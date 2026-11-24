@@ -214,22 +214,26 @@ func (s *Server) updateLoop(ctx context.Context) {
 // updateTick checks for a release where the server's own check is due at
 // now: the first at once, then selfCheckEvery after one that answered,
 // checkEvery after one that failed, or whose package source could not be
-// read. The check is updateRelease's, fresh,
-// which pushes update where a newer release is out; the rules tell each
-// version once. Nothing is checked without a store, which the rules and
-// the settings need, or without a valid channel: a channel set later is
-// checked at the next tick.
+// read. The check is updateRelease's, fresh, which pushes update where a
+// newer release is out; the rules tell each version once. Then the night
+// runs its automatic update (nightTick). Nothing is checked without a
+// store, which the rules and the settings need, or without a valid
+// channel: a channel set later is checked at the next tick.
 func (s *Server) updateTick(ctx context.Context, now time.Time) {
-	if s.opts.Store == nil || now.Before(s.updateNext) || !update.ValidChannel(s.updateChannel(ctx)) {
+	if s.opts.Store == nil || !update.ValidChannel(s.updateChannel(ctx)) {
 		return
 	}
-	v, _ := s.updateRelease(ctx, true)
-	if v.CheckError != "" || v.SourceError != "" {
-		s.updateNext = now.Add(checkEvery)
-		s.log.Debug("update check failed", "channel", v.Channel, "error", v.CheckError, "source_error", v.SourceError)
-		return
+	checked := !now.Before(s.updateNext)
+	if checked {
+		v, _ := s.updateRelease(ctx, true)
+		if v.CheckError != "" || v.SourceError != "" {
+			s.updateNext = now.Add(checkEvery)
+			s.log.Debug("update check failed", "channel", v.Channel, "error", v.CheckError, "source_error", v.SourceError)
+		} else {
+			s.updateNext = now.Add(selfCheckEvery)
+		}
 	}
-	s.updateNext = now.Add(selfCheckEvery)
+	s.nightTick(ctx, now, checked)
 }
 
 // latest returns the newest release on the channel and what the box's
@@ -366,6 +370,9 @@ type updateView struct {
 	CanUpdate  bool           `json:"can_update"`
 	Blocked    string         `json:"blocked,omitempty"`
 	Helper     *update.Status `json:"helper,omitempty"`
+	// Auto is the automatic update at night (update_auto.go); absent
+	// without a store.
+	Auto *autoView `json:"auto,omitempty"`
 	// History is the last updates, newest first (update_history.go).
 	History []updateEntry `json:"history"`
 }
@@ -415,6 +422,7 @@ func (s *Server) updateRelease(ctx context.Context, refresh bool) (updateView, *
 		}
 	}
 	v.CanUpdate = v.Blocked == "" && v.Available && (v.Helper == nil || !v.Helper.Running())
+	v.Auto = s.autoFor(ctx, v)
 	if v.History = s.updateHistory(ctx); v.History == nil {
 		v.History = []updateEntry{}
 	}
@@ -436,55 +444,72 @@ func (s *Server) getUpdate(w http.ResponseWriter, r *http.Request) error {
 }
 
 func (s *Server) startUpdate(w http.ResponseWriter, r *http.Request) error {
+	v, err := s.beginUpdate(r.Context(), userIDOf(r), false)
+	if err != nil {
+		return err
+	}
+	writeJSON(w, http.StatusAccepted, map[string]any{"ok": true, "requested": v.Latest, "channel": v.Channel})
+	return nil
+}
+
+// beginUpdate asks the update helper to install the newest release, for
+// POST /api/v1/update (userID, 0 for the owner's key) and for the night's
+// automatic update (auto, nobody's): the checks, one request at a time,
+// the channel kept, the request, the helper started where the server
+// starts it (Windows, brew), the history's entry and the log's line. Its
+// errors are fail's, which POST answers as they are.
+func (s *Server) beginUpdate(ctx context.Context, userID int64, auto bool) (updateView, error) {
 	// Replacing the binary is never open to an unauthenticated API, even
 	// where reading and setting temperatures are.
-	if why := s.updateBlocked(r.Context()); why != "" {
-		return fail(http.StatusForbidden, "%s", why)
+	if why := s.updateBlocked(ctx); why != "" {
+		return updateView{}, fail(http.StatusForbidden, "%s", why)
 	}
-	v, rel := s.updateRelease(r.Context(), true)
+	v, rel := s.updateRelease(ctx, true)
 	switch {
 	case v.Helper != nil && v.Helper.Running():
-		return fail(http.StatusConflict, "an update is already running (%s)", v.Helper.State)
+		return v, fail(http.StatusConflict, "an update is already running (%s)", v.Helper.State)
 	case v.Latest == "" && v.CheckError != "":
-		return fail(http.StatusBadGateway, "release check failed: %s", v.CheckError)
+		return v, fail(http.StatusBadGateway, "release check failed: %s", v.CheckError)
 	case v.SourceError != "":
-		return fail(http.StatusBadGateway, "reading what %s has failed: %s", sourceName(v.Manager), v.SourceError)
+		return v, fail(http.StatusBadGateway, "reading what %s has failed: %s", sourceName(v.Manager), v.SourceError)
 	case v.Held != "":
-		return fail(http.StatusConflict, "%s is held back: the update helper found nothing to install for it, and no check since has found it in %s", v.Held, sourceName(v.Manager))
+		return v, fail(http.StatusConflict, "%s is held back: the update helper found nothing to install for it, and no check since has found it in %s", v.Held, sourceName(v.Manager))
 	case v.Released != "" && !v.Available:
-		return fail(http.StatusConflict, "%s is out, but %s has it not yet", v.Released, sourceName(v.Manager))
+		return v, fail(http.StatusConflict, "%s is out, but %s has it not yet", v.Released, sourceName(v.Manager))
 	case v.Latest == "":
-		return fail(http.StatusConflict, "no release on channel %s", v.Channel)
+		return v, fail(http.StatusConflict, "no release on channel %s", v.Channel)
 	case !v.Available:
-		return fail(http.StatusConflict, "already up to date (%s)", v.Current)
+		return v, fail(http.StatusConflict, "already up to date (%s)", v.Current)
 	}
 	// One request at a time: a second POST waits for the first's write
 	// and start, and the helper that start left at work answers it.
 	s.updateMu.Lock()
 	defer s.updateMu.Unlock()
-	s.keepChannel(r.Context(), v.Channel, rel)
+	s.keepChannel(ctx, v.Channel, rel)
 	asked := time.Now()
 	if err := update.WriteRequest(s.opts.Update.Request, v.Channel); err != nil {
-		return fail(http.StatusInternalServerError, "asking the update helper: %v", err)
+		return v, fail(http.StatusInternalServerError, "asking the update helper: %v", err)
 	}
 	summary := map[string]any{"from": v.Current, "to": v.Latest, "channel": v.Channel}
+	if auto {
+		summary["auto"] = true
+	}
 	if start := s.opts.Update.Start; start != nil {
 		switch err := start(); {
 		case errors.Is(err, update.ErrHelperRunning):
 			// The running helper takes the request or has taken its own;
 			// a leftover one names the same channel and goes to the next.
-			return fail(http.StatusConflict, "%v (starting)", err)
+			return v, fail(http.StatusConflict, "%v (starting)", err)
 		case err != nil:
 			os.Remove(s.opts.Update.Request)
-			failed := systemEvent("update", userIDOf(r), summary)
+			failed := systemEvent("update", userID, summary)
 			failed.Level, failed.Error = "error", err.Error()
 			s.logServer(failed)
-			return fail(http.StatusInternalServerError, "starting the update helper: %v", err)
+			return v, fail(http.StatusInternalServerError, "starting the update helper: %v", err)
 		}
 	}
 	s.noteStop("update")
-	s.noteUpdateStart(r.Context(), asked, userIDOf(r), v.Current, v.Latest, v.Channel, v.Helper)
-	s.logServer(systemEvent("update", userIDOf(r), summary))
-	writeJSON(w, http.StatusAccepted, map[string]any{"ok": true, "requested": v.Latest, "channel": v.Channel})
-	return nil
+	s.noteUpdateStart(ctx, asked, userID, v.Current, v.Latest, v.Channel, v.Helper, auto)
+	s.logServer(systemEvent("update", userID, summary))
+	return v, nil
 }

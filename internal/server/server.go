@@ -387,8 +387,10 @@ type Server struct {
 	steps   serialWorker
 	updates updateCheck
 	// updateNext is when the server's own release check is due
-	// (updateTick), zero before the first; the update loop's alone.
+	// (updateTick), zero before the first, and auto the night's
+	// automatic update (update_auto.go); the update loop's alone.
 	updateNext time.Time
+	auto       autoState
 	// updateMu holds one update request at a time (startUpdate).
 	updateMu sync.Mutex
 	// historyMu holds the last updates' row while it is read and written

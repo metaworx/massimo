@@ -52,6 +52,9 @@ type updateEntry struct {
 	// Result is the update helper's outcome where it ended without
 	// reaching To: failed, rolled-back or up-to-date.
 	Result string `json:"result,omitempty"`
+	// Auto is set where the server started it itself, at night
+	// (update_auto.go); By is nil then.
+	Auto bool `json:"auto,omitempty"`
 }
 
 // waiting reports whether the entry waits for the start that completes
@@ -100,12 +103,13 @@ func (s *Server) editHistory(ctx context.Context, edit func([]updateEntry) []upd
 
 // noteUpdateStart adds the entry of an update started in Massimo at at:
 // by whom (userID, 0 for the owner's key), from the running version to
-// the one asked for on channel. The entry before it, still waiting, ends
+// the one asked for on channel; auto where the server started it at
+// night (update_auto.go). The entry before it, still waiting, ends
 // with the outcome the update helper reported for it (helper, read just
 // before; helperFinal), so that a second Update leaves no entry open for
 // good; one the helper has no outcome for stays as it is.
-func (s *Server) noteUpdateStart(ctx context.Context, at time.Time, userID int64, from, to, channel string, helper *update.Status) {
-	e := updateEntry{At: at.UTC(), From: from, To: to, Channel: channel}
+func (s *Server) noteUpdateStart(ctx context.Context, at time.Time, userID int64, from, to, channel string, helper *update.Status, auto bool) {
+	e := updateEntry{At: at.UTC(), From: from, To: to, Channel: channel, Auto: auto}
 	if userID != 0 {
 		if u, ok, err := s.opts.Store.UserByID(ctx, userID); err == nil && ok {
 			e.By = &eventUser{Name: u.Name, DisplayName: u.DisplayName}

@@ -1799,6 +1799,8 @@ The server's settings in the store:
   "window_warn_after": {"value": "5m",  "default": "5m",  "set": false, "in_effect": "5m",  "applies": "now"},
   "window_alert_after": {"value": "10m", "default": "10m", "set": false, "in_effect": "10m", "applies": "now"},
   "update.channel":    {"value": "alpha", "default": "alpha", "set": false, "in_effect": "alpha", "applies": "now"},
+  "update.auto":       {"value": "off", "default": "off", "set": false, "in_effect": "off", "applies": "now"},
+  "update.auto_window": {"value": "03:00-05:00", "default": "03:00-05:00", "set": false, "in_effect": "03:00-05:00", "applies": "now"},
   "node.id":           {"value": "01a1ae5a-6bee-7ed4-bb4e-3baa2c43fe55", "set": true, "read_only": true},
   "tenant.id":         {"value": "01a1ae5a-6bee-7edb-b3d5-390730e9e1c5", "set": true, "read_only": true}
 }
@@ -1889,13 +1891,19 @@ run, and where `-announce` or `MASSIMO_ANNOUNCE` decides instead,
 one of `devel`, `nightly`, `alpha`, `beta` and `stable`,
 the build's flavour by default, and applies at once;
 `MASSIMO_UPDATE_CHANNEL`, where set, is used instead, as `in_effect` shows.
+`update.auto` says whether the box installs a release by itself:
+`off`, the default, or `night`,
+inside the window `update.auto_window`, `HH:MM-HH:MM` in the server's time,
+`03:00-05:00` by default, at least 30 minutes, its end past midnight allowed
+(`23:30-01:30`); both apply at once (see `GET /api/v1/update`, `auto`).
 `PUT` takes an object of keys and durations,
 `{"stale_after": "36h", "refresh_interval": null}`,
 with `null` for the default and `"0"` to switch the refresh or the periodic discovery off.
 A number setting takes a JSON number, or the number as a string,
 `auth.password_login`, `integrations.requests`, `auth.keep_open`
 and `auth.password_reveal` `true` or `false`,
-`announce` `auto`, `on` or `off`, and `update.channel` a name.
+`announce` `auto`, `on` or `off`, `update.channel` a name,
+`update.auto` `off` or `night`, and `update.auto_window` a window as above.
 The ranges: `stale_after` and `stale_after_wall` 1h to 720h, `poll_interval` 10s to 1h,
 `refresh_interval` 10m to 168h, `discover_interval` 1m to 24h, `duty_wait` 1m to 1h,
 `window_warn_after` and `window_alert_after` 1m to 24h.
@@ -3879,9 +3887,12 @@ and a read whose settings did not change writes its `settings_read`
 where that differs from the last read's,
 as a DNS hook made or removed meanwhile makes it;
 README.md, "Server", says which settings it checks),
-`restart`, `reboot`, `reboot_cancelled`, `update` (`from`, `to`, `channel`),
+`restart`, `reboot`, `reboot_cancelled`, `update` (`from`, `to`, `channel`,
+and `auto` for one the server started itself at night, by nobody),
 `update_result` (the helper's outcome after the restart, once:
 `state`, `from`, `to`; a failure at `warn` with its `error`),
+`update_postponed` (the night's window closed while the radio held a due
+automatic update back: `version`, `why`, `window`),
 `backup` (`reason`, `id`, `bytes`; an automatic one that failed at `warn`),
 `backup_deleted` (`id`), `backups_pruned`, `log_pruned` and `audit_pruned` (`removed`),
 `log_rotated` (serve's `-log` file rotated: `why`, `size`, `format`, `sighup`
@@ -4251,6 +4262,7 @@ a channel set later is checked within a minute.
   "checked_at": "2026-11-05T13:40:00+01:00",
   "can_update": true,
   "helper": {"state": "done", "from": "v0.1.0-alpha.8", "to": "v0.1.0-alpha.9", "channel": "alpha", "time": "…"},
+  "auto": {"mode": "night", "window": "03:00-05:00", "next": "2026-11-06T03:00:00+01:00"},
   "history": [
     {"at": "2026-11-05T12:01:00Z", "by": {"name": "anna", "display_name": "Anna"}, "from": "v0.1.0-alpha.8", "to": "v0.1.0-alpha.9", "channel": "alpha", "reached": "v0.1.0-alpha.9", "reached_at": "2026-11-05T12:02:10Z"},
     {"at": "2026-10-30T07:15:00Z", "outside": true, "manager": "apt", "from": "v0.1.0-alpha.7", "channel": "alpha", "reached": "v0.1.0-alpha.8", "reached_at": "2026-10-30T07:15:00Z"}
@@ -4296,11 +4308,32 @@ no API token; no update helper; a development build).
 `helper` is the update helper's last run: `state` is one of `checking`,
 `installing`, `restarting`, `done`, `up-to-date`, `failed`, `rolled-back`,
 with `message` on failure.
+`auto` is the automatic update,
+as the settings `update.auto` and `update.auto_window` set it (`GET /api/v1/settings`):
+`mode` `off` or `night`, its `window`,
+and `next`, when the box will try, absent while no update is due:
+the window's next opening, or now inside it before the night's try.
+At night the server installs what `POST` would, itself and by nobody,
+inside the window while the radio is quiet on every Cube:
+no command with a radio line waiting for the Cube or on its way,
+the proxy's clients' among them, no write waiting for its devices to show it,
+no restore and no pairing;
+a page open in a browser holds nothing back,
+nor do the Cube's own memory slots in use.
+It checks afresh at the window's opening and every half hour inside it,
+so that a release built in the night is taken the same night,
+and tries once a night, a start that failed included, across a restart too.
+It tries nothing that `POST` would refuse:
+a version held back, an update running, nothing newer,
+a box that cannot start updates from here (`blocked`).
+A window that closes while the radio held a due update back
+writes `update_postponed` to the log; the next night tries again.
 `history` is the last ten updates, newest first,
 kept in the setting `update.history`:
 an update started here names who started it (`by`, absent for the owner's key),
 the version it ran (`from`), the one it asked for (`to`)
 and the channel it asked on (`channel`);
+one the server started itself at night has `auto` and no `by`;
 the next start with another version adds `reached` and `reached_at`,
 whichever version that is:
 apt may install an older one than `to`, in between, or a newer one.

@@ -53,6 +53,7 @@ var (
 		"reboot_cancelled":     "reboot taken back",
 		"restart":              "restart requested",
 		"update":               "update requested",
+		"update_postponed":     "automatic update postponed: the radio was busy until the window closed",
 	}
 	failedMessages = map[string]string{
 		"backup":       "backup failed",

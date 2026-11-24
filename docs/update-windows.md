@@ -24,6 +24,11 @@ is up (GUIDELINES/project/CI.md, "Runner Constraints").
 Since 2026-11-07 the restart from the API (`POST /api/v1/restart`)
 uses the same starter for `massimo restart -service massimo`, detached,
 its output in `service.log`.
+Since 2026-11-24 the automatic update at night (the setting `update.auto`,
+docs/api-v1.md, "GET /api/v1/update?refresh=1") goes the same way:
+the server's own try calls the starter as `POST /api/v1/update` does,
+so the service needs nothing of its own for it;
+the starter's refusals end the night's try, and the next night tries again.
 
 The text below is the design as written before it.
 Written on 2026-11-06 from the code on `main` after v0.5.0-alpha.1 (internal/update,

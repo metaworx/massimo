@@ -1148,6 +1148,19 @@ export interface UpdateInfo {
    */
   blocked?: string;
   helper?: UpdateStatus;
+  /** The automatic update at night; absent without a store */
+  auto?: {
+    /** The setting update.auto */
+    mode: "off" | "night";
+    /** The setting update.auto_window, HH:MM-HH:MM in the server's time */
+    window: string;
+    /**
+     * When the box will try: inside the window now, else at its next opening;
+     * absent while no update is due
+     * @format date-time
+     */
+    next?: string;
+  };
   /** The last ten updates, newest first; empty without a store */
   history: UpdateEntry[];
 }
@@ -1190,6 +1203,8 @@ export interface UpdateEntry {
   reached?: string;
   /** @format date-time */
   reached_at?: string;
+  /** The server started it itself, at night; by is absent then */
+  auto?: boolean;
   /**
    * The update helper's outcome where the box did not stay on a new version,
    * rolled-back after reached ran: taken at the next read or the next update

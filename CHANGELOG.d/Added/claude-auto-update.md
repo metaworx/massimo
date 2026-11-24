@@ -1,3 +1,3 @@
-- The server checks for a release by itself every six hours and offers
-  one once apt's index or brew's tap has it, holding back a version the
-  helper found nothing for (docs/api-v1.md, packaging/README.md).
+- The server checks for releases every six hours, offers one once apt or
+  brew has it, and with `update.auto` at night installs it in its window
+  while the radio is quiet (docs/api-v1.md, packaging/README.md).

@@ -3399,7 +3399,7 @@ paths:
         stream's user is told in "notification", on that user's streams
         alone); the server's own, source system:
         server_started, server_stopping, settings_read, restart, reboot,
-        reboot_cancelled, update, update_result, backup, backup_deleted,
+        reboot_cancelled, update, update_result, update_postponed, backup, backup_deleted,
         backups_pruned, log_pruned, audit_pruned, log_rotated, restore_started; a Cube's own:
         address_changed, cube_gone; a change made through the API, source
         config: change, with the action, target, set, changes and subject in
@@ -3533,6 +3533,8 @@ paths:
                 auth.password_reveal: {value: "true", default: "true", set: false, in_effect: "true", applies: now}
                 announce: {value: auto, default: auto, set: false, in_effect: "off", applies: restart}
                 update.channel: {value: alpha, default: alpha, set: false, in_effect: alpha, applies: now}
+                update.auto: {value: "off", default: "off", set: false, in_effect: "off", applies: now}
+                update.auto_window: {value: "03:00-05:00", default: "03:00-05:00", set: false, in_effect: "03:00-05:00", applies: now}
                 poll_interval: {value: 10s, default: 10s, set: false, in_effect: 10s, applies: restart}
                 node.id: {value: 01a1ae5a-6bee-7ed4-bb4e-3baa2c43fe55, set: true, read_only: true}
         "401": {$ref: "#/components/responses/Unauthorized"}
@@ -3571,8 +3573,11 @@ paths:
         it before anyone signs in); announce, auto, on or off,
         the announcement on the LAN at the next start; update.channel, devel, nightly, alpha, beta, rc or stable,
         the releases the box takes (its own flavour's and every more
-        stable one's; the default is the build's flavour); null goes back
-        to the default. Every value is checked before any is written. The
+        stable one's; the default is the build's flavour); update.auto, off
+        or night, whether the box installs a release itself, inside the
+        window update.auto_window, HH:MM-HH:MM in the server's time, at
+        least 30 minutes, its end past midnight allowed (03:00-05:00 by
+        default); null goes back to the default. Every value is checked before any is written. The
         answer is that of GET.
       parameters: [{$ref: "#/components/parameters/idempotencyKey"}]
       requestBody:
@@ -5012,6 +5017,14 @@ components:
         can_update: {type: boolean, description: POST would start an update}
         blocked: {type: string, description: "Why an update cannot be started from the API (a package manager owning the binary without a helper of its own, no token, no helper, a development build)"}
         helper: {$ref: "#/components/schemas/UpdateStatus"}
+        auto:
+          type: object
+          description: "The automatic update at night; absent without a store"
+          required: [mode, window]
+          properties:
+            mode: {type: string, enum: ["off", night], description: The setting update.auto}
+            window: {type: string, description: "The setting update.auto_window, HH:MM-HH:MM in the server's time"}
+            next: {type: string, format: date-time, description: "When the box will try: inside the window now, else at its next opening; absent while no update is due"}
         history:
           type: array
           description: The last ten updates, newest first; empty without a store
@@ -5034,6 +5047,7 @@ components:
         channel: {type: string, description: "The channel asked for, where Massimo started it; for an update from outside, the one the box followed at the start that found it"}
         reached: {type: string, description: "The version the next start ran, the one asked for or another apt chose; absent while the update runs"}
         reached_at: {type: string, format: date-time}
+        auto: {type: boolean, description: "The server started it itself, at night; by is absent then"}
         result: {type: string, enum: [failed, rolled-back, up-to-date], description: "The update helper's outcome where the box did not stay on a new version, rolled-back after reached ran: taken at the next read or the next update started where the helper did not restart the server, else at the next start"}
     UpdateStatus:
       type: object

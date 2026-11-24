@@ -322,6 +322,8 @@ function logSummaryText(kind: string, s: Loose, serial: string): string {
       return t("log.sum.update", { from: s.from || "–", to: s.to || "–" });
     case "update_result":
       return t("log.sum.updateResult", { from: s.from || "–", to: s.to || "–", state: logWord("log.updateState.", s.state) });
+    case "update_postponed":
+      return t("log.sum.updatePostponed", { version: s.version || "–", why: s.why || "–" });
     case "backup":
       return s.id ? t("log.sum.backup", { id: s.id, reason: logWord("log.reason.", s.reason) }) : t("log.sum.backupFailed", { reason: logWord("log.reason.", s.reason) });
     case "backup_deleted":
