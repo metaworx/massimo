@@ -615,6 +615,12 @@ export interface Token {
    * session of a sign-in and for a key
    */
   key_id?: number;
+  /**
+   * In a user's token list, true on the key that is the settings file's
+   * MASSIMO_API_TOKEN, which is changed or removed there and not revoked
+   * through the API; absent on any other
+   */
+  from_settings?: boolean;
 }
 
 export interface Me {

@@ -1676,6 +1676,7 @@
   "users.fromKey": "aus dem API-Schlüssel {label}",
   "users.revoke": "Widerrufen",
   "users.revokeLabel": "{label} widerrufen",
+  "users.fromSettings": "aus der Einstellungsdatei: dort ändern oder entfernen",
   "users.revoked": "Token {id} widerrufen.",
   "users.newKey": "Neuer API-Schlüssel",
   "users.keyLabel": "wofür der Schlüssel ist",

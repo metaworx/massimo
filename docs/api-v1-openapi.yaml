@@ -843,7 +843,7 @@ paths:
       parameters: [{$ref: "#/components/parameters/name"}]
       responses:
         "200":
-          description: The live tokens, oldest first, without their secrets
+          description: The live tokens, oldest first, without their secrets; the settings file's MASSIMO_API_TOKEN with from_settings
           content:
             application/json:
               schema:
@@ -894,6 +894,11 @@ paths:
     delete:
       summary: Revoke a session or an API key
       x-capability: users
+      description: |
+        A session made from a key goes with the key. The settings file's
+        token (MASSIMO_API_TOKEN, from_settings in the list) is 409, as
+        DELETE /api/v1/me/token answers it: it is changed or removed in
+        the settings file, since the next start would not add it back.
       parameters:
         - {$ref: "#/components/parameters/idempotencyKey"}
         - {$ref: "#/components/parameters/name"}
@@ -913,6 +918,11 @@ paths:
         "403": {$ref: "#/components/responses/Forbidden"}
         "404":
           description: No such user, or no such live token of the user
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/Error"}
+        "409":
+          description: The token is the settings file's MASSIMO_API_TOKEN
           content:
             application/json:
               schema: {$ref: "#/components/schemas/Error"}
@@ -4648,6 +4658,7 @@ components:
         last_used_at: {type: string, format: date-time}
         last_used_from: {type: string, description: The client's address}
         key_id: {type: integer, description: "The key a session was made from (POST /api/v1/login/key); absent for a session of a sign-in and for a key"}
+        from_settings: {type: boolean, description: "In a user's token list, true on the key that is the settings file's MASSIMO_API_TOKEN, which is changed or removed there and not revoked through the API; absent on any other"}
     Me:
       type: object
       properties:

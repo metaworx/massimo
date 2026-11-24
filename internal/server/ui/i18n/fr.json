@@ -1678,6 +1678,7 @@
   "users.fromKey": "créée à partir de la clé API {label}",
   "users.revoke": "Révoquer",
   "users.revokeLabel": "révoquer {label}",
+  "users.fromSettings": "du fichier de réglages : à modifier ou retirer dans ce fichier",
   "users.revoked": "Jeton {id} révoqué.",
   "users.newKey": "Nouvelle clé API",
   "users.keyLabel": "à quoi sert la clé",

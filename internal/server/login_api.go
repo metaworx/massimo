@@ -96,6 +96,10 @@ type tokenView struct {
 	// KeyID is the key a session was made from (POST /api/v1/login/key),
 	// absent for a session of a sign-in and for a key.
 	KeyID int64 `json:"key_id,omitempty"`
+	// FromSettings marks, in a user's token list, the key that is the
+	// settings file's MASSIMO_API_TOKEN: it is changed or removed in the
+	// file, and the API does not revoke it (settingsKeyID).
+	FromSettings bool `json:"from_settings,omitempty"`
 }
 
 // meView is the answer of GET /api/v1/me.
@@ -428,6 +432,29 @@ func (s *Server) logout(w http.ResponseWriter, r *http.Request) error {
 	return nil
 }
 
+// settingsKeyKept is the refusal of a revoke of the settings file's key.
+const settingsKeyKept = "the token is the settings file's MASSIMO_API_TOKEN: change or remove it in the settings file"
+
+// settingsKeyID is the id of the live API key that is the settings
+// file's MASSIMO_API_TOKEN, 0 where the file has none or the store holds
+// no live key of it. The store keeps each token's hash, unique, so the
+// hash of the token the server holds from the file (legacyToken, which
+// SetToken follows) finds that one row; its label is no mark, any key
+// may carry it. The API does not revoke that key (AP MobileApp v1.4,
+// D86-A): the next start would not add it back, its hash being taken
+// (store.Bootstrap), so it is changed or removed in the file.
+func (s *Server) settingsKeyID(ctx context.Context) (int64, error) {
+	file := s.legacyToken()
+	if file == "" || s.opts.Store == nil {
+		return 0, nil
+	}
+	tok, ok, err := s.opts.Store.TokenByHash(ctx, store.HashToken(file))
+	if err != nil || !ok || tok.Kind != store.TokenAPI {
+		return 0, err
+	}
+	return tok.ID, nil
+}
+
 // deleteMyToken handles DELETE /api/v1/me/token: the token that makes the
 // call is revoked, a session or an API key, a key's sessions with it (AP
 // MobileApp, D80-B), so that a client revokes what it holds without its
@@ -448,7 +475,7 @@ func (s *Server) deleteMyToken(w http.ResponseWriter, r *http.Request) error {
 		return fail(http.StatusBadRequest, "a call on a user's behalf revokes nothing: revoke the integration's key without the %s header", OnBehalfHeader)
 	}
 	if file := s.legacyToken(); file != "" && tokenMatches(file, strings.TrimPrefix(r.Header.Get("Authorization"), "Bearer ")) {
-		return fail(http.StatusConflict, "the token is the settings file's MASSIMO_API_TOKEN: change or remove it in the settings file")
+		return fail(http.StatusConflict, settingsKeyKept)
 	}
 	auditTarget(r, "token:"+strconv.FormatInt(p.token.ID, 10))
 	auditSubject(r, tokenSubject(p.token, p.user))

@@ -8,7 +8,7 @@ import json
 import pytest
 
 from conftest import TOKEN, api_call
-from helpers import show_view, wait_held, wait_until
+from helpers import pause_clock, show_view, wait_held, wait_until
 
 AVAILABLE = '{"available": true, "by": "systemd"}'
 BLOCKED = '{"available": false, "blocked": "no service manager would start this server again"}'
@@ -109,7 +109,7 @@ def test_restart_lists_what_waits(page):
         else:
             held.append(route)
     page.route("**/api/v1/restart", restart)
-    page.clock.pause_at(page.evaluate("Date.now()") + 1000)
+    pause_clock(page)
     try:
         show_view(page, "maint")
         assert wait_held(page, held), "Maintenance reads the restart"

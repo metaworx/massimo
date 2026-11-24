@@ -1300,6 +1300,9 @@ the roles and their sets are rows (section 5), seeded by the first migration.
   and one that was removed from the file is revoked.
   The file stays the way to recover an owner who lost the password:
   put a token into the file, log in with it, set a password.
+  The API does not revoke the file's key (`409`;
+  docs/api-v1.md, "Tokens: /api/v1/users/{name}/tokens"):
+  a revoked row keeps its hash, unique, so the next start could not add it back.
   Whoever can edit the file is root or the service user,
   who can edit the database anyway.
 - Without `MASSIMO_API_TOKEN` and without users,
@@ -2121,3 +2124,20 @@ On its own it costs a rebuild of `log` at the upgrade,
 and a down part under the store's downgrade rule (section 5, "Migrations"),
 which is why it waits for a rebuild that is needed anyway.
 Migration 0013 did the same for `backups` (section 5, "Migrations").
+
+**`AUTOINCREMENT` for `audit.id`**,
+with the next migration that makes `audit` again anyway,
+should anything come to key on the audit's ids.
+`audit.id` has none either, and nothing keeps the audit's newest row:
+once a prune by `audit.keep_days` has emptied the table,
+the next row is given id 1 again.
+Nothing depends on the ids today:
+`before` on `GET /api/v1/audit` is a time, not an id,
+no foreign key points at them,
+the web UI reads only a command's row,
+by its command (`GET /api/v1/commands/{id}`),
+a backup of the store copies the rows as they are,
+and `massimo store info` only counts them.
+The one reader is the app's instrumented tests
+(`app/android/app/src/androidTest/kotlin/ch/metaworx/massimo/Host.kt`),
+within one test on a fresh server.

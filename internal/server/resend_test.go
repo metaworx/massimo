@@ -304,10 +304,7 @@ func TestUnconfirmedRoomCommandNotResent(t *testing.T) {
 			t.Fatalf("sent: %v", got)
 		}
 		// Nothing was sent: the room's day is not taken.
-		r.rt.drift.mu.Lock()
-		_, taken := r.rt.drift.resent[2]
-		r.rt.drift.mu.Unlock()
-		if taken {
+		if r.dayTaken(2) {
 			t.Fatal("the dropped re-send took the room's day")
 		}
 	})
@@ -335,33 +332,55 @@ func TestUnconfirmedRoomCommandNotResent(t *testing.T) {
 			t.Fatalf("not re-sent: %+v", ev)
 		}
 	})
+	// The proxy client's room setpoint, then a lock of its to the deaf
+	// member, whose report is the end of the wait: the follow-up reports
+	// the writes in their order, in one goroutine, and decides about a
+	// write's re-send in the step of its report, a not_resent line or the
+	// room's day taken, before it reports a later write.
 	t.Run("proxy", func(t *testing.T) {
 		t.Parallel()
 		r := startDrift(t, nil, resendOptions(300*time.Millisecond, 0))
 		r.fc.SetDeaf(0x0a0205, true)
-		m, err := cube.CmdSetTemperature(cube.Target{RFAddress: 0x0a0204, RoomID: 2, Room: true}, 21.5, cube.ModeManual, cube.Until{})
+		setpoint, err := cube.CmdSetTemperature(cube.Target{RFAddress: 0x0a0204, RoomID: 2, Room: true}, 21.5, cube.ModeManual, cube.Until{})
 		if err != nil {
 			t.Fatal(err)
 		}
-		c, err := cube.ParseRadioCommand(m.Data)
-		if err != nil {
-			t.Fatal(err)
+		sent, m := r.lines.Mark(), logMark(t, r.ts)
+		r.rt.proxyWrote(radioCommand(t, setpoint)) // as if the Cube had taken it
+		r.rt.proxyWrote(radioCommand(t, cube.CmdLockControls(cube.Target{RFAddress: 0x0a0205, RoomID: 2}, true)))
+		logAfter(t, m, "the lock's report", func(e event) bool {
+			return unconfirmedOf("not_confirmed")(e) && e.Summary["write"] == writeLock
+		})
+		got := logLines(t, m, logLine("unconfirmed", ""))
+		if len(got) != 2 || got[0].Summary["write"] != writeSetpoint || got[0].Summary["outcome"] != "not_confirmed" || got[0].Summary["source"] != "proxy" {
+			t.Fatalf("the lines of the writes, want each one's report alone: %+v", got)
 		}
-		sent := r.lines.Mark()
-		r.rt.proxyWrote(c) // as if the Cube had taken it
-		if ev := r.waitOutcome("not_confirmed", 1); ev.Summary["source"] != "proxy" {
-			t.Fatalf("the report: %+v", ev)
-		}
-		time.Sleep(200 * time.Millisecond)
-		for _, ev := range r.events("unconfirmed") {
-			if ev.Summary["outcome"] != "not_confirmed" {
-				t.Fatalf("a line of a re-send: %+v", ev)
-			}
+		if r.dayTaken(2) {
+			t.Fatal("a re-send took the room's day")
 		}
 		if got := r.radioSince(sent); len(got) != 0 {
 			t.Fatalf("sent: %v", got)
 		}
 	})
+}
+
+// radioCommand is m as the LAN proxy decodes a client's s: line.
+func radioCommand(t *testing.T, m cube.Message) cube.RadioCommand {
+	t.Helper()
+	c, err := cube.ParseRadioCommand(m.Data)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return c
+}
+
+// dayTaken reports whether room's re-send of the day is taken, by a
+// re-send or by the room checks.
+func (r *driftRig) dayTaken(room uint8) bool {
+	r.rt.drift.mu.Lock()
+	defer r.rt.drift.mu.Unlock()
+	_, taken := r.rt.drift.resent[room]
+	return taken
 }
 
 // setpointLine2 is a room command to room 2, manual at 18 °C.

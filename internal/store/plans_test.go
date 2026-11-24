@@ -7,6 +7,7 @@ import (
 	"context"
 	"strings"
 	"testing"
+	"time"
 )
 
 // queryPlan is SQLite's EXPLAIN QUERY PLAN of a statement, its details
@@ -52,13 +53,36 @@ func TestPendingUsesItsIndex(t *testing.T) {
 	}
 }
 
-// The audit's filter by user finds the rows by the indexes audit_user
-// and audit_real_user, by the user's id rather than a join on the name.
-func TestAuditUserFilterUsesItsIndex(t *testing.T) {
+// A page of the audit walks audit_time from its newest end in the page's
+// order, by time, then id, without a sort of its own, from the newest
+// and before a time. The filter by user finds the rows by the indexes
+// audit_user and audit_real_user, by the user's id rather than a join on
+// the name, and sorts what the two walks found.
+func TestAuditPagesUseTheirIndexes(t *testing.T) {
 	t.Parallel()
 	s := open(t, t.TempDir())
-	if plan := queryPlan(t, s, auditSelect+` WHERE `+auditByUser+` ORDER BY a.id DESC LIMIT ?`, int64(1), int64(1), "", "", 10); !strings.Contains(plan, "audit_user") ||
-		!strings.Contains(plan, "audit_real_user") {
-		t.Fatalf("plan %s", plan)
+	at := formatTime(time.Date(2026, 11, 6, 12, 0, 0, 0, time.UTC))
+	for _, sh := range []struct {
+		name  string
+		where string
+		args  []any
+		want  []string
+		sorts bool
+	}{
+		{"from the newest", auditBefore, []any{"", "", 10}, []string{"USING INDEX audit_time"}, false},
+		{"before a time", auditBefore, []any{at, at, 10}, []string{"USING INDEX audit_time"}, false},
+		{"a user", auditByUser, []any{int64(1), int64(1), "", "", 10}, []string{"audit_user", "audit_real_user"}, true},
+		{"a user, before a time", auditByUser, []any{int64(1), int64(1), at, at, 10}, []string{"audit_user", "audit_real_user"}, true},
+	} {
+		plan := queryPlan(t, s, auditQuery(sh.where, auditPage), sh.args...)
+		for _, ix := range sh.want {
+			if !strings.Contains(plan, ix) {
+				t.Errorf("%s: not by %s: %s", sh.name, ix, plan)
+			}
+		}
+		if !sh.sorts && strings.Contains(plan, "TEMP B-TREE") {
+			t.Errorf("%s: sorted: %s", sh.name, plan)
+		}
+		t.Logf("%-22s %s", sh.name, plan)
 	}
 }

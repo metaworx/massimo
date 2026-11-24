@@ -15,7 +15,7 @@ import os
 import pytest
 
 from conftest import TOKEN, URL, api_call
-from helpers import frames, hold, mark, open_main_menu, owner_page, replaced, show_view, undo, wait_held, wait_until
+from helpers import frames, hold, mark, open_main_menu, owner_page, pause_clock, replaced, show_view, undo, wait_held, wait_until
 from test_admin_updates import menu_mark, out
 from test_login import sign_in
 from test_notifications import FAKE_PUSH, reload_with
@@ -531,13 +531,8 @@ def pause(page):
     """Playwright's clock paused at the page's now: the rule's second does
     not pass by itself. Under it the test drives the page by evaluate and
     by Python's own waits (wait_until), none of which waits on a timer or
-    a frame of the page's. Python's pause_at takes seconds, the page's
-    Date.now() milliseconds: given those, the clock jumped millennia ahead
-    and fired every timer of the page's at once, a held read's time limit
-    among them, which aborts it (apiRequest, AP MobileApp, D82-A). It
-    pauses 50 ms on, so that the time asked for is not past once the call
-    arrives."""
-    page.clock.pause_at((page.evaluate("Date.now()") + 50) / 1000)
+    a frame of the page's (helpers.pause_clock, which says why seconds)."""
+    pause_clock(page)
 
 
 def flip_stale(page):
