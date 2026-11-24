@@ -44,19 +44,21 @@ function helperText(h: UpdateStatus): string {
 }
 
 /**
- * historyLine is one of the last updates: the version reached, or the one
- * asked for with how far it got (under way for the newest, else not
- * reached, or the helper's outcome), when, and by whom or from outside
- * Massimo with the package manager.
+ * historyLine is one of the last updates: when; the version reached, or
+ * the one asked for with how far it got (under way for the newest, else
+ * not reached, or the helper's outcome), the version with its channel in
+ * brackets; and by whom, or from outside Massimo with the package manager.
  */
 function historyLine(e: UpdateEntry, newest: boolean): string {
-  const asked = e.to || "";
-  let what = e.reached;
+  const withChannel = (version: string) => (version && e.channel ? t("update.history.withChannel", { version, channel: e.channel }) : version);
+  const asked = withChannel(e.to || "");
+  let what = e.reached ? withChannel(e.reached) : "";
   if (!what && e.result) what = t("update.history.ended", { version: asked, state: stateText(e.result) });
   else if (!what) what = t(newest ? "update.history.running" : "update.history.notReached", { version: asked });
-  const parts = [what];
+  const parts: string[] = [];
   const ms = Date.parse(e.reached_at || e.at || "");
   if (!isNaN(ms)) parts.push(fmtInstant(new Date(ms))); // app.js
+  parts.push(what);
   if (e.outside) parts.push(e.manager ? t("update.history.outsideWith", { manager: e.manager }) : t("update.history.outside"));
   else if (e.by) parts.push(t("update.history.by", { name: e.by.display_name || e.by.name || "" }));
   return parts.join(" · ");

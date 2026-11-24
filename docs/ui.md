@@ -1981,12 +1981,18 @@ The server's sign, when it says an update is out, opens it at Software update.
   (packaging/README.md, "Homebrew").
   While the helper works, **Check for updates** and **Update** are greyed out,
   also after a reload of the page, until it reports that it is done.
-  **Last updates** lists the last three under the version lines:
-  the version reached,
-  or the one asked for with "under way" until the next start,
-  when, and who started it,
-  or "outside Massimo" with apt or brew where Massimo did not start it;
-  one the helper ended without its version says how it ended (`docs/api-v1.md`,
+  **Last updates** lists the last three under the version lines,
+  the date first, then the version with its channel in brackets,
+  then who started it,
+  or "outside Massimo" with apt or brew where Massimo did not start it:
+  "24.11.2026, 15:53 · v0.16.0-alpha.1 (devel) · by Anna".
+  The version is the one reached,
+  or the one asked for with "under way" while the update runs;
+  the channel is the one the update asked for,
+  or, from outside, the one the box followed at the start that found it.
+  One the helper ended without its version says how it ended,
+  "nothing to install" where apt had nothing newer,
+  from the page's next reading, not the next start (`docs/api-v1.md`,
   "GET /api/v1/update?refresh=1").
   The section is drawn in place as a check comes in,
   the header's every half hour, Check for updates, the reading while the helper works

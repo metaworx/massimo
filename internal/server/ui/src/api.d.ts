@@ -1163,11 +1163,20 @@ export interface UpdateEntry {
   from?: string;
   /** The version asked for, where Massimo started it */
   to?: string;
+  /**
+   * The channel asked for, where Massimo started it; for an update from
+   * outside, the one the box followed at the start that found it
+   */
+  channel?: string;
   /** The version the next start ran; absent while the update runs */
   reached?: string;
   /** @format date-time */
   reached_at?: string;
-  /** The update helper's outcome where it ended without reaching to */
+  /**
+   * The update helper's outcome where it ended without reaching to: taken at
+   * the next read where the helper did not restart the server, else at the next
+   * start
+   */
   result?: "failed" | "rolled-back" | "up-to-date";
 }
 

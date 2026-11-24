@@ -231,6 +231,9 @@ func (s *Server) updateRelease(ctx context.Context, refresh bool) (updateView, *
 	if u.Status != "" {
 		if st, err := update.ReadStatus(u.Status); err == nil && !st.Time.IsZero() {
 			v.Helper = &st
+			// an update the helper ended without restarting the server
+			// ends here, before the history is read
+			s.noteHelperOutcome(ctx, &st)
 		}
 	}
 	v.CanUpdate = v.Blocked == "" && v.Available && (v.Helper == nil || !v.Helper.Running())
@@ -288,7 +291,7 @@ func (s *Server) startUpdate(w http.ResponseWriter, r *http.Request) error {
 		}
 	}
 	s.noteStop("update")
-	s.noteUpdateStart(r.Context(), asked, userIDOf(r), v.Current, v.Latest)
+	s.noteUpdateStart(r.Context(), asked, userIDOf(r), v.Current, v.Latest, v.Channel)
 	s.logServer(systemEvent("update", userIDOf(r), summary))
 	writeJSON(w, http.StatusAccepted, map[string]any{"ok": true, "requested": v.Latest, "channel": v.Channel})
 	return nil
