@@ -1,4 +1,4 @@
-# Massimo — CI Conventions (v1.71.0)
+# Massimo — CI Conventions (v1.72.0)
 
 What CI does in this project, for whoever has to change it.
 `/AGENTS.md` names this file as the canonical owner of CI conventions,
@@ -1483,7 +1483,7 @@ since a site without `apt/` would take the repository offline.
 ## 8. Dependabot and the Repository's Settings
 
 `.github/dependabot.yml` has Dependabot propose,
-once a month and in one pull request each,
+once a month and in one pull request each, the Android app's in two,
 the updates of the Go modules the code imports directly,
 of the actions the workflows use,
 of the Android app's Gradle dependencies and plugins, of actionlint,
@@ -1511,10 +1511,19 @@ its tag's commit from `gh api repos/<owner>/<repo>/git/ref/tags/<tag>`
 `github.com/bytemare/ksf` is indirect and replaced by `third_party/bytemare-ksf`,
 so Dependabot leaves it alone until a release has the fix.
 
-The Android app's dependencies and its Gradle plugins are pinned in its
-version catalogue, `app/android/gradle/libs.versions.toml`;
-the Gradle entry, for `/app/android`, groups them into one pull request,
-since a plugin's update can need a library's.
+The Android app's dependencies and its Gradle plugins are pinned in its version catalogue,
+`app/android/gradle/libs.versions.toml`,
+and its Gradle in the committed wrapper.
+The Gradle entry, for `/app/android`,
+makes two pull requests (AP MobileApp, D88-A): the build's own tools,
+the Gradle wrapper and the Android Gradle Plugin, and the libraries.
+One pull request for all of them held a wrapper's update back behind a
+library that could not build yet;
+where a library needs a newer plugin, the build's pull request is merged first.
+A library that asks for a newer `compileSdk` fails the job Android app at
+the check of the libraries' metadata.
+The level is then raised by hand, in `app/android/app/build.gradle.kts`,
+together with the platform the two Android jobs look for (section 2).
 The job Android app builds it, tests it and checks that the release APK
 is built the same twice (section 2), as F-Droid will,
 and the job Android emulator runs its instrumented tests, with the
