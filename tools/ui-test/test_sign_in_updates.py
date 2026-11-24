@@ -140,18 +140,20 @@ def test_the_card_keeps_what_is_typed(new_context, case, watch, guard):
     page.wait_for_selector(".room", timeout=10000)
 
 
-def test_the_fields_are_emptied_at_an_opening_alone(new_context, case, watch, guard):
-    """What was signed in with stays in the card's fields once it is
-    closed, for a password manager that saves it then, and is gone at the
-    next opening (UiParts D210, the app's word). A forward guard: the
-    plain card emptied them at the opening alone too."""
+def test_the_fields_are_emptied_at_an_opening_and_after_a_success(new_context, case, watch, guard):
+    """The password signed in with is gone once the card has closed on the
+    sign-in and the reads after it, the name staying (AP LooseEnds, D13,
+    which changes UiParts D210: the password stayed until the next opening), and both are gone
+    at the next opening. A forward guard of the opening's: the plain card
+    emptied the fields there too."""
     page = open_card(new_context, guard, watch)
     page.locator("#login-user").fill("operator")
     page.locator("#login-password").fill("op-pass")
     page.locator("#login-form button[type=submit]").click()
     page.wait_for_selector(".room", timeout=10000)
     assert page.evaluate("!document.getElementById('login-dialog').open"), "signed in"
-    assert page.locator("#login-password").input_value() == "op-pass", "not emptied at the closing"
+    assert wait_until(page, "document.getElementById('login-password').value === ''", 5), "the password emptied after the sign-in"
+    assert page.locator("#login-user").input_value() == "operator", "the name kept until the next opening"
     sign_out(page)
     assert wait_until(page, "document.getElementById('login-dialog').open", 5), "the card again"
     assert wait_until(page, "document.getElementById('login-user').value === '' && document.getElementById('login-password').value === ''", 3), \

@@ -19,7 +19,7 @@ import { register, mounter } from "../shared/region";
 import { readApp } from "../shared/app";
 import { Banner } from "./Banner";
 import { Card } from "./Card";
-import { asksOwner, card, closed, forgetCard, open, toSignIn, type Way } from "./store";
+import { asksOwner, card, closed, forgetCard, open, settled, toSignIn, type Way } from "./store";
 
 mounter("login-dialog", () => <Card />)();
 mounter("open-banner-slot", () => <Banner />)();
@@ -41,9 +41,13 @@ const signIn = register("signIn", {
   toSignIn(): boolean {
     return toSignIn();
   },
-  /** closed takes the card's closing (askLogin's done). */
-  closed(): void {
-    closed();
+  /** closed takes the card's closing (askLogin's done), ok where it closed on a sign-in or a new owner. */
+  closed(ok: boolean): void {
+    closed(ok);
+  },
+  /** settled takes the end of the page's first reads after a sign-in or a new owner (login.js afterLogin, loadMeAndPreferences): the card's secret fields emptied where a success is due. */
+  settled(): void {
+    settled();
   },
   /** providers takes the enabled providers for their buttons (login.js renderLoginProviders); none in the app. */
   providers(list: LoginProvider[]): void {

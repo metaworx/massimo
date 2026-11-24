@@ -17,9 +17,13 @@
  * that keeps the server open (AP FirstOwner, Block 3), its line,
  * whether a request of the card is under way, which keeps every control
  * that ends the card off, and whether the card is open, for Escape, which
- * leaves a card the user opened (AP LooseEnds, D3). No name, password or key typed is kept here: the card's fields
- * are not controlled (UiParts D210), read at the submit and emptied at
- * each opening.
+ * leaves a card the user opened (AP LooseEnds, D3), and the successes
+ * whose secrets are to go. No name, password or key typed is kept here:
+ * the card's fields are not controlled (UiParts D210), read at the
+ * submit, emptied at each opening, and their secrets, the passwords and
+ * the key, emptied too once the card has closed on a sign-in or a new
+ * owner and the page's first reads after it have settled (AP LooseEnds,
+ * D13, D41-A).
  */
 
 import type { LoginProvider } from "../api";
@@ -40,9 +44,10 @@ export type OwnerStep = "form" | "keep";
 /** BANNER is the browser's key for the open server's warning hidden, per origin and so per server, while there is no owner (AP FirstOwner, D2, D38). */
 const BANNER = "massimo.openBanner";
 
-/** The card's state; opened counts the openings, shown says the card is open, owner says the first owner's form is shown instead of the ways, focus the focus asked for. */
+/** The card's state; opened counts the openings, succeeded the successes whose secret fields are to be emptied now (settled), shown says the card is open, owner says the first owner's form is shown instead of the ways, focus the focus asked for. */
 export const card = live({
   opened: 0,
+  succeeded: 0,
   shown: false,
   owner: false,
   way: "password" as Way,
@@ -120,6 +125,7 @@ export function open(on: Way | "owner", said: string, ask: SignInAsk): void {
   card.keepSaid = null;
   card.providersSaid = said ? { text: said, ok: false } : null;
   card.shown = true;
+  emptyDue = false; // the opening empties the fields: a success's emptying still due would meet what is typed now
   card.opened++;
   askFocus(on === "owner" ? "owner" : "way");
 }
@@ -248,12 +254,46 @@ export function bannerAgain(): void {
   store(BANNER, null);
 }
 
-/** closed takes the card's closing: a choice still waited for dropped. */
-export function closed(): void {
+/** emptyDue is a success whose secret fields wait for the page's first reads after it (settled); an opening drops it, having emptied them already. */
+let emptyDue = false;
+
+/**
+ * closed takes the card's closing, ok where it closed on a sign-in or a
+ * new owner: a choice still waited for dropped, and a success marked, so
+ * that the card's secret fields are emptied once the page's first reads
+ * after it have settled (settled; AP LooseEnds, D13); a dismissal (Skip
+ * for now, Back to the page, Escape, Keep it open, the app's Cancel)
+ * marks nothing.
+ */
+export function closed(ok: boolean): void {
   dropChoice();
   asking = null;
   asker = null;
   card.shown = false;
+  if (ok) emptyDue = true;
+}
+
+/**
+ * settled takes the end of the page's first reads after a sign-in or a
+ * new owner, of who is in and of the user's settings, answered or failed
+ * (login.js afterLogin and loadMeAndPreferences): a success marked at the
+ * card's closing is counted, and the card's secret fields are emptied in
+ * the drawing that follows (AP LooseEnds, D13, D41-A). Not at the close
+ * itself: a password manager, and the app's autofill, take a sign-in for
+ * done at the first request that completes after its form is hidden, and
+ * may read the fields then. Without a success marked, or where the card
+ * was opened again meanwhile, whose opening emptied them already and in
+ * which the user may be typing, it does nothing. Its one limit: one mark
+ * stands for every success, so a second sign-in that closes the card
+ * before the first one's reads have settled has its fields emptied at the
+ * first one's settle, before a read of its own; rare (two sign-ins within
+ * one read of who is in), nothing typed is lost since the card is closed,
+ * and accepted.
+ */
+export function settled(): void {
+  if (!emptyDue) return;
+  emptyDue = false;
+  card.succeeded++;
 }
 
 /** ask is the sign-in the card answers now, taken at a submit's start; null while none is open. */

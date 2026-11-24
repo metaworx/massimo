@@ -15,7 +15,8 @@
  * end with the version, the language, the mode and in the app Select
  * server; the notice where the address takes no kept key; a form for
  * each way, in the app with Cancel, the password's field with its eye
- * (shared/password.tsx), hidden again at each opening; the box that says the login by
+ * (shared/password.tsx), hidden again at each opening and after a
+ * success; the box that says the login by
  * fingerprint was not kept, the two forms and the box in one place of one
  * height (style.css .login-forms), so that a switch of the way moves
  * nothing of the card (UiParts D224); on a server without users, in
@@ -24,8 +25,11 @@
  * provider read (AP FirstOwner, D23); the version at the foot. The forms
  * are real forms with named fields, for a password manager, and their fields are
  * not controlled (UiParts D210): a draw never sets what they hold, they
- * are read at the submit and emptied at each opening alone, as
- * askLogin did. Each way signs in as askLogin's handlers did, then
+ * are read at the submit and emptied at each opening, as askLogin did,
+ * and the password and the key once the card has closed on a sign-in and
+ * the page's first reads after it have settled (store.ts settled; AP
+ * LooseEnds, D13, D41-A), so that a password manager has taken the
+ * sign-in for done first; never at a refusal or a dismissal. Each way signs in as askLogin's handlers did, then
  * finishSignIn of login.js goes on as they went on. The card is never
  * drawn anew: its buttons, their busy states and its fields stay through
  * every draw, the app's status, the providers, the language, a 401's
@@ -82,6 +86,7 @@ function Menu() {
 export function Card() {
   useLang();
   const opened = card.opened;
+  const succeeded = card.succeeded;
   const focus = card.focus;
   const way = card.way;
   const owner = card.owner;
@@ -97,14 +102,23 @@ export function Card() {
   const passRef = useRef<HTMLInputElement>(null);
   const keyRef = useRef<HTMLInputElement>(null);
   const retryRef = useRef<HTMLButtonElement>(null);
-  // each opening empties the fields and turns the switch off, as askLogin did; never the closing, so that a password
-  // manager still finds what was signed in with (the app's word on UiParts D210)
+  // each opening empties the fields and turns the switch off, as askLogin did; a closing empties nothing but after a
+  // success, below (AP LooseEnds, D13, which changes UiParts D210's closing that emptied nothing)
   // biome-ignore lint/correctness/useExhaustiveDependencies: opened is read from the card's store, which Biome takes for a stable import; the effect is for each opening, so it is listed.
   useLayoutEffect(() => {
     if (!opened) return;
     for (const r of [userRef, passRef, keyRef]) if (r.current) r.current.value = "";
     setKeep(false);
   }, [opened]);
+  // a sign-in done, the card closed and the page's first reads after it settled (store.ts settled): the password and
+  // the key emptied (AP LooseEnds, D13, D41-A), the password's eye hidden again by its reset; the name stays until the
+  // next opening. A refusal, a dismissal and a card opened again meanwhile are left as they are: no timer empties a
+  // field the user may be typing in
+  // biome-ignore lint/correctness/useExhaustiveDependencies: succeeded is read from the card's store, which Biome takes for a stable import; the effect is for each success, so it is listed.
+  useLayoutEffect(() => {
+    if (!succeeded) return;
+    for (const r of [passRef, keyRef]) if (r.current) r.current.value = "";
+  }, [succeeded]);
   // the focus asked for, given in the drawing that shows its place: the chosen way's first field at an opening and at a
   // way's click, the password after a refusal, Try again where the login by fingerprint was not kept; the first owner's
   // name is Owner's
@@ -218,7 +232,7 @@ export function Card() {
           <label><span>{t("login.user")}</span> <input ref={userRef} type="text" id="login-user" name="username" autocomplete="username" autocapitalize="none" spellcheck={false} /></label>
           <div class="login-field">
             <label for="login-password">{t("login.password")}</label>
-            <PasswordInput id="login-password" name="password" autocomplete="current-password" inputRef={passRef} reset={opened} />
+            <PasswordInput id="login-password" name="password" autocomplete="current-password" inputRef={passRef} reset={opened + succeeded} />
           </div>
           <label id="login-keep-row" class={"switch login-keep" + hid(!offered)}>
             <input type="checkbox" id="login-keep" checked={keep && offered} onChange={(ev) => setKeep(ev.currentTarget.checked)} />

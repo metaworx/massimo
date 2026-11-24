@@ -30,6 +30,13 @@ an open one while it shows in clear text, labelled **Show password** and
 it keeps what is typed, the caret and the field's focus,
 and the password is hidden again at the submit and at each opening of the
 sign-in card.
+Once the card has closed on a sign-in or a new owner
+and the page's first reads after it, of who is in and of the user's settings,
+have settled,
+its password fields and the API key's are emptied (AP LooseEnds, D13, D41-A):
+not at the close itself, since a password manager takes a sign-in for done
+at the first request that completes after the form is hidden;
+a refused sign-in keeps what was typed for the retry.
 A password shown is hidden again when its fold opens again
 (My profile's Change password, a user's panel),
 and when the eye is switched off, staying hidden when it comes back;
@@ -120,8 +127,9 @@ the card is titled that there are no users yet,
 and has the form that creates the first owner instead of the ways to sign in:
 its name, its password typed twice and, in the app, the switch and Cancel;
 its ☰ as at a sign-in, no provider.
-Its fields are emptied at an opening alone, never when the card closes,
-so that a password manager finds what was typed (FirstOwner D43);
+Its fields are emptied at each opening, and its two passwords once the
+owner is made, the card has closed and the page's first reads after it have settled
+(AP LooseEnds, D13), never at a refusal, Skip for now, Back or Escape;
 what Create the owner finds wrong is said alone,
 the focus on the field to change: the name, or Again where the two passwords
 differ; a missing password the browser refuses itself, its focus on Password;
@@ -3149,8 +3157,16 @@ and starts the page as the plain handlers did.
 Its fields are not controlled (UiParts D210):
 no draw sets what a name, a password or a key field holds,
 so that a password manager's fill stays; they are read at the submit
-and emptied at each opening alone, never at the closing,
-so that a password manager can still save them.
+and emptied at each opening;
+once the card has closed on a sign-in or a new owner (`done(true)` of `askLogin`,
+`MassimoParts.signIn.closed(ok)`) and the page's first reads after it have settled,
+answered or failed (`afterLogin`, `loadMeAndPreferences`, `MassimoParts.signIn.settled`,
+`card.succeeded`), the password, Again and the API key are emptied too,
+and an eye that shows a password is hidden again; the name stays until the next opening
+(AP LooseEnds, D13, D41-A, which changes UiParts D210 and FirstOwner D43).
+A refusal, Skip for now, Back to the page, Escape, Keep it open and the app's Cancel
+empty nothing; a card opened again before the reads settle has emptied its fields
+at the opening, and nothing empties what is typed in it then.
 The app's status of the login by fingerprint is read at each opening
 and after a fingerprint refused
 (`app.ts`), and with it the server the line under the title names (`Server.tsx`,

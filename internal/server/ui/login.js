@@ -250,7 +250,9 @@ let startWaits = 0;
 // loadMeAndPreferences reads who is in, through the sign-in dialog where
 // the server asks for one, and through the first owner's card where the
 // server asks for its owner (loadMe), then the user's settings from the
-// server.
+// server; once both have settled, a card closed on a sign-in or a new
+// owner meanwhile empties its secret fields (MassimoParts.signIn.settled,
+// AP LooseEnds, D13, D41-A).
 async function loadMeAndPreferences() {
   startWaits++;
   try {
@@ -259,7 +261,11 @@ async function loadMeAndPreferences() {
   } finally {
     startWaits--;
   }
-  await loadPreferences();
+  try {
+    await loadPreferences();
+  } finally {
+    MassimoParts.signIn.settled(); // the first reads after a sign-in of the card settled: its secrets go (ui/src/signin/)
+  }
 }
 
 // whoIs names who the page is signed in as, from /me: a user by name,
@@ -431,7 +437,7 @@ function askLogin(on) {
       ask.closed = true;
       dlg.onclose = null;
       if (dlg.open) dlg.close();
-      MassimoParts.signIn.closed();
+      MassimoParts.signIn.closed(ok); // ui/src/signin/: on a success the card's secrets go once the reads after it settle
       document.body.classList.remove("signed-out");
       loginPromise = null;
       resolve(ok);
@@ -600,11 +606,14 @@ async function currentPassword(user, password) {
 // ended while the page ran, a key pasted, the first owner. A write that
 // was not sent while the sign-in was open (notSent, app.js) and said so
 // on the page's message line, which the reload of the data clears, is
-// said there again, where the reload left the line empty.
+// said there again, where the reload left the line empty. Once who is in
+// and the settings are read, answered or failed, the card empties its
+// secret fields (MassimoParts.signIn.settled, AP LooseEnds, D13, D41-A).
 function afterLogin(read = true) {
   const said = notSentSaid();
   (read ? loadMe() : Promise.resolve())
     .then(loadPreferences)
+    .finally(() => MassimoParts.signIn.settled()) // the first reads after the sign-in settled: the card's secrets go (ui/src/signin/)
     .then(() => {
       startPolling(); // app.js: stopped where another user's sign-in forgot the session
       refresh().then((fresh) => {

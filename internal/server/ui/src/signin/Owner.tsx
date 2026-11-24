@@ -9,7 +9,7 @@
  * the card opens with it instead of the ways to sign in (askLogin
  * "owner" of login.js). The name, checked as Add a user checks it
  * (shared/username.tsx), the password twice (shared/password.tsx), each
- * with its eye, hidden again at each opening, and in
+ * with its eye, hidden again at each opening and after a success, and in
  * the app where the phone can and the address takes a key the switch that
  * keeps the login by fingerprint, and Cancel, back to the app's servers.
  * Create the owner creates the owner with a password of version 2 and
@@ -32,9 +32,11 @@
  * AP FirstOwner, Block 3) in the form's place, the two of one height,
  * where the server is not kept open already. Its fields are not controlled, as the card's
  * (UiParts D210): no drawing writes what they hold, they are read at the
- * submit and emptied at each opening alone, never at the closing nor at
- * the turn to the sign-in, so that a password manager finds what was
- * typed when the form goes (FirstOwner D43); the form is drawn once with
+ * submit and emptied at each opening, never at a dismissal nor at the
+ * turn to the sign-in, and the two passwords once the card has closed on
+ * the new owner and the page's first reads after it have settled
+ * (store.ts settled; AP LooseEnds, D13, D41-A; it changes FirstOwner D43,
+ * which kept them for a password manager); the form is drawn once with
  * the card and only hidden.
  */
 
@@ -60,6 +62,7 @@ export function Owner() {
   const working = card.working;
   const kept = keptOpen(me.value);
   const opened = card.opened;
+  const succeeded = card.succeeded;
   const focus = card.focus;
   const offered = offer(app.value);
   const [keep, setKeep] = useState(false);
@@ -89,6 +92,14 @@ export function Owner() {
     setKeep(false);
     nc.say("");
   }, [opened]);
+  // the owner made, signed in, the card closed and the page's first reads after it settled (store.ts settled): the two
+  // passwords emptied (AP LooseEnds, D13, D41-A), their eyes hidden again by their reset; the name stays until the
+  // next opening
+  // biome-ignore lint/correctness/useExhaustiveDependencies: succeeded is read from the card's store, which Biome takes for a stable import; the effect is for each success, so it is listed.
+  useLayoutEffect(() => {
+    if (!succeeded) return;
+    for (const r of [passRef, againRef]) if (r.current) r.current.value = "";
+  }, [succeeded]);
   // the name in focus at the first owner's opening, in the drawing that shows the form; none on a touch screen, where it
   // would bring the soft keyboard up by itself (UiParts D224)
   // and Keep it open… in focus again after Back
@@ -175,7 +186,7 @@ export function Owner() {
             <p class="muted">{t("setup.text")}</p>
             <p id="setup-tls" class={"notice small" + hid(!card.selfSigned)} role="note">{t("header.selfSigned")}</p>
             <UserNameField label={t("users.name")} id="setup-user" msgId="setup-name-msg" nc={nc} autocomplete="username" inputRef={nameRef} />
-            <NewPassword ids={["setup-password", "setup-again"]} label={t("login.password")} inputRefs={[passRef, againRef]} required reset={opened} />
+            <NewPassword ids={["setup-password", "setup-again"]} label={t("login.password")} inputRefs={[passRef, againRef]} required reset={opened + succeeded} />
             <label id="setup-keep-row" class={"switch login-keep" + hid(!offered)}>
               <input type="checkbox" id="setup-keep" checked={keep && offered} onChange={(ev) => setKeep(ev.currentTarget.checked)} />
               <span class="slider" aria-hidden="true" />

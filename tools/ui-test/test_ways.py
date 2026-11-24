@@ -165,6 +165,53 @@ def test_escape_on_the_confirmation_and_not_at_the_start(new_context, case, watc
     assert focus_back(page, back), "the focus back on Create the owner…"
 
 
+def typed(page, password):
+    """The two passwords of the first owner's form typed."""
+    page.locator("#setup-password").fill(password)
+    page.locator("#setup-again").fill(password)
+
+
+def kept(page, password, what):
+    """The closed card's two passwords still hold what was typed."""
+    frames(page)
+    assert not page.evaluate(DIALOG_OPEN), f"{what}: the card closed"
+    values = [page.locator(f).input_value() for f in ("#setup-password", "#setup-again")]
+    assert values == [password, password], f"{what} empties nothing: {values}"
+
+
+def emptied_at_the_opening(page, what):
+    values = [page.locator(f).input_value() for f in ("#setup-password", "#setup-again")]
+    assert values == ["", ""], f"the opening after {what} empties them: {values}"
+
+
+def test_skip_back_and_escape_empty_nothing(new_context, case, watch, guard):
+    """Skip for now, Back to the page and Escape leave the first owner's
+    card as they found it: the closed card's passwords still hold what was
+    typed, and the next opening empties them (AP LooseEnds, D13). A
+    forward guard: the card emptied its fields at the opening alone
+    before."""
+    page = start_page(new_context, guard, watch, OPEN)
+    owner_card(page)
+    typed(page, "skipped")
+    page.locator("#setup-skip").click()
+    kept(page, "skipped", "Skip for now")
+    page.wait_for_selector(".room", timeout=10000)
+    assert wait_until(page, "state.eventsOpen", 10), "the page started"
+    open_by(page, "banner")
+    emptied_at_the_opening(page, "Skip for now")
+    typed(page, "back")
+    page.locator("#setup-skip").click()
+    kept(page, "back", "Back to the page")
+    open_by(page, "menu")
+    emptied_at_the_opening(page, "Back to the page")
+    typed(page, "escaped")
+    page.keyboard.press("Escape")
+    assert wait_until(page, f"!({DIALOG_OPEN})", 5), "Escape closes the card"
+    kept(page, "escaped", "Escape")
+    open_by(page, "users")
+    emptied_at_the_opening(page, "Escape")
+
+
 def test_no_escape_while_create_turns(new_context, case, watch, guard):
     """Escape does nothing while Create the owner turns in a card the user
     opened: the card stays until the creation has ended, then closes on the
