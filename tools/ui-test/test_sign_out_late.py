@@ -119,18 +119,39 @@ def test_the_house_to_every_room(new_context, case, watch, guard, way):
     assert page.evaluate(line) == said, "the House says no room's outcome"
 
 
+def without_presets(rooms):
+    """The rooms' device entries without the thermostats' eco and comfort
+    temperatures, as a server before them sends them (AP RoomMajority
+    v1.1, Block 3): the House's Eco then reads them from the room
+    thermostat's detail (tiles.js presetTemps)."""
+    for room in rooms or []:
+        for d in room.get("devices") or []:
+            d.pop("eco_temp", None)
+            d.pop("comfort_temp", None)
+    return rooms
+
+
 @pytest.mark.parametrize("way", WAYS)
 def test_the_house_in_eco(new_context, case, watch, guard, way):
-    """The House panel's Eco (rooms/House.tsx) reads a room's thermostat
-    for its eco temperature, then sets it: that read answered in the next
-    user's session (a read is sent again after any sign-in) sends no
-    setpoint. Fails on the page before: the setpoint went out under the
-    next user's key, a write that user never made."""
+    """The House panel's Eco (rooms/House.tsx), its rooms' entries without
+    their eco temperatures as a server before them sends them, reads a
+    room's thermostat's detail for it, then sets it: that read answered in
+    the next user's session (a read is sent again after any sign-in) sends
+    no setpoint. Fails on the page before: the setpoint went out under the
+    next user's key, a write that user never made. An entry with them
+    reads nothing before the setpoint, whose late answer
+    test_the_house_to_every_room holds. Every setpoint is answered by a
+    stub, so that none reaches the fake Cube, the rule broken included."""
     page = owner_page(new_context, guard, watch, URL, TOKEN)
+    reads_of(page).change("**/api/v1/cubes/*/rooms?devices=all", without_presets)
+    page.evaluate("loadRooms()")
+    assert page.evaluate("state.rooms.every((r) => r.devices.every((d) => d.eco_temp === undefined))"), "the entries without their temperatures"
+    page.route("**/rooms/*/setpoint", lambda route: route.fulfill(status=200, content_type="application/json", body="{}")
+               if route.request.method == "PUT" else route.continue_())
     page.locator("#house-eco").click()
     page.locator("#house-rooms .check-all input").check()
-    held, sent = [], []
-    hold(page, "**/api/v1/cubes/*/devices/*", "GET", held, sent)
+    held = []
+    hold_first(page, "**/api/v1/cubes/*/devices/*", "GET", held)
     setpoints = requests_of(page, "PUT", "/setpoint")
     page.locator("#house-panel button[type=submit]").click()
     assert wait_held(page, held), "the thermostat's read is on its way"
