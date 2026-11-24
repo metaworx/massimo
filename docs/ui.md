@@ -578,16 +578,80 @@ Every room has a tile:
   "in Office for the Cube", "own week programme",
   the whole sentence its tooltip;
   the log has its **room list** line, a warning until the two agree again.
-- **SET** is the set temperature.
-  The up and down chevrons next to it change it in steps of 0.5 °C;
+- **SET** is the set temperature, the room thermostat's:
+  the one whose setpoint the room's virtual wall thermostat shows,
+  the first of its `sources.setpoint`,
+  which its state events keep current between two reads of the rooms,
+  else the one the room's entry names (`thermostat`) (RoomMajority.D19-A):
+  what most of its thermostats show, else the newest change,
+  else the first of its one order, its master, its wall thermostat,
+  its radiator thermostats; during a boost the same over those that do not boost;
+  from a server before them, its wall thermostat, else its first radiator thermostat.
+  4.5 °C reads **OFF**, as the devices' displays show it (there is no ON for 30.5 °C),
+  here and wherever a setpoint is written:
+  the device list, More's Eco and Comfort, the tile's and the House tile's result,
+  what a device not confirming a write shows, the week programme's bar
+  and the members' line below;
+  the log adds the temperature, "OFF (4.5 °C)".
+  The fields that take a temperature keep 4.5:
+  the holiday form, the House tile's, the programme's switch points, the configuration.
+  At the top right of the value, in the accent colour of SET's icon,
+  a mark says where it is one of the room's presets, as a display does:
+  a crescent moon at its eco temperature, a sun with rays at its comfort temperature,
+  the two side by side where comfort and eco are the same;
+  its tooltip names it in the configuration's words ("Eco temperature"),
+  and so does a screen reader.
+  The mark stands out of the row's flow, in the room above the value,
+  and the value is as wide as "30.5°" whatever it shows,
+  so that the mark costs no width, neither the value nor the chevrons move
+  as a step passes a preset, and the tiles line up;
+  on a phone the row's gaps are narrower and its numbers a little smaller,
+  so that Italian's labels, the longest, fit a 390 px screen.
+  The presets are the room's, its entry's `eco_temp` and `comfort_temp`,
+  what most of its thermostats store, else the first of its order's,
+  as the room's configuration shows them:
+  a setpoint at a wall thermostat's own eco temperature,
+  where most of the room's thermostats store another, is not marked;
+  from a server before them, the room thermostat's own.
+  The page reads the rooms again
+  when a thermostat's `config` event says its presets changed (`changed` names `temps`),
+  and when the Cube gains or loses a thermostat's state,
+  which may make another the room thermostat;
+  one read runs at a time and one more waits behind it for every call meanwhile,
+  so that a burst, as a reconnect brings one per thermostat,
+  reads the rooms twice at most, the last time after the last event.
+  The up and down chevrons next to it change it in steps of 0.5 °C,
+  the value stepped marked as it goes;
   the value is sent 2 seconds after the last click, or at once with **Save**;
   **Cancel** drops it.
   A temperature set this way puts the room into manual mode.
+- **While the room's thermostats show different setpoints**,
+  a line under SET names each with its setpoint and its own mark, " · " between them:
+  "Thermostats differ: Radiator 21.0 °C · Wall thermostat OFF",
+  the sun after the radiator's where 21 °C is its comfort temperature.
+  It stays away while they may differ for a while for a reason of their own,
+  as a room command reaches the devices one by one:
+  while a write of the tile to the room's setpoint runs;
+  from the answer of the tile's or the House tile's write the Cube took
+  until every thermostat shows it, five minutes at most, the server's confirmation's time
+  (a write without a temperature, such as AUTO, until they show its mode
+  and agreeing setpoints taken since the write, which another report,
+  a valve's or a window contact's, does not end);
+  while a thermostat shows a write of its mode or setpoint not confirmed yet
+  (pending), another client's or one from before the page was loaded too;
+  and while a window of the room is open, its radiator thermostats then at their
+  window-open temperature, an out-of-date contact by its last report,
+  as the room checks count it.
+  A boost waits for nothing, and a write that failed or that the Cube discarded
+  leaves an earlier wait as it was.
+  The line goes once they agree,
+  and comes at once where one is changed at the device after that.
 - **AUTO** follows the week programme.
   **MANU** keeps the current temperature.
   **MORE** opens a menu; the arrow keys move in it, Escape closes it:
   - **Eco** and **Comfort** set the room's eco or comfort temperature,
-    shown under each, and keep the room's mode:
+    its presets as SET's mark has them,
+    shown under each (OFF for 4.5 °C), and keep the room's mode:
     in Auto until the next switch point,
     in Manual held, on holiday until the holiday's end.
   - **Hold (Manual)**, a switch shown while the room is in Auto:
@@ -609,6 +673,9 @@ Every room has a tile:
   every device with its type's icon before its name (a radiator, a wall
   thermostat, a window, a leaf for the eco button), its values (valve, set
   and measured temperature, offset), its problems as icons that list them,
+  the set temperature OFF at 4.5 °C, without a unit, and with the moon, the sun
+  or both in the place of its gauge where it is the device's own eco or comfort
+  temperature, so that the values stay where they are,
   as in the tile's head, a write not confirmed among them,
   and badges for lock, window and mode.
   A device whose battery is weak or low and whose battery flag is off
@@ -700,7 +767,7 @@ Every room has a tile:
     a warning where the Cube still holds memory slots for it
     or a device of the room was left with a communication error or a link error.
   - **Week programme**:
-    one bar per day.
+    one bar per day, a segment at 4.5 °C reading OFF, its switch point's field 4.5.
     - A click on a day selects it together with every day that has the same programme.
     - With **Only {day}** on, changes apply to that day alone.
       Off, they apply to all selected days.
@@ -760,7 +827,8 @@ Every room has a tile:
 
 The **House** tile, named after the chosen Cube with the cube before its name
 ("All rooms of …" its tooltip), sets several rooms at once: ECO, AUTO,
-COMFORT or MANU with a temperature, permanently or until a date and time;
+COMFORT or MANU with a temperature, permanently or until a date and time,
+ECO and COMFORT each room's own presets, as its tile's More has them;
 its **Send** is off while no room is ticked,
 the rooms a choice of checkboxes with **All rooms** first.
 What its panel holds stays when the rooms load again and when it closes:
@@ -827,7 +895,7 @@ every box is closed and forgotten with what it held.
 - In a room: **Reset the communication errors** of its devices, free;
   **Name the room's master**, where the Cube's list names no thermostat of
   the room, the wall thermostat, else the first radiator thermostat,
-  in the list only;
+  one the Cube has no state for passed over, in the list only;
   **Re-link the room**, each device's links and room sent again,
   adding only;
   **Unlink all and re-link**, with `structure` as well,
@@ -839,8 +907,12 @@ every box is closed and forgotten with what it held.
   **Continue** asks once more, and only that question's
   **Unlink all and re-link now** sends it.
 - At a device: **Re-send the configuration**, for a thermostat,
-  the temperatures and week programme most of the room's other thermostats
-  share, where its own differ;
+  the room's temperatures and each day of its week programme,
+  where its own differ:
+  what most of the room's thermostats share, its own included,
+  as the room's differences name them,
+  else its master's, its wall thermostat's or its first radiator thermostat's,
+  one the Cube has no state for passed over (RoomMajority.D9);
   **Place in its listed room**, by radio, where the Cube has it in another
   room or none;
   **List where the Cube has it**, in the list only,
@@ -895,8 +967,12 @@ The room checks (`docs/api-v1.md`, "The room checks") have lines of their own:
 with its setting ("Bedroom: its thermostats differ in setpoint for 11 min:
 Window: manual set 21.0, Door: manual set 18.0"), then the room's state sent
 again to them and from where ("as Massimo last set it", "as most of its
-thermostats have it", "as its wall thermostat has it"), or why not,
-and their agreeing again;
+thermostats have it", "as the thermostat changed last has it",
+"as its master has it", "as its wall thermostat has it",
+"as its first radiator thermostat with a state has it"),
+or that it is the room's state from before a device was put into it,
+with what took it then ("what most of its thermostats showed"),
+or why not, and their agreeing again;
 **programme drift**, a thermostat that does not follow its week programme while
 the room's others follow theirs ("does not follow its week programme: 12.0
 instead of 21.0 since the switch point at 18:20, …; its clock or its programme is
@@ -940,6 +1016,8 @@ with its name as it was.
 A device's state line says what changed ("window opened", "set 18.0 → 21.0",
 "mode: manual", "reports again"), whoever changed it, also at the device;
 its first line since the server started shows the whole state.
+A setpoint of 4.5 °C reads as the devices show it, with its temperature,
+"set 18.0 → OFF (4.5 °C)", in every line that writes a setpoint.
 A view scrolled down keeps its place when a new line comes in on top.
 A new line, the lines drawn again (the rooms came, another language),
 the log loaded again and its problems read again leave what the user holds
@@ -1660,12 +1738,25 @@ settings forms and have none of it.
   and for a thermostat **Copy the room's settings**, on by default,
   shown where the role has `configure`, which the copy needs.
   **Put into a room** links the device with the room's other devices and lists it there;
-  with the copy it also gets the temperatures,
-  valve settings and week programme of the room's other thermostats,
-  as the original software does, which costs up to two thirds of an hour's
-  radio budget for a new thermostat (the **?** says how);
-  the room's other thermostats get its temperatures too.
-  The line under the form says how it went, and the end of pairing is said too.
+  with the copy it also gets the room's state,
+  the mode and setpoint its thermostats showed before it came
+  (a room in manual stays in manual), and the room's settings,
+  setting by setting and day by day of the week programme:
+  what most of the room's other thermostats share,
+  else its master's, its wall thermostat's or its first radiator thermostat's,
+  one the Cube has no state for passed over (RoomMajority, Block 2),
+  which costs up to two thirds of an hour's radio budget for a new thermostat
+  (the **?** says how);
+  the room's other thermostats with a state get its temperatures too.
+  Without the copy the device keeps its own state and settings.
+  The line under the form says how it went:
+  the state the device took, the room's, or Massimo's setpoint to the room
+  where one came while the device was linked,
+  or auto on the week programme where the room had none;
+  or that the Cube did not take it and whether it went to the whole room instead;
+  the days of the programme copied, or why no settings were,
+  the room having no other thermostat or none the Cube has a state for;
+  and the end of pairing is said too.
   A role with the capability `pair` but not `cubes`, the manager's by default,
   sees the Cubes' panels with the pairing alone;
   putting a device into a room needs `structure`.
@@ -2272,7 +2363,9 @@ in the order the page loads them:
   (the menus' placing, a copy, a toast, a sign's blinking, a result line);
 - `app.js`, the core: the state, the storage and the settings with their scopes,
   the API with the token and the 401, the helpers the plain scripts and the parts
-  share (a temperature, help, the Cube clock),
+  share (a temperature, help, the Cube clock), and a setpoint as the devices show it,
+  OFF for 4.5 °C, for the plain scripts (`fmtSetpoint`, the week programme's kit;
+  the parts' is `shared/setpoint.tsx`'),
   the loads, the poll, the event stream's connection and its kinds,
   each handed to its part, the language and `init`;
 - `header.js`, what stays plain of the header: the chosen Cube's radio budget line,
@@ -2281,8 +2374,13 @@ in the order the page loads them:
   `home.js`, the home notice's place shown or hidden, the Cubes a `cube_found` event adds
   and the way to them, and what a Cube's address outside the networks needs;
 - `rooms.js` and `tiles.js`, the rooms' actions (the stepper's setpoint and its timer,
-  a tile's writes, the presets, the locks, the holiday form, Escape)
-  and the room's facts they use (UiParts D218; the others are `ui/src/model/room.ts`');
+  a tile's writes, a room's setpoint waiting for its thermostats (`awaitMembers`),
+  the presets, the locks, the holiday form, Escape)
+  and the room's facts they use (UiParts D218;
+  the others are `ui/src/model/room.ts`'),
+  among them the room thermostat
+  (`roomThermostat`, whose state is the room's, as its virtual wall thermostat names it)
+  and the room's presets (`roomPresets`, the room's entry's);
 - `week-program.js`, the week programme editor, an element of its own,
   `<massimo-week-program>`, so that a Home Assistant card can use the same editor:
   it holds the editor's behaviour, works on a model the page keeps,
@@ -2527,6 +2625,8 @@ a value's age it takes from `received` of `rooms.js`, as the rooms do.
 | `Copy`, `CopyIcon`, `CopyPair` | `copy.tsx` | a text that copies itself, a copy icon (`copyEl`, `copyIcon`); something with its copy icon after it, a text or a link (an address served: an integration's, System info's) | `text`, `value` (what it copies, where it is not the text), `label` (named "Copy …"), `name` (its whole name in its place: the server's version), `icon`, `cls`, `id`; `get`, `label`; `get`, `label`, what it follows as children |
 | `Link` | `link.tsx` | a link in a tab of its own, the text alone for a url that is not http(s) | `url`, `text`, `cls` |
 | `DeviceIds` | `device.tsx` | a device's serial and radio address | `serial`, `rf`, `always` |
+| `fmtSetpoint`, `TEMP_OFF` | `setpoint.tsx` | a setpoint as the devices' displays show it, OFF for 4.5 °C without a unit, else as `fmtTemp` gives it, no ON for 30.5 °C, in every text that shows one (a tile's SET, a device row, More, a write's result, the log's "OFF (4.5 °C)"); the number fields keep 4.5; `fmtSetpoint` of `app.js` is the plain scripts' | `v`, `unit` |
+| `presetOf`, `presetMarkLabel`, `PresetMark` | `setpoint.tsx` | a setpoint at a thermostat's presets (a device's `eco_temp` and `comfort_temp`): eco, comfort, or both where the two are the same, null otherwise; its name, in the configuration's words; its mark, the moon, the sun or the two (`icon-eco`, `icon-comfort`, `icon-eco-comfort`), an image named by its label and with it as its tooltip (a tile's SET and its members' line, a device row's Set) | `setpoint`, `eco`, `comfort`; `preset`; `preset`, `cls` (its icon's class: `ti`, `di`) |
 | `cubePath` | `path.ts` | a Cube's path in the API, which every part's request about a Cube starts from, Backup and restore's too; `base()` of `app.js` is its next user, with its block | `serial` |
 | `hid` | `cls.ts` | the class `hidden`, with its space, for an element kept in its place and hidden | `off` |
 | `PutForm`, `newPut` | `put.tsx` | the form that puts a device in no room into one (with `structure`), wherever such a device is shown, a device that joined while its Cube pairs or one of the devices without a room: its name (with `rename`), offered for the room chosen until one is typed (D200-A) and marked where it is too long for the Cube (D201), the room, for a thermostat the copy of the room's settings (with `configure`), on by default, then `PUT …/devices/{rf}` and its outcome; what the caller keeps of it, live; the room chosen is pinned at its first drawing, the first of the rooms, and moves only where it is gone; a part with state that two regions draw, its texts its own (`put.…`, `help.putCopy`, and `name.long` for the name's limit) | `id` (its fields' ids' beginning), `serial`, `dev`, `rooms`, `put` (what `newPut` makes: the name typed, the room and the copy, the request under way, the outcome, done), `reload` (what follows the request, before `onDone` or `onFail`), `onDone`, `onFail`, `onCancel` (its Cancel, of the class `form-cancel`, none without), `focus` (its first field takes the focus when it comes) |

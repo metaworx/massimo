@@ -1,12 +1,12 @@
 # SPDX-License-Identifier: AGPL-3.0-or-later
 # Copyright (C) 2026 The Massimo Authors
-"""A room tile's More menu (AP RoomTile): Eco and Comfort set the room
-thermostat's eco or comfort temperature and keep the room's mode, the
-Hold (Manual) switch, shown while the room is in Auto, makes them hold
-it in Manual, and Holiday… opens the holiday form; the arrow keys move
-between its items and Escape closes it. A room on holiday shows the
-holiday's end on More, in the room's problem pill and in the device
-list.
+"""A room tile's More menu (AP RoomTile): Eco and Comfort set the room's
+eco or comfort temperature (AP RoomMajority, D19-A) and keep the room's
+mode, the Hold (Manual) switch, shown while the room is in Auto, makes
+them hold it in Manual, and Holiday… opens the holiday form; the arrow
+keys move between its items and Escape closes it. A room on holiday
+shows the holiday's end on More, in the room's problem pill and in the
+device list.
 
 Every write is held at its route and answered with a stub, so nothing
 reaches the fake Cube; the modes come from state events applied in the
@@ -57,9 +57,9 @@ def tile_of(page, rid):
 
 
 def presets(page, rid):
-    """The room thermostat's eco and comfort temperatures, as the page
-    reads them from its configuration."""
-    return page.evaluate("(rid) => presetTemps(roomThermostat(state.rooms.find((r) => r.id === rid)))", rid)
+    """The room's eco and comfort temperatures, as the page reads them
+    (presetTemps: the room's entry's)."""
+    return page.evaluate("(rid) => presetTemps(state.rooms.find((r) => r.id === rid))", rid)
 
 
 def answer(page, held, sel):

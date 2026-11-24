@@ -11,9 +11,17 @@
 // Uses the state, api and helpers of app.js.
 "use strict";
 
-// presetTemps are a thermostat's configured eco and comfort
-// temperatures, { eco, comfort }, undefined where it has none.
-async function presetTemps(th) {
+// presetTemps are a room's configured eco and comfort temperatures, {
+// eco, comfort }, undefined where it has none: those of the page's data
+// (roomPresets: the room's entry's, else its room thermostat's entry's,
+// which a load of the rooms after a config event that changed them keeps
+// current), its room thermostat's detail's where neither has them (a
+// server before them).
+async function presetTemps(room) {
+  const p = roomPresets(room);
+  if (p.eco !== undefined && p.comfort !== undefined) return p;
+  const th = roomThermostat(room);
+  if (!th) return {};
   const detail = await deviceDetail(th);
   const cfg = detail.thermostat || detail.wall_thermostat || {};
   return { eco: cfg.eco_temp, comfort: cfg.comfort_temp };
@@ -31,18 +39,19 @@ function presetBody(room, temp) {
   return { mode: "manual", temp };
 }
 
-// presetLabel names a preset's write by the body it sends.
+// presetLabel names a preset's write by the body it sends, its
+// temperature as the devices show it (OFF for 4.5 °C).
 function presetLabel(which, body) {
-  const temp = fmtNum(body.temp, 1);
+  const temp = fmtSetpoint(body.temp);
   const label = which === "eco" ? t("label.eco", { temp }) : t("label.comfort", { temp });
   if (body.mode === "auto") return t("label.presetAuto", { label });
   if (body.mode === "vacation") return t("label.presetUntil", { label, until: fmtUntil(body.until) });
   return t("label.presetManual", { label });
 }
 
-// sendPreset sets the room to its thermostat's eco or comfort
-// temperature (which) in the room's mode, from the More menu, whose
-// summary the tile gives the focus back to (ui/src/rooms/Tile.tsx).
+// sendPreset sets the room to its eco or comfort temperature (which,
+// presetTemps) in the room's mode, from the More menu, whose summary the
+// tile gives the focus back to (ui/src/rooms/Tile.tsx).
 function sendPreset(room, which) {
   leaveEditing(room);
   return tileWrite(room, which, async () => {
@@ -50,7 +59,7 @@ function sendPreset(room, which) {
     const n = MassimoParts.session();
     let temp;
     try {
-      temp = (await presetTemps(roomThermostat(room)))[which];
+      temp = (await presetTemps(room))[which];
     } catch (e) {
       if (!MassimoParts.stillSession(n)) return null;
       showTileResult(room.id, errorText(what, e), false);

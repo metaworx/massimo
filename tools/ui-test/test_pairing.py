@@ -3,8 +3,8 @@
 """Pairing and removal: in System settings → Cubes a device is paired, named
 (the form offers "<room> <type> <n>" for the room chosen, D200-A, one
 too long for the Cube marked and not sent until shortened, D201),
-put into a room with the room's settings and removed from the Cube again
-in the room's Devices tab; a device paired while the page was not
+put into a room with the room's state and settings, which the form's
+outcome names, and removed from the Cube again in the room's Devices tab; a device paired while the page was not
 looking is put into a room from Devices without a room, and another
 removed from there. The fake Cube's device joins two seconds after n:
 (run.sh, -pair) and again after it was removed, so every case pairs it;
@@ -157,11 +157,26 @@ def test_pair_put_into_a_room_and_remove(page, case, clean):
     form.locator("select[name=room]").select_option(str(room["id"]))
     assert name.input_value() == "Pair test", "a name typed stays when the room changes"
     assert form.locator("input[name=copy]").is_checked(), "the copy is on by default"
-    form.locator("button[type=submit]").click()
+    with page.expect_response(lambda r: r.request.method == "PUT" and CUBE + "/devices/" in r.url, timeout=60000) as put:
+        form.locator("button[type=submit]").click()
+    copied = put.value.json()["copied"]
     assert wait_until(page, IN_ROOM % room["id"], 30), "the device is in the room"
     done = "(() => { const r = document.querySelector(\"%s .pair-device[data-rf='%s']\"); return !!r && !r.querySelector('form'); })()" % (PANEL, DEV)
     assert wait_until(page, done, 30), "the row says how it went once the copy is done"
-    assert room["name"] in row.locator(".pair-result").inner_text(), "the outcome names the room"
+    outcome = row.locator(".pair-result").inner_text()
+    assert room["name"] in outcome, "the outcome names the room"
+    # The state the copy's 0x40 carried, the room's from before (AP
+    # RoomMajority, Block 2), worded as the form words it, and the days.
+    said = page.evaluate("""(c) => {
+      const s = c.state, temp = s.setpoint === undefined ? "" : fmtNum(s.setpoint, 1) + " °C";
+      const state = s.mode === "manual" ? t("put.stateManual", { temp }) : s.mode === "vacation" ? t("put.stateVacation", { temp, until: fmtUntil(s.until) })
+        : s.setpoint === undefined ? t("put.stateAuto") : t("put.stateAutoTemp", { temp });
+      const head = c.state_from === "default" ? t(c.mode_not_set ? "put.modeNotSetDefault" : "put.stateDefault")
+        : t(c.mode_not_set ? (c.room_mode ? "put.roomMode" : "put.modeNotSet") : "put.state", { state });
+      return [head, t("put.copied", { days: c.days })];
+    }""", copied)
+    assert "state" in copied and copied.get("state_from") == "room" and not copied.get("config_skipped"), f"the copy's answer: {copied}"
+    assert said[0] in outcome and said[1] in outcome, f"the outcome names the state and the days: {outcome!r}, want {said}"
     assert wait_until(page, "(document.querySelector(\"%s .pairing-msg\") || {}).textContent === %s" % (PANEL, json.dumps(ENDED[case.lang])), 15), \
         "the end of pairing said"
     assert pairing.locator(".pairing-running").is_hidden() and pairing.locator(".pair-open").is_visible(), "Pair a device again"

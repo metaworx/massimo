@@ -32,6 +32,7 @@ import { Problems } from "../shared/problems";
 import { busyProps, useBusy } from "../shared/question";
 import { RepairBox, RepairButton, repairScope } from "../shared/repair";
 import { session, stillSession } from "../shared/session";
+import { fmtSetpoint, type Preset, PresetMark, presetOf, TEMP_OFF } from "../shared/setpoint";
 import { deviceBadges, deviceItems, mismatchWords, problemsLabel, vwtItems } from "./facts";
 import { useLook } from "../shared/look";
 import { openSettings, vwtFormKey } from "./store";
@@ -83,16 +84,26 @@ function useDetail(d: Device, want: boolean): {
  * Cell is one cell of the values grid: label, number, unit, an icon and
  * the value's age after it. The number sits right-aligned in a fixed-width
  * span so the decimal points of a column line up; an empty label makes a
- * spacer. Temperatures (an icon given) are bold.
+ * spacer. Temperatures (an icon given) are bold. A preset, where given,
+ * takes the icon's place with its mark (the setpoint at the device's eco
+ * or comfort temperature, D18), so that it costs no width.
  */
-function Cell({ label, value, unit, icon, at, stale }: { label: string; value: string; unit: string; icon?: string; at?: string; stale?: boolean }) {
+function Cell({ label, value, unit, icon, preset, at, stale }: {
+  label: string;
+  value: string;
+  unit: string;
+  icon?: string;
+  preset?: Preset | null;
+  at?: string;
+  stale?: boolean;
+}) {
   const aged = !!at && value !== "";
   return (
     <span class={aged ? "cell aged" : "cell"}>
       <span class="k">{label}</span>
       <span class={icon ? "num temp" : "num"}>{value}</span>
       <span class="u">{value === "" ? "" : unit}</span>
-      {icon && value !== "" && <Icon symbol={icon} cls="di" />}
+      {icon && value !== "" && (preset ? <PresetMark preset={preset} cls="di" /> : <Icon symbol={icon} cls="di" />)}
       {aged && !icon && <span />}
       {aged && <Age at={at} stale={stale} />}
     </span>
@@ -100,12 +111,15 @@ function Cell({ label, value, unit, icon, at, stale }: { label: string; value: s
 }
 
 /** A cell's values, as Cell takes them. */
-type CellOf = { label: string; value: string; unit: string; icon?: string; at?: string };
+type CellOf = { label: string; value: string; unit: string; icon?: string; preset?: Preset | null; at?: string };
 
 /**
  * Values is a thermostat's two-column grid: valve and offset on the left,
  * set and actual on the right, a holiday's end under them; shown is the
- * device as its values are shown (an out-of-date one's last report).
+ * device as its values are shown (an out-of-date one's last report). The
+ * setpoint is OFF at 4.5 °C, without a unit, as the device shows it, and
+ * marked in place of its gauge where it is the device's own eco or
+ * comfort temperature (D11-A, D18).
  */
 function Values({ d, shown, offset }: { d: Device; shown: Device; offset?: number }) {
   const s = shown.state || {};
@@ -113,7 +127,8 @@ function Values({ d, shown, offset }: { d: Device; shown: Device; offset?: numbe
   if (s.valve_pct !== undefined) left.push({ label: t("val.valve"), value: String(s.valve_pct), unit: "%", at: received(shown, "valve_pct") });
   if (isThermostat(shown)) left.push({ label: t("val.offset"), value: offset === undefined ? "" : (offset > 0 ? "+" : "") + fmtNum(offset, 1), unit: "°C" });
   const right: CellOf[] = [
-    { label: t("val.set"), value: fmtTemp(s.setpoint, ""), unit: "°C", icon: "icon-set" },
+    { label: t("val.set"), value: fmtSetpoint(s.setpoint, ""), unit: s.setpoint === TEMP_OFF ? "" : "°C", icon: "icon-set",
+      preset: presetOf(s.setpoint, shown.eco_temp, shown.comfort_temp) },
     { label: t("val.actual"), value: fmtTemp(s.actual_temp, ""), unit: "°C", icon: "icon-is", at: received(shown, "actual_temp") },
   ];
   const rows = Math.max(left.length, right.length);

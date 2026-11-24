@@ -16,6 +16,7 @@ import (
 	"go.metaworx.ch/massimo/internal/cubelan"
 	"go.metaworx.ch/massimo/internal/engine"
 	"go.metaworx.ch/massimo/internal/protocol/cube"
+	"go.metaworx.ch/massimo/internal/roomorder"
 	"go.metaworx.ch/massimo/internal/view"
 )
 
@@ -106,7 +107,7 @@ func RelinkCommands(snap *cubelan.Snapshot, room uint8, skip view.Hidden) []engi
 // the room's flagged members.
 func relink(snap *cubelan.Snapshot, room uint8, skip view.Hidden, reset bool) []engine.Command {
 	members := ConfigMembers(snap, room, skip)
-	master := roomMaster(snap, room)
+	master := RoomMaster(snap, room)
 	var out []engine.Command
 	for _, d := range members {
 		if !Linkable(d.Type) {
@@ -116,7 +117,7 @@ func relink(snap *cubelan.Snapshot, room uint8, skip view.Hidden, reset bool) []
 		if reset && len(out) == 0 {
 			lines = flaggedResets(snap, members, d.RFAddress)
 		}
-		lines = append(lines, linkLines(master, d.RFAddress, d.Type, room, members, true, true)...)
+		lines = append(lines, linkLines(snap, master, d.RFAddress, d.Type, room, members, true, true)...)
 		lines = append(lines, cube.CmdSetGroup(d.RFAddress, room, false))
 		out = append(out, engine.Command{Key: "repair-relink:" + d.RFAddress.String(), Target: d.RFAddress, RoomID: room, Wakeup: true, Lines: lines})
 	}
@@ -134,7 +135,7 @@ func relink(snap *cubelan.Snapshot, room uint8, skip view.Hidden, reset bool) []
 // resets the room's other flagged members. Not yet run on hardware.
 func UnlinkRelinkCommands(snap *cubelan.Snapshot, room uint8, skip view.Hidden) []engine.Command {
 	members := ConfigMembers(snap, room, skip)
-	master := roomMaster(snap, room)
+	master := RoomMaster(snap, room)
 	var out []engine.Command
 	for _, d := range members {
 		if !Linkable(d.Type) {
@@ -144,7 +145,7 @@ func UnlinkRelinkCommands(snap *cubelan.Snapshot, room uint8, skip view.Hidden) 
 		if len(out) == 0 {
 			lines = flaggedResets(snap, members, d.RFAddress)
 		}
-		lines = append(lines, linkLines(master, d.RFAddress, d.Type, room, members, false, true)...)
+		lines = append(lines, linkLines(snap, master, d.RFAddress, d.Type, room, members, false, true)...)
 		if len(lines) == 0 {
 			continue // no partner: nothing to unlink
 		}
@@ -154,19 +155,20 @@ func UnlinkRelinkCommands(snap *cubelan.Snapshot, room uint8, skip view.Hidden) 
 }
 
 // MasterCandidate is the thermostat a room's metadata should name as its
-// master (D167 of AP DeviceUnPairingFix, the master itself left aside):
-// the room's wall thermostat, else its first radiator thermostat, by
-// their C lines, the devices in skip left out; false for a room without
-// a thermostat.
+// master: the first of the room's order with the master itself left
+// aside (roomorder.Of, RoomMajority.D9), its wall thermostat, else its
+// first radiator thermostat, by their C lines, the dead passed over
+// where one is alive, the devices in skip left out (Addressee); false
+// for a room without a thermostat.
 func MasterCandidate(snap *cubelan.Snapshot, room uint8, skip view.Hidden) (cube.RFAddress, bool) {
-	return Addressee(0, ConfigMembers(snap, room, skip), 0)
+	return Addressee(snap, 0, ConfigMembers(snap, room, skip), 0)
 }
 
 // MasterValid reports whether the metadata's master of room is a
 // thermostat whose C line names the room, which a room command may
 // name (D167).
 func MasterValid(snap *cubelan.Snapshot, room uint8, skip view.Hidden) bool {
-	m := roomMaster(snap, room)
+	m := RoomMaster(snap, room)
 	if m == 0 {
 		return false
 	}
@@ -180,8 +182,8 @@ func MasterValid(snap *cubelan.Snapshot, room uint8, skip view.Hidden) bool {
 
 // Temperatures are the settings of a 0x11 that a room's thermostats
 // share: comfort, eco, maximum, minimum and window-open temperatures.
-// The offset is each device's own, and the window-open minutes, which a
-// wall thermostat does not store, the device's too.
+// The offset is each device's own; the window-open minutes, which a wall
+// thermostat does not store, are not among them (RoomSettings).
 type Temperatures struct {
 	Comfort    float64 `json:"comfort_temp"`
 	Eco        float64 `json:"eco_temp"`
@@ -190,67 +192,40 @@ type Temperatures struct {
 	WindowOpen float64 `json:"window_open_temp"`
 }
 
-// Agreement is what most of a room's other thermostats share by their C
-// lines, against which a device's configuration is re-sent (D163-A):
-// Others counts them; Temps and Program are the shared values, nil
-// where no value is shared by more than half of them, with how many
-// share each (TempsBy, ProgramBy).
-type Agreement struct {
-	Others    int               `json:"others"`
-	Temps     *Temperatures     `json:"temperatures,omitempty"`
-	TempsBy   int               `json:"temperatures_by"`
-	Program   *cube.WeekProgram `json:"-"`
-	ProgramBy int               `json:"program_by"`
+// RoomAgreement is the configuration of room that rf's is re-sent from
+// (D163-A, as AP RoomMajority's D9 changes it): RoomConfig over every
+// thermostat whose C line names the room, rf included, the devices in
+// skip left out, the room's master the metadata's, the reference the
+// server's report of members that differ judges rf by, so that the
+// repair sends what the report named. others counts the room's other
+// thermostats the Cube holds a valid state for; false, and nothing to
+// re-send, where it has none.
+func RoomAgreement(snap *cubelan.Snapshot, rf cube.RFAddress, room uint8, skip view.Hidden) (s RoomSettings, others int, ok bool) {
+	members := ConfigMembers(snap, room, skip)
+	for _, d := range members {
+		if d.RFAddress != rf && d.Type.IsThermostat() && snap.Config(d.RFAddress) != nil && !roomorder.Dead(snap, d.RFAddress) {
+			others++
+		}
+	}
+	if others == 0 {
+		return RoomSettings{}, 0, false
+	}
+	s, ok = RoomConfig(snap, RoomMaster(snap, room), members, 0, nil)
+	return s, others, ok
 }
 
-// RoomAgreement reads what most of the thermostats of room other than rf
-// share by their C lines, the devices in skip left out.
-func RoomAgreement(snap *cubelan.Snapshot, rf cube.RFAddress, room uint8, skip view.Hidden) Agreement {
-	var a Agreement
-	var temps []Temperatures
-	var progs []cube.WeekProgram
-	for _, d := range ConfigMembers(snap, room, skip) {
-		c := snap.Config(d.RFAddress)
-		if d.RFAddress == rf || c == nil {
-			continue
-		}
-		t, ok := temperaturesOf(c)
-		if !ok {
-			continue
-		}
-		temps = append(temps, t)
-		progs = append(progs, ownProgram(c))
-	}
-	a.Others = len(temps)
-	if i, n := majority(len(temps), func(i, j int) bool { return temps[i] == temps[j] }); i >= 0 {
-		a.Temps, a.TempsBy = &temps[i], n
-	}
-	if i, n := majority(len(progs), func(i, j int) bool { return sameWeek(progs[i], progs[j]) }); i >= 0 {
-		a.Program, a.ProgramBy = &progs[i], n
-	}
-	return a
+// temperatures are the shared temperatures of a thermostat's C line,
+// zero for a configuration without them.
+func temperatures(c *cube.DeviceConfig) Temperatures {
+	t, _ := temperaturesOf(c)
+	return t
 }
 
-// majority finds a value of n that more than half of them share, by
-// same; it returns its index and how many share it, or -1.
-func majority(n int, same func(i, j int) bool) (int, int) {
-	for i := 0; i < n; i++ {
-		count := 0
-		for j := 0; j < n; j++ {
-			if same(i, j) {
-				count++
-			}
-		}
-		if 2*count > n {
-			return i, count
-		}
-	}
-	return -1, 0
-}
-
-// temperaturesOf reads the shared temperatures of a thermostat's C line.
+// temperaturesOf reads the shared temperatures of a thermostat's C line;
+// false for none, or another device's.
 func temperaturesOf(c *cube.DeviceConfig) (Temperatures, bool) {
 	switch {
+	case c == nil:
 	case c.Thermostat != nil:
 		t := c.Thermostat
 		return Temperatures{t.ComfortTemp, t.EcoTemp, t.MaxSetpoint, t.MinSetpoint, t.WindowOpenTemp}, true
@@ -261,31 +236,20 @@ func temperaturesOf(c *cube.DeviceConfig) (Temperatures, bool) {
 	return Temperatures{}, false
 }
 
-// sameWeek reports whether two week programmes have the same switch
-// points every day.
-func sameWeek(a, b cube.WeekProgram) bool {
-	for d := range a {
-		if !sameDay(a[d], b[d]) {
-			return false
-		}
-	}
-	return true
-}
-
 // NoMajorityError says why a device's configuration cannot be re-sent
-// from its room: no other thermostat, or none of its values shared by
-// more than half of them.
+// from its room: the room has no other thermostat the Cube holds a valid
+// state for (RoomAgreement, RoomMajority.D9); Dead counts the others
+// passed over for that.
 type NoMajorityError struct {
-	Room   uint8
-	Others int
-	What   string // "temperatures" or "week programme"; "" for no other thermostat
+	Room uint8
+	Dead int
 }
 
 func (e *NoMajorityError) Error() string {
-	if e.What == "" {
+	if e.Dead == 0 {
 		return fmt.Sprintf("room %d has no other thermostat to take the configuration from", e.Room)
 	}
-	return fmt.Sprintf("the %d other thermostats of room %d share no %s by a majority: re-send it to the room instead", e.Others, e.Room, e.What)
+	return fmt.Sprintf("room %d has no other thermostat the cube holds a valid state for to take the configuration from: its %d others have not reported since the cube's last restart or are out of date", e.Room, e.Dead)
 }
 
 // Resent says what a re-sent configuration sends: whether the
@@ -296,31 +260,32 @@ type Resent struct {
 }
 
 // ResendCommands builds the re-sent configuration of rf, a thermostat
-// of room, from its room's agreeing members (RoomAgreement, D163-A):
-// after a wakeup of the room, 0x11 with the shared temperatures, its own
-// offset and window-open minutes kept, where its own differ; then the
-// days of the shared week programme that differ from its own, followed
-// by 0x11 once more, as a copy of a room's settings sends them
-// (CopyCommands). The error is a NoMajorityError where the room has no
-// other thermostat or its others share no temperatures or no week
-// programme; nothing is built where rf agrees already.
-func ResendCommands(snap *cubelan.Snapshot, rf cube.RFAddress, room uint8, skip view.Hidden) ([]engine.Command, Resent, Agreement, error) {
+// of room, from its room's (RoomAgreement: D163-A as AP RoomMajority's
+// D9 changes it): after a wakeup of the room, the days of the room's
+// week programme that differ from its own, then 0x11 with the room's
+// temperatures, its own offset and window-open minutes kept, where its
+// own temperatures or a day differ, as a copy of a room's settings sends
+// them (CopyCommands). others counts the room's other thermostats the
+// Cube holds a valid state for. The error is a NoMajorityError where the
+// room has none; nothing is built where rf has the room's configuration
+// already.
+func ResendCommands(snap *cubelan.Snapshot, rf cube.RFAddress, room uint8, skip view.Hidden) (cmds []engine.Command, sent Resent, a RoomSettings, others int, err error) {
 	c := snap.Config(rf)
 	if c == nil {
-		return nil, Resent{}, Agreement{}, fmt.Errorf("device %s has no configuration to re-send", rf)
+		return nil, Resent{}, RoomSettings{}, 0, fmt.Errorf("device %s has no configuration to re-send", rf)
 	}
-	own, ok := temperaturesOf(c)
+	if _, ok := temperaturesOf(c); !ok {
+		return nil, Resent{}, RoomSettings{}, 0, fmt.Errorf("device %s is a %s and has no configuration to re-send", rf, c.Type)
+	}
+	a, others, ok := RoomAgreement(snap, rf, room, skip)
 	if !ok {
-		return nil, Resent{}, Agreement{}, fmt.Errorf("device %s is a %s and has no configuration to re-send", rf, c.Type)
-	}
-	a := RoomAgreement(snap, rf, room, skip)
-	switch {
-	case a.Others == 0:
-		return nil, Resent{}, a, &NoMajorityError{Room: room}
-	case a.Temps == nil:
-		return nil, Resent{}, a, &NoMajorityError{Room: room, Others: a.Others, What: "temperatures"}
-	case a.Program == nil:
-		return nil, Resent{}, a, &NoMajorityError{Room: room, Others: a.Others, What: "week programme"}
+		dead := 0
+		for _, d := range ConfigMembers(snap, room, skip) {
+			if d.RFAddress != rf && d.Type.IsThermostat() && roomorder.Dead(snap, d.RFAddress) {
+				dead++
+			}
+		}
+		return nil, Resent{}, a, 0, &NoMajorityError{Room: room, Dead: dead}
 	}
 	minutes := RoomRadiator(snap, room, rf).WindowOpenMins
 	if c.Thermostat != nil {
@@ -330,18 +295,14 @@ func ResendCommands(snap *cubelan.Snapshot, rf cube.RFAddress, room uint8, skip 
 	temps, err := cube.CmdSetTemperatures(cube.Target{RFAddress: rf}, cube.TemperatureSettings{Comfort: t.Comfort, Eco: t.Eco,
 		Max: t.Max, Min: t.Min, Offset: ownOffset(c), WindowOpen: t.WindowOpen, WindowOpenMinutes: minutes})
 	if err != nil {
-		return nil, Resent{}, a, fmt.Errorf("the room's temperatures for %s: %w", rf, err)
+		return nil, Resent{}, a, others, fmt.Errorf("the room's temperatures for %s: %w", rf, err)
 	}
-	sent := Resent{Temperatures: own != *t}
-	mine := ownProgram(c)
+	sent = Resent{Temperatures: !a.SameTemperatures(c)}
 	var lines []cube.Message
-	for _, d := range copyDayOrder {
-		if len(a.Program[d]) == 0 || sameDay(a.Program[d], mine[d]) {
-			continue
-		}
+	for _, d := range a.Days(c) {
 		ls, err := cube.CmdSetDayProgram(cube.Target{RFAddress: rf}, d, a.Program[d])
 		if err != nil {
-			return nil, Resent{}, a, fmt.Errorf("the room's programme for %s: %w", d, err)
+			return nil, Resent{}, a, others, fmt.Errorf("the room's programme for %s: %w", d, err)
 		}
 		lines = append(lines, ls...)
 		sent.Days = append(sent.Days, d)
@@ -353,7 +314,7 @@ func ResendCommands(snap *cubelan.Snapshot, rf cube.RFAddress, room uint8, skip 
 		sent.Temperatures = true
 	}
 	if len(lines) == 0 {
-		return nil, sent, a, nil
+		return nil, sent, a, others, nil
 	}
-	return []engine.Command{{Key: "repair-config:" + rf.String(), Target: rf, RoomID: room, Wakeup: true, Lines: lines}}, sent, a, nil
+	return []engine.Command{{Key: "repair-config:" + rf.String(), Target: rf, RoomID: room, Wakeup: true, Lines: lines}}, sent, a, others, nil
 }

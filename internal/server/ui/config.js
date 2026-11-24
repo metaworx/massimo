@@ -13,10 +13,11 @@
 // --- week programme ---------------------------------------------------
 
 // weekKit is what the week programme editor builds with: the page's
-// translation, its elements (components.js) and temperatures (rooms.js).
+// translation, its elements (components.js) and temperatures (rooms.js,
+// app.js' fmtSetpoint for a segment at OFF).
 function weekKit() {
   return {
-    t, elem, textEl, button, switchEl, fieldRow, numberInput, fmtNum, fmtTemp,
+    t, elem, textEl, button, switchEl, fieldRow, numberInput, fmtNum, fmtTemp, fmtSetpoint,
     clamp: clampTemp,
     temps: { min: MIN_TEMP, max: MAX_TEMP, step: STEP },
   };

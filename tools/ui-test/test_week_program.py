@@ -156,3 +156,25 @@ def test_a_programme_changed_elsewhere_is_not_overwritten(page, case, watch):
     finally:
         page.unroute("**/rooms/*/program")
     leave(tile)
+
+
+def test_a_segment_at_off(page, case):
+    """A switch point at 4.5 °C: its segment of the day's bar says OFF, as
+    the devices' displays show it, its tooltip too, and the field keeps
+    the number (AP RoomMajority, D14-A)."""
+    tile, _ = first_tile(page)
+    open_tab(tile, "program")
+    day_button(tile, "monday").click()
+    times = tile.locator(".prog-point input[type=time]")
+    until = times.first.input_value() if times.count() else "24:00"
+    minutes = int(until[:2]) * 60 + int(until[3:5])
+    temp = tile.locator(".prog-point input[type=number]").first
+    temp.fill("4.5")
+    temp.press("Tab")
+    assert wait_until(page, "(document.querySelector('.room .prog-bar .prog-seg') || {}).title?.endsWith(': OFF')", 5), \
+        f"the segment's tooltip: {tile.locator('.prog-bar .prog-seg').first.get_attribute('title')!r}"
+    label = tile.locator(".prog-bar .prog-seg").first.inner_text()
+    assert label == ("OFF" if minutes >= 120 else ""), f"its label, where it is wide enough ({minutes} min): {label!r}"
+    assert tile.locator(".prog-point input[type=number]").first.input_value() == "4.5", "the field keeps the number"
+    tile.locator(".prog-reset-all").click()
+    leave(tile)

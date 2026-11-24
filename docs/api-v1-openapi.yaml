@@ -1954,7 +1954,11 @@ paths:
       description: >-
         A real device, or a room's virtual wall thermostat, named by its
         address, its serial or room-<id>: then with the room's settings and
-        week programme in a wall thermostat's shape, and its own settings.
+        week programme in a wall thermostat's shape, as GET
+        …/rooms/{id}/config and …/program decide them by the room's one
+        order (RoomMajority.D19-A), the offset a device's own (its real
+        wall thermostat's, else the first of the order's), and its own
+        settings.
       parameters: [{$ref: "#/components/parameters/sn"}, {$ref: "#/components/parameters/rf"}]
       responses:
         "200":
@@ -1979,15 +1983,27 @@ paths:
         the room's group (0x22) and listed under name, without name under
         the default "<room name> <type> <n>" a repair's listing gives;
         without room_id it answers 409. A thermostat put into a room, by
-        an add or a move, then gets the room's settings from its first
-        other thermostat: 0x40 auto, 0x11 to every thermostat of the
-        room, 0x12, and 0x10
-        for each day of the programme that differs, then 0x11 again;
-        hidden devices are left out. The copy needs the capability
-        configure as well (403 without it); copy false skips it. A
-        discarded 0x40 sets mode_not_set and ends nothing; any other
-        command that fails ends the copy with its error, the device in
-        the room.
+        an add or a move, then gets the room's state and settings: 0x40
+        to the device directly with the room's state from before the
+        change, read before the device is linked and held for the room
+        checks once a radiogram of the link half went through
+        (RoomMajority.D8-A), auto on the programme where the room has
+        none; 0x11 to the device and the room's thermostats the Cube
+        holds a valid state for, 0x12, and 0x10 for each day of the
+        programme that differs, then 0x11 again. The
+        room's settings are decided by one rule, which the report and the
+        configuration's repair take too (RoomMajority.D9): each group and
+        each day what more than half of the room's other thermostats
+        share, else what the first of the room's order has (master, wall
+        thermostat, radiator thermostats), a thermostat the Cube holds no
+        valid state for passed over; hidden devices are left out. The
+        copy needs the capability configure as well (403 without it);
+        copy false skips it, the device keeping its own state and
+        settings. A discarded 0x40 sets mode_not_set and ends
+        nothing; the room's state then goes once as a room command
+        (room_mode, RoomMajority.D16-A), whose discard ends nothing
+        either; any other command that fails ends the copy with its
+        error, the device in the room.
       parameters: [{$ref: "#/components/parameters/sn"}, {$ref: "#/components/parameters/rf"}, {$ref: "#/components/parameters/idempotencyKey"}]
       requestBody:
         required: true
@@ -2013,15 +2029,32 @@ paths:
                   ok: {type: boolean}
                   copied:
                     type: object
-                    description: What of the room's settings was sent; absent when nothing was.
+                    description: What of the room's state and settings was sent; present where the copy ran.
                     properties:
+                      state:
+                        type: object
+                        description: "The state the 0x40 carried, the room's from before the change (RoomMajority.D8-A), auto on the programme where the room had none."
+                        required: [mode]
+                        properties:
+                          mode: {type: string, enum: [auto, manual, vacation]}
+                          setpoint: {type: number, description: "The setpoint, absent for auto on the week programme"}
+                          until: {type: string, description: "A holiday's end, YYYY-MM-DD HH:MM"}
+                      state_from:
+                        type: string
+                        enum: [room, default]
+                        description: "Where the state came from: the room's from before the change, or Massimo's setpoint to the room since (room); auto on the programme where the room had none (default)."
+                      config_skipped:
+                        type: string
+                        enum: [no_other_thermostat, no_valid_state]
+                        description: "Why no configuration was sent: the room has no other thermostat, or the Cube holds no valid state for any other one (RoomMajority.D9); absent where it was sent."
                       temperatures:
                         type: array
-                        description: The thermostats that got the room's temperatures (0x11).
+                        description: The thermostats that got the room's temperatures (0x11); empty where none did.
                         items: {type: string, pattern: "^[0-9a-f]{6}$"}
                       valve: {type: boolean, description: The device got the room's valve settings (0x12).}
                       days: {type: integer, minimum: 0, maximum: 7, description: The days of the week programme sent (0x10).}
-                      mode_not_set: {type: boolean, description: The Cube discarded the 0x40 that sets auto; the device keeps its mode.}
+                      mode_not_set: {type: boolean, description: "The Cube discarded the 0x40 that sets the device's mode, the room's state; the device keeps its own."}
+                      room_mode: {type: boolean, description: "After the discarded 0x40, the room's state went to the room as a room command, which the Cube took (RoomMajority.D16-A)."}
                   budget: {$ref: "#/components/schemas/Budget"}
                   confirmation: {type: string, enum: [pending], description: "The device went into a room: the server reads the change back from the Cube's free slots, and the log's structure event says when it is done."}
         "400": {$ref: "#/components/responses/BadRequest"}
@@ -2043,10 +2076,11 @@ paths:
         in a room (the metadata's, else its C line's) is unlinked after a
         wakeup of the room, each other member whose error flag is set
         reset first (r:), by one 0x21 with the room flag naming it, to the
-        room's master where it is a thermostat of the room, else its wall
-        thermostat, else its first radiator thermostat, which every member
-        takes; window contacts alone in the room get one each; hidden
-        devices left out; no 0x23 and no 0x21 to the device itself; a
+        first of the room's order (RoomMajority.D9): the room's master where
+        it is a thermostat of the room, else its wall thermostat, else its
+        first radiator thermostat, one the Cube holds no valid state for
+        passed over, which every member takes; window contacts alone in
+        the room get one each; hidden devices left out; no 0x23 and no 0x21 to the device itself; a
         device in room 255 by its C line is not unlinked. Then t: with
         the force flag, which makes the Cube send the device a factory
         reset; then the metadata without it, where it was listed. A device
@@ -2300,17 +2334,21 @@ paths:
         "502": {$ref: "#/components/responses/CubeError"}
   /api/v1/cubes/{sn}/rooms/{id}/program:
     get:
-      summary: The week programme of the room's first thermostat
+      summary: The week programme of the room
       x-capability: read
       description: >-
-        The programme of the room's first radiator thermostat, else its wall
-        thermostat; a programme written and not yet in the devices'
-        configurations shows as written, pending. The tag covers every
-        thermostat of the room.
+        Each day what more than half of the room's thermostats have, else
+        the first of the room's one order's (its master, its wall
+        thermostat, its radiator thermostats), one out of date passed over
+        while every thermostat has reported since the Cube's restart and
+        another is not out of date (RoomMajority.D9, D19-A); a programme
+        written and not yet in the devices' configurations counts as
+        written, pending. The tag covers every
+        thermostat's programme of the room.
       parameters: [{$ref: "#/components/parameters/sn"}, {$ref: "#/components/parameters/id"}]
       responses:
         "200":
-          description: Programme keyed by weekday, plus source (the device it comes from), its tag, pending and program_consistent
+          description: Programme keyed by weekday, plus source (the first of the room's order whose week is the room's), its tag, pending and program_consistent
           headers:
             ETag: {description: "The programme's tag, quoted", schema: {type: string}}
           content:
@@ -2756,8 +2794,10 @@ paths:
       description: |
         Where the metadata's master of the room is no thermostat whose C line
         names the room, the metadata is written with the room's wall
-        thermostat as master, else its first radiator thermostat
-        (AP DeviceUnPairingFix, D167); metadata only, no radio. Nothing to send where
+        thermostat as master, else its first radiator thermostat, one the
+        Cube holds no valid state for passed over while another is not (the
+        room's order without its master, RoomMajority.D9, in place of
+        AP DeviceUnPairingFix, D167); metadata only, no radio. Nothing to send where
         the master is valid or the room has no thermostat.
         The preview sends nothing: the lines a run would send and what they
         cost, and the plan's hash for the run.
@@ -2834,13 +2874,17 @@ paths:
       summary: Preview re-sending a thermostat's configuration from its room
       x-capability: repair
       description: |
-        The temperatures (comfort, eco, maximum, minimum, window open) and
-        the week programme that more than half of the room's other
-        thermostats share by their C lines, where the device's differ:
-        the days that differ (0x10), then 0x11 with the device's own offset
-        and window-open minutes. Nothing to send where the room has no other
-        thermostat, its others share no temperatures or programme by a
-        majority, the device agrees already, or its list and C line name
+        The room's temperatures (comfort, eco, maximum, minimum, window
+        open) and week programme by the C lines of its thermostats, the
+        device's included, as the report of members that differ names
+        them (RoomMajority.D9, the copy's rule): each day and the
+        temperatures what more than half of them share, else what the
+        first of the room's order has, a thermostat the Cube holds no
+        valid state for passed over; where the device's differ, the days
+        that differ (0x10), then 0x11 with the device's own offset and
+        window-open minutes. Nothing to send where the room has no other
+        thermostat the Cube holds a valid state for, the device has the
+        room's configuration already, or its list and C line name
         different rooms.
         The preview sends nothing: the lines a run would send and what they
         cost, and the plan's hash for the run.
@@ -2878,7 +2922,10 @@ paths:
         Where the device's C line names another room than the metadata, or
         none: a move from its C line's room (the removal's unlink half with
         0x23 and the placement's link half), or the link half alone from
-        none. The metadata stays; the room's settings are not copied. Nothing
+        none. The metadata stays; the room's settings are not copied, but a
+        thermostat's run holds the room's state from before it for the room
+        checks once its link half went through, as an add does
+        (RoomMajority.D15-A). Nothing
         to send where the list does not list the device or has it where the Cube
         has it, or a second wall thermostat.
         The preview sends nothing: the lines a run would send and what they
@@ -2917,7 +2964,8 @@ paths:
         Metadata only, no radio: the device's entry moved to the room its C
         line names, or one made for a device the list does not have. A room
         the list does not have is made with room_name, its master the
-        room's wall thermostat, else its first radiator thermostat; without
+        room's wall thermostat, else its first radiator thermostat, as the
+        repair of a room's master names it; without
         the name the preview asks for it (details code room_name_needed and room).
         A device the list does not have gets the name name gives, else
         "<room name> <type> <n>", the type in English and n the lowest
@@ -3378,8 +3426,10 @@ paths:
         at info: state found or cleared and the Mismatch's fields in
         "summary"); the room checks' (docs/api-v1.md, "The
         room checks"): disagree, source cube (a room whose thermostats
-        differ: room and outcome differ, resent (from massimo, majority or
-        wall_thermostat), resend_failed, not_resent or agree in "summary")
+        differ: room and outcome differ, resent (from massimo, majority,
+        newest, master, wall_thermostat or radiator_thermostat, and
+        before_change true for the state from before a structure change),
+        resend_failed, not_resent or agree in "summary")
         and drift, source device (a thermostat off
         its week programme: outcome not_following, follows or left_auto);
         the server's sign-ins, source server, for a
@@ -4010,8 +4060,9 @@ components:
     RepairRefused:
       description: >-
         A run with nothing to send (what its preview's nothing says: no
-        device flagged, the room's list and C lines disagree, no majority
-        to take a configuration from), whose plan changed since its
+        device flagged, the room's list and C lines disagree, no other
+        thermostat with a valid state to take a configuration from),
+        whose plan changed since its
         preview (both hashes in the message), or that would reach the
         queue's hold for the duty cycle or the memory slots (its preview's
         refused). A listing into a room the list does not have carries
@@ -5217,6 +5268,9 @@ components:
         room_uid: {type: string, description: "The room's uid, kept for the room's life and never given to another room; absent before the server has read the room"}
         ready: {type: boolean, description: "Every device of the room has reported since the Cube restarted, so the Cube accepts room commands"}
         stale: {type: boolean, description: A device of the room is stale; present when true}
+        thermostat: {type: string, description: "The radio address of the thermostat whose state is the room's, the first of its virtual wall thermostat's sources.setpoint (RoomMajority.D9, D19-A): one of those whose state more than half show, else the one whose mode or setpoint changed last, else the first of the room's one order (its master, its wall thermostat, its radiator thermostats); during a boost the same over those that do not boost; where no thermostat has a state, the first of that order, as the room's commands name it; absent for a room without a thermostat"}
+        comfort_temp: {type: number, description: "The room's comfort temperature, as GET …/rooms/{id}/config gives it: what more than half of its thermostats store, else the first of its order's; absent for a room without a thermostat"}
+        eco_temp: {type: number, description: "The room's eco temperature, as comfort_temp"}
         devices:
           type: array
           items: {$ref: "#/components/schemas/Device"}
@@ -5327,15 +5381,18 @@ components:
             it (low), or at once when someone marks new batteries (POST
             …/devices/{rf}/battery). Absent for a virtual wall thermostat and a
             device without state
+        comfort_temp: {type: number, description: "A radiator or wall thermostat's comfort temperature, from its configuration (C line); absent for another device and where the Cube sent none"}
+        eco_temp: {type: number, description: "A radiator or wall thermostat's eco temperature, from its configuration (C line); absent for another device and where the Cube sent none"}
         stale: {type: boolean, description: "Radiator or wall thermostat whose entry has not changed for its stale threshold (stale_after, 50 hours, or stale_after_wall, 24 hours): out of range, flat battery, or just quiet. Present when true. A virtual wall thermostat is stale when every source of its actual_temp is"}
         virtual: {type: boolean, description: "A room's virtual wall thermostat, which the server computes from the room's devices; present when true"}
         room_uid: {type: string, description: "A virtual wall thermostat's room's uid"}
         sources:
           type: object
-          description: "A virtual wall thermostat's alone: the radio addresses its actual_temp and its mode came from"
+          description: "A virtual wall thermostat's alone: the radio addresses its actual_temp came from, those its mode came from and those its setpoint and until came from"
           properties:
             actual_temp: {type: array, items: {type: string}}
-            mode: {type: array, items: {type: string}}
+            mode: {type: array, items: {type: string}, description: "Those its mode came from by the room's one order: those that show it, the one of the newest change, or the one of the order; the boosting ones during a boost"}
+            setpoint: {type: array, items: {type: string}, description: "Those its setpoint and until came from by the room's one order, the one whose state it shows first, which the room entry's thermostat names; during a boost from the thermostats that do not boost"}
         confirmation: {$ref: "#/components/schemas/Confirmation"}
         mismatches:
           type: array
@@ -5372,7 +5429,7 @@ components:
       properties:
         id: {type: integer}
         name: {type: string}
-        source: {type: string, description: The thermostat the common fields come from}
+        source: {type: string, description: "The first thermostat of the room's one order that stores the room's temperatures, else the first of the order; absent for a room without a thermostat"}
         comfort_temp: {type: number}
         eco_temp: {type: number}
         max_setpoint: {type: number}
@@ -5517,7 +5574,7 @@ components:
         - {$ref: "#/components/schemas/WeekProgram"}
         - type: object
           properties:
-            source: {type: string, description: The device the programme comes from}
+            source: {type: string, description: "The device the programme comes from: for a room, the first of its one order whose whole week is the room's, else the first of the order"}
             etag: {type: string, description: "The tag over every thermostat of the room's programme, as If-Match takes it"}
             pending: {type: boolean, description: A programme written and not yet in the devices' configurations}
             program_consistent: {type: boolean, description: False while the room's thermostats have different programmes}

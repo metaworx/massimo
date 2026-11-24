@@ -102,8 +102,13 @@ def test_the_search_for_cubes(new_context, case, watch, guard, way):
 def test_the_house_to_every_room(new_context, case, watch, guard, way):
     """The House panel's Auto to every room (rooms/House.tsx), its first
     room's setpoint answered in the next user's session, writes no further
-    room and says nothing. Fails on the page before: it wrote the next
-    room under the next user's key and drew the rooms' outcome."""
+    room, says nothing, and leaves the room's tile waiting for nothing.
+    Fails on the page before: it wrote the next room under the next user's
+    key and drew the rooms' outcome; and without the session's check after
+    the setpoint's answer (AP RoomMajority v1.1, Block 3), the room's tile
+    waited for the user before's setpoint (rooms.js awaitMembers), which
+    held the next user's members' line on that room for up to five
+    minutes."""
     page = owner_page(new_context, guard, watch, URL, TOKEN)
     page.locator("#house-auto").click()
     page.locator("#house-rooms .check-all input").check()
@@ -111,26 +116,53 @@ def test_the_house_to_every_room(new_context, case, watch, guard, way):
     hold(page, "**/rooms/*/setpoint", "PUT", held, sent)
     page.locator("#house-panel button[type=submit]").click()
     assert wait_held(page, held), "the first room's setpoint is on its way"
+    rid = int(held[0].request.url.split("/rooms/")[1].split("/")[0])
     end_session(page, way)
     line = "document.querySelector('#house-panel .tile-result').textContent"
     said = page.evaluate(line)
     let_go(page, held, "PUT", "/setpoint", {})
     assert len(sent) == 1, f"no further room written: {sent}"
     assert page.evaluate(line) == said, "the House says no room's outcome"
+    assert page.evaluate("(rid) => roomUI(state.rooms.find((r) => r.id === rid)).awaiting", rid) is None, \
+        "the room's tile waits for no setpoint of the user before"
+
+
+def without_presets(rooms):
+    """The rooms and their device entries without the eco and comfort
+    temperatures, as a server before them sends them (AP RoomMajority
+    v1.1, Block 3, and v1.2, Block 4): the House's Eco then reads them
+    from the room thermostat's detail (tiles.js presetTemps)."""
+    for room in rooms or []:
+        room.pop("eco_temp", None)
+        room.pop("comfort_temp", None)
+        for d in room.get("devices") or []:
+            d.pop("eco_temp", None)
+            d.pop("comfort_temp", None)
+    return rooms
 
 
 @pytest.mark.parametrize("way", WAYS)
 def test_the_house_in_eco(new_context, case, watch, guard, way):
-    """The House panel's Eco (rooms/House.tsx) reads a room's thermostat
-    for its eco temperature, then sets it: that read answered in the next
-    user's session (a read is sent again after any sign-in) sends no
-    setpoint. Fails on the page before: the setpoint went out under the
-    next user's key, a write that user never made."""
+    """The House panel's Eco (rooms/House.tsx), its rooms' entries without
+    their eco temperatures as a server before them sends them, reads a
+    room's thermostat's detail for it, then sets it: that read answered in
+    the next user's session (a read is sent again after any sign-in) sends
+    no setpoint. Fails on the page before: the setpoint went out under the
+    next user's key, a write that user never made. An entry with them
+    reads nothing before the setpoint, whose late answer
+    test_the_house_to_every_room holds. Every setpoint is answered by a
+    stub, so that none reaches the fake Cube, the rule broken included."""
     page = owner_page(new_context, guard, watch, URL, TOKEN)
+    reads_of(page).change("**/api/v1/cubes/*/rooms?devices=all", without_presets)
+    page.evaluate("loadRooms()")
+    assert page.evaluate("state.rooms.every((r) => r.eco_temp === undefined && r.devices.every((d) => d.eco_temp === undefined))"), \
+        "the entries without their temperatures"
+    page.route("**/rooms/*/setpoint", lambda route: route.fulfill(status=200, content_type="application/json", body="{}")
+               if route.request.method == "PUT" else route.continue_())
     page.locator("#house-eco").click()
     page.locator("#house-rooms .check-all input").check()
-    held, sent = [], []
-    hold(page, "**/api/v1/cubes/*/devices/*", "GET", held, sent)
+    held = []
+    hold_first(page, "**/api/v1/cubes/*/devices/*", "GET", held)
     setpoints = requests_of(page, "PUT", "/setpoint")
     page.locator("#house-panel button[type=submit]").click()
     assert wait_held(page, held), "the thermostat's read is on its way"

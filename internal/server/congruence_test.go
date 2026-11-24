@@ -20,8 +20,11 @@ import (
 	"testing"
 	"time"
 
+	"go.metaworx.ch/massimo/internal/cubelan"
+	"go.metaworx.ch/massimo/internal/cubelan/fakecube"
 	"go.metaworx.ch/massimo/internal/engine"
 	"go.metaworx.ch/massimo/internal/protocol/cube"
+	"go.metaworx.ch/massimo/internal/roomorder"
 	"go.metaworx.ch/massimo/internal/store"
 	"go.metaworx.ch/massimo/internal/testkit"
 	"go.metaworx.ch/massimo/internal/view"
@@ -30,11 +33,12 @@ import (
 // fixtureLines is the fixture's greeting with its metadata and its C
 // lines decoded, for a test to change before it greets with them.
 type fixtureLines struct {
-	t     *testing.T
-	lines []cube.Message // the fixture's, in order
-	md    *cube.Metadata
-	raws  map[cube.RFAddress][]byte
-	order []cube.RFAddress
+	t      *testing.T
+	lines  []cube.Message // the fixture's, in order
+	md     *cube.Metadata
+	raws   map[cube.RFAddress][]byte
+	order  []cube.RFAddress
+	states map[cube.RFAddress]float64 // valid states given (live)
 }
 
 func loadFixtureLines(t *testing.T) *fixtureLines {
@@ -110,6 +114,19 @@ func (f *fixtureLines) master(room uint8, rf cube.RFAddress) {
 	f.t.Fatalf("no room %d", room)
 }
 
+// live gives devices a valid state, in auto at 21 °C: the recorded
+// fixture's devices hold none, as after a restart of the Cube, and a
+// room's configuration is decided over those that hold one
+// (RoomMajority.D9).
+func (f *fixtureLines) live(rfs ...cube.RFAddress) {
+	if f.states == nil {
+		f.states = map[cube.RFAddress]float64{}
+	}
+	for _, rf := range rfs {
+		f.states[rf] = 21
+	}
+}
+
 // greeting is the greeting with the changes.
 func (f *fixtureLines) greeting() []cube.Message {
 	var out []cube.Message
@@ -132,6 +149,9 @@ func (f *fixtureLines) greeting() []cube.Message {
 		default:
 			out = append(out, g)
 		}
+	}
+	if len(f.states) > 0 {
+		out = withValidStates(f.t, out, f.states)
 	}
 	return out
 }
@@ -459,6 +479,7 @@ func TestMismatchMembers(t *testing.T) {
 	f.addConfig(0x0a0a04, 0x0a010b, 4, "MEQ0000204")
 	f.list(0x0a0a04, cube.DeviceRadiatorThermostat, 4, "MEQ0000204", "Other")
 	f.raws[0x0a0a04][0x13] = 34 // eco 17
+	f.live(0x0a010a, 0x0a0a01, 0x0a0a02, 0x0a010b, 0x0a0a04)
 	c := startMismatchCube(t, f.greeting(), nil, nil)
 	for _, want := range []struct{ finding, device string }{
 		{view.MismatchProgramme, "0a0a01"}, {view.MismatchTemperatures, "0a0a02"}, {view.MismatchTemperatures, "0a0a04"},
@@ -475,6 +496,150 @@ func TestMismatchMembers(t *testing.T) {
 	}
 	if r := c.room(t, 1); !has(r.Mismatches, view.MismatchProgramme, "0a0a01") || !has(r.Mismatches, view.MismatchTemperatures, "0a0a02") {
 		t.Fatalf("room 1's mismatches %+v", r.Mismatches)
+	}
+}
+
+// restarted is the greeting of a Cube just restarted: every entry of its
+// L line without values, neither its valid bit (0x10) nor its
+// initialized bit (0x02) set, as the Cube holds no state for any device
+// until it reports.
+func restarted(t *testing.T, lines []cube.Message) []cube.Message {
+	t.Helper()
+	out := append([]cube.Message(nil), lines...)
+	for i, m := range out {
+		if m.Type != 'L' {
+			continue
+		}
+		raw, err := base64.StdEncoding.DecodeString(m.Data)
+		if err != nil {
+			t.Fatal(err)
+		}
+		for j := 0; j < len(raw); j += int(raw[j]) + 1 {
+			raw[j+5] &^= 0x12
+		}
+		out[i].Data = base64.StdEncoding.EncodeToString(raw)
+	}
+	return out
+}
+
+// reportAgain makes rfs report to the Cube, their entries valid in the
+// device list (fakecube.State.Reported), which the server then reads,
+// and waits until the pump has handled what that changed, the checks
+// the states gained run.
+func (c *mismatchCube) reportAgain(t *testing.T, rfs ...cube.RFAddress) {
+	t.Helper()
+	reported := true
+	for _, rf := range rfs {
+		if err := c.fc.SetState(rf, fakecube.State{Reported: &reported}); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if res := c.rt.writer().Do(t.Context(), engine.Command{Lines: []cube.Message{cube.CmdList}}); res.Err != nil {
+		t.Fatal(res.Err)
+	}
+	testkit.Eventually(t, "the members' states", func() bool {
+		snap := c.rt.client.Snapshot()
+		return !slices.ContainsFunc(rfs, func(rf cube.RFAddress) bool { return roomorder.Dead(snap, rf) })
+	})
+	c.rt.pumpSync(t)
+}
+
+// mismatchCounts are how many of the Cube's mismatch events say found
+// and how many cleared.
+func (c *mismatchCube) mismatchCounts(t *testing.T) (found, cleared int) {
+	t.Helper()
+	for _, e := range c.events(t) {
+		switch e.Summary["state"] {
+		case "found":
+			found++
+		case "cleared":
+			cleared++
+		}
+	}
+	return found, cleared
+}
+
+// A room of three whose comfort temperatures all differ, the master
+// 0a010a's deciding the tie: 0a0a01 and 0a0a02 are found. The Cube
+// restarts, and its members report one by one, the master last: while
+// one of them has not reported since the restart nothing is judged, so
+// that the first two to report are not judged against each other by the
+// order without the master; once all have, the room's findings are as
+// before. Nothing is cleared and nothing warned of again.
+func TestMismatchMembersReportOneByOne(t *testing.T) {
+	t.Parallel()
+	f := loadFixtureLines(t)
+	f.addConfig(0x0a0a01, 0x0a010a, 1, "MEQ0000201")
+	f.addConfig(0x0a0a02, 0x0a010a, 1, "MEQ0000202")
+	f.list(0x0a0a01, cube.DeviceRadiatorThermostat, 1, "MEQ0000201", "Second")
+	f.list(0x0a0a02, cube.DeviceRadiatorThermostat, 1, "MEQ0000202", "Third")
+	f.raws[0x0a0a01][0x12] = 40 // comfort 20
+	f.raws[0x0a0a02][0x12] = 38 // comfort 19
+	f.live(0x0a010a, 0x0a0a01, 0x0a0a02)
+	c := startMismatchCube(t, f.greeting(), nil, nil)
+	same := func(step string) {
+		t.Helper()
+		if found, cleared := c.mismatchCounts(t); found != 2 || cleared != 0 ||
+			c.event(t, view.MismatchTemperatures, "0a0a01", "found") == nil || c.event(t, view.MismatchTemperatures, "0a0a02", "found") == nil {
+			t.Fatalf("%s: %d found, %d cleared: %+v", step, found, cleared, c.events(t))
+		}
+		for _, rf := range []string{"0a0a01", "0a0a02"} {
+			if !has(c.device(t, rf).Mismatches, view.MismatchTemperatures, rf) {
+				t.Fatalf("%s: %s's finding gone", step, rf)
+			}
+		}
+	}
+	same("before the restart")
+	c.greet(t, restarted(t, f.greeting()))
+	same("after the restart")
+	c.reportAgain(t, 0x0a0a01, 0x0a0a02)
+	same("the two others reported")
+	c.reportAgain(t, 0x0a010a)
+	same("the master reported")
+}
+
+// A restart of the Cube clears no finding of a room's members and warns
+// of none again (RoomMajority.D9, the dead passed over): room 1's
+// 0a0a01 has another Saturday, 0a0a02 another comfort temperature; the
+// Cube restarts, every entry without a state, while 0a0a01's programme
+// was put right: both findings stay, a dead member and a room without a
+// reference being judged by nothing. Once the members report, 0a0a02,
+// which still differs, keeps its finding and is not warned of again,
+// and 0a0a01's finding clears.
+func TestMismatchMembersThroughARestart(t *testing.T) {
+	t.Parallel()
+	f := loadFixtureLines(t)
+	f.addConfig(0x0a0a01, 0x0a010a, 1, "MEQ0000201")
+	f.addConfig(0x0a0a02, 0x0a010a, 1, "MEQ0000202")
+	f.list(0x0a0a01, cube.DeviceRadiatorThermostat, 1, "MEQ0000201", "Second")
+	f.list(0x0a0a02, cube.DeviceRadiatorThermostat, 1, "MEQ0000202", "Third")
+	f.raws[0x0a0a01][0x1d] ^= 0x02 // the first switch point half a degree off
+	f.raws[0x0a0a02][0x12] = 40    // comfort 20
+	f.live(0x0a010a, 0x0a0a01, 0x0a0a02)
+	c := startMismatchCube(t, f.greeting(), nil, nil)
+	findings := func() (programme, temperatures bool) {
+		return has(c.device(t, "0a0a01").Mismatches, view.MismatchProgramme, "0a0a01"),
+			has(c.device(t, "0a0a02").Mismatches, view.MismatchTemperatures, "0a0a02")
+	}
+	if found, cleared := c.mismatchCounts(t); found != 2 || cleared != 0 {
+		t.Fatalf("before the restart %d found, %d cleared: %+v", found, cleared, c.events(t))
+	}
+
+	f.raws[0x0a0a01][0x1d] ^= 0x02 // put right while the Cube restarted
+	c.greet(t, restarted(t, f.greeting()))
+	if programme, temperatures := findings(); !programme || !temperatures {
+		t.Fatalf("after the restart the findings %v %v, want both kept", programme, temperatures)
+	}
+	if found, cleared := c.mismatchCounts(t); found != 2 || cleared != 0 {
+		t.Fatalf("after the restart %d found, %d cleared: %+v", found, cleared, c.events(t))
+	}
+
+	c.reportAgain(t, 0x0a010a, 0x0a0a01, 0x0a0a02)
+	if programme, temperatures := findings(); programme || !temperatures {
+		t.Fatalf("once they reported the findings %v %v, want 0a0a02's alone", programme, temperatures)
+	}
+	if found, cleared := c.mismatchCounts(t); found != 2 || cleared != 1 || c.event(t, view.MismatchProgramme, "0a0a01", "cleared") == nil {
+		t.Fatalf("once they reported %d found, %d cleared: %+v", found, cleared, c.events(t))
 	}
 }
 
@@ -573,5 +738,92 @@ func TestMismatchEventLine(t *testing.T) {
 	}
 	if got := eventMessage(mismatchEvent(nil, m, "cleared")); !strings.Contains(got, "agree again") {
 		t.Fatalf("line %q", got)
+	}
+}
+
+// outOfDate gives rf's entry in the greeting's L line the state of one
+// the Cube marks out of date, of a device that fell silent: initialized
+// (0x02) and not valid (0x10).
+func outOfDate(t *testing.T, lines []cube.Message, rf cube.RFAddress) []cube.Message {
+	t.Helper()
+	out := append([]cube.Message(nil), lines...)
+	for i, m := range out {
+		if m.Type != 'L' {
+			continue
+		}
+		raw, err := base64.StdEncoding.DecodeString(m.Data)
+		if err != nil {
+			t.Fatal(err)
+		}
+		for j := 0; j < len(raw); j += int(raw[j]) + 1 {
+			if cube.RFAddressFromBytes(raw[j+1:j+4]) == rf {
+				raw[j+5] = raw[j+5]&^0x10 | 0x02
+			}
+		}
+		out[i].Data = base64.StdEncoding.EncodeToString(raw)
+	}
+	return out
+}
+
+// The report's tie of a room's thermostats takes the first of the
+// room's order (RoomMajority.D9), the dead passed over: in room 1 of the
+// rooms fixture, its wall thermostat 0a0201, the master, and the radiator
+// thermostat 0a0202 with another comfort temperature tie, and the
+// radiator thermostat is found to differ; with the radiator thermostat
+// the master, the wall thermostat is. With the master out of date,
+// 0a0202 and 0a0203, whose comfort temperatures differ from each other
+// too, tie and the first radiator thermostat's decides: 0a0203 differs,
+// and the master is not judged, its finding left as it was. A room with
+// one member that is not dead has no reference, and one with a member
+// that has not reported since the Cube's restart judges none: nothing is
+// judged.
+func TestMemberMismatchesTieByTheOrder(t *testing.T) {
+	t.Parallel()
+	greeting, err := fakecube.RoomsFixture()
+	if err != nil {
+		t.Fatal(err)
+	}
+	all := []cube.RFAddress{0x0a0201, 0x0a0202, 0x0a0203}
+	for _, c := range []struct {
+		name     string
+		master   cube.RFAddress
+		rfs      []cube.RFAddress
+		state    func(t *testing.T, lines []cube.Message, rf cube.RFAddress) []cube.Message // 0a0201's, nil for valid
+		want     []string
+		unjudged []cube.RFAddress
+	}{
+		{"the master alive", 0x0a0201, all[:2], nil, []string{"0a0202"}, nil},
+		{"a radiator thermostat the master", 0x0a0202, all[:2], nil, []string{"0a0201"}, nil},
+		{"the master out of date", 0x0a0201, all, outOfDate, []string{"0a0203"}, all[:1]},
+		{"one member alive", 0x0a0201, all[:2], outOfDate, nil, all[:2]},
+		{"the master not reported since the restart", 0x0a0201, all, withoutValues, nil, all},
+	} {
+		lines := greeting
+		if c.state != nil {
+			lines = c.state(t, greeting, 0x0a0201)
+		}
+		snap, err := cubelan.SnapshotOf(lines, time.Now())
+		if err != nil {
+			t.Fatal(err)
+		}
+		cfgs := map[cube.RFAddress]*cube.DeviceConfig{0x0a0201: snap.Config(0x0a0201)}
+		for i, rf := range []cube.RFAddress{0x0a0202, 0x0a0203} {
+			radiator := *snap.Config(rf)
+			th := *radiator.Thermostat
+			th.ComfortTemp += float64(i + 1)
+			radiator.Thermostat = &th
+			cfgs[rf] = &radiator
+		}
+		room := cube.RoomMeta{ID: 1, Name: "Wohnen", RFAddress: c.master}
+		found, unjudged := memberMismatches(snap, cfgs, room, c.rfs, nil, nil)
+		var got []string
+		for _, m := range found {
+			if m.Finding == view.MismatchTemperatures {
+				got = append(got, m.Device)
+			}
+		}
+		if !slices.Equal(got, c.want) || !slices.Equal(unjudged, c.unjudged) {
+			t.Errorf("%s: the temperatures differ at %v, unjudged %v; want %v and %v", c.name, got, unjudged, c.want, c.unjudged)
+		}
 	}
 }

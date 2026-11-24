@@ -222,7 +222,7 @@ func (s *Server) resendState(rt *runtime, snap *cubelan.Snapshot, w confirmWrite
 		return st, false
 	}
 	now := time.Now()
-	cubeNow, ok := cubeClock(snap, now)
+	cubeNow, ok := snap.CubeClock(now)
 	if !ok {
 		return st, false
 	}

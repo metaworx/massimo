@@ -25,7 +25,8 @@ import { isShown, showView } from "../shared/pages";
 
 /** newUI is what a room's tile keeps, live (rooms.js roomUI). */
 export function newUI(): RoomUI {
-  return live<RoomUI>({ open: false, pending: null, timer: null, vacation: false, confirm: false, config: false, sending: null, hold: false, result: null });
+  return live<RoomUI>({ open: false, pending: null, timer: null, vacation: false, confirm: false, config: false, sending: null, hold: false, result: null,
+    awaiting: null, awaitTimer: null });
 }
 
 /**

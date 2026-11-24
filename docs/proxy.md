@@ -173,6 +173,8 @@ Nothing of a virtual wall thermostat reaches the Cube:
 
 - The greeting's room and device list names it in its room,
   its C line has a wall thermostat's layout with the room's presets and week programme,
+  as `GET …/devices/{rf}` gives them for it,
+  the room's by its one order (docs/api-v1.md, "The virtual wall thermostat"),
   and its entry in the L line has its state; `c:` and `l:` answer the same.
 - A metadata write is stripped of the virtual wall thermostats,
   and the real wall thermostats are put back.

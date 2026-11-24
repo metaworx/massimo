@@ -10,8 +10,11 @@
  * name (with rename), offered by default for the room chosen until one is
  * typed (D200-A), one too long for the Cube marked on its field and not
  * sent (D201); the room, one of the rooms given; and for a thermostat the
- * switch that copies the room's settings (with configure, which the copy
- * needs as well), on by default; then PUT …/devices/{rf} and its outcome.
+ * switch that copies the room's state and settings (with configure, which
+ * the copy needs as well), on by default; then PUT …/devices/{rf} and its
+ * outcome: the state the device took, or that the Cube did not take it
+ * and whether it went to the room instead, and what of the settings was
+ * copied, or why none (AP RoomMajority, Block 2).
  * What is typed, the request under way and the outcome are kept by the
  * caller (newPut), so that they outlive the form's being drawn again or
  * in another place.
@@ -27,6 +30,7 @@ import { live } from "./live";
 import { byteLength, defaultDeviceName, NAME_BYTES } from "./name";
 import { cubePath } from "./path";
 import { session, stillSession } from "./session";
+import { fmtSetpoint } from "./setpoint";
 import { can } from "./me";
 
 /** What a form that puts a device into a room keeps: the name typed, the room and the copy chosen, its request under way, its outcome, and done once the device is in its room. */
@@ -50,8 +54,38 @@ export function newPut(): Put {
 /** The device as the form reads it: its type, radio address and serial, a device of a Cube's list or one that joined. */
 type Joined = { type: Device["type"]; rf_address: string; serial?: string; name?: string };
 
-/** The answer of PUT …/devices/{rf}, as far as the form reads it: what of the room's settings was copied, the radio budget, a confirmation pending. */
-type Answer = { copied?: { days?: number; mode_not_set?: boolean }; budget?: { duty_cycle_pct?: number; free_memory_slots?: number }; confirmation?: string };
+/** The state a copy gave the device, as PUT …/devices/{rf} names it: its mode, its setpoint (none for auto on the programme), a holiday's end. */
+type CopiedState = { mode?: string; setpoint?: number; until?: string };
+
+/** What a copy of the room's state and settings sent, as PUT …/devices/{rf} answers it; state_from "default" where the room had no state to give. */
+type Copied = { state?: CopiedState; state_from?: string; days?: number; config_skipped?: string; mode_not_set?: boolean; room_mode?: boolean };
+
+/** The answer of PUT …/devices/{rf}, as far as the form reads it: what of the room's state and settings was copied, the radio budget, a confirmation pending. */
+type Answer = { copied?: Copied; budget?: { duty_cycle_pct?: number; free_memory_slots?: number }; confirmation?: string };
+
+/** stateText words the state a copy's 0x40 carried: auto on the programme, auto with a setpoint until the next switch point, manual, a holiday. */
+function stateText(s: CopiedState): string {
+  const temp = s.setpoint === undefined ? "" : fmtSetpoint(s.setpoint);
+  switch (s.mode) {
+    case "manual":
+      return t("put.stateManual", { temp });
+    case "vacation":
+      return t("put.stateVacation", { temp, until: fmtUntil(s.until) });
+  }
+  return s.setpoint === undefined ? t("put.stateAuto") : t("put.stateAutoTemp", { temp });
+}
+
+/** copiedText says what a copy did: the state the device took, the room's or, where the room had none, auto on the programme, or that the Cube did not take it and whether it went to the whole room instead (room_mode); then what of the settings was copied, or why none (config_skipped). */
+function copiedText(c: Copied): string {
+  const state = stateText(c.state || {});
+  let mode = t("put.state", { state });
+  if (c.state_from === "default") mode = c.mode_not_set ? t("put.modeNotSetDefault") : t("put.stateDefault");
+  else if (c.mode_not_set) mode = c.room_mode ? t("put.roomMode", { state }) : t("put.modeNotSet", { state });
+  let config = t("put.copied", { days: c.days ?? 0 });
+  if (c.config_skipped === "no_valid_state") config = t("put.configSkipped.no_valid_state");
+  else if (c.config_skipped) config = t("put.configSkipped.no_other_thermostat");
+  return mode + " " + config;
+}
 
 /** offered is the name the form offers in room: the room's name, the device type's word in the page's language and the lowest free number (defaultDeviceName). */
 function offered(dev: Joined, room: Room | undefined): string {
@@ -132,10 +166,7 @@ export function PutForm({ id, serial, dev, rooms, put, reload, onDone, onFail, o
     }
     if (!stillSession(n)) return;
     let text = t("put.done", { device: label, room: room.name });
-    if (res?.copied) {
-      text += " " + t("put.copied", { days: res.copied.days ?? 0 });
-      if (res.copied.mode_not_set) text += " " + t("put.modeNotSet");
-    }
+    if (res?.copied) text += " " + copiedText(res.copied);
     if (res?.budget) text = t("result.budget", { text, duty: res.budget.duty_cycle_pct ?? 0, slots: res.budget.free_memory_slots ?? 0 });
     if (res?.confirmation === "pending") text += " " + t("result.structurePending");
     put.result = { text, ok: true };

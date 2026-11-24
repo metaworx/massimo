@@ -29,6 +29,57 @@ type StateTimes struct {
 	// when its current value appeared. Only the values the device has are
 	// present.
 	Fields map[string]time.Time
+	// Changes is, per value of Fields, whether its time is that of a
+	// change from an earlier value the snapshot saw for the device, and
+	// not one the device made by itself: false for a value's first
+	// sighting (a new device's, one there when the server first
+	// connected, an entry's that got its values late or got them back
+	// after it had none); for the mode with which a boost ends, and its
+	// setpoint where that is the one from before the boost; and for the
+	// mode, setpoint and until with which a holiday ends at its until
+	// (AP RoomMajority, D3-A: a change made at a device is the newest
+	// wish, and these are no one's). Fields' times are the same either
+	// way.
+	Changes map[string]bool
+
+	// boostFrom is the setpoint from before the device's boost, as
+	// stateValues renders it, and boostKnown whether it is known.
+	boostFrom  string
+	boostKnown bool
+}
+
+// holidayGrace is how far after the moment a holiday's end may lie for
+// the holiday's leaving to count as its end by its until: the devices
+// keep the end in half hours, and their clock may be a little ahead of
+// the Cube's, or of this host's where the Cube's is not known.
+const holidayGrace = 30 * time.Minute
+
+// holidayOver reports whether a holiday's end has passed at the Cube's
+// time at now (cubeClockLocked), or at this host's local time where the
+// Cube's is not known, within holidayGrace.
+func (s *Snapshot) holidayOver(until cube.Until, now time.Time) bool {
+	if cubeNow, ok := s.cubeClockLocked(now); ok {
+		return !until.Time(time.UTC).After(cubeNow.Add(holidayGrace))
+	}
+	return !until.Time(time.Local).After(now.Add(holidayGrace))
+}
+
+// noOnes reports whether the value k, now v, is one the device set by
+// itself between old and st, seen at now, with s.mu held: the mode with
+// which a boost ends, and its setpoint where it is the one from before
+// the boost (or that is not known), since a person who ends a boost by
+// turning the wheel sets another; the mode, setpoint and until with
+// which a holiday ends at its until.
+func (s *Snapshot) noOnes(t *StateTimes, old, st cube.DeviceState, k, v string, now time.Time) bool {
+	switch {
+	case old.Mode == st.Mode:
+		return false
+	case old.Mode == cube.ModeBoost:
+		return k == "mode" || k == "setpoint" && (!t.boostKnown || v == t.boostFrom)
+	case old.Mode == cube.ModeVacation && old.Until != nil && s.holidayOver(*old.Until, now):
+		return k == "mode" || k == "setpoint" || k == "until"
+	}
+	return false
 }
 
 // stateValues renders the values of a state for comparison, keyed by
@@ -73,7 +124,7 @@ func stateValues(st cube.DeviceState) map[string]string {
 func (s *Snapshot) noteTimesLocked(old cube.DeviceState, had bool, st cube.DeviceState, now time.Time) {
 	t, ok := s.times[st.RFAddress]
 	if !ok {
-		t = &StateTimes{Fields: map[string]time.Time{}}
+		t = &StateTimes{Fields: map[string]time.Time{}, Changes: map[string]bool{}}
 		s.times[st.RFAddress] = t
 	}
 	if had && ok && sameState(old, st) {
@@ -88,11 +139,17 @@ func (s *Snapshot) noteTimesLocked(old cube.DeviceState, had bool, st cube.Devic
 	for k, v := range after {
 		if _, seen := t.Fields[k]; !seen || before[k] != v {
 			t.Fields[k] = now
+			_, earlier := before[k]
+			t.Changes[k] = seen && earlier && !s.noOnes(t, old, st, k, v, now)
 		}
+	}
+	if st.Mode == cube.ModeBoost && (!had || old.Mode != cube.ModeBoost) {
+		t.boostFrom, t.boostKnown = before["setpoint"], had && before["setpoint"] != ""
 	}
 	for k := range t.Fields {
 		if _, ok := after[k]; !ok {
 			delete(t.Fields, k)
+			delete(t.Changes, k)
 		}
 	}
 }
@@ -106,9 +163,12 @@ func (s *Snapshot) Times(rf cube.RFAddress) (StateTimes, bool) {
 	if !ok {
 		return StateTimes{}, false
 	}
-	cp := StateTimes{Changed: t.Changed, Fields: make(map[string]time.Time, len(t.Fields))}
+	cp := StateTimes{Changed: t.Changed, Fields: make(map[string]time.Time, len(t.Fields)), Changes: make(map[string]bool, len(t.Changes))}
 	for k, v := range t.Fields {
 		cp.Fields[k] = v
+	}
+	for k, v := range t.Changes {
+		cp.Changes[k] = v
 	}
 	return cp, true
 }

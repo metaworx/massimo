@@ -9,7 +9,9 @@
  * not seen for long, the Cube's lines that differ from its room list;
  * rooms/facts.ts roomEntries); one line while the room's commands are
  * refused; the measured and
- * the set temperature with the stepper; the modes with More; the info and
+ * the set temperature with the stepper, the setpoint marked where it is
+ * the room's eco or comfort temperature (roomPresets); the members'
+ * setpoints while they differ; the modes with More; the info and
  * the cog; the holiday form, the deletion's question, the room's repairs,
  * the result line, the device list and the configuration. Built once per
  * room and updated in place, so that an open menu, the focus, a click and
@@ -19,6 +21,7 @@
  * configuration is a part of its own (Config.tsx).
  */
 
+import { Fragment } from "preact";
 import { useLayoutEffect, useRef, useState } from "preact/hooks";
 import { Age, Notice, ResultLine } from "../shared/badge";
 import { hid } from "../shared/cls";
@@ -35,9 +38,67 @@ import { problemsLabel, roomEntries } from "./facts";
 import { useLook } from "../shared/look";
 import { apiUntil, roomActual, roomActualDevice } from "../model/room";
 import { cubePath } from "../shared/path";
+import { fmtSetpoint, PresetMark, presetOf } from "../shared/setpoint";
 
 /** The arrow keys of More move between these: its buttons that are on, and the Hold switch where shown. */
 const MORE_ITEMS = ".menu-items button:not(:disabled), .menu-items .switch:not(.hidden) input";
+
+/** The tile's writes that set the room's setpoint (tileWrite's keys), beside those that lock. */
+const SETPOINT_WRITES = new Set(["setpoint", "auto", "manual", "vacation", "boost", "eco", "comfort"]);
+
+/**
+ * settling says whether the room's thermostats may show different
+ * setpoints for a while for a reason of their own: a write of the tile to
+ * the room's setpoint running, or one the Cube took that they do not all
+ * show yet (roomUI's sending and awaiting, rooms.js awaitMembers); a
+ * thermostat showing a write of its mode or setpoint pending, the
+ * server's (confirmation), also another client's and one from before the
+ * page was loaded; an open window of the room, which puts its radiator
+ * thermostats at their window-open temperature, as the room checks pause
+ * for it: a contact's state, or an out-of-date contact's last report, as
+ * the room checks count it.
+ */
+function settling(room: PageRoom, ui: RoomUI): boolean {
+  if ((ui.sending && SETPOINT_WRITES.has(ui.sending)) || ui.awaiting) return true;
+  return room.devices.some((d) =>
+    (isThermostat(d) && d.confirmation?.state === "pending" && d.confirmation.fields.some((f) => f === "mode" || f === "setpoint")) ||
+    (d.type === "shutter_contact" && (d.state?.window_open === true || (!!d.out_of_date && d.last_known?.window_open === true))));
+}
+
+/**
+ * Members is the line under the setpoint row while the room's thermostats
+ * show different setpoints (D17-A): each by its name with its setpoint,
+ * OFF included, and the mark of its own eco or comfort temperature
+ * (D11-A), " · " between them; not while they are settling, so that a
+ * room command reaching the devices one by one does not flicker; gone
+ * once they agree. A thermostat without a state is left out. The line is
+ * built once, hidden while it says nothing, and its members are updated
+ * in place by their radio addresses.
+ */
+function Members({ room, ui }: { room: PageRoom; ui: RoomUI }) {
+  const members = room.devices.filter((d) => isThermostat(d) && d.state?.setpoint !== undefined);
+  const differ = new Set(members.map((d) => d.state?.setpoint)).size > 1;
+  const shown = differ && !settling(room, ui);
+  return (
+    <p class={"members-line" + hid(!shown)}>
+      <span class="members-label">{t("room.members")}</span>{" "}
+      {members.map((d, i) => {
+        const sp = d.state?.setpoint;
+        const preset = presetOf(sp, d.eco_temp, d.comfort_temp);
+        return (
+          <Fragment key={d.rf_address}>
+            {i > 0 && " · "}
+            <span class="member" data-rf={d.rf_address}>
+              <span class="member-name">{deviceName(d)}</span>
+              <span class="member-set">{fmtSetpoint(sp)}</span>
+              {preset && <PresetMark preset={preset} cls="di" />}
+            </span>
+          </Fragment>
+        );
+      })}
+    </p>
+  );
+}
 
 /**
  * NotReadyLine is the tile's one line while the room's commands are
@@ -108,12 +169,13 @@ function pressed(mode: string | null, modes: string[], m: string): { cls: string
 }
 
 /**
- * More is the tile's More menu (D99): Eco and Comfort, the room
- * thermostat's eco or comfort temperature in the room's mode, each with its
- * temperature once the menu has opened; the Hold switch while the room is
- * in Auto, which makes them hold theirs in Manual; and Holiday…, the
- * holiday form. On holiday it says until when (D99), and with the
- * thermostats' modes differing it is outlined where one is on holiday.
+ * More is the tile's More menu (D99): Eco and Comfort, the room's eco or
+ * comfort temperature (presetTemps, RoomMajority.D19-A) in the room's
+ * mode, each with its temperature once the menu has opened; the Hold
+ * switch while the room is in Auto, which makes them hold theirs in
+ * Manual; and Holiday…, the holiday form. On holiday it says until when
+ * (D99), and with the thermostats' modes differing it is outlined where
+ * one is on holiday.
  */
 function More({ room, ui, mode, modes, tile }: { room: PageRoom; ui: RoomUI; mode: string | null; modes: string[]; tile: () => HTMLElement | null }) {
   const [temps, setTemps] = useState<{ eco?: number; comfort?: number }>({});
@@ -126,13 +188,12 @@ function More({ room, ui, mode, modes, tile }: { room: PageRoom; ui: RoomUI; mod
   return (
     <Dropdown cls="more-menu" summaryCls={cls} title={holiday || t("room.moreTitle")} busy={busy} arrows={MORE_ITEMS}
       onOpen={() => {
-        const th = roomThermostat(room);
-        if (th) presetTemps(th).then(setTemps).catch(() => {});
+        if (roomThermostat(room)) presetTemps(room).then(setTemps).catch(() => {});
       }}
       summary={<><span class="more-label">{holiday || t("mode.more")}</span><Icon symbol="icon-chevron-down" cls="ni caret" /></>}>
       {(["eco", "comfort"] as const).map((which) => (
         <MenuItem key={which} cls={"menu-" + which} label={t("room." + which)} subCls="more-temp"
-          sub={temps[which] === undefined ? "" : fmtTemp(temps[which])} disabled={off} onClick={() => {
+          sub={temps[which] === undefined ? "" : fmtSetpoint(temps[which])} disabled={off} onClick={() => {
             sendPreset(room, which);
             tile()?.querySelector<HTMLElement>(".more-sum")?.focus(); // the menu closes on its item: the focus back on More
           }} />
@@ -172,7 +233,7 @@ function Vacation({ room, ui }: { room: PageRoom; ui: RoomUI }) {
     const u = apiUntil(until);
     if (!u) return;
     closeVacation(room);
-    sendRoomSetpoint(room, { mode: "vacation", temp: v, until: u }, t("label.vacation", { temp: fmtNum(v, 1), until: u }), "vacation");
+    sendRoomSetpoint(room, { mode: "vacation", temp: v, until: u }, t("label.vacation", { temp: fmtSetpoint(v), until: u }), "vacation");
   };
   return (
     <form class={"panel vacation-panel" + hid(!open)} onSubmit={send}>
@@ -216,6 +277,10 @@ export function Tile({ room }: { room: PageRoom }) {
   const th = roomThermostat(room);
   const s = roomState(room);
   const current = s && s.setpoint !== undefined ? s.setpoint : null;
+  // the setpoint shown, a stepped one too, and its mark by the room's eco and comfort (D10-A, D19-A)
+  const shown = ui.pending !== null ? ui.pending : current;
+  const presets = roomPresets(room);
+  const preset = th ? presetOf(shown, presets.eco, presets.comfort) : null;
   const modes = roomModes(room);
   const mode = modes.length > 1 ? null : s ? s.mode || null : null;
   const actual = roomActual(room);
@@ -246,8 +311,11 @@ export function Tile({ room }: { room: PageRoom }) {
         </div>
         <div class="temp-block">
           <span class="temp-tag"><Icon symbol="icon-set" cls="ti" /><span class="temp-label">{t("room.set")}</span></span>
-          <span class={"temp-big setpoint-big" + (ui.pending !== null ? " pending" : "")} aria-label={t("room.setTemp")}>
-            {th ? fmtTemp(ui.pending !== null ? ui.pending : current, "°") : ""}
+          <span class="set-val">
+            <span class={"temp-big setpoint-big" + (ui.pending !== null ? " pending" : "")} aria-label={t("room.setTemp")}>
+              {th ? fmtSetpoint(shown, "°") : ""}
+            </span>
+            {preset && <PresetMark preset={preset} cls="ti" />}
           </span>
         </div>
         <div class="stepper needs-setpoint">
@@ -255,6 +323,7 @@ export function Tile({ room }: { room: PageRoom }) {
           <button type="button" class="step step-minus" aria-label={t("temp.less")} title={t("temp.lessTitle")} disabled={off} onClick={() => stepSetpoint(room, -STEP)}>⌄</button>
         </div>
       </div>
+      <Members room={room} ui={ui} />
       <div class={"pending-row" + hid(ui.pending === null)}>
         <button type="button" {...write("pending-save primary", "setpoint")} onClick={() => flushSetpoint(room)}>{t("action.save")}</button>
         <button type="button" class="pending-cancel" disabled={off} onClick={() => cancelSetpoint(room)}>{t("action.cancel")}</button>
@@ -271,7 +340,7 @@ export function Tile({ room }: { room: PageRoom }) {
             // picks a temperature with the stepper, which sends manual itself.
             leaveEditing(room);
             if (current === null) showTileResult(room.id, t("room.noSetpoint"), false);
-            else sendRoomSetpoint(room, { mode: "manual", temp: current }, t("label.manual", { temp: fmtNum(current, 1) }), "manual");
+            else sendRoomSetpoint(room, { mode: "manual", temp: current }, t("label.manual", { temp: fmtSetpoint(current) }), "manual");
           }}>{t("mode.manu")}</button>
           <More room={room} ui={ui} mode={mode} modes={modes} tile={tile} />
         </span>

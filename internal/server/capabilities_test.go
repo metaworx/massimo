@@ -13,6 +13,7 @@ import (
 	"testing"
 	"time"
 
+	"go.metaworx.ch/massimo/internal/protocol/cube"
 	"go.metaworx.ch/massimo/internal/store"
 	"go.metaworx.ch/massimo/internal/testkit/cubewatch"
 )
@@ -260,10 +261,14 @@ func TestMoveNeedsStructure(t *testing.T) {
 
 // The copy of the room's settings after a move needs configure as well:
 // a role with structure alone is refused before anything is sent, and
-// moves without the copy.
+// moves without the copy. Room 2's 0a0109 has a valid state, so that
+// the room has a configuration to copy (RoomMajority.D9).
 func TestCopyNeedsConfigure(t *testing.T) {
 	t.Parallel()
-	r := startServer(t, withOptions(storeOptions(t, t.TempDir(), "secret")))
+	r := startServer(t, withOptions(storeOptions(t, t.TempDir(), "secret")),
+		changeGreeting(func(lines []cube.Message) []cube.Message {
+			return withValidStates(t, lines, map[cube.RFAddress]float64{0x0a0109: 21})
+		}))
 	fc, ts, s := r.fc, r.ts, r.s
 	st := s.opts.Store
 	st.AddRole(t.Context(), store.Role{Key: "mover", Capabilities: []string{"read", "structure"}}, 0)

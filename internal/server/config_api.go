@@ -15,6 +15,7 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
+	"slices"
 	"strconv"
 	"strings"
 	"time"
@@ -23,6 +24,7 @@ import (
 	"go.metaworx.ch/massimo/internal/cubeio"
 	"go.metaworx.ch/massimo/internal/engine"
 	"go.metaworx.ch/massimo/internal/protocol/cube"
+	"go.metaworx.ch/massimo/internal/roomorder"
 	"go.metaworx.ch/massimo/internal/view"
 )
 
@@ -217,11 +219,15 @@ func (s *Server) renameRoom(w http.ResponseWriter, r *http.Request) error {
 // such as one just paired, needs a room_id and is added to the room the
 // way the original software adds a new device (cubeio.Writer.AddDevice),
 // without a name under the default "<room name> <type> <n>" (D200-A).
-// Either way a thermostat then gets the room's settings
+// Either way a thermostat then gets the room's state and configuration
 // (cubeio.Writer.CopySettings), which needs the capability configure as
 // well, unless the body says "copy": false. The links and the metadata
-// are written under the Cube's structure lock (lockStructure), the copy
-// after it.
+// are written under the Cube's structure lock (lockStructure), which
+// leaves every room out of the room checks, the copy after it; the
+// room's state is read under the lock before the links, so that the new
+// device's own cannot reach the room's members first, and held for the
+// room checks once a radiogram of the link half reached them
+// (roomBefore; AP RoomMajority, D8-A).
 func (s *Server) updateDevice(w http.ResponseWriter, r *http.Request) error {
 	rt, err := s.cube(r)
 	if err != nil {
@@ -282,12 +288,11 @@ func (s *Server) updateDevice(w http.ResponseWriter, r *http.Request) error {
 		}
 	}
 	withCopy := (req.Copy == nil || *req.Copy) && c.Type.IsThermostat()
-	var room uint8   // the room the device went into, 0 when it stayed
-	var pending bool // the move or the placement is read back (structure.go)
+	var at placement
 	if idx < 0 {
-		room, pending, err = s.addDevice(ctx, r, rt, md, c, req.Name, req.RoomID, withCopy)
+		at, err = s.addDevice(ctx, r, rt, md, c, req.Name, req.RoomID, withCopy)
 	} else {
-		room, pending, err = s.moveDevice(ctx, r, rt, md, idx, c, req.Name, req.RoomID, withCopy)
+		at, err = s.moveDevice(ctx, r, rt, md, idx, c, req.Name, req.RoomID, withCopy)
 	}
 	if err != nil {
 		return err
@@ -295,46 +300,116 @@ func (s *Server) updateDevice(w http.ResponseWriter, r *http.Request) error {
 	unlock()
 	locked = false
 	answer := map[string]any{"ok": true}
-	if room != 0 && withCopy {
-		copied, err := s.copySettings(ctx, rt, rf, c.Type, room)
+	if at.room != 0 && withCopy {
+		copied, err := s.copySettings(ctx, rt, rf, c.Type, at.room, rt.copyState(at))
 		if err != nil {
 			return err
 		}
-		if !copied.Empty() || copied.ModeNotSet {
-			answer["copied"] = copied
-		}
+		answer["copied"] = copied // the state its 0x40 carried, whatever else went
 	}
 	answer["budget"] = rt.client.Budget()
-	if pending {
+	if at.pending {
 		answer["confirmation"] = "pending"
 	}
 	writeJSON(w, http.StatusOK, answer)
 	return nil
 }
 
+// placement is what an add or a move did: the room it put the device
+// into, 0 when the room stayed; whether the change is read back
+// (structure.go); and the room's state from before it, which the copy
+// gives the device (roomBefore), nil for none, and when it was read, a
+// time of the room checks' clock.
+type placement struct {
+	room    uint8
+	pending bool
+	state   *cubeio.RoomState
+	at      time.Time
+}
+
+// copyState is the state the copy gives a device put into a room: the
+// room's from before the change (at.state), but where Massimo set the
+// room another state since it was read, as by a room setpoint taken
+// while the change's link half ran, that setpoint, Massimo's own command
+// coming first (RoomMajority.D8-A, D4-A).
+func (rt *runtime) copyState(at placement) *cubeio.RoomState {
+	in, ok := rt.intentAfter(at.room, at.at)
+	if !ok {
+		return at.state
+	}
+	if st := at.state; st != nil && st.Mode == in.mode && st.Temp == in.temp && st.Until == in.until {
+		return at.state
+	}
+	return &cubeio.RoomState{Mode: in.mode, Temp: in.temp, Until: in.until}
+}
+
+// before is a room's state before a structure change brings a thermostat
+// into it (Server.roomBefore), held for the room checks only once the
+// change's link half reached a member (hold).
+type before struct {
+	room uint8
+	ref  resend
+	at   time.Time
+	ok   bool // the room has a state
+}
+
+// roomBefore reads room's state before a structure change brings the
+// thermostat rf into it (roomReference, by the room checks' clock, rf
+// left out where its C line names the room already): what the room's
+// other members show before rf is linked, so that its own state, which
+// may reach them first, does not count (AP RoomMajority, D8-A, D15-A).
+// The caller holds the structure lock, which leaves every room out of
+// the room checks (roomChecks: busy) until the change is through, and
+// holds the state (before.hold) once the link half reached a member.
+func (s *Server) roomBefore(rt *runtime, room uint8, rf cube.RFAddress) before {
+	now := s.roomNow()
+	ref, ok := rt.roomReference(rt.client.Snapshot(), room, rf, now)
+	return before{room: room, ref: ref, at: now, ok: ok}
+}
+
+// state is the room's state for the copy, nil where it has none.
+func (b before) state() *cubeio.RoomState {
+	if !b.ok {
+		return nil
+	}
+	return &cubeio.RoomState{Mode: b.ref.mode, Temp: b.ref.temp, Until: b.ref.until}
+}
+
+// hold holds the room's state for the room checks (holdReference) where
+// reached says a radiogram of the link half may have reached a member
+// (cubeio.Reached), which may then take the newcomer's state: where none
+// did, nothing is held, and a hold of an earlier change stays as it is.
+func (b before) hold(rt *runtime, reached bool) {
+	if b.ok && reached {
+		rt.holdReference(b.room, b.ref, b.at)
+	}
+}
+
 // moveDevice renames a device the metadata lists, md.Devices[idx],
 // and moves it to another room as the original software does; withCopy
-// says that the copy follows, which needs configure. It returns the
-// room it moved the device into, 0 when the room stayed.
-func (s *Server) moveDevice(ctx context.Context, r *http.Request, rt *runtime, md *cube.Metadata, idx int, c *cube.DeviceConfig, name *string, roomID *int, withCopy bool) (uint8, bool, error) {
+// says that the copy follows, which needs configure. A thermostat's new
+// room's state is read before the links and held once they reached a
+// member of the room (roomBefore). It returns the placement, its room 0
+// when the room stayed.
+func (s *Server) moveDevice(ctx context.Context, r *http.Request, rt *runtime, md *cube.Metadata, idx int, c *cube.DeviceConfig, name *string, roomID *int, withCopy bool) (placement, error) {
 	rf, cur := c.RFAddress, md.Devices[idx]
-	pending := false // a structure change is read back (structure.go)
+	var at placement
 	newRoom := cur.RoomID
 	if roomID != nil {
 		if *roomID < 1 || *roomID > 255 {
-			return 0, false, fail(http.StatusBadRequest, "room_id must be 1..255")
+			return placement{}, fail(http.StatusBadRequest, "room_id must be 1..255")
 		}
 		newRoom = uint8(*roomID)
 		if _, ok := rt.hidden().Room(md, newRoom); !ok {
-			return 0, false, fail(http.StatusNotFound, "no room %d", newRoom)
+			return placement{}, fail(http.StatusNotFound, "no room %d", newRoom)
 		}
 		if other, ok := secondWall(md, rf, newRoom); ok && c.Type == cube.DeviceWallThermostat && newRoom != cur.RoomID {
-			return 0, false, fail(http.StatusConflict, "room %d has a wall thermostat already (%s); a room takes one, as in the original software", newRoom, other)
+			return placement{}, fail(http.StatusConflict, "room %d has a wall thermostat already (%s); a room takes one, as in the original software", newRoom, other)
 		}
 		if newRoom != cur.RoomID {
 			if withCopy {
 				if err := s.require(r, "configure"); err != nil {
-					return 0, false, err
+					return placement{}, err
 				}
 			}
 			var members []cube.DeviceMeta
@@ -343,15 +418,23 @@ func (s *Server) moveDevice(ctx context.Context, r *http.Request, rt *runtime, m
 					members = append(members, d)
 				}
 			}
+			var was before
+			if c.Type.IsThermostat() {
+				was = s.roomBefore(rt, newRoom, rf) // before the links
+				at.state, at.at = was.state(), was.at
+			}
 			watch := rt.beginStructure("move", rf, cur.RoomID, newRoom)
 			out, in := cubeio.MoveCommands(rt.client.Snapshot(), rf, c.Type, cur.RoomID, newRoom, members, rt.hidden())
 			for _, cmd := range []engine.Command{out, in} {
 				res := rt.enqueue(ctx, cmd).Wait(ctx)
+				if cmd.Key == in.Key {
+					was.hold(rt, cubeio.Reached(cmd, res)) // the link half reached the room
+				}
 				if err := s.commandError(rt, res, 0); err != nil {
-					return 0, false, err
+					return placement{}, err
 				}
 			}
-			pending = rt.watchStructure(watch)
+			at.pending = rt.watchStructure(watch)
 		}
 	}
 	cp := *md
@@ -361,31 +444,47 @@ func (s *Server) moveDevice(ctx context.Context, r *http.Request, rt *runtime, m
 	}
 	cp.Devices[idx].RoomID = newRoom
 	if err := s.writeMetadata(ctx, rt, &cp); err != nil {
-		return 0, false, err
+		return placement{}, err
 	}
 	if newRoom == cur.RoomID {
-		return 0, false, nil
+		return placement{}, nil
 	}
 	rt.writer().Reread(ctx, rf)
 	rt.afterWrite(rf) // the C line names the new room once the device acknowledged
-	return newRoom, pending, nil
+	at.room = newRoom
+	return at, nil
 }
 
-// copySettings gives a device just put into room the room's settings
+// copySettings gives a device just put into room the room's state from
+// before (state, roomBefore's, nil for none) and its configuration
 // (cubeio.Writer.CopySettings, the hidden devices left out), follows up
-// the C lines it wrote and logs what was sent. Its error says that the
-// device is in the room and why the copy stopped; what was copied until
-// then is returned with it.
-func (s *Server) copySettings(ctx context.Context, rt *runtime, rf cube.RFAddress, typ cube.DeviceType, room uint8) (cubeio.Copied, error) {
-	copied, res, err := rt.writerOf(ctx).CopySettings(ctx, rf, typ, room, rt.hidden())
+// the C lines it wrote and logs what was sent. A room command of the
+// state, which follows a discarded 0x40 (RoomMajority.D16-A), counts as
+// Massimo's own setpoint to the room (intend), which keeps the room's
+// hold of the same state. Its error says that the device is in the room
+// and why the copy stopped; what was copied until then is returned with
+// it.
+func (s *Server) copySettings(ctx context.Context, rt *runtime, rf cube.RFAddress, typ cube.DeviceType, room uint8, state *cubeio.RoomState) (cubeio.Copied, error) {
+	copied, res, err := rt.writerOf(ctx).CopySettings(ctx, rf, typ, room, rt.hidden(), state)
 	if err != nil {
 		return copied, fail(http.StatusBadGateway, "device %s is in room %d, but the room's settings cannot be copied: %v", rf, room, err)
 	}
-	rt.afterWrite(copied.Temperatures...) // with none, the budget's follow-up of the 0x40
-	if !copied.Empty() || copied.ModeNotSet {
-		s.log.Info("settings copied", "cube", rt.cubeSerial(), "device", rf, "room", room, "temperatures", len(copied.Temperatures),
-			"valve", copied.Valve, "days", copied.Days, "mode_not_set", copied.ModeNotSet)
+	if st := copied.State; copied.RoomMode {
+		rt.intend(room, st.Mode, st.Temp, st.Until, s.roomNow()) // the room's intended state (drift.go)
 	}
+	rt.afterWrite(copied.Temperatures...) // with none, the budget's follow-up of the 0x40
+	attrs := []any{"cube", rt.cubeSerial(), "device", rf, "room", room, "mode", copied.State.Mode.String()}
+	if copied.State.Temp != 0 {
+		attrs = append(attrs, "setpoint", copied.State.Temp)
+	}
+	if !copied.State.Until.IsZero() {
+		attrs = append(attrs, "until", copied.State.Until.String())
+	}
+	if copied.ConfigSkipped != "" {
+		attrs = append(attrs, "config_skipped", copied.ConfigSkipped)
+	}
+	s.log.Info("settings copied", append(attrs, "temperatures", len(copied.Temperatures), "valve", copied.Valve, "days", copied.Days,
+		"mode_not_set", copied.ModeNotSet, "room_mode", copied.RoomMode)...)
 	if err := s.commandError(rt, res, 0); err != nil {
 		var he *httpError
 		if errors.As(err, &he) {
@@ -399,28 +498,30 @@ func (s *Server) copySettings(ctx context.Context, rt *runtime, rf cube.RFAddres
 // addDevice puts a device that is not in the metadata, one just paired
 // or paired long ago and never listed, into a room, under name, else
 // under defaultDeviceName's default; withCopy says that the copy
-// follows, which needs configure. It returns the room.
-func (s *Server) addDevice(ctx context.Context, r *http.Request, rt *runtime, md *cube.Metadata, c *cube.DeviceConfig, name *string, roomID *int, withCopy bool) (uint8, bool, error) {
+// follows, which needs configure. A thermostat's room's state is read
+// before the links and held once they reached a member of the room
+// (roomBefore). It returns the placement.
+func (s *Server) addDevice(ctx context.Context, r *http.Request, rt *runtime, md *cube.Metadata, c *cube.DeviceConfig, name *string, roomID *int, withCopy bool) (placement, error) {
 	if roomID == nil {
-		return 0, false, fail(http.StatusConflict, "device %s is in no room yet; give room_id to add it to one", c.RFAddress)
+		return placement{}, fail(http.StatusConflict, "device %s is in no room yet; give room_id to add it to one", c.RFAddress)
 	}
 	if *roomID < 1 || *roomID > 255 {
-		return 0, false, fail(http.StatusBadRequest, "room_id must be 1..255")
+		return placement{}, fail(http.StatusBadRequest, "room_id must be 1..255")
 	}
 	room := uint8(*roomID)
 	target, ok := rt.hidden().Room(md, room)
 	if !ok {
-		return 0, false, fail(http.StatusNotFound, "no room %d", room)
+		return placement{}, fail(http.StatusNotFound, "no room %d", room)
 	}
 	if c.Type == cube.DeviceCube {
-		return 0, false, fail(http.StatusBadRequest, "the cube itself is not in a room")
+		return placement{}, fail(http.StatusBadRequest, "the cube itself is not in a room")
 	}
 	if other, ok := secondWall(md, c.RFAddress, room); ok && c.Type == cube.DeviceWallThermostat {
-		return 0, false, fail(http.StatusConflict, "room %d has a wall thermostat already (%s); a room takes one, as in the original software", room, other)
+		return placement{}, fail(http.StatusConflict, "room %d has a wall thermostat already (%s); a room takes one, as in the original software", room, other)
 	}
 	if withCopy {
 		if err := s.require(r, "configure"); err != nil {
-			return 0, false, err
+			return placement{}, err
 		}
 	}
 	// Without a name the device is listed under the default a repair's
@@ -429,16 +530,24 @@ func (s *Server) addDevice(ctx context.Context, r *http.Request, rt *runtime, md
 	if name != nil {
 		n = strings.TrimSpace(*name)
 	}
+	at := placement{room: room}
+	var was before
+	if c.Type.IsThermostat() {
+		was = s.roomBefore(rt, room, c.RFAddress) // before the links
+		at.state, at.at = was.state(), was.at
+	}
 	watch := rt.beginStructure("add", c.RFAddress, room, c.RoomID)
-	res, err := rt.writerOf(ctx).AddDevice(ctx, md, c, n, room, rt.hidden())
+	res, reached, err := rt.writerOf(ctx).AddDevice(ctx, md, c, n, room, rt.hidden())
+	was.hold(rt, reached) // the link half reached the room
 	if err != nil {
-		return 0, false, fail(http.StatusBadRequest, "%v", err)
+		return placement{}, fail(http.StatusBadRequest, "%v", err)
 	}
 	if err := s.commandError(rt, res, 0); err != nil {
-		return 0, false, err
+		return placement{}, err
 	}
 	rt.afterWrite(c.RFAddress) // the C line names the room once the device acknowledged
-	return room, rt.watchStructure(watch), nil
+	at.pending = rt.watchStructure(watch)
+	return at, nil
 }
 
 // removeDevice handles DELETE /devices/{rf}: the device is deleted from
@@ -886,7 +995,45 @@ type roomConfigDevice struct {
 	DisplayActual *bool           `json:"display_actual,omitempty"`
 }
 
-// getRoomConfig handles GET /rooms/{id}/config.
+// roomConfig is a room's configuration as the API shows it
+// (RoomMajority.D19-A): cubeio.RoomConfig over the thermostats whose C
+// line names the room, the hidden left out, by their configurations,
+// config's (the snapshot's where config is nil), each group on its own,
+// the temperatures, the valve settings and each day of the week
+// programme what more than half of them share, else the first of the
+// room's order's (its master, its wall thermostat, its radiator
+// thermostats), one the Cube holds no valid state for, being out of
+// date, passed over: the rule of the copy, the repair and the report of
+// members that differ. While a thermostat of the room has not reported
+// since the Cube's restart (unreported), as the report waits for them
+// all (RoomMajority.D21-A), and where every thermostat is out of date,
+// the same over them all, as the room's addressee is taken then
+// (cubeio.Addressee), so that the room's configuration stays as it was
+// while its thermostats report one by one: a configuration shown, unlike
+// one copied or re-sent, is no reference that the dead could spread.
+// order is the room's thermostats in that order. False where no
+// thermostat of the room has a configuration.
+func (rt *runtime) roomConfig(room uint8, config func(cube.RFAddress) *cube.DeviceConfig) (s cubeio.RoomSettings, order []cube.RFAddress, ok bool) {
+	snap := rt.client.Snapshot()
+	if config == nil {
+		config = snap.Config
+	}
+	master, members := cubeio.RoomMaster(snap, room), cubeio.ConfigMembers(snap, room, rt.hidden())
+	settled := !slices.ContainsFunc(members, func(d cube.DeviceMeta) bool { return d.Type.IsThermostat() && unreported(snap, d.RFAddress) })
+	if settled {
+		if s, ok = cubeio.RoomConfig(snap, master, members, 0, config); ok {
+			return s, roomorder.Of(snap, master, members, 0), true
+		}
+	}
+	s, ok = cubeio.RoomConfig(nil, master, members, 0, config)
+	return s, roomorder.Of(nil, master, members, 0), ok
+}
+
+// getRoomConfig handles GET /rooms/{id}/config: the room's configuration
+// (roomConfig), from source, the first thermostat of the room's order
+// that has the room's temperatures, else the first of the order, and
+// each thermostat's own offset and display. A room without a thermostat
+// has no source, and no devices.
 func (s *Server) getRoomConfig(w http.ResponseWriter, r *http.Request) error {
 	rt, err := s.cube(r)
 	if err != nil {
@@ -908,32 +1055,37 @@ func (s *Server) getRoomConfig(w http.ResponseWriter, r *http.Request) error {
 		d := roomConfigDevice{RFAddress: rf.String(), Type: c.Type, Name: names[rf]}
 		switch {
 		case c.Thermostat != nil:
-			t := c.Thermostat
-			d.TempOffset = t.TempOffset
-			if v.Source == "" {
-				v.Source = rf.String()
-				v.ComfortTemp, v.EcoTemp, v.MaxSetpoint, v.MinSetpoint = t.ComfortTemp, t.EcoTemp, t.MaxSetpoint, t.MinSetpoint
-				v.WindowOpenTemp, v.WindowOpenMins = t.WindowOpenTemp, t.WindowOpenMins
-				v.BoostMinutes, v.BoostValvePct, v.DecalcDay, v.DecalcHour = t.BoostMinutes, t.BoostValvePct, t.DecalcDay, t.DecalcHour
-				v.MaxValvePct, v.ValveOffsetPct = t.MaxValvePct, t.ValveOffsetPct
-			}
+			d.TempOffset = c.Thermostat.TempOffset
 		case c.Wall != nil:
-			wc := c.Wall
-			d.TempOffset = wc.TempOffset
+			d.TempOffset = c.Wall.TempOffset
 			if st, ok := snap.State(rf); ok && st.Valid {
 				d.DisplayActual = st.DisplayActual
-			}
-			if v.Source == "" {
-				ref := cubeio.RoomRadiator(snap, room.ID, rf)
-				v.Source = rf.String()
-				v.ComfortTemp, v.EcoTemp, v.MaxSetpoint, v.MinSetpoint = wc.ComfortTemp, wc.EcoTemp, wc.MaxSetpoint, wc.MinSetpoint
-				v.WindowOpenTemp, v.WindowOpenMins = wc.WindowOpenTemp, ref.WindowOpenMins
-				v.BoostMinutes, v.BoostValvePct, v.DecalcDay, v.DecalcHour = wc.BoostMinutes, wc.BoostValvePct, ref.DecalcDay, ref.DecalcHour
-				v.MaxValvePct, v.ValveOffsetPct = ref.MaxValvePct, ref.ValveOffsetPct
 			}
 		}
 		v.Devices = append(v.Devices, d)
 	}
+	if len(v.Devices) == 0 {
+		writeJSON(w, http.StatusOK, v)
+		return nil
+	}
+	rs, order, ok := rt.roomConfig(room.ID, nil)
+	if !ok {
+		writeJSON(w, http.StatusOK, v)
+		return nil
+	}
+	source := order[0]
+	for _, rf := range order {
+		if rs.SameTemperatures(snap.Config(rf)) {
+			source = rf
+			break
+		}
+	}
+	t, vs := rs.Temps, rs.Valve
+	v.Source = source.String()
+	v.ComfortTemp, v.EcoTemp, v.MaxSetpoint, v.MinSetpoint, v.WindowOpenTemp = t.Comfort, t.Eco, t.Max, t.Min, t.WindowOpen
+	v.WindowOpenMins = rs.WindowOpenMins
+	v.BoostMinutes, v.BoostValvePct, v.DecalcDay, v.DecalcHour = vs.BoostMinutes, vs.BoostValvePct, vs.DecalcDay, vs.DecalcHour
+	v.MaxValvePct, v.ValveOffsetPct = vs.MaxValvePct, vs.ValveOffsetPct
 	writeJSON(w, http.StatusOK, v)
 	return nil
 }
@@ -1071,8 +1223,9 @@ func (s *Server) setRoomProgram(w http.ResponseWriter, r *http.Request) error {
 	return nil
 }
 
-// getRoomProgram handles GET /rooms/{id}/program: the programme of the
-// room's first radiator thermostat, else its first wall thermostat.
+// getRoomProgram handles GET /rooms/{id}/program: the room's week
+// programme, each day decided over its thermostats by the one order
+// (programOfRoom).
 func (s *Server) getRoomProgram(w http.ResponseWriter, r *http.Request) error {
 	rt, err := s.cube(r)
 	if err != nil {
@@ -1082,9 +1235,15 @@ func (s *Server) getRoomProgram(w http.ResponseWriter, r *http.Request) error {
 	if err != nil {
 		return err
 	}
-	rp, ok := rt.programOfRoom(room.ID)
+	return writeRoomProgram(w, rt, room.ID)
+}
+
+// writeRoomProgram answers a GET of a room's programme (programOfRoom),
+// 404 where the room has no thermostat.
+func writeRoomProgram(w http.ResponseWriter, rt *runtime, room uint8) error {
+	rp, ok := rt.programOfRoom(room)
 	if !ok {
-		return fail(http.StatusNotFound, "room %d has no thermostat", room.ID)
+		return fail(http.StatusNotFound, "room %d has no thermostat", room)
 	}
 	return writeProgram(w, rp)
 }
@@ -1098,11 +1257,7 @@ func (s *Server) getDeviceProgram(w http.ResponseWriter, r *http.Request) error 
 		return err
 	}
 	if room, ok := virtualOf(rt, r.PathValue("rf")); ok {
-		rp, ok := rt.programOfRoom(room.ID)
-		if !ok {
-			return fail(http.StatusNotFound, "room %d has no thermostat", room.ID)
-		}
-		return writeProgram(w, rp)
+		return writeRoomProgram(w, rt, room.ID)
 	}
 	rf, c, err := s.visibleDevice(rt, r)
 	if err != nil {

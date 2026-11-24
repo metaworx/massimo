@@ -12,6 +12,7 @@ import (
 
 	"go.metaworx.ch/massimo/internal/cubelan"
 	"go.metaworx.ch/massimo/internal/protocol/cube"
+	"go.metaworx.ch/massimo/internal/roomorder"
 )
 
 // The virtual wall thermostat (docs/api-v1.md, "The virtual wall
@@ -221,16 +222,14 @@ func RoomThermostat(room cube.RoomMeta, members []Device, info RoomInfo, addr cu
 		d.Sources = map[string][]string{"actual_temp": from}
 	}
 
-	// The mode: boost while any thermostat boosts; else the wall
-	// thermostat's, else the one that reported last; setpoint and until
-	// from the same.
-	base := reportedOnly(walls)
-	if len(base) == 0 {
-		base = []Device{latest(reportedOnly(radiators))}
-	}
-	b := base[0]
+	// The mode: boost while any thermostat boosts; else the room's state
+	// by the one order (RoomMajority.D9, D19-A; roomState); setpoint and
+	// until from the same, during a boost too, which sources.setpoint
+	// names, that one first, and sources.mode outside a boost, the
+	// boosting ones during one.
+	b, setFrom := roomState(room.RFAddress, members, reported)
+	modeFrom := setFrom
 	st.Mode, st.Setpoint, st.Until = b.State.Mode, b.State.Setpoint, b.State.Until
-	modeFrom := []string{b.RFAddress}
 	for _, k := range []string{"mode", "setpoint", "until"} {
 		newest(k, b.Received[k])
 	}
@@ -247,7 +246,7 @@ func RoomThermostat(room cube.RoomMeta, members []Device, info RoomInfo, addr cu
 	if d.Sources == nil {
 		d.Sources = map[string][]string{}
 	}
-	d.Sources["mode"] = modeFrom
+	d.Sources["mode"], d.Sources["setpoint"] = modeFrom, setFrom
 	consistent := true
 	for _, m := range reported[1:] {
 		consistent = consistent && SameSetting(reported[0].State, m.State)
@@ -308,15 +307,42 @@ func fresh(ds []Device) []Device {
 	return out
 }
 
-// latest is the device whose entry changed last.
-func latest(ds []Device) Device {
-	best := ds[0]
-	for _, d := range ds[1:] {
-		if d.LastSeen != nil && (best.LastSeen == nil || d.LastSeen.After(*best.LastSeen)) {
-			best = d
+// roomState is the thermostat whose mode, setpoint and until a virtual
+// wall thermostat shows, and the radio addresses of those its state came
+// from: the room's state by the one order (roomorder.State, the one rule
+// of the room checks' re-send, without Massimo's own command and the
+// state held before a structure change, which only the server knows)
+// over members, the room's devices in the Cube's order, those with a
+// state and a setpoint not in boost: what more than half of them show,
+// the members in auto that each follow their own programme as one
+// state; else the one whose mode or setpoint changed last; else the
+// first of the room's order, its master (the metadata's, master), its
+// wall thermostat, its radiator thermostats. Where every one boosts,
+// the same over those in boost; where none has a setpoint, the first of
+// reported, the room's thermostats with a state. The thermostat comes
+// first among those its state came from, so that the first of them is
+// the one whose setpoint the virtual wall thermostat shows
+// (sources.setpoint, Room.Thermostat).
+func roomState(master cube.RFAddress, members, reported []Device) (Device, []string) {
+	for _, boost := range []bool{false, true} {
+		var ds []Device
+		var ms []roomorder.Member
+		for _, d := range members {
+			if m, ok := d.member(); ok && (m.State.Mode == cube.ModeBoost) == boost {
+				ds, ms = append(ds, d), append(ms, m)
+			}
+		}
+		if p, ok := roomorder.State(master, ms); ok {
+			from := []string{ds[p.Index].RFAddress}
+			for _, rf := range p.From {
+				if rf != ms[p.Index].RF {
+					from = append(from, rf.String())
+				}
+			}
+			return ds[p.Index], from
 		}
 	}
-	return best
+	return reported[0], []string{reported[0].RFAddress}
 }
 
 // aggregate is the median (of two values, their mean) or the mean,
@@ -341,12 +367,12 @@ func aggregate(vals []float64, method string) float64 {
 }
 
 // SameSetting reports whether two thermostats agree on mode, setpoint
-// and until: the rule of a virtual wall thermostat's Consistent, and of
-// the server's check of a room's members.
+// and until (roomorder.SameSetting): the rule of a virtual wall
+// thermostat's Consistent, and of the server's check of a room's
+// members.
 func SameSetting(a, b *State) bool {
-	eqF := func(x, y *float64) bool { return x == nil && y == nil || x != nil && y != nil && *x == *y }
-	eqU := func(x, y *cube.Until) bool { return x == nil && y == nil || x != nil && y != nil && *x == *y }
-	return a.Mode == b.Mode && eqF(a.Setpoint, b.Setpoint) && eqU(a.Until, b.Until)
+	return roomorder.SameSetting(cube.DeviceState{Mode: a.Mode, Setpoint: a.Setpoint, Until: a.Until},
+		cube.DeviceState{Mode: b.Mode, Setpoint: b.Setpoint, Until: b.Until})
 }
 
 // nonEmpty is nil for an empty map.
@@ -375,7 +401,9 @@ func (s State) MarshalJSON() ([]byte, error) {
 }
 
 // RoomsOf lists the visible rooms as the view kind shows them, each with
-// its uid; info holds the rooms' uids and settings.
+// its uid and the thermostat whose state is the room's, the one its
+// virtual wall thermostat takes its setpoint and until from
+// (Room.Thermostat); info holds the rooms' uids and settings.
 func RoomsOf(snap *cubelan.Snapshot, h Hidden, stale Staleness, kind Kind, info map[uint8]RoomInfo) []Room {
 	md := snap.Metadata()
 	if md == nil {
@@ -384,11 +412,18 @@ func RoomsOf(snap *cubelan.Snapshot, h Hidden, stale Staleness, kind Kind, info 
 	rooms := Rooms(snap, h, stale)
 	visible := h.VisibleRooms(md)
 	addrs := VirtualAddresses(snap, visible, info)
+	cubeNow, clock := snap.CubeClock(now())
 	for i := range rooms {
 		r := &rooms[i]
 		r.UID = info[r.ID].UID
 		meta, _ := h.Room(md, r.ID)
+		for j := range r.Devices {
+			r.Devices[j].setFollows(snap, cubeNow, clock)
+		}
 		vwt := RoomThermostat(meta, r.Devices, info[r.ID], addrs[r.ID])
+		if from := vwt.Sources["setpoint"]; len(from) > 0 {
+			r.Thermostat = from[0] // the one whose setpoint the virtual wall thermostat shows
+		}
 		r.Devices = pick(kind, r.Devices, vwt)
 	}
 	return rooms

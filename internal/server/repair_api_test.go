@@ -9,14 +9,17 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"net/url"
+	"slices"
 	"strings"
 	"testing"
 	"time"
 
+	"go.metaworx.ch/massimo/internal/cubeio"
 	"go.metaworx.ch/massimo/internal/cubelan/fakecube"
 	"go.metaworx.ch/massimo/internal/protocol/cube"
 	"go.metaworx.ch/massimo/internal/store"
 	"go.metaworx.ch/massimo/internal/testkit/cubewatch"
+	"go.metaworx.ch/massimo/internal/view"
 )
 
 // The repairs' tests run over copyGreeting (config_api_test.go): room 1
@@ -444,17 +447,60 @@ func TestRepairResendConfig(t *testing.T) {
 	sameLines(t, received, sent, want)
 }
 
-// Without a majority, nothing is re-sent and the answer says why: the
-// two other thermostats of room 1 differ in their temperatures; a device
-// alone in its room has nothing to take them from.
-func TestRepairResendRefused(t *testing.T) {
+// On a tie the room's order decides (RoomMajority.D9), where the repair
+// refused before: room 1's other thermostats, 0a010a, its master, and
+// the wall thermostat, differ in their temperatures, and copyNew gets
+// 0a010a's with its own offset and window-open minutes, after the five
+// days of the programme both share that differ from its own.
+func TestRepairResendOnATie(t *testing.T) {
 	t.Parallel()
 	r := startServer(t, repairing(), withFake(func(fc *fakecube.Server) { withRoom1Thermostats(t, fc.Greeting, false) }))
+	fc, ts, s := r.fc, r.ts, r.s
+	snap := s.cubes["keq0000100"].client.Snapshot()
+	refProg := snap.Config(0x0a010a).Thermostat.WeekProgram
+	own := snap.Config(copyNew).Thermostat
+	want := []string{"z:1e,G,01"}
+	for _, d := range []cube.Weekday{cube.Monday, cube.Tuesday, cube.Wednesday, cube.Thursday, cube.Friday} {
+		ls, err := cube.CmdSetDayProgram(direct(copyNew), d, refProg[d])
+		if err != nil {
+			t.Fatal(err)
+		}
+		want = append(want, lineStrings(ls)...)
+	}
+	temps, err := cube.CmdSetTemperatures(direct(copyNew), cube.TemperatureSettings{Comfort: 22, Eco: 15, Max: 30.5, Min: 4.5,
+		Offset: own.TempOffset, WindowOpen: 5, WindowOpenMinutes: own.WindowOpenMins})
+	if err != nil {
+		t.Fatal(err)
+	}
+	want = append(want, temps.String(), "c:"+copyNew.String())
+	received := cubewatch.Lines(fc)
+	sent := received.Mark()
+	p, code, out := runRepairOf(t, ts, "/api/v1/cubes/KEQ0000100/devices/0a0b0c/repair/config", "")
+	if p.Action != "config" || p.Details["others"] != float64(2) || p.Details["temperatures_by"] != float64(1) || p.Details["program_by"] != float64(2) {
+		t.Fatalf("preview %+v", p)
+	}
+	if code != 200 || out["ok"] != true {
+		t.Fatalf("run: %d %v", code, out)
+	}
+	sameLines(t, received, sent, want)
+}
+
+// Without another thermostat the Cube holds a valid state for, nothing
+// is re-sent and the answer says why: a device alone in its room has
+// nothing to take its configuration from, nor one whose room's other
+// thermostats have not reported since the Cube's restart.
+func TestRepairResendRefused(t *testing.T) {
+	t.Parallel()
+	r := startServer(t, repairing(), withFake(func(fc *fakecube.Server) {
+		withRoom1Thermostats(t, fc.Greeting, false)
+		fc.Greeting = withoutValues(t, withoutValues(t, fc.Greeting, 0x0a010a), copyWall)
+	}))
 	fc, ts := r.fc, r.ts
 	received := cubewatch.Lines(fc)
 	sent := received.Mark()
-	nothingOf(t, ts, "/api/v1/cubes/KEQ0000100/devices/0a0b0c/repair/config", "share no temperatures")
-	nothingOf(t, ts, "/api/v1/cubes/KEQ0000100/devices/0a010d/repair/config", "no other thermostat")
+	nothingOf(t, ts, "/api/v1/cubes/KEQ0000100/devices/0a0b0c/repair/config",
+		"room 1 has no other thermostat the cube holds a valid state for to take the configuration from: its 2 others")
+	nothingOf(t, ts, "/api/v1/cubes/KEQ0000100/devices/0a010d/repair/config", "room 6 has no other thermostat to take the configuration from")
 	if got := received.Since(sent, cubewatch.Except('l')); len(got) != 0 {
 		t.Fatalf("sent %v", lineStrings(got))
 	}
@@ -797,4 +843,38 @@ func TestRepairUnlinkRelink(t *testing.T) {
 		t.Fatalf("run: %d %v", code, out)
 	}
 	sameLines(t, received, sent, append(relinkLines(false), relinkLines(true)...))
+}
+
+// The repair re-sends what the report of members that differ names
+// (RoomMajority.D9): room 1's 0a010a, its master, and the wall
+// thermostat differ in their temperatures, a tie the master's decides,
+// so the report finds the wall thermostat's; its repair sends it
+// 0a010a's, and 0a010a's repair has nothing to send, the room's being
+// its own.
+func TestRepairResendNamesWhatTheReportNames(t *testing.T) {
+	t.Parallel()
+	r := startServer(t, repairing())
+	snap := r.rt.client.Snapshot()
+	var found []string
+	mismatches, _ := findMismatches(snap, snap.Metadata(), view.NewHidden(nil, snap.Metadata(), false), nil)
+	for _, m := range mismatches {
+		if m.Room == 1 && (m.Finding == view.MismatchTemperatures || m.Finding == view.MismatchProgramme) {
+			found = append(found, m.Finding+" "+m.Device)
+		}
+	}
+	if !slices.Equal(found, []string{"temperatures 0c0d0e"}) {
+		t.Fatalf("the report of room 1: %v", found)
+	}
+	nothingOf(t, r.ts, "/api/v1/cubes/KEQ0000100/devices/0a010a/repair/config", "device 0a010a has room 1's temperatures and week programme already")
+	code, p, body := previewOf(t, r.ts, "/api/v1/cubes/KEQ0000100/devices/0c0d0e/repair/config")
+	w := snap.Config(copyWall).Wall
+	temps, err := cube.CmdSetTemperatures(direct(copyWall), cube.TemperatureSettings{Comfort: 22, Eco: 15, Max: 30.5, Min: 4.5,
+		Offset: w.TempOffset, WindowOpen: 5, WindowOpenMinutes: cubeio.RoomRadiator(snap, 1, copyWall).WindowOpenMins})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if code != 200 || len(p.Steps) != 1 || !slices.Equal(p.Steps[0].Lines, []string{temps.String()}) ||
+		p.Details["others"] != float64(1) || p.Details["thermostats"] != float64(2) || p.Details["temperatures_by"] != float64(1) {
+		t.Fatalf("the wall thermostat's repair: %d %s", code, body)
+	}
 }
