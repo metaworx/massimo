@@ -6,10 +6,12 @@ package store
 import (
 	"context"
 	"crypto/sha256"
+	"database/sql"
 	"encoding/hex"
 	"errors"
 	"fmt"
 	"io/fs"
+	"path/filepath"
 	"strings"
 	"testing"
 	"testing/fstest"
@@ -342,5 +344,127 @@ func TestBackupsAutoincrementMigration(t *testing.T) {
 	next, err := s.AddBackup(ctx, Backup{CubeID: c.ID, Reason: ReasonAuto, Format: "json"}, []byte(`{"version":1}`))
 	if err != nil || next.ID <= gone.ID {
 		t.Fatalf("the next backup is %d (%v), the purged tombstone was %d", next.ID, err, gone.ID)
+	}
+}
+
+// A Cube's pending backup is kept, replaced and forgotten, one row per
+// Cube, its times to the millisecond; one without a hash or a change is
+// refused, and a store opened read-only writes none.
+func TestBackupPending(t *testing.T) {
+	t.Parallel()
+	dir := t.TempDir()
+	s := open(t, dir)
+	ctx := context.Background()
+	a, _ := s.AddCube(ctx, Cube{Serial: "KEQ0000001", Configured: true})
+	b, _ := s.AddCube(ctx, Cube{Serial: "KEQ0000002", Configured: true})
+	if _, ok, err := s.BackupPending(ctx, a.ID); ok || err != nil {
+		t.Fatalf("a pending backup before any: %v %v", ok, err)
+	}
+	t0 := time.Date(2026, 11, 24, 0, 32, 0, 123_000_000, time.UTC)
+	same := func(got, want BackupPending) bool {
+		return got.CubeID == want.CubeID && got.Ref == want.Ref && got.Hash == want.Hash && got.FirstChange.Equal(want.FirstChange) && got.LastChange.Equal(want.LastChange)
+	}
+	p := BackupPending{CubeID: a.ID, Ref: "ref", Hash: "first", FirstChange: t0, LastChange: t0}
+	if err := s.SetBackupPending(ctx, p); err != nil {
+		t.Fatal(err)
+	}
+	if got, ok, err := s.BackupPending(ctx, a.ID); !ok || err != nil || !same(got, p) {
+		t.Fatalf("kept %+v %v %v, want %+v", got, ok, err, p)
+	}
+	// A new hash while dirty: the first change stays, the last moves.
+	p.Hash, p.LastChange = "second", t0.Add(10*time.Minute)
+	if err := s.SetBackupPending(ctx, p); err != nil {
+		t.Fatal(err)
+	}
+	other := BackupPending{CubeID: b.ID, Hash: "other", FirstChange: t0, LastChange: t0}
+	if err := s.SetBackupPending(ctx, other); err != nil {
+		t.Fatal(err)
+	}
+	var rows int
+	if err := s.db.QueryRowContext(ctx, `SELECT count(*) FROM backup_pending WHERE cube_id = ?`, a.ID).Scan(&rows); err != nil || rows != 1 {
+		t.Fatalf("%d rows of the Cube, %v", rows, err)
+	}
+	if got, ok, _ := s.BackupPending(ctx, a.ID); !ok || !same(got, p) {
+		t.Fatalf("replaced %+v, want %+v", got, p)
+	}
+	for _, bad := range []BackupPending{{CubeID: a.ID, FirstChange: t0, LastChange: t0}, {CubeID: a.ID, Hash: "x"}, {Hash: "x", FirstChange: t0, LastChange: t0}} {
+		if err := s.SetBackupPending(ctx, bad); err == nil {
+			t.Fatalf("kept %+v", bad)
+		}
+	}
+	if err := s.DeleteBackupPending(ctx, a.ID); err != nil {
+		t.Fatal(err)
+	}
+	if _, ok, _ := s.BackupPending(ctx, a.ID); ok {
+		t.Fatal("the Cube's pending backup is still there")
+	}
+	if got, ok, _ := s.BackupPending(ctx, b.ID); !ok || !same(got, other) {
+		t.Fatalf("the other Cube's went too: %+v %v", got, ok)
+	}
+	if err := s.DeleteBackupPending(ctx, a.ID); err != nil {
+		t.Fatalf("deleting none: %v", err)
+	}
+	s.Close()
+	ro, err := OpenReadOnly(dir, Options{Logger: quiet()})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer ro.Close()
+	if got, ok, err := ro.BackupPending(ctx, b.ID); !ok || err != nil || !same(got, other) {
+		t.Fatalf("read-only: %+v %v %v", got, ok, err)
+	}
+	if ro.SetBackupPending(ctx, p) == nil || ro.DeleteBackupPending(ctx, b.ID) == nil {
+		t.Fatal("a store opened read-only wrote a pending backup")
+	}
+}
+
+// Migration 0026 is additive: a binary for 25 opens the file it made and
+// reads it as before, and its down part takes the schema back to the one
+// of 25.
+func TestBackupPendingMigration(t *testing.T) {
+	t.Parallel()
+	ctx := context.Background()
+	clock := fixedClock()
+	at25 := t.TempDir()
+	migrateOnly(t, at25, migrationsUpTo(t, 25), clock)
+	dir := copyStore(t, at25)
+	migrateOnly(t, dir, nil, clock)
+	s := newStore(dir, Options{Logger: quiet(), Now: clock})
+	if err := s.open(false); err != nil {
+		t.Fatal(err)
+	}
+	c := oldCube(t, s, "KEQ0000001")
+	if err := s.SetBackupPending(ctx, BackupPending{CubeID: c, Ref: "ref", Hash: "hash", FirstChange: clock(), LastChange: clock()}); err != nil {
+		t.Fatal(err)
+	}
+	s.Close()
+
+	old, err := Open(dir, Options{Logger: quiet(), migrations: migrationsUpTo(t, 25), readerVersion: 25})
+	if err != nil {
+		t.Fatalf("a binary for 25: %v", err)
+	}
+	if v, mr := old.SchemaVersion(); v != 26 || mr != 24 {
+		t.Fatalf("a binary for 25 reads version %d, min_reader %d", v, mr)
+	}
+	if row, ok, err := old.CubeByID(ctx, c); err != nil || !ok || row.Serial != "KEQ0000001" {
+		t.Fatalf("a binary for 25 reads the Cube: %+v %v %v", row, ok, err)
+	}
+	old.Close()
+
+	down, err := fs.ReadFile(embeddedMigrations(), "0026_backup_pending.down.sql")
+	if err != nil {
+		t.Fatal(err)
+	}
+	db, err := sql.Open("sqlite", "file:"+filepath.ToSlash(Path(dir)))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer db.Close()
+	if _, err := db.ExecContext(ctx, string(down)); err != nil {
+		t.Fatal(err)
+	}
+	want, got := fileSchema(t, rawDB(t, at25)), fileSchema(t, db)
+	if fmt.Sprint(got) != fmt.Sprint(want) {
+		t.Fatalf("after the down part:\n%v\nwant the schema of 25:\n%v", got, want)
 	}
 }

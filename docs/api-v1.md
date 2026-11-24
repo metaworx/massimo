@@ -3204,6 +3204,8 @@ the backup follows once `backups.auto_min` minutes passed without a further chan
 at the latest `backups.auto_max` minutes after the first,
 and a Cube that has none gets one at once:
 at its first connection, or once its last backup is deleted or pruned.
+The windows hold across a start of the server, `changed` and `due` with them;
+a clean stop takes the backup of a change pending before the Cubes close.
 Changes made outside Massimo count as well, once the Cube reports them,
 at the latest at the six-hourly refresh.
 A restore keeps the Cube's configuration before its first step (`before_restore`)

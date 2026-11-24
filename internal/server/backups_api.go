@@ -209,8 +209,8 @@ func (s *Server) deleteBackup(w http.ResponseWriter, r *http.Request) error {
 	rt.bk.rows.Lock()
 	newest, has, newestErr := st.NewestBackup(r.Context(), cubeID)
 	ok, err := st.DeleteBackup(r.Context(), cubeID, id)
-	if ok && (newestErr != nil || !has || newest.ID == id) {
-		rt.bk.forget()
+	if ok && (newestErr != nil || !has || newest.ID == id) && rt.bk.forget() {
+		s.dropKept(r.Context(), rt)
 	}
 	rt.bk.rows.Unlock()
 	if err != nil {

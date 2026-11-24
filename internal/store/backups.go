@@ -11,7 +11,9 @@ package store
 // (manual), before every restore (before_restore), and keeps the file a
 // restore was sent (upload). Retention is by reason and age, the newest
 // of each Cube kept whatever their age; a deleted backup is a tombstone
-// without its file.
+// without its file. backup_pending (migration 0026) keeps the server's
+// watch of a Cube whose configuration changed since its reference, so
+// that the automatic backup's windows hold across a start.
 
 import (
 	"bytes"
@@ -270,6 +272,63 @@ func (s *Store) DeleteBackup(ctx context.Context, cubeID, id int64) (bool, error
 		return false, fmt.Errorf("store: delete backup %d: %w", id, err)
 	}
 	return true, nil
+}
+
+// BackupPending is the watch of a Cube whose configuration differs from
+// its reference, kept across a start of the server (migration 0026):
+// the automatic backup's windows count from its first and its last
+// change.
+type BackupPending struct {
+	CubeID      int64
+	Ref         string    // the configuration hash of the reference: the newest backup, or the file restored
+	Hash        string    // the configuration hash at the last look
+	FirstChange time.Time // the first change against Ref; backups.auto_max counts from it
+	LastChange  time.Time // the last change seen; backups.auto_min counts from it
+}
+
+// BackupPending returns a Cube's kept watch, and whether it has one.
+func (s *Store) BackupPending(ctx context.Context, cubeID int64) (BackupPending, bool, error) {
+	p := BackupPending{CubeID: cubeID}
+	var first, last sql.NullString
+	err := s.db.QueryRowContext(ctx, `SELECT ref, hash, first_change, last_change FROM backup_pending WHERE cube_id = ?`, cubeID).
+		Scan(&p.Ref, &p.Hash, &first, &last)
+	if errors.Is(err, sql.ErrNoRows) {
+		return BackupPending{}, false, nil
+	}
+	if err != nil {
+		return BackupPending{}, false, fmt.Errorf("store: pending backup of cube %d: %w", cubeID, err)
+	}
+	p.FirstChange, p.LastChange = parseTime(first), parseTime(last)
+	return p, true, nil
+}
+
+// SetBackupPending keeps a Cube's watch, in place of the one kept.
+func (s *Store) SetBackupPending(ctx context.Context, p BackupPending) error {
+	if err := s.writable(); err != nil {
+		return err
+	}
+	if p.CubeID == 0 || p.Hash == "" || p.FirstChange.IsZero() || p.LastChange.IsZero() {
+		return fmt.Errorf("store: pending backup of cube %d: no hash or no change", p.CubeID)
+	}
+	_, err := s.db.ExecContext(ctx, `INSERT INTO backup_pending (cube_id, ref, hash, first_change, last_change) VALUES (?, ?, ?, ?, ?)
+		ON CONFLICT (cube_id) DO UPDATE SET ref = excluded.ref, hash = excluded.hash, first_change = excluded.first_change, last_change = excluded.last_change`,
+		p.CubeID, p.Ref, p.Hash, formatTime(p.FirstChange), formatTime(p.LastChange))
+	if err != nil {
+		return fmt.Errorf("store: pending backup of cube %d: %w", p.CubeID, err)
+	}
+	return nil
+}
+
+// DeleteBackupPending forgets a Cube's kept watch; none kept is no
+// error.
+func (s *Store) DeleteBackupPending(ctx context.Context, cubeID int64) error {
+	if err := s.writable(); err != nil {
+		return err
+	}
+	if _, err := s.db.ExecContext(ctx, `DELETE FROM backup_pending WHERE cube_id = ?`, cubeID); err != nil {
+		return fmt.Errorf("store: pending backup of cube %d: %w", cubeID, err)
+	}
+	return nil
 }
 
 // PruneBackups removes, per Cube, the backups past the newest

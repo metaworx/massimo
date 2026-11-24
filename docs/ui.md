@@ -1921,7 +1921,9 @@ settings forms and have none of it.
   before a restore, or the file a restore was sent), its size and who asked:
   one follows by itself an hour after the Cube's configuration last changed,
   at the latest two hours after the first change (the settings `backups.*`,
-  docs/api-v1.md, "Backups"), and a line says when while one is pending.
+  docs/api-v1.md, "Backups"), also across a restart of the server,
+  which takes a pending one as it stops,
+  and a line says when while one is pending.
   **Take a backup now** keeps one by hand.
   Each row has **Download**, **Compare with the one before**,
   which lists what changed as the restore would send it,

@@ -311,6 +311,9 @@ type Options struct {
 	// confirmWithin is how long a write's devices have to show it, for
 	// the tests; zero for defaultConfirmWithin (confirm.go).
 	confirmWithin time.Duration
+	// noStopBackups leaves out the backups a stop takes (backupsAtStop),
+	// for the tests of a stop that is not clean, as a crash or a kill.
+	noStopBackups bool
 	// discoveryLate is how long, from an answer, a discovery run waits
 	// for its N and c answers where DiscoveryWait ends sooner
 	// (cubelan.SearchOptions.LateWait), for the tests, whose proxies never
@@ -422,6 +425,7 @@ type Server struct {
 	discRun   *discoveryRun   // the run going on, if any
 	discNext  *discoveryRun   // the run to start when discRun ends, if any
 	ctx       context.Context // Run's, for work that outlives a request
+	cubesCtx  context.Context // the runtimes', which outlives Run's by the stop's backups
 	foundMu   sync.Mutex
 	found     map[string]*foundCube // by serial, upper case
 	servers   []announce.Found      // the servers announced at the latest run, under foundMu
@@ -853,9 +857,14 @@ func New(opts Options) *Server {
 
 // Run connects every Cube and blocks until ctx ends. Cubes added
 // through the API while it runs are started the same way (runtimes.go).
+// Their runtimes run on a context of their own, which ends after ctx:
+// the stop first takes the automatic backup of each Cube whose change
+// is pending, within a few seconds (backupsAtStop).
 func (s *Server) Run(ctx context.Context) error {
+	cubesCtx, stopCubes := context.WithCancel(context.WithoutCancel(ctx))
+	defer stopCubes()
 	s.mu.Lock()
-	s.ctx = ctx
+	s.ctx, s.cubesCtx = ctx, cubesCtx
 	s.mu.Unlock()
 	// The log's writer (log.go), before the Cubes connect, on a context
 	// of its own: it ends once the server's goroutines have, so that what
@@ -895,6 +904,12 @@ func (s *Server) Run(ctx context.Context) error {
 	}
 	<-ctx.Done()
 	s.logStopping() // before the writer stops, which writes it
+	// The Cubes are still connected: a change pending gets its backup
+	// before they close, and before serve closes the store.
+	if !s.opts.noStopBackups {
+		s.backupsAtStop(cubesCtx)
+	}
+	stopCubes()
 	// Once ctx is done nothing new is tracked (track); taking the lock
 	// waits for a track that saw ctx alive, so Wait cannot race an Add.
 	s.mu.Lock()

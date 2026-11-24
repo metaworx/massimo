@@ -549,7 +549,11 @@ func (s *Server) runRestore(ctx context.Context, rt *runtime, run *restoreRun, p
 	if err == nil {
 		// The file restored is the reference now: the next look says
 		// whether the Cube took all of it.
-		rt.bk.restored(hash)
+		rt.bk.rows.Lock()
+		if rt.bk.restored(hash) {
+			s.dropKept(ctx, rt)
+		}
+		rt.bk.rows.Unlock()
 	}
 	finished := time.Now()
 	rt.restoreMu.Lock()

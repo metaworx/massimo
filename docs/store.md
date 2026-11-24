@@ -540,6 +540,14 @@ CREATE TABLE backup_data (                      -- migration 0024 (D5-B), backup
     data BLOB    NOT NULL                       -- the backup file, gzip; a tombstone has no row
 );
 
+CREATE TABLE backup_pending (                   -- migration 0026: the windows of a change's backup
+    cube_id      INTEGER PRIMARY KEY REFERENCES cubes (id) ON DELETE CASCADE,
+    ref          TEXT    NOT NULL,  -- backup.ConfigHash of the reference they count against
+    hash         TEXT    NOT NULL,  -- backup.ConfigHash at the last look
+    first_change TEXT    NOT NULL,  -- backups.auto_max counts from it
+    last_change  TEXT    NOT NULL   -- backups.auto_min counts from it
+);
+
 CREATE TABLE auth_failures (
     key          TEXT    PRIMARY KEY,            -- 'addr:<ip>' or 'user:<name>'
     window_start TEXT    NOT NULL,
@@ -771,6 +779,16 @@ Notes on the tables:
   The prune deletes the rows, so the id is `AUTOINCREMENT` (migration 0013):
   SQLite never gives a deleted backup's id to a later one,
   and an id the API named before a prune names no other backup.
+- `backup_pending` (migration 0026) is the server's watch of a Cube whose
+  configuration differs from its reference, kept so that the automatic backup's
+  windows hold across a start (section 9 (e)):
+  a row while the Cube is dirty, none while it is clean.
+  It is a table of its own, not columns of `cubes`,
+  so that a Cube row's `version` and `updated_at` keep meaning a change of its
+  configuration in the store.
+  A row has no `uuid`, `version`, `deleted_at` or `origin`:
+  the watch is this server's, is not replicated,
+  and is deleted rather than marked.
 - `auth_failures` is the `authLimiter` of #7 keyed by address,
   plus a key per user name so that password guessing from many addresses behind
   a reverse proxy locks the name rather than the proxy.
@@ -1009,6 +1027,17 @@ which a binary since 0025 refuses, a session counting only while its key does.
 The column has no foreign key, so that its down part,
 `0025_token_parent.down.sql`, can drop it and the index;
 it loses which key made a session, and only that.
+`0026_backup_pending.sql` adds `backup_pending` (AP BackupWatch v1.0, Block 1),
+additively, keeping `min_reader` 24:
+a dirty Cube's windows of its automatic backup,
+kept across a start (section 9 (e)).
+A binary for 24 or 25 leaves the table alone and keeps its watch in memory,
+as before;
+a row it leaves behind, its backup taken without deleting it,
+names another reference in `ref`, and this binary's next start deletes it.
+Its down part, `0026_backup_pending.down.sql`, drops the table;
+it loses the windows of a pending backup, and only that,
+which the binary of 25 begins again at its first look.
 On a store of 500 000 log rows (149 MB, a tenth with a user) a desktop took
 2.0 s for the raise, its copy `massimo.db.before-24` included, and 2.2 s for the
 down part, its copy included (`TestRaiseTimes` with
@@ -1901,8 +1930,9 @@ Implemented on 2026-11-06 (AP StoreLog v1.0), with its review's fixes (v1.1).
 Implemented on 2026-11-07 (AP StoreBackups v1.0).
 
 - Files: `internal/store/backups.go` (add, list, read,
-  delete as a tombstone without the file, the prune),
-  migrations 0005 (the four reasons) and 0013 (an id never given out twice);
+  delete as a tombstone without the file, the prune, the windows kept),
+  migrations 0005 (the four reasons), 0013 (an id never given out twice)
+  and 0026 (the windows kept across a start);
   `internal/server/backups.go` (the automatic backup) and `backups_api.go` (the
   routes); `backup.ConfigHash` and `cubelan.SnapshotOf` (the comparison);
   `backup.js` with its partials (the Settings panel).
@@ -1920,6 +1950,36 @@ Implemented on 2026-11-07 (AP StoreBackups v1.0).
   or pruned, which `backups.keep_newest` 0 allows.
   A restore takes `before_restore` first and is refused when it cannot,
   and keeps the file of its body as `upload`.
+- The windows across a start (AP BackupWatch v1.0, Block 1, D1-C):
+  a dirty Cube's first and last change are kept in `backup_pending`,
+  with the hash of the configuration and of the reference they count against.
+  The look that finds the Cube dirty, or changed again while dirty,
+  writes them, so at most once a minute;
+  a backup stored, the Cube clean again, and a delete, a prune or a restore that
+  resets the reference delete them, and a clean Cube costs the store no write.
+  The Cube's runtime reads them when it is made,
+  so that the list's `changed` and `due` are right from the first request after a start.
+  The first look then keeps them while the configuration is the one kept,
+  and counts another as a change at that look, the first change kept;
+  a change made while no server ran is so a change at the first look.
+  Windows kept against another reference than the newest backup are left over,
+  by a binary before 0026 that took the backup, and go.
+  Before that, every start began both windows again:
+  a change got its backup at `auto_min` after the last start,
+  not after the change,
+  and starts closer together than `auto_min` never let it come.
+- The backup at a stop: a clean stop (SIGINT, SIGTERM, a SIGHUP that `-sighup`
+  makes a stop, the Windows service manager's stop, the restart from the API,
+  the update's restart of the service) takes the `auto` backup of each connected
+  Cube with a change pending, after a last look, before the Cubes' runtimes end
+  and so before serve closes the store;
+  the Cubes at once, within 5 s in all,
+  inside serve's 10 s for the server's stop.
+  A Cube not connected, under a restore, or whose backup fails, is logged
+  (a failure as a `backup` line with `at: stop`,
+  a warning for what the Cube did not give, an error for what failed here)
+  and keeps its windows for the next start.
+  A Cube without any backup gets its first at the first look after the next start.
 - API: `GET`/`POST …/backups` (the list newest first,
   with `changed` and `due` while one is pending; one by hand with a note),
   `GET …/backups/{id}` (as stored, or `?format=`),
@@ -1942,6 +2002,14 @@ Implemented on 2026-11-07 (AP StoreBackups v1.0).
   the change against the one before after deleting the newest,
   and one at once, with an id of its own,
   after deleting all or pruning the only one;
+  the windows across a start,
+  `auto_min` after the change and `auto_max` after the first,
+  the first request after the start naming both;
+  a change while stopped counted at the first look;
+  the stop's backup, before the store closes (`internal/serve`),
+  of a change pending and of one only the stop's look saw;
+  no write of the windows while a Cube is clean; windows left over dropped;
+  the table's round trip, 0026 read by a binary for 25, and its down part;
   the routes and the settings' check;
   a restore keeping `before_restore` and `upload`, by id, and clean after;
   the diff of a backup against itself and an edited copy;

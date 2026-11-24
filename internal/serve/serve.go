@@ -38,8 +38,10 @@ import (
 	"go.metaworx.ch/massimo/internal/store"
 )
 
-// stopGrace is how long Run waits for the server to stop, writing the
-// log's pending events, before the store closes under it.
+// stopGrace is how long Run waits for the server to stop, taking the
+// backups of the changes pending (5 s at most, server's backupsAtStop)
+// and writing the log's pending events, before the store closes under
+// it.
 const stopGrace = 10 * time.Second
 
 // Config is what a server is started with.
@@ -348,8 +350,9 @@ func (i *Instance) Server() *server.Server { return i.srv }
 func (i *Instance) Store() *store.Store { return i.st }
 
 // Run serves the API and every Cube until ctx ends, then closes the
-// store: once the server has stopped and written the log's pending
-// events, or after a grace of ten seconds. An instance runs once.
+// store: once the server has stopped, taken the automatic backup of
+// each Cube with a change pending and written the log's pending events,
+// or after a grace of ten seconds. An instance runs once.
 func (i *Instance) Run(ctx context.Context) error {
 	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
