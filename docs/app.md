@@ -430,7 +430,8 @@ under My profile → Sessions and keys by the phone's name, ends the session.
   its card; and once the list has loaded, the WebView forgets the pages
   before it, so that Back from the list leaves the app
   (`Bridge.leaving`, `Opened.leaving`, `Opened.takes`, `OpenedTest.kt`;
-  the WebView's half is the emulator suite's, Block 18).
+  the WebView's half is the emulator suite's, `TapTest.kt`,
+  `tools/app-emulator/README.md`).
 - **Logout** ends the session alone; the key stays,
   and the form offers both ways.
 - **Turning it off** (**Turn off** in the server's settings, `forget`)

@@ -37,6 +37,18 @@ android {
         versionName = appVersion.first
         versionCode = appVersion.second
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
+        // Each instrumented test starts as the app installed anew: the
+        // orchestrator (testOptions) clears the app's data, its Keystore
+        // keys among them, before every test, so that a test of the
+        // emulator suite (tools/app-emulator/README.md) finds nothing of
+        // the one before.
+        testInstrumentationRunnerArguments["clearPackageData"] = "true"
+    }
+
+    // Each instrumented test in an instrumentation of its own, so that a
+    // crash or a hung prompt ends that test alone.
+    testOptions {
+        execution = "ANDROIDX_TEST_ORCHESTRATOR"
     }
 
     // foss is the F-Droid build, play the Google Play build; they differ
@@ -154,4 +166,7 @@ dependencies {
     androidTestImplementation(libs.androidx.test.core)
     androidTestImplementation(libs.androidx.test.ext.junit)
     androidTestImplementation(libs.androidx.test.runner)
+    androidTestImplementation(libs.androidx.test.uiautomator)
+    androidTestUtil(libs.androidx.test.orchestrator)
+    androidTestUtil(libs.androidx.test.services)
 }

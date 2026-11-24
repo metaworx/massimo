@@ -200,10 +200,22 @@ Turn off and Forget all on every path and the keys they leave,
 revoked at the next session (`FakeServer`), the certificate's details
 (`src/test/resources/san.pem`, made for the test, its key thrown away),
 the address the server opened at start is taken at, and the app's settings.
-The prompt and the Keystore's keys bound to it are a phone's alone:
-they are checked on one (the plan's Verification of Block 8).
-The instrumented test (`app/src/androidTest/`) loads the connect page on a
-phone and checks that the bridge answers it and refuses it a token:
+The WebView, the bridge, the prompt and the Keystore's keys bound to it
+are checked on an emulator:
+`make app-emulator-test`, at the repository's root,
+runs the instrumented tests (`app/src/androidTest/`) on one,
+against two servers on the host with the fake Cube,
+the fingerprint simulated
+(`tools/app-emulator/README.md`, which lists the cases).
+It needs KVM and the SDK's emulator with the pinned system image,
+says which is missing, and CI's job Android emulator runs it.
+What only a phone shows stays the phone check's:
+a real fingerprint sensor, the phone maker's autofill, the look.
+On a phone, by hand, the connect page's smoke test (`ConnectPageTest`)
+is the one that runs, the others skipped without the servers the target
+passes;
+the orchestrator clears the debug app's data before each test,
+and Gradle uninstalls it afterwards:
 
 ```bash
 ./gradlew :app:connectedFossDebugAndroidTest
