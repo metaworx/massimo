@@ -172,6 +172,18 @@ from who is in or from a sign-in asked for (FirstOwner D45),
 so that a server open again shows its warning (FirstOwner D2).
 A server without a store keeps it as it is, without buttons (FirstOwner D39).
 ☰'s Create the owner… and System settings → Users open the card too.
+
+Under it, for a holder of `update`, the automatic update's question,
+on every page, where automatic updates are on and an update is due,
+as GET /api/v1/update's `auto.ask` says (`docs/api-v1.md`):
+the version out, the window it is installed in tonight, the server's time,
+and **Install now**, **Tonight** and **Skip this version**.
+The answer is the box's (`PUT /api/v1/update/answer`):
+Install now starts the update, Tonight leaves it to the night,
+Skip this version keeps the night from installing it until a newer release is out.
+The question goes in every other browser at the answer's line in the log,
+and a refused answer says why under the buttons.
+Everyone else sees nothing new.
 Opened so on a running page, the card hides the page as at every opening,
 and the page stands still behind it, its poll stopped and its stream closed,
 a restart's end opening none meanwhile (FirstOwner D34, D35);
@@ -446,7 +458,8 @@ The compacted header has **↑**, back to the top, first of the page buttons: �
   its state named first in the pill's label:
   the plug in green while the server answers;
   a blue "i" while an update is out,
-  for one who may install it (the list's second item opens Software update);
+  for one who may install it or choose its channel,
+  a holder of `update` or `settings` (the list's second item opens Software update);
   an amber triangle, blinking, once the server runs a new version
   (the list's second item reloads the page);
   the open plug, blinking, the pill filled red, after a poll without an answer:
@@ -1984,6 +1997,8 @@ The server's sign, when it says an update is out, opens it at Software update.
   once a night, while no command waits for the radio (`docs/api-v1.md`,
   "GET /api/v1/update?refresh=1").
   Where updates cannot be started from here, the choice is off, with the reason.
+  Under the version lines the automatic update's question, as under the header,
+  with the same three answers.
   On a box with the update helper installed (packaging/README.md, "Updating"),
   **Update** (with `update`) installs it and restarts the server.
   If the new version does not come up, the old one is put back.

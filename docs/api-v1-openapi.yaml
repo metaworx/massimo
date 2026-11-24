@@ -3686,6 +3686,68 @@ paths:
           content:
             application/json:
               schema: {$ref: "#/components/schemas/Error"}
+  /api/v1/update/answer:
+    put:
+      summary: Answer the question of the automatic update, for the box
+      x-capability: update
+      description: |
+        Where automatic updates are on (the setting update.auto at night)
+        and an update is due, GET /api/v1/update says ask; the answer is
+        the box's, kept in the setting update.answer. now starts the update
+        at once, as POST /api/v1/update does; tonight ends the question for
+        the version, which the night installs; skip holds the version back
+        from the night, and the question with it, until a newer release is
+        out. tonight and skip need automatic updates on. Audited as
+        update.answer, a line of the log under Configuration.
+      parameters: [{$ref: "#/components/parameters/idempotencyKey"}]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [version, answer]
+              properties:
+                version: {type: string, description: "The version asked about, latest of GET /api/v1/update"}
+                answer: {type: string, enum: [now, tonight, skip]}
+      responses:
+        "200":
+          description: Kept (tonight, skip); the answer is that of GET /api/v1/update
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/UpdateInfo"}
+        "202":
+          description: Install now requested, as POST /api/v1/update answers
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  ok: {type: boolean}
+                  requested: {type: string}
+                  channel: {type: string}
+        "400":
+          description: Not a version and an answer
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/Error"}
+        "401": {$ref: "#/components/responses/Unauthorized"}
+        "403":
+          description: The caller's role lacks update; for now, as POST /api/v1/update refuses
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/Error"}
+        "409":
+          description: "Not the version offered, automatic updates off (tonight, skip), or as POST /api/v1/update refuses (now)"
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/Error"}
+        "429": {$ref: "#/components/responses/LockedOut"}
+        "503":
+          description: The server has no store
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/Error"}
   /api/v1/restart:
     get:
       summary: Whether the server can be restarted from here, and who starts it again
@@ -5020,11 +5082,26 @@ components:
         auto:
           type: object
           description: "The automatic update at night; absent without a store"
-          required: [mode, window]
+          required: [mode, window, ask]
           properties:
             mode: {type: string, enum: ["off", night], description: The setting update.auto}
             window: {type: string, description: "The setting update.auto_window, HH:MM-HH:MM in the server's time"}
-            next: {type: string, format: date-time, description: "When the box will try: inside the window now, else at its next opening; absent while no update is due"}
+            next: {type: string, format: date-time, description: "When the box will try: inside the window now, else at its next opening; absent while no update is due or the version is skipped"}
+            answer:
+              type: object
+              description: "The box's answer to the question (PUT /api/v1/update/answer), where it names the version offered or a newer one"
+              required: [version, answer, at]
+              properties:
+                version: {type: string}
+                answer: {type: string, enum: [tonight, skip]}
+                by:
+                  type: object
+                  description: Who answered; absent for the owner's key
+                  properties:
+                    name: {type: string}
+                    display_name: {type: string}
+                at: {type: string, format: date-time}
+            ask: {type: boolean, description: "The page asks a holder of update Install now, Tonight or Skip this version: automatic updates on, an update due, no answer for it"}
         history:
           type: array
           description: The last ten updates, newest first; empty without a store

@@ -9,8 +9,9 @@
  * newest release on it (GET /api/v1/update, ?refresh=1 to ask now), the
  * settings update.channel, update.auto and update.auto_window for a
  * holder of settings (GET and PUT /api/v1/settings), the request to the
- * update helper (POST
- * /api/v1/update), and the reading every 3 s while the helper works,
+ * update helper (POST /api/v1/update) and the answer to the automatic
+ * update's question (PUT /api/v1/update/answer), and the reading every
+ * 3 s while the helper works,
  * which rides out the server's restart. While Maintenance is shown, an
  * event of the stream that says the versions or the channel changed reads
  * them again (serverEvent). A load writes the live state the
@@ -54,6 +55,10 @@ export const data = live({
   channelSaid: null as Say | null,
   /** Why the last change of the automatic update or its window failed, in its note until it is read again. */
   autoSaid: null as Say | null,
+  /** What the last answer to the automatic update's question said, where it was refused, under its buttons until the next load. */
+  answerSaid: null as Say | null,
+  /** An answer to the question is on its way: its buttons are off. */
+  answering: false,
   /** The helper works, or the request to it runs: Update turns and Check for updates is off. */
   busy: false,
 });
@@ -279,6 +284,42 @@ export async function runUpdate(): Promise<void> {
   followUpdate();
 }
 
+/**
+ * answerUpdate answers the automatic update's question about version
+ * (PUT /api/v1/update/answer), for a holder of update: now starts the
+ * update, which the page then follows as its own; tonight and skip end
+ * the question, the answer's GET /api/v1/update drawn at once. A refusal
+ * is said under the buttons; the versions are read again either way.
+ */
+export async function answerUpdate(version: string, answer: "now" | "tonight" | "skip"): Promise<void> {
+  const n = session();
+  data.answering = true;
+  data.answerSaid = null;
+  try {
+    const r = await api<UpdateInfo & { requested?: string }>("PUT", "api/v1/update/answer", { version, answer });
+    if (!stillSession(n)) return;
+    if (answer === "now") {
+      question.asking = false;
+      setBusy(true);
+      data.said = () => t("update.requested", { version: (r && r.requested) || version });
+      follow.grace = Date.now() + 30 * 1000;
+      followUpdate();
+      return;
+    }
+    if (r && r.auto) {
+      update.value = r;
+      renderServerSign(); // header.js
+    }
+  } catch (e) {
+    if (!stillSession(n)) return;
+    const error = (e as Error).message;
+    data.answerSaid = () => t("update.askFailed", { error });
+    await loadUpdate(false);
+  } finally {
+    if (stillSession(n)) data.answering = false;
+  }
+}
+
 /** ownFlow says whether the page follows an update of its own: its request runs, or the reading every 3 s while the helper works. */
 function ownFlow(): boolean {
   return data.busy || follow.on;
@@ -318,6 +359,11 @@ const reader = burstReader(async (what) => {
  * reads by its own pace, so its events read nothing.
  */
 export function serverEvent(ev: ServerEvent): void {
+  // an answer to the automatic update's question, from any browser: the banner shows on every page
+  if (ev.kind === "change" && (ev.summary || {}).action === "update.answer" && (can("update") || can("settings")) && !ownFlow()) {
+    void loadUpdate(false);
+    return;
+  }
   if (!isShown("maint")) return;
   if (ev.kind === "resync") reader("update", "channel");
   else if (settingsChanged(ev).some((k) => k === "update.channel" || k === "update.auto" || k === "update.auto_window")) reader("update", "channel");
@@ -360,6 +406,8 @@ export function forgetSoftware(): void {
   data.window = null;
   data.channelSaid = null;
   data.autoSaid = null;
+  data.answerSaid = null;
+  data.answering = false;
   question.asking = false;
   question.version = "";
 }

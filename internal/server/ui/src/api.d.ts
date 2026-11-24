@@ -1156,10 +1156,30 @@ export interface UpdateInfo {
     window: string;
     /**
      * When the box will try: inside the window now, else at its next opening;
-     * absent while no update is due
+     * absent while no update is due or the version is skipped
      * @format date-time
      */
     next?: string;
+    /**
+     * The box's answer to the question (PUT /api/v1/update/answer), where it
+     * names the version offered or a newer one
+     */
+    answer?: {
+      version: string;
+      answer: "tonight" | "skip";
+      /** Who answered; absent for the owner's key */
+      by?: {
+        name?: string;
+        display_name?: string;
+      };
+      /** @format date-time */
+      at: string;
+    };
+    /**
+     * The page asks a holder of update Install now, Tonight or Skip this
+     * version: automatic updates on, an update due, no answer for it
+     */
+    ask: boolean;
   };
   /** The last ten updates, newest first; empty without a store */
   history: UpdateEntry[];

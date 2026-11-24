@@ -7,7 +7,8 @@
  * Maintenance → Software update as a part, built once and updated in
  * place: the update channel for a holder of settings, saved at once, the
  * automatic update at night and its window, the running version and
- * whether a newer release is out, the release's
+ * whether a newer release is out, the automatic update's question
+ * (Ask.tsx), the release's
  * notes, the helper's last state, the last three updates, Check for
  * updates and Update, which asks in place of the buttons. A load that
  * comes in leaves the channel's choice, its focus and the question where
@@ -24,6 +25,7 @@ import { BusyButton, busyProps, Question, useAsk, useSetAtOnce } from "../shared
 import { fmtServerClock } from "../shared/time";
 import { update } from "../shared/update";
 import { ask, data, loadUpdate, question, runUpdate, setAuto, setChannel, setWindow, UPDATE_FLAVOURS } from "./store";
+import { asked, AskButtons, askText } from "./Ask";
 import { cardBadges } from "../shared/card";
 import { can } from "../shared/me";
 import { useLook } from "../shared/look";
@@ -240,12 +242,19 @@ export function Software() {
   const failed = data.failed;
   const said = data.said;
   const version = question.version;
+  const askedVersion = asked();
   return (
     <>
       {u && setting && can("settings") && <Channel u={u} setting={setting} />}
       {u && data.auto && data.window && can("settings") && <Auto u={u} auto={data.auto} win={data.window} />}
       <div ref={asking.row as Ref<HTMLDivElement>} class="update" aria-live="polite">
         <p id="update-text">{failed ? failed() : u ? versionLine(u) : "–"}</p>
+        {askedVersion && (
+          // the automatic update's question, as the banner under the header asks it (Ask.tsx)
+          <p id="update-card-ask" class="update-card-ask">
+            <span>{askText(askedVersion)}</span> <AskButtons prefix="update-card-ask" version={askedVersion} />
+          </p>
+        )}
         <p>
           <a id="update-link" class={u && u.release_url ? undefined : "hidden"} href={(u && u.release_url) || undefined} target="_blank" rel="noopener noreferrer">
             {u && u.release_url ? t("update.notes", { version: u.released || u.latest || "" }) : ""}

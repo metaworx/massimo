@@ -235,7 +235,7 @@ the OpenAPI file carries each operation's as `x-capability`:
 | `cubes` | add, configure and remove Cubes | `POST /api/v1/cubes`, `PUT`/`DELETE /api/v1/cubes/{sn}` |
 | `cubes.reboot` | reboot a Cube, which drops the radiograms it has not delivered; seeded for no role | `POST /api/v1/cubes/{sn}/reboot` |
 | `settings` | the server's settings, its store and the settings in effect | `GET`/`PUT /api/v1/settings`, `GET /api/v1/store`, `GET /api/v1/config` |
-| `update` | start a software update | `POST /api/v1/update` |
+| `update` | start a software update, answer the automatic update's question | `POST /api/v1/update`, `PUT /api/v1/update/answer` |
 | `restart` | restart the server through the service manager that runs it, read its settings file again, and read a Cube again at once | `GET`/`POST /api/v1/restart`, `POST /api/v1/reload`, `POST /api/v1/cubes/{sn}/refresh` |
 | `reboot` | reboot the computer the server runs on, where its owner switched that on; seeded for no role | `GET`/`POST`/`DELETE /api/v1/reboot` |
 | `audit` | read the audit | `GET /api/v1/audit` |
@@ -1311,7 +1311,7 @@ Needs `audit`, which only `owner` has by default; `503` without a store.
 
 Every route but the `GET`s and the stream ticket leaves a row:
 `action` names what was asked (`setpoint`, `device.lock`, `device.update`,
-`room.rename`, `room.config`, `room.program`, `room.delete`,
+`room.rename`, `room.config`, `room.program`, `room.delete`, `update.answer`,
 `pairing.start`, `restore.start`, `cube.add`, `settings.update`, `login`,
 `login.failed`, `logout`, `user.add`, `token.add`, `role.update`,
 `capability.disable`, …), `cube` the Cube of the route, `target` the device,
@@ -4328,6 +4328,16 @@ a version held back, an update running, nothing newer,
 a box that cannot start updates from here (`blocked`).
 A window that closes while the radio held a due update back
 writes `update_postponed` to the log; the next night tries again.
+`ask` says that the page asks a holder of `update`:
+Install now, Tonight or Skip this version,
+automatic updates at night, an update that `POST` would start,
+and no answer for it yet;
+`answer` is the box's answer (`PUT /api/v1/update/answer`)
+where it names the version offered or a newer one:
+`version`, `answer` `tonight` or `skip`,
+`by` (absent for the owner's key) and `at`.
+A version skipped is not installed at night, and `next` is absent,
+until a newer release is out; `Update` still installs it.
 `history` is the last ten updates, newest first,
 kept in the setting `update.history`:
 an update started here names who started it (`by`, absent for the owner's key),
@@ -4385,6 +4395,28 @@ in the moment between the start of the helper and its first status),
 when the package source has the release not yet, or while it is held;
 `500` on Windows when the helper could not be started (the request is withdrawn);
 `502` when GitHub or the package source could not be asked.
+
+### PUT /api/v1/update/answer
+
+The box's answer to the automatic update's question (`auto.ask` of GET),
+for a holder of `update`:
+
+```json
+{"version": "v0.1.0-alpha.10", "answer": "tonight"}
+```
+
+`version` is the one asked about, `latest` of GET; another is `409`.
+`now` starts the update at once, as `POST /api/v1/update` does,
+with its answers, and keeps nothing.
+`tonight` ends the question for the version, which the night installs
+as it would unanswered;
+`skip` holds the version back from the night, and the question with it,
+until a newer release is out.
+Both need automatic updates at night (`409` while `update.auto` is `off`),
+are kept in the setting `update.answer`, one answer for the box,
+and answer `200` with what GET answers.
+Audited as `update.answer`, a change line in the log:
+every page reads the versions again at it, so that the question goes everywhere.
 
 ### GET /api/v1/restart, POST /api/v1/restart
 

@@ -6,7 +6,7 @@ stubbed, and the setting update.channel where the channel is chosen;
 nothing is installed."""
 import json
 
-from helpers import show_view, update_json, wait_until
+from helpers import VIEWER, frames, show_view, update_json, wait_until
 
 
 def test_busy_while_the_helper_installs(page):
@@ -365,3 +365,98 @@ def test_automatic_line(page):
     got = page.locator("#update-history-list li").text_content()
     assert got == want, "the line: %r, not %r" % (got, want)
     page.unroute("**/api/v1/update*")
+
+
+def ask_routes(page):
+    """Stubs GET /api/v1/update with v0.0.2-test due at night and the
+    automatic update's question asked, and PUT /api/v1/update/answer: now
+    answers as POST /api/v1/update does, tonight and skip end the
+    question. Returns the bodies of the answers."""
+    state = {"ask": True}
+    puts = []
+
+    def body():
+        b = json.loads(update_json("up-to-date", "v0.0.2-test", True))
+        b["auto"] = {"mode": "night", "window": "03:00-05:00", "next": "2026-11-25T03:00:00+01:00", "ask": state["ask"]}
+        return b
+
+    def handle(route):
+        if route.request.method != "PUT":
+            route.fulfill(status=200, content_type="application/json", body=json.dumps(body()))
+            return
+        a = json.loads(route.request.post_data)
+        puts.append(a)
+        state["ask"] = False
+        if a["answer"] == "now":
+            route.fulfill(status=202, content_type="application/json", body=json.dumps({"ok": True, "requested": a["version"], "channel": "alpha"}))
+            return
+        b = body()
+        b["auto"]["answer"] = {"version": a["version"], "answer": a["answer"], "at": "2026-11-24T20:00:00Z"}
+        route.fulfill(status=200, content_type="application/json", body=json.dumps(b))
+
+    page.route("**/api/v1/update*", handle)
+    page.route("**/api/v1/update/answer", handle)
+    return puts
+
+
+def unroute_ask(page):
+    page.unroute("**/api/v1/update*")
+    page.unroute("**/api/v1/update/answer")
+
+
+def test_update_question_banner(page):
+    """Where automatic updates are on and an update is due, a holder of
+    update is asked under the header, on any page: the version, the
+    window, and Install now, Tonight, Skip this version; Tonight answers
+    for the box and the banner goes."""
+    puts = ask_routes(page)
+    page.evaluate("state.updateAt = 0; updateDue()")
+    banner = page.locator("#update-ask")
+    banner.wait_for(state="visible")
+    text = page.evaluate("t('update.ask.text', {version: 'v0.0.2-test', from: '03:00', to: '05:00'})")
+    assert page.locator("#update-ask-text").text_content() == text, "the question: %r" % banner.text_content()
+    for answer, key in (("now", "update.ask.now"), ("tonight", "update.ask.tonight"), ("skip", "update.ask.skip")):
+        assert page.locator("#update-ask-" + answer).text_content() == page.evaluate("t(%s)" % json.dumps(key)), answer
+    page.locator("#update-ask-tonight").click()
+    banner.wait_for(state="hidden")
+    assert puts == [{"version": "v0.0.2-test", "answer": "tonight"}], "Tonight answered: %r" % puts
+    unroute_ask(page)
+
+
+def test_update_question_in_software(page):
+    """Software update asks the same: Skip this version there answers for
+    the box, and the question goes from the card and from under the
+    header; Install now starts the update, which the card then says."""
+    puts = ask_routes(page)
+    show_view(page, "maint")
+    page.locator("#update-check").click()
+    page.locator("#update-card-ask").wait_for(state="visible")
+    assert page.locator("#update-ask").is_visible(), "the banner too"
+    page.locator("#update-card-ask-skip").click()
+    page.locator("#update-card-ask").wait_for(state="hidden")
+    page.locator("#update-ask").wait_for(state="hidden")
+    assert puts == [{"version": "v0.0.2-test", "answer": "skip"}], "Skip answered: %r" % puts
+    unroute_ask(page)
+
+    puts = ask_routes(page)
+    page.locator("#update-check").click()
+    page.locator("#update-card-ask").wait_for(state="visible")
+    page.locator("#update-card-ask-now").click()
+    requested = page.evaluate("t('update.requested', {version: 'v0.0.2-test'})")
+    assert wait_until(page, "document.getElementById('update-helper').textContent === %s" % json.dumps(requested), 5), \
+        "the card says the update was requested: %r" % page.locator("#update-helper").text_content()
+    assert puts == [{"version": "v0.0.2-test", "answer": "now"}], "Install now answered: %r" % puts
+    unroute_ask(page)
+
+
+def test_update_question_not_for_viewer(page):
+    """A user without update is asked nothing, though the server asks."""
+    page.route("**/api/v1/me", lambda route: route.fulfill(status=200, content_type="application/json", body=json.dumps(VIEWER)))
+    page.evaluate("loadMe()")
+    assert wait_until(page, "!hasCap('update') && !hasCap('settings')", 5), "the viewer's capabilities"
+    ask_routes(page)
+    assert page.evaluate("MassimoParts.software.load(false).then((u) => !!(u && u.auto && u.auto.ask))"), "the server asks"
+    frames(page)
+    assert not page.locator("#update-ask").is_visible(), "no banner for a viewer"
+    unroute_ask(page)
+    page.unroute("**/api/v1/me")

@@ -39,6 +39,7 @@
 //	GET  /api/v1/system                              how the server is installed, the computer, the caller's address (system_api.go)
 //	GET  /api/v1/update                              newest signed release on the update channel
 //	POST /api/v1/update                              ask the update helper to install it (needs a token)
+//	PUT  /api/v1/update/answer                       answer the question of the automatic update: now, tonight or skip (update_answer.go)
 //	GET  /api/v1/restart                             whether the server can be restarted from here (restart_api.go)
 //	POST /api/v1/restart                             restart it through its service manager
 //	POST /api/v1/reload                              read the settings file again at once, as SIGHUP does
@@ -1538,6 +1539,7 @@ func (s *Server) routes() {
 	api("GET /api/v1/system", "read", s.getSystem)
 	api("GET /api/v1/update", "read", s.getUpdate)
 	api("POST /api/v1/update", "update", s.startUpdate)
+	api("PUT /api/v1/update/answer", "update", s.putUpdateAnswer)
 	api("GET /api/v1/restart", "restart", s.getRestart)
 	api("POST /api/v1/restart", "restart", s.startRestart)
 	api("POST /api/v1/reload", "restart", s.reloadSettings)

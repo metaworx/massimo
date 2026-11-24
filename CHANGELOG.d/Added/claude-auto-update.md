@@ -1,3 +1,3 @@
-- The server checks for releases every six hours, offers one once apt or
-  brew has it, and, set so in Software update, installs it at night in
-  its window while the radio is quiet (docs/ui.md, docs/api-v1.md).
+- The server checks for releases every six hours and offers what apt or
+  brew has; set so, it installs at night while the radio is quiet, and
+  asks Install now, Tonight or Skip this version (docs/ui.md).

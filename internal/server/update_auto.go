@@ -133,11 +133,6 @@ func (s *Server) triedSince(ctx context.Context, from time.Time) bool {
 	return err == nil && !t.Before(from)
 }
 
-// skippedVersion reports whether an answer of the owner's holds version
-// back from the night (AP AutoUpdate D3, Skip this version); none does
-// yet.
-func (s *Server) skippedVersion(context.Context, string) bool { return false }
-
 // radioBusy says why the radio is not quiet, "" where it is (D6-A): on a
 // Cube a command with a radio line waits in the queue or runs (the
 // proxy's clients' among them), a write of Massimo's waits for its
@@ -251,6 +246,11 @@ type autoView struct {
 	// Next is when the box will try: inside the window now, else at its
 	// next opening; absent while no update is due.
 	Next *time.Time `json:"next,omitempty"`
+	// Answer is the answer to the question where it names the version
+	// offered or a newer one (update_answer.go); Ask says the page asks a
+	// holder of update: at night, an update due, no answer yet.
+	Answer *updateAnswer `json:"answer,omitempty"`
+	Ask    bool          `json:"ask"`
 }
 
 // autoFor is the automatic update as v, the update's state, makes it;
@@ -266,7 +266,14 @@ func (s *Server) autoFor(ctx context.Context, v updateView) *autoView {
 		return out
 	}
 	out.Mode = store.UpdateAutoNight
-	if !v.CanUpdate || s.opts.Store.ReadOnly() || s.skippedVersion(ctx, v.Latest) {
+	if v.Available {
+		out.Answer = s.answerFor(ctx, v.Latest)
+	}
+	if !v.CanUpdate || s.opts.Store.ReadOnly() {
+		return out
+	}
+	out.Ask = out.Answer == nil
+	if s.skippedVersion(ctx, v.Latest) {
 		return out
 	}
 	next := n.next(now)
