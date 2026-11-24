@@ -1,4 +1,4 @@
-# Massimo — CI Conventions (v1.68.0)
+# Massimo — CI Conventions (v1.70.0)
 
 What CI does in this project, for whoever has to change it.
 `/AGENTS.md` names this file as the canonical owner of CI conventions,
@@ -60,9 +60,9 @@ flowchart TD
 
     relcommit -->|"yes: suite=false"| skipped["Every job skipped, nothing built:<br/>the tag's run tests the commit"]
     known -->|"yes, or a pull request"| docs["Guidelines and Code result,<br/>Site where site=true"]
-    record -->|"yes: tested=true"| retest["Guidelines, and what had not passed<br/>for this code: UI test, LAN,<br/>Android app, Fuzz, macOS, Windows"]
+    record -->|"yes: tested=true"| retest["Guidelines, and what had not passed<br/>for this code: UI test, LAN,<br/>Android app and emulator, Fuzz, macOS, Windows"]
     record -->|no| full["Every test job, Guidelines, Site;<br/>Fuzz on a push only"]
-    paths["A pull request runs UI test, LAN, Android app,<br/>macOS and Windows only where it touches their paths"]
+    paths["A pull request runs UI test, LAN, Android app and emulator,<br/>macOS and Windows only where it touches their paths"]
     retest -.- paths
     full -.- paths
     docs --> atp["All tests passed:<br/>green, it writes the Tested record;<br/>a macOS or Windows job no runner took<br/>is not run on a pull request or main,<br/>run again by Retry on a tag"]
@@ -118,7 +118,7 @@ flowchart TD
 
 | Trigger | Jobs |
 |---------|------|
-| push to `main`, pull request (each push to its branch) | Vet and test (gofmt, go vet per platform, go test with `-count=1`, its skipped tests and its slowest tests and packages named in the summary, the three tests that need root once more as root, the store's benchmarks once each with `-short`, `make cross`); actionlint (`make actionlint`: the workflows by actionlint, their `run:` scripts by the runner's shellcheck); UI types (`make ui-check`: `tsc --noEmit` over the web UI's parts, `internal/server/ui/src/`, then Biome's two hooks rules over them); Race (`make race`, the race detector on `internal/server`, `internal/store`, `internal/cubelan`, `internal/proxy`, `internal/serve`, `internal/announce`, `internal/notify`, `internal/engine`, `internal/cubeio` and `internal/certs`, `-count=1` and `-timeout 30m`, `checkptr` off for the packages under `modernc.org` alone, its skipped and its slowest tests named in the summary); Test (armv6, QEMU) (`make test-armv6`, every package's tests with `-short`, `-count=1` and `-timeout 30m` on 32-bit ARM, run by Ubuntu's `qemu-user` as the Raspberry Pi 1's core, its skipped and its slowest tests named in the summary); Fuzz on a push to `main` only (`make fuzz`, every fuzz target for 10 s, a crash's input kept as the artifact `fuzz-crash`, Go 1.26's own deadline passed with a warning); govulncheck for linux and windows; Debian package (`make packages`, then the amd64 one installed, checked and purged in a trixie and a bookworm container, then under systemd, each case in a container of its own (`make deb-systemd-test`: the first start, the restart, the upgrade from v0.12.0-alpha.1 with the service running), and installed again from an apt repository built with a throwaway key; the packages uploaded as the artifact `packages`); Platforms (platforms.yml, which nightly.yml calls too, its jobs "Platforms / Windows service" and "Platforms / macOS LaunchDaemon"): Windows service (the unit tests of the update, the installer, the command line, discovery and `internal/safefile`; install, run, update from the API and by hand, roll back, remove, on a Windows runner; then a second `serve` announcing itself beside Windows' own mDNS, found by `massimo discover`; on a pull request only when it changes the job's own paths or the announcement's, as the job What to test answers, and not on the merge of a pull request that found it not needed); macOS LaunchDaemon (the unit tests of the update, the installer, the command line and `internal/safefile`; first `install` on the template's settings, `packaging/launchd/template-test.sh`: the message and its owner line run as printed, a loaded job restarted, a booted-out one left stopped, the web UI's way, the purge; then the same as Windows on a macOS runner, with a self-signed certificate: the service installed with `-tls self-signed`, the health check and the API over `https://`; then the Homebrew formula rendered for a tarball of the checkout, built from source, tested and checked for the marker; then a second `serve` beside Apple's mDNSResponder, found and resolved by `dns-sd`; on a pull request as the Windows job, with its own paths); UI test (the web UI's pytest suite, a job per case, "UI test (1100-en)", "UI test (1100-de)", "UI test (390-en)" and "UI test (390-de)", each its case in four workers, its log naming the 20 slowest phases of the tests; on failure the failed tests' screenshots, and the screenshots, videos and traces of their run once more, as `ui-test-results-<case>`; and "UI test (screenshots)", the screenshot set in a job of its own, uploaded as the artifact `ui-screenshots`, the PNGs only; on a pull request only when it changes the UI, its bundler (`tools/uibundle`), the vendored Preact, the server's own Go files but for its tests, the OpenAPI file, its suite or `ci.yml`, as the job What to test answers); LAN against avahi (`make lan-test`: a second `serve`'s searches finding a fake Cube, losing it with its cable pulled and finding it again, then from a box's proxy too; `serve` beside avahi-daemon, `avahi-browse` and `massimo discover` on a client; a third `serve` following the Cube by its serial to another address after the loss; in Docker; on a pull request only when it changes the announcement, discovery, the shared port, the server's own files, the proxy, the Go module, the LAN test or `ci.yml`, as the job What to test answers, and not on the merge of a pull request that found it not needed); Android app (`app/version.json` against its tag, the debug build with its unit tests and lint, the release APK built at two paths and compared byte for byte, then the AAB and the nightly APK signed with a key made for the run; on a pull request only when it changes `app/`, the web UI's files the app bundles, `packaging/app-*.sh`, `ci.yml`, `build.yml` or `release.yml`, as the job What to test answers, and not on the merge of a pull request that found it not needed); Guidelines (section 4); Site (`packaging/site/build.sh --no-apt`: the site's pages and the docs of the commit, every link checked, a document under `docs/` missing from `docs/fragments/_documents.md` failing it; never deployed; also for a change to the site's documents alone); Code result, for a change to documents alone only (`packaging/code-result.sh`: the verdict of the last run that tested the code, below) |
+| push to `main`, pull request (each push to its branch) | Vet and test (gofmt, go vet per platform, go test with `-count=1`, its skipped tests and its slowest tests and packages named in the summary, the three tests that need root once more as root, the store's benchmarks once each with `-short`, `make cross`); actionlint (`make actionlint`: the workflows by actionlint, their `run:` scripts by the runner's shellcheck); UI types (`make ui-check`: `tsc --noEmit` over the web UI's parts, `internal/server/ui/src/`, then Biome's two hooks rules over them); Race (`make race`, the race detector on `internal/server`, `internal/store`, `internal/cubelan`, `internal/proxy`, `internal/serve`, `internal/announce`, `internal/notify`, `internal/engine`, `internal/cubeio` and `internal/certs`, `-count=1` and `-timeout 30m`, `checkptr` off for the packages under `modernc.org` alone, its skipped and its slowest tests named in the summary); Test (armv6, QEMU) (`make test-armv6`, every package's tests with `-short`, `-count=1` and `-timeout 30m` on 32-bit ARM, run by Ubuntu's `qemu-user` as the Raspberry Pi 1's core, its skipped and its slowest tests named in the summary); Fuzz on a push to `main` only (`make fuzz`, every fuzz target for 10 s, a crash's input kept as the artifact `fuzz-crash`, Go 1.26's own deadline passed with a warning); govulncheck for linux and windows; Debian package (`make packages`, then the amd64 one installed, checked and purged in a trixie and a bookworm container, then under systemd, each case in a container of its own (`make deb-systemd-test`: the first start, the restart, the upgrade from v0.12.0-alpha.1 with the service running), and installed again from an apt repository built with a throwaway key; the packages uploaded as the artifact `packages`); Platforms (platforms.yml, which nightly.yml calls too, its jobs "Platforms / Windows service" and "Platforms / macOS LaunchDaemon"): Windows service (the unit tests of the update, the installer, the command line, discovery and `internal/safefile`; install, run, update from the API and by hand, roll back, remove, on a Windows runner; then a second `serve` announcing itself beside Windows' own mDNS, found by `massimo discover`; on a pull request only when it changes the job's own paths or the announcement's, as the job What to test answers, and not on the merge of a pull request that found it not needed); macOS LaunchDaemon (the unit tests of the update, the installer, the command line and `internal/safefile`; first `install` on the template's settings, `packaging/launchd/template-test.sh`: the message and its owner line run as printed, a loaded job restarted, a booted-out one left stopped, the web UI's way, the purge; then the same as Windows on a macOS runner, with a self-signed certificate: the service installed with `-tls self-signed`, the health check and the API over `https://`; then the Homebrew formula rendered for a tarball of the checkout, built from source, tested and checked for the marker; then a second `serve` beside Apple's mDNSResponder, found and resolved by `dns-sd`; on a pull request as the Windows job, with its own paths); UI test (the web UI's pytest suite, a job per case, "UI test (1100-en)", "UI test (1100-de)", "UI test (390-en)" and "UI test (390-de)", each its case in four workers, its log naming the 20 slowest phases of the tests; on failure the failed tests' screenshots, and the screenshots, videos and traces of their run once more, as `ui-test-results-<case>`; and "UI test (screenshots)", the screenshot set in a job of its own, uploaded as the artifact `ui-screenshots`, the PNGs only; on a pull request only when it changes the UI, its bundler (`tools/uibundle`), the vendored Preact, the server's own Go files but for its tests, the OpenAPI file, its suite or `ci.yml`, as the job What to test answers); LAN against avahi (`make lan-test`: a second `serve`'s searches finding a fake Cube, losing it with its cable pulled and finding it again, then from a box's proxy too; `serve` beside avahi-daemon, `avahi-browse` and `massimo discover` on a client; a third `serve` following the Cube by its serial to another address after the loss; in Docker; on a pull request only when it changes the announcement, discovery, the shared port, the server's own files, the proxy, the Go module, the LAN test or `ci.yml`, as the job What to test answers, and not on the merge of a pull request that found it not needed); Android app (`app/version.json` against its tag, the debug build with its unit tests and lint, the release APK built at two paths and compared byte for byte, then the AAB and the nightly APK signed with a key made for the run; on a pull request only when it changes `app/`, the web UI's files the app bundles, `packaging/app-*.sh`, `tools/app-emulator/`, `ci.yml`, `build.yml` or `release.yml`, as the job What to test answers, and not on the merge of a pull request that found it not needed); Android emulator (`make app-emulator-test`: the app's instrumented tests on an emulator of the pinned image, KVM given to the runner's user, against two servers on the runner with the fake Cube, the fingerprint simulated, in a step with a time limit of its own, strict: a test skipped or fewer run than the sources declare fail it; its results, the emulator's log, the device's, the servers', the screens of failed tests and Gradle's report and JUnit results, as the artifact `app-emulator-results`, on a failure or a cancellation, and kept seven days on a pass; where Android app runs, its result counted with Android app's under the Tested record's `app=`); Guidelines (section 4); Site (`packaging/site/build.sh --no-apt`: the site's pages and the docs of the commit, every link checked, a document under `docs/` missing from `docs/fragments/_documents.md` failing it; never deployed; also for a change to the site's documents alone); Code result, for a change to documents alone only (`packaging/code-result.sh`: the verdict of the last run that tested the code, below) |
 | beside the jobs above, on a push | Build (build.yml): What to release decides what the run releases, then every target built without cgo with the Debian packages, the build record, `SHA256SUMS` and the manifest, the provenance attested; for a version tag the Android app's APK and AAB, for the nightly build its nightly APK, unsigned, attested too; nothing signed (section 6) |
 | after every job above | All tests passed: fails unless none of them failed or was cancelled, but for a macOS or Windows job no runner took on a pull request or a push to `main`, which counts as not run, and names each with its result in its summary, an annotation for each that did not pass, and on a pull request in one comment; a job that passed only on a re-run counts, and is named in a line of the summary, a warning, that comment and, on a pull request, a comment of its own; then, on a push, once Build is done, Release (release.yml): a push to `main` becomes the `devel` build, the GitHub release `release/devel` replaced in place, signed with the rolling key (section 6); then, at every run of release.yml, Site (site.yml): the site built with the newest release's signed apt index and the docs of every channel, and deployed to GitHub Pages; nothing where no release carries the index yet; for a push to `main` of the site's documents alone, which has no Build and so no Release, Deploy site (site.yml) instead |
 | push to a release branch (`release/alpha`, later `release/beta` and `release/stable`) | nothing: ci.yml listens to `main` and the tags; the release moved the branch to a commit ci.yml had tested |
@@ -204,6 +204,8 @@ filter finding it not needed, and it did not pass,
 and so is the Android app where it answered `app=false` (AP MobileApp, D17-A),
 and so are macOS and Windows, where it answered `macos=false` or `windows=false`
 (AP TestSpeed, D1-A, D2-A).
+The Android app passed where both its jobs did, Android app and Android emulator
+(AP MobileApp, Block 18), the record having no room for a word of its own.
 GitHub takes 140 characters for a status's description,
 and the record fills them at its longest:
 the fingerprint's 68 and the six words' 72,
@@ -515,7 +517,10 @@ the UI test jobs a case's 30 and the screenshot set's 15,
 estimated from the two-case jobs' 15.4 before AP TestSpeed's Block 5
 until they have runs of their own;
 the Android app keeps its 45, 7.0, and Code result its 70,
-which waits up to an hour for a run still going.
+which waits up to an hour for a run still going;
+the Android emulator 45, about three times the 15 or so it is estimated
+to take, until it has runs of its own,
+its suite's step 32 of them (below).
 
 The armhf package ships the armv6 binary, which `make cross` only builds:
 Test (armv6, QEMU) runs every package's tests on it,
@@ -731,7 +736,8 @@ A pull request runs it only when it changes `app/`,
 a file of `internal/server/ui/` the app bundles
 (all but `index.html`, `partials/`, `src/`, `parts.js` and `vendor/`,
 which `BundleUi` in `app/android/app/build.gradle.kts` leaves out),
-`packaging/app-*.sh`, `ci.yml`, `build.yml` or `release.yml`;
+`packaging/app-*.sh`, the emulator suite's `tools/app-emulator/`,
+`ci.yml`, `build.yml` or `release.yml`;
 a push to `main` always,
 but for the merge of a pull request that found it not needed (`app=unneeded`),
 as LAN (owner, 2026-11-17, D17-A).
@@ -740,6 +746,61 @@ before Gradle, here and in build.yml's job,
 and `app/core/`, `internal/serve/` with what it imports,
 `go.mod` and `go.sum` to the filter;
 the comparison then covers the `.aar` too.
+
+The Android emulator job (AP MobileApp, Block 18, D71-A) runs
+`make app-emulator-test` (`tools/app-emulator/README.md`):
+the app's instrumented tests on an emulator,
+against two servers on the runner built from the tree with the fake Cube,
+reached at `127.0.0.1` through `adb reverse`, as the phone rig reaches one,
+the fingerprint simulated through the emulator's console.
+GitHub's Linux runners have KVM, and a udev rule gives the runner's user
+`/dev/kvm`, which the emulator needs for an x86_64 image.
+The emulator and its system image are pinned in `tools/app-emulator/pins.sh`,
+Android 14 with Google's APIs:
+`tools/app-emulator/sdk.sh fetch` fetches the two archives into a directory
+of the run's (`APP_EMU_SDK`), held to the size and the SHA-1 Google's SDK
+repository gives, as sdkmanager checks them,
+since sdkmanager installs the newest revision alone;
+the runner image's SDK, its licences accepted, stays as it is.
+The emulator boots without a window, audio or snapshots,
+its data wiped, within `APP_EMU_BOOT_TIMEOUT` of the builds' end (420 s here).
+An emulator in CI is known to stall at its boot or at a prompt,
+so the suite's step has a time limit of its own, 32 minutes inside the job's 45:
+GitHub counts a step's limit as a failure and a job's as a cancellation.
+The step runs `make app-emulator-test`'s two steps,
+`make ui` and `tools/app-emulator/run.sh`,
+the script in the shell's place (`exec`),
+since the runner signals the step's shell alone at its limit:
+`run.sh` gets the signal, stops Gradle and takes the screens and Gradle's
+report home before it stops the emulator,
+within the seconds the runner gives before it kills what is left.
+Gradle passes a run whose tests were skipped, an `assume` among them,
+or that ran fewer than declared,
+so `run.sh` counts what each of its two Gradle runs ran from the JUnit results
+against the tests the sources declare (`tools/app-emulator/tally/`),
+and in CI (`CI=true`) fails where one was skipped or not run.
+Its results are the artifact `app-emulator-results`:
+on a failure or a cancellation,
+and on a pass too, kept seven days,
+so that a passing run's count and logs can be read;
+a case that is flaky is fixed or taken out, not retried in a loop.
+It runs where Android app runs, What to test's `app` and `app_done`,
+the suite's own `tools/app-emulator/` among the paths.
+Its servers are built from the tree and the suite drives their page,
+but a change to the server alone does not run it on a pull request,
+the page's `index.html`, `partials/` and `src/` among it,
+which the app does not bundle:
+the push to `main` does, and a change to the page that breaks the suite
+turns `main` red there.
+Adding them to `app` would run both Android jobs at every pull request of the page,
+the emulator's estimated 15 minutes and more beside the UI tests',
+as `app` is one answer for both jobs.
+All tests passed needs it, and the Tested record's `app=` is `true` only where
+both jobs passed:
+the record fills GitHub's 140 characters at its longest,
+and a word of its own would need room made first (above).
+What the phone check keeps is what an emulator cannot show:
+a real fingerprint sensor, the phone maker's autofill, the look.
 
 The actionlint job runs `make actionlint`,
 the tool pinned by the `tool` line of `tools/actionlint/go.mod`,
@@ -1455,7 +1516,13 @@ version catalogue, `app/android/gradle/libs.versions.toml`;
 the Gradle entry, for `/app/android`, groups them into one pull request,
 since a plugin's update can need a library's.
 The job Android app builds it, tests it and checks that the release APK
-is built the same twice (section 2), as F-Droid will.
+is built the same twice (section 2), as F-Droid will,
+and the job Android emulator runs its instrumented tests, with the
+orchestrator and UiAutomator of the same catalogue.
+The emulator and the system image that job runs on are pinned in
+`tools/app-emulator/pins.sh`, which no Dependabot entry reads:
+they move by hand, the version, the archive's address, its size and its
+SHA-1 together (`tools/app-emulator/README.md`, "Pins").
 
 actionlint is pinned by the `tool` line of `tools/actionlint/go.mod`,
 a module of its own rather than a `tool` line in massimo's `go.mod`,

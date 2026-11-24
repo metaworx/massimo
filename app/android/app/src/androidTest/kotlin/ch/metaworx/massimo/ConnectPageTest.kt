@@ -15,9 +15,10 @@ import java.util.concurrent.CountDownLatch
 import java.util.concurrent.TimeUnit
 
 /**
- * The shell's smoke test, run by hand on a phone (app/README.md): the
- * connect page loads from the app's copy of the UI, the bridge answers it,
- * and it refuses the page a server's call.
+ * The shell's smoke test, on a phone by hand (app/README.md) and in the
+ * emulator suite (tools/app-emulator/README.md): the connect page loads
+ * from the app's copy of the UI, the bridge answers it at the contract's
+ * version, and it refuses the page a server's call.
  */
 @RunWith(AndroidJUnit4::class)
 class ConnectPageTest {
