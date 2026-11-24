@@ -6,7 +6,8 @@
  *
  * Maintenance → Software update as a part, built once and updated in
  * place: the update channel for a holder of settings, saved at once, the
- * running version and whether a newer release is out, the release's
+ * automatic update at night and its window, the running version and
+ * whether a newer release is out, the release's
  * notes, the helper's last state, the last three updates, Check for
  * updates and Update, which asks in place of the buttons. A load that
  * comes in leaves the channel's choice, its focus and the question where
@@ -15,13 +16,14 @@
  */
 
 import type { Ref } from "preact";
-import { useLayoutEffect } from "preact/hooks";
+import { useLayoutEffect, useRef, useState } from "preact/hooks";
 import type { Setting, UpdateEntry, UpdateInfo, UpdateStatus } from "../api";
 import { hid } from "../shared/cls";
-import { Select } from "../shared/field";
+import { Field, Select } from "../shared/field";
 import { BusyButton, busyProps, Question, useAsk, useSetAtOnce } from "../shared/question";
+import { fmtServerClock } from "../shared/time";
 import { update } from "../shared/update";
-import { ask, data, loadUpdate, question, runUpdate, setChannel, UPDATE_FLAVOURS } from "./store";
+import { ask, data, loadUpdate, question, runUpdate, setAuto, setChannel, setWindow, UPDATE_FLAVOURS } from "./store";
 import { cardBadges } from "../shared/card";
 import { can } from "../shared/me";
 import { useLook } from "../shared/look";
@@ -48,7 +50,8 @@ function helperText(h: UpdateStatus): string {
  * the one asked for with how far it got (under way for the newest, else
  * not reached), the version with its channel in brackets, and the
  * helper's outcome where it has one, a rollback after the version reached
- * included; and by whom, or from outside Massimo with the package manager.
+ * included; and by whom, automatically where the server started it at
+ * night, or from outside Massimo with the package manager.
  */
 function historyLine(e: UpdateEntry, newest: boolean): string {
   const withChannel = (version: string) => (version && e.channel ? t("update.history.withChannel", { version, channel: e.channel }) : version);
@@ -62,6 +65,7 @@ function historyLine(e: UpdateEntry, newest: boolean): string {
   if (!isNaN(ms)) parts.push(fmtInstant(new Date(ms))); // app.js
   parts.push(what);
   if (e.outside) parts.push(e.manager ? t("update.history.outsideWith", { manager: e.manager }) : t("update.history.outside"));
+  else if (e.auto) parts.push(t("update.history.auto"));
   else if (e.by) parts.push(t("update.history.by", { name: e.by.display_name || e.by.name || "" }));
   return parts.join(" · ");
 }
@@ -139,6 +143,85 @@ function Channel({ u, setting }: { u: UpdateInfo; setting: Setting }) {
   );
 }
 
+/**
+ * Auto is the automatic update's choice, for a holder of settings, who
+ * alone may change it: Off or At night (update.auto), saved at once as
+ * the channel is, its note saying what it does; at night its window
+ * (Window), and when the box will try next. Both are off, with the
+ * reason, where updates cannot be started from here (blocked).
+ */
+function Auto({ u, auto, win }: { u: UpdateInfo; auto: Setting; win: Setting }) {
+  useLook();
+  const mode = useSetAtOnce(auto.value || "off");
+  const stored = win.value || "03:00-05:00";
+  const [from, to] = stored.split("-");
+  const off = !!u.blocked;
+  const night = mode.value === "night";
+  const said = data.autoSaid;
+  let note = night ? t("update.autoNight", { from: from || "", to: to || "" }) : t("update.autoOff");
+  if (off) note = t("update.autoBlocked", { reason: u.blocked || "" });
+  if (said) note = said();
+  const next = night && !off && u.auto && u.auto.next ? fmtServerClock(u.auto.next) : "";
+  const options: [string, string][] = [["off", t("update.auto.off")], ["night", t("update.auto.night")]];
+  return (
+    <>
+      <Select label={t("update.auto")} id="update-auto" wide options={options} value={mode.value} disabled={off}
+        hint={note} hintId="update-auto-note" onChange={(v) => mode.set(v, setAuto)} />
+      {night && <Window stored={stored} off={off} next={next} />}
+    </>
+  );
+}
+
+/**
+ * Window is the automatic update's window, its start and its end as
+ * times on the server's clock: an end is saved as its field is left
+ * changed, the window shown as chosen until the server's answer shows
+ * what it keeps (a window it refuses, too short, goes back, and the
+ * automatic update's note says why); an end left while the other's save
+ * runs is saved after it. Under it when the box will try next.
+ */
+function Window({ stored, off, next }: { stored: string; off: boolean; next: string }) {
+  const [from, to] = stored.split("-");
+  const [edit, setEdit] = useState<{ from: string; to: string } | null>(null);
+  // the edit as the fields hold it, and the save that runs, outside the drawing
+  const held = useRef<{ from: string; to: string } | null>(null);
+  const sending = useRef(false);
+  const shown = edit || { from: from || "", to: to || "" };
+  const change = (v: { from: string; to: string }) => {
+    held.current = v;
+    setEdit(v);
+  };
+  const leave = () => {
+    const e = held.current;
+    if (!e || sending.current) return;
+    const w = e.from + "-" + e.to;
+    if (w === stored || !e.from || !e.to) {
+      held.current = null;
+      setEdit(null);
+      return;
+    }
+    sending.current = true;
+    void setWindow(w).finally(() => {
+      sending.current = false;
+      if (held.current === e) {
+        held.current = null;
+        setEdit(null);
+      } else leave(); // changed again while it saved
+    });
+  };
+  return (
+    <Field label={t("update.window")} id="update-window-start" wide hint={next ? t("update.autoNext", { time: next }) : ""} hintId="update-auto-next">
+      <span class="inline field-control">
+        <input id="update-window-start" type="time" value={shown.from} disabled={off} aria-describedby={next ? "update-auto-next" : undefined}
+          onInput={(ev) => change({ ...shown, from: ev.currentTarget.value })} onBlur={leave} />
+        <span class="muted">–</span>
+        <input id="update-window-end" type="time" value={shown.to} disabled={off} aria-label={t("update.windowTo")}
+          onInput={(ev) => change({ ...shown, to: ev.currentTarget.value })} onBlur={leave} />
+      </span>
+    </Field>
+  );
+}
+
 /** Software is the section's body. */
 export function Software() {
   useLook();
@@ -160,6 +243,7 @@ export function Software() {
   return (
     <>
       {u && setting && can("settings") && <Channel u={u} setting={setting} />}
+      {u && data.auto && data.window && can("settings") && <Auto u={u} auto={data.auto} win={data.window} />}
       <div ref={asking.row as Ref<HTMLDivElement>} class="update" aria-live="polite">
         <p id="update-text">{failed ? failed() : u ? versionLine(u) : "–"}</p>
         <p>

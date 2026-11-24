@@ -244,3 +244,124 @@ def test_last_updates(page):
     assert wait_until(page, "document.getElementById('update-history').classList.contains('hidden')", 5), \
         "no list without a history"
     page.unroute("**/api/v1/update*")
+
+
+def auto_routes(page, blocked=None):
+    """Stubs GET /api/v1/update with an update out, the automatic update
+    as the settings stand and its next try, and the settings update.channel,
+    update.auto and update.auto_window, off and 03:00-05:00 until a PUT
+    stores another; blocked is the reason updates cannot be started.
+    Returns the bodies of the settings PUTs."""
+    state = {"update.auto": None, "update.auto_window": None}
+    defaults = {"update.auto": "off", "update.auto_window": "03:00-05:00"}
+    puts = []
+
+    def value(key):
+        return state[key] or defaults[key]
+
+    def views():
+        out = {"update.channel": {"value": "alpha", "default": "alpha", "set": False, "in_effect": "alpha", "applies": "now"}}
+        for key in state:
+            out[key] = {"value": value(key), "default": defaults[key], "set": state[key] is not None, "in_effect": value(key), "applies": "now"}
+        return out
+
+    def update(route):
+        body = json.loads(update_json("up-to-date", "v0.0.2-test", True))
+        body["auto"] = {"mode": value("update.auto"), "window": value("update.auto_window")}
+        if value("update.auto") == "night":
+            body["auto"]["next"] = "2026-11-25T03:00:00+01:00"
+        if blocked:
+            body.update({"blocked": blocked, "can_update": False})
+        route.fulfill(status=200, content_type="application/json", body=json.dumps(body))
+
+    def settings(route):
+        if route.request.method == "PUT":
+            body = json.loads(route.request.post_data)
+            puts.append(body)
+            for key, v in body.items():
+                if key in state:
+                    state[key] = v
+        route.fulfill(status=200, content_type="application/json", body=json.dumps(views()))
+
+    page.route("**/api/v1/update*", update)
+    page.route("**/api/v1/settings", settings)
+    return puts
+
+
+def test_automatic_updates(page):
+    """Software update sets the automatic update, saved at once: off by
+    default, saying updates wait for someone; at night it names the
+    window, which comes up with its two ends, and when the box tries
+    next, on the server's clock whatever the browser's zone; an end
+    changed is saved as its field is left."""
+    puts = auto_routes(page)
+    show_view(page, "maint")
+    sel = page.locator("#update-auto")
+    sel.wait_for(state="visible")
+    note = page.locator("#update-auto-note")
+    assert sel.is_enabled() and sel.input_value() == "off", "off by default"
+    assert note.text_content() == page.evaluate("t('update.autoOff')"), "the note says off"
+    assert not page.locator("#update-window-start").is_visible(), "no window while off"
+
+    sel.select_option("night")
+    assert wait_until(page, "!!document.getElementById('update-window-start')", 5), "the window comes up"
+    assert puts == [{"update.auto": "night"}], "night is stored: %r" % puts
+    night = page.evaluate("t('update.autoNight', {from: '03:00', to: '05:00'})")
+    assert wait_until(page, "document.getElementById('update-auto-note').textContent === %s" % json.dumps(night), 5), \
+        "the note names the window: %r" % note.text_content()
+    assert page.locator("#update-window-start").input_value() == "03:00" and page.locator("#update-window-end").input_value() == "05:00", \
+        "the window's ends"
+    when = page.evaluate("""new Intl.DateTimeFormat(i18n.lang, {year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit',
+        minute: '2-digit', hour12: false, timeZone: 'UTC'}).format(new Date(Date.UTC(2026, 10, 25, 3, 0)))""")
+    next_try = page.evaluate("t('update.autoNext', {time: %s})" % json.dumps(when))
+    assert wait_until(page, "(document.getElementById('update-auto-next') || {}).textContent === %s" % json.dumps(next_try), 5), \
+        "the next try on the server's clock: %r" % page.locator("#update-window-start").evaluate("e => e.closest('.field').textContent")
+    assert "03:00" in next_try, "03:00, the server's time: %r" % next_try
+
+    start = page.locator("#update-window-start")
+    start.fill("23:30")
+    start.blur()
+    assert wait_until(page, "document.getElementById('update-window-start').value === '23:30'", 5), "the start kept"
+    assert held_true(page, lambda: {"update.auto_window": "23:30-05:00"} in puts), "the window is stored as the field is left: %r" % puts
+    unroute_channel(page)
+
+
+def held_true(page, cond, tries=100):
+    """Waits until cond(), a test of what the stubs saw, holds, letting the
+    page run between tries (the stubs answer only then); reports whether
+    it did."""
+    for _ in range(tries):
+        if cond():
+            return True
+        page.wait_for_timeout(50)
+    return cond()
+
+
+def test_automatic_updates_blocked(page):
+    """Where updates cannot be started from here, the automatic update is
+    off, with the reason."""
+    auto_routes(page, blocked="no update helper installed")
+    show_view(page, "maint")
+    sel = page.locator("#update-auto")
+    sel.wait_for(state="visible")
+    reason = page.evaluate("t('update.autoBlocked', {reason: 'no update helper installed'})")
+    assert wait_until(page, "document.getElementById('update-auto').disabled", 5), "the choice is off"
+    assert page.locator("#update-auto-note").text_content() == reason, "the note says why"
+    unroute_channel(page)
+
+
+def test_automatic_line(page):
+    """An update the server started itself at night says so in the last
+    updates, where a person's name would stand."""
+    show_view(page, "maint")
+    body = json.loads(update_json("up-to-date", "v0.0.1-test", False))
+    body["history"] = [{"at": "2026-11-25T02:00:00Z", "auto": True, "from": "v0.0.1", "to": "v0.0.2", "channel": "alpha",
+                        "reached": "v0.0.2", "reached_at": "2026-11-25T02:01:00Z"}]
+    page.route("**/api/v1/update*", lambda route: route.fulfill(status=200, content_type="application/json", body=json.dumps(body)))
+    page.locator("#update-check").click()
+    assert wait_until(page, "document.querySelectorAll('#update-history-list li').length === 1", 5), "one line"
+    want = page.evaluate("""[fmtInstant(new Date(Date.parse('2026-11-25T02:01:00Z'))),
+        t('update.history.withChannel', {version: 'v0.0.2', channel: 'alpha'}), t('update.history.auto')].join(' · ')""")
+    got = page.locator("#update-history-list li").text_content()
+    assert got == want, "the line: %r, not %r" % (got, want)
+    page.unroute("**/api/v1/update*")

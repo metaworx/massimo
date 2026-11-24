@@ -319,7 +319,7 @@ function logSummaryText(kind: string, s: Loose, serial: string): string {
     case "reboot_cancelled":
       return t(s.why ? "log.sum.rebootOff" : "log.sum.rebootCancelled");
     case "update":
-      return t("log.sum.update", { from: s.from || "–", to: s.to || "–" });
+      return t(s.auto ? "log.sum.updateAuto" : "log.sum.update", { from: s.from || "–", to: s.to || "–" });
     case "update_result":
       return t("log.sum.updateResult", { from: s.from || "–", to: s.to || "–", state: logWord("log.updateState.", s.state) });
     case "update_postponed":

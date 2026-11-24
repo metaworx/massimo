@@ -949,9 +949,11 @@ and why, the settings file read again with the names of what changed
 (a warning, in the start's own words,
 where the next start would refuse a setting, or the file,
 one that does not parse or is there but cannot be read),
-a restart, a reboot or an update asked for and its outcome, the backups, their
-prune and the log's, a restore started; and a Cube's new address or its
-leaving the LAN.
+a restart, a reboot or an update asked for and its outcome,
+an automatic update asked for at night ("update v… → v… asked for automatically")
+or postponed because the radio stayed busy until its window closed,
+the backups, their prune and the log's, a restore started;
+and a Cube's new address or its leaving the LAN.
 A line someone asked for says by whom ("backup 12 taken (by hand), by Anna").
 Every change made through the web UI, the API or `massimo user` is a line
 of its own, with who made it: "Cube changed KEQ0000000: name – → Upstairs, by
@@ -1968,6 +1970,20 @@ The server's sign, when it says an update is out, opens it at Software update.
   brew's formula, which another channel's formula replaces
   (the rolling ones from the tap `metaworx/massimo-rolling`);
   or `MASSIMO_UPDATE_CHANNEL`, until it is removed.
+  Under it **Automatic updates**, for a holder of `settings`,
+  saved at once as the channel is:
+  **Off**, the default, says updates are installed only when someone starts one;
+  **At night** names its window and shows it, its start and its end
+  as two times on the server's clock, 03:00 to 05:00 unless changed,
+  each saved as its field is left changed;
+  a window the server refuses, one shorter than 30 minutes,
+  goes back, and the note says why.
+  Under the window, "Next try: 25.11.2026, 03:00, the server's time",
+  where an update is due, on the server's clock whatever this browser's zone.
+  At night the server installs the update itself inside the window,
+  once a night, while no command waits for the radio (`docs/api-v1.md`,
+  "GET /api/v1/update?refresh=1").
+  Where updates cannot be started from here, the choice is off, with the reason.
   On a box with the update helper installed (packaging/README.md, "Updating"),
   **Update** (with `update`) installs it and restarts the server.
   If the new version does not come up, the old one is put back.
@@ -1991,7 +2007,7 @@ The server's sign, when it says an update is out, opens it at Software update.
   also after a reload of the page, until it reports that it is done.
   **Last updates** lists the last three under the version lines,
   the date first, then the version with its channel in brackets,
-  then who started it,
+  then who started it, "automatically" for one the server started at night,
   or "outside Massimo" with apt or brew where Massimo did not start it:
   "24.11.2026, 15:53 · v0.16.0-alpha.1 (devel) · by Anna".
   The version is the one reached, the one apt chose where it is another,
@@ -2025,7 +2041,7 @@ The server's sign, when it says an update is out, opens it at Software update.
   | Event | When the server sends it | What Software update reads |
   |---|---|---|
   | `resync` | the stream opened again with no replay: after the server's restart, an update's among them | the versions, the helper's state and the last updates (`GET /api/v1/update`), and the setting |
-  | `change` of `update.channel` | the channel set, from any browser | the same |
+  | `change` of `update.channel`, `update.auto` or `update.auto_window` | the channel, the automatic update or its window set, from any browser | the same |
   | `update` | an update asked for from another browser | nothing at once: the page takes Update's question back and follows it as its own, the reading every 3 s with its 30 s of grace; an event more than a minute old by the server's clock, replayed after a gap of the stream, reads the versions once |
 
   The server's start and an update's end are written before any stream opens,

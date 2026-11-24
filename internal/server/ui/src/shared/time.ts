@@ -30,3 +30,17 @@ export function fmtWhen(iso: string): string {
   return new Intl.DateTimeFormat(i18n.lang, { year: "numeric", month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit", hour12: false })
     .format(new Date(iso));
 }
+
+/**
+ * fmtServerClock is an API time as the server's clock reads it: at the
+ * offset the time carries (Z for none), which the server writes in its
+ * own zone, in the page's language, the hour of 24; "" for no time.
+ */
+export function fmtServerClock(iso: string): string {
+  const ms = Date.parse(iso || "");
+  if (isNaN(ms)) return "";
+  const m = /([+-])(\d\d):(\d\d)$/.exec(iso);
+  const offset = m ? (m[1] === "-" ? -1 : 1) * (Number(m[2]) * 60 + Number(m[3])) : 0;
+  return new Intl.DateTimeFormat(i18n.lang, { year: "numeric", month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit", hour12: false, timeZone: "UTC" })
+    .format(new Date(ms + offset * 60000));
+}

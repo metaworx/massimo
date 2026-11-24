@@ -7,8 +7,9 @@
  * What Maintenance → Software update is drawn from, read and sent, line
  * for line as update.js did: the running version, the channel and the
  * newest release on it (GET /api/v1/update, ?refresh=1 to ask now), the
- * setting update.channel for a holder of settings (GET and PUT
- * /api/v1/settings), the request to the update helper (POST
+ * settings update.channel, update.auto and update.auto_window for a
+ * holder of settings (GET and PUT /api/v1/settings), the request to the
+ * update helper (POST
  * /api/v1/update), and the reading every 3 s while the helper works,
  * which rides out the server's restart. While Maintenance is shown, an
  * event of the stream that says the versions or the channel changed reads
@@ -46,8 +47,13 @@ export const data = live({
   said: null as Say | null,
   /** The setting update.channel, for a holder of settings; null where it could not be read. */
   setting: null as Setting | null,
+  /** The settings update.auto and update.auto_window, as setting is read; null where they could not be. */
+  auto: null as Setting | null,
+  window: null as Setting | null,
   /** Why the last change of the channel failed, in the channel's note until it is read again. */
   channelSaid: null as Say | null,
+  /** Why the last change of the automatic update or its window failed, in its note until it is read again. */
+  autoSaid: null as Say | null,
   /** The helper works, or the request to it runs: Update turns and Check for updates is off. */
   busy: false,
 });
@@ -62,7 +68,7 @@ export const question = live({ asking: false, version: "" });
  */
 const follow = { on: false, gen: 0, timer: 0 as ReturnType<typeof setTimeout> | 0, until: 0, grace: 0 };
 
-/** channelSeq counts the changes of the channel: a later change's reads supersede an earlier one's; channelOwn counts this page's changes under way, their PUT and their reads. */
+/** channelSeq counts the changes of the update's settings, the channel, the automatic update and its window: a later change's reads supersede an earlier one's; channelOwn counts this page's changes under way, their PUT and their reads. */
 let channelSeq = 0;
 let channelOwn = 0;
 
@@ -120,20 +126,27 @@ export async function loadUpdate(refresh: boolean, mine: () => boolean = () => t
   return u;
 }
 
-/** loadChannel reads the setting update.channel, for a holder of settings; mine as loadUpdate's. */
+/** loadChannel reads the settings update.channel, update.auto and update.auto_window, for a holder of settings; mine as loadUpdate's. */
 export async function loadChannel(mine: () => boolean = () => true): Promise<void> {
   if (!can("settings")) return;
   const n = session();
-  let setting: Setting | null;
+  let all: Record<string, Setting> = {};
   try {
-    const all = (await api<Record<string, Setting>>("GET", "api/v1/settings")) || {};
-    setting = all["update.channel"] || null;
+    all = (await api<Record<string, Setting>>("GET", "api/v1/settings")) || {};
   } catch {
-    setting = null;
+    all = {};
   }
   if (!stillSession(n) || !mine()) return;
-  data.setting = setting;
+  takeSettings(all);
   data.channelSaid = null;
+  data.autoSaid = null;
+}
+
+/** takeSettings keeps the update's settings of an answer of GET or PUT /api/v1/settings. */
+function takeSettings(all: Record<string, Setting>): void {
+  data.setting = all["update.channel"] || null;
+  data.auto = all["update.auto"] || null;
+  data.window = all["update.auto_window"] || null;
 }
 
 /**
@@ -145,14 +158,33 @@ export async function loadChannel(mine: () => boolean = () => true): Promise<voi
  * once: a later choice's reads supersede an earlier one's, whose late
  * answers change nothing shown. A refusal is said in the channel's note.
  */
-export async function setChannel(value: string): Promise<void> {
+export function setChannel(value: string): Promise<void> {
+  return saveSetting("update.channel", value || null, (error) => (data.channelSaid = () => t("update.channelFailed", { error })));
+}
+
+/** setAuto stores the automatic update's mode, off or night, as setChannel stores the channel. */
+export function setAuto(value: string): Promise<void> {
+  return saveSetting("update.auto", value, (error) => (data.autoSaid = () => t("update.autoFailed", { error })));
+}
+
+/** setWindow stores the automatic update's window, HH:MM-HH:MM on the server's clock, as setChannel stores the channel. */
+export function setWindow(value: string): Promise<void> {
+  return saveSetting("update.auto_window", value, (error) => (data.autoSaid = () => t("update.autoFailed", { error })));
+}
+
+/**
+ * saveSetting stores one of the update's settings, key, as setChannel
+ * says: the PUT, whose answer shows the settings stored, then the reads
+ * outside it; refused says why where the server refused it.
+ */
+async function saveSetting(key: string, value: string | null, refused: (error: string) => void): Promise<void> {
   const n = session();
   const seq = ++channelSeq;
   channelOwn++;
   let failed: Error | null = null;
   try {
-    const all = await api<Record<string, Setting> | null>("PUT", "api/v1/settings", { "update.channel": value || null });
-    if (stillSession(n) && seq === channelSeq && all && all["update.channel"]) data.setting = all["update.channel"];
+    const all = await api<Record<string, Setting> | null>("PUT", "api/v1/settings", { [key]: value });
+    if (stillSession(n) && seq === channelSeq && all && all[key]) takeSettings(all);
   } catch (e) {
     failed = e as Error;
   }
@@ -160,18 +192,15 @@ export async function setChannel(value: string): Promise<void> {
     channelOwn--;
     return;
   }
-  void channelReads(n, seq, failed).finally(ownChannelEnded);
+  void channelReads(n, seq, failed, refused).finally(ownChannelEnded);
 }
 
-/** channelReads are a change's reads after its PUT: the release check on the channel, then the setting; a later change's supersede them. */
-async function channelReads(n: number, seq: number, failed: Error | null): Promise<void> {
+/** channelReads are a change's reads after its PUT: the release check on the channel, then the settings; a later change's supersede them. */
+async function channelReads(n: number, seq: number, failed: Error | null, refused: (error: string) => void): Promise<void> {
   const mine = () => seq === channelSeq;
   await loadUpdate(true, mine);
   await loadChannel(mine);
-  if (failed && stillSession(n) && mine()) {
-    const error = failed.message;
-    data.channelSaid = () => t("update.channelFailed", { error });
-  }
+  if (failed && stillSession(n) && mine()) refused(failed.message);
 }
 
 /** stopFollow ends the reading while the helper works. */
@@ -257,10 +286,11 @@ function ownFlow(): boolean {
 
 /**
  * The section's reads for the stream's events, one at a time while
- * Maintenance is shown: "update" the versions, "channel" the setting
- * update.channel. A read is dropped where this page's own change of the
- * channel is under way (its reads read the same), and its answer shows
- * nothing where a choice was made meanwhile.
+ * Maintenance is shown: "update" the versions, "channel" the update's
+ * settings, the channel, the automatic update and its window. A read is
+ * dropped where this page's own change of one is under way (its reads
+ * read the same), and its answer shows nothing where a choice was made
+ * meanwhile.
  */
 const reader = burstReader(async (what) => {
   if (channelOwn) {
@@ -280,7 +310,8 @@ const reader = burstReader(async (what) => {
  * of the stream, which is how the page learns of a restart (the server's
  * start and an update's end are written before any stream opens, and a
  * stream opened again gets no replay of them); the channel and the
- * versions on it after update.channel was set (change). An update asked
+ * versions on it after update.channel, update.auto or
+ * update.auto_window was set (change). An update asked
  * for from another browser (update) is followed as this page follows its
  * own: the reading with its grace, since right after the request the
  * helper may still report its last state. An update this page follows
@@ -289,7 +320,7 @@ const reader = burstReader(async (what) => {
 export function serverEvent(ev: ServerEvent): void {
   if (!isShown("maint")) return;
   if (ev.kind === "resync") reader("update", "channel");
-  else if (settingsChanged(ev).includes("update.channel")) reader("update", "channel");
+  else if (settingsChanged(ev).some((k) => k === "update.channel" || k === "update.auto" || k === "update.auto_window")) reader("update", "channel");
   else if (ev.kind === "update" && !ownFlow()) {
     if (!fresh(ev)) {
       reader("update"); // replayed after a gap of the stream: read once, as any other event
@@ -325,7 +356,10 @@ export function forgetSoftware(): void {
   data.busy = false;
   data.said = null;
   data.setting = null;
+  data.auto = null;
+  data.window = null;
   data.channelSaid = null;
+  data.autoSaid = null;
   question.asking = false;
   question.version = "";
 }
