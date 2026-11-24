@@ -1553,6 +1553,25 @@ export interface Room {
   ready: boolean;
   /** A device of the room is stale; present when true */
   stale?: boolean;
+  /**
+   * The radio address of the thermostat whose state is the room's, the first of
+   * its virtual wall thermostat's sources.setpoint (RoomMajority.D9, D19-A):
+   * one of those whose state more than half show, else the one whose mode or
+   * setpoint changed last, else the first of the room's one order (its master,
+   * its wall thermostat, its radiator thermostats); during a boost the same
+   * over those that do not boost; where no thermostat has a state, the first of
+   * that order, as the room's commands name it; absent for a room without a
+   * thermostat
+   */
+  thermostat?: string;
+  /**
+   * The room's comfort temperature, as GET …/rooms/{id}/config gives it: what
+   * more than half of its thermostats store, else the first of its order's;
+   * absent for a room without a thermostat
+   */
+  comfort_temp?: number;
+  /** The room's eco temperature, as comfort_temp */
+  eco_temp?: number;
   devices: Device[];
   /**
    * The findings of the Cube's C lines against its room list that concern the
@@ -1768,12 +1787,23 @@ export interface Device {
   /** A virtual wall thermostat's room's uid */
   room_uid?: string;
   /**
-   * A virtual wall thermostat's alone: the radio addresses its actual_temp and
-   * its mode came from
+   * A virtual wall thermostat's alone: the radio addresses its actual_temp came
+   * from, those its mode came from and those its setpoint and until came from
    */
   sources?: {
     actual_temp?: string[];
+    /**
+     * Those its mode came from by the room's one order: those that show it, the
+     * one of the newest change, or the one of the order; the boosting ones
+     * during a boost
+     */
     mode?: string[];
+    /**
+     * Those its setpoint and until came from by the room's one order, the one
+     * whose state it shows first, which the room entry's thermostat names;
+     * during a boost from the thermostats that do not boost
+     */
+    setpoint?: string[];
   };
   confirmation?: Confirmation;
   /**
@@ -1819,7 +1849,11 @@ export interface DeviceResult {
 export interface RoomConfig {
   id?: number;
   name?: string;
-  /** The thermostat the common fields come from */
+  /**
+   * The first thermostat of the room's one order that stores the room's
+   * temperatures, else the first of the order; absent for a room without a
+   * thermostat
+   */
   source?: string;
   comfort_temp?: number;
   eco_temp?: number;
@@ -1993,7 +2027,10 @@ export interface IntegrationUser {
 }
 
 export interface ProgramWithTag extends WeekProgram {
-  /** The device the programme comes from */
+  /**
+   * The device the programme comes from: for a room, the first of its one order
+   * whose whole week is the room's, else the first of the order
+   */
   source?: string;
   /**
    * The tag over every thermostat of the room's programme, as If-Match takes it

@@ -100,12 +100,11 @@ async function houseRequests(): Promise<void> {
   let failed = false;
   for (const room of rooms) {
     if (!stillSession(n)) return; // signed out meanwhile: the next rooms are not written, nothing is said
-    const th = roomThermostat(room);
-    if (!th) continue;
+    if (!roomThermostat(room)) continue;
     try {
       let temp: number | undefined = manualTemp;
       if (mode === "eco" || mode === "comfort") {
-        temp = (await presetTemps(th))[mode];
+        temp = (await presetTemps(room))[mode]; // the room's (RoomMajority.D19-A)
         if (!stillSession(n)) return; // a read answered after a sign-out, sent again for whoever signed in: no setpoint after it
         if (temp === undefined) throw new Error(t(mode === "eco" ? "house.noEco" : "house.noComfort"));
       }

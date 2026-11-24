@@ -10,7 +10,7 @@
  * rooms/facts.ts roomEntries); one line while the room's commands are
  * refused; the measured and
  * the set temperature with the stepper, the setpoint marked where it is
- * the room thermostat's eco or comfort temperature; the members'
+ * the room's eco or comfort temperature (roomPresets); the members'
  * setpoints while they differ; the modes with More; the info and
  * the cog; the holiday form, the deletion's question, the room's repairs,
  * the result line, the device list and the configuration. Built once per
@@ -169,12 +169,13 @@ function pressed(mode: string | null, modes: string[], m: string): { cls: string
 }
 
 /**
- * More is the tile's More menu (D99): Eco and Comfort, the room
- * thermostat's eco or comfort temperature in the room's mode, each with its
- * temperature once the menu has opened; the Hold switch while the room is
- * in Auto, which makes them hold theirs in Manual; and Holiday…, the
- * holiday form. On holiday it says until when (D99), and with the
- * thermostats' modes differing it is outlined where one is on holiday.
+ * More is the tile's More menu (D99): Eco and Comfort, the room's eco or
+ * comfort temperature (presetTemps, RoomMajority.D19-A) in the room's
+ * mode, each with its temperature once the menu has opened; the Hold
+ * switch while the room is in Auto, which makes them hold theirs in
+ * Manual; and Holiday…, the holiday form. On holiday it says until when
+ * (D99), and with the thermostats' modes differing it is outlined where
+ * one is on holiday.
  */
 function More({ room, ui, mode, modes, tile }: { room: PageRoom; ui: RoomUI; mode: string | null; modes: string[]; tile: () => HTMLElement | null }) {
   const [temps, setTemps] = useState<{ eco?: number; comfort?: number }>({});
@@ -187,8 +188,7 @@ function More({ room, ui, mode, modes, tile }: { room: PageRoom; ui: RoomUI; mod
   return (
     <Dropdown cls="more-menu" summaryCls={cls} title={holiday || t("room.moreTitle")} busy={busy} arrows={MORE_ITEMS}
       onOpen={() => {
-        const th = roomThermostat(room);
-        if (th) presetTemps(th).then(setTemps).catch(() => {});
+        if (roomThermostat(room)) presetTemps(room).then(setTemps).catch(() => {});
       }}
       summary={<><span class="more-label">{holiday || t("mode.more")}</span><Icon symbol="icon-chevron-down" cls="ni caret" /></>}>
       {(["eco", "comfort"] as const).map((which) => (
@@ -277,9 +277,10 @@ export function Tile({ room }: { room: PageRoom }) {
   const th = roomThermostat(room);
   const s = roomState(room);
   const current = s && s.setpoint !== undefined ? s.setpoint : null;
-  // the setpoint shown, a stepped one too, and its mark by the room thermostat's eco and comfort (D10-A)
+  // the setpoint shown, a stepped one too, and its mark by the room's eco and comfort (D10-A, D19-A)
   const shown = ui.pending !== null ? ui.pending : current;
-  const preset = th ? presetOf(shown, th.eco_temp, th.comfort_temp) : null;
+  const presets = roomPresets(room);
+  const preset = th ? presetOf(shown, presets.eco, presets.comfort) : null;
   const modes = roomModes(room);
   const mode = modes.length > 1 ? null : s ? s.mode || null : null;
   const actual = roomActual(room);

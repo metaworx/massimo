@@ -33,8 +33,10 @@ package server
 // newcomer into it (holdReference), in place of the state more than
 // half of the members show; else the state of the member whose mode or
 // setpoint changed last; else the state of the first member of the
-// room's one order (cubeio.RoomOrder): its master, its wall thermostat,
-// its radiator thermostats; else none, the Warn alone.
+// room's one order (roomorder.Of): its master, its wall thermostat, its
+// radiator thermostats; else none, the Warn alone. The last three are
+// roomorder.State, the rule the virtual wall thermostat shows a room by
+// too (RoomMajority.D19-A).
 // It goes through the queue at low priority, never while the queue holds
 // the radio for the duty cycle or the memory slots, and at most once a
 // day per room, a day shared with Block 8's re-send of an unconfirmed
@@ -68,6 +70,7 @@ import (
 	"go.metaworx.ch/massimo/internal/cubelan"
 	"go.metaworx.ch/massimo/internal/engine"
 	"go.metaworx.ch/massimo/internal/protocol/cube"
+	"go.metaworx.ch/massimo/internal/roomorder"
 	"go.metaworx.ch/massimo/internal/store"
 	"go.metaworx.ch/massimo/internal/view"
 )
@@ -87,8 +90,9 @@ const (
 	intentLead = 15 * time.Minute
 	// driftGrace is how far from the Cube's time a programme's
 	// temperature still counts: a switch point just past, a clock a few
-	// minutes off.
-	driftGrace = 5 * time.Minute
+	// minutes off (roomorder.Grace, by which a member follows its
+	// programme).
+	driftGrace = roomorder.Grace
 	// driftPersist is how long a member must not follow its programme
 	// before the Warn.
 	driftPersist = 5 * time.Minute
@@ -100,14 +104,15 @@ const (
 // The re-sent state's origins, the summary's from, in the order they
 // are taken (D188, RoomMajority.D9): Massimo's last setpoint, the
 // members' majority (of those before a structure change, where one was
-// held: before_change), the newest change, then the room's order.
+// held: before_change), the newest change, then the room's order; the
+// last five are roomorder.State's rules.
 const (
 	fromMassimo  = "massimo"
-	fromMajority = "majority"
-	fromNewest   = "newest"
-	fromMaster   = "master"
-	fromWall     = "wall_thermostat"
-	fromRadiator = "radiator_thermostat"
+	fromMajority = string(roomorder.ByMajority)
+	fromNewest   = string(roomorder.ByNewest)
+	fromMaster   = string(roomorder.ByMaster)
+	fromWall     = string(roomorder.ByWall)
+	fromRadiator = string(roomorder.ByRadiator)
 )
 
 // driftState is a runtime's room checks: each room's disagreement and
@@ -347,11 +352,9 @@ func (s *Server) roomCheckLoop(ctx context.Context, rt *runtime) {
 type roomMember struct {
 	rf      cube.RFAddress
 	typ     cube.DeviceType
-	wall    bool
 	st      cube.DeviceState
-	state   *view.State
 	program *cube.WeekProgram
-	judged  bool // in auto, with a programme and the Cube's time
+	judged  bool // in auto, with a programme and the Cube's time (roomorder.Following)
 	follows bool // judged, and its setpoint is its programme's
 	// modeAt and setpointAt are when its mode and its setpoint changed
 	// to their values (cubelan.StateTimes), zero where that is no one's
@@ -360,6 +363,21 @@ type roomMember struct {
 	// got its values late), or the end of a boost or of a holiday at its
 	// until (StateTimes.Changes).
 	modeAt, setpointAt time.Time
+}
+
+// member is m as the room's state is decided over it (roomorder.State).
+func (m roomMember) member() roomorder.Member {
+	return roomorder.Member{RF: m.rf, Type: m.typ, State: m.st, Follows: m.follows, ModeAt: m.modeAt, SetpointAt: m.setpointAt}
+}
+
+// members are ms as the room's state is decided over them, in their
+// order.
+func members(ms []roomMember) []roomorder.Member {
+	out := make([]roomorder.Member, 0, len(ms))
+	for _, m := range ms {
+		out = append(out, m.member())
+	}
+	return out
 }
 
 // roomScan is what a check finds in one room.
@@ -373,8 +391,8 @@ type roomScan struct {
 
 // scanRoom reads one room's members from the snapshot, those in skip
 // left out, judging the members in auto by the Cube's time where it is
-// known. A member the Cube holds no valid state for is dead
-// (cubeio.Dead) and left out, as is one in boost.
+// known (roomorder.Following). A member the Cube holds no valid state
+// for is dead (roomorder.Dead) and left out, as is one in boost.
 func scanRoom(snap *cubelan.Snapshot, room uint8, skip view.Hidden, cubeNow time.Time, clock bool) roomScan {
 	sc := roomScan{all: map[cube.RFAddress]bool{}, master: cubeio.RoomMaster(snap, room), at: time.Now()}
 	for _, rf := range snap.Devices() {
@@ -394,72 +412,26 @@ func scanRoom(snap *cubelan.Snapshot, room uint8, skip view.Hidden, cubeNow time
 		if !ok || !st.Valid || st.Mode == cube.ModeBoost || st.Setpoint == nil {
 			continue
 		}
-		m := roomMember{rf: rf, typ: c.Type, wall: c.Type == cube.DeviceWallThermostat, st: st, state: view.StateOf(st)}
+		m := roomMember{rf: rf, typ: c.Type, st: st, program: roomorder.Program(c)}
 		if times, ok := snap.Times(rf); ok {
-			m.modeAt, m.setpointAt = changedAt(times, "mode"), changedAt(times, "setpoint")
+			m.modeAt, m.setpointAt = roomorder.ChangedAt(times, "mode"), roomorder.ChangedAt(times, "setpoint")
 		}
-		switch {
-		case c.Thermostat != nil:
-			m.program = &c.Thermostat.WeekProgram
-		case c.Wall != nil:
-			m.program = &c.Wall.WeekProgram
-		}
-		if st.Mode == cube.ModeAuto && m.program != nil && clock {
-			m.judged = true
-			m.follows = followsAround(m.program, cubeNow, *st.Setpoint, driftGrace)
-		}
+		m.judged, m.follows = roomorder.Following(st, m.program, cubeNow, clock)
 		sc.members = append(sc.members, m)
 	}
 	return sc
 }
 
-// changedAt is when a value of times changed to the one it has, zero
-// where that is no one's change (cubelan.StateTimes.Changes).
-func changedAt(times cubelan.StateTimes, field string) time.Time {
-	if !times.Changes[field] {
-		return time.Time{}
-	}
-	return times.Fields[field]
-}
-
-// programDay is w's programme of t's weekday; the devices' week starts
-// on Saturday.
-func programDay(w *cube.WeekProgram, t time.Time) cube.DayProgram {
-	return w[(int(t.Weekday())+1)%7]
-}
-
-// programTemp is w's temperature at t, a time of the Cube's clock.
-func programTemp(w *cube.WeekProgram, t time.Time) (float64, bool) {
-	m := t.Hour()*60 + t.Minute()
-	for _, p := range programDay(w, t) {
-		if m < p.Until {
-			return p.Temp, true
-		}
-	}
-	return 0, false
-}
-
 // switchedAt is when the switch point in force at t began, as "HH:MM".
 func switchedAt(w *cube.WeekProgram, t time.Time) string {
 	m, start := t.Hour()*60+t.Minute(), 0
-	for _, p := range programDay(w, t) {
+	for _, p := range roomorder.ProgramDay(w, t) {
 		if m < p.Until {
 			break
 		}
 		start = p.Until
 	}
 	return fmt.Sprintf("%02d:%02d", start/60, start%60)
-}
-
-// followsAround reports whether setpoint is w's temperature at a minute
-// within grace of t.
-func followsAround(w *cube.WeekProgram, t time.Time, setpoint float64, grace time.Duration) bool {
-	for d := -grace; d <= grace; d += time.Minute {
-		if temp, ok := programTemp(w, t.Add(d)); ok && temp == setpoint {
-			return true
-		}
-	}
-	return false
 }
 
 // drifting is the member of a room in auto whose setpoint is not its
@@ -513,9 +485,10 @@ func compared(ms []roomMember) []roomMember {
 }
 
 // membersAgree reports whether two members agree: in mode, setpoint and
-// until, or both in auto, each following its own programme.
+// until, or both in auto, each following its own programme
+// (roomorder.Agree).
 func membersAgree(a, b roomMember) bool {
-	return a.follows && b.follows || view.SameSetting(a.state, b.state)
+	return roomorder.Agree(a.member(), b.member())
 }
 
 // disagrees reports whether two of the members do not agree.
@@ -630,15 +603,19 @@ func (d *driftState) intentSince(room uint8, since time.Time) *roomIntent {
 //     brought a newcomer into the room (holdReference), marked
 //     before_change; where it is auto with a temperature, auto on the
 //     programme once a switch point has passed since it was held; else
-//     the state more than half of ms show (majority);
+//     the room's state by the one order over ms (roomorder.State,
+//     RoomMajority.D19-A, which the virtual wall thermostat shows too):
+//     the state more than half of ms show (roomorder.Majority);
 //  3. else the state of the member whose mode or setpoint changed last
-//     (newest);
+//     (roomorder.Newest);
 //  4. else the state of the first of the room's order among ms
-//     (cubeio.RoomOrder, D9): the master's where it is a thermostat of
+//     (roomorder.ByOrder, D9): the master's where it is a thermostat of
 //     the room, the wall thermostat's, the first radiator thermostat's;
 //  5. else none, where ms is empty.
 //
-// now is the room checks' clock, cubeNow the Cube's at now.
+// A member that follows its programme gives auto on the programme
+// (memberResend). now is the room checks' clock, cubeNow the Cube's at
+// now.
 func referenceState(room uint8, master cube.RFAddress, ms []roomMember, in *roomIntent, held *heldReference, now, cubeNow time.Time, clock bool) (resend, bool) {
 	if in != nil {
 		for _, m := range ms {
@@ -660,78 +637,16 @@ func referenceState(room uint8, master cube.RFAddress, ms []roomMember, in *room
 		}
 		return r, true
 	}
-	if r, ok := majority(room, ms); ok {
-		return r, true
-	}
-	if r, ok := newest(room, ms); ok {
-		return r, true
-	}
-	return orderResend(room, master, ms)
-}
-
-// orderResend is the state of the first of the room's order among ms
-// (cubeio.RoomOrder, RoomMajority.D9), from the rule that took it: its
-// master, its wall thermostat or a radiator thermostat; false for none.
-// The dead are not among ms.
-func orderResend(room uint8, master cube.RFAddress, ms []roomMember) (resend, bool) {
-	metas := make([]cube.DeviceMeta, 0, len(ms))
-	byRF := map[cube.RFAddress]roomMember{}
-	for _, m := range ms {
-		metas = append(metas, cube.DeviceMeta{Type: m.typ, RFAddress: m.rf, RoomID: room})
-		byRF[m.rf] = m
-	}
-	for _, rf := range cubeio.RoomOrder(nil, master, metas, 0) {
-		m := byRF[rf]
-		switch {
-		case rf == master:
-			return memberResend(room, m, fromMaster), true
-		case m.wall:
-			return memberResend(room, m, fromWall), true
-		}
-		return memberResend(room, m, fromRadiator), true
+	if p, ok := roomorder.State(master, members(ms)); ok {
+		return pickResend(room, ms, p), true
 	}
 	return resend{}, false
 }
 
-// newest is the state of the member whose mode or setpoint changed last
-// (RoomMajority.D3-A, as D7-C counts it): a change made by hand at a
-// device is the newest wish. A member's time is the later of its mode's
-// and its setpoint's, those not known left out (scanRoom); but where
-// any of ms is in manual or on holiday, a member that follows its
-// programme counts its mode's time alone, since in auto a setpoint set
-// by hand holds only until the programme's next switch point, while in
-// manual or on holiday the programme changes nothing. The newest time
-// wins strictly: false where no member has a time, or where members
-// that do not agree share it.
-func newest(room uint8, ms []roomMember) (resend, bool) {
-	fixed := false // a member in manual or on holiday
-	for _, m := range ms {
-		fixed = fixed || m.st.Mode == cube.ModeManual || m.st.Mode == cube.ModeVacation
-	}
-	var best []roomMember
-	var at time.Time
-	for _, m := range ms {
-		t := m.modeAt
-		if !(fixed && m.follows) && m.setpointAt.After(t) {
-			t = m.setpointAt
-		}
-		switch {
-		case t.IsZero() || t.Before(at):
-		case t.After(at):
-			best, at = []roomMember{m}, t
-		default:
-			best = append(best, m)
-		}
-	}
-	if len(best) == 0 {
-		return resend{}, false
-	}
-	for _, m := range best[1:] {
-		if !membersAgree(best[0], m) {
-			return resend{}, false
-		}
-	}
-	return memberResend(room, best[0], fromNewest), true
+// pickResend is the state roomorder decided over ms, p, as a re-send:
+// the member's it names, from the rule that took it.
+func pickResend(room uint8, ms []roomMember, p roomorder.Pick) resend {
+	return memberResend(room, ms[p.Index], string(p.Rule))
 }
 
 // memberResend is a member's state as a re-send: its mode, setpoint and
@@ -745,26 +660,6 @@ func memberResend(room uint8, m roomMember, from string) resend {
 		r.temp = 0
 	}
 	return r
-}
-
-// majority is the state more than half of the members show (D188): a
-// member's, with which more than half agree (membersAgree, itself
-// counted), in mode, setpoint and until, the members in auto that each
-// follow their own programme as one state, auto on the programme; false
-// where no state has more than half.
-func majority(room uint8, ms []roomMember) (resend, bool) {
-	for i, m := range ms {
-		n := 0
-		for _, o := range ms {
-			if membersAgree(m, o) {
-				n++
-			}
-		}
-		if 2*n > len(ms) {
-			return memberResend(room, ms[i], fromMajority), true
-		}
-	}
-	return resend{}, false
 }
 
 // switchedSince reports whether a switch point of a member's week
@@ -1003,10 +898,10 @@ func driftWarn(snap *cubelan.Snapshot, room uint8, m roomMember, ms []roomMember
 			others = append(others, o.rf.String())
 		}
 	}
-	expected, _ := programTemp(m.program, cubeNow)
+	expected, _ := roomorder.ProgramTemp(m.program, cubeNow)
 	summary := map[string]any{"room": room, "outcome": "not_following", "setpoint": *m.st.Setpoint, "expected": expected,
 		"switch_at": switchedAt(m.program, cubeNow), "cube_time": cubeNow.Format("2006-01-02 15:04"), "others": others, "auto_dst": m.st.AutoDST}
-	if followsAround(m.program, cubeNow.Add(-time.Hour), *m.st.Setpoint, driftGrace) || followsAround(m.program, cubeNow.Add(time.Hour), *m.st.Setpoint, driftGrace) {
+	if roomorder.FollowsAround(m.program, cubeNow.Add(-time.Hour), *m.st.Setpoint, driftGrace) || roomorder.FollowsAround(m.program, cubeNow.Add(time.Hour), *m.st.Setpoint, driftGrace) {
 		summary["hour_off"] = true
 	}
 	if m.st.Error && m.st.FailedRadiogram != nil {

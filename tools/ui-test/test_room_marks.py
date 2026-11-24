@@ -4,17 +4,23 @@
 4.5 °C is OFF in the tile's SET, its stepped value and a device row,
 without a unit; a crescent moon marks a setpoint at the eco
 temperature, a sun at the comfort temperature, the two side by side
-where comfort is eco, in the tile by the room thermostat's and beside
-its value, in a slot of its own so that nothing moves, in a device row
-by the device's own and in the place of Set's gauge; the marks are
-labelled in the configuration's words and in the accent colour, in
-light and dark. The device entries carry the temperatures (comfort_temp,
+where comfort is eco, in the tile by the room's and beside its value,
+in a slot of its own so that nothing moves, in a device row by the
+device's own and in the place of Set's gauge; the marks are labelled
+in the configuration's words and in the accent colour, in light and
+dark. The device entries carry the temperatures (comfort_temp,
 eco_temp) as the devices' details have them, and a config event brings
-new ones. While the room's thermostats show different setpoints, a line
-under the setpoint row names each with its setpoint and mark, not while
-a write of the tile or the House tile waits for them to show it, a
-write of theirs is pending or a window of the room is open, and goes
-once they agree.
+new ones. The room entries (v1.2, Block 4, D19-A) name the thermostat
+whose state is the room's (thermostat), which the tile's SET follows,
+and carry the room's temperatures, as its configuration has them, by
+which the tile marks its setpoint and More sets its presets, a wall
+thermostat's own aside; a config event that changed a thermostat's
+presets, and a state event of a thermostat the Cube gained or lost,
+read the rooms again, a burst of them twice at most. While the room's
+thermostats show different setpoints, a line under the setpoint row
+names each with its setpoint and mark, not while a write of the tile or
+the House tile waits for them to show it, a write of theirs is pending
+or a window of the room is open, and goes once they agree.
 
 The states come from state events applied in the page (updateDevice);
 every write is held at its route and answered with a stub, so nothing
@@ -86,6 +92,45 @@ WINDOW = """([rid, open, stale]) => {
   if (stale) Object.assign(d, { reported: false, out_of_date: true, last_known: st, state: undefined });
   else Object.assign(d, { reported: true, out_of_date: undefined, last_known: undefined, state: st });
   updateDevice(JSON.parse(JSON.stringify(d)));
+}"""
+
+# Sets a room's eco and comfort temperatures, its entry's, as the server
+# decides them over its thermostats: [rid, eco, comfort].
+PRESETS = """([rid, eco, comfort]) => {
+  const r = state.rooms.find((x) => x.id === rid);
+  r.eco_temp = eco; // a room's fields are signals: its tile follows
+  r.comfort_temp = comfort;
+}"""
+
+# Puts a wall thermostat into a room in the page, a copy of its
+# thermostat with a wall thermostat's type, at a state and its own eco
+# and comfort temperatures, and names it the room's thermostat, its
+# entry's and its virtual wall thermostat's, as where the room's master
+# decides: [rid, setpoint, eco, comfort]; returns its address.
+WALL = """([rid, setpoint, eco, comfort]) => {
+  const r = state.rooms.find((x) => x.id === rid);
+  const src = r.devices.find((d) => isThermostat(d) && d.reported);
+  const wall = Object.assign(JSON.parse(JSON.stringify(src)), { rf_address: "0a0ffd", serial: "NEQ0000998", name: "Wall",
+    type: "wall_thermostat", eco_temp: eco, comfort_temp: comfort });
+  wall.state = Object.assign({}, wall.state, { mode: "manual", setpoint });
+  delete wall.state.valve_pct;
+  r.devices = [...r.devices.filter((d) => d.rf_address !== "0a0ffd"), wall];
+  r.thermostat = wall.rf_address;
+  r.vwt = Object.assign({}, r.vwt, { sources: Object.assign({}, r.vwt && r.vwt.sources, { setpoint: [wall.rf_address] }) });
+  return wall.rf_address;
+}"""
+
+# Gives a room's virtual wall thermostat, as its state event brings it,
+# its sources.setpoint, the thermostats whose setpoint it shows: [rid,
+# rfs], rfs null for none, as from a server before them.
+VWT_SETPOINT = """([rid, rfs]) => {
+  const r = state.rooms.find((x) => x.id === rid);
+  const d = JSON.parse(JSON.stringify(r.vwt));
+  d.sources = Object.assign({}, d.sources);
+  if (rfs) d.sources.setpoint = rfs;
+  else delete d.sources.setpoint;
+  state.events.dispatchEvent(new MessageEvent("state", { data: JSON.stringify({ kind: "state", source: "device", level: "info",
+    device: d.rf_address, serial: d.serial, time: new Date().toISOString(), state: d }) }));
 }"""
 
 # What each case shows: the setpoint, the eco and comfort temperatures,
@@ -189,6 +234,136 @@ def test_entries_carry_presets(page, case):
             assert d["eco"] is None and d["comfort"] is None, f"{d['rf']}: no temperatures: {d}"
 
 
+@pytest.mark.cases("1100-en")
+def test_rooms_name_their_thermostat(page, case):
+    """Every room with a thermostat names the one that stands for it
+    (thermostat, the first of its one order, D19-A), a thermostat among
+    its devices, which roomThermostat takes, and carries its eco and
+    comfort temperatures, those of its configuration's answer; a room
+    without one names none and carries none."""
+    got = page.evaluate("""async () => {
+      const out = [];
+      for (const r of state.rooms) {
+        const cfg = await api("GET", base() + "/rooms/" + r.id + "/config");
+        const th = roomThermostat(r);
+        out.push({ id: r.id, named: r.thermostat, th: th && th.rf_address, among: r.devices.some((d) => d.rf_address === r.thermostat && isThermostat(d)),
+          eco: r.eco_temp, comfort: r.comfort_temp, any: r.devices.some(isThermostat), want: { eco: cfg.eco_temp, comfort: cfg.comfort_temp } });
+      }
+      return out;
+    }""")
+    assert any(r["any"] for r in got), "the fixture has rooms with thermostats"
+    for r in got:
+        if not r["any"]:
+            assert r["named"] is None and r["eco"] is None and r["comfort"] is None, f"room {r['id']}: none: {r}"
+            continue
+        assert r["named"] and r["among"] and r["th"] == r["named"], f"room {r['id']}: its thermostat named and taken: {r}"
+        assert r["eco"] == r["want"]["eco"] and r["comfort"] == r["want"]["comfort"], f"room {r['id']}: its configuration's: {r}"
+
+
+def test_room_thermostat_follows_the_entry(page, case):
+    """Where the room's virtual wall thermostat names none
+    (sources.setpoint, as from a server before it), the tile's SET is the
+    setpoint of the thermostat the room's entry names (roomThermostat),
+    whichever it names; an entry without it either takes the wall
+    thermostat."""
+    room = page.evaluate(ROOM, [None, True])
+    rid, (a, b) = room["id"], room["devices"][:2]
+    sel = '.room[data-id="%s"]' % rid
+    page.evaluate(SET, [rid, {a["rf"]: {"setpoint": 21}, b["rf"]: {"setpoint": 18}}])
+    lang = case.lang
+    shows = lambda v: "document.querySelector(%r).textContent === %r" % (sel + " .setpoint-big", shown(v, lang, "°"))
+    named = lambda: page.evaluate("(rid) => roomThermostat(state.rooms.find((r) => r.id === rid)).rf_address", rid)
+    try:
+        page.evaluate(VWT_SETPOINT, [rid, None])
+        page.evaluate("([rid, rf]) => { state.rooms.find((r) => r.id === rid).thermostat = rf; }", [rid, a["rf"]])
+        assert wait_until(page, shows(21), 5) and named() == a["rf"], f"the first named: {named()}"
+        page.evaluate("([rid, rf]) => { state.rooms.find((r) => r.id === rid).thermostat = rf; }", [rid, b["rf"]])
+        assert wait_until(page, shows(18), 5) and named() == b["rf"], f"the other named: {named()}"
+        wall = page.evaluate(WALL, [rid, 23, 16, 24])
+        assert wait_until(page, shows(23), 5) and named() == wall, f"a wall thermostat named: {named()}"
+        page.evaluate(VWT_SETPOINT, [rid, None])  # the wall thermostat named by the entry alone
+        page.evaluate("([rid, rf]) => { state.rooms.find((r) => r.id === rid).thermostat = rf; }", [rid, b["rf"]])
+        assert wait_until(page, shows(18), 5), "the radiator named, the wall thermostat beside it"
+        page.evaluate("(rid) => { state.rooms.find((r) => r.id === rid).thermostat = undefined; }", rid)
+        assert wait_until(page, shows(23), 5) and named() == wall, f"none named: the wall thermostat: {named()}"
+    finally:
+        page.evaluate("async () => { await loadRooms(); }")
+
+
+def test_set_follows_the_virtual_wall_thermostats_events(page, case):
+    """The tile's SET follows the thermostat whose setpoint the room's
+    virtual wall thermostat shows (its sources.setpoint), which its state
+    events bring, without a read of the rooms (D19-A): a member changed at
+    its device moves the room's state to another, as a boost's end may,
+    and SET shows that one's setpoint at once, ahead of the room's entry
+    (thermostat), which names it only at the next read."""
+    room = page.evaluate(ROOM, [None, True])
+    rid, (a, b) = room["id"], room["devices"][:2]
+    sel = '.room[data-id="%s"]' % rid
+    page.evaluate(SET, [rid, {a["rf"]: {"setpoint": 21}, b["rf"]: {"setpoint": 18}}])
+    shows = lambda v: "document.querySelector(%r).textContent === %r" % (sel + " .setpoint-big", shown(v, case.lang, "°"))
+    loads = []
+    page.on("request", lambda r: loads.append(r.url) if r.method == "GET" and "/rooms?devices=all" in r.url else None)
+    try:
+        page.evaluate("([rid, rf]) => { state.rooms.find((r) => r.id === rid).thermostat = rf; }", [rid, a["rf"]])
+        page.evaluate(VWT_SETPOINT, [rid, [a["rf"]]])
+        assert wait_until(page, shows(21), 5), "SET the room's thermostat's 21"
+        page.evaluate(VWT_SETPOINT, [rid, [b["rf"]]])
+        assert wait_until(page, shows(18), 5), "SET the one the virtual wall thermostat names now, ahead of the entry"
+        assert page.evaluate("(rid) => state.rooms.find((r) => r.id === rid).thermostat", rid) == a["rf"], "the entry as it was"
+        page.evaluate(VWT_SETPOINT, [rid, [a["rf"], b["rf"]]])
+        assert wait_until(page, shows(21), 5), "and back, the first of them"
+        page.wait_for_timeout(300)
+        assert not loads, f"no read of the rooms: {loads}"
+    finally:
+        page.evaluate("async () => { await loadRooms(); }")
+
+
+def test_the_rooms_presets_over_a_wall_thermostats(page, case):
+    """Where the room's thermostat is a wall thermostat whose own eco and
+    comfort differ from most of the room's (D19-A): the tile marks the
+    setpoint by the room's, More shows and sends the room's, with no
+    request for a detail, and the members' line marks each by its own
+    (D11-A)."""
+    room = page.evaluate(ROOM, [None, False])
+    rid, th = room["id"], room["devices"][0]
+    sel = '.room[data-id="%s"]' % rid
+    tile = page.locator(sel)
+    lang = case.lang
+    try:
+        wall = page.evaluate(WALL, [rid, 17, 16, 23])
+        page.evaluate(SET, [rid, {th["rf"]: {"setpoint": 17, "eco": 17, "comfort": 21}}])
+        page.evaluate(PRESETS, [rid, 17, 21])
+        assert wait_until(page, "document.querySelector(%r).textContent === %r" % (sel + " .setpoint-big", shown(17, lang, "°")), 5), "SET the wall thermostat's 17"
+        assert wait_until(page, "!!document.querySelector(%r)" % (sel + " .setpoint-row .preset-mark.preset-eco"), 5), \
+            "17 is the room's eco: marked, though not the wall thermostat's (16)"
+        page.evaluate("([rid, rf]) => { const r = state.rooms.find((x) => x.id === rid); const d = JSON.parse(JSON.stringify(r.devices.find((x) => x.rf_address === rf))); d.state.setpoint = 16; updateDevice(d); }", [rid, wall])
+        assert wait_until(page, "document.querySelector(%r).textContent === %r" % (sel + " .setpoint-big", shown(16, lang, "°")), 5), "SET 16"
+        assert mark_of(tile.locator(".setpoint-row")) is None, "16 is the wall thermostat's eco, not the room's: no mark"
+        assert wait_until(page, line_shown(page, sel), 5), "the members' line while 16 and 17 differ"
+        marks = {rf: preset for rf, _, _, preset in members_line(tile)["members"]}
+        assert marks == {th["rf"]: "eco", wall: "eco"}, f"each member by its own eco, 17 and 16: {marks}"
+
+        asked = []
+        page.on("request", lambda r: asked.append(r.url) if r.method == "GET" and "/devices/" in r.url else None)
+        tile.locator(".more-sum").click()
+        assert wait_until(page, "document.querySelector(%r).textContent !== ''" % (sel + " .menu-eco .more-temp"), 5), "Eco shows its temperature"
+        assert tile.locator(".menu-eco .more-temp").inner_text() == num(17, lang) + " °C", "More's Eco the room's 17, not 16"
+        assert tile.locator(".menu-comfort .more-temp").inner_text() == num(21, lang) + " °C", "More's Comfort the room's 21, not 23"
+        held, sent = [], []
+        hold(page, PUT, "PUT", held, sent)
+        try:
+            tile.locator(".more-menu .menu-comfort").click()
+            assert wait_held(page, held), "Comfort sends"
+            assert sent[-1]["temp"] == 21, f"the room's comfort sent: {sent}"
+            answer_all(page, held, PENDING)
+        finally:
+            page.unroute(PUT)
+        assert not asked, f"no detail asked for: {asked}"
+    finally:
+        page.evaluate("async () => { await loadRooms(); }")
+
+
 def test_marks_and_off(page, case):
     """The tile's SET and a device row at OFF, at eco, at comfort, at
     comfort equal to eco, at none of them and at the highest: OFF
@@ -214,6 +389,7 @@ def test_marks_and_off(page, case):
     try:
         for name, sp, eco, comfort, preset in CASES:
             page.evaluate(SET, [rid, {d["rf"]: {"setpoint": sp, "eco": eco, "comfort": comfort} for d in ths}])
+            page.evaluate(PRESETS, [rid, eco, comfort])  # every thermostat of the room at them: the room's
             want = shown(sp, lang, "°")
             assert wait_until(page, "document.querySelector(%r).textContent === %r" % (sel + " .setpoint-big", want), 5), \
                 f"{name}: the tile's SET shows {want}: {tile.locator('.setpoint-big').inner_text()!r}"
@@ -253,6 +429,7 @@ def test_marks_and_off(page, case):
         # The stepped value: half a degree under the eco temperature, then
         # stepped onto it; held at its route, so that nothing is sent.
         page.evaluate(SET, [rid, {d["rf"]: {"setpoint": 16.5, "eco": 17, "comfort": 21} for d in ths}])
+        page.evaluate(PRESETS, [rid, 17, 21])
         assert wait_until(page, "!document.querySelector(%r)" % (sel + " .setpoint-row .preset-mark"), 5), "16.5 is no preset"
         before = box(page, sel + " .stepper", sp_row)
         held, sent = [], []
@@ -317,6 +494,7 @@ def test_the_setpoint_row_fits_in_every_language(page, case):
                 steppers = {}
                 for sp, eco in ((30.5, 17), (30.5, 30.5), (4.5, 17), (4.5, 4.5)):
                     page.evaluate(SET, [rid, {d["rf"]: {"setpoint": sp, "eco": eco, "comfort": 21} for d in ths}])
+                    page.evaluate(PRESETS, [rid, eco, 21])
                     marked = eco == sp
                     assert wait_until(page, "!!document.querySelector(%r) === %s" % (sel + " .set-val .preset-mark", "true" if marked else "false"), 5), \
                         f"{lang}: the mark {marked} at {sp}"
@@ -341,13 +519,14 @@ def test_the_setpoint_row_fits_in_every_language(page, case):
 
 
 def test_more_shows_off_from_the_entry(page, case):
-    """More's Eco and Comfort come from the room thermostat's entry, with
-    no request for its detail (D13-A), and show OFF for an eco
+    """More's Eco and Comfort come from the room's entry (D19-A), with no
+    request for its thermostat's detail (D13-A), and show OFF for an eco
     temperature of 4.5 °C, as the devices' displays show it."""
     room = page.evaluate(ROOM, [None, False])
     rid, ths = room["id"], room["devices"]
     tile = page.locator('.room[data-id="%s"]' % rid)
     page.evaluate(SET, [rid, {d["rf"]: {"setpoint": 20, "eco": 4.5, "comfort": 21} for d in ths}])
+    page.evaluate(PRESETS, [rid, 4.5, 21])
     asked = []
     page.on("request", lambda r: asked.append(r.url) if r.method == "GET" and "/devices/" in r.url else None)
     page.evaluate("state.details = {}")
@@ -360,30 +539,194 @@ def test_more_shows_off_from_the_entry(page, case):
     assert not asked, f"no detail asked for: {asked}"
 
 
-def test_a_config_event_brings_new_presets(page, case):
+def test_a_config_event_brings_new_presets(page, case, reads):
     """A config event carries the device's entry with its new eco and
-    comfort temperatures: the tile's and the row's marks follow it."""
+    comfort temperatures: the row's mark follows it at once; one that says
+    its presets changed (changed: temps) reads the rooms again, and the
+    tile's mark follows the room's new ones (D19-A); one that does not
+    reads nothing."""
     room = page.evaluate(ROOM, [None, False])
     rid, th = room["id"], room["devices"][0]
     sel = '.room[data-id="%s"]' % rid
     tile = page.locator(sel)
     page.evaluate(SET, [rid, {th["rf"]: {"setpoint": 18, "eco": 16, "comfort": 21}}])
+    page.evaluate(PRESETS, [rid, 16, 21])
     assert wait_until(page, "!document.querySelector(%r)" % (sel + " .setpoint-row .preset-mark"), 5), "18 is no preset"
     tile.locator(".room-name-btn").click()
     row = tile.locator('.device[data-rf="%s"]' % th["rf"])
     row.wait_for()
+    config = """([rid, rf, changed]) => {
+      const r = state.rooms.find((x) => x.id === rid);
+      const d = JSON.parse(JSON.stringify(r.devices.find((x) => x.rf_address === rf)));
+      d.eco_temp = 18;
+      const ev = { kind: "config", source: "device", level: "info", device: rf, serial: d.serial, time: new Date().toISOString(),
+        changes: { eco_temp: { from: 16, to: 18 } }, state: d };
+      if (changed) ev.changed = changed;
+      state.events.dispatchEvent(new MessageEvent("config", { data: JSON.stringify(ev) }));
+    }"""
+    loads = []
+    page.on("request", lambda r: loads.append(r.url) if r.method == "GET" and "/rooms?devices=all" in r.url else None)
     try:
-        page.evaluate("""([rid, rf]) => {
-          const r = state.rooms.find((x) => x.id === rid);
-          const d = JSON.parse(JSON.stringify(r.devices.find((x) => x.rf_address === rf)));
-          d.eco_temp = 18;
-          state.events.dispatchEvent(new MessageEvent("config", { data: JSON.stringify({ kind: "config", source: "device", level: "info",
-            device: rf, serial: d.serial, time: new Date().toISOString(), changes: { eco_temp: { from: 16, to: 18 } }, state: d }) }));
-        }""", [rid, th["rf"]])
-        assert wait_until(page, "!!document.querySelector(%r)" % (sel + " .setpoint-row .preset-mark.preset-eco"), 5), "the tile's eco mark"
-        assert mark_of(set_cell(row, case.lang))["preset"] == "eco", "the row's eco mark"
+        page.evaluate(config, [rid, th["rf"], None])
+        assert wait_until(page, "document.querySelector(%r)?.classList.contains('preset-eco')" % (
+            sel + ' .device[data-rf="%s"] .preset-mark' % th["rf"]), 5), "the row's eco mark at once"
+        assert mark_of(tile.locator(".setpoint-row")) is None, "the tile's by the room's, which did not change"
+        page.wait_for_timeout(300)
+        assert not loads, f"no read of the rooms without changed: {loads}"
+
+        def room_eco(rooms):
+            for r in rooms or []:
+                if r.get("id") == rid:
+                    r["eco_temp"], r["comfort_temp"] = 18, 21
+                    for d in r.get("devices") or []:
+                        if d.get("rf_address") == th["rf"]:
+                            d["eco_temp"] = 18
+                            d.setdefault("state", {})["setpoint"] = 18
+            return rooms
+        reads.change("**/api/v1/cubes/*/rooms?devices=all", room_eco)
+        page.evaluate(config, [rid, th["rf"], ["temps"]])
+        assert wait_until(page, "!!document.querySelector(%r)" % (sel + " .setpoint-row .preset-mark.preset-eco"), 5), \
+            "the rooms read again: the tile's eco mark by the room's new eco"
+        assert loads, "the rooms were read"
+        assert mark_of(set_cell(tile.locator('.device[data-rf="%s"]' % th["rf"]), case.lang))["preset"] == "eco", "the row's eco mark"
     finally:
+        reads.clear("**/api/v1/cubes/*/rooms?devices=all")
+        page.evaluate("async () => { await loadRooms(); }")
         tile.locator(".room-name-btn").click()
+
+
+def test_a_thermostat_gained_or_lost_reads_the_rooms(page, case, reads):
+    """A state event of a room's thermostat whose state the Cube gained or
+    lost (changes.reported) reads the rooms again, since another may then
+    stand for the room (thermostat, the dead passed over, D19-A): the
+    tile's SET follows the one the server names now; a state event of
+    another change reads nothing."""
+    room = page.evaluate(ROOM, [None, True])
+    rid, (a, b) = room["id"], room["devices"][:2]
+    sel = '.room[data-id="%s"]' % rid
+    loads = []
+    page.on("request", lambda r: loads.append(r.url) if r.method == "GET" and "/rooms?devices=all" in r.url else None)
+    event = """([rid, rf, changes]) => {
+      const r = state.rooms.find((x) => x.id === rid);
+      const d = JSON.parse(JSON.stringify(r.devices.find((x) => x.rf_address === rf)));
+      state.events.dispatchEvent(new MessageEvent("state", { data: JSON.stringify({ kind: "state", source: "device", level: "info",
+        device: rf, serial: d.serial, time: new Date().toISOString(), changes, state: d }) }));
+    }"""
+    try:
+        page.evaluate(event, [rid, a["rf"], {"valve_pct": {"from": 0, "to": 10}}])
+        page.wait_for_timeout(300)
+        assert not loads, f"no read of the rooms for a valve: {loads}"
+
+        def named_twin(rooms):
+            # the server's answer, the twin the page has beside the room's
+            # thermostat named, the first one's state gone
+            for r in rooms or []:
+                if r.get("id") == rid:
+                    first = next(d for d in r["devices"] if d.get("rf_address") == a["rf"])
+                    twin = json.loads(json.dumps(first))
+                    twin.update({"rf_address": b["rf"], "serial": "MEQ0000999", "name": "Twin"})
+                    twin["state"] = dict(twin.get("state") or {}, setpoint=23.5)  # a setpoint none of the fixture's has
+                    first.update({"reported": False, "out_of_date": True, "last_known": first.pop("state", None)})
+                    r["devices"] = [d for d in r["devices"] if d.get("rf_address") != b["rf"]] + [twin]
+                    r["thermostat"] = b["rf"]
+                    for v in r["devices"]:
+                        if v.get("virtual"):
+                            v.setdefault("sources", {})["setpoint"] = [b["rf"]]
+            return rooms
+        reads.change("**/api/v1/cubes/*/rooms?devices=all", named_twin)
+        assert page.evaluate("document.querySelector(%r).textContent" % (sel + " .setpoint-big")) != shown(23.5, case.lang, "°"), "SET not the twin's yet"
+        page.evaluate(event, [rid, a["rf"], {"reported": {"from": True, "to": False}}])
+        assert wait_until(page, "document.querySelector(%r).textContent === %r" % (sel + " .setpoint-big", shown(23.5, case.lang, "°")), 5), \
+            "the rooms read again: SET the twin's, which the server names now"
+        assert loads, "the rooms were read"
+        assert page.evaluate("(rid) => roomThermostat(state.rooms.find((r) => r.id === rid)).rf_address", rid) == b["rf"], "the room thermostat the one named"
+    finally:
+        reads.clear("**/api/v1/cubes/*/rooms?devices=all")
+        page.evaluate("async () => { await loadRooms(); }")
+
+
+def test_a_burst_of_reloads_reads_the_rooms_twice(page, case):
+    """A burst of the events that read the rooms again (state events of a
+    thermostat whose state the Cube gained or lost, as a reconnect brings
+    one per thermostat): one read runs and one more waits behind it, which
+    the rest of the burst shares (app.js loadRooms), so the rooms are read
+    twice, the second after the last event, and the page shows the second
+    read's rooms, not those of the first, answered first."""
+    room = page.evaluate(ROOM, [None, False])
+    rid, th = room["id"], room["devices"][0]
+    sel = '.room[data-id="%s"]' % rid
+    pattern = "**/api/v1/cubes/*/rooms?devices=all"
+    event = """([rid, rf]) => {
+      const r = state.rooms.find((x) => x.id === rid);
+      const d = JSON.parse(JSON.stringify(r.devices.find((x) => x.rf_address === rf)));
+      state.events.dispatchEvent(new MessageEvent("state", { data: JSON.stringify({ kind: "state", source: "device", level: "info",
+        device: rf, serial: d.serial, time: new Date().toISOString(), changes: { reported: { from: false, to: true } }, state: d }) }));
+    }"""
+
+    def answer(route, name):
+        """Answers a held read with the server's rooms, the room renamed."""
+        rooms = route.fetch().json()
+        for r in rooms:
+            if r.get("id") == rid:
+                r["name"] = name
+        route.fulfill(status=200, content_type="application/json", body=json.dumps(rooms))
+
+    held, sent = [], []
+    hold(page, pattern, "GET", held, sent)
+    try:
+        for _ in range(5):
+            page.evaluate(event, [rid, th["rf"]])
+        assert wait_held(page, held), "the first read"
+        page.wait_for_timeout(300)
+        assert len(sent) == 1, f"one read while it runs: {sent}"
+        answer(held.pop(0), "Stale")
+        assert wait_held(page, held), "the read that waited"
+        page.wait_for_timeout(300)
+        assert len(sent) == 2, f"the burst read twice: {sent}"
+        answer(held.pop(0), "Newest")
+        assert wait_until(page, "document.querySelector(%r).textContent === 'Newest'" % (sel + " .room-name"), 5), \
+            "the second read's rooms shown"
+        page.wait_for_timeout(300)
+        assert len(sent) == 2 and not held, f"no third read: {sent}"
+    finally:
+        for route in held:  # the reads a failure left held go to the server
+            route.continue_()
+        held.clear()
+        page.unroute(pattern)
+        page.evaluate("async () => { await loadRooms(); }")
+
+
+def test_a_cube_change_reads_its_rooms_at_once(page, case):
+    """The rooms of a Cube chosen while the previous Cube's read runs are
+    read at once, not after it, and the previous read's late answer
+    changes nothing (app.js loadRooms): the Cube's read held, another
+    serial chosen, whose read the test answers with a room of its own."""
+    serial = page.evaluate("state.serial")
+    other = "KEQ0000990"
+    held, sent = [], []
+    pattern = "**/api/v1/cubes/%s/rooms?devices=all" % serial
+
+    def answer_other(route):
+        body = [{"id": 1, "name": "Other Cube's room", "ready": True, "devices": []}] if "/rooms" in route.request.url else []
+        route.fulfill(status=200, content_type="application/json", body=json.dumps(body))
+    hold(page, pattern, "GET", held, sent)
+    page.route("**/api/v1/cubes/%s/**" % other, answer_other)
+    try:
+        page.evaluate("() => { loadRooms().catch(() => {}); }")
+        assert wait_held(page, held), "the first Cube's read is on its way"
+        page.evaluate("(s) => { state.serial = s; loadRooms().catch(() => {}); }", other)
+        assert wait_until(page, "state.roomsOf === %r" % other, 5), "the other Cube's rooms read while the first's still runs"
+        held.pop(0).continue_()
+        page.wait_for_timeout(500)
+        got = page.evaluate("[state.roomsOf, state.rooms.map((r) => r.name)]")
+        assert got == [other, ["Other Cube's room"]], f"the first Cube's late answer changes nothing: {got}"
+    finally:
+        for route in held:
+            route.continue_()
+        held.clear()
+        page.unroute(pattern)
+        page.unroute("**/api/v1/cubes/%s/**" % other)
+        page.evaluate("async (s) => { state.serial = s; await loadRooms(); }", serial)
 
 
 def members_line(tile):

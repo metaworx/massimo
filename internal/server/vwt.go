@@ -18,8 +18,10 @@ import (
 
 	"github.com/google/uuid"
 
+	"go.metaworx.ch/massimo/internal/cubeio"
 	"go.metaworx.ch/massimo/internal/cubelan"
 	"go.metaworx.ch/massimo/internal/protocol/cube"
+	"go.metaworx.ch/massimo/internal/roomorder"
 	"go.metaworx.ch/massimo/internal/store"
 	"go.metaworx.ch/massimo/internal/view"
 )
@@ -117,8 +119,27 @@ func (s *Server) roomsOf(rt *runtime, kind view.Kind) []view.Room {
 		rt.withConfirmations(rt.withBattery(s.withWindow(rooms[i].Devices)))
 		rooms[i].Confirmation = rt.roomConfirmation(rooms[i].ID)
 		rt.setRoomMismatches(&rooms[i]) // congruence.go
+		rt.setRoomOrder(&rooms[i])
 	}
 	return rooms
+}
+
+// setRoomOrder completes a room entry by the one order
+// (RoomMajority.D19-A): its thermostat, where RoomsOf named none, no
+// thermostat of the room having a state, the first of the room's order,
+// its master, its wall thermostat, its radiator thermostats, as its room
+// commands name it (cubeio.RoomAddressee), which radiograms keep naming
+// whichever thermostat the entry names; comfort_temp and eco_temp the
+// room's, as its configuration shows them (roomConfig). A client marks a
+// setpoint of the room by them; each device keeps its own
+// (RoomMajority.D11-A).
+func (rt *runtime) setRoomOrder(r *view.Room) {
+	if a, ok := cubeio.RoomAddressee(rt.client.Snapshot(), r.ID, rt.hidden()); ok && r.Thermostat == "" {
+		r.Thermostat = a.String()
+	}
+	if s, _, ok := rt.roomConfig(r.ID, nil); ok {
+		r.ComfortTemp, r.EcoTemp = new(s.Temps.Comfort), new(s.Temps.Eco)
+	}
 }
 
 // devicesOf is the device list of a Cube as the API shows it in a view.
@@ -187,7 +208,9 @@ type vwtDetail struct {
 }
 
 // virtualDetail is the answer of GET …/devices/{rf} for a room's virtual
-// wall thermostat.
+// wall thermostat, and its configuration the proxy's virtual C line
+// (proxy_virtual.go): the room's, in a wall thermostat's shape
+// (virtualWall).
 func (s *Server) virtualDetail(rt *runtime, room cube.RoomMeta) vwtDetail {
 	snap := rt.client.Snapshot()
 	info := rt.roomInfo()
@@ -205,27 +228,55 @@ func (s *Server) virtualDetail(rt *runtime, room cube.RoomMeta) vwtDetail {
 	if ri.RFAddress != 0 {
 		d.Settings.RFAddress = ri.RFAddress.String()
 	}
-	if rp, ok := rt.programOfRoom(room.ID); ok {
+	rp, ok := rt.programOfRoom(room.ID)
+	if ok {
 		d.Etag = rp.etag
 	}
-	radiators, walls := roomThermostats(rt, room.ID)
-	for _, rf := range append(walls, radiators...) {
-		c := snap.Config(rf)
-		switch {
-		case c.Wall != nil:
-			w := *c.Wall
-			w.DisplayActual, w.Extra = nil, nil
-			d.Wall = &w
-		case c.Thermostat != nil:
-			t := c.Thermostat
-			d.Wall = &cube.WallConfig{ComfortTemp: t.ComfortTemp, EcoTemp: t.EcoTemp, MaxSetpoint: t.MaxSetpoint, MinSetpoint: t.MinSetpoint,
-				TempOffset: t.TempOffset, WindowOpenTemp: t.WindowOpenTemp, BoostMinutes: t.BoostMinutes, BoostValvePct: t.BoostValvePct, WeekProgram: t.WeekProgram}
-		}
-		if d.Wall != nil {
-			break
+	d.Wall = virtualWall(rt, snap, room.ID, rp.prog)
+	return d
+}
+
+// virtualWall is a room's configuration in a wall thermostat's shape, as
+// its virtual wall thermostat shows it and the proxy's virtual C line
+// carries it: the room's temperatures and boost settings as GET
+// …/rooms/{id}/config decides them (roomConfig: what more than half of
+// its thermostats share, else the first of its order's, one out of date
+// passed over while every thermostat has reported since the Cube's
+// restart and another is not out of date; RoomMajority.D9, D19-A), its
+// week programme as GET …/program gives it
+// (prog, from programOfRoom: each day so, a programme on its way counted,
+// as the etag beside it counts it), a day it lacks the first of the
+// order's own, so that every day of the C line holds a switch point. The
+// offset is no room's but a device's own: the room's real wall
+// thermostat's, which a write of it reaches (virtualConfig), else that
+// of the first of the room's order. Nil for a room without a
+// thermostat.
+func virtualWall(rt *runtime, snap *cubelan.Snapshot, room uint8, prog cube.WeekProgram) *cube.WallConfig {
+	rs, order, ok := rt.roomConfig(room, nil)
+	if !ok {
+		return nil
+	}
+	t, v := rs.Temps, rs.Valve
+	w := &cube.WallConfig{ComfortTemp: t.Comfort, EcoTemp: t.Eco, MaxSetpoint: t.Max, MinSetpoint: t.Min, WindowOpenTemp: t.WindowOpen,
+		BoostMinutes: v.BoostMinutes, BoostValvePct: v.BoostValvePct, WeekProgram: prog}
+	first := roomorder.Program(snap.Config(order[0]))
+	for d := range w.WeekProgram {
+		if len(w.WeekProgram[d]) == 0 && first != nil {
+			w.WeekProgram[d] = first[d]
 		}
 	}
-	return d
+	own := order[0]
+	if wall, ok := roomWall(rt, room); ok {
+		own = wall
+	}
+	switch c := snap.Config(own); {
+	case c == nil:
+	case c.Thermostat != nil:
+		w.TempOffset = c.Thermostat.TempOffset
+	case c.Wall != nil:
+		w.TempOffset = c.Wall.TempOffset
+	}
+	return w
 }
 
 // publishVWTs publishes a state event for each virtual wall thermostat

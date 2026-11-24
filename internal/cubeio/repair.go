@@ -16,6 +16,7 @@ import (
 	"go.metaworx.ch/massimo/internal/cubelan"
 	"go.metaworx.ch/massimo/internal/engine"
 	"go.metaworx.ch/massimo/internal/protocol/cube"
+	"go.metaworx.ch/massimo/internal/roomorder"
 	"go.metaworx.ch/massimo/internal/view"
 )
 
@@ -155,7 +156,7 @@ func UnlinkRelinkCommands(snap *cubelan.Snapshot, room uint8, skip view.Hidden) 
 
 // MasterCandidate is the thermostat a room's metadata should name as its
 // master: the first of the room's order with the master itself left
-// aside (RoomOrder, RoomMajority.D9), its wall thermostat, else its
+// aside (roomorder.Of, RoomMajority.D9), its wall thermostat, else its
 // first radiator thermostat, by their C lines, the dead passed over
 // where one is alive, the devices in skip left out (Addressee); false
 // for a room without a thermostat.
@@ -202,7 +203,7 @@ type Temperatures struct {
 func RoomAgreement(snap *cubelan.Snapshot, rf cube.RFAddress, room uint8, skip view.Hidden) (s RoomSettings, others int, ok bool) {
 	members := ConfigMembers(snap, room, skip)
 	for _, d := range members {
-		if d.RFAddress != rf && d.Type.IsThermostat() && snap.Config(d.RFAddress) != nil && !Dead(snap, d.RFAddress) {
+		if d.RFAddress != rf && d.Type.IsThermostat() && snap.Config(d.RFAddress) != nil && !roomorder.Dead(snap, d.RFAddress) {
 			others++
 		}
 	}
@@ -280,7 +281,7 @@ func ResendCommands(snap *cubelan.Snapshot, rf cube.RFAddress, room uint8, skip 
 	if !ok {
 		dead := 0
 		for _, d := range ConfigMembers(snap, room, skip) {
-			if d.RFAddress != rf && d.Type.IsThermostat() && Dead(snap, d.RFAddress) {
+			if d.RFAddress != rf && d.Type.IsThermostat() && roomorder.Dead(snap, d.RFAddress) {
 				dead++
 			}
 		}

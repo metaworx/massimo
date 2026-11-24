@@ -12,6 +12,7 @@ import (
 	"go.metaworx.ch/massimo/internal/cubelan"
 	"go.metaworx.ch/massimo/internal/cubelan/fakecube"
 	"go.metaworx.ch/massimo/internal/protocol/cube"
+	"go.metaworx.ch/massimo/internal/roomorder"
 )
 
 const (
@@ -134,7 +135,7 @@ func roomsSnapshot(t *testing.T, dead ...cube.RFAddress) *cubelan.Snapshot {
 		t.Fatal(err)
 	}
 	for _, rf := range dead {
-		if !Dead(snap, rf) {
+		if !roomorder.Dead(snap, rf) {
 			t.Fatalf("%s not dead in the snapshot", rf)
 		}
 	}
@@ -190,7 +191,7 @@ func TestRoomOrder(t *testing.T) {
 		if c.members != nil {
 			members = c.members(snap)
 		}
-		if got := RoomOrder(snap, c.master, members, c.leave); !slices.Equal(got, c.order) {
+		if got := roomorder.Of(snap, c.master, members, c.leave); !slices.Equal(got, c.order) {
 			t.Errorf("%s: the order %v, want %v", c.name, got, c.order)
 		}
 		if got, ok := Addressee(snap, c.master, members, c.leave); got != c.addressee || !ok {

@@ -1954,7 +1954,11 @@ paths:
       description: >-
         A real device, or a room's virtual wall thermostat, named by its
         address, its serial or room-<id>: then with the room's settings and
-        week programme in a wall thermostat's shape, and its own settings.
+        week programme in a wall thermostat's shape, as GET
+        …/rooms/{id}/config and …/program decide them by the room's one
+        order (RoomMajority.D19-A), the offset a device's own (its real
+        wall thermostat's, else the first of the order's), and its own
+        settings.
       parameters: [{$ref: "#/components/parameters/sn"}, {$ref: "#/components/parameters/rf"}]
       responses:
         "200":
@@ -2330,17 +2334,21 @@ paths:
         "502": {$ref: "#/components/responses/CubeError"}
   /api/v1/cubes/{sn}/rooms/{id}/program:
     get:
-      summary: The week programme of the room's first thermostat
+      summary: The week programme of the room
       x-capability: read
       description: >-
-        The programme of the room's first radiator thermostat, else its wall
-        thermostat; a programme written and not yet in the devices'
-        configurations shows as written, pending. The tag covers every
-        thermostat of the room.
+        Each day what more than half of the room's thermostats have, else
+        the first of the room's one order's (its master, its wall
+        thermostat, its radiator thermostats), one out of date passed over
+        while every thermostat has reported since the Cube's restart and
+        another is not out of date (RoomMajority.D9, D19-A); a programme
+        written and not yet in the devices' configurations counts as
+        written, pending. The tag covers every
+        thermostat's programme of the room.
       parameters: [{$ref: "#/components/parameters/sn"}, {$ref: "#/components/parameters/id"}]
       responses:
         "200":
-          description: Programme keyed by weekday, plus source (the device it comes from), its tag, pending and program_consistent
+          description: Programme keyed by weekday, plus source (the first of the room's order whose week is the room's), its tag, pending and program_consistent
           headers:
             ETag: {description: "The programme's tag, quoted", schema: {type: string}}
           content:
@@ -5260,6 +5268,9 @@ components:
         room_uid: {type: string, description: "The room's uid, kept for the room's life and never given to another room; absent before the server has read the room"}
         ready: {type: boolean, description: "Every device of the room has reported since the Cube restarted, so the Cube accepts room commands"}
         stale: {type: boolean, description: A device of the room is stale; present when true}
+        thermostat: {type: string, description: "The radio address of the thermostat whose state is the room's, the first of its virtual wall thermostat's sources.setpoint (RoomMajority.D9, D19-A): one of those whose state more than half show, else the one whose mode or setpoint changed last, else the first of the room's one order (its master, its wall thermostat, its radiator thermostats); during a boost the same over those that do not boost; where no thermostat has a state, the first of that order, as the room's commands name it; absent for a room without a thermostat"}
+        comfort_temp: {type: number, description: "The room's comfort temperature, as GET …/rooms/{id}/config gives it: what more than half of its thermostats store, else the first of its order's; absent for a room without a thermostat"}
+        eco_temp: {type: number, description: "The room's eco temperature, as comfort_temp"}
         devices:
           type: array
           items: {$ref: "#/components/schemas/Device"}
@@ -5377,10 +5388,11 @@ components:
         room_uid: {type: string, description: "A virtual wall thermostat's room's uid"}
         sources:
           type: object
-          description: "A virtual wall thermostat's alone: the radio addresses its actual_temp and its mode came from"
+          description: "A virtual wall thermostat's alone: the radio addresses its actual_temp came from, those its mode came from and those its setpoint and until came from"
           properties:
             actual_temp: {type: array, items: {type: string}}
-            mode: {type: array, items: {type: string}}
+            mode: {type: array, items: {type: string}, description: "Those its mode came from by the room's one order: those that show it, the one of the newest change, or the one of the order; the boosting ones during a boost"}
+            setpoint: {type: array, items: {type: string}, description: "Those its setpoint and until came from by the room's one order, the one whose state it shows first, which the room entry's thermostat names; during a boost from the thermostats that do not boost"}
         confirmation: {$ref: "#/components/schemas/Confirmation"}
         mismatches:
           type: array
@@ -5417,7 +5429,7 @@ components:
       properties:
         id: {type: integer}
         name: {type: string}
-        source: {type: string, description: The thermostat the common fields come from}
+        source: {type: string, description: "The first thermostat of the room's one order that stores the room's temperatures, else the first of the order; absent for a room without a thermostat"}
         comfort_temp: {type: number}
         eco_temp: {type: number}
         max_setpoint: {type: number}
@@ -5562,7 +5574,7 @@ components:
         - {$ref: "#/components/schemas/WeekProgram"}
         - type: object
           properties:
-            source: {type: string, description: The device the programme comes from}
+            source: {type: string, description: "The device the programme comes from: for a room, the first of its one order whose whole week is the room's, else the first of the order"}
             etag: {type: string, description: "The tag over every thermostat of the room's programme, as If-Match takes it"}
             pending: {type: boolean, description: A programme written and not yet in the devices' configurations}
             program_consistent: {type: boolean, description: False while the room's thermostats have different programmes}

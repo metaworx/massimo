@@ -2060,6 +2060,9 @@ each with its `room_uid` and the devices the view (`devices=`, see
     "id": 5,
     "name": "Bad",
     "ready": true,
+    "thermostat": "0a0102",
+    "comfort_temp": 21,
+    "eco_temp": 17,
     "devices": [
       {
         "rf_address": "0a0102",
@@ -2090,6 +2093,28 @@ silence, docs/cube-protocol.md): such a device has `out_of_date: true` and
 with `received` and `last_seen` as old as they are.
 `ready` on a room is true when all its devices have reported,
 which is the condition for the Cube to accept a room command.
+`thermostat` on a room is the radio address of the thermostat whose state is the room's,
+the one its virtual wall thermostat takes its setpoint and until from
+(the first of its `sources.setpoint`, below; RoomMajority.D9, D19-A):
+one of those whose state more than half of the room's thermostats show,
+else the one whose mode or setpoint changed last,
+else the first of the room's one order,
+its master where that is a thermostat of the room, else its wall thermostat,
+else its first radiator thermostat;
+during a boost the same over the thermostats that do not boost,
+so that the room's tile and its virtual wall thermostat show one setpoint.
+Where no thermostat of the room has a state,
+it is the first of that order, as the room's commands name it;
+absent for a room without a thermostat.
+The web UI shows the room's set temperature and mode by it,
+and between two reads of the rooms by its virtual wall thermostat's `sources.setpoint`,
+which that one's `state` events bring;
+the room's commands keep naming the first of the order,
+the dead passed over, whichever thermostat `thermostat` names.
+`comfort_temp` and `eco_temp` on a room are the room's comfort and eco temperatures,
+as `GET …/rooms/{id}/config` gives them:
+what more than half of its thermostats store, else the first of that order's;
+the web UI marks the room's setpoint by them, and each device's by its own.
 `confirmation`, on a device and on a room, is present while a write to it is
 not confirmed yet (see "Writes confirmed by the devices"):
 its `state` (`pending`, `unconfirmed`), `since` the Cube took the oldest write
@@ -2105,7 +2130,8 @@ A radiator or wall thermostat's entry, beside `state`, carries `comfort_temp`
 and `eco_temp`, its comfort and eco temperatures from its configuration
 (its C line, as `GET …/devices/{rf}` gives them under `thermostat` or
 `wall_thermostat`), absent where the Cube sent none:
-the web UI marks a setpoint that is one of them, as the device's display does.
+the web UI marks a device's setpoint that is one of them,
+as the device's display does, and a room's by the room's (below).
 `error` is the device's communication error,
 as the original software's UI calls it ("Communication error!"):
 the Cube's last radiogram to the device failed,
@@ -2266,7 +2292,7 @@ whichever client shows it.
            "window_open": false, "battery_low": false, "error": false, "link_error": false,
            "consistent": true},
  "received": {"actual_temp": "…", "mode": "…", …}, "last_seen": "…",
- "sources": {"actual_temp": ["0a0102", "0a0103"], "mode": ["0a0104"]}}
+ "sources": {"actual_temp": ["0a0102", "0a0103"], "mode": ["0a0104"], "setpoint": ["0a0104"]}}
 ```
 
 - It belongs to its room: its name is the room's,
@@ -2289,9 +2315,26 @@ whichever client shows it.
   `received.actual_temp` is the oldest of the values used, so that the age never
   looks better than the data, and `sources.actual_temp` lists them.
 - `mode` is `boost` while any thermostat of the room boosts;
-  else the wall thermostat's, else that of the radiator thermostat that reported last,
-  with `setpoint` and `until` from the same one, named in `sources.mode`
-  (the boosting ones during a boost).
+  else the room's state by its one order (RoomMajority.D9, D19-A),
+  over its thermostats with a state that do not boost, in the Cube's order:
+  what more than half of them show
+  (those in auto that each follow their own week programme counting as one state);
+  else that of the one whose mode or setpoint changed last, by someone's hand,
+  as the room checks' `newest` counts it (below);
+  else that of the room's master,
+  its wall thermostat, its first radiator thermostat,
+  the first of them with a state.
+  `setpoint` and `until` come from the same one,
+  and `sources.setpoint` names those they came from, that one first:
+  the thermostats that show its state, the one of the newest change,
+  or the one of the order;
+  `sources.mode` names the same.
+  During a boost, `setpoint` and `until` are still those of that rule
+  over the thermostats that do not boost (over those that boost, where every one does),
+  which `sources.setpoint` names,
+  and `sources.mode` names the boosting ones.
+  It is the room checks' rule for the state they send again (below),
+  where Massimo's own command and a state held from before a newcomer come first.
   `consistent` is false while the room's thermostats disagree on mode,
   setpoint or `until`.
 - `valve_pct` is the highest of the radiator thermostats',
@@ -2350,9 +2393,22 @@ A Cube that has two in a room, set up by another tool, is shown as it is.
 
 `GET …/devices/{rf}` answers for a virtual wall thermostat whatever the view,
 with the room's settings and week programme in a wall thermostat's shape
-(`wall_thermostat`, from the room's wall thermostat, else its first radiator
-thermostat) and its own `settings`:
+(`wall_thermostat`) and its own `settings`:
 `{"temp_method": "median"}`, and `rf_address` where the owner set one.
+The settings are the room's by its one order (RoomMajority.D9, D19-A),
+as `GET …/rooms/{id}/config` decides them:
+the five temperatures what more than half of the room's thermostats share,
+else what the first of its order has,
+the boost settings so among its radiator thermostats,
+the wall thermostat's in a room without one,
+a thermostat out of date passed over as there;
+the week programme as `GET …/rooms/{id}/program` gives it,
+under the `etag` beside it.
+`temp_offset` is no room's but a device's own:
+the room's real wall thermostat's, which a write of it reaches,
+else that of the first of the room's order.
+The proxy's virtual C line carries the same
+(docs/proxy.md, "Virtual wall thermostats").
 
 ### The room checks
 
@@ -2920,10 +2976,33 @@ it is confirmed by the wall thermostat's state, `display_actual`.
 ### GET /api/v1/cubes/{sn}/rooms/{id}/config
 
 The room's settings as the UI edits them:
-the common fields above (without `temp_offset` and `display_actual`) from the
-room's first radiator thermostat, else its wall thermostat, named in `source`,
-and a `devices` list with each thermostat's `rf_address`, `type`, `name`,
-`temp_offset` and, for wall thermostats, `display_actual`.
+the common fields above (without `temp_offset` and `display_actual`),
+decided over the thermostats whose C line names the room by the one order
+(RoomMajority.D9, D19-A),
+as the copy of `PUT …/devices/{rf}`, the configuration's repair
+and the room's differences (`mismatches`, `temperatures`) decide them,
+each group on its own:
+the five temperatures what more than half of the thermostats share,
+else what the first of the room's order has
+(its master where that is a thermostat of the room, else its wall thermostat,
+else its first radiator thermostat, then each other one).
+The boost, descaling and valve settings are one group,
+decided so among the radiator thermostats alone, which alone store it all,
+as are the window-open minutes;
+a wall thermostat's boost settings count only in a room of wall thermostats alone,
+with the original software's defaults for the rest.
+A thermostat the Cube marks out of date is passed over while another is not;
+while one of the room's thermostats has not reported since the Cube's restart
+(`reported` false and not `out_of_date`),
+as the room's differences wait for them all,
+and where every one is out of date,
+they are decided over them all,
+so that the room's settings stay as they were while its thermostats report one by one.
+`source` names the first thermostat of that order that stores the room's temperatures,
+else the first of the order.
+A `devices` list gives each thermostat's `rf_address`, `type`, `name`,
+`temp_offset` and, for wall thermostats, `display_actual`;
+a room without a thermostat has no `source` and an empty list.
 
 ### PUT /api/v1/cubes/{sn}/rooms/{id}/config
 
@@ -2944,10 +3023,18 @@ configuration (see "Writes confirmed by the devices").
 
 ### GET /api/v1/cubes/{sn}/rooms/{id}/program
 
-The week programme of the room's first radiator thermostat (else its wall thermostat),
-keyed by weekday as in a backup, plus `source`, its tag `etag` (also the `ETag` header),
-`pending` and `program_consistent`.
-`GET …/devices/{rf}/program` gives one thermostat's the same way;
+The room's week programme, keyed by weekday as in a backup,
+each day decided on its own as the configuration's groups are (above):
+what more than half of the room's thermostats have,
+else the first of the room's order's,
+a thermostat out of date passed over as there (RoomMajority.D9, D19-A);
+a programme written and not yet in a thermostat's configuration counts as written.
+Plus `source`, the first thermostat of that order whose whole week is the room's,
+else the first of the order;
+its tag `etag` (also the `ETag` header), `pending` and `program_consistent`;
+`404` for a room without a thermostat.
+`GET …/devices/{rf}/program` gives one thermostat's own the same way,
+under its room's tag;
 a virtual wall thermostat's is its room's.
 
 **The programme's tag.**
@@ -2957,9 +3044,13 @@ and a programme changed since, in another client or at a device,
 is refused with `412`, whose body and `ETag` carry the current tag,
 instead of being overwritten unseen; nothing is sent then.
 A write without `If-Match` is unconditional, as before.
-The tag covers every thermostat of the room,
+The tag covers every thermostat's programme of the room,
 since a write to the room or to one member changes the room:
-a member's tag is its room's,
+it changes where a member's programme changes, though the room's stays,
+and not where only who decides the room's programme changes
+(a thermostat passed over or back, another master),
+which no one made to a programme and which refuses no write.
+A member's tag is its room's,
 and `program_consistent` is false while the members' programmes differ.
 A programme written and not yet in the devices' configurations,
 which the server re-reads within minutes after a write,

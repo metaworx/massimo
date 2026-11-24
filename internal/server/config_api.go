@@ -15,6 +15,7 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
+	"slices"
 	"strconv"
 	"strings"
 	"time"
@@ -23,6 +24,7 @@ import (
 	"go.metaworx.ch/massimo/internal/cubeio"
 	"go.metaworx.ch/massimo/internal/engine"
 	"go.metaworx.ch/massimo/internal/protocol/cube"
+	"go.metaworx.ch/massimo/internal/roomorder"
 	"go.metaworx.ch/massimo/internal/view"
 )
 
@@ -993,7 +995,45 @@ type roomConfigDevice struct {
 	DisplayActual *bool           `json:"display_actual,omitempty"`
 }
 
-// getRoomConfig handles GET /rooms/{id}/config.
+// roomConfig is a room's configuration as the API shows it
+// (RoomMajority.D19-A): cubeio.RoomConfig over the thermostats whose C
+// line names the room, the hidden left out, by their configurations,
+// config's (the snapshot's where config is nil), each group on its own,
+// the temperatures, the valve settings and each day of the week
+// programme what more than half of them share, else the first of the
+// room's order's (its master, its wall thermostat, its radiator
+// thermostats), one the Cube holds no valid state for, being out of
+// date, passed over: the rule of the copy, the repair and the report of
+// members that differ. While a thermostat of the room has not reported
+// since the Cube's restart (unreported), as the report waits for them
+// all (RoomMajority.D21-A), and where every thermostat is out of date,
+// the same over them all, as the room's addressee is taken then
+// (cubeio.Addressee), so that the room's configuration stays as it was
+// while its thermostats report one by one: a configuration shown, unlike
+// one copied or re-sent, is no reference that the dead could spread.
+// order is the room's thermostats in that order. False where no
+// thermostat of the room has a configuration.
+func (rt *runtime) roomConfig(room uint8, config func(cube.RFAddress) *cube.DeviceConfig) (s cubeio.RoomSettings, order []cube.RFAddress, ok bool) {
+	snap := rt.client.Snapshot()
+	if config == nil {
+		config = snap.Config
+	}
+	master, members := cubeio.RoomMaster(snap, room), cubeio.ConfigMembers(snap, room, rt.hidden())
+	settled := !slices.ContainsFunc(members, func(d cube.DeviceMeta) bool { return d.Type.IsThermostat() && unreported(snap, d.RFAddress) })
+	if settled {
+		if s, ok = cubeio.RoomConfig(snap, master, members, 0, config); ok {
+			return s, roomorder.Of(snap, master, members, 0), true
+		}
+	}
+	s, ok = cubeio.RoomConfig(nil, master, members, 0, config)
+	return s, roomorder.Of(nil, master, members, 0), ok
+}
+
+// getRoomConfig handles GET /rooms/{id}/config: the room's configuration
+// (roomConfig), from source, the first thermostat of the room's order
+// that has the room's temperatures, else the first of the order, and
+// each thermostat's own offset and display. A room without a thermostat
+// has no source, and no devices.
 func (s *Server) getRoomConfig(w http.ResponseWriter, r *http.Request) error {
 	rt, err := s.cube(r)
 	if err != nil {
@@ -1015,32 +1055,37 @@ func (s *Server) getRoomConfig(w http.ResponseWriter, r *http.Request) error {
 		d := roomConfigDevice{RFAddress: rf.String(), Type: c.Type, Name: names[rf]}
 		switch {
 		case c.Thermostat != nil:
-			t := c.Thermostat
-			d.TempOffset = t.TempOffset
-			if v.Source == "" {
-				v.Source = rf.String()
-				v.ComfortTemp, v.EcoTemp, v.MaxSetpoint, v.MinSetpoint = t.ComfortTemp, t.EcoTemp, t.MaxSetpoint, t.MinSetpoint
-				v.WindowOpenTemp, v.WindowOpenMins = t.WindowOpenTemp, t.WindowOpenMins
-				v.BoostMinutes, v.BoostValvePct, v.DecalcDay, v.DecalcHour = t.BoostMinutes, t.BoostValvePct, t.DecalcDay, t.DecalcHour
-				v.MaxValvePct, v.ValveOffsetPct = t.MaxValvePct, t.ValveOffsetPct
-			}
+			d.TempOffset = c.Thermostat.TempOffset
 		case c.Wall != nil:
-			wc := c.Wall
-			d.TempOffset = wc.TempOffset
+			d.TempOffset = c.Wall.TempOffset
 			if st, ok := snap.State(rf); ok && st.Valid {
 				d.DisplayActual = st.DisplayActual
-			}
-			if v.Source == "" {
-				ref := cubeio.RoomRadiator(snap, room.ID, rf)
-				v.Source = rf.String()
-				v.ComfortTemp, v.EcoTemp, v.MaxSetpoint, v.MinSetpoint = wc.ComfortTemp, wc.EcoTemp, wc.MaxSetpoint, wc.MinSetpoint
-				v.WindowOpenTemp, v.WindowOpenMins = wc.WindowOpenTemp, ref.WindowOpenMins
-				v.BoostMinutes, v.BoostValvePct, v.DecalcDay, v.DecalcHour = wc.BoostMinutes, wc.BoostValvePct, ref.DecalcDay, ref.DecalcHour
-				v.MaxValvePct, v.ValveOffsetPct = ref.MaxValvePct, ref.ValveOffsetPct
 			}
 		}
 		v.Devices = append(v.Devices, d)
 	}
+	if len(v.Devices) == 0 {
+		writeJSON(w, http.StatusOK, v)
+		return nil
+	}
+	rs, order, ok := rt.roomConfig(room.ID, nil)
+	if !ok {
+		writeJSON(w, http.StatusOK, v)
+		return nil
+	}
+	source := order[0]
+	for _, rf := range order {
+		if rs.SameTemperatures(snap.Config(rf)) {
+			source = rf
+			break
+		}
+	}
+	t, vs := rs.Temps, rs.Valve
+	v.Source = source.String()
+	v.ComfortTemp, v.EcoTemp, v.MaxSetpoint, v.MinSetpoint, v.WindowOpenTemp = t.Comfort, t.Eco, t.Max, t.Min, t.WindowOpen
+	v.WindowOpenMins = rs.WindowOpenMins
+	v.BoostMinutes, v.BoostValvePct, v.DecalcDay, v.DecalcHour = vs.BoostMinutes, vs.BoostValvePct, vs.DecalcDay, vs.DecalcHour
+	v.MaxValvePct, v.ValveOffsetPct = vs.MaxValvePct, vs.ValveOffsetPct
 	writeJSON(w, http.StatusOK, v)
 	return nil
 }
@@ -1178,8 +1223,9 @@ func (s *Server) setRoomProgram(w http.ResponseWriter, r *http.Request) error {
 	return nil
 }
 
-// getRoomProgram handles GET /rooms/{id}/program: the programme of the
-// room's first radiator thermostat, else its first wall thermostat.
+// getRoomProgram handles GET /rooms/{id}/program: the room's week
+// programme, each day decided over its thermostats by the one order
+// (programOfRoom).
 func (s *Server) getRoomProgram(w http.ResponseWriter, r *http.Request) error {
 	rt, err := s.cube(r)
 	if err != nil {
@@ -1189,9 +1235,15 @@ func (s *Server) getRoomProgram(w http.ResponseWriter, r *http.Request) error {
 	if err != nil {
 		return err
 	}
-	rp, ok := rt.programOfRoom(room.ID)
+	return writeRoomProgram(w, rt, room.ID)
+}
+
+// writeRoomProgram answers a GET of a room's programme (programOfRoom),
+// 404 where the room has no thermostat.
+func writeRoomProgram(w http.ResponseWriter, rt *runtime, room uint8) error {
+	rp, ok := rt.programOfRoom(room)
 	if !ok {
-		return fail(http.StatusNotFound, "room %d has no thermostat", room.ID)
+		return fail(http.StatusNotFound, "room %d has no thermostat", room)
 	}
 	return writeProgram(w, rp)
 }
@@ -1205,11 +1257,7 @@ func (s *Server) getDeviceProgram(w http.ResponseWriter, r *http.Request) error 
 		return err
 	}
 	if room, ok := virtualOf(rt, r.PathValue("rf")); ok {
-		rp, ok := rt.programOfRoom(room.ID)
-		if !ok {
-			return fail(http.StatusNotFound, "room %d has no thermostat", room.ID)
-		}
-		return writeProgram(w, rp)
+		return writeRoomProgram(w, rt, room.ID)
 	}
 	rf, c, err := s.visibleDevice(rt, r)
 	if err != nil {

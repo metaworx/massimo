@@ -14,6 +14,7 @@ import (
 	"go.metaworx.ch/massimo/internal/cubelan"
 	"go.metaworx.ch/massimo/internal/engine"
 	"go.metaworx.ch/massimo/internal/protocol/cube"
+	"go.metaworx.ch/massimo/internal/roomorder"
 	"go.metaworx.ch/massimo/internal/view"
 )
 
@@ -337,7 +338,7 @@ func configSteps(snap *cubelan.Snapshot, rf cube.RFAddress, room uint8, members 
 	var radiators, walls []cube.RFAddress // the original software's order: radiator thermostats first
 	for _, d := range members {
 		switch {
-		case d.RFAddress != rf && Dead(snap, d.RFAddress): // its own configuration did not count
+		case d.RFAddress != rf && roomorder.Dead(snap, d.RFAddress): // its own configuration did not count
 		case d.Type == cube.DeviceWallThermostat:
 			walls = append(walls, d.RFAddress)
 		default:
@@ -430,7 +431,7 @@ type RoomSettings struct {
 // D5-A), the one rule the copy (CopyCommands), the repair
 // (RoomAgreement) and the server's report of members that differ take.
 // It is decided over the thermostats among members but leave that the
-// Cube holds a valid state for (RoomOrder, the dead passed over), by
+// Cube holds a valid state for (roomorder.Of, the dead passed over), by
 // their configurations, config's (snap.Config where config is nil),
 // each group on its own: the temperatures, the valve settings and each
 // day of the week programme are what more than half of those that have
@@ -450,7 +451,7 @@ func RoomConfig(snap *cubelan.Snapshot, master cube.RFAddress, members []cube.De
 		config = snap.Config
 	}
 	var all, radiators []*cube.DeviceConfig // in the room's order
-	for _, rf := range RoomOrder(snap, master, members, leave) {
+	for _, rf := range roomorder.Of(snap, master, members, leave) {
 		switch c := config(rf); {
 		case c == nil:
 		case c.Thermostat != nil:

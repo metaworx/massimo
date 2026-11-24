@@ -91,7 +91,7 @@ declare global {
   function refresh(): Promise<boolean>;
   /** Loads the Cubes' list into state.cubes and state.found and draws what shows them. */
   function loadCubes(): Promise<boolean>;
-  /** Loads the chosen Cube's rooms and its devices in no room, and draws them. */
+  /** Loads the chosen Cube's rooms and its devices in no room, and draws them; one load at a time, one more waiting behind it for every call meanwhile. */
   function loadRooms(): Promise<boolean>;
   /** Asks the server for the current state now, the rooms too with rooms. */
   function poll(rooms?: boolean): Promise<void>;

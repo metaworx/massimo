@@ -578,8 +578,15 @@ Every room has a tile:
   "in Office for the Cube", "own week programme",
   the whole sentence its tooltip;
   the log has its **room list** line, a warning until the two agree again.
-- **SET** is the set temperature, the room thermostat's
-  (its wall thermostat, else its first radiator thermostat).
+- **SET** is the set temperature, the room thermostat's:
+  the one whose setpoint the room's virtual wall thermostat shows,
+  the first of its `sources.setpoint`,
+  which its state events keep current between two reads of the rooms,
+  else the one the room's entry names (`thermostat`) (RoomMajority.D19-A):
+  what most of its thermostats show, else the newest change,
+  else the first of its one order, its master, its wall thermostat,
+  its radiator thermostats; during a boost the same over those that do not boost;
+  from a server before them, its wall thermostat, else its first radiator thermostat.
   4.5 °C reads **OFF**, as the devices' displays show it (there is no ON for 30.5 °C),
   here and wherever a setpoint is written:
   the device list, More's Eco and Comfort, the tile's and the House tile's result,
@@ -589,7 +596,7 @@ Every room has a tile:
   The fields that take a temperature keep 4.5:
   the holiday form, the House tile's, the programme's switch points, the configuration.
   At the top right of the value, in the accent colour of SET's icon,
-  a mark says where it is one of the room thermostat's presets, as its display does:
+  a mark says where it is one of the room's presets, as a display does:
   a crescent moon at its eco temperature, a sun with rays at its comfort temperature,
   the two side by side where comfort and eco are the same;
   its tooltip names it in the configuration's words ("Eco temperature"),
@@ -600,8 +607,19 @@ Every room has a tile:
   as a step passes a preset, and the tiles line up;
   on a phone the row's gaps are narrower and its numbers a little smaller,
   so that Italian's labels, the longest, fit a 390 px screen.
-  The presets are those of the thermostat's entry,
-  which a change of its configuration brings at once (its `config` event).
+  The presets are the room's, its entry's `eco_temp` and `comfort_temp`,
+  what most of its thermostats store, else the first of its order's,
+  as the room's configuration shows them:
+  a setpoint at a wall thermostat's own eco temperature,
+  where most of the room's thermostats store another, is not marked;
+  from a server before them, the room thermostat's own.
+  The page reads the rooms again
+  when a thermostat's `config` event says its presets changed (`changed` names `temps`),
+  and when the Cube gains or loses a thermostat's state,
+  which may make another the room thermostat;
+  one read runs at a time and one more waits behind it for every call meanwhile,
+  so that a burst, as a reconnect brings one per thermostat,
+  reads the rooms twice at most, the last time after the last event.
   The up and down chevrons next to it change it in steps of 0.5 °C,
   the value stepped marked as it goes;
   the value is sent 2 seconds after the last click, or at once with **Save**;
@@ -632,6 +650,7 @@ Every room has a tile:
   **MANU** keeps the current temperature.
   **MORE** opens a menu; the arrow keys move in it, Escape closes it:
   - **Eco** and **Comfort** set the room's eco or comfort temperature,
+    its presets as SET's mark has them,
     shown under each (OFF for 4.5 °C), and keep the room's mode:
     in Auto until the next switch point,
     in Manual held, on holiday until the holiday's end.
@@ -808,7 +827,8 @@ Every room has a tile:
 
 The **House** tile, named after the chosen Cube with the cube before its name
 ("All rooms of …" its tooltip), sets several rooms at once: ECO, AUTO,
-COMFORT or MANU with a temperature, permanently or until a date and time;
+COMFORT or MANU with a temperature, permanently or until a date and time,
+ECO and COMFORT each room's own presets, as its tile's More has them;
 its **Send** is off while no room is ticked,
 the rooms a choice of checkboxes with **All rooms** first.
 What its panel holds stays when the rooms load again and when it closes:
@@ -2356,7 +2376,11 @@ in the order the page loads them:
 - `rooms.js` and `tiles.js`, the rooms' actions (the stepper's setpoint and its timer,
   a tile's writes, a room's setpoint waiting for its thermostats (`awaitMembers`),
   the presets, the locks, the holiday form, Escape)
-  and the room's facts they use (UiParts D218; the others are `ui/src/model/room.ts`');
+  and the room's facts they use (UiParts D218;
+  the others are `ui/src/model/room.ts`'),
+  among them the room thermostat
+  (`roomThermostat`, whose state is the room's, as its virtual wall thermostat names it)
+  and the room's presets (`roomPresets`, the room's entry's);
 - `week-program.js`, the week programme editor, an element of its own,
   `<massimo-week-program>`, so that a Home Assistant card can use the same editor:
   it holds the editor's behaviour, works on a model the page keeps,

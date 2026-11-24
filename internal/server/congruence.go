@@ -67,6 +67,7 @@ import (
 	"go.metaworx.ch/massimo/internal/cubeio"
 	"go.metaworx.ch/massimo/internal/cubelan"
 	"go.metaworx.ch/massimo/internal/protocol/cube"
+	"go.metaworx.ch/massimo/internal/roomorder"
 	"go.metaworx.ch/massimo/internal/store"
 	"go.metaworx.ch/massimo/internal/view"
 )
@@ -302,8 +303,8 @@ func masterMismatch(cfgs map[cube.RFAddress]*cube.DeviceConfig, r cube.RoomMeta,
 // snap), so that a device fresh from its copy is none. unjudged lists
 // those whose findings stay as they were: every member while one of
 // them has not reported since the Cube's restart (unreported), else the
-// dead (cubeio.Dead: out of date), and every member where fewer than two
-// are alive, as the room then has no reference.
+// dead (roomorder.Dead: out of date), and every member where fewer than
+// two are alive, as the room then has no reference.
 func memberMismatches(snap *cubelan.Snapshot, cfgs map[cube.RFAddress]*cube.DeviceConfig, r cube.RoomMeta, rfs []cube.RFAddress, names map[uint8]string, listed map[cube.RFAddress]cube.DeviceMeta) (out []view.Mismatch, unjudged []cube.RFAddress) {
 	if len(rfs) < 2 {
 		return nil, nil
@@ -315,7 +316,7 @@ func memberMismatches(snap *cubelan.Snapshot, cfgs map[cube.RFAddress]*cube.Devi
 	var alive []cube.RFAddress
 	for _, rf := range rfs {
 		metas = append(metas, cube.DeviceMeta{Type: cfgs[rf].Type, RFAddress: rf, RoomID: r.ID})
-		if cubeio.Dead(snap, rf) {
+		if roomorder.Dead(snap, rf) {
 			unjudged = append(unjudged, rf)
 		} else {
 			alive = append(alive, rf)

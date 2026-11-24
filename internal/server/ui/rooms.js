@@ -22,11 +22,35 @@ const AWAIT_MS = 5 * 60 * 1000;
 // --- room facts -------------------------------------------------------
 
 // roomThermostat returns the thermostat whose state stands for the room:
-// the wall thermostat when there is one, else the first radiator
-// thermostat; null for a room without thermostats.
+// the one whose setpoint its virtual wall thermostat shows, the first of
+// its sources.setpoint (room.vwt, which the virtual wall thermostat's
+// state events keep current between two loads of the rooms: what most of
+// its thermostats show, else the newest change, else the first of its
+// one order, during a boost of those that do not boost;
+// RoomMajority.D19-A); else the one the room's entry names
+// (room.thermostat, the same at the load); for a server before them, or
+// where they name none of its devices, the wall thermostat when there is
+// one, else the first radiator thermostat; null for a room without
+// thermostats.
 function roomThermostat(room) {
+  const ofRoom = (rf) => (rf ? room.devices.find((d) => d.rf_address === rf && isThermostat(d)) : null);
+  const named = ofRoom(room.vwt && room.vwt.sources && room.vwt.sources.setpoint && room.vwt.sources.setpoint[0]) || ofRoom(room.thermostat);
+  if (named) return named;
   const wall = room.devices.find((d) => d.type === "wall_thermostat");
   return wall || room.devices.find(isThermostat) || null;
+}
+
+// roomPresets are the room's eco and comfort temperatures, { eco,
+// comfort }, by which the tile marks the room's setpoint and More sets
+// its presets: the room's entry's (room.eco_temp, room.comfort_temp:
+// what most of its thermostats store, else the first of its order's;
+// RoomMajority.D19-A), else, for an entry without them, its room
+// thermostat's entry's; undefined where neither has them. Each device row
+// marks its device's setpoint by its own (D11-A).
+function roomPresets(room) {
+  if (room.eco_temp !== undefined && room.comfort_temp !== undefined) return { eco: room.eco_temp, comfort: room.comfort_temp };
+  const th = roomThermostat(room);
+  return th ? { eco: th.eco_temp, comfort: th.comfort_temp } : {};
 }
 
 function roomState(room) {

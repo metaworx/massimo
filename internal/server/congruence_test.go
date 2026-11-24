@@ -20,11 +20,11 @@ import (
 	"testing"
 	"time"
 
-	"go.metaworx.ch/massimo/internal/cubeio"
 	"go.metaworx.ch/massimo/internal/cubelan"
 	"go.metaworx.ch/massimo/internal/cubelan/fakecube"
 	"go.metaworx.ch/massimo/internal/engine"
 	"go.metaworx.ch/massimo/internal/protocol/cube"
+	"go.metaworx.ch/massimo/internal/roomorder"
 	"go.metaworx.ch/massimo/internal/store"
 	"go.metaworx.ch/massimo/internal/testkit"
 	"go.metaworx.ch/massimo/internal/view"
@@ -539,7 +539,7 @@ func (c *mismatchCube) reportAgain(t *testing.T, rfs ...cube.RFAddress) {
 	}
 	testkit.Eventually(t, "the members' states", func() bool {
 		snap := c.rt.client.Snapshot()
-		return !slices.ContainsFunc(rfs, func(rf cube.RFAddress) bool { return cubeio.Dead(snap, rf) })
+		return !slices.ContainsFunc(rfs, func(rf cube.RFAddress) bool { return roomorder.Dead(snap, rf) })
 	})
 	c.rt.pumpSync(t)
 }

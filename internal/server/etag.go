@@ -106,10 +106,10 @@ func withDays(prog cube.WeekProgram, body []byte) cube.WeekProgram {
 	return out
 }
 
-// roomProgram is a room's week programme as the API shows it: its first
-// radiator thermostat's (else its wall thermostat's), with its source, the
-// tag over every member's, whether one is still on its way, and whether
-// the members' programmes are the same.
+// roomProgram is a room's week programme as the API shows it: each day
+// decided over the room's thermostats by the one order (programOfRoom),
+// with its source, the tag over every member's, whether one is still on
+// its way, and whether the members' programmes are the same.
 type roomProgram struct {
 	members    []cube.RFAddress
 	source     cube.RFAddress
@@ -126,30 +126,76 @@ func programTag(progs []cube.WeekProgram) string {
 	return "p" + hex.EncodeToString(sum[:8])
 }
 
-// programOfRoom is a room's programme as the API shows it; false where
-// the room has no thermostat.
+// programOfRoom is a room's programme as the API shows it
+// (RoomMajority.D19-A): each day what more than half of the room's
+// thermostats have, else the first of the room's order's (its master,
+// its wall thermostat, its radiator thermostats), one out of date passed
+// over while every thermostat has reported since the Cube's restart and
+// another is not out of date (roomConfig), each member's
+// programme as programOf shows it, a written one still on its way
+// counted as written. Its source is the first of the order whose week is
+// the room's, else the first of the order. The tag covers every
+// member's programme, in the members' order (radiator thermostats
+// first): a change of any member changes it, the room's programme
+// changed or not, as a write to the room would overwrite it, while a
+// change of who decides the room's programme alone (a member passed over
+// or back, another master), which no one made to a programme, leaves it
+// and refuses no write. False where the room has no thermostat.
 func (rt *runtime) programOfRoom(room uint8) (roomProgram, bool) {
 	radiators, walls := roomThermostats(rt, room)
 	rp := roomProgram{members: append(radiators, walls...), consistent: true}
 	var progs []cube.WeekProgram
+	own := map[cube.RFAddress]cube.WeekProgram{}
 	for _, rf := range rp.members {
 		prog, pending, ok := rt.programOf(rf)
 		if !ok {
 			continue
 		}
-		if len(progs) == 0 {
-			rp.source, rp.prog = rf, prog
-		} else if !samePrograms(progs[0], prog) {
+		if len(progs) > 0 && !samePrograms(progs[0], prog) {
 			rp.consistent = false
 		}
 		progs = append(progs, prog)
+		own[rf] = prog
 		rp.pending = rp.pending || pending
 	}
 	if len(progs) == 0 {
 		return rp, false
 	}
+	snap := rt.client.Snapshot()
+	s, order, ok := rt.roomConfig(room, func(rf cube.RFAddress) *cube.DeviceConfig { return withProgram(snap.Config(rf), own[rf]) })
+	if !ok {
+		return rp, false
+	}
+	rp.prog, rp.source = s.Program, order[0]
+	for _, rf := range order {
+		if prog, ok := own[rf]; ok && samePrograms(prog, s.Program) {
+			rp.source = rf
+			break
+		}
+	}
 	rp.etag = programTag(progs)
 	return rp, true
+}
+
+// withProgram is a thermostat's configuration c with prog as its week
+// programme, as one written and still on its way counts (programOf); c
+// itself for another device's, or where prog is empty.
+func withProgram(c *cube.DeviceConfig, prog cube.WeekProgram) *cube.DeviceConfig {
+	if c == nil || samePrograms(prog, cube.WeekProgram{}) {
+		return c
+	}
+	cp := *c
+	switch {
+	case c.Thermostat != nil:
+		t := *c.Thermostat
+		t.WeekProgram = prog
+		cp.Thermostat = &t
+	case c.Wall != nil:
+		w := *c.Wall
+		w.WeekProgram = prog
+		cp.Wall = &w
+	}
+	return &cp
 }
 
 // programOfDevice is a device's programme as the API shows it: a room

@@ -48,8 +48,10 @@ declare global {
   const DEFAULT_TEMP: number;
   /** What the room's tile keeps, made the first time it is asked for. */
   function roomUI(room: PageRoom): RoomUI;
-  /** The thermostat whose state stands for the room: its wall thermostat, else its first radiator thermostat. */
+  /** The thermostat whose state stands for the room: the one whose setpoint its virtual wall thermostat shows (vwt.sources.setpoint), else the one its entry names (thermostat), else its wall thermostat, else its first radiator thermostat. */
   function roomThermostat(room: PageRoom): Device | null;
+  /** The room's eco and comfort temperatures: its entry's, else its room thermostat's; undefined where neither has them. */
+  function roomPresets(room: PageRoom): { eco?: number; comfort?: number };
   /** The state of the room's thermostat, null without one. */
   function roomState(room: PageRoom): State | null;
   /** The modes of the room's thermostats, boost counted as manual, each once. */

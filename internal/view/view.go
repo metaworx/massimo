@@ -15,6 +15,7 @@ import (
 
 	"go.metaworx.ch/massimo/internal/cubelan"
 	"go.metaworx.ch/massimo/internal/protocol/cube"
+	"go.metaworx.ch/massimo/internal/roomorder"
 )
 
 // Hidden is the set of hidden devices: devices that are paired but never
@@ -203,7 +204,9 @@ type Device struct {
 	// on events and are never stale.
 	Stale bool `json:"stale,omitempty"`
 	// Sources is a virtual wall thermostat's alone: the radio addresses
-	// its actual_temp and its mode came from.
+	// its actual_temp came from, those its mode came from (the boosting
+	// ones during a boost), and those its setpoint and until came from,
+	// the one whose state it shows first (setpoint).
 	Sources map[string][]string `json:"sources,omitempty"`
 	// Mismatches are the differences the server finds between the
 	// device's C line and the metadata, or between it and the other
@@ -214,6 +217,44 @@ type Device struct {
 	// server keeps (its confirm.go); a virtual wall thermostat has its
 	// room's.
 	Confirmation *Confirmation `json:"confirmation,omitempty"`
+
+	// follows, modeAt and setpointAt are what the room's state rule
+	// (roomorder.State) takes of a thermostat with a state beside it, for
+	// its room's virtual wall thermostat (vwt.go): whether it is in auto
+	// at its week programme's temperature at the Cube's time
+	// (roomorder.Following, which RoomsOf notes, setFollows), and when
+	// its mode and its setpoint changed by someone's hand
+	// (roomorder.ChangedAt, which DeviceOf notes).
+	follows            bool
+	modeAt, setpointAt time.Time
+}
+
+// setFollows notes whether a thermostat with a state is in auto at its
+// week programme's temperature at cubeNow, the Cube's time, where clock
+// says it is known (roomorder.Following), from its entry and its C line
+// in snap.
+func (d *Device) setFollows(snap *cubelan.Snapshot, cubeNow time.Time, clock bool) {
+	if d.State == nil || !d.Type.IsThermostat() {
+		return
+	}
+	rf, err := cube.ParseRFAddress(d.RFAddress)
+	if err != nil {
+		return
+	}
+	st, _ := snap.State(rf)
+	_, d.follows = roomorder.Following(st, roomorder.Program(snap.Config(rf)), cubeNow, clock)
+}
+
+// member is a thermostat's view as its room's state is decided over it
+// (roomorder.State); false for another device, and for one without a
+// state or a setpoint.
+func (d Device) member() (roomorder.Member, bool) {
+	rf, err := cube.ParseRFAddress(d.RFAddress)
+	if err != nil || !d.Type.IsThermostat() || d.State == nil || d.State.Setpoint == nil {
+		return roomorder.Member{}, false
+	}
+	st := cube.DeviceState{RFAddress: rf, Type: d.Type, Valid: true, Mode: d.State.Mode, Setpoint: d.State.Setpoint, Until: d.State.Until}
+	return roomorder.Member{RF: rf, Type: d.Type, State: st, Follows: d.follows, ModeAt: d.modeAt, SetpointAt: d.setpointAt}, true
 }
 
 // Confirmation says that a write is not confirmed yet: the device, or a
@@ -322,6 +363,9 @@ func DeviceOf(snap *cubelan.Snapshot, rf cube.RFAddress, stale Staleness) Device
 		if len(t.Fields) > 0 {
 			d.Received = t.Fields
 		}
+		if st.Valid {
+			d.modeAt, d.setpointAt = roomorder.ChangedAt(t, "mode"), roomorder.ChangedAt(t, "setpoint")
+		}
 		thermostat := d.Type.IsThermostat()
 		d.Stale = thermostat && now().Sub(changed) > stale.after(d.Type)
 	}
@@ -381,6 +425,27 @@ type Room struct {
 	// UID is the room's uid in the server's store, kept for the room's
 	// life; empty where the server has none.
 	UID string `json:"room_uid,omitempty"`
+	// Thermostat is the radio address of the thermostat whose state is
+	// the room's (RoomMajority.D9, D19-A): the one its virtual wall
+	// thermostat takes its setpoint and until from (RoomsOf sets it, the
+	// first of the virtual wall thermostat's sources.setpoint), by
+	// roomorder.State: what more than half of the room's thermostats
+	// show, else the newest change, else the first of its order; during
+	// a boost the same over those that do not boost, so that the room's
+	// tile and its virtual wall thermostat show one setpoint. Where no
+	// thermostat of the room has a state, the server names the first of
+	// its order, as its room commands name it (cubeio.RoomAddressee);
+	// absent for a room without a thermostat.
+	Thermostat string `json:"thermostat,omitempty"`
+	// ComfortTemp and EcoTemp are the room's comfort and eco
+	// temperatures, as its configuration is decided over its thermostats
+	// (cubeio.RoomConfig: what more than half share, else the first of the
+	// order's, one out of date passed over while every thermostat has
+	// reported since the Cube's restart and another is alive), absent for a
+	// room without a thermostat; a client marks a setpoint of the room that
+	// is one of them. The server sets them, none elsewhere.
+	ComfortTemp *float64 `json:"comfort_temp,omitempty"`
+	EcoTemp     *float64 `json:"eco_temp,omitempty"`
 	// Ready is true when every member of the room has reported since the
 	// Cube's last restart; the Cube discards room commands otherwise.
 	Ready bool `json:"ready"`
@@ -446,7 +511,7 @@ func Silent(snap *cubelan.Snapshot, room uint8, h Hidden) []cube.RFAddress {
 		if !member {
 			continue
 		}
-		if st, ok := snap.State(rf); !ok || !st.Valid {
+		if roomorder.Dead(snap, rf) {
 			out = append(out, rf)
 		}
 	}

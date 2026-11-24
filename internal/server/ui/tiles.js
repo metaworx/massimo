@@ -11,13 +11,17 @@
 // Uses the state, api and helpers of app.js.
 "use strict";
 
-// presetTemps are a thermostat's configured eco and comfort
-// temperatures, { eco, comfort }, undefined where it has none: those of
-// its entry in the page's data (comfort_temp, eco_temp, which the config
-// and state events keep current), its detail's where the entry lacks
-// them (a server before them).
-async function presetTemps(th) {
-  if (th.eco_temp !== undefined && th.comfort_temp !== undefined) return { eco: th.eco_temp, comfort: th.comfort_temp };
+// presetTemps are a room's configured eco and comfort temperatures, {
+// eco, comfort }, undefined where it has none: those of the page's data
+// (roomPresets: the room's entry's, else its room thermostat's entry's,
+// which a load of the rooms after a config event that changed them keeps
+// current), its room thermostat's detail's where neither has them (a
+// server before them).
+async function presetTemps(room) {
+  const p = roomPresets(room);
+  if (p.eco !== undefined && p.comfort !== undefined) return p;
+  const th = roomThermostat(room);
+  if (!th) return {};
   const detail = await deviceDetail(th);
   const cfg = detail.thermostat || detail.wall_thermostat || {};
   return { eco: cfg.eco_temp, comfort: cfg.comfort_temp };
@@ -45,9 +49,9 @@ function presetLabel(which, body) {
   return t("label.presetManual", { label });
 }
 
-// sendPreset sets the room to its thermostat's eco or comfort
-// temperature (which) in the room's mode, from the More menu, whose
-// summary the tile gives the focus back to (ui/src/rooms/Tile.tsx).
+// sendPreset sets the room to its eco or comfort temperature (which,
+// presetTemps) in the room's mode, from the More menu, whose summary the
+// tile gives the focus back to (ui/src/rooms/Tile.tsx).
 function sendPreset(room, which) {
   leaveEditing(room);
   return tileWrite(room, which, async () => {
@@ -55,7 +59,7 @@ function sendPreset(room, which) {
     const n = MassimoParts.session();
     let temp;
     try {
-      temp = (await presetTemps(roomThermostat(room)))[which];
+      temp = (await presetTemps(room))[which];
     } catch (e) {
       if (!MassimoParts.stillSession(n)) return null;
       showTileResult(room.id, errorText(what, e), false);

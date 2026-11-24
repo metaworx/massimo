@@ -4,6 +4,7 @@
 package view
 
 import (
+	"encoding/base64"
 	"encoding/json"
 	"strings"
 	"testing"
@@ -71,12 +72,13 @@ func TestRoomThermostatState(t *testing.T) {
 	if d = RoomThermostat(room, []Device{r1, r3}, RoomInfo{}, 5); *d.State.ActualTemp != 22 {
 		t.Errorf("median of two %v", *d.State.ActualTemp)
 	}
-	// The mode of the radiator thermostat that reported last.
+	// The mode most of the radiator thermostats show, not that of the one
+	// that reported last (RoomMajority.D19-A).
 	r3m := r3
 	r3m.State = &State{Mode: cube.ModeManual, Setpoint: r3.State.Setpoint, ActualTemp: r3.State.ActualTemp}
 	d = RoomThermostat(room, []Device{r1, r2, r3m}, RoomInfo{}, 5)
-	if d.State.Mode != cube.ModeManual || d.Sources["mode"][0] != "0a0204" || *d.State.Consistent {
-		t.Errorf("latest radiator's mode: %+v %v", d.State, d.Sources)
+	if d.State.Mode != cube.ModeAuto || strings.Join(d.Sources["mode"], ",") != "0a0202,0a0203" || *d.State.Consistent {
+		t.Errorf("most radiators' mode: %+v %v", d.State, d.Sources)
 	}
 
 	// Stale values are left out while a fresh one exists; all stale, all used.
@@ -129,6 +131,233 @@ func TestRoomThermostatState(t *testing.T) {
 	raw, _ = json.Marshal(r1.State)
 	if !strings.Contains(string(raw), `"mode":"auto"`) {
 		t.Errorf("a real state %s", raw)
+	}
+}
+
+// The virtual wall thermostat's mode, setpoint and until by the one
+// order (RoomMajority.D9, D19-A; roomorder.State), boost aside: what
+// more than half of the room's thermostats with a state show, those on
+// their own programmes as one; else the one whose mode or setpoint
+// changed last; else the room's master, its wall thermostat, its first
+// radiator thermostat; a dead thermostat (no state, its last report
+// kept) passed over. sources.mode names those the state came from, the
+// boosting ones during a boost, whose setpoint and until are those of
+// the thermostats that do not boost.
+func TestRoomThermostatByTheOneOrder(t *testing.T) {
+	at := func(m int) time.Time { return t0.Add(time.Duration(m) * time.Minute) }
+	until := cube.Until{Year: 2026, Month: 12, Day: 24, Minutes: 18 * 60}
+	// th is a reported thermostat at mode and setpoint, its mode and its
+	// setpoint changed by hand at changed minutes after t0 (0: not known),
+	// in auto following its programme where follows says so.
+	th := func(rf string, typ cube.DeviceType, mode cube.Mode, setpoint float64, changed int, follows bool) Device {
+		d := thermo(rf, typ, mode, setpoint, 20, t0)
+		if mode == cube.ModeVacation {
+			d.State.Until = &until
+		}
+		if changed != 0 {
+			d.modeAt, d.setpointAt = at(changed), at(changed)
+		}
+		d.follows = follows
+		return d
+	}
+	const wallT, radA, radB, radC, radD = "0a0201", "0a0202", "0a0203", "0a0204", "0a0205"
+	wallRoom := cube.RoomMeta{ID: 5, Name: "Wohnen", RFAddress: 0x0a0201}
+	radRoom := cube.RoomMeta{ID: 5, Name: "Wohnen", RFAddress: 0x0a0203}
+	dead := func(d Device) Device {
+		d.LastKnown, d.State, d.Reported, d.OutOfDate = d.State, nil, false, true
+		return d
+	}
+	for _, c := range []struct {
+		name     string
+		room     cube.RoomMeta
+		members  []Device
+		mode     cube.Mode
+		setpoint float64
+		until    bool
+		from     string // sources.mode
+		setFrom  string // sources.setpoint, from where it differs
+	}{
+		{"most, the wall thermostat and the master the other", wallRoom, []Device{th(wallT, cube.DeviceWallThermostat, cube.ModeManual, 23, 9, false),
+			th(radA, cube.DeviceRadiatorThermostat, cube.ModeManual, 18, 0, false), th(radB, cube.DeviceRadiatorThermostat, cube.ModeManual, 18, 0, false)},
+			cube.ModeManual, 18, false, radA + "," + radB, ""},
+		{"those on their own programmes as one", radRoom, []Device{th(wallT, cube.DeviceWallThermostat, cube.ModeAuto, 21, 0, true),
+			th(radA, cube.DeviceRadiatorThermostat, cube.ModeAuto, 19, 0, true), th(radB, cube.DeviceRadiatorThermostat, cube.ModeManual, 21, 0, false)},
+			cube.ModeAuto, 21, false, wallT + "," + radA, ""},
+		{"no majority: the newest change", wallRoom, []Device{th(wallT, cube.DeviceWallThermostat, cube.ModeManual, 23, 1, false),
+			th(radA, cube.DeviceRadiatorThermostat, cube.ModeVacation, 15, 5, false), th(radB, cube.DeviceRadiatorThermostat, cube.ModeAuto, 20, 0, false)},
+			cube.ModeVacation, 15, true, radA, ""},
+		{"no time: the master, a radiator thermostat", radRoom, []Device{th(wallT, cube.DeviceWallThermostat, cube.ModeManual, 23, 0, false),
+			th(radA, cube.DeviceRadiatorThermostat, cube.ModeManual, 18, 0, false), th(radB, cube.DeviceRadiatorThermostat, cube.ModeManual, 19, 0, false)},
+			cube.ModeManual, 19, false, radB, ""},
+		{"no master: the wall thermostat", room, []Device{th(radA, cube.DeviceRadiatorThermostat, cube.ModeManual, 18, 0, false),
+			th(wallT, cube.DeviceWallThermostat, cube.ModeManual, 23, 0, false)}, cube.ModeManual, 23, false, wallT, ""},
+		{"no wall thermostat: the first radiator thermostat", room, []Device{th(radB, cube.DeviceRadiatorThermostat, cube.ModeManual, 19, 0, false),
+			th(radA, cube.DeviceRadiatorThermostat, cube.ModeManual, 18, 0, false)}, cube.ModeManual, 19, false, radB, ""},
+		{"a dead master passed over", radRoom, []Device{th(radA, cube.DeviceRadiatorThermostat, cube.ModeManual, 18, 0, false),
+			dead(th(radB, cube.DeviceRadiatorThermostat, cube.ModeManual, 5, 0, false)), th(radC, cube.DeviceRadiatorThermostat, cube.ModeManual, 22, 0, false)},
+			cube.ModeManual, 18, false, radA, ""},
+		{"a dead wall thermostat passed over, the newest change its own", wallRoom, []Device{dead(th(wallT, cube.DeviceWallThermostat, cube.ModeManual, 5, 9, false)),
+			th(radA, cube.DeviceRadiatorThermostat, cube.ModeManual, 18, 2, false), th(radB, cube.DeviceRadiatorThermostat, cube.ModeManual, 22, 1, false)},
+			cube.ModeManual, 18, false, radA, ""},
+		{"a boost: its setpoint that of those not boosting", wallRoom, []Device{th(wallT, cube.DeviceWallThermostat, cube.ModeManual, 23, 0, false),
+			th(radA, cube.DeviceRadiatorThermostat, cube.ModeManual, 23, 0, false), th(radB, cube.DeviceRadiatorThermostat, cube.ModeBoost, 21, 0, false)},
+			cube.ModeBoost, 23, false, radB, wallT + "," + radA},
+		// Majority passes over B, whom fewer than half agree with, and
+		// takes A, whom B and C agree with, C on its programme as A is:
+		// A's state, A first.
+		{"the one picked first among those its state came from", room, []Device{th(radB, cube.DeviceRadiatorThermostat, cube.ModeAuto, 21, 0, false),
+			th(radA, cube.DeviceRadiatorThermostat, cube.ModeAuto, 21, 0, true), th(radC, cube.DeviceRadiatorThermostat, cube.ModeAuto, 19, 0, true),
+			th(radD, cube.DeviceRadiatorThermostat, cube.ModeManual, 18, 0, false)},
+			cube.ModeAuto, 21, false, radA + "," + radB + "," + radC, ""},
+	} {
+		if c.setFrom == "" {
+			c.setFrom = c.from
+		}
+		d := RoomThermostat(c.room, c.members, RoomInfo{}, 5)
+		if d.State == nil || d.State.Mode != c.mode || d.State.Setpoint == nil || *d.State.Setpoint != c.setpoint || (d.State.Until != nil) != c.until ||
+			strings.Join(d.Sources["mode"], ",") != c.from || strings.Join(d.Sources["setpoint"], ",") != c.setFrom {
+			t.Errorf("%s: %+v, its mode from %v, its setpoint from %v; want %s %v from %s and %s", c.name, d.State, d.Sources["mode"], d.Sources["setpoint"],
+				c.mode, c.setpoint, c.from, c.setFrom)
+		}
+	}
+}
+
+// withEntries is the rooms fixture's greeting with its L line's entries
+// changed by edit, each by its address: the flags (mode in the low bits
+// of byte 6) and the setpoint (byte 8, in half degrees).
+func withEntries(t *testing.T, lines []cube.Message, edit func(rf cube.RFAddress, e []byte)) cube.Message {
+	t.Helper()
+	for _, m := range lines {
+		if m.Type != 'L' {
+			continue
+		}
+		raw, err := base64.StdEncoding.DecodeString(m.Data)
+		if err != nil {
+			t.Fatal(err)
+		}
+		for j := 0; j < len(raw); j += int(raw[j]) + 1 {
+			edit(cube.RFAddressFromBytes(raw[j+1:j+4]), raw[j:j+int(raw[j])+1])
+		}
+		return cube.Message{Type: 'L', Data: base64.StdEncoding.EncodeToString(raw)}
+	}
+	t.Fatal("no L line")
+	return cube.Message{}
+}
+
+// The facts of a thermostat that the room's state is decided by, as
+// DeviceOf reads them from the snapshot, and the virtual wall thermostat
+// of room 2 by them (RoomMajority.D19-A): at the Cube's 20:13, two
+// minutes before the radiator thermostats' programme goes from 21 °C to
+// 17 °C, 0a0204 in auto at 21 °C and 0a0205 at 17 °C each follow it, and
+// count as one state against 0a0206's manual 21 °C; once 0a0205 is set to
+// manual 19 °C, its change is the newest, though 0a0206's valve reported
+// later, and the room entry names it; once 0a0206 boosts, the room
+// boosts at 0a0205's setpoint, which the entry still names.
+func TestRoomThermostatByTheSnapshot(t *testing.T) {
+	lines, err := fakecube.RoomsFixture()
+	if err != nil {
+		t.Fatal(err)
+	}
+	at := time.Date(2026, 11, 3, 19, 51, 0, 0, time.Local) // the fixture's Cube's clock, Tuesday
+	setting := func(e []byte, mode cube.Mode, setpoint float64) {
+		e[6] = e[6]&^0x03 | byte(mode)
+		e[8] = e[8]&0xc0 | byte(setpoint*2)
+	}
+	first := withEntries(t, lines, func(rf cube.RFAddress, e []byte) {
+		switch rf {
+		case 0x0a0204:
+			setting(e, cube.ModeAuto, 21)
+		case 0x0a0205:
+			setting(e, cube.ModeAuto, 17)
+		case 0x0a0206:
+			setting(e, cube.ModeManual, 21)
+		}
+	})
+	for i := range lines {
+		if lines[i].Type == 'L' {
+			lines[i] = first
+		}
+	}
+	snap, err := cubelan.SnapshotOf(lines, at)
+	if err != nil {
+		t.Fatal(err)
+	}
+	was := now
+	now = func() time.Time { return at.Add(22 * time.Minute) } // the Cube's 20:13
+	t.Cleanup(func() { now = was })
+	// room 2 as RoomsOf gives it, its virtual wall thermostat first, then
+	// its devices by their addresses
+	room2 := func() (Device, map[string]Device) {
+		t.Helper()
+		for _, r := range RoomsOf(snap, nil, Staleness{}, KindAll, nil) {
+			if r.ID == 2 {
+				byRF := map[string]Device{}
+				for _, d := range r.Devices[1:] {
+					byRF[d.RFAddress] = d
+				}
+				return r.Devices[0], byRF
+			}
+		}
+		t.Fatal("no room 2")
+		return Device{}, nil
+	}
+	vwt := func() Device { d, _ := room2(); return d }
+	if _, ds := room2(); !ds["0a0204"].follows || !ds["0a0205"].follows || ds["0a0206"].follows ||
+		!ds["0a0204"].modeAt.IsZero() || !ds["0a0205"].setpointAt.IsZero() {
+		t.Fatalf("the facts at the first sighting: %+v", ds)
+	}
+	if d := vwt(); d.State.Mode != cube.ModeAuto || *d.State.Setpoint != 21 || strings.Join(d.Sources["mode"], ",") != "0a0204,0a0205" {
+		t.Errorf("two on their programmes as one: %s %v from %v", d.State.Mode, *d.State.Setpoint, d.Sources["mode"])
+	}
+
+	later := withEntries(t, []cube.Message{first}, func(rf cube.RFAddress, e []byte) {
+		if rf == 0x0a0205 {
+			setting(e, cube.ModeManual, 19)
+		}
+	})
+	if err := snap.Apply(later, at.Add(time.Minute)); err != nil {
+		t.Fatal(err)
+	}
+	valve := withEntries(t, []cube.Message{later}, func(rf cube.RFAddress, e []byte) {
+		if rf == 0x0a0206 {
+			e[7] = 40
+		}
+	})
+	if err := snap.Apply(valve, at.Add(2*time.Minute)); err != nil {
+		t.Fatal(err)
+	}
+	if _, ds := room2(); !ds["0a0205"].modeAt.Equal(at.Add(time.Minute)) || !ds["0a0205"].setpointAt.Equal(at.Add(time.Minute)) || ds["0a0205"].follows {
+		t.Fatalf("0a0205 set by hand: %+v", ds["0a0205"])
+	}
+	if d := vwt(); d.State.Mode != cube.ModeManual || *d.State.Setpoint != 19 || strings.Join(d.Sources["mode"], ",") != "0a0205" {
+		t.Errorf("the newest change: %s %v from %v", d.State.Mode, *d.State.Setpoint, d.Sources["mode"])
+	}
+	entry := func() string {
+		for _, r := range RoomsOf(snap, nil, Staleness{}, KindAll, nil) {
+			if r.ID == 2 {
+				return r.Thermostat
+			}
+		}
+		return ""
+	}
+	if got := entry(); got != "0a0205" {
+		t.Errorf("the room entry names %q, want the newest change's 0a0205", got)
+	}
+
+	// 0a0206 boosts: the room boosts, at 0a0205's setpoint still, which
+	// its entry names, sources.mode naming the boosting one.
+	boost := withEntries(t, []cube.Message{valve}, func(rf cube.RFAddress, e []byte) {
+		if rf == 0x0a0206 {
+			setting(e, cube.ModeBoost, 21)
+		}
+	})
+	if err := snap.Apply(boost, at.Add(3*time.Minute)); err != nil {
+		t.Fatal(err)
+	}
+	if d := vwt(); d.State.Mode != cube.ModeBoost || *d.State.Setpoint != 19 || strings.Join(d.Sources["mode"], ",") != "0a0206" ||
+		strings.Join(d.Sources["setpoint"], ",") != "0a0205" || entry() != "0a0205" {
+		t.Errorf("a boost: %s %v, its mode from %v, its setpoint from %v, the entry %q", d.State.Mode, *d.State.Setpoint, d.Sources["mode"],
+			d.Sources["setpoint"], entry())
 	}
 }
 

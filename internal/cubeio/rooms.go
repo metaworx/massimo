@@ -6,70 +6,25 @@ package cubeio
 import (
 	"go.metaworx.ch/massimo/internal/cubelan"
 	"go.metaworx.ch/massimo/internal/protocol/cube"
+	"go.metaworx.ch/massimo/internal/roomorder"
 	"go.metaworx.ch/massimo/internal/view"
 )
 
-// Dead reports whether the Cube holds no valid state for rf
-// (RoomMajority.D9): no L entry, or one whose valid bit (0x10 of its
-// first flags byte) is clear, as for a device not heard since the
-// Cube's restart or one whose entry the Cube marks out of date. The
-// communication error and the link error do not make a device dead,
-// since it answers. view.Silent lists a room's dead members by the same
-// test, and the room checks leave them out. A nil snapshot holds every
-// device alive.
-func Dead(snap *cubelan.Snapshot, rf cube.RFAddress) bool {
-	if snap == nil {
-		return false
-	}
-	st, ok := snap.State(rf)
-	return !ok || !st.Valid
-}
-
-// RoomOrder lists the thermostats among members in the one order in
-// which a member stands for its room (RoomMajority.D9, which replaces
-// DeviceUnPairingFix.D167; one function, as its D169-A asked): the
-// room's master where it is one of them, then their wall thermostat,
-// then their first radiator thermostat and each other one, in the
-// order the caller lists the members: the Cube's where they are
-// ConfigMembers' (room commands, the repairs), the metadata's where they
-// are RoomMembers' (a move's and a removal's links). A dead member
-// (Dead, by snap) is passed over, and leave, the device that
-// leaves or joins the room, is never listed. For a room's state the
-// room checks take Massimo's own command, the majority and the newest
-// change first (internal/server/drift.go, referenceState); a radiogram
-// with the room flag names the first (Addressee).
-func RoomOrder(snap *cubelan.Snapshot, master cube.RFAddress, members []cube.DeviceMeta, leave cube.RFAddress) []cube.RFAddress {
-	var order, walls, radiators []cube.RFAddress
-	for _, d := range members {
-		if d.RFAddress == leave || !d.Type.IsThermostat() || Dead(snap, d.RFAddress) {
-			continue
-		}
-		switch {
-		case master != 0 && d.RFAddress == master:
-			order = append(order, d.RFAddress)
-		case d.Type == cube.DeviceWallThermostat:
-			walls = append(walls, d.RFAddress)
-		default:
-			radiators = append(radiators, d.RFAddress)
-		}
-	}
-	return append(append(order, walls...), radiators...)
-}
-
 // Addressee picks the member a radiogram with the room flag names in its
-// header: the first of RoomOrder, the dead passed over; where every
-// thermostat among members but leave is dead, the first of the same
-// order with the dead in it, since such a radiogram must name one
-// (RoomMajority.D9). ok is false where no member but leave is a
-// thermostat. Every member of the numbered room takes such a radiogram,
-// whichever member the header names (T135, docs/cube-protocol.md, "Set
-// temperature (0x40) addressing"). Passing over a dead member has not
-// been tried on hardware.
+// header: the first of the room's one order (roomorder.Of: the master,
+// the wall thermostat, the radiator thermostats in members' order), the
+// dead passed over; where every thermostat among members but leave is
+// dead, the first of the same order with the dead in it, since such a
+// radiogram must name one (RoomMajority.D9). ok is false where no
+// member but leave is a thermostat. Every member of the numbered room
+// takes such a radiogram, whichever member the header names (T135,
+// docs/cube-protocol.md, "Set temperature (0x40) addressing"). Passing
+// over a dead member has not been tried on hardware.
 func Addressee(snap *cubelan.Snapshot, master cube.RFAddress, members []cube.DeviceMeta, leave cube.RFAddress) (cube.RFAddress, bool) {
-	if order := RoomOrder(snap, master, members, leave); len(order) > 0 {
+	if order := roomorder.Of(snap, master, members, leave); len(order) > 0 {
 		return order[0], true
 	}
-	if order := RoomOrder(nil, master, members, leave); len(order) > 0 {
+	if order := roomorder.Of(nil, master, members, leave); len(order) > 0 {
 		return order[0], true
 	}
 	return 0, false

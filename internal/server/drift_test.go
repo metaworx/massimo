@@ -16,9 +16,9 @@ import (
 	"go.metaworx.ch/massimo/internal/cubelan/fakecube"
 	"go.metaworx.ch/massimo/internal/engine"
 	"go.metaworx.ch/massimo/internal/protocol/cube"
+	"go.metaworx.ch/massimo/internal/roomorder"
 	"go.metaworx.ch/massimo/internal/testkit"
 	"go.metaworx.ch/massimo/internal/testkit/cubewatch"
-	"go.metaworx.ch/massimo/internal/view"
 )
 
 // checkClock is the room checks' clock in the tests: the real time, so
@@ -856,6 +856,28 @@ func TestDriftAfterASwitchPoint(t *testing.T) {
 	}
 }
 
+// majority is the re-send by roomorder.State's first step alone
+// (roomorder.Majority), as referenceState takes it: false where it
+// decides nothing.
+func majority(room uint8, ms []roomMember) (resend, bool) {
+	return stepResend(room, ms, roomorder.Majority)
+}
+
+// newest is the re-send by roomorder.State's second step alone
+// (roomorder.Newest), as majority is.
+func newest(room uint8, ms []roomMember) (resend, bool) {
+	return stepResend(room, ms, roomorder.Newest)
+}
+
+// stepResend is the re-send by step alone over ms.
+func stepResend(room uint8, ms []roomMember, step func([]roomorder.Member) (roomorder.Pick, bool)) (resend, bool) {
+	p, ok := step(members(ms))
+	if !ok {
+		return resend{}, false
+	}
+	return pickResend(room, ms, p), true
+}
+
 // The rules of the comparison: two members in auto that follow their
 // own programmes agree whatever their setpoints; one that does not is
 // the room's odd one only while every other follows; a command to a
@@ -865,7 +887,7 @@ func TestRoomCheckRules(t *testing.T) {
 	sp := func(v float64) *float64 { return &v }
 	member := func(rf cube.RFAddress, mode cube.Mode, set float64, judged, follows bool) roomMember {
 		st := cube.DeviceState{RFAddress: rf, Valid: true, Mode: mode, Setpoint: sp(set)}
-		return roomMember{rf: rf, st: st, state: view.StateOf(st), judged: judged, follows: follows}
+		return roomMember{rf: rf, st: st, judged: judged, follows: follows}
 	}
 	a := member(1, cube.ModeAuto, 21, true, true)
 	b := member(2, cube.ModeAuto, 19, true, true)
@@ -965,7 +987,7 @@ func TestNewestRules(t *testing.T) {
 		if mode == cube.ModeVacation {
 			st.Until = &until
 		}
-		return roomMember{rf: rf, typ: cube.DeviceRadiatorThermostat, st: st, state: view.StateOf(st), judged: mode == cube.ModeAuto,
+		return roomMember{rf: rf, typ: cube.DeviceRadiatorThermostat, st: st, judged: mode == cube.ModeAuto,
 			follows: follows, modeAt: modeAt, setpointAt: setAt}
 	}
 	for _, c := range []struct {

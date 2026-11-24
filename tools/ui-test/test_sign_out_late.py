@@ -120,11 +120,13 @@ def test_the_house_to_every_room(new_context, case, watch, guard, way):
 
 
 def without_presets(rooms):
-    """The rooms' device entries without the thermostats' eco and comfort
+    """The rooms and their device entries without the eco and comfort
     temperatures, as a server before them sends them (AP RoomMajority
-    v1.1, Block 3): the House's Eco then reads them from the room
-    thermostat's detail (tiles.js presetTemps)."""
+    v1.1, Block 3, and v1.2, Block 4): the House's Eco then reads them
+    from the room thermostat's detail (tiles.js presetTemps)."""
     for room in rooms or []:
+        room.pop("eco_temp", None)
+        room.pop("comfort_temp", None)
         for d in room.get("devices") or []:
             d.pop("eco_temp", None)
             d.pop("comfort_temp", None)
@@ -145,7 +147,8 @@ def test_the_house_in_eco(new_context, case, watch, guard, way):
     page = owner_page(new_context, guard, watch, URL, TOKEN)
     reads_of(page).change("**/api/v1/cubes/*/rooms?devices=all", without_presets)
     page.evaluate("loadRooms()")
-    assert page.evaluate("state.rooms.every((r) => r.devices.every((d) => d.eco_temp === undefined))"), "the entries without their temperatures"
+    assert page.evaluate("state.rooms.every((r) => r.eco_temp === undefined && r.devices.every((d) => d.eco_temp === undefined))"), \
+        "the entries without their temperatures"
     page.route("**/rooms/*/setpoint", lambda route: route.fulfill(status=200, content_type="application/json", body="{}")
                if route.request.method == "PUT" else route.continue_())
     page.locator("#house-eco").click()
