@@ -1,4 +1,4 @@
-# AP LooseEnds v1.0: Follow-ups of the UI runs
+# AP LooseEnds v1.1: Follow-ups of the UI runs
 
 ## TL;DR
 
@@ -146,7 +146,7 @@ each the owner's to change, and the completion gate lists them.
 Read on main at `RoomMajority, Blocks 1 to 4 …` (#410) and the four plan commits
 after it.
 
-### Block 1: who counts as a user
+### For Block 1: who counts as a user
 
 - **The one count today** is
   `SELECT count(*) FROM users WHERE deleted_at IS NULL`, written four times:
@@ -213,7 +213,7 @@ after it.
   `README.md` ("while there are no users", in "Server"),
   `docs/ui.md` (the sign-in, Users).
 
-### Block 2: the sign-in card
+### For Block 2: the sign-in card
 
 Read as AP MobileApp's Blocks 15 and 16 left it.
 
@@ -252,7 +252,7 @@ Read as AP MobileApp's Blocks 15 and 16 left it.
   `src/signin/store.ts` and `src/shared/password.tsx` and `docs/ui.md` (the
   sign-in; "How the page is built") say "emptied at each opening alone".
 
-### Block 3: the page
+### For Block 3: the page
 
 - **The poll behind the start's card** (walk finding 4):
   `init` (`app.js`) calls `applySettings`, which calls `startPolling`,
@@ -283,7 +283,7 @@ Read as AP MobileApp's Blocks 15 and 16 left it.
     The log has a generation of its own for this (`logState.gen`,
     `src/log/store.ts`); `src/shared/` has no such helper.
 
-### Block 4: Playwright's clock
+### For Block 4: Playwright's clock
 
 `page.clock.pause_at(page.evaluate("Date.now()") + 1000)` hands milliseconds to
 an API that takes seconds,
@@ -301,7 +301,7 @@ neither needs the jump,
 and each still shows what it means with the clock 50 ms on.
 `tools/` is not a shipped path.
 
-### Block 5: four server tests
+### For Block 5: four server tests
 
 - **`TestConfigWriteConfirmed`** (`confirm_test.go`):
   the fake Cube applies 150 ms after the command (`ApplyAfter`,
@@ -688,3 +688,7 @@ Assisted-by: claude-code:claude-opus-5-5
 - v1.0 (2026-11-24): first revision, from the owner's decisions D1-A, D2-A,
   D3-A and D13-A on the walk along the first owner's path and on the runs'
   NOTEs; D40 to D42 open.
+- v1.1 (2026-11-24): the Analysis' five headings read "For Block <n>",
+  since the plans' check takes every heading "Block <n>" for a block of the
+  Implementation Plan; nothing else changed, and D40-A, D41-A and D42-A stand
+  as taken with PLAN++.
