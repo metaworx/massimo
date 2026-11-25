@@ -802,6 +802,9 @@ Every room has a tile:
     a temperature kept until a date and time, then back to Auto.
   A room on holiday has MORE pressed, saying until when:
   "Holiday until 24.12., 18:00", the year added where it is not this one.
+  The tile's **i** and cog stand at the right end of the modes' row, at its top:
+  where MORE wraps under AUTO and MANU, as a holiday's does in a narrow tile,
+  they stay level with AUTO.
 - With the room's thermostats in different modes, for example after another
   program set one of them, the modes in use are outlined,
   and the head's crossed arrows list each thermostat's mode.
@@ -812,8 +815,9 @@ Every room has a tile:
   and with **Repair…** opens the room's repairs under the tile (Repairs, below).
 - The room name or the **i** button opens the device list:
   every device with its type's icon before its name (a radiator, a wall
-  thermostat, a window, a leaf for the eco button), its values (valve, set
-  and measured temperature, offset), its problems as icons that list them,
+  thermostat, a window, a leaf for the eco button), its values (valve and
+  offset on the left, set and measured temperature on the right,
+  ending at the row's right edge), its problems as icons that list them,
   the set temperature OFF at 4.5 °C, without a unit, and with the moon, the sun
   or both in the place of its gauge where it is the device's own eco or comfort
   temperature, so that the values stay where they are,
