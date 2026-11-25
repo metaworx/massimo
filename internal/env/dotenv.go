@@ -20,7 +20,7 @@ import (
 )
 
 // sources records where each variable came from, by its name's key
-// (nameKey): "file" when LoadFile or ReloadFile set it, with its lines
+// (NameKey): "file" when LoadFile or ReloadFile set it, with its lines
 // where the file gives it more than once (pair.source), "environment,
 // overrides <file>" when it was already set (the environment wins).
 // sourcesMu guards it, since serve re-reads the file while it runs.
@@ -29,11 +29,13 @@ var (
 	sources   = map[string]string{}
 )
 
-// nameKey is the key a variable's name is known by in a read of the
-// settings file and in sources: on Windows, which takes a name in any
-// case, its upper case, so that MASSIMO_X and massimo_x are one name to
-// the read as they are one variable there; elsewhere the name.
-func nameKey(k string) string {
+// NameKey is the key a variable's name is known by in a read of the
+// settings file, in sources and to the program's lists of the settings
+// (Known, Removed): on Windows, which takes a name in any case, its
+// upper case, so that MASSIMO_X and massimo_x are one name to the read
+// as they are one variable there; elsewhere the name (AP
+// StartConfiguration, D53-A).
+func NameKey(k string) string {
 	if runtime.GOOS == "windows" {
 		return strings.ToUpper(k)
 	}
@@ -50,7 +52,7 @@ func fromFile(src string) bool { return strings.HasPrefix(src, "file") }
 func Source(name string) string {
 	sourcesMu.Lock()
 	defer sourcesMu.Unlock()
-	if s := sources[nameKey(name)]; s != "" {
+	if s := sources[NameKey(name)]; s != "" {
 		return s
 	}
 	return "environment"
@@ -79,25 +81,27 @@ func File() string {
 
 // A Note is a line of the settings file that a read set aside, which
 // sets nothing: a later line of a name the file gives again, a line
-// without a name, a MASSIMO_ENV_FILE line, and for ReadFileLenient a
-// line that is not KEY=VALUE. Its Text names the lines by their numbers
-// and never quotes a value, which may be a secret; it reads after "the
-// settings file: ".
+// without a name, a MASSIMO_ENV_FILE line, a known name in another
+// case but on Windows, and for ReadFileLenient a line that is not
+// KEY=VALUE. Its Text names the lines by their numbers and never quotes
+// a value, which may be a secret; it reads after "the settings file: ".
 type Note struct {
 	// Lines are the numbers of the lines it is about, in the file's
 	// order: for a name given more than once every line of it, the
 	// first the one that wins.
 	Lines []int
-	// Name is the variable the lines give, "" for a line without one
-	// and for a name that is no variable's (varName), which may be part
-	// of a secret wrapped onto a line of its own.
+	// Name is the variable the lines give, a known name in another case
+	// by its upper case, "" for a line without one and for a name that
+	// is no variable's (varName), which may be part of a secret wrapped
+	// onto a line of its own.
 	Name string
 	// Text says what the read did with them: "MASSIMO_X is given on
 	// lines 3 and 4; the first wins", "lines 3 and 4 give the same name;
 	// the first wins" for a name that is no variable's, "line 7 has no
 	// name before its =, ignored", "line 2 sets MASSIMO_ENV_FILE,
 	// ignored: name the file with -env", "line 5 is not KEY=VALUE: serve
-	// refuses the file until it is fixed".
+	// refuses the file until it is fixed", "line 6 sets MASSIMO_LISTEN in
+	// another case, ignored: names are upper case".
 	Text string
 }
 
@@ -192,11 +196,13 @@ func utf16Text(head []byte) bool {
 // The first line of a name wins, an empty one too; its note quotes the
 // name as that line writes it, and only where it is a variable's
 // (varName). On Windows a name in another case is the same name
-// (nameKey), as it is the same variable there. A line without a name
-// is ignored. A MASSIMO_ENV_FILE line is ignored, in any case, as
-// Windows takes the name: the file File names stays the one the start
-// read, where a reload of another file would take its token as the
-// owner's key.
+// (NameKey), as it is the same variable there; elsewhere a name the
+// program knows in upper case alone (Known) is ignored, a Cube's line
+// too, which PerCubeValue's comparison in any case read before, its
+// note naming it in upper case, a known variable's name (D53-A). A line without a name is ignored. A
+// MASSIMO_ENV_FILE line is ignored, in any case, as Windows takes the
+// name: the file File names stays the one the start read, where a
+// reload of another file would take its token as the owner's key.
 func readFile(path string, lenient bool) ([]pair, []Note, error) {
 	f, err := os.Open(path)
 	if err != nil {
@@ -242,7 +248,7 @@ func readFile(path string, lenient bool) ([]pair, []Note, error) {
 		if len(v) >= 2 && (v[0] == '"' && v[len(v)-1] == '"' || v[0] == '\'' && v[len(v)-1] == '\'') {
 			v = v[1 : len(v)-1]
 		}
-		i, again := index[nameKey(k)]
+		i, again := index[NameKey(k)]
 		switch {
 		case k == "":
 			notes = append(notes, Note{Lines: []int{n}, Text: fmt.Sprintf("line %d has no name before its =, ignored", n)})
@@ -250,8 +256,11 @@ func readFile(path string, lenient bool) ([]pair, []Note, error) {
 			notes = append(notes, Note{Lines: []int{n}, Name: k, Text: fmt.Sprintf("line %d sets %s, ignored: name the file with -env", n, FileVar)})
 		case again:
 			pairs[i].lines = append(pairs[i].lines, n)
+		case runtime.GOOS != "windows" && !Known(k) && Known(strings.ToUpper(k)):
+			notes = append(notes, Note{Lines: []int{n}, Name: strings.ToUpper(k),
+				Text: fmt.Sprintf("line %d sets %s in another case, ignored: names are upper case", n, strings.ToUpper(k))})
 		default:
-			index[nameKey(k)] = len(pairs)
+			index[NameKey(k)] = len(pairs)
 			pairs = append(pairs, pair{k, v, []int{n}})
 		}
 	}
@@ -272,12 +281,12 @@ func readFile(path string, lenient bool) ([]pair, []Note, error) {
 }
 
 // ReadFile reads the settings file at path as LoadFile and ReloadFile
-// do, and sets nothing: the value of each name, its first line's, and
-// the notes on the lines the read set aside (readFile). A missing file
-// is os.ErrNotExist, UTF-16 text ErrUTF16, any other error LoadFile's.
-// It is what serve reads, for a check of it: massimo install refuses a
-// -settings file it returns an error for, os.ErrNotExist too
-// (internal/install).
+// do, and sets nothing: the value of each name by its key (NameKey),
+// its first line's, and the notes on the lines the read set aside
+// (readFile). A missing file is os.ErrNotExist, UTF-16 text ErrUTF16,
+// any other error LoadFile's. It is what serve reads, for a check of
+// it: massimo install refuses a -settings file it returns an error for,
+// os.ErrNotExist too (internal/install).
 func ReadFile(path string) (map[string]string, []Note, error) {
 	return values(readFile(path, false))
 }
@@ -295,14 +304,15 @@ func ReadFileLenient(path string) (map[string]string, []Note, error) {
 }
 
 // values is the value of each name of pairs, for ReadFile and
-// ReadFileLenient.
+// ReadFileLenient, by its key (NameKey): on Windows a name in another
+// case is found by its upper case, as the start reads it there.
 func values(pairs []pair, notes []Note, err error) (map[string]string, []Note, error) {
 	if err != nil {
 		return nil, nil, err
 	}
 	vars := make(map[string]string, len(pairs))
 	for _, p := range pairs {
-		vars[p.k] = p.v
+		vars[NameKey(p.k)] = p.v
 	}
 	return vars, notes, nil
 }
@@ -329,9 +339,9 @@ func LoadFile(path string) ([]Note, error) {
 	for _, p := range pairs {
 		if os.Getenv(p.k) == "" {
 			os.Setenv(p.k, p.v)
-			sources[nameKey(p.k)] = p.source()
+			sources[NameKey(p.k)] = p.source()
 		} else {
-			sources[nameKey(p.k)] = "environment, overrides " + path
+			sources[NameKey(p.k)] = "environment, overrides " + path
 		}
 	}
 	return notes, nil
@@ -346,9 +356,12 @@ func LoadFile(path string) ([]Note, error) {
 // nothing and is returned; a parse error is the one LoadFile returns,
 // the line named by its number, never quoted (readFile). It takes the
 // lines LoadFile takes, the first of a name, and returns the names whose
-// value changed, sorted, each by its key (nameKey), so that a caller
+// value changed, sorted, each by its key (NameKey), so that a caller
 // compares them with the names it knows, on Windows too, and the notes
-// LoadFile returns.
+// LoadFile returns. On Windows a variable keeps the spelling it was set
+// with when the file names it in another case: spelling it anew would
+// unset it first, and a Getenv between would find it unset (AP
+// StartConfiguration, D54-A).
 func ReloadFile(path string) (changed []string, notes []Note, err error) {
 	pairs, notes, err := readFile(path, false)
 	if err != nil {
@@ -356,9 +369,9 @@ func ReloadFile(path string) (changed []string, notes []Note, err error) {
 	}
 	sourcesMu.Lock()
 	defer sourcesMu.Unlock()
-	named := map[string]bool{} // by nameKey, as sources
+	named := map[string]bool{} // by NameKey, as sources
 	for _, p := range pairs {
-		key := nameKey(p.k)
+		key := NameKey(p.k)
 		named[key] = true
 		src := sources[key]
 		if strings.HasPrefix(src, "environment") || src == "" && os.Getenv(p.k) != "" {

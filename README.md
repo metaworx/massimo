@@ -1109,6 +1109,11 @@ A name given twice takes its first line, at a start as at a reload,
 and `massimo config` names its lines;
 on Windows a name in two cases is given twice,
 as `MASSIMO_X` and `massimo_x` are one variable there.
+Names are upper case, but for the serial in a Cube's line:
+on Windows the start takes `massimo_listen` as `MASSIMO_LISTEN`,
+and so do a reload and `massimo config`;
+on Linux and macOS such a line is set aside, a Cube's line too
+(`line 3 sets MASSIMO_LISTEN in another case, ignored: names are upper case`).
 A UTF-8 byte order mark at the file's start is skipped,
 and UTF-16 text, as PowerShell 5.1's `>` or `>>` writes it, is refused:
 save it as UTF-8.

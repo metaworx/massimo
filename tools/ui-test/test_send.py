@@ -232,6 +232,141 @@ def test_house_send_turns_and_needs_a_room(page, case):
     page.locator("#house-panel .form-cancel").click()
 
 
+def test_house_holiday_sends_vacation_to_each_room(page, case):
+    """The House tile's Holiday sends a room command to each room ticked,
+    one after another, and to none unticked: holiday at OFF until a week
+    ahead at 06:00, as the form's defaults are (AP RoomsPage v1.0, Block
+    7, D6-A, D7-A); each room's outcome in the result line. Every PUT is
+    held at its route and answered with a stub. Fails on the page before,
+    which had no Holiday."""
+    page.locator("#house-holiday").click()
+    page.locator("#house-panel").wait_for(state="visible")
+    rooms = page.evaluate("state.rooms.filter(roomThermostat).map((r) => r.id)")
+    assert len(rooms) >= 3, f"the fake Cube's rooms with a thermostat: {rooms}"
+    page.locator("#house-rooms .check-all input").check()
+    page.locator("#house-rooms .check:not(.check-all) input").first.uncheck()
+    ticked = rooms[1:]
+    until = page.evaluate("""(() => {
+      const d = new Date(), p = (n) => String(n).padStart(2, "0");
+      const w = new Date(d.getFullYear(), d.getMonth(), d.getDate() + 7, 6, 0);
+      return w.getFullYear() + "-" + p(w.getMonth() + 1) + "-" + p(w.getDate()) + " 06:00";
+    })()""")
+    held, bodies = [], []
+
+    def handle(route):
+        if route.request.method != "PUT":
+            route.continue_()
+            return
+        rid = int(route.request.url.split("/rooms/")[1].split("/")[0])
+        bodies.append((rid, route.request.post_data_json))
+        held.append(route)
+
+    page.route("**/rooms/*/setpoint", handle)
+    try:
+        page.locator("#house-panel button[type=submit]").click()
+        for n in range(1, len(ticked) + 1):
+            assert wait_held(page, held), f"room {n} of {len(ticked)} is sent"
+            assert len(bodies) == n, f"one room after another: {bodies}"
+            answer(held)
+        assert wait_until(page, "!document.querySelector('#house-panel button[type=submit]').classList.contains('busy')", 5), "every room answered"
+        page.wait_for_timeout(300)
+    finally:
+        page.unroute("**/rooms/*/setpoint")
+    want = [(rid, {"mode": "vacation", "temp": 4.5, "until": until}) for rid in ticked]
+    assert bodies == want, f"holiday at OFF until a week ahead to each room ticked: {bodies}"
+    result = page.locator("#house-panel .tile-result").inner_text()
+    assert len(result.strip().splitlines()) == len(ticked), f"each room's outcome: {result!r}"
+    page.locator("#house-panel .form-cancel").click()
+
+
+def tomorrow_at(page, hhmm):
+    """Tomorrow at a time, as a date and time field holds it."""
+    return page.evaluate("""(hhmm) => {
+      const d = new Date(), p = (n) => String(n).padStart(2, "0");
+      const w = new Date(d.getFullYear(), d.getMonth(), d.getDate() + 1);
+      return w.getFullYear() + "-" + p(w.getMonth() + 1) + "-" + p(w.getDate()) + "T" + hhmm;
+    }""", hhmm)
+
+
+def one_room_ticked(page):
+    """The House form's first room alone ticked; its id."""
+    page.locator("#house-rooms .check-all input").uncheck()
+    page.locator("#house-rooms .check:not(.check-all) input").first.check()
+    return page.evaluate("state.rooms.filter(roomThermostat)[0].id")
+
+
+def send_held(page):
+    """Sends the House form, its PUTs held at their route and answered
+    with a stub; the bodies sent, once Send is back or after a while."""
+    held, sent = [], []
+    hold(page, "**/rooms/*/setpoint", "PUT", held, sent)
+    try:
+        page.locator("#house-panel button[type=submit]").click()
+        wait_held(page, held, seconds=3)
+        answer(held)
+        wait_until(page, "!document.querySelector('#house-panel button[type=submit]').classList.contains('busy')", 5)
+        page.wait_for_timeout(300)
+        answer(held)
+    finally:
+        page.unroute("**/rooms/*/setpoint")
+    return sent
+
+
+def test_house_sends_with_a_hidden_date_off_its_step(page, case):
+    """A date and time between the field's steps (18:15), then Permanently:
+    the hidden date is no part of the form, and Send sends MANU at the
+    first room's setpoint. Fails on the page before, where the hidden field
+    was checked all the same and Send did nothing."""
+    page.locator("#house-manu").click()
+    page.locator("#house-panel").wait_for(state="visible")
+    one_room_ticked(page)
+    page.locator("#house-panel input[name=house-duration][value=until]").check()
+    page.locator("#house-until").fill(tomorrow_at(page, "18:15"))
+    page.locator("#house-panel input[name=house-duration][value=permanent]").check()
+    setpoint = page.evaluate("roomState(state.rooms.find(roomThermostat)).setpoint")
+    sent = send_held(page)
+    assert sent == [{"mode": "manual", "temp": setpoint}], f"MANU sent, the hidden date no hindrance: {sent}"
+    page.locator("#house-panel .form-cancel").click()
+
+
+def test_house_sends_with_a_hidden_temperature_off_its_step(page, case):
+    """A temperature between the field's steps (21.3) and a date between
+    its steps typed for MANU, then AUTO: neither hidden field is part of the
+    form, and Send sends AUTO. Fails on the page before, where the hidden
+    fields were checked all the same and Send did nothing."""
+    page.locator("#house-manu").click()
+    page.locator("#house-panel").wait_for(state="visible")
+    one_room_ticked(page)
+    page.locator("#house-temp").fill("21.3")
+    page.locator("#house-panel input[name=house-duration][value=until]").check()
+    page.locator("#house-until").fill(tomorrow_at(page, "18:15"))
+    page.locator("#house-panel input[name=house-mode][value=auto]").check()
+    sent = send_held(page)
+    assert sent == [{"mode": "auto"}], f"AUTO sent, the hidden fields no hindrance: {sent}"
+    page.locator("#house-panel .form-cancel").click()
+
+
+def test_house_refuses_a_past_end(page, case):
+    """A holiday whose end has passed is refused at Send: nothing is sent,
+    the field is marked and says why, the focus on it; a later end clears
+    the mark. Fails on the page before, which sent it to every room."""
+    page.locator("#house-holiday").click()
+    page.locator("#house-panel").wait_for(state="visible")
+    one_room_ticked(page)
+    until = page.locator("#house-until")
+    until.fill("2020-01-02T18:00")
+    sent = send_held(page)
+    assert sent == [], f"nothing sent: {sent}"
+    assert until.get_attribute("aria-invalid") == "true", "the field marked"
+    limit = page.locator("#house-until-limit")
+    assert limit.is_visible() and limit.inner_text().strip() == page.evaluate("t('house.untilPast')"), f"why: {limit.inner_text()!r}"
+    assert until.get_attribute("aria-describedby") == "house-until-limit", "the field described by why"
+    assert page.evaluate("document.activeElement === document.getElementById('house-until')"), "the focus on the field"
+    until.fill(tomorrow_at(page, "18:00"))
+    assert until.get_attribute("aria-invalid") is None and not limit.is_visible(), "a later end clears the mark"
+    page.locator("#house-panel .form-cancel").click()
+
+
 def test_boost_from_the_room_menu(page, case):
     """The room's ⋯ has Boost: it sends the room's setpoint with mode
     boost, the menu closing, the item turning until the answer."""
