@@ -1487,6 +1487,7 @@
   "login.missing": "Naam en wachtwoord zijn nodig.",
   "login.failed": "Niet aangemeld: {error}",
   "login.wrong": "Verkeerde naam of wachtwoord.",
+  "login.keyRefused": "De server kent deze API-sleutel niet.",
   "login.ways": "Aanmelden met",
   "setup.notKept": "Aanmelden met vingerafdruk is niet bewaard; schakel het in bij je volgende aanmelding.",
   "login.fingerprint": "Aanmelden met vingerafdruk",

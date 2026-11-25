@@ -35,8 +35,8 @@ import { keptOpen, takeAsker } from "../shared/owner";
 /** A way to sign in, by the button's data-way: the name and the password, or an API key. */
 export type Way = "password" | "key";
 
-/** Where the focus is asked to go: the chosen way's first field, the password, Try again, the first owner's name, the confirmation that keeps the server open, the button that opens it. */
-export type FocusOn = "way" | "password" | "retry" | "owner" | "keep" | "keepButton";
+/** Where the focus is asked to go: the chosen way's first field, the password, the API key's field after its refusal, Try again, the first owner's name, the confirmation that keeps the server open, the button that opens it. */
+export type FocusOn = "way" | "password" | "key" | "retry" | "owner" | "keep" | "keepButton";
 
 /** The first owner's place: the form, or the confirmation that keeps the server open. */
 export type OwnerStep = "form" | "keep";
@@ -52,6 +52,7 @@ export const card = live({
   owner: false,
   way: "password" as Way,
   said: null as Outcome | null,
+  keySaid: null as Outcome | null,
   ownerSaid: null as Outcome | null,
   ownerStep: "form" as OwnerStep,
   keepSaid: null as Outcome | null,
@@ -121,6 +122,7 @@ export function open(on: Way | "owner", said: string, ask: SignInAsk): void {
   card.way = on === "owner" ? "password" : on;
   card.ownerStep = "form";
   card.said = null;
+  card.keySaid = null;
   card.ownerSaid = null;
   card.keepSaid = null;
   card.providersSaid = said ? { text: said, ok: false } : null;
@@ -335,6 +337,7 @@ export function keepEnded(): void {
 export function forgetCard(): void {
   dropChoice();
   card.said = null;
+  card.keySaid = null;
   card.ownerSaid = null;
   card.keepSaid = null;
   card.providersSaid = null;

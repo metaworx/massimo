@@ -1486,6 +1486,7 @@
   "login.missing": "Name und Passwort sind nötig.",
   "login.failed": "Nicht angemeldet: {error}",
   "login.wrong": "Falscher Name oder falsches Passwort.",
+  "login.keyRefused": "Der Server kennt diesen API-Schlüssel nicht.",
   "login.ways": "Anmelden mit",
   "setup.notKept": "Die Anmeldung mit Fingerabdruck wurde nicht gespeichert; schalte sie bei der nächsten Anmeldung ein.",
   "login.fingerprint": "Anmelden mit Fingerabdruck",
