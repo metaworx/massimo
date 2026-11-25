@@ -81,7 +81,14 @@ GUIDELINES/wip/HANDOVER.md is the context a session needs to work here.
     that a Windows service created before v0.7.0 needs `install` again
     before the Update button works;
     `install` warning that the API is open to the LAN
-    while the server signs users in (AuthWarning).
+    while the server signs users in (AuthWarning);
+    a re-read's `C` reply applied twice, by `Send` and again by
+    `cubeio.Writer.Reread` (the proxy's `c:` too), so that one re-read gives
+    two config events: a plan of its own;
+    a helper of tools/ui-test/ for a test that tells a device's data through
+    `reads`, reading the rooms again after the device's own `state` and
+    `config` events, which take back what it told
+    (`test_new_batteries_sent` lost its button so).
 13. **Housekeeping**:
     the `.env` copies and the release key in the Linux test box's session scratchpad,
     its SSH key on the Pi; the M7 reservations for the house Cube and the Pi;
