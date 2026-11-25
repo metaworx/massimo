@@ -867,6 +867,14 @@ The suite's helpers for it are in `tools/ui-test/helpers.py`
   A read that the patterns of several changes match takes each of them,
   so a test's own change under another spelling of the pattern goes with them
   (Playwright runs the later of two routes alone).
+- **A fold opened** (`open_fold`, `close_fold`, `toggle_fold` of `helpers.py`):
+  a `<details>` fold's `toggle` event comes in a task of its own after the click,
+  and a part that starts anew at it drops what the test did inside the fold before it:
+  `#me-password` and `.user-panel` start their password fields anew.
+  The helpers click the fold's summary and take that event,
+  and the part's drawing after it, before the test acts inside the fold;
+  a click that toggles nothing fails within seconds (`FOLD_TOGGLE`),
+  not at the test's end.
 - **The stream watched** (`Stream`, the fixture `stream`):
   every page of the page fixture has `PAGE_KIT` before its own scripts,
   which records each event the page's listeners take,

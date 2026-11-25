@@ -19,7 +19,8 @@ takes the stream's state events; safe_route is the one route handler
 that lets go a request the page no longer waits for; undo is a cleanup
 that says what it could not undo; held_poll holds the page's poll while
 a test measures what the page does by itself; pause_clock pauses
-Playwright's clock at the page's now.
+Playwright's clock at the page's now. open_fold, close_fold and
+toggle_fold take a fold's toggle event before a test acts inside it.
 """
 import contextlib
 import json
@@ -994,6 +995,57 @@ def focus_in_turn(page, click, focused):
 def frames(page):
     """Two frames and a task: a part drawn again after a change has been drawn."""
     page.evaluate("() => new Promise((done) => requestAnimationFrame(() => requestAnimationFrame(() => setTimeout(done, 0))))")
+
+
+# --- a fold ---------------------------------------------------------------
+
+# A fold's summary clicked, and the fold's toggle event taken, in ms
+# milliseconds at most: the event, which tells the page's part the fold's
+# new state (Fold's onToggle), comes in a task of its own after the
+# click, and a part that starts anew at it (#me-password and .user-panel
+# start their password fields anew) drops what the test did inside the
+# fold before it. A click that toggles nothing fails once ms have passed,
+# not at the test's end. Resolves to whether the fold is open.
+FOLD_TOGGLE = """([sel, ms]) => new Promise((done, fail) => {
+  const d = document.querySelector(sel);
+  if (!d) {
+    fail(new Error("no fold " + sel));
+    return;
+  }
+  const took = () => {
+    clearTimeout(timer);
+    setTimeout(() => done(d.open), 0);
+  };
+  const timer = setTimeout(() => {
+    d.removeEventListener("toggle", took);
+    fail(new Error("no toggle event of " + sel + " within " + ms + " ms"));
+  }, ms);
+  d.addEventListener("toggle", took, { once: true });
+  d.querySelector(":scope > summary").click();
+})"""
+
+
+def toggle_fold(page, sel, seconds=3):
+    """The fold sel, a <details>, opened or closed by its summary, its
+    toggle event taken within seconds and the part drawn again (frames);
+    returns whether it is open."""
+    is_open = page.evaluate(FOLD_TOGGLE, [sel, int(seconds * 1000)])
+    frames(page)
+    return is_open
+
+
+def open_fold(page, sel, seconds=3):
+    """The fold sel open, its toggle event taken (toggle_fold) where it
+    was closed."""
+    if not page.evaluate("(sel) => document.querySelector(sel).open", sel):
+        assert toggle_fold(page, sel, seconds), f"the fold {sel} opens"
+
+
+def close_fold(page, sel, seconds=3):
+    """The fold sel closed, its toggle event taken (toggle_fold) where it
+    was open."""
+    if page.evaluate("(sel) => document.querySelector(sel).open", sel):
+        assert not toggle_fold(page, sel, seconds), f"the fold {sel} closes"
 
 
 # --- a page of its own ------------------------------------------------------
