@@ -845,6 +845,28 @@ The suite's helpers for it are in `tools/ui-test/helpers.py`
   The poll does not load them while the stream is open,
   but the events that start a load do (`connected`, `metadata`, `unconfirmed` and others),
   among them those the server sends by itself.
+- **What a test tells of a device or a room**
+  (`reads.device(rf, **fields)`, `reads.room(rid, **fields)`, AP ToldData, D2-A):
+  a device's fields, those of its `state` among them,
+  or a room entry's, its presets, its `thermostat`
+  and its virtual wall thermostat's `sources`,
+  are in the rooms' read (`ROOMS`) from then on,
+  each in place of its value told before, and a `None` takes a field out.
+  `reads.device(rf, like=…)` tells of a device the server does not list,
+  a twin or a wall thermostat:
+  a copy of the server's entry of `like`, at the end of its room's devices
+  or of those of the room `room_id` names.
+  Both keep what they tell (`keep`):
+  the device, or the room's thermostats and its virtual wall thermostat,
+  so that it comes back after the server's own events of them
+  and after any read of the page's own.
+  The page shows it at its next read:
+  the test reads the rooms (`loadRooms()`),
+  or puts the same into the page itself where that is the event under test,
+  and a check after it waits.
+  A read that the patterns of several changes match takes each of them,
+  so a test's own change under another spelling of the pattern goes with them
+  (Playwright runs the later of two routes alone).
 - **The stream watched** (`Stream`, the fixture `stream`):
   every page of the page fixture has `PAGE_KIT` before its own scripts,
   which records each event the page's listeners take,
