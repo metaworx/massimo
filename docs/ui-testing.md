@@ -785,6 +785,10 @@ The suite's helpers for it are in `tools/ui-test/helpers.py`
   A test does not set `state.cubes`, `state.found` or `state.version` in the page:
   the next poll takes them back,
   and a version other than the server's makes the page reload.
+  A test that holds the poll and writes a field of a Cube
+  writes `state.cubes` whole, as the page's loads do,
+  never the field in place, which the page may not draw again
+  (`test_header.py`'s `SET_READ`).
 - **The poll held** (`with held_poll(page):`):
   a test that measures what the page does by itself,
   a count of its drawings or times that stand still,
