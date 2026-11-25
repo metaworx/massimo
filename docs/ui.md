@@ -301,6 +301,14 @@ and **Install now**, **Tonight** and **Skip this version**.
 The answer is the box's (`PUT /api/v1/update/answer`):
 Install now starts the update, Tonight leaves it to the night,
 Skip this version keeps the night from installing it until a newer release is out.
+While the server's next start refuses the settings file,
+Install now asks first, where it was pressed, in place of the three answers:
+the update's question, as Update asks it in Software update,
+with the sentence that the server does not come back until the file is fixed;
+its Install now starts the update, and Cancel gives the three answers back,
+the focus on Install now, with nothing sent.
+Install now reads that at the press (`GET /api/v1/restart`), turning meanwhile;
+without a refusal, or where the read fails, it starts the update at once.
 The question goes in every other browser at the answer's line in the log,
 and a refused answer says why under the buttons.
 Everyone else sees nothing new.
@@ -2104,7 +2112,8 @@ settings forms and have none of it.
   and **seen on the LAN** or **not seen on the LAN**;
   in it where it came from, its installation id, address, version and
   until when it waits, a switch per capability of the role `integration`,
-  all on, for its maximum,
+  all on, for its maximum, `restart` on and off with why
+  where `update` or `reboot` is on, as in a role's set,
   **Registered before as**, where an integration of its kind is
   registered, the same installation chosen,
   **Refuse**, which asks first, and **Approve**.
@@ -2122,7 +2131,8 @@ settings forms and have none of it.
   its id, installation id, address, version, when its key was issued and
   whether the LAN saw it;
   for a call from another installation, **Accept the new installation**;
-  **Enabled**, saved at once, its maximum with **Save the maximum** and **Reset**,
+  **Enabled**, saved at once, its maximum, `restart` held as in a request's,
+  with **Save the maximum** and **Reset**,
   its users (read when the panel opens), the system user first,
   each with its id's first eight characters, its level and when it acted
   last, and **Acts as**: its own user or a Massimo user, the one of the
@@ -2172,6 +2182,9 @@ settings forms and have none of it.
 - **Roles** (with `roles`):
   every role in a panel with its display name and a switch per capability,
   the owner's all on and off,
+  `restart` on and off with why where `update` or `reboot` is on,
+  since each includes it (docs/api-v1.md, "Authentication"),
+  in a new role's form too; what is held alone is not saved,
   **Save**, off while nothing differs from the role, and **Reset**,
   **Disable** (with `roles.disable`), **Remove** for a created role nobody has,
   and **Add a role**; the owner cannot be changed.
@@ -2281,10 +2294,19 @@ The server's sign, when it says an update is out, opens it at Software update.
   "GET /api/v1/update?refresh=1").
   Where updates cannot be started from here, the choice is off, with the reason.
   Under the version lines the automatic update's question, as under the header,
-  with the same three answers.
+  with the same three answers, Install now asking first there too
+  while the next start refuses the settings file.
   On a box with the update helper installed (packaging/README.md, "Updating"),
   **Update** (with `update`) installs it and restarts the server.
   If the new version does not come up, the old one is put back.
+  While the server's next start refuses the settings file,
+  Update's question ends with the sentence that the server stays down
+  until the file is fixed, as the restart's and the reboot's do:
+  the old version would not start either.
+  Update reads that at the press, turning meanwhile,
+  and asks once the answer is in (`GET /api/v1/restart`,
+  which a holder of `update` reads without `restart`);
+  a failed read asks as before.
   On a box the Debian package installed it says "Installed by apt",
   the channel is the suite of the apt source,
   and **Update** has the package's helper run apt;
@@ -2358,7 +2380,8 @@ The server's sign, when it says an update is out, opens it at Software update.
   A page not shown reads nothing; showing it reads everything, as before.
   Events that come together make one read, and one more after it for those
   that came while it ran.
-- **Maintenance** (with `restart`, `reboot` for its reboot,
+- **Maintenance** (with `restart`, which `update` and `reboot` include
+  (docs/api-v1.md, "Authentication"), `reboot` for its reboot,
   or `settings` for its announcement, its Cube intervals and its last two parts),
   in this order: **Announce on the LAN**, the Cube intervals
   with **Refresh the Cubes** after the refresh's,
@@ -2397,7 +2420,9 @@ The server's sign, when it says an update is out, opens it at Software update.
   the server's next start refuses the settings file as it is,
   and the server does not come back until the file is fixed.
   The card reads what the next start refuses only with `restart`,
-  so the reboot's question says it only to a holder of `restart` as well.
+  which `reboot` includes,
+  so the reboot's question says it to every holder of `reboot`
+  but where `restart` is disabled for every role.
   The notice blocks nothing, and the restart is offered all the same;
   a read that finds nothing refused, Reload now's among them,
   takes it away, with the badge and the sentence.
@@ -2838,6 +2863,8 @@ a new frame is a partial, listed in `uiPartials`.
 
 What several regions read of the API's data beside its fields is under `ui/src/model/`
 (`capLabel` of `cap.ts`, what a capability allows,
+and `includedHint`, why a switch of one that another includes is held on
+(`CAP_INCLUDES`, the server's includes),
 for the roles and the integrations, and `event.ts`, a server's event of the stream
 (`ServerEvent`) and the settings a change event set (`settingsChanged`),
 for the parts that follow the server, among it):
@@ -2925,7 +2952,7 @@ a value's age it takes from `received` of `rooms.js`, as the rooms do.
 | `localOf`, `isoOf` | `time.ts` | a `DateTime`'s value and the API's time as each other, for a field that shows a stored end and sends it (a user's end); the draft compares the field's minute, all it holds | `iso`; `local` |
 | `fmtWhen` | `time.ts` | an API time as date and time in the page's language, the hour of 24 (a backup's time, a device's in Notifications) | `iso` |
 | `Switch` | `field.tsx` | a checkbox drawn as a switch (`switchEl`), in its own row with its help where asked (`fieldRow` without a label) | `name`, `label`, `checked` and `onChange`, or `draft` and `show`; `row`, `help`, `rowCls` (classes its own row adds, a capability's `needs-…`), `cls` (the switch's classes), `id`, `disabled`, `title`, `aria` (its name where `label` is empty, which draws no text: My settings' "only on this device"), `data` (the checkbox's `data-` attributes), `badge` (inside the switch after its label, a capability's state), children after the switch |
-| `Choices` | `choices.tsx` | a choice of several among a list: a group of switches under its heading, All and None as buttons where asked (the configuration's Copy tab), under a legend (an integration's maximum) or without a heading (a role's capabilities, Capabilities for every role), or of checkboxes, All a checkbox first (`look` `check`, the House panel), or of radio buttons in a row where one option alone is chosen (`look` `one`, a suggested password's Words or Characters); an option locked shows whether it is chosen and is off (the owner's set, a capability while its request runs) | `title`, `legend` (a fieldset under it), `label` (the group's name for a screen reader), `id`, `cls` (a class the group adds, `cap-grid`, `integration-caps`), `options` (`[value, label, disabled, { title, badge, lock }]`, the last for switches alone), `chosen`, `set(chosen)`, `all` (`{ all, none }`, their labels, `none` left out for All alone), `empty` (said where there is no option), `look` (`switch`, the default, `check` or `one`, its group named `id`) |
+| `Choices` | `choices.tsx` | a choice of several among a list: a group of switches under its heading, All and None as buttons where asked (the configuration's Copy tab), under a legend (an integration's maximum) or without a heading (a role's capabilities, Capabilities for every role), or of checkboxes, All a checkbox first (`look` `check`, the House panel), or of radio buttons in a row where one option alone is chosen (`look` `one`, a suggested password's Words or Characters); an option locked shows whether it is chosen and is off (the owner's set, a capability while its request runs), an option held shows chosen and is off whatever is chosen, its why in a badge, and All chooses it not (a capability another chosen one includes) | `title`, `legend` (a fieldset under it), `label` (the group's name for a screen reader), `id`, `cls` (a class the group adds, `cap-grid`, `integration-caps`), `options` (`[value, label, disabled, { title, badge, lock, held }]`, the last for switches alone, `held` the why), `chosen`, `set(chosen)`, `all` (`{ all, none }`, their labels, `none` left out for All alone), `empty` (said where there is no option), `look` (`switch`, the default, `check` or `one`, its group named `id`) |
 | `ChoiceGroup` | `choices.tsx` | the frame of a choice of several drawn as switches, which `Choices` is drawn with and a region uses where each switch is a part of its own (Capabilities for every role, each switch saved at once) | `id`, `cls`, `label` (the group's name for a screen reader), `legend` (a fieldset under it), `head`, the switches as children |
 | `Tabs` | `tabs.tsx` | a row of tabs: a tab list of buttons, each with its key in `data-tab`, the one shown active and selected, and what follows the list (a close button) | `cls` (the row's class), `listCls`, `label` (the list's name), `tabs` (`{ key, label, cls }`), `current`, `onPick(key)`, children after the list |
 | `Stepper` | `field.tsx` | a number field between − and +, the step within its range; its buttons are named for a temperature, half a degree less and more, and the first user of another unit adds their names | `value`, `set`, `min`, `max`, `step`, `id` and `cls` of the field, `hidden` (the whole kept in its place unseen), children after the + (a unit) |

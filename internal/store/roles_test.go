@@ -87,17 +87,18 @@ func TestRoles(t *testing.T) {
 }
 
 // The effective set: everything for owner, nothing for a disabled role,
-// the role's set minus the disabled capabilities otherwise.
+// the role's set minus the disabled capabilities otherwise, with those
+// disabled capabilities beside it, none for owner.
 func TestEffective(t *testing.T) {
 	t.Parallel()
 	s := open(t, t.TempDir())
 	ctx := context.Background()
-	caps, off, err := s.Effective(ctx, RoleOwner, allCaps)
-	if err != nil || off || len(caps) != len(allCaps) {
-		t.Fatalf("owner %v %v %v", caps, off, err)
+	caps, disabled, off, err := s.Effective(ctx, RoleOwner, allCaps)
+	if err != nil || off || len(caps) != len(allCaps) || disabled != nil {
+		t.Fatalf("owner %v %v %v %v", caps, disabled, off, err)
 	}
-	if caps, _, _ := s.Effective(ctx, RoleViewer, allCaps); strings.Join(caps, ",") != "preferences,read" {
-		t.Fatalf("viewer %v", caps)
+	if caps, disabled, _, _ := s.Effective(ctx, RoleViewer, allCaps); strings.Join(caps, ",") != "preferences,read" || len(disabled) != 0 {
+		t.Fatalf("viewer %v %v", caps, disabled)
 	}
 	if err := s.SetCapabilityDisabled(ctx, "pair", true, 0); err != nil {
 		t.Fatal(err)
@@ -106,21 +107,21 @@ func TestEffective(t *testing.T) {
 	if d, _ := s.DisabledCapabilities(ctx); strings.Join(d, ",") != "pair" {
 		t.Fatalf("disabled %v", d)
 	}
-	if caps, _, _ := s.Effective(ctx, RoleManager, allCaps); slices.Contains(caps, "pair") || len(caps) != 15 {
-		t.Fatalf("manager without pair %v", caps)
+	if caps, disabled, _, _ := s.Effective(ctx, RoleManager, allCaps); slices.Contains(caps, "pair") || len(caps) != 15 || strings.Join(disabled, ",") != "pair" {
+		t.Fatalf("manager without pair %v, disabled %v", caps, disabled)
 	}
-	if caps, _, _ := s.Effective(ctx, RoleOwner, allCaps); len(caps) != len(allCaps) {
+	if caps, disabled, _, _ := s.Effective(ctx, RoleOwner, allCaps); len(caps) != len(allCaps) || disabled != nil {
 		t.Fatal("a disabled capability touched owner")
 	}
 	s.SetCapabilityDisabled(ctx, "pair", false, 0)
-	if caps, _, _ := s.Effective(ctx, RoleManager, allCaps); len(caps) != 16 {
+	if caps, _, _, _ := s.Effective(ctx, RoleManager, allCaps); len(caps) != 16 {
 		t.Fatalf("manager %v", caps)
 	}
 	s.SetRoleDisabled(ctx, RoleManager, true, 0)
-	if caps, off, _ := s.Effective(ctx, RoleManager, allCaps); !off || len(caps) != 0 {
+	if caps, _, off, _ := s.Effective(ctx, RoleManager, allCaps); !off || len(caps) != 0 {
 		t.Fatalf("disabled manager %v %v", caps, off)
 	}
-	if _, _, err := s.Effective(ctx, "nope", allCaps); !errors.Is(err, ErrNoRole) {
+	if _, _, _, err := s.Effective(ctx, "nope", allCaps); !errors.Is(err, ErrNoRole) {
 		t.Fatalf("unknown role: %v", err)
 	}
 }

@@ -1,6 +1,6 @@
 > **Fragment** — inlined by `tools/sync-docs.sh`; not a standalone document.
 
-# {{project_name}} — Project Contract (v1.19.0)
+# {{project_name}} — Project Contract (v1.20.0)
 
 <!-- TEMPLATE: installed as {{guidelines_root}}/project/_CONTRACT.md. Replace
      every {{TODO: …}}, delete rows that do not apply. Shared documents
@@ -62,6 +62,15 @@ not this block:
 - `:!packaging/site/docs.js`
 - `:!packaging/site/site.css`
 - `:!packaging/site/privacy.html`
+- `:!*_test.go`
+- `:!**/testdata/**`
+- `:!packaging/apt/test.sh`
+- `:!packaging/deb/test.sh`
+- `:!packaging/deb/systemd-test.sh`
+- `:!packaging/deb/systemd-cases.sh`
+- `:!packaging/launchd/template-test.sh`
+- `:!app/android/app/src/test/**`
+- `:!app/android/app/src/androidTest/**`
 <!-- END GENERATED SHIPPED-PATHS -->
 
 A change touching only the paths listed below may skip the test suite:

@@ -326,25 +326,28 @@ func (s *Store) SetCapabilityDisabled(ctx context.Context, capability string, di
 
 // Effective returns the capabilities a role grants: every one of all for
 // owner, none for a disabled role, else the role's set minus the
-// disabled capabilities. The second result says whether the role is
-// disabled.
-func (s *Store) Effective(ctx context.Context, roleKey string, all []string) (caps []string, roleDisabled bool, err error) {
+// disabled capabilities. The second result lists the disabled
+// capabilities it read, so that a caller granting more beside the set
+// (the server's includes) grants none of them without reading them
+// again: none for owner, whom they do not bind, nor for a disabled role.
+// The third says whether the role is disabled.
+func (s *Store) Effective(ctx context.Context, roleKey string, all []string) (caps, off []string, roleDisabled bool, err error) {
 	r, ok, err := s.Role(ctx, roleKey)
 	if err != nil {
-		return nil, false, err
+		return nil, nil, false, err
 	}
 	if !ok {
-		return nil, false, fmt.Errorf("%w: %s", ErrNoRole, roleKey)
+		return nil, nil, false, fmt.Errorf("%w: %s", ErrNoRole, roleKey)
 	}
 	if r.Key == RoleOwner {
-		return normalCaps(all), false, nil
+		return normalCaps(all), nil, false, nil
 	}
 	if r.Disabled {
-		return []string{}, true, nil
+		return []string{}, nil, true, nil
 	}
-	off, err := s.DisabledCapabilities(ctx)
+	off, err = s.DisabledCapabilities(ctx)
 	if err != nil {
-		return nil, false, err
+		return nil, nil, false, err
 	}
 	disabled := map[string]bool{}
 	for _, c := range off {
@@ -356,5 +359,5 @@ func (s *Store) Effective(ctx context.Context, roleKey string, all []string) (ca
 			out = append(out, c)
 		}
 	}
-	return out, false, nil
+	return out, off, false, nil
 }

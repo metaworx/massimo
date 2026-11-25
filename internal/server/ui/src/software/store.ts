@@ -12,16 +12,19 @@
  * update helper (POST /api/v1/update) and the answer to the automatic
  * update's question (PUT /api/v1/update/answer), and the reading every
  * 3 s while the helper works,
- * which rides out the server's restart. While Maintenance is shown, an
+ * which rides out the server's restart. Update and Install now read
+ * first whether the server's next start refuses the settings file (GET
+ * /api/v1/restart), which their question then says (AP AutoUpdate,
+ * D12-A to D14-A). While Maintenance is shown, an
  * event of the stream that says the versions or the channel changed reads
  * them again (serverEvent). A load writes the live state the
  * part draws, so that a newer release, the helper's progress and the last
  * updates show in place; an answer after a sign-out is dropped
  * (shared/session.ts), and a sign-out ends the reading and takes the
- * question back.
+ * questions back.
  */
 
-import type { Setting, UpdateInfo, UpdateStatus } from "../api";
+import type { RestartInfo, Setting, UpdateInfo, UpdateStatus } from "../api";
 import { type ServerEvent, settingsChanged } from "../model/event";
 import { burstReader } from "../shared/burst";
 import { live } from "../shared/live";
@@ -63,8 +66,28 @@ export const data = live({
   busy: false,
 });
 
-/** The question Update asks in place of the section's buttons, and the version it asked about. */
-export const question = live({ asking: false, version: "" });
+/**
+ * The question Update asks in place of the section's buttons: the
+ * version it asked about, whether the server's next start refuses the
+ * settings file, as read at the press (refused), and whether that read
+ * runs (reading), Update turning meanwhile.
+ */
+export const question = live({ asking: false, version: "", refused: false, reading: false });
+
+/**
+ * The question Install now asks while the server's next start refuses
+ * the settings file, where it was pressed, in place of the automatic
+ * update's three answers: under the header (update-ask) and in the
+ * card's copy (update-card-ask), each with the version it asked about
+ * and whether its read runs.
+ */
+export const nowAsks = {
+  "update-ask": live({ asking: false, version: "", reading: false }),
+  "update-card-ask": live({ asking: false, version: "", reading: false }),
+};
+
+/** AskPlace is where the automatic update's question is asked, the prefix of its answers' ids. */
+export type AskPlace = keyof typeof nowAsks;
 
 /**
  * The reading while the helper works: whether it runs, its generation
@@ -122,6 +145,7 @@ export async function loadUpdate(refresh: boolean, mine: () => boolean = () => t
   data.failed = null;
   data.said = null;
   if (question.asking && (!u.can_update || u.latest !== question.version)) question.asking = false;
+  takeNowBack(u);
   if (updateBusy(u.helper)) {
     // busy follows what a read finds: the helper at work greys the buttons out, whoever started it
     setBusy(true);
@@ -251,12 +275,89 @@ function followUpdate(): void {
   follow.timer = setTimeout(step, 3000);
 }
 
-/** ask asks in the section whether to install the update the last load offers. */
-export function ask(): void {
+/**
+ * readRefused reads GET /api/v1/restart under the session's number and
+ * says whether the server's next start refuses the settings file: true
+ * where its refused is not empty, which a holder of update without
+ * restart reads as well, so that it is decided on refused, never on
+ * available (StartConfiguration.D34-A); false where the read failed (a
+ * 403 for a user with neither update nor restart, no answer); null where
+ * the session changed meanwhile, its answer the user's who was.
+ */
+export async function readRefused(): Promise<boolean | null> {
+  const n = session();
+  let v: RestartInfo | null;
+  try {
+    v = await api<RestartInfo | null>("GET", "api/v1/restart");
+  } catch {
+    return stillSession(n) ? false : null;
+  }
+  if (!stillSession(n)) return null;
+  return !!v && !!v.refused && v.refused.length > 0;
+}
+
+/**
+ * ask asks in the section whether to install the update the last load
+ * offers, once it has read whether the server's next start refuses the
+ * settings file (readRefused), which the question then says (D12-A); a
+ * failed read asks as before. Update turns while it reads, and a press
+ * meanwhile reads nothing more; the question names the release offered
+ * once the answer is in, and goes nowhere where none is to be installed
+ * then, or the session changed.
+ */
+export async function ask(): Promise<void> {
+  if (question.reading || !update.value || !update.value.latest) return;
+  question.reading = true;
+  const refused = await readRefused();
+  if (refused === null) return; // signed out meanwhile: forgetSoftware has ended the read
+  question.reading = false;
   const u = update.value;
-  if (!u || !u.latest) return;
+  // a load or an event meanwhile: what loadUpdate and serverEvent take back is not asked
+  if (!u || !u.latest || !u.can_update || data.busy) return;
   question.version = u.latest;
+  question.refused = refused;
   question.asking = true;
+}
+
+/**
+ * installNow is Install now, pressed where the automatic update's
+ * question is asked (place) about version: it reads whether the server's
+ * next start refuses the settings file (readRefused), and where it does
+ * asks there first, in place of the three answers (D14-A); where it does
+ * not, or the read failed, it answers now at once. A press while the
+ * read runs reads nothing more, and a sign-out meanwhile sends nothing.
+ */
+export async function installNow(place: AskPlace, version: string): Promise<void> {
+  const q = nowAsks[place];
+  if (q.reading || data.answering) return;
+  q.reading = true;
+  const refused = await readRefused();
+  if (refused === null) return; // signed out meanwhile: forgetSoftware has ended the read
+  q.reading = false;
+  // a load meanwhile that offers another version, or none: what takeNowBack takes back is not asked
+  if (!stillAsks(update.value, version)) return;
+  if (!refused) {
+    await answerUpdate(version, "now");
+    return;
+  }
+  q.version = version;
+  q.asking = true;
+}
+
+/** stillAsks says whether u, GET /api/v1/update's answer, still asks the automatic update's question about version. */
+function stillAsks(u: UpdateInfo | null, version: string): boolean {
+  return !!u && !!u.auto && !!u.auto.ask && !!u.available && u.latest === version;
+}
+
+/**
+ * takeNowBack takes Install now's questions back where u no longer asks
+ * about the version they asked about: another version offered, or the
+ * question answered, from any browser.
+ */
+function takeNowBack(u: UpdateInfo): void {
+  for (const q of Object.values(nowAsks)) {
+    if (q.asking && !stillAsks(u, q.version)) q.asking = false;
+  }
 }
 
 /** runUpdate asks the server's update helper to install the version asked about, then follows it. */
@@ -308,6 +409,7 @@ export async function answerUpdate(version: string, answer: "now" | "tonight" | 
     }
     if (r && r.auto) {
       update.value = r;
+      takeNowBack(r);
       renderServerSign(); // header.js
     }
   } catch (e) {
@@ -392,9 +494,10 @@ function fresh(ev: ServerEvent): boolean {
 /**
  * forgetSoftware forgets what the section kept of the user who was
  * signed in (MassimoParts.signedOut): the reading while the helper works
- * ends, the question goes, and the channel's setting, a holder of
- * settings' alone, is read again for the next. The versions, which every
- * user may read, stay for the server's sign.
+ * ends, the questions go, Update's and Install now's with the reads
+ * before them, and the channel's setting, a holder of settings' alone,
+ * is read again for the next. The versions, which every user may read,
+ * stay for the server's sign.
  */
 export function forgetSoftware(): void {
   stopFollow();
@@ -410,4 +513,11 @@ export function forgetSoftware(): void {
   data.answering = false;
   question.asking = false;
   question.version = "";
+  question.refused = false;
+  question.reading = false;
+  for (const q of Object.values(nowAsks)) {
+    q.asking = false;
+    q.version = "";
+    q.reading = false;
+  }
 }

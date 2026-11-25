@@ -507,7 +507,9 @@ export interface Session {
   expires_at?: string;
   user?: User;
   role?: RoleRef;
-  /** The effective set */
+  /**
+   * The effective set, with what it includes: restart beside update or reboot
+   */
   capabilities?: string[];
   /**
    * With login, for a user of auth_version 1: a proof, good once for five
@@ -652,7 +654,10 @@ export interface Me {
   mode?: "users" | "open" | "token" | "none";
   user?: User | null;
   role?: RoleRef | null;
-  /** What the caller may do; every capability outside users mode */
+  /**
+   * What the caller may do, restart beside update or reboot, which include it;
+   * every capability outside users mode
+   */
   capabilities?: string[];
   /** The first owner can be created from here */
   setup?: boolean;
@@ -874,17 +879,11 @@ export interface RestoreProgress {
 }
 
 export interface RestartInfo {
-  /**
-   * Whether this caller's POST would restart the server now; false for a caller
-   * without restart
-   */
+  /** Whether this caller's POST would restart the server now */
   available: boolean;
   /** Who starts the server again; absent when nobody would */
   by?: "systemd" | "launchd" | "windows" | "exit";
-  /**
-   * Why the restart is not available, 'capability "restart" required' for a
-   * caller without restart
-   */
+  /** Why the restart is not available */
   blocked?: string;
   /**
    * The settings file's variables that changed since the start and apply only

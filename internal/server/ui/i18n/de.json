@@ -1857,6 +1857,7 @@
   "cap.audit": "das Protokoll lesen",
   "cap.auth": "die Anmeldedienste verwalten",
   "cap.integrations": "Integrationen registrieren und ihre Benutzer verknüpfen",
+  "cap.included": "inbegriffen: ein Update oder ein Neustart des Computers startet den Server neu",
   "help.users": "Wer sich anmeldet, hat eine Rolle, die sagt, was er darf. Ein Gast hat ein Ende; ein Benutzer ohne Passwort meldet sich nur mit Schlüsseln an. Ein hier gesetztes Passwort beendet die Sitzungen des Benutzers.",
   "help.roles": "Eine Rolle ist eine Menge von Fähigkeiten, von denen jede einen Teil dessen bewacht, was Seite und API tun. Die sechs Standardrollen lassen sich umbenennen und umbauen, außer dem Eigentümer; weitere lassen sich anlegen. Eine gesperrte Rolle hält ihre Benutzer draußen.",
   "help.capabilities": "Eine hier abgeschaltete Fähigkeit wird jeder Rolle außer dem Eigentümer verweigert, was auch die Rollen sagen: zum Beispiel das Anlernen, solange niemand anlernen soll, oder Updates auf einer Box, die von Hand aktualisiert wird.",

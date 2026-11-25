@@ -1858,6 +1858,7 @@
   "cap.audit": "de audit lezen",
   "cap.auth": "de aanmeldproviders beheren",
   "cap.integrations": "integraties registreren en hun gebruikers koppelen",
+  "cap.included": "inbegrepen: een update of een herstart van de computer herstart de server",
   "help.users": "Wie zich aanmeldt heeft één rol, die zegt wat hij mag. Een gast heeft een einddatum; een gebruiker zonder wachtwoord meldt zich alleen met sleutels aan. Een hier gezet wachtwoord beëindigt de sessies van de gebruiker.",
   "help.roles": "Een rol is een verzameling bevoegdheden, die elk een deel bewaken van wat de pagina en de API doen. De zes standaardrollen kunnen worden hernoemd en aangepast, behalve de eigenaar; meer kunnen worden aangemaakt. Een uitgeschakelde rol houdt zijn gebruikers buiten.",
   "help.capabilities": "Een hier uitgezette bevoegdheid wordt elke rol behalve de eigenaar geweigerd, wat de rollen ook zeggen: bijvoorbeeld koppelen zolang niemand mag koppelen, of updates op een machine die met de hand wordt bijgewerkt.",

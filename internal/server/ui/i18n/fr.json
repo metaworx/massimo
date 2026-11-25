@@ -1859,6 +1859,7 @@
   "cap.audit": "lire l'audit",
   "cap.auth": "gérer les fournisseurs de connexion",
   "cap.integrations": "enregistrer les intégrations et lier leurs utilisateurs",
+  "cap.included": "incluse : une mise à jour ou un redémarrage de l'ordinateur redémarre le serveur",
   "help.users": "Chaque personne connectée a un rôle, qui dit ce qu'elle peut faire. Un invité a une date de fin ; un utilisateur sans mot de passe se connecte avec des clés seulement. Un mot de passe défini ici met fin aux sessions de l'utilisateur.",
   "help.roles": "Un rôle est un ensemble de capacités, chacune gardant une partie de ce que font la page et l'API. Les six rôles par défaut peuvent être renommés et remaniés, sauf le propriétaire ; d'autres peuvent être créés. Un rôle désactivé tient ses utilisateurs dehors.",
   "help.capabilities": "Une capacité désactivée ici est refusée à tous les rôles sauf au propriétaire, quoi que disent les rôles : par exemple l'appairage tant que personne ne doit appairer, ou les mises à jour sur une machine mise à jour à la main.",

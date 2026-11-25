@@ -1912,6 +1912,7 @@
   "cap.audit": "czytać audyt",
   "cap.auth": "zarządzać dostawcami logowania",
   "cap.integrations": "rejestrować integracje i wiązać ich użytkowników",
+  "cap.included": "zawarte: aktualizacja lub ponowne uruchomienie komputera uruchamia ponownie serwer",
   "help.users": "Każdy, kto się loguje, ma jedną rolę, która mówi, co może. Gość ma datę końca; użytkownik bez hasła loguje się tylko kluczami. Hasło ustawione tutaj kończy sesje użytkownika.",
   "help.roles": "Rola to zbiór uprawnień, z których każde strzeże części tego, co robią strona i API. Sześć ról domyślnych można przemianować i przebudować, poza właścicielem; można tworzyć kolejne. Wyłączona rola nie wpuszcza swoich użytkowników.",
   "help.capabilities": "Uprawnienie wyłączone tutaj jest odmawiane każdej roli poza właścicielem, cokolwiek mówią role: na przykład parowanie, dopóki nikt nie powinien parować, albo aktualizacje na urządzeniu aktualizowanym ręcznie.",
