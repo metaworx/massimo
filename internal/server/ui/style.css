@@ -1101,6 +1101,31 @@ button.subtle { color: var(--muted); }
 .menu-items button:hover > .ni { color: var(--accent); }
 /* a Cube's cube stays grey: a blue cube is a Cube found and not served */
 .menu-items button:hover > .ni.cube-icon { color: var(--muted); }
+/* A tip (shared/tip.tsx): its text in a small box under its button,
+   from the button's left edge, on the menus' layer and with their edge
+   and shadow, kept in the window by placeTip; the first letter a
+   capital, as of a text standing alone. */
+.tip { position: relative; display: inline-flex; min-width: 0; }
+.tip-text {
+  position: absolute;
+  top: calc(100% + 4px);
+  left: 0;
+  z-index: 5;
+  width: max-content;
+  max-width: min(240px, calc(100vw - 32px));
+  padding: 4px 8px;
+  font-size: 0.8rem;
+  font-weight: 400;
+  line-height: 1.3;
+  letter-spacing: normal;
+  white-space: normal;
+  color: var(--fg);
+  background: var(--card);
+  border: 1px solid color-mix(in srgb, var(--line), var(--fg) 25%);
+  border-radius: 8px;
+  box-shadow: var(--menu-shadow);
+}
+.tip-text::first-letter { text-transform: uppercase; }
 
 .tile .notice { margin: 10px 14px 0; width: auto; font-size: 0.9rem; }
 /* Rooms without a connected Cube (home.js renderHomeNotice) */
@@ -1128,9 +1153,18 @@ button.subtle { color: var(--muted); }
    (.no-setpoint, login.js), the row has no third column, so that SET
    stands at the tile's right edge. */
 .no-setpoint .setpoint-row { grid-template-columns: minmax(0, auto) minmax(0, auto); }
-/* A temperature: a small column with the icon above the label, then the
+/* While a tip of the row is open (IS's or SET's full term), the row is
+   a layer above the rest of the tile, so that the tip lies over the
+   modes' row under it, More's summary too, in an engine where the row's
+   container contains its layout and so holds the tip's own layer; only
+   then, so that a popup of one row never stays under a later tile. AP
+   RoomsPage's Block 6 extends it for SET's list. */
+.setpoint-row:has(.tip-text:not(.hidden)) { position: relative; z-index: 1; }
+/* A temperature: a small column with the icon above the short label,
+   the button of a tip with the full term (shared/tip.tsx), then the
    number. A label too long for the space is cut, its icon kept, rather
-   than the row made wider. */
+   than the row made wider. The button is drawn as the column alone,
+   shown at every width and with or without a hover. */
 .temp-block {
   display: flex;
   flex-direction: row;
@@ -1138,13 +1172,25 @@ button.subtle { color: var(--muted); }
   gap: 4px;
   min-width: 0;
 }
+.temp-block > .tip { flex: 0 1 auto; min-width: 1.25rem; /* the icon's */ }
 .temp-tag {
   display: flex;
   flex-direction: column;
   align-items: center;
   gap: 1px;
   flex: 0 1 auto;
-  min-width: 1.25rem; /* the icon's */
+  min-width: 0;
+  padding: 0;
+  border: 0;
+  border-radius: 4px;
+  background: none;
+  color: inherit;
+}
+/* The label in the text's colour while its tip is open, and under a
+   pointer that hovers, not after a tap on a touch screen. */
+.temp-tag[aria-expanded="true"] .temp-label { color: var(--fg); }
+@media (hover: hover) {
+  .temp-tag:hover .temp-label { color: var(--fg); }
 }
 /* The numbers' size follows the row's width, 100cqi inside its padding
    (the row is their size container): 2.3rem where there is room, else

@@ -8,15 +8,16 @@
  * menu, whose problems list its notices too (a room not ready, devices
  * not seen for long, the Cube's lines that differ from its room list;
  * rooms/facts.ts roomEntries); one line while the room's commands are
- * refused; the measured and
- * the set temperature with the stepper, the setpoint marked where it is
- * the room's eco or comfort temperature (roomPresets); the members'
- * setpoints while they differ; the modes with More; the info and
- * the cog; the holiday form, the deletion's question, the room's repairs,
- * the result line, the device list and the configuration. Built once per
- * room and updated in place, so that an open menu, the focus, a click and
- * what is typed stay when data comes in. The tile's actions are the plain
- * ones (rooms.js, tiles.js), which set the tile's live state (roomUI); the
+ * refused; the measured and the set temperature, each beside its icon
+ * and short label, a tap on which shows the full term (shared/tip.tsx),
+ * with the stepper, the setpoint marked where it is the room's eco or
+ * comfort temperature (roomPresets); the members' setpoints while they
+ * differ; the modes with More; the info and the cog; the holiday form,
+ * the deletion's question, the room's repairs, the result line, the
+ * device list and the configuration. Built once per room and updated in
+ * place, so that an open menu, the focus, a click and what is typed
+ * stay when data comes in. The tile's actions are the plain ones
+ * (rooms.js, tiles.js), which set the tile's live state (roomUI); the
  * room's repairs are the shared RepairBox, opened from ⋯; the
  * configuration is a part of its own (Config.tsx).
  */
@@ -39,6 +40,7 @@ import { useLook } from "../shared/look";
 import { apiUntil, roomActual, roomActualDevice } from "../model/room";
 import { cubePath } from "../shared/path";
 import { fmtSetpoint, PresetMark, presetOf } from "../shared/setpoint";
+import { Tip } from "../shared/tip";
 
 /** The arrow keys of More move between these: its buttons that are on, and the Hold switch where shown. */
 const MORE_ITEMS = ".menu-items button:not(:disabled), .menu-items .switch:not(.hidden) input";
@@ -303,14 +305,14 @@ export function Tile({ room }: { room: PageRoom }) {
       <NotReadyLine room={room} tile={tile} />
       <div class={"setpoint-row" + hid(!th)}>
         <div class="temp-block">
-          <span class="temp-tag"><Icon symbol="icon-is" cls="ti" /><span class="temp-label">{t("room.is")}</span></span>
+          <Tip cls="temp-tag" label={t("room.is")} labelCls="temp-label" text={t("room.measured")}><Icon symbol="icon-is" cls="ti" /></Tip>
           <span class={"temp-val" + (src?.stale ? " stale" : "")}>
             <span class="temp-big temp-is" aria-label={t("room.measured")} title={t(actual === undefined ? "room.noMeasured" : "room.measured")}>{fmtTemp(actual, "°")}</span>
             <span class="temp-age">{src && <Age at={received(src, "actual_temp")} stale={src.stale} />}</span>
           </span>
         </div>
         <div class="temp-block">
-          <span class="temp-tag"><Icon symbol="icon-set" cls="ti" /><span class="temp-label">{t("room.set")}</span></span>
+          <Tip cls="temp-tag" label={t("room.set")} labelCls="temp-label" text={t("room.setTemp")}><Icon symbol="icon-set" cls="ti" /></Tip>
           <span class="set-val">
             <span class={"temp-big setpoint-big" + (ui.pending !== null ? " pending" : "")} aria-label={t("room.setTemp")}>
               {th ? fmtSetpoint(shown, "°") : ""}
