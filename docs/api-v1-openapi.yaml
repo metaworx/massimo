@@ -409,7 +409,8 @@ paths:
       x-capability: any
       description: |
         The mode (users, open, token, none), the caller's user, role and
-        effective capabilities, and the token presented; outside users
+        effective capabilities, with what they include (restart beside
+        update or reboot), and the token presented; outside users
         mode user and role are null and the capabilities are all of
         them. An open server has no regular user: an integration's users
         do not count, and its key is answered as anyone's, mode open.
@@ -3816,12 +3817,7 @@ paths:
   /api/v1/restart:
     get:
       summary: Whether the server can be restarted from here, and who starts it again
-      x-capability: restart or update
-      description: |
-        A holder of update reads it as well as one of restart, since every
-        update restarts the server: without restart, available is false and
-        blocked is 'capability "restart" required', as its own POST would be;
-        the rest is a restart holder's, by and refused included.
+      x-capability: restart
       responses:
         "200":
           description: The restart's state for this caller
@@ -4037,7 +4033,7 @@ components:
       description: >-
         A session or an API key of a user of the store, which names the
         user whose role grants the capabilities (x-capability on each
-        operation, two joined by "or" where either will do,
+        operation; update and reboot each include restart,
         docs/api-v1.md "Authentication"); without a store,
         the one token of MASSIMO_API_TOKEN or -token. Required once a
         user exists, or a token is set. Ten failed checks from one
@@ -4705,7 +4701,7 @@ components:
         role: {$ref: "#/components/schemas/RoleRef"}
         capabilities:
           type: array
-          description: The effective set
+          description: "The effective set, with what it includes: restart beside update or reboot"
           items: {type: string}
         upgrade:
           type: string
@@ -4808,7 +4804,7 @@ components:
           allOf: [{$ref: "#/components/schemas/RoleRef"}]
         capabilities:
           type: array
-          description: What the caller may do; every capability outside users mode
+          description: "What the caller may do, restart beside update or reboot, which include it; every capability outside users mode"
           items: {type: string}
         setup: {type: boolean, description: The first owner can be created from here}
         kept_open: {type: boolean, description: "An open server kept open on purpose (the setting auth.keep_open): the web UI does not ask for the first owner"}
@@ -4948,9 +4944,9 @@ components:
       type: object
       required: [available]
       properties:
-        available: {type: boolean, description: "Whether this caller's POST would restart the server now; false for a caller without restart"}
+        available: {type: boolean, description: Whether this caller's POST would restart the server now}
         by: {type: string, enum: [systemd, launchd, windows, exit], description: Who starts the server again; absent when nobody would}
-        blocked: {type: string, description: "Why the restart is not available, 'capability \"restart\" required' for a caller without restart"}
+        blocked: {type: string, description: Why the restart is not available}
         pending:
           type: array
           items: {type: string}

@@ -9,7 +9,6 @@ import (
 	"net/http"
 	"net/url"
 	"regexp"
-	"slices"
 	"strings"
 	"time"
 
@@ -32,7 +31,9 @@ import (
 //     configures, admin adds nothing of its own.
 //
 // Without the header the key acts as the integration itself: its role
-// integration and its maximum.
+// integration and its maximum. What the set the chain leaves includes
+// (auth.go, includes) is taken at the check, after every link, so that
+// a maximum with update and without restart passes restart's check.
 
 // OnBehalfHeader names the user an integration's call acts for.
 const OnBehalfHeader = "X-MassimoHA-On-Behalf-Of"
@@ -192,15 +193,18 @@ func (s *Server) integrationPrincipal(ctx context.Context, r *http.Request, p *p
 	if own.Disabled || own.Expired(now) {
 		return nil, &onBehalfRefusal{http.StatusForbidden, "user_disabled", "the integration's user " + own.Name + " is disabled"}
 	}
-	ownCaps, off, err := st.Effective(ctx, own.Role, capabilities)
+	ownCaps, ownOff, roleOff, err := st.Effective(ctx, own.Role, capabilities)
 	if err != nil {
 		return nil, &onBehalfRefusal{http.StatusInternalServerError, "", err.Error()}
 	}
-	if off {
+	if roleOff {
 		return nil, &onBehalfRefusal{http.StatusForbidden, "user_disabled", "the role " + own.Role + " is disabled"}
 	}
-	// 1: the user's role; 2 and 4 are in caps already.
+	// 1: the user's role; 2 and 4 are in caps already. The capabilities
+	// disabled for every role that any role of the chain left out are
+	// never included.
 	caps = intersect(caps, ownCaps)
+	off := union(p.off, ownOff)
 	acting := own
 	if id.Linked() {
 		linked, ok, err := st.UserByID(ctx, id.EffectiveUserID)
@@ -210,32 +214,31 @@ func (s *Server) integrationPrincipal(ctx context.Context, r *http.Request, p *p
 		if linked.Disabled || linked.Expired(now) {
 			return nil, &onBehalfRefusal{http.StatusForbidden, "user_disabled", "the linked user " + linked.Name + " is disabled"}
 		}
-		linkedCaps, off, err := st.Effective(ctx, linked.Role, capabilities)
+		linkedCaps, linkedOff, roleOff, err := st.Effective(ctx, linked.Role, capabilities)
 		if err != nil {
 			return nil, &onBehalfRefusal{http.StatusInternalServerError, "", err.Error()}
 		}
-		if off {
+		if roleOff {
 			return nil, &onBehalfRefusal{http.StatusForbidden, "user_disabled", "the role " + linked.Role + " is disabled"}
 		}
 		caps = intersect(caps, linkedCaps) // 3
+		off = union(off, linkedOff)
 		acting = linked
 	}
 	if allowed, bounded := levelCaps[ob.level]; bounded {
 		caps = intersect(caps, allowed) // 5
 	}
-	q := &principal{mode: p.mode, user: acting, token: p.token, caps: caps, integration: &integ, actsFor: &id}
+	q := &principal{mode: p.mode, user: acting, token: p.token, caps: caps, off: off, integration: &integ, actsFor: &id}
 	return q, nil
 }
 
-// integrationCaps are the capabilities left in a principal's set, sorted:
-// for GET /api/v1/me.
-func integrationCaps(p *principal) []string {
-	var out []string
-	for c, ok := range p.caps {
+// union is a set of capabilities with those of more added.
+func union(set map[string]bool, more []string) map[string]bool {
+	out := setOf(more)
+	for c, ok := range set {
 		if ok {
-			out = append(out, c)
+			out[c] = true
 		}
 	}
-	slices.Sort(out)
 	return out
 }

@@ -598,6 +598,57 @@ def test_role_save_is_off_until_a_change(page, case):
     show_view(page, "tiles")
 
 
+def test_restart_held_with_update_or_reboot(page, case):
+    """In a role's set, and in a new role's form, restart shows on, off
+    and with why while update or reboot is on, since each includes it,
+    and free again, as stored, with them off; Save sends the set as
+    switched, without what is held alone, and the role is stored so."""
+    key = f"inc{case.width}{case.lang}"
+    undo(f"the role {key}", lambda: api_call("DELETE", "api/v1/roles/" + key))
+    api_call("POST", "api/v1/roles", {"key": key, "capabilities": ["read"]})
+    try:
+        show_view(page, "system")
+        sel = f".role-panel[data-key='{key}']"
+        assert wait_until(page, f"!!document.querySelector(\"{sel}\")", 5), "the role is listed"
+        panel = page.locator(sel)
+        panel.locator("summary").click()
+        why = page.evaluate("t('cap.included')")
+
+        def held(form, holder):
+            """restart's switch while holder's is on, and once it is off again."""
+            restart = form.locator(".cap-grid .switch[title='restart']")
+            box = restart.locator("input")
+            assert not box.is_checked() and box.is_enabled() and restart.locator(".flag").count() == 0, "restart off and free, as stored"
+            form.locator(f".cap-grid .switch[title='{holder}']").click()
+            assert box.is_checked() and box.is_disabled(), f"restart on and off with {holder} on"
+            assert restart.locator(".flag").inner_text() == why, f"with why: {restart.inner_text()!r}"
+            form.locator(f".cap-grid .switch[title='{holder}']").click()
+            assert not box.is_checked() and box.is_enabled() and restart.locator(".flag").count() == 0, f"restart free again with {holder} off"
+
+        for holder in ("update", "reboot"):
+            held(panel, holder)
+        puts = []
+        page.on("request", lambda r: puts.append(r.post_data_json) if r.method == "PUT" and r.url.endswith("/api/v1/roles/" + key) else None)
+        panel.locator(".cap-grid .switch[title='update']").click()
+        panel.locator("form button[type=submit]").click()
+        assert wait_until(page, "document.getElementById('roles-msg').classList.contains('ok')", 5), "the role saved"
+        assert [p.get("capabilities") for p in puts] == [["read", "update"]], f"sent {puts}"
+        stored = [r for r in api_call("GET", "api/v1/roles")["roles"] if r["key"] == key]
+        assert stored and stored[0]["capabilities"] == ["read", "update"], f"stored {stored}"
+        restart = panel.locator(".cap-grid .switch[title='restart'] input")
+        assert restart.is_checked() and restart.is_disabled(), "the role as saved: restart held with update"
+
+        page.locator("#role-add").click()
+        form = page.locator("#role-new")
+        form.wait_for()
+        for holder in ("update", "reboot"):
+            held(form, holder)
+        form.locator(".form-cancel").click()
+    finally:
+        undo(f"the role {key}", lambda: api_call("DELETE", "api/v1/roles/" + key))
+    show_view(page, "tiles")
+
+
 def name_msg(page, selector):
     """The name check's message under a field: its text, or None while
     hidden."""

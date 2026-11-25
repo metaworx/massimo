@@ -520,7 +520,7 @@ func (s *Server) meOf(r *http.Request, p *principal) (meView, error) {
 	if !ok {
 		return me, fail(http.StatusInternalServerError, "role %s of user %s is gone", p.user.Role, p.user.Name)
 	}
-	caps, _, err := st.Effective(ctx, p.user.Role, capabilities)
+	caps, off, _, err := st.Effective(ctx, p.user.Role, capabilities)
 	if err != nil {
 		return me, fail(http.StatusInternalServerError, "%v", err)
 	}
@@ -533,14 +533,14 @@ func (s *Server) meOf(r *http.Request, p *principal) (meView, error) {
 	u := viewUser(p.user, invitedBy)
 	u.Display, u.Integration = userDisplay(ctx, st.Namer(), p.user)
 	tok := viewToken(p.token)
-	me.User, me.Role, me.Capabilities, me.Token = &u, &roleRef{Key: role.Key, Name: role.Name, Disabled: role.Disabled}, caps, &tok
+	// The role's set with what it includes, as every check takes it
+	// (principal.has).
+	me.User, me.Role, me.Capabilities, me.Token = &u, &roleRef{Key: role.Key, Name: role.Name, Disabled: role.Disabled}, heldCaps(setOf(caps), setOf(off)), &tok
 	if p.integration != nil || p.user.IntegrationID != 0 {
 		// What the chain leaves, or for an integration's user's own key
-		// the role integration and the maximum (principalFor).
-		me.Capabilities = integrationCaps(p)
-		if me.Capabilities == nil {
-			me.Capabilities = []string{}
-		}
+		// the role integration and the maximum (principalFor), with what
+		// that includes.
+		me.Capabilities = heldCaps(p.caps, p.off)
 	}
 	if i := p.integration; i != nil {
 		me.Integration = &meIntegration{UUID: i.UUID, Key: i.UUID, Name: store.IntegrationName(*i), ReportedName: i.Name, State: i.State, InstanceID: i.InstanceID}

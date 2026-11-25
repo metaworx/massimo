@@ -7,8 +7,11 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"maps"
 	"net/http/httptest"
+	"os"
 	"path/filepath"
+	"regexp"
 	"slices"
 	"strings"
 	"sync/atomic"
@@ -16,6 +19,7 @@ import (
 	"time"
 
 	"go.metaworx.ch/massimo/internal/store"
+	"go.metaworx.ch/massimo/internal/testkit"
 	"go.metaworx.ch/massimo/internal/testkit/cubewatch"
 	"go.metaworx.ch/massimo/internal/update"
 )
@@ -71,8 +75,8 @@ func TestRestartRoutes(t *testing.T) {
 	if code, text := callAPI(t, ts, "GET", path, manager, ""); code != 200 || !decodeRestart(t, text).Available {
 		t.Fatalf("GET as manager: %d %s", code, text)
 	}
-	for m, want := range map[string]string{"GET": `capability "restart" or "update" required`, "POST": `capability "restart" required`} {
-		if code, text := callAPI(t, ts, m, path, operator, "{}"); code != 403 || errorOf(text) != want {
+	for _, m := range []string{"GET", "POST"} {
+		if code, text := callAPI(t, ts, m, path, operator, "{}"); code != 403 || errorOf(text) != `capability "restart" required` {
 			t.Fatalf("%s as operator: %d %s", m, code, text)
 		}
 		if code, text := callAPI(t, ts, m, path, "", "{}"); code != 401 {
@@ -120,21 +124,24 @@ func TestRestartRoutes(t *testing.T) {
 	}
 }
 
-// A holder of update alone reads GET /api/v1/restart, since every update
-// restarts the server (AP StartConfiguration, D34-A): a restart holder's
-// answer, what the next start refuses and who restarts included, but for
-// available and blocked, which say that its own POST is refused; a role
-// with neither is refused the GET, and both the POST.
-func TestRestartReadWithUpdate(t *testing.T) {
+// update and reboot each include restart (AP StartConfiguration, D37,
+// D39-A): a role with update alone, and one with reboot alone, reads
+// GET /api/v1/restart as a holder of restart does, restarts the server,
+// reads the settings file again and reads a Cube again, whose one line
+// is the quit; GET /api/v1/me lists restart beside it, and the roles'
+// sets stay as stored. reboot does not include update (D40-A), nor
+// update reboot, and a role with neither is refused all of restart's.
+func TestUpdateAndRebootIncludeRestart(t *testing.T) {
 	t.Parallel()
 	c := &restartCounter{}
 	opts := storeOptions(t, t.TempDir(), "secret")
 	opts.Restart = RestartOptions{By: "systemd", Restart: c.restart}
-	r := startServer(t, withOptions(opts))
+	r := startServer(t, quiet(), withOptions(opts))
 	ts, s := r.ts, r.s
 	st := s.opts.Store
 	for _, role := range []store.Role{
 		{Key: "updater", Capabilities: []string{"read", "update"}},
+		{Key: "rebooter", Capabilities: []string{"read", "reboot"}},
 		{Key: "restarter", Capabilities: []string{"read", "restart"}},
 		{Key: "reader", Capabilities: []string{"read", "settings"}},
 	} {
@@ -142,50 +149,269 @@ func TestRestartReadWithUpdate(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
-	updater := userToken(t, st, "updater1", "updater")
-	restarter := userToken(t, st, "restarter1", "restarter")
-	reader := userToken(t, st, "reader1", "reader")
-	path := "/api/v1/restart"
-	s.SetReloader("/etc/massimo/env", func(context.Context) (ReloadResult, error) { return ReloadResult{}, nil })
+	tokens := map[string]string{}
+	for _, role := range []string{"updater", "rebooter", "restarter", "reader"} {
+		tokens[role] = userToken(t, st, role+"1", role)
+	}
+	s.SetReloader("/etc/massimo/env", func(context.Context) (ReloadResult, error) {
+		return ReloadResult{Changed: []string{}, Pending: []string{}, Refused: []Refusal{}, ReadAt: time.Now()}, nil
+	})
 	s.SetSettingsRead(time.Date(2026, 11, 8, 19, 52, 0, 0, time.UTC))
 	s.SetPendingRestart([]string{"MASSIMO_HSTS"})
 	refused := []Refusal{{Settings: []string{"MASSIMO_HSTS"}, Error: `-hsts or MASSIMO_HSTS "-1": want a number of days, 0 or more`}}
 	s.SetRefused(refused)
-	code, text := callAPI(t, ts, "GET", path, restarter, "")
-	want := decodeRestart(t, text)
-	if code != 200 || !want.Available || want.Blocked != "" || want.By != "systemd" || want.File == "" || want.ReadAt == nil || len(want.Pending) != 1 || !sameRefusals(want.Refused, refused) {
-		t.Fatalf("GET with restart: %d %s", code, text)
+	path := "/api/v1/restart"
+	code, want := callAPI(t, ts, "GET", path, tokens["restarter"], "")
+	if v := decodeRestart(t, want); code != 200 || !v.Available || v.Blocked != "" || v.By != "systemd" || v.File == "" || v.ReadAt == nil || len(v.Pending) != 1 || !sameRefusals(v.Refused, refused) {
+		t.Fatalf("GET with restart: %d %s", code, want)
 	}
-	code, text = callAPI(t, ts, "GET", path, updater, "")
-	got := decodeRestart(t, text)
-	if code != 200 || got.Available || got.Blocked != `capability "restart" required` {
-		t.Fatalf("GET with update: %d %s, want available false and the capability", code, text)
+	refresh := "/api/v1/cubes/KEQ0000100/refresh"
+	for _, who := range []struct {
+		role, own string
+		me        []string
+	}{{"updater", "update", []string{"read", "restart", "update"}}, {"rebooter", "reboot", []string{"read", "reboot", "restart"}}} {
+		tok := tokens[who.role]
+		if code, text := callAPI(t, ts, "GET", path, tok, ""); code != 200 || text != want {
+			t.Errorf("GET with %s alone: %d %s, want restart's %s", who.own, code, text, want)
+		}
+		code, text := callAPI(t, ts, "GET", "/api/v1/me", tok, "")
+		var me struct {
+			Capabilities []string `json:"capabilities"`
+		}
+		json.Unmarshal([]byte(text), &me)
+		if code != 200 || !slices.Equal(me.Capabilities, who.me) {
+			t.Errorf("GET /api/v1/me with %s alone: %d %v, want %v", who.own, code, me.Capabilities, who.me)
+		}
+		if code, text := callAPI(t, ts, "POST", "/api/v1/reload", tok, ""); code != 200 {
+			t.Errorf("reload with %s alone: %d %s", who.own, code, text)
+		}
+		sent := r.lines.Mark()
+		if code, text := callAPI(t, ts, "POST", refresh, tok, ""); code != 200 {
+			t.Errorf("refresh with %s alone: %d %s", who.own, code, text)
+		} else {
+			testkit.Eventually(t, "the quit", func() bool { return r.lines.Count(sent, nil) > 0 })
+			if got := lineStrings(r.lines.Since(sent, nil)); !slices.Equal(got, []string{"q:"}) {
+				t.Errorf("the refresh with %s alone sent %q, want only the quit", who.own, got)
+			}
+		}
+		calls := c.calls.Load()
+		if code, text := callAPI(t, ts, "POST", path, tok, "{}"); code != 202 || c.calls.Load() != calls+1 {
+			t.Errorf("POST with %s alone: %d %s, %d restarts", who.own, code, text, c.calls.Load()-calls)
+		}
+		s.restartGate.asked.Store(false) // the next one restarts again
+		s.noteStop("")
 	}
-	got.Available, got.Blocked = want.Available, want.Blocked
-	if g, w := toJSON(t, got), toJSON(t, want); g != w {
-		t.Fatalf("GET with update, but for available and blocked: %s, want %s", g, w)
-	}
-	if code, text := callAPI(t, ts, "GET", path, reader, ""); code != 403 || errorOf(text) != `capability "restart" or "update" required` {
-		t.Fatalf("GET with neither: %d %s", code, text)
-	}
-	for _, who := range []struct{ name, token string }{{"update", updater}, {"neither", reader}} {
-		if code, text := callAPI(t, ts, "POST", path, who.token, "{}"); code != 403 || errorOf(text) != `capability "restart" required` {
-			t.Fatalf("POST with %s: %d %s", who.name, code, text)
+	for _, rt := range []struct{ method, path string }{{"GET", path}, {"POST", path}, {"POST", "/api/v1/reload"}, {"POST", refresh}} {
+		if code, text := callAPI(t, ts, rt.method, rt.path, tokens["reader"], "{}"); code != 403 || errorOf(text) != `capability "restart" required` {
+			t.Errorf("%s %s with neither: %d %s", rt.method, rt.path, code, text)
 		}
 	}
-	if n := c.calls.Load(); n != 0 {
-		t.Fatalf("restart asked %d times", n)
+	for _, m := range []string{"POST", "PUT"} {
+		p := map[string]string{"POST": "/api/v1/update", "PUT": "/api/v1/update/answer"}[m]
+		if code, text := callAPI(t, ts, m, p, tokens["rebooter"], "{}"); code != 403 || errorOf(text) != `capability "update" required` {
+			t.Errorf("%s %s with reboot alone: %d %s", m, p, code, text)
+		}
+	}
+	for _, m := range []string{"GET", "POST", "DELETE"} {
+		if code, text := callAPI(t, ts, m, "/api/v1/reboot", tokens["updater"], "{}"); code != 403 || errorOf(text) != `capability "reboot" required` {
+			t.Errorf("%s /api/v1/reboot with update alone: %d %s", m, code, text)
+		}
+	}
+	// The stored sets are as saved: the include is taken at the check.
+	_, text := callAPI(t, ts, "GET", "/api/v1/roles", "secret", "")
+	var list struct {
+		Roles []roleView `json:"roles"`
+	}
+	json.Unmarshal([]byte(text), &list)
+	stored := map[string][]string{}
+	for _, ro := range list.Roles {
+		stored[ro.Key] = ro.Capabilities
+	}
+	if !slices.Equal(stored["updater"], []string{"read", "update"}) || !slices.Equal(stored["rebooter"], []string{"read", "reboot"}) {
+		t.Errorf("the roles' stored sets: updater %v, rebooter %v", stored["updater"], stored["rebooter"])
+	}
+	if n := c.calls.Load(); n != 2 {
+		t.Errorf("restart asked %d times, want 2", n)
 	}
 }
 
-// toJSON is a value as JSON, for comparing two answers.
-func toJSON(t *testing.T, v any) string {
-	t.Helper()
-	b, err := json.Marshal(v)
+// A capability disabled for every role is not included: with restart
+// off, a holder of update or of reboot is refused restart's checks as a
+// holder of restart is, and GET /api/v1/me lists no restart; on again,
+// they pass. The owner, whom it does not bind, still restarts.
+func TestDisabledRestartIsNotIncluded(t *testing.T) {
+	t.Parallel()
+	opts := storeOptions(t, t.TempDir(), "secret")
+	opts.Restart = RestartOptions{By: "systemd", Restart: (&restartCounter{}).restart}
+	r := startServer(t, quiet(), withOptions(opts))
+	ts, st := r.ts, r.s.opts.Store
+	for _, role := range []store.Role{
+		{Key: "updater", Capabilities: []string{"read", "update"}},
+		{Key: "rebooter", Capabilities: []string{"read", "reboot"}},
+	} {
+		if _, err := st.AddRole(t.Context(), role, 0); err != nil {
+			t.Fatal(err)
+		}
+	}
+	tokens := map[string]string{
+		"update":  userToken(t, st, "updater1", "updater"),
+		"reboot":  userToken(t, st, "rebooter1", "rebooter"),
+		"restart": userToken(t, st, "manager1", store.RoleManager),
+	}
+	lists := func(tok, c string) bool {
+		_, text := callAPI(t, ts, "GET", "/api/v1/me", tok, "")
+		var me struct {
+			Capabilities []string `json:"capabilities"`
+		}
+		json.Unmarshal([]byte(text), &me)
+		return slices.Contains(me.Capabilities, c)
+	}
+	if code, text := callAPI(t, ts, "PUT", "/api/v1/capabilities/restart", "secret", `{"disabled":true}`); code != 200 {
+		t.Fatalf("restart disabled: %d %s", code, text)
+	}
+	for who, tok := range tokens {
+		for _, m := range []string{"GET", "POST"} {
+			if code, text := callAPI(t, ts, m, "/api/v1/restart", tok, "{}"); code != 403 || errorOf(text) != `capability "restart" required` {
+				t.Errorf("%s /api/v1/restart with %s, restart disabled: %d %s", m, who, code, text)
+			}
+		}
+		if lists(tok, "restart") {
+			t.Errorf("GET /api/v1/me with %s lists restart while it is disabled", who)
+		}
+	}
+	if !lists(tokens["update"], "update") || !lists(tokens["reboot"], "reboot") {
+		t.Error("restart disabled took update or reboot with it")
+	}
+	if code, text := callAPI(t, ts, "GET", "/api/v1/restart", "secret", ""); code != 200 {
+		t.Errorf("GET as owner, restart disabled: %d %s", code, text)
+	}
+	if code, text := callAPI(t, ts, "PUT", "/api/v1/capabilities/restart", "secret", `{"disabled":false}`); code != 200 {
+		t.Fatalf("restart enabled: %d %s", code, text)
+	}
+	for who, tok := range tokens {
+		if code, text := callAPI(t, ts, "GET", "/api/v1/restart", tok, ""); code != 200 || !lists(tok, "restart") {
+			t.Errorf("GET /api/v1/restart with %s, restart enabled again: %d %s", who, code, text)
+		}
+	}
+}
+
+// The include is taken on what an integration's bounds leave: with update
+// in its maximum and restart not, its key and the user it acts for at
+// admin pass restart's check, and GET /api/v1/me lists it; at control,
+// whose level leaves no update, the user does not; with restart disabled
+// for every role, neither the key nor the user passes it, and GET
+// /api/v1/me lists update alone; with reboot it is the same, and update
+// stays refused; with neither, restart is refused.
+func TestIncludeAfterTheIntegrationsBounds(t *testing.T) {
+	t.Parallel()
+	r := startServer(t, quiet(), withOptions(storeOptions(t, t.TempDir(), "secret")))
+	ts, st := r.ts, r.s.opts.Store
+	i, key := registerHA(t, st, []string{"read", "update"})
+	path := "/api/v1/restart"
+	get := func(h map[string]string) (int, string) {
+		resp, text := callWith(t, ts, "GET", path, key, "", h)
+		return resp.StatusCode, text
+	}
+	me := func(h map[string]string) []string {
+		_, text := callWith(t, ts, "GET", "/api/v1/me", key, "", h)
+		var v struct {
+			Capabilities []string `json:"capabilities"`
+		}
+		json.Unmarshal([]byte(text), &v)
+		return v.Capabilities
+	}
+	for _, h := range []map[string]string{nil, as(haAnna, LevelAdmin)} {
+		if code, text := get(h); code != 200 {
+			t.Errorf("GET with update in the maximum, %v: %d %s", h, code, text)
+		}
+		if got := me(h); !slices.Equal(got, []string{"read", "restart", "update"}) {
+			t.Errorf("GET /api/v1/me with update in the maximum, %v: %v", h, got)
+		}
+	}
+	if code, text := get(as(haAnna, LevelControl)); code != 403 || errorOf(text) != `capability "restart" required` {
+		t.Errorf("GET at control, which leaves no update: %d %s", code, text)
+	}
+	if code, text := callAPI(t, ts, "PUT", "/api/v1/capabilities/restart", "secret", `{"disabled":true}`); code != 200 {
+		t.Fatalf("restart disabled: %d %s", code, text)
+	}
+	for _, h := range []map[string]string{nil, as(haAnna, LevelAdmin)} {
+		for _, m := range []string{"GET", "POST"} {
+			if resp, text := callWith(t, ts, m, path, key, "{}", h); resp.StatusCode != 403 || errorOf(text) != `capability "restart" required` {
+				t.Errorf("%s with update in the maximum, restart disabled, %v: %d %s", m, h, resp.StatusCode, text)
+			}
+		}
+		if got := me(h); !slices.Equal(got, []string{"read", "update"}) {
+			t.Errorf("GET /api/v1/me with update in the maximum, restart disabled, %v: %v", h, got)
+		}
+	}
+	if code, text := callAPI(t, ts, "PUT", "/api/v1/capabilities/restart", "secret", `{"disabled":false}`); code != 200 {
+		t.Fatalf("restart enabled: %d %s", code, text)
+	}
+	setMax := func(caps []string) {
+		t.Helper()
+		if _, err := st.SetIntegration(t.Context(), i.UUID, func(i *store.Integration) error { i.MaxCaps = caps; return nil }, 0); err != nil {
+			t.Fatal(err)
+		}
+	}
+	setMax([]string{"read", "reboot"})
+	for _, h := range []map[string]string{nil, as(haAnna, LevelAdmin)} {
+		if code, text := get(h); code != 200 {
+			t.Errorf("GET with reboot in the maximum, %v: %d %s", h, code, text)
+		}
+		if resp, text := callWith(t, ts, "POST", "/api/v1/update", key, "{}", h); resp.StatusCode != 403 || errorOf(text) != `capability "update" required` {
+			t.Errorf("POST /api/v1/update with reboot in the maximum, %v: %d %s", h, resp.StatusCode, text)
+		}
+	}
+	setMax([]string{"read"})
+	for _, h := range []map[string]string{nil, as(haAnna, LevelAdmin)} {
+		if code, text := get(h); code != 403 || errorOf(text) != `capability "restart" required` {
+			t.Errorf("GET with neither in the maximum, %v: %d %s", h, code, text)
+		}
+		if got := me(h); !slices.Equal(got, []string{"read"}) {
+			t.Errorf("GET /api/v1/me with neither in the maximum, %v: %v", h, got)
+		}
+	}
+}
+
+// The includes name known capabilities, one step each (what an included
+// capability includes is not taken, so none includes again); update and
+// reboot include restart, and reboot not update (D40-A); the web UI's
+// CAP_INCLUDES (ui/src/model/cap.ts), which shows them, is the same.
+func TestIncludes(t *testing.T) {
+	t.Parallel()
+	src, err := os.ReadFile(filepath.Join("ui", "src", "model", "cap.ts"))
 	if err != nil {
 		t.Fatal(err)
 	}
-	return string(b)
+	m := regexp.MustCompile(`CAP_INCLUDES: Record<string, string\[\]> = \{([^}]*)\}`).FindSubmatch(src)
+	if m == nil {
+		t.Fatal("ui/src/model/cap.ts has no CAP_INCLUDES")
+	}
+	ui := map[string][]string{}
+	for _, e := range regexp.MustCompile(`([a-z.]+): \[([^\]]*)\]`).FindAllSubmatch(m[1], -1) {
+		for _, c := range regexp.MustCompile(`"([a-z.]+)"`).FindAllSubmatch(e[2], -1) {
+			ui[string(e[1])] = append(ui[string(e[1])], string(c[1]))
+		}
+	}
+	if !maps.EqualFunc(ui, includes, slices.Equal) {
+		t.Errorf("the web UI's CAP_INCLUDES %v, the server's includes %v", ui, includes)
+	}
+	for holder, more := range includes {
+		if !validCapability(holder) {
+			t.Errorf("%q includes, but is no capability", holder)
+		}
+		for _, c := range more {
+			if !validCapability(c) || c == holder {
+				t.Errorf("%q includes %q", holder, c)
+			}
+			if _, again := includes[c]; again {
+				t.Errorf("%q includes %q, which includes again", holder, c)
+			}
+		}
+	}
+	if !slices.Equal(includes["update"], []string{"restart"}) || !slices.Equal(includes["reboot"], []string{"restart"}) {
+		t.Errorf("includes %v, want update and reboot to include restart alone", includes)
+	}
 }
 
 // Without a service manager that starts the server again, while an

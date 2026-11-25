@@ -156,9 +156,8 @@ those that are not an integration's, disabled ones included:
   (or made from a key by `POST /api/v1/login/key`) or
   an API key from `POST /api/v1/users/{name}/tokens`; otherwise `401`.
   The token names a user, the user's role grants capabilities,
-  and every route needs one of them, or either of two (the table below);
-  a request without it is `403` with the message `capability "pair" required`,
-  or `capability "restart" or "update" required` for a route either of two admits.
+  and every route needs one of them (the table below);
+  a request without it is `403` with the message `capability "pair" required`.
   A disabled user, a guest past its end date or a disabled role is `403` too,
   with the reason.
 - **Open**, a store without regular users, the state before the first owner:
@@ -233,8 +232,7 @@ The file stays the way to recover an owner who lost the password:
 put a token into it, log in with it, set a password; no restart is needed.
 
 The capabilities, what each allows and the routes it guards;
-the OpenAPI file carries each operation's as `x-capability`,
-`restart or update` for `GET /api/v1/restart`, which a holder of either reads:
+the OpenAPI file carries each operation's as `x-capability`:
 
 | Capability | Allows | Routes |
 |---|---|---|
@@ -259,11 +257,24 @@ the OpenAPI file carries each operation's as `x-capability`,
 | `cubes` | add, configure and remove Cubes | `POST /api/v1/cubes`, `PUT`/`DELETE /api/v1/cubes/{sn}` |
 | `cubes.reboot` | reboot a Cube, which drops the radiograms it has not delivered; seeded for no role | `POST /api/v1/cubes/{sn}/reboot` |
 | `settings` | the server's settings, its store and the settings in effect | `GET`/`PUT /api/v1/settings`, `GET /api/v1/store`, `GET /api/v1/config` |
-| `update` | start a software update, answer the automatic update's question, and read the restart's state, since an update restarts the server | `POST /api/v1/update`, `PUT /api/v1/update/answer`, `GET /api/v1/restart` |
+| `update` | start a software update and answer the automatic update's question; includes `restart` | `POST /api/v1/update`, `PUT /api/v1/update/answer` |
 | `restart` | restart the server through the service manager that runs it, read its settings file again, and read a Cube again at once | `GET`/`POST /api/v1/restart`, `POST /api/v1/reload`, `POST /api/v1/cubes/{sn}/refresh` |
-| `reboot` | reboot the computer the server runs on, where its owner switched that on; seeded for no role | `GET`/`POST`/`DELETE /api/v1/reboot` |
+| `reboot` | reboot the computer the server runs on, where its owner switched that on; includes `restart`; seeded for no role | `GET`/`POST`/`DELETE /api/v1/reboot` |
 | `audit` | read the audit | `GET /api/v1/audit` |
 | `auth` | the OpenID Connect providers users sign in through; seeded for no role | `GET`/`POST /api/v1/providers`, `PUT`/`DELETE /api/v1/providers/{key}` |
+
+`update` and `reboot` each include `restart`, since each restarts the server:
+their holder passes every check of `restart` as a holder of `restart` does,
+and `GET /api/v1/me` lists `restart` beside them.
+The include is taken at the check, on the set the bounds leave
+(the role's set less the capabilities disabled for every role,
+an integration's ceiling and maximum, a call's level):
+an integration whose maximum holds `update` and not `restart` restarts the server,
+a call of it at `control`, which leaves no `update`, does not,
+and `restart` disabled for every role is disabled for their holders too.
+No role's stored set changes: `GET /api/v1/roles` shows it as saved,
+and the rule below compares the stored sets.
+`reboot` does not include `update`, nor `update` `reboot`.
 
 A user changes only users whose role has no capability its own lacks,
 and gives only such roles: an owner changes everyone,
@@ -516,7 +527,8 @@ a revoke under the user's tokens is `409` too (below).
 `mode` is how the server authenticates (Authentication above).
 With users, `user`, `role`, `capabilities` (the effective set:
 the role's minus the disabled capabilities, every one for `owner`,
-none for a disabled role) and `token`, the one presented;
+none for a disabled role, and what those include, `restart` beside
+`update` or `reboot` ("Authentication")) and `token`, the one presented;
 outside users mode `user` and `role` are null and `capabilities` is every one.
 `setup` is true on an open server for a caller on the local network,
 the one that may create the first owner,
@@ -1064,6 +1076,9 @@ on a server with regular users: on an open server the header is not read
   4. the integration's maximum, `max_caps`;
   5. the level: `view` reads, `control` also sets, locks and configures,
      and `admin` adds nothing of its own.
+
+  The include is taken on what they leave ("Authentication"):
+  a call left with `update` or `reboot` passes `restart`'s checks too.
 - **Without the header** the key acts as the integration itself:
   its role and its maximum (an integration's own polls and stream),
   within the role `integration` as every call through it.
@@ -4648,12 +4663,8 @@ A read that finds nothing refused clears it,
 and the start has none, since it would have refused it.
 It blocks nothing: the restart is offered all the same,
 and so are an update and a reboot.
-A holder of `update` reads the `GET` as well as one of `restart`,
-since every update restarts the server:
-without `restart` its `available` is false
-and `blocked` is `capability "restart" required`, as its own `POST` would be,
-and the rest is a restart holder's,
-`by` and what the next start refuses included.
+A holder of `update` or of `reboot` reads it as one of `restart` does,
+since each includes `restart` ("Authentication").
 `by` is `systemd`, `launchd` (also Homebrew's job), `windows`
 (the Windows service manager) or `exit` (`serve -restart exit`:
 whatever runs the server, told by the exit status).
@@ -4675,8 +4686,7 @@ a loopback peer with no `X-Forwarded-For`, `X-Real-IP` or `Forwarded` header,
 so that nobody on the LAN, and no client of a reverse proxy on the box,
 can restart it;
 anyone else gets `403` with the reason.
-`403` also for the `POST` without the capability `restart`,
-and for the `GET` without `restart` or `update`;
+`403` also without the capability `restart`;
 `409` when no service manager would start the server again (`serve` in a terminal,
 or `-restart off`),
 while a restart is under way,

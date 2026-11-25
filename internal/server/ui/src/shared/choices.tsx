@@ -12,23 +12,28 @@
  * as checkboxes in a row, All a checkbox of its own before them (the House
  * panel); or, where one option alone is chosen, as radio buttons in a row
  * (a suggested password's Words or Characters). An option may be locked (shown chosen or not, as it is, and off:
- * the owner's set, a capability's switch while its request runs), and carry
- * a tooltip and a badge (a capability disabled for every role). The caller
- * keeps what is chosen.
+ * the owner's set, a capability's switch while its request runs), or held
+ * (shown chosen and off whatever is chosen, with why: a capability another
+ * chosen one includes), and carry a tooltip and a badge (a capability
+ * disabled for every role). The caller keeps what is chosen.
  */
 
 import type { ComponentChildren } from "preact";
+import { Badge } from "./badge";
 import { Switch } from "./field";
 
 /**
  * More of an option of Choices: its tooltip, a badge after its label,
- * and lock, which shows it as chosen or not and keeps it from being
- * changed.
+ * lock, which shows it as chosen or not and keeps it from being changed,
+ * and held, why it is shown chosen and kept from being changed whatever
+ * is chosen (one another chosen option brings with it), said in a badge
+ * after its label; set is never told of a held option.
  */
 export interface ChoiceMore {
   title?: string;
   badge?: ComponentChildren;
   lock?: boolean;
+  held?: string;
 }
 
 /** An option of Choices: its value, its label, whether it cannot be chosen (shown not chosen, and off), and more. */
@@ -42,7 +47,7 @@ export type Choice = [value: string, label: string, disabled?: boolean, more?: C
  * under the heading title, all giving the labels of All and None, buttons
  * in the heading's row, each off where it would change nothing, or with
  * legend a fieldset under that legend; without a heading, a legend or All
- * it draws no head. look "check" draws checkboxes (.checks), all.all the
+ * it draws no head; All chooses no held option. look "check" draws checkboxes (.checks), all.all the
  * label of All, a checkbox first, on while every option is chosen, and no
  * None (all.none left out), its options without more. look "one" draws
  * radio buttons in a row (.checks.one), a group of the name id, set told
@@ -61,7 +66,7 @@ export function Choices({ title, legend, label, id, cls, options, chosen, set, a
   empty?: string;
   look?: "switch" | "check" | "one";
 }) {
-  const free = options.filter(([, , off, more]) => !off && !more?.lock).map(([v]) => v);
+  const free = options.filter(([, , off, more]) => !off && !more?.lock && !more?.held).map(([v]) => v);
   const every = free.every((v) => chosen.includes(v));
   const toggle = (v: string, on: boolean) => set(on ? [...chosen, v] : chosen.filter((x) => x !== v));
   if (look === "one") {
@@ -103,8 +108,8 @@ export function Choices({ title, legend, label, id, cls, options, chosen, set, a
     <ChoiceGroup id={id} cls={cls} label={label} legend={legend} head={head || undefined}>
       {options.length === 0 && empty && <p class="muted">{empty}</p>}
       {options.map(([v, l, off, more]) => (
-        <Switch key={v} row={false} label={l} checked={!off && chosen.includes(v)} disabled={off || more?.lock} title={more?.title}
-          badge={more?.badge} onChange={(on) => toggle(v, on)} />
+        <Switch key={v} row={false} label={l} checked={!off && (!!more?.held || chosen.includes(v))} disabled={off || more?.lock || !!more?.held}
+          title={more?.title} badge={more?.held ? <>{more.badge}<Badge kind="mode" text={more.held} /></> : more?.badge} onChange={(on) => toggle(v, on)} />
       ))}
     </ChoiceGroup>
   );
