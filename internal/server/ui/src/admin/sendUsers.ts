@@ -14,8 +14,9 @@
  * (run, shared/account.ts). A change reads the users again and says how
  * it went under the list; a user gone from a load that went through
  * forgets its form and its open panel; an answer after a sign-out is
- * dropped (shared/session.ts). What the signed-in user may do with a user is the
- * server's word per user (may), else the capabilities'.
+ * dropped (shared/session.ts). What the signed-in user may do with a user,
+ * and the roles it may give it, is the server's word per user (may), else
+ * the capabilities'.
  */
 
 import type { Role, User } from "../api";
@@ -46,19 +47,28 @@ export function mayPassword(u: User): boolean {
 }
 
 /**
- * roleOptions are the roles a user may be given, for its choice: with
- * users every role (those read, else the default keys), with guests only
- * guest, owner only for an owner (the server's rank rule); current is
- * kept in the list.
+ * roleOptions are the roles a user may be given, for its choice: for a
+ * listed user u the server's word (may.roles, in the roles' order: for an
+ * integration's user those within its integration's maximum and
+ * integration, AP AccessEnds, D3); else with users every role (those
+ * read, else the default keys), with guests only guest, owner only for
+ * an owner (the server's rank rule), and for a new user (no u) no
+ * integration, which the server gives no new user. current, the stored
+ * role, and chosen, a role chosen and not saved, are kept in the list,
+ * so that a list read again with fewer roles leaves the choice shown.
  */
-export function roleOptions(current?: string): [string, string][] {
+export function roleOptions(current?: string, u?: User, chosen?: string): [string, string][] {
   const read = roles.list;
   let keys: string[];
-  if (usersAdmin() === "guests") keys = ["guest"];
-  else if (read) keys = read.map((r) => r.key);
-  else keys = [...DEFAULT_ROLES];
-  if (me.value?.role?.key !== "owner") keys = keys.filter((k) => k !== "owner");
-  if (current && !keys.includes(current)) keys.push(current);
+  if (u?.may) keys = [...(u.may.roles || [])];
+  else {
+    if (usersAdmin() === "guests") keys = ["guest"];
+    else if (read) keys = read.map((r) => r.key);
+    else keys = [...DEFAULT_ROLES];
+    if (me.value?.role?.key !== "owner") keys = keys.filter((k) => k !== "owner");
+    if (!u) keys = keys.filter((k) => k !== "integration");
+  }
+  for (const k of [current, chosen]) if (k && !keys.includes(k)) keys.push(k);
   return keys.map((k) => [k, roleLabel(k, (read || []).find((x) => x.key === k)?.name)]);
 }
 

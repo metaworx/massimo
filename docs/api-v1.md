@@ -282,7 +282,16 @@ and gives only such roles: an owner changes everyone,
 nobody but an owner changes an owner or gives the role `owner`,
 and a role made with `users` but without, say, `restore` changes no manager.
 The users routes say what the caller may do with each user they list
-(`"may": {"manage": true, "password": true}`).
+(`"may": {"manage": true, "password": true, "roles": ["guest", "viewer"]}`):
+change it, set its password,
+and give it the roles of `roles`, in the roles' order,
+empty where it may give none;
+of those, for an integration's user only the roles within the role `integration`
+and its integration's maximum, and `integration` itself ("Integrations"),
+never `owner`.
+So a holder of `users` without `roles` or `integrations` learns from it
+the keys of the roles it outranks and, for each integration's user,
+which of them lie within that integration's maximum.
 
 The default roles and their sets are those of docs/store.md section 6:
 `owner` has every capability and cannot be changed,
@@ -292,7 +301,8 @@ restore, the repairs and the restart,
 `guest` is `operator` without the lock, backups, discovery and preferences,
 `viewer` reads, and `integration`, fixed like `owner`, is the role of the
 registered integrations and their users and the ceiling of their calls
-(docs/store.md section 6); a regular user is never given it.
+(docs/store.md section 6); a regular user is never given it,
+and an integration's user given another role may be given it back.
 A role's set can be changed, a role renamed, created and disabled,
 and a capability disabled for every role but `owner`,
 through the routes of `/api/v1/roles` and `/api/v1/capabilities`.
@@ -758,7 +768,8 @@ or a `proof` from the sign-in by OPAQUE, its own `password` or `record`;
 a user with keys only (`has_password` false) sets its first one without,
 as its key could as well make another key;
 the rest needs `users` (`guests` for a guest), a password `passwords` too,
-each for a user the caller outranks ("Authentication").
+each for a user the caller outranks ("Authentication");
+the answer is the user with its `may`, as the list gives it.
 A `password` is held to the rule of `POST`,
 before anything of the request is written,
 and for an integration's user it is `403` before that, whatever its length;
@@ -1080,6 +1091,15 @@ on a server with regular users: on an open server the header is not read
 
   The include is taken on what they leave ("Authentication"):
   a call left with `update` or `reboot` passes `restart`'s checks too.
+- **Its role:** of the roles the caller may give,
+  the users routes offer such a user (`may.roles`) only those
+  whose capabilities lie within the role `integration` and the integration's maximum,
+  and `integration` itself,
+  which a user moved off it is given back, by the rank rule as any role;
+  never `owner`, which holds every capability.
+  A role beyond them is taken all the same, and acts within them;
+  one stored so, or left beyond a maximum lowered later,
+  is offered no more once another is given.
 - **Without the header** the key acts as the integration itself:
   its role and its maximum (an integration's own polls and stream),
   within the role `integration` as every call through it.

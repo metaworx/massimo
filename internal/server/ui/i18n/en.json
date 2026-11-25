@@ -1618,6 +1618,7 @@
   "users.keysOnly": "keys only",
   "users.integrationUser": "integration user",
   "users.integrationNoSignIn": "Acts through its integration alone: no new password or key, and no sign-in of its own.",
+  "users.roleAboveMax": "Beyond its integration's maximum: it acts within that maximum all the same.",
   "users.removePassword": "Remove the password",
   "users.integrationOwn": "integration",
   "users.linkedTo": "acts as {name}",

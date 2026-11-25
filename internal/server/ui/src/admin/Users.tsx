@@ -93,20 +93,22 @@ function badges(u: User) {
 const trim = (v: string) => v.trim();
 
 /**
- * UserForm is a user's settings: its display name, and for its manager
- * its role, whether it is disabled and a guest's end; a new password and,
- * for one's own without managing it, the current one; Remove, which asks
- * in place of the actions, Reset and Save. The fields that show what is
- * stored keep their drafts by the user's name; Save sends those that
- * differ from the user as the list last gave it. open is the panel's: a
- * password shown is hidden again as the panel closes or opens. An
- * integration's user gets no password, a line in its place: it acts
- * through its integration alone (AP LooseEnds, D1); one it holds from
- * before, its manager removes with Remove the password. A new password is
- * typed once (AP PasswordRules, D51-A) and held to the rule, its line
- * under it; a Save the rule refuses sends nothing and puts the focus in
- * it; left empty, the password stays as it is and is not checked. The
- * dice beside it suggests one (Block 4).
+ * UserForm is a user's settings: its display name, and for its manager its
+ * role, of those the server says it may give (an integration's user those
+ * within its integration's maximum, AP AccessEnds, D3; a stored role or
+ * one chosen beyond it kept, with a line under it, D4), whether it is
+ * disabled and a guest's end; a new password and, for one's own without
+ * managing it, the current one; Remove, which asks in place of the
+ * actions, Reset and Save. The fields that show what is stored keep their
+ * drafts by the user's name; Save sends those that differ from the user as
+ * the list last gave it. open is the panel's: a password shown is hidden
+ * again as the panel closes or opens. An integration's user gets no
+ * password, a line in its place: it acts through its integration alone
+ * (AP LooseEnds, D1); one it holds from before, its manager removes with
+ * Remove the password. A new password is typed once (AP PasswordRules,
+ * D51-A) and held to the rule, its line under it; a Save the rule refuses
+ * sends nothing and puts the focus in it; left empty, the password stays
+ * as it is and is not checked. The dice beside it suggests one (Block 4).
  */
 function UserForm({ u, off, open }: { u: User; off: boolean; open: boolean }) {
   useLook();
@@ -153,10 +155,13 @@ function UserForm({ u, off, open }: { u: User; off: boolean; open: boolean }) {
   const words = () => [u.name, u.display_name || "", display.value.trim()];
   const admin = "admin-only" + hid(!manage);
   const ofIntegration = !!u.integration;
+  // a role chosen beyond the maximum of the user's integration, the stored one or one chosen before the list was read again: offered all the same (AP AccessEnds, D4)
+  const beyond = ofIntegration && !!u.may && !(u.may.roles || []).includes(role.value);
   return (
     <form {...form.props} class={"user-form" + hid(off)} onSubmit={submit}>
       <TextField label={t("users.displayName")} id={id("display_name")} name="display_name" maxLength={64} draft={display} cls={hid(!manage && !self).trim() || undefined} />
-      <Select label={t("users.role")} id={id("role")} name="role" wide cls={admin} options={roleOptions(u.role)} draft={role} show={(k) => roleLabel(k)} />
+      <Select label={t("users.role")} id={id("role")} name="role" wide cls={admin} options={roleOptions(u.role, u, role.value)} draft={role} show={(k) => roleLabel(k)}
+        hint={beyond ? t("users.roleAboveMax") : undefined} hintId={id("role-hint")} />
       <Switch name="disabled" label={t("users.disabled")} rowCls={admin} draft={disabled} />
       <Field label={t("users.expires")} id={id("expires")} wide cls={admin} hint={t("users.expiresHint")} draft={expires}
         show={(v) => (v ? fmtShortTime(Date.parse(v)) : t("users.noEnd"))}>

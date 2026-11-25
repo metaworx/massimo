@@ -403,8 +403,12 @@ func (s *Server) getIntegration(w http.ResponseWriter, r *http.Request) error {
 	if err != nil {
 		return userFail(err)
 	}
+	integs, err := st.Integrations(r.Context())
+	if err != nil {
+		return integrationFail(err)
+	}
 	// Proposals leave out every integration's users.
-	marks, _, err := integrationMarks(r.Context(), st, users)
+	marks, _, err := integrationMarks(r.Context(), st, users, integs)
 	if err != nil {
 		return integrationFail(err)
 	}
@@ -480,12 +484,9 @@ func (s *Server) putIntegrationUser(w http.ResponseWriter, r *http.Request) erro
 }
 
 // integrationMarks are the users list's marks: which users are an
-// integration's, and which integration users are linked to a user.
-func integrationMarks(ctx context.Context, st *store.Store, users []store.User) (map[int64]*userIntegration, map[int64][]userLink, error) {
-	integs, err := st.Integrations(ctx)
-	if err != nil {
-		return nil, nil, err
-	}
+// integration's, and which integration users are linked to a user; integs
+// are the store's integrations, which the caller has read.
+func integrationMarks(ctx context.Context, st *store.Store, users []store.User, integs []store.Integration) (map[int64]*userIntegration, map[int64][]userLink, error) {
 	ids, err := st.AllIntegrationIdentities(ctx)
 	if err != nil {
 		return nil, nil, err

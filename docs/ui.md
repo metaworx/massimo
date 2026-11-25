@@ -1998,7 +1998,9 @@ settings forms and have none of it.
   a user changes only users whose role has no capability its own lacks,
   so nobody but an owner changes an owner, whose panel says so,
   and with `passwords` alone (a manager's) a panel offers the password alone;
-  the role choice offers no owner but to an owner.
+  a user's role choice offers the roles the server says may be given to it
+  (`may.roles`, AP AccessEnds, D3), so no owner but to an owner,
+  and a new user's no `integration`, which no new user is given.
   Every user in a panel whose head shows the display name, the login apart
   from it and, at the right edge, the badges: **you** first, the role,
   the state and **keys only**;
@@ -2154,6 +2156,12 @@ settings forms and have none of it.
   and **Remove the password** where it holds one from before;
   its role, disabled, its display name and Remove stay,
   and a key it holds from before is listed with Revoke.
+  Its role choice offers the roles within its integration's maximum
+  and **integration**, which it is given back (AP AccessEnds, D3, D5);
+  a role stored beyond the maximum stays chosen and offered,
+  with the line under it that the user acts within that maximum all the same,
+  until another is saved, and so does a role chosen and not yet saved
+  where the list read again no longer offers it (D4).
   My profile of one, in with such a key, says the same line in place of the
   password, and offers no new key and no Link.
   The log's lines, a command's detail and its audit row name who

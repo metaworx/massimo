@@ -1665,6 +1665,7 @@
   "users.keysOnly": "tylko klucze",
   "users.integrationUser": "użytkownik integracji",
   "users.integrationNoSignIn": "Działa wyłącznie przez swoją integrację: bez nowego hasła ani klucza i bez własnego logowania.",
+  "users.roleAboveMax": "Ponad maksimum swojej integracji: mimo to działa tylko w granicach tego maksimum.",
   "users.removePassword": "Usuń hasło",
   "users.integrationOwn": "integracja",
   "users.linkedTo": "działa jako {name}",

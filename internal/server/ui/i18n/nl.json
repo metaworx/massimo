@@ -1619,6 +1619,7 @@
   "users.keysOnly": "alleen sleutels",
   "users.integrationUser": "gebruiker van een integratie",
   "users.integrationNoSignIn": "Handelt alleen via zijn integratie: geen nieuw wachtwoord of nieuwe sleutel, en geen eigen aanmelding.",
+  "users.roleAboveMax": "Boven het maximum van zijn integratie: hij handelt toch alleen binnen dat maximum.",
   "users.removePassword": "Wachtwoord verwijderen",
   "users.integrationOwn": "integratie",
   "users.linkedTo": "handelt als {name}",

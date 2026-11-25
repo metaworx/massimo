@@ -1620,6 +1620,7 @@
   "users.keysOnly": "solo chiavi",
   "users.integrationUser": "utente di un'integrazione",
   "users.integrationNoSignIn": "Agisce solo tramite la sua integrazione: nessuna nuova password o chiave e nessun accesso proprio.",
+  "users.roleAboveMax": "Oltre il massimo della sua integrazione: agisce comunque entro quel massimo.",
   "users.removePassword": "Rimuovi la password",
   "users.integrationOwn": "integrazione",
   "users.linkedTo": "agisce come {name}",

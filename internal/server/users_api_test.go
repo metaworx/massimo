@@ -10,6 +10,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"slices"
 	"strconv"
 	"strings"
 	"testing"
@@ -132,6 +133,7 @@ func TestUsersRoutes(t *testing.T) {
 	// guests and itself, and may set the password of none but those it
 	// outranks: not the owner's.
 	code, text = callAPI(t, ts, "GET", users, annaKey, "")
+	list = nil // decoded afresh: a reused element would keep the owner's may.roles where the manager's has none
 	json.Unmarshal([]byte(text), &list)
 	may := map[string]userMay{}
 	for _, u := range list {
@@ -139,8 +141,11 @@ func TestUsersRoutes(t *testing.T) {
 			may[u.Name] = *u.May
 		}
 	}
-	if code != 200 || len(may) < 3 || may["owner"] != (userMay{}) || may["guest1"] != (userMay{Manage: true, Password: true}) ||
-		may["anna"] != (userMay{Manage: false, Password: true}) {
+	is := func(m userMay, manage, password bool, roles ...string) bool {
+		return m.Manage == manage && m.Password == password && slices.Equal(m.Roles, roles)
+	}
+	if code != 200 || len(may) < 3 || !is(may["owner"], false, false) || !is(may["guest1"], true, true, store.RoleGuest) ||
+		!is(may["anna"], false, true) {
 		t.Fatalf("a manager's list: %d %s", code, text)
 	}
 	if code, _ := callAPI(t, ts, "GET", users+"/owner", annaKey, ""); code != 200 {
@@ -621,6 +626,167 @@ func TestRankRule(t *testing.T) {
 	}
 	if code, text := callAPI(t, ts, "DELETE", users+"manager1", keeper, ""); code != 403 || errorOf(text) != "the role manager has capabilities yours lacks" {
 		t.Errorf("users, removing a manager: %d %s", code, text)
+	}
+}
+
+// The roles an integration's user may be given, may.roles of the users
+// list and of a change's answer (AP AccessEnds, D3 to D6): those within
+// the role integration and its integration's maximum, and integration,
+// never owner; a regular user may be given every role the caller
+// outranks and never integration. A role beyond the maximum is taken
+// and offered no more; integration is given back by the rank rule
+// alone, so that a holder of users that does not outrank it and the
+// integration's own key are refused, and the user given it back acts
+// within the maximum still.
+func TestAssignableRolesOfAnIntegrationsUser(t *testing.T) {
+	t.Parallel()
+	r := startServer(t, withOptions(storeOptions(t, t.TempDir(), "secret")))
+	ts, s := r.ts, r.s
+	st := s.opts.Store
+	maxCaps := []string{"read", "setpoint", "configure"}
+	i, key := registerHA(t, st, maxCaps)
+	own, system := i.UUID+":", i.UUID+":system"
+	userToken(t, st, "anna", store.RoleOperator)
+	if _, err := st.AddRole(t.Context(), store.Role{Key: "keeper", Capabilities: []string{"read", "preferences", "users"}}, 0); err != nil {
+		t.Fatal(err)
+	}
+	keeper := userToken(t, st, "keeper1", "keeper")
+	listed := func(token string) map[string][]string {
+		t.Helper()
+		code, text := callAPI(t, ts, "GET", "/api/v1/users", token, "")
+		var list []userView
+		if err := json.Unmarshal([]byte(text), &list); err != nil || code != 200 {
+			t.Fatalf("the users: %d %s", code, text)
+		}
+		out := map[string][]string{}
+		for _, u := range list {
+			if u.May != nil {
+				out[u.Name] = u.May.Roles
+			}
+		}
+		return out
+	}
+	give := func(token, name, role string, want int, roles ...string) {
+		t.Helper()
+		code, text := callAPI(t, ts, "PUT", "/api/v1/users/"+name, token, `{"role":"`+role+`"}`)
+		if code != want {
+			t.Fatalf("%s given %s: %d %s, want %d", name, role, code, text, want)
+		}
+		if v := decodeUserView(text); want == 200 && (v.Role != role || v.May == nil || !slices.Equal(v.May.Roles, roles)) {
+			t.Fatalf("%s given %s: the answer %s, want may.roles %v", name, role, text, roles)
+		}
+	}
+	within := []string{store.RoleGuest, store.RoleIntegration}
+	every := []string{store.RoleOwner, store.RoleManager, store.RoleOperator, store.RoleGuest, store.RoleViewer, "keeper"}
+	got := listed("secret")
+	for _, name := range []string{own, system} {
+		if !slices.Equal(got[name], within) {
+			t.Errorf("%s within read, setpoint and configure: %v, want %v", name, got[name], within)
+		}
+	}
+	if !slices.Equal(got["anna"], every) {
+		t.Errorf("a regular user: %v, want %v", got["anna"], every)
+	}
+
+	// Moved off integration and given it back; then the owner, beyond the
+	// maximum, taken as before and offered no more.
+	give("secret", system, store.RoleGuest, 200, within...)
+	give("secret", system, store.RoleIntegration, 200, within...)
+	give("secret", system, store.RoleOwner, 200, within...)
+	// An integration's user with a key of its own from before this
+	// version, given integration back: its own calls, which no header
+	// narrows, stay within the maximum.
+	held, err := st.AddUser(t.Context(), store.User{Name: "held", Role: store.RoleViewer}, "", 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, heldKey, err := st.AddToken(t.Context(), held.ID, store.TokenAPI, "from before", time.Time{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	asAnIntegrations(t, st, "held", i)
+	give("secret", "held", store.RoleGuest, 200, within...)
+	give("secret", "held", store.RoleIntegration, 200, within...)
+	code, me, text := meFrom(t, s, "192.168.1.20:5000", heldKey)
+	if code != 200 || len(me.Capabilities) == 0 {
+		t.Fatalf("/me with the held key: %d %s", code, text)
+	}
+	for _, c := range me.Capabilities {
+		if !slices.Contains(maxCaps, c) {
+			t.Errorf("given integration back, the held key's call holds %s, beyond the maximum %v", c, maxCaps)
+		}
+	}
+	give("secret", "anna", store.RoleIntegration, 403)
+
+	// The maximum widened to the ceiling brings operator and viewer in.
+	if code, text := callAPI(t, ts, "PUT", "/api/v1/integrations/"+i.UUID, "secret", `{"max_caps":["`+strings.Join(integrationCeiling, `","`)+`"]}`); code != 200 {
+		t.Fatalf("the maximum widened: %d %s", code, text)
+	}
+	wide := []string{store.RoleOperator, store.RoleGuest, store.RoleViewer, store.RoleIntegration}
+	if got := listed("secret")[own]; !slices.Equal(got, wide) {
+		t.Errorf("%s within the ceiling: %v, want %v", own, got, wide)
+	}
+	give("secret", system, store.RoleViewer, 200, wide...)
+
+	// A holder of users that outranks viewer and not integration: viewer
+	// alone, integration refused.
+	if got := listed(keeper)[system]; !slices.Equal(got, []string{store.RoleViewer}) {
+		t.Errorf("the keeper's choice for %s: %v, want viewer alone", system, got)
+	}
+	if code, text := callAPI(t, ts, "PUT", "/api/v1/users/"+system, keeper, `{"role":"integration"}`); code != 403 || errorOf(text) != "the role integration has capabilities yours lacks" {
+		t.Errorf("the keeper gives %s integration: %d %s", system, code, text)
+	}
+	// The integration's own key, which holds guests: guest alone, never
+	// integration.
+	give("secret", system, store.RoleGuest, 200, wide...)
+	if got := listed(key)[system]; !slices.Equal(got, []string{store.RoleGuest}) {
+		t.Errorf("the integration's choice for %s: %v, want guest alone", system, got)
+	}
+	if code, text := callAPI(t, ts, "PUT", "/api/v1/users/"+system, key, `{"role":"integration"}`); code != 403 || errorOf(text) != `capability "users" required to give the role integration` {
+		t.Errorf("the integration gives %s integration: %d %s", system, code, text)
+	}
+}
+
+// A maximum beyond the role integration, which only the store holds,
+// offers no role beyond the role integration: the ceiling bounds the
+// choice as it bounds every call (AP AccessEnds, D3). A caller that may
+// manage an integration's user and give it none of the roles is told so
+// by an empty list, not by none at all.
+func TestAssignableRolesWithinTheCeiling(t *testing.T) {
+	t.Parallel()
+	r := startServer(t, withOptions(storeOptions(t, t.TempDir(), "secret")))
+	ts, st := r.ts, r.s.opts.Store
+	if _, err := st.AddRole(t.Context(), store.Role{Key: "keeper", Capabilities: []string{"read", "preferences", "users"}}, 0); err != nil {
+		t.Fatal(err)
+	}
+	i, _ := registerHA(t, st, []string{"read", "preferences", "users"})
+	own, system := i.UUID+":", i.UUID+":system"
+	manager := userToken(t, st, "manager1", store.RoleManager)
+	mays := func(token string) map[string]map[string]any {
+		t.Helper()
+		code, text := callAPI(t, ts, "GET", "/api/v1/users", token, "")
+		var list []map[string]any
+		if err := json.Unmarshal([]byte(text), &list); err != nil || code != 200 {
+			t.Fatalf("the users: %d %s", code, text)
+		}
+		out := map[string]map[string]any{}
+		for _, u := range list {
+			if m, ok := u["may"].(map[string]any); ok {
+				out[u["name"].(string)] = m
+			}
+		}
+		return out
+	}
+	if got := fmt.Sprint(mays("secret")[own]["roles"]); got != "[viewer integration]" {
+		t.Errorf("%s within the ceiling and a maximum beyond it: %s, want [viewer integration]", own, got)
+	}
+	if code, text := callAPI(t, ts, "PUT", "/api/v1/users/"+system, "secret", `{"role":"guest"}`); code != 200 {
+		t.Fatalf("%s given guest: %d %s", system, code, text)
+	}
+	// The manager may manage a guest, and give guest alone, which lies beyond this maximum.
+	m := mays(manager)[system]
+	if roles, ok := m["roles"].([]any); m["manage"] != true || !ok || len(roles) != 0 {
+		t.Errorf("the manager's may for %s: %v, want manage and an empty roles", system, m)
 	}
 }
 
