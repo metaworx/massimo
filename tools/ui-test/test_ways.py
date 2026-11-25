@@ -13,7 +13,7 @@ import json
 import pytest
 
 from conftest import TOKEN
-from helpers import ApiReads, frames, scroll_width, show_view, wait_held, wait_until
+from helpers import OPERATOR_PASSWORD, ApiReads, frames, scroll_width, show_view, wait_held, wait_until
 from test_first_owner import DIALOG_OPEN, OPEN, owner_card, sent, start_page, turned
 
 KEPT = dict(OPEN, kept_open=True)
@@ -428,7 +428,7 @@ def test_the_turn_on_a_running_page_forgets_the_open_page(new_context, case, wat
     stage["me"] = None
     page.evaluate("() => { signIn = window.__signIn || signIn; }")
     page.locator("#login-user").fill("operator")
-    page.locator("#login-password").fill("op-pass")
+    page.locator("#login-password").fill(OPERATOR_PASSWORD)
     page.locator("#login-form button[type=submit]").click()
     assert wait_until(page, f"!({DIALOG_OPEN}) && state.eventsOpen", 10), "signed in, the page started"
     assert page.evaluate("state.me.user.name") == "operator", "as the operator"
@@ -480,7 +480,7 @@ def test_a_refusal_during_a_failed_create_turns_the_card(new_context, case, watc
     turned(page)
     stage["me"] = None
     page.locator("#login-user").fill("operator")
-    page.locator("#login-password").fill("op-pass")
+    page.locator("#login-password").fill(OPERATOR_PASSWORD)
     page.locator("#login-form button[type=submit]").click()
     assert wait_until(page, f"!({DIALOG_OPEN}) && window.__read === 'operator'", 10), "signed in, the read answered"
 

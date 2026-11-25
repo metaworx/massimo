@@ -1,0 +1,103 @@
+{
+ "cases": [
+  {
+   "password": "",
+   "context": [],
+   "answer": "too_short",
+   "why": "the empty password: where empty means none, the caller does not ask"
+  },
+  {
+   "password": "mxtqvzl",
+   "context": [],
+   "answer": "too_short",
+   "why": "seven letters"
+  },
+  {
+   "password": "mxtqvzlp",
+   "context": [],
+   "answer": "ok",
+   "why": "eight letters, the fewest"
+  },
+  {
+   "password": "       x",
+   "context": [],
+   "answer": "ok",
+   "why": "spaces count, and are not trimmed"
+  },
+  {
+   "password": "äöüäöüä",
+   "context": [],
+   "answer": "too_short",
+   "why": "seven letters of two bytes each in UTF-8: 14 bytes, 7 characters"
+  },
+  {
+   "password": "äöüäöüäö",
+   "context": [],
+   "answer": "ok",
+   "why": "eight letters of two bytes each: äöü is three characters, not six"
+  },
+  {
+   "password": "e\u0301e\u0301e\u0301e\u0301",
+   "context": [],
+   "answer": "ok",
+   "why": "four letters, each an e and a combining accent: 8 code points, not normalised"
+  },
+  {
+   "password": "😀😀😀😀😀😀😀",
+   "context": [],
+   "answer": "too_short",
+   "why": "seven characters beyond the basic plane: 14 UTF-16 units, 7 characters"
+  },
+  {
+   "password": "😀😀😀😀😀😀😀😀",
+   "context": [],
+   "answer": "ok",
+   "why": "eight characters beyond the basic plane: 16 UTF-16 units, 32 bytes"
+  },
+  {
+   "password": "ferry-lamp-olive-quartz",
+   "context": [
+    "anna",
+    "Anna"
+   ],
+   "answer": "ok",
+   "why": "a few words; the context words refuse nothing yet"
+  },
+  {
+   "password": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+   "context": [],
+   "answer": "ok",
+   "why": "sixty-four letters, the most"
+  },
+  {
+   "password": "😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀",
+   "context": [],
+   "answer": "ok",
+   "why": "sixty-four characters beyond the basic plane: 128 UTF-16 units, 256 bytes"
+  },
+  {
+   "password": "ääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääää",
+   "context": [],
+   "answer": "ok",
+   "why": "sixty-four letters of two bytes each: 128 bytes, 64 characters"
+  },
+  {
+   "password": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+   "context": [],
+   "answer": "too_long",
+   "why": "sixty-five letters"
+  },
+  {
+   "password": "äääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääää",
+   "context": [],
+   "answer": "too_long",
+   "why": "sixty-five letters of two bytes each"
+  },
+  {
+   "password": "😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀",
+   "context": [],
+   "answer": "too_long",
+   "why": "sixty-five characters beyond the basic plane: 130 UTF-16 units, 65 characters"
+  }
+ ]
+}

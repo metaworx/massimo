@@ -19,6 +19,7 @@ import (
 	"strings"
 	"time"
 
+	"go.metaworx.ch/massimo/internal/password"
 	"go.metaworx.ch/massimo/internal/store"
 )
 
@@ -125,6 +126,18 @@ func userFail(err error) error {
 func noWayIn(u store.User) error {
 	if u.IntegrationID != 0 {
 		return fail(http.StatusForbidden, "the user %s is an integration's: it acts through its integration alone, with no key, password or sign-in of its own", u.Name)
+	}
+	return nil
+}
+
+// newPassword holds a plain password that a request sets to the rule of
+// internal/password, with the user's names as its context: 400 with the
+// rule's words where it fails. A record registered by OPAQUE is never
+// seen and so never checked, and the callers leave out an empty
+// password, which means none (AP PasswordRules, D11-A).
+func newPassword(pw string, u store.User) error {
+	if err := password.Check(pw, u.Name, u.DisplayName); err != nil {
+		return fail(http.StatusBadRequest, "%v", err)
 	}
 	return nil
 }
@@ -390,6 +403,11 @@ func (s *Server) postUser(w http.ResponseWriter, r *http.Request) error {
 		}
 	}
 	auditTarget(r, "user:"+store.NormalName(u.Name))
+	if password != "" {
+		if err := newPassword(password, u); err != nil {
+			return err
+		}
+	}
 	var created store.User
 	var rec []byte
 	if req.Record != nil {
@@ -518,6 +536,12 @@ func (s *Server) putUser(w http.ResponseWriter, r *http.Request) error {
 	}
 	if setsPassword && !a.self && !a.maySetPassword(u) {
 		return a.rankFail(u.Role, "passwords")
+	}
+	if req.Password != nil && *req.Password != "" {
+		// Before the current password is checked or a proof used up.
+		if err := newPassword(*req.Password, u); err != nil {
+			return err
+		}
 	}
 	if setsPassword && a.self && !a.all && u.HasPassword {
 		// One's own password: the current one proves the caller is the

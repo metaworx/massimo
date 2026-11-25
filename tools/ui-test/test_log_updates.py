@@ -24,7 +24,7 @@ from helpers import LOG_CMD_DETAIL as DETAIL
 from helpers import LOG_CMD_LINE as CMD_LINE
 from helpers import LOG_FIRST as FIRST
 from helpers import LOG_TEXT_LINE as TEXT_LINE
-from helpers import StubLog, frames, isolate_log, mark, owner_page, replaced, safe_route, show_view, sign_out, wait_until
+from helpers import OPERATOR_PASSWORD, StubLog, frames, isolate_log, mark, owner_page, replaced, safe_route, show_view, sign_out, wait_until
 from helpers import log_event as ev
 from helpers import log_lines as lines
 from helpers import stub_log_command as stub_command
@@ -360,7 +360,7 @@ def sign_off(page, how):
         sign_out(page)
     else:
         expire(page)
-    sign_in(page, "operator", "op-pass")
+    sign_in(page, "operator", OPERATOR_PASSWORD)
 
 
 class Held:
@@ -575,7 +575,7 @@ def test_the_same_user_after_a_401_keeps_the_log(new_context, case, watch, guard
     page.set_default_timeout(5000)
     page.on("pageerror", lambda e: watch.problems.append(f"page error: {e}"))
     page.goto(URL)
-    sign_in(page, "operator", "op-pass")
+    sign_in(page, "operator", OPERATOR_PASSWORD)
     show_view(page, "log")
     assert wait_until(page, "!MassimoParts.log.state.loading", 5), "the log loaded"
     page.locator("#log-filter").fill("the-first")
@@ -584,7 +584,7 @@ def test_the_same_user_after_a_401_keeps_the_log(new_context, case, watch, guard
     expire(page)
     # signed in again in the dialog, the log still shown: sign_in waits for the tiles
     page.locator("#login-user").fill("operator")
-    page.locator("#login-password").fill("op-pass")
+    page.locator("#login-password").fill(OPERATOR_PASSWORD)
     page.locator("#login-form button[type=submit]").click()
     assert wait_until(page, "!document.getElementById('login-dialog').open && MassimoParts.pages.shown() === 'log'", 10), "signed in again, the log shown"
     held.let_go("window.__read")
@@ -605,7 +605,7 @@ def test_the_who_choice_follows_another_user_without_a_sign_out(new_context, cas
     page.set_default_timeout(5000)
     page.on("pageerror", lambda e: watch.problems.append(f"page error: {e}"))
     page.goto(URL)
-    sign_in(page, "operator", "op-pass")
+    sign_in(page, "operator", OPERATOR_PASSWORD)
     assert not page.evaluate("hasCap('users')"), "the operator may not list the users"
     show_view(page, "log")
     assert wait_until(page, "Array.isArray(MassimoParts.log.state.users) && MassimoParts.log.state.users.length === 0", 5), "no users for the operator"

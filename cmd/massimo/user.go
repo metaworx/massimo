@@ -26,6 +26,7 @@ import (
 
 	"golang.org/x/term"
 
+	"go.metaworx.ch/massimo/internal/password"
 	"go.metaworx.ch/massimo/internal/store"
 )
 
@@ -59,7 +60,11 @@ func userUsage() {
 The roles are owner, manager, operator, guest, viewer, integration and the
 ones created through the API (viewer when -role is absent); -expires takes
 an RFC 3339 time, the end of a guest. -password-stdin reads the password
-from the first line of standard input, for scripts.
+from the first line of standard input, for scripts. A new password has 8
+to 64 characters; 15 or a few words are better. A password set before
+stays valid, but rename asks for one again: give a new one there where
+the old one is shorter, or -no-password, which leaves the user with its
+keys only.
 `+dataDirUsage("user", "add", "anna", "-role", "operator"))
 }
 
@@ -194,9 +199,24 @@ func (u *userCmd) logChange(action, target string, detail map[string]any) {
 	}
 }
 
-// readPassword asks for a password twice on the terminal, or reads it
-// from standard input with -password-stdin.
-func readPassword(fromStdin bool) (string, error) {
+// readPassword asks for a new password twice on the terminal, or reads
+// it from standard input with -password-stdin, and holds it to the rule
+// of internal/password; words are the user's names, which the rule
+// checks it against.
+func readPassword(fromStdin bool, words ...string) (string, error) {
+	pw, err := enterPassword(fromStdin)
+	if err != nil {
+		return "", err
+	}
+	if err := password.Check(pw, words...); err != nil {
+		return "", err
+	}
+	return pw, nil
+}
+
+// enterPassword is readPassword without the rule: the password as
+// entered, refused only where the two differ or none is given.
+func enterPassword(fromStdin bool) (string, error) {
 	if fromStdin {
 		line, err := bufio.NewReader(stdin).ReadString('\n')
 		if err != nil && !errors.Is(err, io.EOF) {
@@ -259,21 +279,21 @@ func (u *userCmd) add(args []string) error {
 	if err := u.open(); err != nil {
 		return err
 	}
-	password := ""
+	pw := ""
 	if !*noPassword {
-		if password, err = readPassword(*fromStdin); err != nil {
+		if pw, err = readPassword(*fromStdin, nu.Name, nu.DisplayName); err != nil {
 			return fmt.Errorf("user add: %w", err)
 		}
 	}
 	created := store.User{}
-	if password != "" {
+	if pw != "" {
 		// A password of version 2: the browser signs in by OPAQUE and
 		// the server never sees it (docs/store.md section 6).
-		created, err = u.st.AddUserOpaque(u.ctx, nu, password, 0)
+		created, err = u.st.AddUserOpaque(u.ctx, nu, pw, 0)
 	} else {
 		created, err = u.st.AddUser(u.ctx, nu, "", 0)
 	}
-	u.audit("user.add", "user:"+store.NormalName(names[0]), map[string]any{"role": *role, "password": password != ""}, err)
+	u.audit("user.add", "user:"+store.NormalName(names[0]), map[string]any{"role": *role, "password": pw != ""}, err)
 	if err != nil {
 		return fmt.Errorf("user add: %w", err)
 	}
@@ -352,11 +372,11 @@ func (u *userCmd) passwd(args []string) error {
 	if !ok {
 		return fmt.Errorf("user passwd: no user %q", names[0])
 	}
-	password, err := readPassword(*fromStdin)
+	pw, err := readPassword(*fromStdin, us.Name, us.DisplayName)
 	if err != nil {
 		return fmt.Errorf("user passwd: %w", err)
 	}
-	err = u.st.SetPasswordOpaque(u.ctx, us.Name, password, 0)
+	err = u.st.SetPasswordOpaque(u.ctx, us.Name, pw, 0)
 	if err == nil {
 		err = u.st.RevokeSessions(u.ctx, us.ID)
 	}
@@ -371,7 +391,9 @@ func (u *userCmd) passwd(args []string) error {
 // rename gives a user a new login name. The password is set again under
 // it, asked as add asks it: a record of version 2 holds the name it was
 // registered under, so the old one would not open under the new name.
-// -no-password leaves the user with its API keys only.
+// -no-password leaves the user with its API keys only. The new password
+// is held to the rule as any other (AP PasswordRules, D54-A): a user
+// whose old one is shorter gives a new one, or -no-password.
 func (u *userCmd) rename(args []string) error {
 	fs := flag.NewFlagSet("user rename", flag.ContinueOnError)
 	noPassword := fs.Bool("no-password", false, "leave the user with API keys only")
@@ -404,13 +426,16 @@ func (u *userCmd) rename(args []string) error {
 	} else if taken {
 		return fmt.Errorf("user rename: %w: %s", store.ErrUserExists, store.NormalName(names[1]))
 	}
-	password := ""
+	pw := ""
 	if !*noPassword {
-		if password, err = readPassword(*fromStdin); err != nil {
+		if pw, err = readPassword(*fromStdin, names[1], us.DisplayName); err != nil {
+			if errors.Is(err, password.ErrTooShort) {
+				return fmt.Errorf("user rename: %w; a rename sets the password again, under the new name: give a new one, or -no-password, which leaves the user with its keys only", err)
+			}
 			return fmt.Errorf("user rename: %w", err)
 		}
 	}
-	renamed, err := u.st.RenameUser(u.ctx, us.Name, names[1], password, 0)
+	renamed, err := u.st.RenameUser(u.ctx, us.Name, names[1], pw, 0)
 	if err == nil {
 		err = u.st.RevokeSessions(u.ctx, us.ID)
 	}
@@ -419,7 +444,7 @@ func (u *userCmd) rename(args []string) error {
 		target = "user:" + renamed.Name
 	}
 	// user.update, as a rename through PUT /api/v1/users/{name} would be.
-	u.audit("user.update", target, map[string]any{"from": us.Name, "name": store.NormalName(names[1]), "password": password != ""}, err)
+	u.audit("user.update", target, map[string]any{"from": us.Name, "name": store.NormalName(names[1]), "password": pw != ""}, err)
 	if err != nil {
 		return fmt.Errorf("user rename: %w", err)
 	}

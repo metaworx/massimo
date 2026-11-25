@@ -77,7 +77,7 @@ func TestCrossOriginWritesRefused(t *testing.T) {
 
 	// With users, a cross-site write is refused even with the right key.
 	ts = startServer(t, withOptions(storeOptions(t, t.TempDir(), "secret"))).ts
-	body := `{"name":"anna","role":"operator","password":"pw"}`
+	body := `{"name":"anna","role":"operator","password":"anna-pass-1"}`
 	if code, text := sendWith(t, ts, "POST", "/api/v1/users", body, map[string]string{"Authorization": "Bearer secret", "Sec-Fetch-Site": "cross-site"}); code != http.StatusForbidden {
 		t.Errorf("users mode, cross-site: %d %s", code, text)
 	}

@@ -17,7 +17,7 @@ from collections import Counter
 import pytest
 
 from conftest import URL, api_call
-from helpers import frames, hold, held_poll, open_personal_page, scroll_settled, show_view, wait_held, wait_until
+from helpers import OPERATOR_PASSWORD, frames, held_poll, hold, open_personal_page, scroll_settled, show_view, wait_held, wait_until
 from test_login import sign_in
 from test_preferences import clear_user, operator_key
 
@@ -169,7 +169,7 @@ def test_no_read_of_my_profile_while_signing_out(new_context, case, watch, guard
         page.set_default_timeout(5000)
         page.on("pageerror", lambda e: watch.problems.append(f"page error: {e}"))
         page.goto(URL)
-        sign_in(page, "operator", "op-pass")
+        sign_in(page, "operator", OPERATOR_PASSWORD)
         page.evaluate("setSetting('lang', 'fr')")
         page.reload()  # the operator's French alone loaded, German not
         page.wait_for_selector(".room", timeout=10000)
@@ -272,7 +272,7 @@ def test_a_sign_out_forgets_before_the_language(new_context, case, watch, guard)
         page.set_default_timeout(5000)
         page.on("pageerror", lambda e: watch.problems.append(f"page error: {e}"))
         page.goto(URL)
-        sign_in(page, "operator", "op-pass")
+        sign_in(page, "operator", OPERATOR_PASSWORD)
         page.evaluate("setSetting('lang', 'fr')")
         page.reload()  # the operator's French alone loaded, German not
         page.wait_for_selector(".room", timeout=10000)

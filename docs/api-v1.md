@@ -691,6 +691,13 @@ kept in lower case; `role` is a role's key, `viewer` when absent;
 `password` may be absent for a user that logs in with keys only,
 or replaced by `record` and `ksf`, a password of version 2 (below);
 `disabled` and, for a guest, `expires_at` (RFC 3339) as well.
+A new `password` has 8 to 64 characters, counted in Unicode code points as sent,
+not normalised;
+outside that it is `400` with `password: at least 8 characters`
+or `password: at most 64 characters`, and nothing is written.
+A `record` is not checked: the server never sees the password in it,
+so a client that registers by OPAQUE holds its users to the rule itself.
+A password set before the rule signs in as it is.
 A `guests` holder creates guests only (`403` otherwise).
 The answer is `201` with the user; a name in use is `409`, a bad name,
 an unknown role or an unknown field `400`,
@@ -721,7 +728,10 @@ a user with keys only (`has_password` false) sets its first one without,
 as its key could as well make another key;
 the rest needs `users` (`guests` for a guest), a password `passwords` too,
 each for a user the caller outranks ("Authentication").
-A password set by someone else ends the user's sessions;
+A `password` is held to the rule of `POST`,
+before anything of the request is written,
+and for an integration's user it is `403` before that, whatever its length;
+a password set by someone else ends the user's sessions;
 an empty password removes it.
 
 A password of version 2 is set in two steps.

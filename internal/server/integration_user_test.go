@@ -30,6 +30,8 @@ func refusesWayIn(t *testing.T, s *Server, addr, token, name string) {
 	for _, c := range []struct{ method, path, body string }{
 		{"POST", base + "/tokens", `{"label":"planted"}`},
 		{"PUT", base, `{"role":"viewer","password":"correct horse"}`},
+		// Told that it has no password, not that this one is short.
+		{"PUT", base, `{"role":"viewer","password":"x"}`},
 		{"PUT", base, `{"role":"viewer","record":"AAAA","ksf":"` + store.OpaqueKSF + `"}`},
 		{"POST", base + "/register", `{"request":"AAAA"}`},
 		{"POST", base + "/identities", `{"provider":"cloud","email":"anna@example.com"}`},

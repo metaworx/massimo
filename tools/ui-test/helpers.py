@@ -31,6 +31,11 @@ from urllib.parse import parse_qs, urlparse
 
 from playwright.sync_api import Error
 
+# The password of the operator that run.sh adds with massimo user add, in
+# every set: of 8 characters or more, as a new password is
+# (internal/password).
+OPERATOR_PASSWORD = "op-password"
+
 OPEN = {"en": "open", "de": "offen"}
 USED = "0" * 48
 FOUND2 = {"serial": "LEQ0000506", "configured": False, "address": "192.168.1.78", "rf_address": "0a1b2e",

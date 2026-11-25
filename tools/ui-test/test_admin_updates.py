@@ -15,7 +15,7 @@ import json
 import pytest
 
 from conftest import TOKEN, URL, api_call
-from helpers import focus_in_turn, frames, hold, mark, open_main_menu, owner_page, pause_clock, reads_of, replaced, safe_route, show_view, sign_out, undo, wait_held, wait_until
+from helpers import OPERATOR_PASSWORD, focus_in_turn, frames, hold, mark, open_main_menu, owner_page, pause_clock, reads_of, replaced, safe_route, show_view, sign_out, undo, wait_held, wait_until
 from test_log_alerts import alerts_route
 from test_login import sign_in
 from test_oidc import provider  # noqa: F401, the fixture
@@ -218,7 +218,7 @@ def test_sign_out_forgets_the_users(new_context, case, watch, guard):
         sign_out(page)
         assert wait_until(page, "!!document.querySelector(%s)?.open" % json.dumps(DIALOG), 5), "the dialog asks first"
         page.locator(DIALOG + " .dialog-go").click()
-        sign_in(page, "operator", "op-pass")
+        sign_in(page, "operator", OPERATOR_PASSWORD)
         nothing_left(page, key)
     finally:
         revoke(label)
@@ -232,7 +232,7 @@ def test_another_user_after_a_401_finds_no_users(new_context, case, watch, guard
     try:
         key = type_everything(page, label)
         expire(page)
-        sign_in(page, "operator", "op-pass")
+        sign_in(page, "operator", OPERATOR_PASSWORD)
         nothing_left(page, key)
     finally:
         revoke(label)
@@ -496,7 +496,7 @@ def test_sign_out_forgets_the_backups(new_context, case, watch, guard):
         row.locator(".backup-actions button").nth(1).click()
         page.locator(CUBE_BOX + " .restore-plan").wait_for(timeout=10000)
         sign_out(page)
-        sign_in(page, "operator", "op-pass")
+        sign_in(page, "operator", OPERATOR_PASSWORD)
         frames(page)
         assert page.locator(".restore-plan").count() == 0, "no plan"
         assert page.locator(".backup-row").count() == 0, "no list"
@@ -985,7 +985,7 @@ def test_sign_out_forgets_the_integrations(new_context, case, watch, guard):
     page = owner_page(new_context, guard, watch, URL, TOKEN)
     integrations_typed(page, case)
     out(page)
-    sign_in(page, "operator", "op-pass")
+    sign_in(page, "operator", OPERATOR_PASSWORD)
     integrations_gone(page)
 
 
@@ -994,7 +994,7 @@ def test_another_user_after_a_401_finds_no_integrations(new_context, case, watch
     page = owner_page(new_context, guard, watch, URL, TOKEN)
     integrations_typed(page, case)
     expire(page)
-    sign_in(page, "operator", "op-pass")
+    sign_in(page, "operator", OPERATOR_PASSWORD)
     integrations_gone(page)
 
 
@@ -1008,7 +1008,7 @@ def test_another_user_after_a_401_finds_no_backups(new_context, case, watch, gua
         first_row(page, CUBE_BOX).locator(".backup-actions button").nth(1).click()
         page.locator(CUBE_BOX + " .restore-plan").wait_for(timeout=10000)
         expire(page)
-        sign_in(page, "operator", "op-pass")
+        sign_in(page, "operator", OPERATOR_PASSWORD)
         frames(page)
         assert page.locator(".restore-plan").count() == 0 and page.locator(".backup-row").count() == 0, "no plan, no list"
     finally:
@@ -1021,7 +1021,7 @@ def across(page, how):
         out(page)
     else:
         expire(page)
-    sign_in(page, "operator", "op-pass")
+    sign_in(page, "operator", OPERATOR_PASSWORD)
 
 
 @pytest.mark.parametrize("how", ["sign-out", "expired"])

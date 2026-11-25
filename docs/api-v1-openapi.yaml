@@ -707,7 +707,10 @@ paths:
         first owner: open to a caller on the
         local network (loopback, a private range, link-local), the role
         owner and a password required, refused from anywhere else, and
-        created once: a second request at the same moment is 409.
+        created once: a second request at the same moment is 409. A
+        password has 8 to 64 characters, Unicode code points as sent,
+        or it is 400 and nothing is written; a record is not checked,
+        since the server never sees the password in it.
       parameters: [{$ref: "#/components/parameters/idempotencyKey"}]
       requestBody:
         required: true
@@ -756,7 +759,10 @@ paths:
         password set by someone else ends the user's sessions. The last
         enabled owner cannot be disabled or demoted (409); an
         integration's user is none. An integration's user gets no password
-        or record (403): it acts through its integration alone.
+        or record (403): it acts through its integration alone. A
+        password other than the empty one has 8 to 64 characters, or it
+        is 400 and nothing of the request is written; a record is not
+        checked.
       parameters: [{$ref: "#/components/parameters/name"}, {$ref: "#/components/parameters/idempotencyKey"}]
       requestBody:
         required: true
@@ -4357,7 +4363,7 @@ components:
         name: {type: string, description: "The login name: 1 to 64 of letters, digits, '.', '_', '-' and '@', case does not matter", example: anna}
         display_name: {type: string, maxLength: 64}
         role: {type: string, description: "A role's key; viewer when absent, owner for the first owner"}
-        password: {type: string, description: Absent for a user with keys only; this or record for the first owner}
+        password: {type: string, minLength: 8, maxLength: 64, description: "8 to 64 characters, Unicode code points as sent. Absent for a user with keys only, and an empty one counts as absent; this or record for the first owner"}
         record: {type: string, description: "A password of auth_version 2 in place of password: the registration record, base64url (POST /api/v1/users/{name}/register)"}
         ksf: {type: string, description: "The record's key stretching, as the registration answered it: m=<KiB>,t=<passes>,p=<lanes>", example: "m=19456,t=2,p=1"}
         disabled: {type: boolean}
@@ -4369,7 +4375,7 @@ components:
         role: {type: string}
         disabled: {type: boolean}
         expires_at: {type: string, format: date-time, nullable: true, description: null clears the end date}
-        password: {type: string, description: Empty removes the password}
+        password: {type: string, description: "Empty removes the password; any other has 8 to 64 characters, Unicode code points as sent"}
         current_password: {type: string, description: "Required when a user sets its own password, unless proof is given"}
         record: {type: string, description: "A password of auth_version 2 in place of password: the registration record, base64url"}
         ksf: {type: string, description: "The record's key stretching: m=<KiB>,t=<passes>,p=<lanes>", example: "m=19456,t=2,p=1"}

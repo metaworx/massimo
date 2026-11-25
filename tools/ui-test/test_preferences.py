@@ -12,7 +12,7 @@ import urllib.request
 import pytest
 
 from conftest import TOKEN, URL, api_call, clear_preferences
-from helpers import pause_clock, show_view, sign_out, wait_until
+from helpers import OPERATOR_PASSWORD, pause_clock, show_view, sign_out, wait_until
 
 
 def server_ui():
@@ -137,7 +137,7 @@ def test_log_out_leaves_nothing_for_the_next_user(new_context, case, watch, guar
         page.goto(URL)
         assert wait_until(page, "document.getElementById('login-dialog').open", 5), "the sign-in dialog"
         page.locator("#login-user").fill("operator")
-        page.locator("#login-password").fill("op-pass")
+        page.locator("#login-password").fill(OPERATOR_PASSWORD)
         page.locator("#login-form button[type=submit]").click()
         page.wait_for_selector(".room", timeout=10000)
         assert wait_until(page, "!document.body.classList.contains('no-sync')", 5), "the operator's settings follow it"

@@ -13,7 +13,7 @@ import json
 import pytest
 
 from conftest import TOKEN, URL
-from helpers import NAME_BAD, ApiReads, assert_login_card_centred, frames, pause_clock, scroll_width, wait_held, wait_until
+from helpers import NAME_BAD, OPERATOR_PASSWORD, ApiReads, assert_login_card_centred, frames, pause_clock, scroll_width, wait_held, wait_until
 from test_connect import FAKE_BRIDGE
 
 OPEN = {"mode": "open", "user": None, "role": None, "capabilities": [], "setup": True}
@@ -312,7 +312,7 @@ def test_a_refusal_turns_the_card_to_the_sign_in(new_context, case, watch, guard
     frames(page)
     assert len(sent(page, "GET", "/api/v1/login/providers")) == 1, "the providers read once"
     page.locator("#login-user").fill("operator")
-    page.locator("#login-password").fill("op-pass")
+    page.locator("#login-password").fill(OPERATOR_PASSWORD)
     page.locator("#login-form button[type=submit]").click()
     page.wait_for_selector(".room", timeout=10000)
     assert wait_until(page, f"!({DIALOG_OPEN}) && state.eventsOpen", 10), "signed in, the page started"
@@ -364,7 +364,7 @@ def test_a_page_left_open_learns_of_the_owner(new_context, case, watch, guard, w
     page.unroute("**/events/ticket")
     page.unroute("**/api/v1/me")
     page.locator("#login-user").fill("operator")
-    page.locator("#login-password").fill("op-pass")
+    page.locator("#login-password").fill(OPERATOR_PASSWORD)
     page.locator("#login-form button[type=submit]").click()
     page.wait_for_selector(".room", timeout=10000)
     assert wait_until(page, f"!({DIALOG_OPEN}) && state.eventsOpen", 10), "signed in, the stream open again"
@@ -489,7 +489,7 @@ def test_a_late_creation_leaves_a_later_sign_in_open(new_context, case, watch, g
     page.unroute("**/api/v1/me")
     page.evaluate("() => { signIn = window.__signIn; }")  # the sign-in by OPAQUE again, for the operator
     page.locator("#login-user").fill("operator")
-    page.locator("#login-password").fill("op-pass")
+    page.locator("#login-password").fill(OPERATOR_PASSWORD)
     page.locator("#login-form button[type=submit]").click()
     assert wait_until(page, f"!({DIALOG_OPEN}) && window.__answered === true && state.eventsOpen", 10), \
         page.evaluate("({open: document.getElementById('login-dialog').open, answered: window.__answered, events: state.eventsOpen, "

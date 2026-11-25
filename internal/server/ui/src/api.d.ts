@@ -181,7 +181,11 @@ export interface UserCreate {
   display_name?: string;
   /** A role's key; viewer when absent, owner for the first owner */
   role?: string;
-  /** Absent for a user with keys only; this or record for the first owner */
+  /**
+   * 8 to 64 characters, Unicode code points as sent. Absent for a user with
+   * keys only, and an empty one counts as absent; this or record for the first
+   * owner
+   */
   password?: string;
   /**
    * A password of auth_version 2 in place of password: the registration record,
@@ -210,7 +214,10 @@ export interface UserChange {
    * @format date-time
    */
   expires_at?: string | null;
-  /** Empty removes the password */
+  /**
+   * Empty removes the password; any other has 8 to 64 characters, Unicode code
+   * points as sent
+   */
   password?: string;
   /** Required when a user sets its own password, unless proof is given */
   current_password?: string;
