@@ -18,7 +18,6 @@ import (
 	"io"
 	"net"
 	"os"
-	"runtime"
 	"sort"
 	"strings"
 	"time"
@@ -210,12 +209,12 @@ func Serials(name string, environ []string) (serials []string, values map[string
 
 // Lookup is the value of the variable name in environ, KEY=VALUE lines
 // as os.Environ gives them, found as os.Getenv finds it in the process's
-// own: by its name, on Windows, where a name is one variable in any case,
-// in any case; "" where it is not set. It reads a list that need not be
-// the process's, such as a settings file's lines (massimo install).
+// own: by its key (NameKey), on Windows in any case; "" where it is not
+// set. It reads a list that need not be the process's, such as a
+// settings file's lines (massimo install).
 func Lookup(name string, environ []string) string {
 	for _, kv := range environ {
-		if k, v, ok := strings.Cut(kv, "="); ok && (k == name || runtime.GOOS == "windows" && strings.EqualFold(k, name)) {
+		if k, v, ok := strings.Cut(kv, "="); ok && NameKey(k) == NameKey(name) {
 			return v
 		}
 	}

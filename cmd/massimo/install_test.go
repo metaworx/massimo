@@ -175,6 +175,28 @@ func TestInstallChecksNameTheirVariables(t *testing.T) {
 	}
 }
 
+// A known name in another case in a -settings file is the start's
+// variable on Windows, which takes a name in any case, and is checked
+// as it: a bad massimo_hsts is refused there; elsewhere the start
+// ignores it with a note, and so does install (AP StartConfiguration,
+// D53-A).
+func TestInstallChecksANameInAnotherCase(t *testing.T) {
+	t.Parallel()
+	settings := writeSettings(t, "MASSIMO_API_TOKEN=t\nmassimo_hsts=-1\n")
+	var out bytes.Buffer
+	err := install.Install(installOpts(t, settings, &out))
+	_, hsts := hstsDays("-1")
+	if runtime.GOOS != "windows" {
+		if err != nil || !strings.Contains(out.String(), "in another case, ignored") {
+			t.Errorf("%v, want it ignored with a note:\n%s", err, out.String())
+		}
+		return
+	}
+	if err == nil || !strings.Contains(err.Error(), "\n  "+hsts.Error()+"\n") {
+		t.Errorf("%v, want the start's %v", err, hsts)
+	}
+}
+
 // The install command hands the start's checks to install: a dry run of
 // a -settings file with a bad MASSIMO_HSTS is refused.
 func TestInstallCommandRunsTheStartChecks(t *testing.T) {

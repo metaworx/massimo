@@ -551,6 +551,27 @@ func TestSetEnvLines(t *testing.T) {
 	}
 }
 
+// setEnvLines matches a name by its key, as serve reads it
+// (env.NameKey): on Windows a line of the name in another case is
+// replaced, and one of a variable dropped goes, where a line appended
+// below it would be the one the start ignores; elsewhere such a line is
+// another variable's, which the start ignores, and stays (AP
+// StartConfiguration, D53-A).
+func TestSetEnvLinesByTheNamesKey(t *testing.T) {
+	p := filepath.Join(t.TempDir(), "env")
+	os.WriteFile(p, []byte("massimo_tls=off\nexport massimo_tls_http=:80\nMASSIMO_API_TOKEN=t\n"), 0o640)
+	if err := setEnvLines(p, [][2]string{{"MASSIMO_TLS", "files"}}, []string{"MASSIMO_TLS_HTTP"}); err != nil {
+		t.Fatal(err)
+	}
+	want := "massimo_tls=off\nexport massimo_tls_http=:80\nMASSIMO_API_TOKEN=t\nMASSIMO_TLS=files\n"
+	if runtime.GOOS == "windows" {
+		want = "MASSIMO_TLS=files\nMASSIMO_API_TOKEN=t\n"
+	}
+	if got := read(t, p); got != want {
+		t.Errorf("%q, want %q on %s", got, want, runtime.GOOS)
+	}
+}
+
 func TestInstallTLSFiles(t *testing.T) {
 	root, bin := setup(t)
 	src := t.TempDir()

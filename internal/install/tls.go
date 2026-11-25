@@ -225,8 +225,11 @@ const utf8BOM = "\xEF\xBB\xBF"
 // line of a variable that is there (an "export " prefix too), so the
 // first, which serve takes, and appending the others, removes the lines
 // of the variables in drop, and writes the file atomically with its
-// mode. A UTF-8 byte order mark at the file's start is skipped, as serve
-// skips it, so that the first line's name is matched, and kept.
+// mode. A name is matched by its key, as serve reads it (env.NameKey):
+// on Windows a line of the name in another case is replaced, which the
+// start would take before a line appended below it. A UTF-8 byte order
+// mark at the file's start is skipped, as serve skips it, so that the
+// first line's name is matched, and kept.
 func setEnvLines(path string, vars [][2]string, drop []string) error {
 	mode := os.FileMode(0o600)
 	b, err := os.ReadFile(path)
@@ -245,7 +248,7 @@ func setEnvLines(path string, vars [][2]string, drop []string) error {
 		kept := lines[:0]
 		for _, line := range lines {
 			k, _, ok := strings.Cut(strings.TrimPrefix(strings.TrimSpace(line), "export "), "=")
-			if ok && slices.Contains(drop, strings.TrimSpace(k)) {
+			if ok && slices.ContainsFunc(drop, func(d string) bool { return env.NameKey(d) == env.NameKey(strings.TrimSpace(k)) }) {
 				continue
 			}
 			kept = append(kept, line)
@@ -256,7 +259,7 @@ func setEnvLines(path string, vars [][2]string, drop []string) error {
 		found := false
 		for i, line := range lines {
 			k, _, ok := strings.Cut(strings.TrimPrefix(strings.TrimSpace(line), "export "), "=")
-			if ok && strings.TrimSpace(k) == v[0] {
+			if ok && env.NameKey(strings.TrimSpace(k)) == env.NameKey(v[0]) {
 				lines[i] = v[0] + "=" + v[1]
 				found = true
 			}
