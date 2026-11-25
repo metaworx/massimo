@@ -292,6 +292,7 @@ func TestRestoreFailsWhenTheCubeDiscards(t *testing.T) {
 	ts := startServer(t, withFake(func(fc *fakecube.Server) { fc.Discard = true })).ts
 	f := backupWithEco(backupOf(t, ts), 17)
 	hash := plan(t, ts, "", f)["plan"].(string)
+	m := logMark(t, ts)
 	if code, out := postBackup(t, ts, restoreBase+"?plan="+hash, "application/json", marshal(t, f)); code != 202 {
 		t.Fatalf("restore: %d %v", code, out)
 	}
@@ -304,15 +305,10 @@ func TestRestoreFailsWhenTheCubeDiscards(t *testing.T) {
 	if st["state"] != "failed" || st["sent"] != 0.0 || st["error"] == nil || res["ok"] != false || res["discarded"] != true {
 		t.Fatalf("state %v", st)
 	}
-	var evs []event
-	getJSON(t, ts, "", "/api/v1/cubes/KEQ0000100/log", &evs)
-	var done *event
-	for i := range evs {
-		if evs[i].Kind == "restore_done" {
-			done = &evs[i]
-		}
-	}
-	if done == nil || done.Restore.State != "failed" || done.Restore.OK || done.Error == "" {
+	// The run reads failed before its restore_done line is written, by
+	// the run and not by the pump: the line is waited for.
+	done, _ := logAfter(t, m, "the restore's end", logLine("restore_done", ""))
+	if done.Restore == nil || done.Restore.State != "failed" || done.Restore.OK || done.Error == "" {
 		t.Fatalf("done event %+v", done)
 	}
 }
