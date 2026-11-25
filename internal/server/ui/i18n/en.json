@@ -234,6 +234,7 @@
   "credits.kind.go": "Go's runtime and standard library",
   "credits.kind.module": "Go module",
   "credits.kind.moduleCopy": "Go module, its copy in {path}",
+  "credits.kind.moduleElsewhere": "Go module, in another platform's build",
   "credits.kind.vendored": "held in {path}",
   "credits.includes": "Includes {what} and the crates they are built with; their licence texts, collected for Massimo from the crates' archives, are among its files.",
   "credits.seeText": "licence in its text",

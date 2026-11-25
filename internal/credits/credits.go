@@ -8,7 +8,10 @@
 // internal/server/ui/vendor/, each with the files of its licence.
 // make credits (tools/credits) writes credits.json, which git keeps and
 // the binary embeds; System info shows it (served at /ui/credits.json)
-// and massimo credits prints it. go test fails while it is not current.
+// and massimo credits prints it, with the versions of Go and of each
+// module the binary was built with, which the file leaves out. go test
+// fails while it is not current: a module added or removed, a licence's
+// text changed, not a module's version.
 package credits
 
 import (
@@ -17,6 +20,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"runtime"
+	"runtime/debug"
 	"strings"
 	"sync"
 )
@@ -48,8 +52,9 @@ type Entry struct {
 	// Name is how the list names it, unique without regard to case: a
 	// module's path, a package's name, Massimo, Go.
 	Name string `json:"name"`
-	// Version is its version, "" where none is known; Go's is the
-	// running binary's (JSON), which the committed file leaves out.
+	// Version is its version, "" where none is known: a vendored entry's
+	// its note's; Go's and a module's the running binary's (JSON), which
+	// the committed file leaves out, none for a module it does not link.
 	Version string `json:"version,omitempty"`
 	// Licence is the SPDX identifier of its licence: the one its note
 	// names, else the one its first licence file is known by; "" where
@@ -86,29 +91,55 @@ type File struct {
 var embedded []byte
 
 // served is the list as the binary serves and prints it: the embedded
-// file with Go's version set to the running binary's.
+// file with the versions the running binary was built with (built).
 var served = sync.OnceValues(func() ([]byte, error) {
 	l, err := Parse(embedded)
 	if err != nil {
 		return nil, err
 	}
-	for i := range l.Entries {
-		if l.Entries[i].Kind == KindGo {
-			l.Entries[i].Version = GoVersion()
-		}
-	}
-	return Encode(l)
+	info, _ := debug.ReadBuildInfo()
+	return Encode(built(l, runtime.Version(), info))
 })
 
-// GoVersion is the version of the Go the running binary was built with,
-// as Go's entry carries it: runtime.Version() without its "go" in front
-// (1.26.8), as the other entries' versions; a development toolchain's,
-// which has no such prefix, as it is.
-func GoVersion() string {
-	return goVersionOf(runtime.Version())
+// noVersion is the version the build information gives a directory
+// that go.mod's replace puts in a module's place (third_party/).
+const noVersion = "(devel)"
+
+// built is l with the versions of a binary built with the Go of
+// goVersion (runtime.Version()) and the modules of info
+// (debug.ReadBuildInfo), which the committed file leaves out: Go's entry
+// goVersion without its "go" (goVersionOf); a module's the version info
+// gives its path, a module replaced by another's its replacement's, one
+// replaced by a directory the version go.mod requires; none where info
+// does not name the module (one that only another platform links, a
+// test binary that does not link it) or there is no info. A vendored
+// entry keeps its note's.
+func built(l List, goVersion string, info *debug.BuildInfo) List {
+	versions := map[string]string{}
+	if info != nil {
+		for _, d := range info.Deps {
+			v := d.Version
+			if r := d.Replace; r != nil && r.Version != "" && r.Version != noVersion {
+				v = r.Version
+			}
+			versions[d.Path] = v
+		}
+	}
+	for i, e := range l.Entries {
+		switch e.Kind {
+		case KindGo:
+			l.Entries[i].Version = goVersionOf(goVersion)
+		case KindModule:
+			l.Entries[i].Version = versions[e.Name]
+		}
+	}
+	return l
 }
 
-// goVersionOf is v without a "go" in front of its digits.
+// goVersionOf is Go's version v (runtime.Version()) as Go's entry
+// carries it: without a "go" in front of its digits (1.26.8), as the
+// other entries' versions; a development toolchain's, which has no such
+// prefix, as it is.
 func goVersionOf(v string) string {
 	if rest, ok := strings.CutPrefix(v, "go"); ok && rest != "" && rest[0] >= '0' && rest[0] <= '9' {
 		return rest
@@ -117,9 +148,9 @@ func goVersionOf(v string) string {
 }
 
 // JSON is the list as the server serves it at /ui/credits.json: the
-// embedded credits.json, Go's version the running binary's (GoVersion).
-// A file that does not read is served as it is (TestEmbeddedList fails
-// on it).
+// embedded credits.json with the versions of Go and of each module the
+// running binary was built with. A file that does not read is served as
+// it is (TestEmbeddedList fails on it).
 func JSON() []byte {
 	b, err := served()
 	if err != nil {

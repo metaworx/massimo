@@ -15,9 +15,10 @@ import (
 	"go.metaworx.ch/massimo/internal/credits"
 )
 
-// runCredits prints the credits and licences of everything the binary
-// includes, from the list it embeds, the one System info shows
-// (internal/credits): it needs no store, no settings and no server.
+// runCredits prints the credits and licences of everything a build of
+// Massimo includes, for any platform, from the list the binary embeds,
+// the one System info shows (internal/credits): it needs no store, no
+// settings and no server.
 func runCredits(args []string) error { return creditsCommand(args, os.Stdout) }
 
 // creditsCommand is massimo credits writing to w: without a name the
@@ -28,8 +29,10 @@ func creditsCommand(args []string, w io.Writer) error {
 	fs.Usage = func() {
 		fmt.Fprint(os.Stderr, `usage: massimo credits [<name>]
 
-  without a name  everything this binary includes, a line each: its name, version,
-                  licence and where it comes from (System info's Credits and licences)
+  without a name  everything a build of Massimo includes, for any platform, a line each:
+                  its name, version (this binary's; - for a Go module only another
+                  platform's build includes), licence and where it comes from
+                  (System info's Credits and licences)
   <name>          that entry's licence, the text of each of its files; the name as
                   the list prints it, without regard to case
 `)
@@ -127,7 +130,9 @@ func includesLine(e credits.Entry) string {
 	return e.Name + " includes " + e.Includes + " and the crates they are built with; their licence texts, collected for Massimo from the crates' archives, are among its files."
 }
 
-// creditOrigin says where an entry comes from, as System info does.
+// creditOrigin says where an entry comes from, as System info does: a Go
+// module without a version is one this binary does not link, which the
+// list names for another platform's build.
 func creditOrigin(e credits.Entry) string {
 	switch e.Kind {
 	case credits.KindSelf:
@@ -135,8 +140,11 @@ func creditOrigin(e credits.Entry) string {
 	case credits.KindGo:
 		return "Go's runtime and standard library"
 	case credits.KindModule:
-		if e.Path != "" {
+		switch {
+		case e.Path != "":
 			return "Go module, its copy in " + e.Path
+		case e.Version == "":
+			return "Go module, in another platform's build"
 		}
 		return "Go module"
 	}

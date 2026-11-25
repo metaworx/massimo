@@ -6,7 +6,8 @@ which the binary embeds (`internal/credits`),
 System info shows under **Credits and licences** (`docs/ui.md`, "System info")
 and `massimo credits` prints.
 git keeps the file;
-a change to a module or to a vendored file, or to a vendored file's note, writes it again.
+a module added or removed, a licence's text changed,
+or a change to a vendored file or to a vendored file's note, writes it again.
 
 ```sh
 make credits                      # go list needs the web UI's bundle, which make ui builds first
@@ -17,6 +18,13 @@ go run ./tools/credits -check     # exits 1 where the file is not current
 `TestGeneratedFileCurrent` here compares it byte for byte, licence texts included,
 and `TestEverythingIncludedHasAnEntry` (`internal/credits`) names what has no entry.
 
+The file names no module's version, and no Go version:
+the binary fills in those it was built with,
+from its build information (`runtime/debug.ReadBuildInfo`, `internal/credits`).
+So a module's update in `go.mod`, as Dependabot's pull requests make one,
+needs no `make credits` and fails no test,
+unless it changes a licence's text or adds or removes a module.
+
 ## What it lists
 
 In this order, each with every licence file it has
@@ -26,7 +34,7 @@ In this order, each with every licence file it has
 |-------|------------------|--------------------|
 | Massimo itself | `Massimo`, AGPL-3.0-or-later | the repository's `LICENSE` |
 | Go's runtime and standard library | `Go`; no version in the file: the binary shows its own (`runtime.Version()`) | `$(go env GOROOT)`; where a distribution keeps them elsewhere (Debian), `golang.org/x/sys`, whose `LICENSE` and `PATENTS` are Go's |
-| each Go module the binary links | its path and version | its directory in the module cache, or the repository's copy that `go.mod` replaces it with |
+| each Go module the binary links | its path; no version in the file: the binary shows the one it was built with, a module replaced by another at the replacement's, one replaced by a copy at the one `go.mod` requires, none where it does not link the module (one that only another platform links) | its directory in the module cache, or the repository's copy that `go.mod` replaces it with |
 | each directory of `third_party/` | a row of its note's table, else the directory's name | the directory, or the row's |
 | each file of `internal/server/ui/vendor/` | a row of its `README.md`'s table, else the file's name | the files beside it named after it (`opaque.LICENSE`, `opaque.LICENSE-3RD-PARTY`) |
 
@@ -100,5 +108,5 @@ A later OPAQUE client with more crates can pass it:
 then `make credits` stops, and the cap is weighed again.
 
 The file is the same on every machine:
-no absolute path, no time, no Go version, the order above, line ends as LF
-(`.gitattributes` keeps them on a Windows checkout).
+no absolute path, no time, no version of Go or of a module, the order above,
+line ends as LF (`.gitattributes` keeps them on a Windows checkout).

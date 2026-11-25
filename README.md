@@ -1082,8 +1082,12 @@ massimo credits
 massimo credits preact
 ```
 
-`credits` lists everything the binary includes, a line each with its name,
-version (Go's the one the binary was built with), licence and where it comes from,
+`credits` lists everything a build of Massimo includes, for any platform,
+a line each with its name,
+version (Go's and each Go module's the one the binary was built with),
+licence and where it comes from,
+a module that only another platform's build links with `-`
+and "Go module, in another platform's build",
 "and others" where its files are under other licences too,
 then what an entry includes and the crates those are built with,
 whose licence texts, collected for Massimo, are among its files

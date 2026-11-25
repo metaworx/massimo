@@ -21,9 +21,16 @@ import { tParts } from "../shared/lang";
 import { busyProps } from "../shared/question";
 import { type CreditEntry, type CreditFile, creditFolds, credits, folds, loadCredits } from "./store";
 
-/** origin says where an entry comes from, in the page's language. */
+/**
+ * origin says where an entry comes from, in the page's language: a Go
+ * module without a version is one this server's build does not link,
+ * which the list names for another platform's build.
+ */
 function origin(e: CreditEntry): string {
-  if (e.kind === "module") return e.path ? t("credits.kind.moduleCopy", { path: e.path }) : t("credits.kind.module");
+  if (e.kind === "module") {
+    if (e.path) return t("credits.kind.moduleCopy", { path: e.path });
+    return e.version ? t("credits.kind.module") : t("credits.kind.moduleElsewhere");
+  }
   if (e.kind === "vendored") return t("credits.kind.vendored", { path: e.path || "" });
   return t("credits.kind." + e.kind);
 }

@@ -46,7 +46,11 @@ var targets = []target{
 
 // module is a Go module the binary links: its path and version, the
 // directory its files are in, and local, the directory of the
-// repository that replaces it (go.mod's replace), "" for none.
+// repository that replaces it (go.mod's replace), "" for none. The
+// version is not written into the list: the binary fills in its own
+// (internal/credits), so that a module's update leaves the file as it
+// is, unless it adds or removes a module, a module it requires in turn
+// too, or changes a licence's text.
 type module struct {
 	path, version, dir, local string
 }
@@ -135,7 +139,8 @@ func modulesFor(root string, t target) ([]module, error) {
 
 // generate makes the list: Massimo, Go, the modules by path, then what
 // third_party/ and the UI's vendor/ hold, by path; and the number of
-// entries.
+// entries. Go's entry and the modules' carry no version, which
+// internal/credits sets to those the running binary was built with.
 func generate(s source) ([]byte, int, error) {
 	mods, err := s.modules()
 	if err != nil {
@@ -154,7 +159,7 @@ func generate(s source) ([]byte, int, error) {
 	l.Entries = append(l.Entries, g)
 	local := map[string]bool{}
 	for _, m := range mods {
-		e, err := entryOf(credits.Entry{Name: m.path, Version: m.version, Kind: credits.KindModule, Path: m.local}, m.dir, "")
+		e, err := entryOf(credits.Entry{Name: m.path, Kind: credits.KindModule, Path: m.local}, m.dir, "")
 		if err != nil {
 			return nil, 0, err
 		}

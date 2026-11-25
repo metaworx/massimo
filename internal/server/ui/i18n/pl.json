@@ -239,6 +239,7 @@
   "credits.kind.go": "środowisko uruchomieniowe i biblioteka standardowa Go",
   "credits.kind.module": "moduł Go",
   "credits.kind.moduleCopy": "moduł Go, jego kopia w {path}",
+  "credits.kind.moduleElsewhere": "moduł Go, w kompilacji dla innej platformy",
   "credits.kind.vendored": "w {path}",
   "credits.includes": "Zawiera {what} oraz crate'y, z których są zbudowane; ich teksty licencji, zebrane dla Massimo z archiwów crate'ów, są wśród jego plików.",
   "credits.seeText": "licencja w tekście",

@@ -8,6 +8,7 @@ import (
 	"context"
 	"crypto/sha256"
 	"encoding/base64"
+	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -94,11 +95,13 @@ func TestUIServed(t *testing.T) {
 	if code, _, body := get("/ui/vendor/opaque.LICENSE"); code != 200 || !strings.HasPrefix(body, "MIT License") {
 		t.Fatalf("GET /ui/vendor/opaque.LICENSE: %d", code)
 	}
-	// The credits' ETag holds Go's version, which the file carries.
+	// The credits' ETag holds the digest of what is served, which carries
+	// the versions of Go and of the modules the binary was built with.
+	digest := sha256.Sum256(credits.JSON())
 	if resp, err := http.Get(ts.URL + "/ui/credits.json"); err != nil {
 		t.Fatal(err)
-	} else if resp.Body.Close(); !strings.HasSuffix(resp.Header.Get("ETag"), "/credits.json/go"+etagChars(credits.GoVersion())+`"`) {
-		t.Fatalf("GET /ui/credits.json: ETag %q, want Go's version %s in it", resp.Header.Get("ETag"), credits.GoVersion())
+	} else if resp.Body.Close(); !strings.HasSuffix(resp.Header.Get("ETag"), "/credits.json/"+hex.EncodeToString(digest[:8])+`"`) {
+		t.Fatalf("GET /ui/credits.json: ETag %q, want the list's digest %x in it", resp.Header.Get("ETag"), digest[:8])
 	}
 	// The credits, without a token: the bytes internal/credits serves.
 	if code, ct, body := get("/ui/credits.json"); code != 200 || !strings.HasPrefix(ct, "application/json") || body != string(credits.JSON()) {

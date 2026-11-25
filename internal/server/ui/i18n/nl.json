@@ -235,6 +235,7 @@
   "credits.kind.go": "runtime en standaardbibliotheek van Go",
   "credits.kind.module": "Go-module",
   "credits.kind.moduleCopy": "Go-module, de kopie in {path}",
+  "credits.kind.moduleElsewhere": "Go-module, in de build voor een ander platform",
   "credits.kind.vendored": "in {path}",
   "credits.includes": "Bevat {what} en de crates waarmee ze zijn gebouwd; hun licentieteksten, voor Massimo verzameld uit de archieven van de crates, staan onder de bestanden.",
   "credits.seeText": "licentie in de tekst",

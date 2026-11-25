@@ -9,6 +9,7 @@ import (
 	"os"
 	"os/exec"
 	"runtime"
+	"runtime/debug"
 	"strings"
 	"testing"
 
@@ -16,11 +17,14 @@ import (
 )
 
 // TestCreditsList checks massimo credits: a line for every entry of the
-// embedded list, the one System info shows, with its version (Go's the
-// binary's) and licence, "and others" where its files are under others
-// too, "see the text" where its text is known by none, under a head;
-// then what an entry includes, whose texts are among its files: the
-// OPAQUE client, MIT and others with its crates' texts.
+// embedded list, the one System info shows, with its version (Go's and
+// each module's the binary's, builtVersions) and licence, "and others"
+// where its files are under others too, "see the text" where its text is
+// known by none, under a head; a module this binary does not link (on
+// linux the two only the windows and darwin builds link) "-" and from
+// another platform's build; then what an entry includes, whose texts are
+// among its files: the OPAQUE client, MIT and others with its crates'
+// texts.
 func TestCreditsList(t *testing.T) {
 	t.Parallel()
 	var out bytes.Buffer
@@ -49,8 +53,39 @@ func TestCreditsList(t *testing.T) {
 			t.Errorf("what %s includes is not said:\n%s", e.Name, notes)
 		}
 	}
-	if g, _ := l.Find("Go"); g.Version != credits.GoVersion() || strings.HasPrefix(g.Version, "go1") {
+	if g, _ := l.Find("Go"); g.Version != strings.TrimPrefix(runtime.Version(), "go") || strings.HasPrefix(g.Version, "go1") {
 		t.Errorf("Go's version %q, want the binary's %q without its go", g.Version, runtime.Version())
+	}
+	built := builtVersions(t)
+	printed, lineOf := map[string]string{}, map[string]string{}
+	for _, line := range lines[1:] {
+		if f := strings.Fields(line); len(f) > 1 {
+			printed[f[0]], lineOf[f[0]] = f[1], line
+		}
+	}
+	for _, e := range l.Entries {
+		if e.Kind != credits.KindModule {
+			continue
+		}
+		want, from := built[e.Name], "Go module"
+		if want == "" {
+			want, from = "-", "Go module, in another platform's build" // only another platform's build links it
+		}
+		if e.Path != "" {
+			from = "Go module, its copy in " + e.Path
+		}
+		if printed[e.Name] != want {
+			t.Errorf("%s: version %q printed, want the binary's %q", e.Name, printed[e.Name], want)
+		}
+		if !strings.HasSuffix(lineOf[e.Name], "  "+from) {
+			t.Errorf("%s: %q, want it from %q", e.Name, lineOf[e.Name], from)
+		}
+	}
+	if from := creditOrigin(credits.Entry{Name: "example.org/a", Kind: credits.KindModule}); from != "Go module, in another platform's build" {
+		t.Errorf("a module without a version: from %q, want another platform's build", from)
+	}
+	if v := printed["golang.org/x/net"]; v == "" || v == "-" || v != built["golang.org/x/net"] {
+		t.Errorf("golang.org/x/net: version %q printed, want the binary's %q", v, built["golang.org/x/net"])
 	}
 	for _, c := range []struct{ name, want string }{
 		{"modernc.org/sqlite", "BSD-3-Clause and others"},
@@ -64,6 +99,26 @@ func TestCreditsList(t *testing.T) {
 	if !strings.Contains(out.String(), "third_party/preact/preact") || !strings.Contains(out.String(), "Go module") {
 		t.Errorf("where an entry comes from is not printed:\n%s", out.String())
 	}
+}
+
+// builtVersions are the modules this binary was built with and their
+// versions, as its build information names them: a module replaced by
+// another at the replacement's version, one replaced by a directory
+// (third_party/) at the version go.mod requires.
+func builtVersions(t *testing.T) map[string]string {
+	t.Helper()
+	info, ok := debug.ReadBuildInfo()
+	if !ok {
+		t.Fatal("the test binary has no build information")
+	}
+	out := map[string]string{}
+	for _, d := range info.Deps {
+		out[d.Path] = d.Version
+		if r := d.Replace; r != nil && r.Version != "" && r.Version != "(devel)" {
+			out[d.Path] = r.Version
+		}
+	}
+	return out
 }
 
 // TestCreditsOne checks massimo credits <name>: what the entry

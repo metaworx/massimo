@@ -234,6 +234,7 @@
   "credits.kind.go": "Laufzeit und Standardbibliothek von Go",
   "credits.kind.module": "Go-Modul",
   "credits.kind.moduleCopy": "Go-Modul, seine Kopie in {path}",
+  "credits.kind.moduleElsewhere": "Go-Modul, im Build einer anderen Plattform",
   "credits.kind.vendored": "abgelegt in {path}",
   "credits.includes": "Enthält {what} und die Crates, mit denen diese gebaut sind; deren Lizenztexte, für Massimo aus den Archiven der Crates gesammelt, stehen unter seinen Dateien.",
   "credits.seeText": "Lizenz im Text",

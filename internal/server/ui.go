@@ -5,7 +5,9 @@ package server
 
 import (
 	"bytes"
+	"crypto/sha256"
 	"embed"
+	"encoding/hex"
 	"fmt"
 	"io/fs"
 	"net/http"
@@ -14,6 +16,7 @@ import (
 	"slices"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	"go.metaworx.ch/massimo/internal/credits"
@@ -188,11 +191,11 @@ func (s *Server) uiRoutes(mux *http.ServeMux) {
 	// The credits and licences of what the binary includes, which System
 	// info shows (internal/credits): the embedded list, a file as the
 	// others are.
-	// Its ETag holds Go's version too, which the file carries: a server of
-	// the same version built with another Go serves another file.
+	// Its ETag holds its digest too (creditsDigest): a server of the same
+	// version built with another Go or other modules serves another list.
 	mux.HandleFunc("GET /ui/credits.json", func(w http.ResponseWriter, r *http.Request) {
 		securityHeaders(w)
-		cache(w, "credits.json/go"+etagChars(credits.GoVersion()))
+		cache(w, "credits.json/"+creditsDigest())
 		http.ServeContent(w, r, "credits.json", time.Time{}, bytes.NewReader(credits.JSON()))
 	})
 	mux.HandleFunc("GET /ui/vendor/{file}", func(w http.ResponseWriter, r *http.Request) {
@@ -209,6 +212,14 @@ func (s *Server) uiRoutes(mux *http.ServeMux) {
 		serve(w, r, "i18n/"+name)
 	})
 }
+
+// creditsDigest is the start of the SHA-256 of the credits as the server
+// serves them, in hex, which their ETag holds: they carry the versions of
+// Go and of the modules the binary was built with (internal/credits).
+var creditsDigest = sync.OnceValue(func() string {
+	sum := sha256.Sum256(credits.JSON())
+	return hex.EncodeToString(sum[:8])
+})
 
 // uiETagVersion is the version part of the UI files' ETags: the server
 // version without the "massimo" in front and the build details after it,

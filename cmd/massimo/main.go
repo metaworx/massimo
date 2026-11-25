@@ -184,7 +184,7 @@ commands:
   install         install massimo serve as a service (systemd), or update or -remove it
   update          install the newest signed release from GitHub (-check only looks)
   restart         restart the installed server (systemd, launchd, the Windows service)
-  credits         list what this binary includes with each licence, or print one's licence (credits <name>)
+  credits         list what a build for any platform includes with each licence, or print one's licence (credits <name>)
   version         print the version (also --version)
 `)
 }

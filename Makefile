@@ -218,11 +218,14 @@ api-types:
 # System info shows: tools/credits writes internal/credits/credits.json
 # from the modules go list finds for every platform of cross, Go's own
 # LICENSE, third_party/ and the web UI's vendor/, run again after a
-# module, Go's go line or a vendored file changed. git keeps the file
-# and the binary embeds it; go test (internal/credits, tools/credits)
-# fails while it is not current, and go run ./tools/credits -check says
-# so without writing. go list needs the bundle (ui), which the server
-# embeds. massimo credits prints the list too.
+# module is added or removed, a licence's text changed, or Go's go line
+# or a vendored file changed; not for a module's version alone, which
+# the file leaves out and the binary shows as it was built with. git
+# keeps the file and the binary embeds it; go test (internal/credits,
+# tools/credits) fails while it is not current, and go run
+# ./tools/credits -check says so without writing. go list needs the
+# bundle (ui), which the server embeds. massimo credits prints the list
+# too.
 credits: ui
 	GOOS= GOARCH= GOARM= go run ./tools/credits
 
