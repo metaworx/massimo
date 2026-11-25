@@ -1224,15 +1224,31 @@ The capabilities, what each allows, and the routes it guards:
 | `auth` | the OpenID Connect providers users sign in through; seeded for no role | `GET`/`POST /api/v1/providers`, `PUT`/`DELETE /api/v1/providers/{key}` |
 | `integrations` | the registered integrations: requests, approval, their maximum, their users and links (migration 0021) | `GET /api/v1/integrations`, `…/integrations/found`, `GET`/`PUT`/`DELETE …/integrations/{uuid}`, its `approve`, `refuse` and `accept-instance`, `PUT …/integrations/{uuid}/users/{id}` |
 
-`update` and `reboot` each include `restart`, since each restarts the server
-(2026-11-25, AP StartConfiguration, D37):
-their holder passes every check of `restart`.
+<!-- BEGIN GENERATED PARTIAL docs/fragments/_capability-rules.md - do not edit; run "GUIDELINES/shared/tools/sync-docs.sh" -->
+`update` and `reboot` each include `restart`, since each restarts the server:
+their holder passes every check of `restart` as a holder of `restart` does,
+and `GET /api/v1/me` lists `restart` beside them.
 The include is taken at the check, on the set the bounds leave
-(the role's set less the disabled capabilities,
-an integration's ceiling and maximum, a call's level),
-so a disabled `restart` stays off for their holders too;
-nothing stored changes, no role's rows and no migration.
-`reboot` does not include `update` (D40-A).
+(the role's set less the capabilities disabled for every role,
+an integration's ceiling and maximum, a call's level):
+an integration whose maximum holds `update` and not `restart` restarts the server,
+a call of it at `control`, which leaves no `update`, does not,
+and `restart` disabled for every role is disabled for their holders too.
+Nothing stored changes, and no migration runs:
+`GET /api/v1/roles` shows each role's set as saved,
+and the rule below compares the stored sets.
+`reboot` does not include `update`, nor `update` `reboot`.
+
+A user changes only users whose role has no capability its own lacks,
+and gives only such roles: an owner changes everyone,
+nobody but an owner changes an owner or gives the role `owner`,
+and a role made with `users` but without, say, `restore` changes no manager.
+<!-- END GENERATED PARTIAL docs/fragments/_capability-rules.md -->
+
+The rule holds for `users`, `guests` and `passwords` alike
+(docs/api-v1.md, "Authentication").
+Both includes were decided on 2026-11-25 (AP StartConfiguration, D37),
+and on the same day that `reboot` does not include `update` (D40-A).
 
 The default roles, as seeded.
 `owner` has every capability.
@@ -1290,12 +1306,6 @@ that is one row of the seed.
 a guest has it not, so a guest's settings stay on its devices,
 where the defaults apply anyway (decided 2026-11-06),
 and an integration's users keep theirs if it ever shows them a page.
-A user changes only users whose role has no capability its own lacks,
-and gives only such roles: an owner changes everyone,
-nobody but an owner changes an owner or gives the role `owner`,
-and a role made with `users` but without, say, `restore` changes no manager.
-The rule holds for `users`, `guests` and `passwords` alike
-(docs/api-v1.md, "Authentication").
 
 Guests are users with the role `guest`,
 created by a holder of `guests` with an invitation (a one-time code or link;

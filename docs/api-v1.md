@@ -264,6 +264,7 @@ the OpenAPI file carries each operation's as `x-capability`:
 | `auth` | the OpenID Connect providers users sign in through; seeded for no role | `GET`/`POST /api/v1/providers`, `PUT`/`DELETE /api/v1/providers/{key}` |
 | `integrations` | the registered integrations: requests, approval, their maximum, their users and links ("Integrations", below) | `GET /api/v1/integrations`, `…/integrations/found`, `GET`/`PUT`/`DELETE …/integrations/{uuid}`, its `approve`, `refuse` and `accept-instance`, `PUT …/integrations/{uuid}/users/{id}` |
 
+<!-- BEGIN GENERATED PARTIAL docs/fragments/_capability-rules.md - do not edit; run "GUIDELINES/shared/tools/sync-docs.sh" -->
 `update` and `reboot` each include `restart`, since each restarts the server:
 their holder passes every check of `restart` as a holder of `restart` does,
 and `GET /api/v1/me` lists `restart` beside them.
@@ -273,7 +274,8 @@ an integration's ceiling and maximum, a call's level):
 an integration whose maximum holds `update` and not `restart` restarts the server,
 a call of it at `control`, which leaves no `update`, does not,
 and `restart` disabled for every role is disabled for their holders too.
-No role's stored set changes: `GET /api/v1/roles` shows it as saved,
+Nothing stored changes, and no migration runs:
+`GET /api/v1/roles` shows each role's set as saved,
 and the rule below compares the stored sets.
 `reboot` does not include `update`, nor `update` `reboot`.
 
@@ -281,6 +283,8 @@ A user changes only users whose role has no capability its own lacks,
 and gives only such roles: an owner changes everyone,
 nobody but an owner changes an owner or gives the role `owner`,
 and a role made with `users` but without, say, `restore` changes no manager.
+<!-- END GENERATED PARTIAL docs/fragments/_capability-rules.md -->
+
 The users routes say what the caller may do with each user they list
 (`"may": {"manage": true, "password": true, "roles": ["guest", "viewer"]}`):
 change it, set its password,
