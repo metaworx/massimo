@@ -6,7 +6,9 @@ mode, the Hold (Manual) switch, shown while the room is in Auto, makes
 them hold it in Manual, and Holiday… opens the holiday form; the arrow
 keys move between its items and Escape closes it. A room on holiday
 shows the holiday's end on More, in the room's problem pill and in the
-device list.
+device list; its tile's tools stay level with AUTO where More wraps
+under it, and the device list's values end at the row's right edge
+(AP RoomsPage v1.0, Block 2).
 
 Every write is held at its route and answered with a stub, so nothing
 reaches the fake Cube; the modes come from state events applied in the
@@ -217,3 +219,45 @@ def test_a_holiday_shows_its_end(page, case):
     page.evaluate(SET_MODE, ["auto", None, False, rid])
     assert "#icon-suitcase" not in head_icons(tile), "no suitcase once the holiday is over"
     assert more.inner_text().strip() == page.evaluate("t('mode.more')"), "More's plain label"
+
+
+# A room's tile on holiday as it is laid out: the top of its first mode
+# button and of its tools, whether More wraps under AUTO, and, for each
+# row of its open device list whose right column shows a value, where
+# the last value of that column ends and where the row does (a row
+# hidden outside expert mode left out).
+HOLIDAY_ROW = """(sel) => {
+  const tile = document.querySelector(sel);
+  const box = (el) => el.getBoundingClientRect();
+  const first = box(tile.querySelector('.mode-row .mode-group > button'));
+  const rows = [...tile.querySelectorAll('.devices .device')].flatMap((row) => {
+    const cells = [...row.querySelectorAll('.device-vals > .cell:not(.wide)')];
+    const right = cells.filter((c, i) => i % 2 === 1 && c.querySelector('.num').textContent !== '');
+    if (!right.length || !box(row).width) return [];
+    const ends = [...right[right.length - 1].querySelectorAll('*')].map(box).filter((b) => b.width > 0).map((b) => b.right);
+    return [{ end: Math.round(Math.max(...ends) * 10) / 10, edge: Math.round(box(row).right * 10) / 10 }];
+  });
+  return { first: first.top, tools: box(tile.querySelector('.tile-tools .tool-btn')).top,
+           wrapped: box(tile.querySelector('.mode-row .more-sum')).top >= first.bottom, rows };
+}"""
+
+
+def test_a_holiday_keeps_the_tools_up_and_the_values_at_the_edge(page, case):
+    """A room on holiday (AP RoomsPage v1.0, Block 2): in a narrow tile,
+    a phone's or one of three columns at 1100 px, More, saying until
+    when, wraps under AUTO and MANU, and the tile's tools stay at the top
+    of the modes' row, level with AUTO, not centred on its two lines; in
+    the open device list, each row's right column, Set and Actual, ends
+    at the row's right edge, at 390 px and at 1100 px."""
+    rid = page.evaluate(SET_MODE, ["vacation", "%d-12-24 18:00" % datetime.date.today().year, False])
+    tile, sel = tile_of(page, rid)
+    tile.locator(".tile-info").click()
+    page.wait_for_selector(sel + " .device .device-vals", timeout=5000)
+    try:
+        geo = page.evaluate(HOLIDAY_ROW, sel)
+        assert geo["wrapped"] or case.width > 480, f"on a phone More wraps under AUTO: {geo}"
+        assert abs(geo["tools"] - geo["first"]) <= 1, f"the tools level with AUTO: {geo}"
+        assert geo["rows"], f"a device row with Set and Actual: {geo}"
+        assert all(abs(r["edge"] - r["end"]) <= 2 for r in geo["rows"]), f"the values end at the row's edge: {geo['rows']}"
+    finally:
+        tile.locator(".tile-info").click()

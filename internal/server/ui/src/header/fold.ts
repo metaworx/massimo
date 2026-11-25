@@ -12,6 +12,10 @@
  * as if ↑ were among the pages, so that scrolling never changes the fold;
  * again whenever the row or one of its items changes size, and at each of
  * the header's renders, which bring the pile's icons and the Cube's name.
+ * The measure is clipped to the row's width (style.css): the row at its
+ * whole width is wider than a phone's page, which would become as wide,
+ * and the browser would zoom out and cut the scroll of a page near its
+ * end, at every poll.
  * Each fit places an open list of the row again (placeMenus of
  * components.js): the pill and the Cube choice move as the row folds and
  * as its items change width, and a list placed for where its summary

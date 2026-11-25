@@ -120,7 +120,12 @@ body:not(.expert) .expert-only { display: none !important; }
    ui/src/header/fold.ts measures it (data-fold): "logo" the M in the
    logo's place, "cube" the Cube choice a cube button, "pile" the pile on
    the next row, at the left; "measure" the items at their whole widths,
-   for the measure alone. */
+   for the measure alone. The measure is clipped to the row's width: at
+   its whole width the row is wider than a phone's page, which would
+   become as wide for that layout, and the browser would zoom out to show
+   it and cut the scroll of a page near its end, which would move up at
+   every poll. Only the measure is clipped, so that no open list or
+   focus ring of the row ever is. */
 .top-line {
   display: flex;
   align-items: flex-end;
@@ -134,6 +139,7 @@ body:not(.expert) .expert-only { display: none !important; }
    are from each other (4 px, .nav's gap): the row's 16 px less 12;
    fold.ts measures the distance as it is */
 .top-line > .cube { margin-right: -12px; }
+.top-line[data-fold="measure"] { overflow-x: clip; }
 .top-line[data-fold="measure"] > .brand, .top-line[data-fold="measure"] > .cube { flex: none; }
 .top-line[data-fold~="logo"] .brand-name { min-width: calc(var(--brand-h) * var(--brand-mark-ratio, 1.09)); }
 .top-line[data-fold~="logo"] .brand-name .brand-logo { display: none; }
@@ -1357,6 +1363,9 @@ html.blink-first .server-icon.state-new use.mark, html.blink-first .server-icon.
    one line, so that the two columns fit a phone and each age stands
    under its own value. */
 .device-vals .cell.aged { display: grid; grid-template-columns: auto auto auto auto; justify-content: start; align-items: baseline; column-gap: 8px; }
+/* In the right column (.end) the name's track takes the room its value
+   does not need, as a plain cell's name does (.device-vals, below). */
+.device-vals > .cell.aged.end { grid-template-columns: 1fr auto auto auto; }
 .device-vals .cell.aged .age { display: contents; }
 .device-vals .cell.aged .age-text { grid-column: 1; grid-row: 2; line-height: 1.2; }
 .device-vals .cell.aged .age-exact { grid-column: 2 / -1; grid-row: 2; line-height: 1.2; white-space: nowrap; }
@@ -1395,9 +1404,11 @@ html.blink-first .server-icon.state-new use.mark, html.blink-first .server-icon.
 }
 .pending-row button { padding: 4px 12px; font-size: 0.9rem; }
 
+/* The modes' row: its items at its top, so that the tools stand level
+   with AUTO where the modes wrap onto a second line (.mode-group). */
 .mode-row {
   display: flex;
-  align-items: center;
+  align-items: flex-start;
   flex-wrap: wrap;
   gap: 8px;
   padding: 8px 14px 14px;
@@ -1412,7 +1423,7 @@ html.blink-first .server-icon.state-new use.mark, html.blink-first .server-icon.
 .mode-row .mode-group > button { padding: 6px 10px; font-size: 0.85rem; }
 /* The modes take the row beside the tools, and wrap there: More saying
    until when a holiday lasts goes under AUTO and MANU, the tools beside
-   both rather than on a line of their own. */
+   both rather than on a line of their own, at the row's top (.mode-row). */
 .mode-group { display: inline-flex; flex-wrap: wrap; gap: 8px; flex: 1 1 0; }
 .mode-row .mode-group > button.active { background: var(--accent); color: var(--accent-fg); border-color: var(--accent); }
 /* More (ui/src/rooms/Tile.tsx More): a mode button whose menu drops down, Eco,
@@ -1493,17 +1504,25 @@ html.blink-first .server-icon.state-new use.mark, html.blink-first .server-icon.
 .device-ids > span { white-space: pre-wrap; }
 .hidden-device { display: inline-flex; flex-wrap: wrap; align-items: baseline; gap: 2px 8px; min-width: 0; }
 .hidden-device > .device-ids { color: var(--muted); font-size: 0.85rem; }
+/* A device row's values (ui/src/rooms/Devices.tsx Values): the left
+   column at the row's left, the right one at its right edge, at least
+   16 px between them, as narrow as a phone's at any width, since a tile
+   of three columns at 1100 px is narrower than a phone's. In the right
+   column, Set and Actual, whose cells carry the class end (Values), a
+   value's name takes the room its value does not need, so that each
+   value ends at the edge whatever the length of its name. */
 .device-vals {
   display: grid;
   grid-template-columns: auto auto;
-  justify-content: start;
-  gap: 2px 28px;
+  justify-content: space-between;
+  gap: 2px 16px;
   margin-top: 6px;
   font-variant-numeric: tabular-nums;
 }
+.device-vals > .cell.end > .k { margin-right: auto; }
 .device-vals .cell { display: flex; align-items: baseline; gap: 8px; white-space: nowrap; min-width: 0; align-self: start; }
 .device-vals .cell.wide { grid-column: 1 / -1; white-space: normal; }
-.device-vals .k { color: var(--muted); min-width: 3.6em; }
+.device-vals .k { color: var(--muted); min-width: 3.2em; }
 .device-vals .num { display: inline-block; min-width: 4.4ch; text-align: right; }
 .device-vals .num.temp { font-weight: 700; }
 .device-vals .u { color: var(--muted); font-size: 0.85em; min-width: 1.6em; }
@@ -1686,8 +1705,6 @@ dialog .actions { display: flex; justify-content: flex-end; gap: 8px; margin-top
 .dialog-form > span { min-width: 0; overflow-wrap: anywhere; }
 
 @media (max-width: 480px) {
-  .device-vals { gap: 2px 16px; }
-  .device-vals .k { min-width: 3.2em; }
   .panel-row > .muted { min-width: 0; width: 100%; }
   .house .panel, .room .panel { margin-left: 8px; margin-right: 8px; padding: 10px; }
 }

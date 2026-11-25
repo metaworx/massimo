@@ -14,8 +14,8 @@ from the page's state alone: every read of the rooms takes that back,
 the page's own and those the server's events start, and so does a
 state or config event of the device, which brings it as the server has
 it; the server sends them by itself after an earlier test's write, at
-its next poll of the Cube, and in the burst of the reconnect it makes
-two minutes after a write to read its Cube's budget.
+its next poll of the Cube. So the test keeps its thermostat
+(reads.keep): the page reads its rooms again after each of them.
 """
 import re
 
@@ -30,17 +30,6 @@ THERMOSTAT = """() => {
   if (!r) return null;
   const d = r.devices.find((d) => isThermostat(d) && d.reported && !d.virtual);
   return { id: r.id, room: r.name, name: deviceName(d), rf: d.rf_address };
-}"""
-
-# After each state or config event of the thermostat rf, which brings it
-# as the server has it, the page reads its rooms again: the reads answer
-# with what the test told them.
-READ_AFTER_ITS_EVENTS = """(rf) => {
-  for (const kind of ["state", "config"]) {
-    state.events.addEventListener(kind, (ev) => {
-      if (JSON.parse(ev.data).device === rf) loadRooms().catch(() => {});
-    });
-  }
 }"""
 
 SAYS = {
@@ -108,7 +97,7 @@ def test_unconfirmed_marks(page, case, reads):
     since = page.evaluate("new Date().toISOString()")
     told = {}
     reads.change(ROOMS, told_thermostat(dev["rf"], told))
-    page.evaluate(READ_AFTER_ITS_EVENTS, dev["rf"])
+    reads.keep(dev["rf"])
 
     def confirmation(cstate, fields):
         # the server's answer from now on, shown by a read of the page's own

@@ -77,6 +77,15 @@ then the browser.
 
 pytest-playwright keeps a failed test's screenshot in `tools/ui-test/results/`,
 one directory per test (gitignored, emptied at the start of every run).
+A run whose tests failed also keeps each set's `serve.log` and `fakecube.log`
+in `tools/ui-test/results/logs/set<n>/`, copied at its end, after the retry,
+so that they hold both passes,
+before its cleanup removes the temporary directory that held them;
+a passing run leaves none.
+They say what the servers did meanwhile, a reconnect of their own among it,
+which a screenshot does not show (AP ServerTraffic, D4-A),
+and hold only the suite's test data:
+the server redacts keys and tokens in its log.
 The first pass records no trace and no video:
 the trace's DOM snapshots make every step slower,
 840 ms instead of 14 for a step in System settings at 1100 px,
@@ -861,7 +870,8 @@ on every push to `main` and every pull request that changes the UI's paths,
 in Microsoft's Playwright image,
 and uploads the PNGs as the artifact `ui-screenshots` (`GUIDELINES/project/CI.md`);
 when a case's step fails it also uploads `tools/ui-test/results/`,
-the failed tests' screenshots and the retry's screenshots, videos and traces,
+the failed tests' screenshots, the retry's screenshots, videos and traces,
+and the servers' logs,
 as the artifact `ui-test-results-<case>`.
 It does not make the slideshow, which needs ImageMagick:
 `slideshow.sh` is run where the set is taken, and the GIF committed with it.

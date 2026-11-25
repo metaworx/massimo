@@ -792,7 +792,7 @@ jobs:
       - name: JDK 17 and the Android SDK
         run: |
           echo "JAVA_HOME=${JAVA_HOME_17_X64:?the runner image has no JDK 17}" >> "$GITHUB_ENV"
-          for p in platforms/android-36 build-tools/36.0.0; do
+          for p in platforms/android-37.0 build-tools/36.0.0; do
             if [ ! -d "${ANDROID_HOME:?the runner image has no Android SDK}/${p}" ]; then
               echo "::error::the runner image's Android SDK lacks ${p}"
               exit 1
@@ -912,7 +912,7 @@ jobs:
           APP_EMU_SDK: ${{ runner.temp }}/emu-sdk
         run: |
           echo "JAVA_HOME=${JAVA_HOME_17_X64:?the runner image has no JDK 17}" >> "$GITHUB_ENV"
-          for p in platforms/android-36 build-tools/36.0.0 platform-tools; do
+          for p in platforms/android-37.0 build-tools/36.0.0 platform-tools; do
             if [ ! -d "${ANDROID_HOME:?the runner image has no Android SDK}/${p}" ]; then
               echo "::error::the runner image's Android SDK lacks ${p}"
               exit 1

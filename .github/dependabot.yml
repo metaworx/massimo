@@ -2,7 +2,8 @@
 # code imports directly, the actions the workflows use, pinned by commit
 # SHA with their version as a comment, and the Android app's Gradle
 # dependencies and plugins, in app/android/gradle/libs.versions.toml;
-# checked monthly, one pull request for each. Its commit messages cannot take the project's form,
+# checked monthly, one pull request for each, the app's build tools and
+# its libraries one each. Its commit messages cannot take the project's form,
 # so the Guidelines job leaves them out of its check, and its updates go
 # into one CHANGELOG bullet when they are merged.
 # github.com/bytemare/ksf, replaced by third_party/bytemare-ksf until a
@@ -46,8 +47,13 @@ updates:
     schedule:
       interval: monthly
     groups:
+      # The build's own tools apart from the libraries: a library that
+      # cannot build yet then holds no wrapper's update back.
+      gradle-build:
+        patterns: ["gradle-wrapper", "com.android.*"]
       gradle:
         patterns: ["*"]
+        exclude-patterns: ["gradle-wrapper", "com.android.*"]
     commit-message:
       prefix: build
       include: scope

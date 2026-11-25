@@ -9,6 +9,7 @@ import (
 	"fmt"
 	"os"
 	"os/signal"
+	"strconv"
 	"strings"
 	"time"
 
@@ -23,6 +24,7 @@ func runFakeCube(args []string) error {
 	listen := fs.String("listen", "127.0.0.1:62910", "address to listen on")
 	file := fs.String("greeting", "", "file with the protocol lines to send on connect (a capture, or a backup's lines)")
 	duty := fs.Int("duty", 0, "duty cycle percentage to report in S replies")
+	freeSlots := freeSlotsFlag(fs)
 	discovery := fs.String("discovery", "", "also answer UDP discovery on this address, such as 127.0.0.1:23273, as a Cube that is not configured (serve finds it with -discover-target <that address>)")
 	discoverySerial := fs.String("discovery-serial", "KEQ0000000", "serial of the Cube that answers -discovery")
 	fixture := fs.String("fixture", "", "serve a built-in house instead of -greeting: rooms (a wall thermostat with two radiator thermostats, three radiator thermostats, a shutter contact alone)")
@@ -55,6 +57,7 @@ func runFakeCube(args []string) error {
 	}
 	srv := &fakecube.Server{Greeting: greeting, Duty: *duty, Apply: *apply, ApplyAfter: *applyAfter, BoostFor: *boostFor,
 		SingleClient: *singleClient, HoldDead: *holdDead}
+	freeSlots(srv)
 	if *pair != "" {
 		if srv.Pair, err = parsePair(greeting, *pair); err != nil {
 			return fmt.Errorf("fakecube: -pair: %w", err)
@@ -89,6 +92,29 @@ func runFakeCube(args []string) error {
 	defer stop()
 	<-ctx.Done()
 	return nil
+}
+
+// freeSlotsFlag adds -free-slots to fs. The function it returns gives the
+// fake the free memory slots given, in its S replies and its greeting's H
+// line, and leaves it as it is where the flag was not given: its S replies
+// then say 0x31, one radiogram pending, for which a server with its
+// periodic refresh on reconnects to read its budget two minutes after a
+// write (internal/server/followup.go).
+func freeSlotsFlag(fs *flag.FlagSet) func(*fakecube.Server) {
+	var free *int
+	fs.Func("free-slots", "free memory slots, 0 to 255, to report in S replies and in the greeting's H line, such as 50 for a Cube that holds no radiogram (default: S replies say 0x31, one radiogram pending, and the H line is the greeting's)", func(v string) error {
+		n, err := strconv.Atoi(v)
+		if err != nil || n < 0 || n > 0xff {
+			return fmt.Errorf("want 0 to 255, got %q", v)
+		}
+		free = &n
+		return nil
+	})
+	return func(srv *fakecube.Server) {
+		if free != nil {
+			srv.SetFreeSlots(*free)
+		}
+	}
 }
 
 // parsePair reads -pair, <template rf>,<rf>,<serial>[,<delay>], into the

@@ -9,7 +9,11 @@
 # in one worker (--dist loadfile); UI_TEST_WORKERS=1 runs it in one
 # process against one set. The arguments after "smoke" go to pytest, as
 # do those in PYTEST_ADDOPTS (PYTEST_ADDOPTS='-k cubes' make ui-test).
-# Of a failed test it keeps the screenshot under tools/ui-test/results/.
+# Of a failed test it keeps the screenshot under tools/ui-test/results/,
+# and of a run whose tests failed each set's serve.log and fakecube.log
+# under results/logs/set<n>/, which CI uploads with the screenshots, so
+# that a failure shows what the servers did meanwhile (AP ServerTraffic,
+# D4-A).
 # The first pass records no trace, whose DOM snapshots make every step
 # slower, and no video, which lengthens every test's tear-down (AP
 # TestSpeed, D8-A); when tests fail, they run once more with both, the
@@ -48,6 +52,12 @@
 # The fake Cube has a device that joins pairing mode two seconds after
 # n:, a copy of the radiator thermostat 0a010d as 0abcde (TEQ0000001),
 # and joins again after a t: deleted it, so that every case can pair it.
+# It has every memory slot free (-free-slots 50), so that its S replies
+# say no radiogram pending: by default they say one, and the server then
+# reconnects to read its budget two minutes after every write, whose
+# burst of events and reads would fall into whichever test runs then
+# (AP ServerTraffic, D1-A). A test that wants a reconnect plants one
+# (POST …/refresh).
 #
 # The fake Cube also answers UDP discovery, as a Cube that is not
 # configured (KEQ0000000), on a loopback port the server asks instead of
@@ -132,7 +142,7 @@ start_set() {
 	mkdir -p "$d/down"
 	cd "$d"
 	env -i PATH="$PATH" HOME="$HOME" "$work/massimo" fakecube -greeting "$here/greeting.txt" \
-		-listen "$cube" -discovery "$disc" \
+		-listen "$cube" -discovery "$disc" -free-slots 50 \
 		-pair 0a010d,0abcde,TEQ0000001 > fakecube.log 2>&1 &
 	pids="$pids $!"
 	env -i PATH="$PATH" HOME="$HOME" MASSIMO_API_TOKEN="$token" \
@@ -253,6 +263,24 @@ if [ "$workers" -gt 1 ]; then
 fi
 export UI_TEST_URL="http://127.0.0.1:$api_port/" UI_TEST_DOWN_URL="http://127.0.0.1:$down_port/" UI_TEST_TOKEN="$token" \
 	UI_TEST_SERVE_LOG="$work/set0/serve.log"
+
+# keep_logs: each set's serve.log and fakecube.log copied into
+# results/logs/set<n>/, for a run whose tests failed, after the retry, so
+# that they hold both passes, and before the cleanup removes them with
+# the work directory.
+keep_logs() {
+	n=0
+	while [ $n -lt "$workers" ]; do
+		mkdir -p "$here/results/logs/set$n"
+		cp "$work/set$n/serve.log" "$work/set$n/fakecube.log" "$here/results/logs/set$n/" || true
+		n=$((n + 1))
+	done
+	echo "ui-test: the servers' logs are in tools/ui-test/results/logs/" >&2
+}
+
+# A run's logs go before it starts: the first pass empties results/ only
+# once a test has started, and a passing run leaves none.
+rm -rf "$here/results/logs"
 rc=0
 PYTEST_ADDOPTS="--durations=20 ${PYTEST_ADDOPTS:-}" "$py" -m pytest --output "$here/results" "$@" || rc=$?
 # Only failed tests (exit 1) run again: not an interrupted or empty run.
@@ -264,4 +292,5 @@ if "$py" -m pytest --last-failed --last-failed-no-failures none --video retain-o
 else
 	echo "ui-test: tests failed again; their videos and traces are in tools/ui-test/results/retry/" >&2
 fi
+keep_logs
 exit 1
