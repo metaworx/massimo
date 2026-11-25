@@ -231,26 +231,28 @@ since an integration's user holds no key of its own.
 The file stays the way to recover an owner who lost the password:
 put a token into it, log in with it, set a password; no restart is needed.
 
-The capabilities, what each allows and the routes it guards;
-the OpenAPI file carries each operation's as `x-capability`:
+The capabilities, what each allows and the routes it guards,
+`…` standing for any part of a path;
+a test holds each row to the routes the server registers with its capability,
+and the OpenAPI file carries each operation's as `x-capability`:
 
 | Capability | Allows | Routes |
 |---|---|---|
-| `read` | see everything of the Cubes and one's own user | every `GET` of a Cube, its rooms, devices, configuration, programmes, log, pairing and restore state but its backups, the event stream and its ticket, `GET /api/v1/commands/{id}`, `GET /api/v1/log` and its `alerts`, `GET /api/v1/system`, `GET /api/v1/push/vapid`, `GET /api/v1/update`; `GET /api/v1/me` for any signed-in user |
-| `preferences` | keep one's own settings and colour schemes on the server, so that they follow the user across browsers, and be notified; without it they stay in the browser | `PUT`/`DELETE /api/v1/me/preferences/{key}`, `/api/v1/me/push` |
+| `read` | see everything of the Cubes and one's own user: rooms, devices, configuration, programmes, the log and the stream, the pairing and restore state, a command's outcome, the server's log and its alerts, the system's facts, the update state | `GET /api/v1/cubes`, `GET /api/v1/cubes/{sn}`, `GET …/rooms`, `GET …/devices`, `GET …/devices/{rf}`, `GET …/rooms/{id}/config`, `GET …/rooms/{id}/program`, `GET …/devices/{rf}/program`, `GET …/log`, `GET …/events`, `POST …/events/ticket`, `GET …/pairing`, `GET …/restore`, `GET /api/v1/commands/{id}`, `GET /api/v1/log`, `GET /api/v1/log/alerts`, `GET /api/v1/system`, `GET /api/v1/push/vapid`, `GET /api/v1/update`; `GET /api/v1/me` and one's own preferences, `GET /api/v1/me/preferences…`, for any signed-in user |
+| `preferences` | keep one's own settings and colour schemes on the server, so that they follow the user across browsers, and be notified; without it they stay in the browser | `PUT`/`DELETE /api/v1/me/preferences/{key}`, `GET`/`POST /api/v1/me/push`, `DELETE /api/v1/me/push/{id}` |
 | `setpoint` | set temperatures and modes | `PUT …/devices/{rf}/setpoint`, `PUT …/rooms/{id}/setpoint` |
 | `lock` | lock and unlock the thermostats' buttons | `PUT …/devices/{rf}/lock` |
-| `configure` | temperatures, device settings, week programmes, and new batteries marked | `PUT …/rooms/{id}/config`, `PUT …/devices/{rf}/config`, `PUT …/rooms/{id}/program`, `PUT …/devices/{rf}/program`, the copy of a room's settings in `PUT …/devices/{rf}`, `POST …/devices/{rf}/battery` |
+| `configure` | temperatures, device settings, week programmes, and new batteries marked | `PUT …/rooms/{id}/config`, `PUT …/devices/{rf}/config`, `PUT …/rooms/{id}/program`, `PUT …/devices/{rf}/program`, `POST …/devices/{rf}/battery`; the copy of a room's settings in `PUT …/devices/{rf}` |
 | `rename` | room and device names | `PUT …/rooms/{id}`, `PUT …/devices/{rf}` with `name` |
-| `structure` | move and remove devices, delete rooms | `PUT …/devices/{rf}` with `room_id`, `DELETE …/devices/{rf}`, `DELETE …/rooms/{id}` |
-| `pair` | put the Cube into pairing mode and stop it | `POST …/pairing`, `DELETE …/pairing` |
+| `structure` | move and remove devices, delete rooms | `PUT …/devices/{rf}` with `room_id`, `DELETE …/devices/{rf}`, `DELETE …/rooms/{id}`; beside `repair`, `GET`/`POST …/repair/unlink-relink` |
+| `pair` | put the Cube into pairing mode and stop it | `POST`/`DELETE …/pairing` |
 | `discover` | search for Cubes on the LAN | `POST /api/v1/cubes/discover` |
-| `backup` | download a backup, and the backups the server keeps | `GET …/backup`, `GET`/`POST …/backups`, `GET …/backups/{id}` and its `diff`, `GET /api/v1/backups/unserved` |
+| `backup` | download a backup, and the backups the server keeps | `GET …/backup`, `GET`/`POST …/backups`, `GET …/backups/{id}`, `GET …/backups/{id}/diff`, `GET /api/v1/backups/unserved` |
 | `restore` | plan and run a restore, delete a kept backup | `POST …/restore/plan`, `POST …/restore`, `DELETE …/backups/{id}` |
-| `repair` | the repairs of a Cube's rooms and devices: their communication errors reset, a device's configuration re-sent from its room, a device placed or listed where the Cube and its list disagree, a room's master named, a room re-linked; "unlink all and re-link" needs `structure` as well ("Repairs", below) | `GET`/`POST …/repair/…` |
-| `guests` | create, change and remove users whose role is `guest` | the users routes, limited to guests |
-| `users` | every user: create, role, disable, password, tokens, the identities they sign in with | `GET`/`POST /api/v1/users`, `…/users/{name}`, `…/users/{name}/tokens`, `…/users/{name}/identities…` |
-| `passwords` | set the password of a user (the manager's by default) | `GET /api/v1/users`, `PUT …/users/{name}` with a password, `POST …/users/{name}/register` |
+| `repair` | the repairs of a Cube's rooms and devices: their communication errors reset, a device's configuration re-sent from its room, a device placed or listed where the Cube and its list disagree, a room's master named, a room re-linked; "unlink all and re-link" needs `structure` as well ("Repairs", below) | `GET`/`POST …/repair/…`; `GET`/`POST …/repair/unlink-relink` with `structure` as well |
+| `guests` | create, invite, change, disable and remove users whose role is `guest`, and give them an end date | the users routes, `GET`/`POST`/`PUT`/`DELETE /api/v1/users…`, for users whose role is `guest` |
+| `users` | every user: create, role, disable, password, tokens, the identities they sign in with | `GET`/`POST /api/v1/users`, `GET`/`PUT`/`DELETE …/users/{name}`, `GET`/`POST …/users/{name}/tokens`, `DELETE …/users/{name}/tokens/{id}`, `POST …/users/{name}/register`, `GET`/`POST`/`PUT`/`DELETE …/users/{name}/identities…` |
+| `passwords` | set the password of a user (the manager's by default) | `GET /api/v1/users`, `GET …/users/{name}`, `PUT …/users/{name}` with a password, `POST …/users/{name}/register` |
 | `roles` | a role's capabilities and name, create and delete roles | `GET`/`POST /api/v1/roles`, `PUT`/`DELETE /api/v1/roles/{key}` |
 | `roles.disable` | disable and enable a role | `PUT /api/v1/roles/{key}/disabled` |
 | `capabilities` | disable and enable a capability for every role but `owner` | `GET /api/v1/capabilities`, `PUT /api/v1/capabilities/{key}` |
@@ -262,7 +264,7 @@ the OpenAPI file carries each operation's as `x-capability`:
 | `reboot` | reboot the computer the server runs on, where its owner switched that on; includes `restart`; seeded for no role | `GET`/`POST`/`DELETE /api/v1/reboot` |
 | `audit` | read the audit | `GET /api/v1/audit` |
 | `auth` | the OpenID Connect providers users sign in through; seeded for no role | `GET`/`POST /api/v1/providers`, `PUT`/`DELETE /api/v1/providers/{key}` |
-| `integrations` | the registered integrations: requests, approval, their maximum, their users and links ("Integrations", below) | `GET /api/v1/integrations`, `…/integrations/found`, `GET`/`PUT`/`DELETE …/integrations/{uuid}`, its `approve`, `refuse` and `accept-instance`, `PUT …/integrations/{uuid}/users/{id}` |
+| `integrations` | the registered integrations: requests, approval, their maximum, their users and links ("Integrations", below) | `GET /api/v1/integrations`, `GET …/integrations/found`, `GET`/`PUT`/`DELETE …/integrations/{uuid}`, `POST …/integrations/{uuid}/approve`, `POST …/integrations/{uuid}/refuse`, `POST …/integrations/{uuid}/accept-instance`, `PUT …/integrations/{uuid}/users/{id}` |
 
 <!-- BEGIN GENERATED PARTIAL docs/fragments/_capability-rules.md - do not edit; run "GUIDELINES/shared/tools/sync-docs.sh" -->
 `update` and `reboot` each include `restart`, since each restarts the server:
