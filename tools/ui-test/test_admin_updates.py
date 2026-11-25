@@ -11,6 +11,7 @@ and for another user signed in after an expired session, nothing typed,
 no list and no key shown once is left. The users the tests make are
 removed again, and nothing typed is saved."""
 import json
+import re
 
 import pytest
 
@@ -422,6 +423,77 @@ def test_an_integrations_drafts_stay_and_a_request_keeps_its_choice(page, case):
         assert wait_until(page, "!document.querySelector('#sys-integrations .section-pill .problems')", 5), "Reset: no pill"
     finally:
         page.unroute(f"**/api/v1/integrations/{made[0]}")
+    show_view(page, "tiles")
+
+
+def cap_switch(form, label):
+    """The switch of a capability in form, by its label."""
+    return form.locator(".switch").filter(has=form.page.locator(".switch-label", has_text=re.compile("^" + re.escape(label) + "$")))
+
+
+def test_an_integrations_maximum_holds_restart_with_update_or_reboot(page, case, watch):
+    """A request's maximum and an integration's: restart on, off and with
+    why while update or reboot is on, since each includes it, and free
+    again with them off; Approve and Save the maximum send the maximum as
+    switched, without what is held alone. The request and the
+    integration are stubbed (stub_integrations, the request's own read
+    too), the approval answered 409: nothing is registered or stored."""
+    from test_parts_guard import IG_STUB, REQ_STUB
+    reads_of(page).change("**/api/v1/integrations/found*", lambda body: dict(body or {}, looks=True, found=[]))
+    made = stub_integrations(page)
+    safe_route(page, f"**/api/v1/integrations/{made[1]}", lambda r: r.fulfill(status=200, content_type="application/json", body=json.dumps(REQ_STUB)))
+    watch.expected.append((f"/api/v1/integrations/{made[1]}/approve", 409))
+    approved = []
+
+    def approve(route):
+        approved.append(route.request.post_data_json)
+        route.fulfill(status=409, content_type="application/json", body=json.dumps({"error": "held by the test"}))
+    safe_route(page, f"**/api/v1/integrations/{made[1]}/approve", approve)
+    puts, reread = [], []
+    page.on("request", lambda r: puts.append(r.post_data_json) if r.method == "PUT" and r.url.endswith("/api/v1/integrations/" + made[0]) else None)
+    # the save's read of the list, and of the open panel's integration, before its stub goes
+    page.on("response", lambda r: reread.append(r.url) if puts and r.request.method == "GET" and r.url.endswith("/api/v1/integrations/" + made[0]) else None)
+    try:
+        show_view(page, "system")
+        update, restart, reboot, why = page.evaluate("[t('cap.update'), t('cap.restart'), t('cap.reboot'), t('cap.included')]")
+        request = page.locator(f".integration-request[data-uuid='{made[1]}']")
+        request.wait_for()
+        sw = cap_switch(request, restart)
+        box = sw.locator("input")
+        # A request's maximum is the whole ceiling at first: restart held by both.
+        assert box.is_checked() and box.is_disabled() and sw.locator(".flag").inner_text() == why, "restart on, off and with why"
+        cap_switch(request, update).click()
+        assert box.is_checked() and box.is_disabled(), "still held by reboot"
+        cap_switch(request, reboot).click()
+        assert box.is_checked() and box.is_enabled() and sw.locator(".flag").count() == 0, "free, as chosen"
+        sw.click()
+        assert not box.is_checked(), "switched off"
+        cap_switch(request, update).click()
+        assert box.is_checked() and box.is_disabled(), "held again by update"
+        request.locator(".approve-integration").click()
+        assert wait_held(page, approved), "the approval sent"
+        sent = approved[0]["max_caps"]
+        assert "update" in sent and "read" in sent and "restart" not in sent and "reboot" not in sent, f"the approval's maximum as switched: {sent}"
+
+        panel = open_panel(page, f".integration-panel[data-uuid='{made[0]}']")
+        form = panel.locator("form.integration-max")
+        sw = cap_switch(form, restart)
+        box = sw.locator("input")
+        assert IG_STUB["max_caps"] == ["read", "setpoint"], "the stub's maximum holds neither"
+        for holder in (update, reboot):
+            assert not box.is_checked() and box.is_enabled() and sw.locator(".flag").count() == 0, "restart off and free, as stored"
+            cap_switch(form, holder).click()
+            assert box.is_checked() and box.is_disabled() and sw.locator(".flag").inner_text() == why, f"restart on, off and with why, {holder} on"
+            cap_switch(form, holder).click()
+        assert not box.is_checked() and box.is_enabled(), "free again with both off"
+        cap_switch(form, update).click()
+        form.locator("button[type=submit]").click()
+        assert wait_held(page, puts), "the maximum sent"
+        assert [sorted(p["max_caps"]) for p in puts] == [["read", "setpoint", "update"]], f"sent {puts}"
+        assert wait_held(page, reread), "the integration read again after the save"
+    finally:
+        page.unroute(f"**/api/v1/integrations/{made[0]}")
+        page.unroute(f"**/api/v1/integrations/{made[1]}")
     show_view(page, "tiles")
 
 

@@ -16,8 +16,7 @@ import (
 )
 
 // route is one registered /api route: the method, the path pattern and
-// the capability it needs, or the two of which either will do
-// ("restart or update", capOr).
+// the capability it needs.
 type route struct {
 	method, path, capability string
 }
@@ -38,7 +37,7 @@ func registeredRoutes(t *testing.T) []route {
 		code += string(b)
 	}
 	var out []route
-	for _, m := range regexp.MustCompile(`api\("(GET|PUT|POST|DELETE) (/api/v1/[^"]+)", "([a-z.]+(?: or [a-z.]+)?)"`).FindAllStringSubmatch(code, -1) {
+	for _, m := range regexp.MustCompile(`api\("(GET|PUT|POST|DELETE) (/api/v1/[^"]+)", "([a-z.]+)"`).FindAllStringSubmatch(code, -1) {
 		out = append(out, route{method: m[1], path: m[2], capability: m[3]})
 	}
 	if len(out) == 0 {

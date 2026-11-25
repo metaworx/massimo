@@ -29,6 +29,7 @@ import (
 	"net"
 	"net/http"
 	"net/netip"
+	"slices"
 	"strconv"
 	"strings"
 	"sync"
@@ -63,8 +64,8 @@ const (
 )
 
 // capabilities lists every capability of docs/store.md section 6 in its
-// order. A route is registered with one of them, or with two of which
-// either admits it (capOr); the roles' sets are rows of the store.
+// order. A route is registered with one of them; the roles' sets are
+// rows of the store, and what a capability includes is includes'.
 var capabilities = []string{
 	"read", "preferences", "setpoint", "lock", "configure", "rename", "structure", "pair", "discover", "backup", "restore", "repair",
 	"guests", "users", "passwords", "roles", "roles.disable", "capabilities", "cubes", "cubes.reboot", "settings", "update", "restart", "reboot", "audit",
@@ -90,12 +91,6 @@ const (
 	capAny  = "any"
 )
 
-// capOr joins the two capabilities of a route that either admits:
-// GET /api/v1/restart is registered with "restart or update", since every
-// update restarts the server and its holder reads what the next start
-// refuses (AP StartConfiguration, D34-A).
-const capOr = " or "
-
 func validCapability(c string) bool {
 	for _, k := range capabilities {
 		if k == c {
@@ -105,41 +100,68 @@ func validCapability(c string) bool {
 	return false
 }
 
-// routeCapabilities splits a route's capability into those that admit
-// it: one, or two joined by capOr.
-func routeCapabilities(capability string) []string {
-	return strings.Split(capability, capOr)
+// includes is what a capability includes (AP StartConfiguration, D37):
+// its holder passes every check of the capabilities it names, as their
+// holder would. It is taken at the check (D39-A), on a principal's set as
+// every bound left it (has), and nowhere else: no role's stored set
+// changes, and a capability disabled for every role is not included. One
+// step: what an included capability includes is not taken. An update and
+// a reboot each restart the server; a reboot does not include an update,
+// which may bring new or incompatible features (D40-A).
+var includes = map[string][]string{
+	"update": {"restart"},
+	"reboot": {"restart"},
 }
 
-// routeCapabilityError says what is wrong with the capability a route is
-// registered with, "" for nothing: capNone and capAny stand alone, any
-// other is one capability or two joined by capOr, each a known one. The
-// api helper panics on it (server.go).
-func routeCapabilityError(pattern, capability string) string {
-	if capability == capNone || capability == capAny {
-		return ""
+// included reports whether set holds a capability that includes c
+// (includes), c not being one of off, the capabilities disabled for
+// every role.
+func included(set, off map[string]bool, c string) bool {
+	if off[c] {
+		return false
 	}
-	caps := routeCapabilities(capability)
-	if len(caps) > 2 {
-		return fmt.Sprintf("route %s: more than two capabilities %q", pattern, capability)
-	}
-	for _, c := range caps {
-		if !validCapability(c) {
-			return fmt.Sprintf("route %s: unknown capability %q", pattern, c)
+	for holder, more := range includes {
+		if set[holder] && slices.Contains(more, c) {
+			return true
 		}
 	}
-	return ""
+	return false
+}
+
+// heldCaps lists the capabilities set passes the checks of, sorted: its
+// own and what they include (included), none of off; GET /api/v1/me
+// lists them.
+func heldCaps(set, off map[string]bool) []string {
+	out := []string{}
+	for c, ok := range set {
+		if ok {
+			out = append(out, c)
+		}
+	}
+	for _, more := range includes {
+		for _, c := range more {
+			if !set[c] && !slices.Contains(out, c) && included(set, off, c) {
+				out = append(out, c)
+			}
+		}
+	}
+	slices.Sort(out)
+	return out
+}
+
+// setOf is a list of capabilities as a set.
+func setOf(list []string) map[string]bool {
+	set := map[string]bool{}
+	for _, c := range list {
+		set[c] = true
+	}
+	return set
 }
 
 // capabilityRequired is the error of a request refused for want of the
-// route's capability: `capability "restart" required`, or for two
-// `capability "restart" or "update" required`.
+// route's capability: `capability "restart" required`.
 func capabilityRequired(capability string) string {
-	caps := routeCapabilities(capability)
-	for i, c := range caps {
-		caps[i] = strconv.Quote(c)
-	}
-	return "capability " + strings.Join(caps, capOr) + " required"
+	return fmt.Sprintf("capability %q required", capability)
 }
 
 // authMode is how a server authenticates.
@@ -157,7 +179,13 @@ type principal struct {
 	mode  authMode
 	user  store.User
 	token store.Token
-	caps  map[string]bool
+	// caps is the set every bound left (principalFor, onbehalf.go), what
+	// it includes not added: has takes that at the check. off are the
+	// capabilities disabled for every role that the roles' effective sets
+	// left out (store.Effective), none for owner's; has never includes
+	// one of them.
+	caps map[string]bool
+	off  map[string]bool
 	// legacyToken is the one token a server without a store had when it
 	// let the principal in, "" for none (stillAdmitted).
 	legacyToken string
@@ -177,7 +205,9 @@ func (p *principal) realUserID() int64 {
 	return p.user.ID
 }
 
-// has reports whether the principal holds a capability; outside users
+// has reports whether the principal holds a capability, or one that
+// includes it (included): every check of a capability asks it, so that
+// the include is taken on the set as every bound left it. Outside users
 // mode everyone holds every one.
 func (p *principal) has(c string) bool {
 	if p == nil {
@@ -186,7 +216,7 @@ func (p *principal) has(c string) bool {
 	if p.mode != modeUsers {
 		return true
 	}
-	return p.caps[c]
+	return p.caps[c] || included(p.caps, p.off, c)
 }
 
 // named reports whether the principal is a user of the store.
@@ -827,7 +857,8 @@ func (s *Server) unknownToken(ctx context.Context, hash string, now time.Time) e
 // enabled and not past its end, and the capabilities of the user's
 // role, which must be enabled; an integration's user's only while its
 // integration is active, and within the role integration and its
-// maximum.
+// maximum. What the set includes is not added here but at the check
+// (has), after these bounds and those of onbehalf.go.
 func (s *Server) principalFor(ctx context.Context, tok store.Token, now time.Time) (*principal, error) {
 	st := s.opts.Store
 	u, ok, err := st.UserByID(ctx, tok.UserID)
@@ -843,17 +874,14 @@ func (s *Server) principalFor(ctx context.Context, tok store.Token, now time.Tim
 	if u.Expired(now) {
 		return nil, forbidden("user %s has expired", u.Name)
 	}
-	caps, roleOff, err := st.Effective(ctx, u.Role, capabilities)
+	caps, off, roleOff, err := st.Effective(ctx, u.Role, capabilities)
 	if err != nil {
 		return nil, err
 	}
 	if roleOff {
 		return nil, forbidden("role %s is disabled", u.Role)
 	}
-	p := &principal{mode: modeUsers, user: u, token: tok, caps: map[string]bool{}}
-	for _, c := range caps {
-		p.caps[c] = true
-	}
+	p := &principal{mode: modeUsers, user: u, token: tok, caps: setOf(caps), off: setOf(off)}
 	if u.IntegrationID != 0 {
 		// An integration's user, by whatever key it came: only while its
 		// integration is active, and within the role integration and the
@@ -922,18 +950,12 @@ func (s *Server) touch(ctx context.Context, tok store.Token, ip string, now time
 }
 
 // allowed reports whether a principal may call a route registered with
-// a capability, or with two of which it holds either (capOr). The users
-// routes also admit a guests or passwords holder and a user's own name,
-// and the device route a structure holder; the handlers narrow what
-// those may do.
+// a capability. The users routes also admit a guests or passwords
+// holder and a user's own name, and the device route a structure
+// holder; the handlers narrow what those may do.
 func (s *Server) allowed(p *principal, capability string, r *http.Request) bool {
-	if capability == capAny {
+	if capability == capAny || p.has(capability) {
 		return true
-	}
-	for _, c := range routeCapabilities(capability) {
-		if p.has(c) {
-			return true
-		}
 	}
 	if capability == "users" && (p.has("guests") || p.has("passwords") || p.named() && strings.EqualFold(r.PathValue("name"), p.user.Name)) {
 		return true

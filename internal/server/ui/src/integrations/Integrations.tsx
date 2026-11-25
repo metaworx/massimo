@@ -19,10 +19,10 @@
 
 import { useLayoutEffect, useRef, useState } from "preact/hooks";
 import type { Integration, IntegrationUser } from "../api";
-import { capLabel } from "../model/cap";
+import { capLabel, includedHint } from "../model/cap";
 import { session } from "../shared/session";
 import { Age, Badge, ResultLine } from "../shared/badge";
-import { Choices } from "../shared/choices";
+import { type Choice, Choices } from "../shared/choices";
 import { hid } from "../shared/cls";
 import { Copy, CopyPair } from "../shared/copy";
 import { Field, FormFooter, Meanwhile, Select, Switch, TextField, useDraft } from "../shared/field";
@@ -39,9 +39,13 @@ import { isShown, mayShow, showView } from "../shared/pages";
 import { can } from "../shared/me";
 import { useLook } from "../shared/look";
 
-/** capOptions are the capabilities of the ceiling as a choice of switches. */
-function capOptions(): [string, string][] {
-  return INTEGRATION_CEILING.map((c) => [c, capLabel(c)]);
+/**
+ * capOptions are the capabilities of the ceiling as a choice of switches,
+ * one that a capability of chosen includes held on with why (restart with
+ * update or reboot) and never added to chosen.
+ */
+function capOptions(chosen: string[]): Choice[] {
+  return INTEGRATION_CEILING.map((c) => [c, capLabel(c), false, { held: includedHint(c, chosen) }]);
 }
 
 /** haRegisterURL is the page of Home Assistant at base that adds the Massimo integration. */
@@ -132,7 +136,7 @@ function RequestPanel({ r }: { r: Integration }) {
           [t("integrations.version"), r.version || ""],
           [t("integrations.expires"), isNaN(expires) ? "" : fmtShortTime(expires)],
         ].filter(([, v]) => v) as Fact[]} />
-        <Choices legend={t("integrations.max")} label={t("integrations.max")} cls="integration-caps" options={capOptions()} chosen={caps} set={setCaps} />
+        <Choices legend={t("integrations.max")} label={t("integrations.max")} cls="integration-caps" options={capOptions(caps)} chosen={caps} set={setCaps} />
         <Select label={t("integrations.attach")} id={"integration-attach-" + r.uuid} wide cls={hid(!earlier.length).trim() || undefined} hint={t("integrations.attachHint")}
           options={[["", t("integrations.attachNone")], ...earlier.map((i): [string, string] => [i.uuid, i.name + " (" + i.uuid.slice(0, 8) + ")"])]}
           value={attach} onChange={setAttach} />
@@ -209,7 +213,7 @@ function MaxForm({ i }: { i: Integration }) {
   };
   return (
     <form {...form.props} class="integration-max" onSubmit={submit}>
-      <Choices legend={t("integrations.max")} label={t("integrations.max")} cls="integration-caps" options={capOptions()} chosen={max.value} set={max.set} />
+      <Choices legend={t("integrations.max")} label={t("integrations.max")} cls="integration-caps" options={capOptions(max.value)} chosen={max.value} set={max.set} />
       <Meanwhile draft={max} show={(l) => l.map(capLabel).join(", ")} />
       <FormFooter submit={t("integrations.saveMax")} look={form.look} reset={form.reset} off={!max.changed} />
     </form>

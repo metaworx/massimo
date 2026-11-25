@@ -1217,12 +1217,22 @@ The capabilities, what each allows, and the routes it guards:
 | `cubes` | add, configure and remove Cubes | `POST /api/v1/cubes`, `PUT`/`DELETE /api/v1/cubes/{sn}` |
 | `cubes.reboot` | reboot a Cube, which drops the radiograms it has not delivered | `POST /api/v1/cubes/{sn}/reboot` |
 | `settings` | the server's settings | `GET`/`PUT /api/v1/settings` |
-| `update` | start a software update, and read the restart's state, since an update restarts the server | `POST /api/v1/update`, `GET /api/v1/restart` |
+| `update` | start a software update; includes `restart` | `POST /api/v1/update` |
 | `restart` | restart the server, read its settings file again, and read a Cube again at once | `GET`/`POST /api/v1/restart`, `POST /api/v1/reload`, `POST /api/v1/cubes/{sn}/refresh` |
-| `reboot` | reboot the computer the server runs on, where its owner switched that on | `GET`/`POST`/`DELETE /api/v1/reboot` |
+| `reboot` | reboot the computer the server runs on, where its owner switched that on; includes `restart` | `GET`/`POST`/`DELETE /api/v1/reboot` |
 | `audit` | read the audit | `GET /api/v1/audit` |
 | `auth` | the OpenID Connect providers users sign in through; seeded for no role | `GET`/`POST /api/v1/providers`, `PUT`/`DELETE /api/v1/providers/{key}` |
 | `integrations` | the registered integrations: requests, approval, their maximum, their users and links (migration 0021) | `/api/v1/integrations…` |
+
+`update` and `reboot` each include `restart`, since each restarts the server
+(2026-11-25, AP StartConfiguration, D37):
+their holder passes every check of `restart`.
+The include is taken at the check, on the set the bounds leave
+(the role's set less the disabled capabilities,
+an integration's ceiling and maximum, a call's level),
+so a disabled `restart` stays off for their holders too;
+nothing stored changes, no role's rows and no migration.
+`reboot` does not include `update` (D40-A).
 
 The default roles, as seeded.
 `owner` has every capability.

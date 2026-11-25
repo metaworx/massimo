@@ -1853,6 +1853,7 @@
   "cap.audit": "read the audit",
   "cap.auth": "manage the sign-in providers",
   "cap.integrations": "register integrations and link their users",
+  "cap.included": "included: an update or a reboot restarts the server",
   "help.users": "Everyone who signs in has one role, which says what they may do. A guest has an end date; a user without a password signs in with keys only. A password set here ends the user's sessions.",
   "help.roles": "A role is a set of capabilities, each guarding part of what the page and the API do. The six default roles can be renamed and reshaped, except the owner; more can be created. A disabled role keeps its users out.",
   "help.capabilities": "A capability switched off here is denied to every role but the owner, whatever the roles say: for example pairing while nobody should pair, or updates on a box updated by hand.",

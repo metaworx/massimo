@@ -18,7 +18,7 @@
 
 import { useLayoutEffect, useState } from "preact/hooks";
 import type { Role } from "../api";
-import { capLabel } from "../model/cap";
+import { capLabel, includedHint } from "../model/cap";
 import { Adder } from "../shared/adder";
 import { Badge, ResultLine } from "../shared/badge";
 import { type Choice, ChoiceGroup, Choices } from "../shared/choices";
@@ -43,13 +43,16 @@ function openRole(key: string): void {
 
 /**
  * capChoices are the capabilities as a choice of switches, each named by
- * its key in its tooltip, one disabled for every role marked; lock keeps
- * every one as it is (the owner's set).
+ * its key in its tooltip, one disabled for every role marked, one that a
+ * capability of chosen includes held on with why (restart with update or
+ * reboot) and never added to chosen; lock keeps every one as it is (the
+ * owner's set).
  */
-function capChoices(lock = false): Choice[] {
+function capChoices(chosen: string[], lock = false): Choice[] {
   return roles.caps.map((c) => [c.key, capLabel(c.key), false, {
     title: c.key,
     lock,
+    held: lock ? undefined : includedHint(c.key, chosen),
     badge: c.disabled ? <Badge kind="warn" text={t("roles.capOff")} /> : undefined,
   }]);
 }
@@ -95,7 +98,7 @@ function RoleForm({ r }: { r: Role }) {
       {owner && <p class="muted small role-owner-note">{t("roles.ownerNote")}</p>}
       <span class="muted small">{t("roles.capabilities")}</span>
       <div class="role-caps">
-        <Choices cls="cap-grid" label={t("roles.capabilities")} options={capChoices(owner)} chosen={owner ? roles.caps.map((c) => c.key) : set.value}
+        <Choices cls="cap-grid" label={t("roles.capabilities")} options={capChoices(set.value, owner)} chosen={owner ? roles.caps.map((c) => c.key) : set.value}
           set={set.set} />
         <Meanwhile draft={set} show={(l) => l.map(capLabel).join(", ")} />
       </div>
@@ -148,7 +151,7 @@ function NewRole() {
       <TextField label={t("roles.name")} id="role-new-name" name="name" maxLength={64} value={name} set={setName} />
       <span class="muted small">{t("roles.capabilities")}</span>
       <div class="role-caps">
-        <Choices cls="cap-grid" label={t("roles.capabilities")} options={capChoices()} chosen={set} set={setSet} />
+        <Choices cls="cap-grid" label={t("roles.capabilities")} options={capChoices(set)} chosen={set} set={setSet} />
       </div>
       <div class="actions">
         <span class="actions-right">
