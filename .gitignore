@@ -53,5 +53,6 @@ __pycache__/
 # (tools/uibundle) and embedded; built wherever Go is compiled, never
 # committed (AP UiParts, D172-A).
 /internal/server/ui/parts.js
-# The type check's TypeScript (make ui-check), installed by npm ci.
+# The type check's TypeScript and Biome (make ui-check), where npm ci
+# installs them into a checkout (tools/ui-check/README.md).
 node_modules/

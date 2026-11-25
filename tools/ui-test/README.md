@@ -65,6 +65,7 @@ UI_TEST_CASES=390-en,390-de make ui-test              # some cases; a CI job run
 tools/ui-test/run.sh smoke test_log.py                # one file
 tools/ui-test/run.sh smoke 'test_log.py::test_log_changes[1100-en-chromium]' -x
 UI_TEST_WORKERS=1 make ui-test                        # in one process
+KEEP=1 make ui-test                                   # the work directory kept
 PYTEST_ADDOPTS='test_parts_guard.py' make ui-test    # the parts' guard alone
 PYTEST_ADDOPTS='test_parts_guard.py -k rooms' make ui-test  # the guard of one region
 ```
@@ -76,7 +77,11 @@ A test's id carries its case: `1100-en`, `390-en`, `1100-de`, `390-de`,
 then the browser.
 
 pytest-playwright keeps a failed test's screenshot in `tools/ui-test/results/`,
-one directory per test (gitignored, emptied at the start of every run).
+one directory per test (gitignored).
+`run.sh` empties `results/` at the start of every run of the suite,
+so that what it holds is always the last run's,
+also of one that stopped before its first test,
+and a passing run leaves it empty (AP CleanRuns, D3-A).
 A run whose tests failed also keeps each set's `serve.log` and `fakecube.log`
 in `tools/ui-test/results/logs/set<n>/`, copied at its end, after the retry,
 so that they hold both passes,
@@ -109,6 +114,18 @@ in CI's UI jobs' logs too, so that a run shows where its time went;
 the retry lists none of its own.
 `python -m playwright show-trace <trace.zip>` replays a trace step by step,
 with the page's DOM, console and network at every step.
+
+The run's sets, its `massimo` and the servers' logs and stores
+are in its work directory,
+`massimo-ui-test.XXXXXX` under `TMPDIR` (`/tmp` where it is not set),
+which holds the run's PID in `pid` and goes at the run's end.
+A run that was killed, whose cleanup did not run, leaves its own behind;
+a later run removes each of the user's whose run is gone
+and that is older than a day,
+never one in use, so that another checkout's run keeps its own.
+`KEEP=1` keeps the run's work directory, passed or failed,
+with a file `kept` in it from the start, which the later runs leave alone,
+and prints its path; it is then removed by hand (AP CleanRuns, D4-A).
 
 ## The fixtures
 
@@ -426,7 +443,13 @@ hence `failed_checks_forgotten`.
   language and who is in read again; the fields are emptied at an opening
   alone, never at the closing; the fingerprint's button keeps the user's
   name at a change of language, and stays the same element, turning, while
-  the system's prompt is open and the status and the language change.
+  the system's prompt is open and the status and the language change; the
+  fingerprint's button is off while the password signs in, and from its
+  press until its answer the card is working, both ways' Sign in, both
+  Cancels and Select server off; a fingerprint's session that comes once
+  the page signed out behind the card is ended at the server and kept by
+  nobody, and a late refusal says nothing in a later opening, the app's
+  status read again (AP AccessEnds, Block 1).
 - `test_sign_out_late.py`, an answer that comes after a sign-out (AP
   UiParts, Block 14, D212): the search for Cubes, the House's writes to
   every room and in Eco, a pairing's Start, Cube settings' Save, a device
@@ -512,6 +535,12 @@ hence `failed_checks_forgotten`.
   session out at the server with its own token, and a key replaced is not
   (`test_a_replaced_session_ends`); a tab whose session another tab's
   sign-in replaced leaves that tab's stored token alone at its 401;
+  an answer of the password's way or of the API key's that comes once
+  another way has signed in or set its token, once the card was closed and
+  opened anew, or once the page signed out behind the card, makes no
+  token, says nothing and takes no focus, a late password's session
+  signed out at the server, and Sign in is ready in a card opened anew
+  (AP AccessEnds, Block 1);
   My profile opened at `#profile?key=<id>` (`test_profile_marks_a_key`)
   marks that key and scrolls a row below the first screen into view,
   marks nothing for an id that is not one of the user's keys,

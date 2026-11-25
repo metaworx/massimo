@@ -44,9 +44,28 @@
  * is read with first and becomes the page's token only once the server
  * has taken it: a refused one is said on the key's way, under its field,
  * the field emptied and in focus, and the page's token and the app's
- * bridge stay as they were (AP LooseEnds, D43). An answer to the key's
- * read that comes once its opening has ended (another way signed in
- * meanwhile, the card closed or opened anew, a sign-out) does nothing.
+ * bridge stay as they were (AP LooseEnds, D43). An answer of any way, the
+ * password's, the key's read, the fingerprint's and a provider's start,
+ * that comes once its opening has ended (another way signed in meanwhile,
+ * the card closed or opened anew, a sign-out) writes no line, takes no
+ * focus and sets no token (store.ts opening; AP LooseEnds, D44), and
+ * neither does one that comes once another way of the same opening has
+ * set its token: a session that came late is ended at the server, and a
+ * provider's page is not opened (AP AccessEnds, D2). The password's and
+ * the key's Sign in and a provider's button turn for a request of their
+ * opening alone, ready again in a card opened anew. The login by
+ * fingerprint, whose session the app keeps as setToken would, ending the
+ * one it held, keeps the card working from its press until the card has
+ * closed, as the first owner's creation does: the other ways' Sign in,
+ * the providers' buttons, Cancel and Select server are off, and it starts
+ * only while no other way of the opening runs; one that answers once the
+ * session was forgotten meanwhile has its session ended, and kept by
+ * nobody where the page holds no token, as after a sign-out (on a page
+ * that still holds a session, which only a script's close of the card
+ * leaves, the app has ended that session as it kept the fingerprint's,
+ * and keeps the fingerprint's, ended). The first owner's form needs no
+ * check of its opening (Owner.tsx): every way out of the card is off
+ * while it creates (AP AccessEnds, D1).
  */
 
 import { useLayoutEffect, useRef, useState } from "preact/hooks";
@@ -62,11 +81,10 @@ import { ModeSelect } from "../shared/mode";
 import { PasswordInput } from "../shared/password";
 import { BusyButton, busyProps, useBusy } from "../shared/question";
 import { VersionRow, version } from "../shared/server";
-import { session, stillSession } from "../shared/session";
 import { keepLogin, kept, offer, plainHere } from "./app";
 import { Owner } from "./Owner";
 import { ServerLine } from "./Server";
-import { ask, askFocus, card, chooseWay, keepChosen, type Way } from "./store";
+import { askFocus, card, chooseWay, keepChosen, opening, type Way } from "./store";
 
 /** The ways to sign in by a form, their data-way and their name's key, in the row's order after the fingerprint. */
 const WAYS: [Way, string][] = [["password", "login.password"], ["key", "login.token"]];
@@ -104,8 +122,11 @@ export function Card() {
   const offered = offer(st);
   const servers = !!appConnect();
   const [keep, setKeep] = useState(false);
-  const pw = useBusy();
-  const kb = useBusy();
+  // the password's and the key's Sign in turn for a request of this opening alone: in a card opened anew they are
+  // ready again, an earlier request's answer doing nothing there; the fingerprint's, one system prompt at a time, for
+  // the card
+  const pw = useBusy(opened);
+  const kb = useBusy(opened);
   const fp = useBusy();
   const userRef = useRef<HTMLInputElement>(null);
   const passRef = useRef<HTMLInputElement>(null);
@@ -151,8 +172,10 @@ export function Card() {
   };
   const submitPassword = (ev: Event) => {
     ev.preventDefault();
-    if (pw.busy) return; // a second Enter while it signs in
-    const a = ask();
+    if (pw.busy || card.working) return; // a second Enter while it signs in; nothing while the fingerprint's prompt is open
+    // the opening the password was typed in: an answer once it has ended writes nothing and sets no token (AP
+    // LooseEnds, D44)
+    const { a, still, take } = opening();
     const user = (userRef.current?.value || "").trim();
     const password = passRef.current?.value || "";
     if (!user || !password) return fail(t("login.missing"));
@@ -162,6 +185,7 @@ export function Card() {
       try {
         session = await signIn(user, password);
       } catch (e) {
+        if (!still()) return;
         const err = e as Error & { status?: number };
         // the server's 401 in the page's language; any other refusal (too many attempts, a server not ready) says more
         // in the server's own words than a key would
@@ -169,29 +193,34 @@ export function Card() {
         askFocus("password");
         return;
       }
+      if (!still() || !a) {
+        // a session that came late is no token of the page's, which another way set meanwhile: ended at the server,
+        // so that no live session is left that nobody holds (AP AccessEnds, D2)
+        endSession(session.token);
+        return;
+      }
+      take(); // the opening this sign-in's: another way's answer from now on is late
       const put = setToken(session.token);
       const login = appLogin();
       if (keep && offer(app.value) && login) {
         await put; // in the app the session kept by the bridge first, which login.keep reads on another thread (D68-A)
         if (!(await keepLogin(login))) return;
       }
-      if (a) await finishSignIn(a);
+      await finishSignIn(a); // an opening that ended while the login was kept: finishSignIn does nothing for it
     });
   };
   const submitKey = (ev: Event) => {
     ev.preventDefault();
-    if (kb.busy) return; // a second Enter while it signs in
-    const a = ask();
+    if (kb.busy || card.working) return; // a second Enter while it signs in; nothing while the fingerprint's prompt is open
+    // the opening the key was typed in still the card's and open, in the same session: an answer after another way
+    // signed in, after the card closed or opened anew, or after a sign-out, makes no token and writes nothing
+    const { a, still, take } = opening();
     const key = (keyRef.current?.value || "").trim();
     if (!key) return;
     card.keySaid = null;
-    const n = session();
     kb.run(async () => {
       // the key read with first, as who it is, before it becomes the page's token: a key the server refuses replaces
       // no session of the page's, and no bridge keeps it (AP LooseEnds, D43)
-      // the opening the key was typed in still the card's and open, in the same session: an answer after another way
-      // signed in, after the card closed or opened anew, or after a sign-out, makes no token and writes nothing
-      const still = () => stillSession(n) && !!a && ask() === a && !a.closed;
       let me: unknown;
       try {
         me = await apiRequest("GET", "api/v1/me", undefined, { token: key });
@@ -207,28 +236,63 @@ export function Card() {
         return;
       }
       if (!still() || !a) return;
+      take();
       await setToken(key); // in the app, the key kept by the bridge before the sign-in's reads go out with it
       await finishSignIn(a, me); // who is in as the key read it: settleSignIn reads it no second time
     });
   };
-  // the login by fingerprint: a session from the key the app keeps
-  const fingerprint = () => fp.run(async () => {
-    const a = ask();
-    const login = appLogin();
-    if (!login) return;
-    card.said = null;
-    let token: string | null;
-    try {
-      token = await login.fingerprint();
-    } catch (e) {
-      fail(t("login.fingerprintFailed", { error: (e as Error).message }));
-      readApp(); // a key the server refused is gone
-      return;
-    }
-    if (!token) return; // the prompt dismissed: the card stays
-    setToken(token);
-    if (a) await finishSignIn(a);
-  });
+  // the login by fingerprint: a session from the key the app keeps, which the app keeps as setToken would and so ends
+  // the session it held. While the system's prompt and the session's request run the card is working, as while the
+  // first owner is created (AP AccessEnds, D1): no other way signs in meanwhile and nothing leaves the card, and it
+  // starts only while no other way's request of this opening runs, so that no session of another way is made beside it
+  // for the app to end. Its answer acts only while the opening it was asked in is still the card's; one that comes
+  // once the session was forgotten meanwhile, by a sign-out, is ended at the server and the app keeps none of it (AP
+  // AccessEnds, D2)
+  const fingerprint = () => {
+    if (pw.busy || kb.busy) return;
+    fp.run(async () => {
+      const { a, still, take } = opening();
+      const login = appLogin();
+      if (!login) return;
+      card.said = null;
+      card.working = true;
+      try {
+        let token: string | null;
+        try {
+          token = await login.fingerprint();
+        } catch (e) {
+          if (still()) fail(t("login.fingerprintFailed", { error: (e as Error).message }));
+          readApp(); // a key the server refused is gone, whatever the opening
+          return;
+        }
+        if (!token) return; // the prompt dismissed: the card stays
+        if (!still() || !a) {
+          endSession(token, true);
+          return;
+        }
+        take();
+        setToken(token);
+        await finishSignIn(a); // working on until the card has closed, as Create the owner is
+      } finally {
+        card.working = false;
+      }
+    });
+  };
+  // a provider's button: its start answers the provider's address, which the page leaves for only while the opening
+  // the button was pressed in is still the card's; a refusal after it has ended says nothing. It takes no opening: it
+  // sets no token, a page it leaves ends its opening, and one a navigation leaves standing (stopped, answered with no
+  // content) keeps every way of it
+  const provider = (key: string) => {
+    const { still } = opening();
+    return startProvider(key).then(
+      (url) => {
+        if (still()) location.assign(url);
+      },
+      (e: Error) => {
+        if (still()) card.providersSaid = { text: t("login.failed", { error: e.message }), ok: false };
+      },
+    );
+  };
   const fpLabel = fpShown && st ? t("connect.loginAs", { name: st.user || "" }) : t("login.fingerprint");
   const v = version.value;
   const keepFailed = card.keepFailed;
@@ -240,15 +304,15 @@ export function Card() {
       <div id="login-providers" class={"login-providers" + hid(owner || (!card.providers.length && !card.providersSaid))}>
         <div id="login-provider-buttons" class="login-provider-buttons">
           {card.providers.map((p) => (
-            <BusyButton key={p.key} label={t("login.with", { name: p.name })} data={{ provider: p.key }}
-              run={() => startProvider(p.key).catch((e: Error) => { card.providersSaid = { text: t("login.failed", { error: e.message }), ok: false }; })} />
+            <BusyButton key={p.key} label={t("login.with", { name: p.name })} data={{ provider: p.key }} epoch={opened} off={card.working}
+              run={() => provider(p.key)} />
           ))}
         </div>
         <ResultLine id="login-providers-error" cls="small" role="alert" res={card.providersSaid} />
       </div>
       <div id="login-row" class="login-row">
         <div id="login-ways" class={"login-ways" + hid(card.waysOff || owner)} role="group" aria-label={t("login.ways")}>
-          <button type="button" id="login-way-fp" {...busyProps("login-way login-way-fp" + hid(!fpShown), fp.busy)} aria-label={fpLabel} title={fpLabel}
+          <button type="button" id="login-way-fp" {...busyProps("login-way login-way-fp" + hid(!fpShown), fp.busy, pw.busy || kb.busy)} aria-label={fpLabel} title={fpLabel}
             onClick={fingerprint}><Icon symbol="icon-fingerprint" cls="ni" /></button>
           {WAYS.map(([w, key]) => (
             <button key={w} type="button" class="login-way" data-way={w} aria-pressed={way === w ? "true" : "false"} onClick={() => chooseWay(w)}>{t(key)}</button>
@@ -273,8 +337,8 @@ export function Card() {
           </label>
           <ResultLine id="login-error" cls="small" role="alert" res={card.said} />
           <div class="actions">
-            <button type="button" id="login-cancel" class={"form-cancel" + hid(!servers)} onClick={toServers}>{t("action.cancel")}</button>
-            <button type="submit" {...busyProps("primary", pw.busy)}>{t("login.submit")}</button>
+            <button type="button" id="login-cancel" class={"form-cancel" + hid(!servers)} disabled={card.working} onClick={toServers}>{t("action.cancel")}</button>
+            <button type="submit" {...busyProps("primary", pw.busy, card.working)}>{t("login.submit")}</button>
           </div>
         </form>
         <div id="login-keep-failed" class={"login-keep-failed" + hid(!keepFailed)}>
@@ -288,8 +352,8 @@ export function Card() {
           <label><span>{t("login.token")}</span> <input ref={keyRef} type="password" id="login-token" name="api-key" autocomplete="off" /></label>
           <ResultLine id="login-key-error" cls="small" role="alert" res={card.keySaid} />
           <div class="actions">
-            <button type="button" id="login-key-cancel" class={"form-cancel" + hid(!servers)} onClick={toServers}>{t("action.cancel")}</button>
-            <button type="submit" {...busyProps("primary", kb.busy)}>{t("login.submit")}</button>
+            <button type="button" id="login-key-cancel" class={"form-cancel" + hid(!servers)} disabled={card.working} onClick={toServers}>{t("action.cancel")}</button>
+            <button type="submit" {...busyProps("primary", kb.busy, card.working)}>{t("login.submit")}</button>
           </div>
         </form>
       </div>

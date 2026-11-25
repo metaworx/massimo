@@ -9,8 +9,9 @@
  * the one signed in, a link come back for it, the roles' names, who is read
  * again, the sign-out, a password registered by OPAQUE and the current
  * one proved, and the page's address; for the sign-in's parts the app's
- * bridge, the token kept, the sign-in by OPAQUE and the page's start
- * after it; for ☰ the app's ways to its servers and to its settings.
+ * bridge, the token kept, a late sign-in's session ended, the sign-in by
+ * OPAQUE and the page's start after it; for ☰ the app's ways to its
+ * servers and to its settings.
  */
 
 import type { User } from "../api";
@@ -64,10 +65,12 @@ declare global {
   function askLogin(on?: "owner"): Promise<boolean>;
   /** Goes on after a sign-in of the card: settleSignIn, the card closed and askLogin answered, the page started where no start waits for it; nothing for an ask closed already, and it reports whether it ended the ask. */
   function finishSignIn(ask: SignInAsk, me?: unknown): Promise<boolean>;
-  /** Starts a sign-in through a provider and opens its page; its refusal is thrown. */
-  function startProvider(key: string): Promise<void>;
+  /** Starts a sign-in through a provider and answers the provider's page to go to, which the card opens; its refusal is thrown. */
+  function startProvider(key: string): Promise<string>;
   /** Keeps the page's token, or forgets it with null: in the browser's storage, or in the app's; a session it replaces is ended at the server once. Its promise is the bridge's answer, null in a browser and where the bridge failed. */
   function setToken(token: string | null): Promise<unknown>;
+  /** Ends a session at the server that the page does not keep, a sign-in's that answered once its opening had ended: POST /api/v1/logout with it, not awaited, a refusal ignored, nothing for no token; kept, the app's bridge keeps it (the login by fingerprint's), which is left with none where the page holds no token. */
+  function endSession(token: string, kept?: boolean): void;
   /** The bridge's answer to the last token setToken handed it, a sign-in's ({revoked}, contract version 5); null in a browser, before any, and where the bridge failed. */
   function tokenAnswer(): Promise<unknown>;
   /** Signs in by OPAQUE, without a token and without the dialog: the session, its token among it; the answer's error is thrown. */

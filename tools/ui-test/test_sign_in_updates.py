@@ -9,10 +9,12 @@ purpose (test_login.py)."""
 import json
 
 import pytest
+from playwright.sync_api import TimeoutError as PlaywrightTimeoutError
 
-from conftest import TOKEN, URL
-from helpers import OPERATOR_PASSWORD, frames, sign_out, wait_until
+from conftest import TOKEN, URL, api_call
+from helpers import OPERATOR_PASSWORD, frames, sign_out, wait_held, wait_until
 from test_connect import server_page
+from test_login import status_with
 
 OPEN_SETUP = json.dumps({"mode": "open", "user": None, "role": None, "capabilities": [], "setup": True})
 
@@ -198,6 +200,149 @@ def test_the_fingerprint_keeps_its_name_and_its_turn(new_context, case, watch, g
     assert wait_until(page, "!document.getElementById('login-way-fp').classList.contains('busy')", 3), "dismissed: it stops turning"
     assert page.evaluate("document.getElementById('login-dialog').open"), "and the card stays"
 
+
+# the app's prompt held at each call until the test lets it go, then answered as the fake bridge answers
+HOLD_FINGER = """() => { const login = window.massimo.login; const answer = login.fingerprint;
+  login.fingerprint = () => new Promise((resolve, reject) => { window.__letFingerGo = () => answer.call(login).then(resolve, reject); }); }"""
+FP_HELD = "typeof window.__letFingerGo === 'function'"
+FP_DONE = "!document.getElementById('login-way-fp').classList.contains('busy')"
+KEPT_LOGIN = {"status": {"can": True, "user": "operator", "ask": "start", "plain": False}}
+# what is off while the card is working: both ways' Sign in, both Cancels, Select server
+WORKING_OFF = ["#login-form button[type=submit]", "#login-key-form button[type=submit]", "#login-cancel", "#login-key-cancel", "#login-menu-servers"]
+OFF_NOW = "(sels) => sels.filter((s) => !document.querySelector(s).disabled)"
+
+
+def fingerprint_session(case):
+    """A session of the operator's made from a key of its own (POST
+    /api/v1/login/key), as the app's login by fingerprint makes one, and
+    the key's id, whose removal ends it."""
+    label = f"ui-test-fingerprint-{case.width}-{case.lang}"
+    key = api_call("POST", "api/v1/users/operator/tokens", {"label": label})
+    return api_call("POST", "api/v1/login/key", {"label": label}, token=key["token"])["token"], key["id"]
+
+
+def logout_with(page, act):
+    """The response of the POST /api/v1/logout that act leads to, None
+    where none comes."""
+    try:
+        with page.expect_response(lambda r: r.request.method == "POST" and r.url.endswith("/api/v1/logout")) as ended:
+            act()
+        return ended.value
+    except PlaywrightTimeoutError:
+        return None
+
+
+def test_the_fingerprint_keeps_the_card_working(new_context, case, watch, guard):
+    """In the app with a login kept: while the password's sign-in runs,
+    the fingerprint's button is off; from the fingerprint's press until
+    its answer the card is working, as while the first owner is created:
+    both ways' Sign in, both Cancels and Select server are off, and a
+    submit of the password's form starts nothing. The finger then answers:
+    the page signs in with the fingerprint's session, the page's token and
+    the app's, live at the server (AP AccessEnds, D1, D2). Fails on the
+    page before: the password's Sign in stayed on behind the prompt, where
+    a sign-in by it would be ended by the app as it keeps the
+    fingerprint's session."""
+    fsession, kid = fingerprint_session(case)
+    try:
+        page = server_page(new_context, guard, watch, {**KEPT_LOGIN, "fingerprint": fsession})
+        page.locator("#login-dialog[open]").wait_for()
+        fp = page.locator("#login-way-fp")
+        fp.wait_for(state="visible")
+        held = []
+        page.route("**/api/v1/login/start", lambda route: held.append(route))
+        page.locator("#login-user").fill("operator")
+        page.locator("#login-password").fill("wrong")
+        page.locator("#login-form button[type=submit]").click()
+        assert wait_held(page, held), "the password's start, held"
+        assert fp.evaluate("(b) => b.disabled"), "the fingerprint off while the password signs in"
+        with page.expect_response(lambda r: r.url.endswith("/api/v1/login/start")):
+            held.pop().fulfill(status=503, content_type="application/json", body=json.dumps({"error": "not ready"}))
+        assert wait_until(page, "!document.getElementById('login-way-fp').disabled", 3), "and on again once it was refused"
+        page.unroute("**/api/v1/login/start")
+        starts = []
+        page.on("request", lambda r: starts.append(r.url) if r.url.endswith("/api/v1/login/start") else None)
+        page.evaluate(HOLD_FINGER)
+        fp.click()
+        assert wait_until(page, FP_HELD, 3), "the prompt open, held"
+        frames(page)
+        assert page.evaluate(OFF_NOW, WORKING_OFF) == [], "the other ways and the ways out off while the prompt is open"
+        page.locator("#login-password").fill(OPERATOR_PASSWORD)
+        page.evaluate("() => { document.getElementById('login-form').requestSubmit(); }")
+        frames(page)
+        assert not page.evaluate("document.querySelector('#login-form button[type=submit]').classList.contains('busy')") and starts == [], \
+            f"a submit of the password's form starts nothing: {starts}"
+        page.evaluate("() => { window.__letFingerGo(); }")
+        page.wait_for_selector(".room", timeout=10000)
+        assert page.evaluate("[state.token, window.__fakeBridge.token]") == [fsession, fsession], "in with the fingerprint's session, the page's and the app's"
+        assert status_with(fsession) == 200, "which is live at the server"
+        assert page.evaluate(OFF_NOW, WORKING_OFF[:2]) == WORKING_OFF[:2], "the card's Sign in on again"
+    finally:
+        api_call("DELETE", "api/v1/users/operator/tokens/%d" % kid)
+
+
+def test_a_late_fingerprint_makes_no_token(new_context, case, watch, guard):
+    """In the app with a login kept, the card opened on a running page: a
+    refusal of the fingerprint's prompt held while the card is closed and
+    opened anew says nothing in the new opening, and the app's status is
+    read again, its key being gone; and a prompt held while the page signs
+    out behind the card (logout, which leaves the same opening open), then
+    passed: its session, which the app keeps as setToken would, makes no
+    token, is ended at the server with its own token and kept by the app
+    no more (AP AccessEnds, D2). Fails on the page before: the late
+    session became the page's token and the app's after the sign-out; and
+    where the app was handed the page's empty token back, it forgot the
+    session, left live at the server."""
+    fsession, kid = fingerprint_session(case)
+    try:
+        page = server_page(new_context, guard, watch, {**KEPT_LOGIN, "fingerprint": "error:the key was refused"})
+        page.locator("#login-dialog[open]").wait_for()
+        fp = page.locator("#login-way-fp")
+        fp.wait_for(state="visible")
+        page.locator("#login-user").fill("operator")
+        page.locator("#login-password").fill(OPERATOR_PASSWORD)
+        page.locator("#login-form button[type=submit]").click()
+        page.wait_for_selector(".room", timeout=10000)
+        assert page.evaluate("state.me.token.kind") == "session", "in with the password"
+
+        # a refusal let go in a later opening
+        page.evaluate("() => { askLogin(); }")
+        assert wait_until(page, "document.getElementById('login-dialog').open", 5), "the sign-in opens on the running page"
+        fp.wait_for(state="visible")
+        page.evaluate(HOLD_FINGER)
+        fp.click()
+        assert wait_until(page, FP_HELD, 3), "the prompt open, held"
+        page.evaluate("() => { document.getElementById('login-dialog').close(); }")
+        assert wait_until(page, "!document.getElementById('login-dialog').open && loginPromise === null", 5), "the card left, its opening ended"
+        page.evaluate("() => { askLogin(); }")
+        assert wait_until(page, "document.getElementById('login-dialog').open", 5), "the card opened anew"
+        status = "window.__fakeBridge.calls.filter((c) => c[0] === 'login.status').length"
+        assert wait_until(page, f"{status} > 0", 3)
+        frames(page)
+        n = page.evaluate(status)
+        page.evaluate("() => { window.__letFingerGo(); }")
+        assert wait_until(page, FP_DONE, 3), "the prompt refused, late"
+        frames(page)
+        assert page.locator("#login-error").is_hidden(), "no refusal said in the new opening"
+        assert wait_until(page, f"{status} === {n + 1}", 3), f"the app's status read again: {page.evaluate(status)} reads, {n} before"
+
+        # a session that comes once the page signed out behind the card
+        page.evaluate("(t) => { window.__fakeBridgeConfig.login.fingerprint = t; window.__letFingerGo = null; }", fsession)
+        assert wait_until(page, FP_DONE + " && !document.getElementById('login-way-fp').disabled", 3), "the fingerprint ready again"
+        fp.click()
+        assert wait_until(page, FP_HELD, 3), "the prompt open again, held"
+        page.evaluate("() => { logout(); }")  # not awaited: its start waits for the card
+        assert wait_until(page, "state.token === null && state.me === null", 5), "signed out behind the card"
+        logout = logout_with(page, lambda: page.evaluate("() => { window.__letFingerGo(); }"))
+        assert wait_until(page, FP_DONE, 3), "the prompt passed, late"
+        frames(page)
+        assert page.evaluate("[state.token, window.__fakeBridge.token]") == [None, None], "neither the page nor the app keeps the late session"
+        assert logout is not None and logout.request.headers.get("authorization") == "Bearer " + fsession, "the late session signed out, with its own token"
+        assert status_with(fsession) == 401, "a request with it answers 401"
+        assert page.evaluate("document.getElementById('login-dialog').open") and page.locator("#login-error").is_hidden(), \
+            "the card stays open, saying nothing"
+    finally:
+        api_call("DELETE", "api/v1/users/operator/tokens/%d" % kid)
 
 
 BOX = "(() => { const r = document.getElementById('login-dialog').getBoundingClientRect(); return [r.top, r.height]; })()"

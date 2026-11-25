@@ -1,6 +1,6 @@
 > **Fragment** — inlined by `tools/sync-docs.sh`; not a standalone document.
 
-# {{project_name}} (v1.0.0)
+# {{project_name}} (v1.1.0)
 
 <!-- TEMPLATE: installed as {{guidelines_root}}/project/_README.md. This is the
      opening of the generated {{guidelines_root}}/README.md, and the only
@@ -22,8 +22,9 @@ It is for the owners of such systems and for the people and agents who develop i
 ```bash
 git clone --recurse-submodules git@github.com:metaworx/massimo.git
 cd massimo
-make            # go test ./... and the binary
-make cross      # every target, without cgo
+make              # go test ./... and the binary
+make cross        # every target, without cgo, into dist/
+make cross-check  # every target built, none kept
 ```
 
 Go 1.26 is the toolchain (`go.mod` says the minimum, CI pins 1.26).

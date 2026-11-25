@@ -200,6 +200,13 @@ or Android 8 to 10, whose prompt takes no PIN.
 
 ## The results
 
+The servers' stores, their `massimo` and `tally`
+are in the run's work directory,
+`massimo-app-emulator.XXXXXX` under `TMPDIR`,
+which goes at the end of the run;
+`KEEP=1 make app-emulator-test` keeps it and prints its path
+(AP CleanRuns, D4-A).
+
 `results/`, emptied at each run and not kept by git:
 `emulator.log` with the kernel's messages,
 the device's `logcat.txt` from the boot on (the suite's steps under
