@@ -18,10 +18,15 @@ a device of the room as it is, what every state event of the stream
 runs; a reload is loadRooms(), what a metadata event runs, and the poll
 while the stream is down. The poll's timer is stopped, so that every
 redraw is the test's. The setpoint's PUT is answered with a stub where
-a test presses +, so that nothing reaches the fake Cube."""
+a test presses +, so that nothing reaches the fake Cube. A state that a
+test makes up, the House tile's virtual wall thermostats', is told to
+the rooms' read as well and kept (tell_vwt, AP ToldData), so that the
+server's own events and any read of the rooms bring it back, and its
+check waits for it."""
 import pytest
 
 from helpers import frames, held_poll, hold, mark, replaced, wait_held, wait_until
+from helpers import settled as looked_until
 
 
 def held(page):
@@ -749,66 +754,95 @@ def test_house_lowest_and_highest(page, case):
             assert abs(box["range-is", which]["x"] - box["range-set", which]["x"]) < 0.5, f"the {which} values aligned: {box}"
 
 
-def test_house_lowest_and_highest_follow_a_state_event(page, case):
+def tell_vwt(page, reads, rid, stale=None, **fields):
+    """A state event of the room's virtual wall thermostat with these
+    fields of its state, marked stale where stale is given: told to the
+    rooms' read as well and kept (Reads.device, AP ToldData), so that the
+    server's own events of it, which bring it as the server has it, and any
+    read of the rooms bring it back; and put into the page as the event
+    under test (updateDevice). A check of it waits (looked_until, helpers.settled)."""
+    rf = page.evaluate("(rid) => state.rooms.find((r) => r.id === rid).vwt.rf_address", rid)
+    told = {"state": fields}
+    if stale is not None:
+        told["stale"] = stale
+    reads.device(rf, **told)
+    page.evaluate("""([rid, st, stale]) => {
+      const r = state.rooms.find((x) => x.id === rid);
+      const v = JSON.parse(JSON.stringify(r.vwt));
+      Object.assign(v.state, st);
+      if (stale !== null) v.stale = stale;
+      updateDevice(v);
+    }""", [rid, fields, stale])
+
+
+# The House tile's rows and what they are drawn from, in one look: each
+# room's virtual wall thermostat as the page has it (id, stale, measured
+# temperature, setpoint); the lowest and highest the rows should show by
+# them, a stale measured temperature left out while any is fresh
+# (vwt_range's rule); and the rows' values and the measured ones' classes.
+RANGE_LOOK = """() => {
+  const vwts = state.rooms.filter((r) => r.vwt && r.vwt.state)
+    .map((r) => ({ id: r.id, stale: !!r.vwt.stale, actual: r.vwt.state.actual_temp, setpoint: r.vwt.state.setpoint }));
+  const measured = vwts.filter((v) => typeof v.actual === "number");
+  const used = measured.some((v) => !v.stale) ? measured.filter((v) => !v.stale) : measured;
+  const a = used.map((v) => v.actual), s = vwts.map((v) => v.setpoint).filter((x) => typeof x === "number");
+  const el = (row, which) => document.querySelector("#house .house-range ." + row + " .range-" + which);
+  return { vwts,
+    want: { is: [fmtTemp(Math.min(...a), "°"), fmtTemp(Math.max(...a), "°")], set: [fmtSetpoint(Math.min(...s), "°"), fmtSetpoint(Math.max(...s), "°")] },
+    is: [el("range-is", "low").textContent.trim(), el("range-is", "high").textContent.trim()],
+    set: [el("range-set", "low").textContent.trim(), el("range-set", "high").textContent.trim()],
+    isCls: [el("range-is", "low").className, el("range-is", "high").className] };
+}"""
+
+
+def test_house_lowest_and_highest_follow_a_state_event(page, case, reads):
     """A state event of a room's virtual wall thermostat that brings a new
     lowest temperature and an OFF setpoint is shown in the House tile's
-    rows at once, their tips' buttons the same elements."""
+    rows, their tips' buttons the same elements. The state is told to the
+    rooms' read as well (tell_vwt), the check waiting for it."""
     held(page)
     page.locator(RANGE).wait_for(state="visible")
     buttons = [RANGE + " .range-is button.tip-btn", RANGE + " .range-set button.tip-btn"]
     mark(page, buttons)
     rid = page.evaluate("state.rooms.find((r) => r.vwt && r.vwt.state).id")
-    page.evaluate("""(rid) => {
-      const r = state.rooms.find((x) => x.id === rid);
-      const v = JSON.parse(JSON.stringify(r.vwt));
-      v.state.actual_temp = 9.5;
-      v.state.setpoint = 4.5;
-      updateDevice(v);
-    }""", rid)
-    frames(page)
-    low = page.evaluate("fmtTemp(9.5, '°')")
-    assert range_texts(page, "range-is")[0] == low, f"the new lowest: {range_texts(page, 'range-is')} for {low}"
-    assert range_texts(page, "range-set")[0] == page.evaluate("t('temp.off')"), f"OFF the lowest setpoint: {range_texts(page, 'range-set')}"
+    tell_vwt(page, reads, rid, actual_temp=9.5, setpoint=4.5)
+    low, off = page.evaluate("[fmtTemp(9.5, '°'), t('temp.off')]")
+    ok, got = looked_until(page, lambda: page.evaluate(RANGE_LOOK), lambda g: g["is"][0] == low and g["set"][0] == off)
+    assert ok, f"the new lowest {low} and OFF the lowest setpoint: {got}"
     assert not replaced(page, buttons), "the tips' buttons stay"
 
 
-def stale_vwt(page, rid, actual=None):
-    """A state event of the room's virtual wall thermostat marked stale, its measured temperature actual where given."""
-    page.evaluate("""([rid, actual]) => {
-      const r = state.rooms.find((x) => x.id === rid);
-      const v = JSON.parse(JSON.stringify(r.vwt));
-      v.stale = true;
-      if (actual !== null) v.state.actual_temp = actual;
-      updateDevice(v);
-    }""", [rid, actual])
-
-
-def test_house_lowest_and_highest_leave_out_a_stale_temperature(page, case):
+def test_house_lowest_and_highest_leave_out_a_stale_temperature(page, case, reads):
     """A room whose virtual wall thermostat's measured temperature is stale
     counts in neither the lowest nor the highest while any room has a fresh
     one, as the server leaves a stale thermostat out within a room; with
-    only stale ones, they are shown, greyed as a tile greys them. Fails on
+    only stale ones, they are shown, greyed as a tile greys them. The
+    states are told to the rooms' read as well (tell_vwt), each check
+    waiting for the page to hold them and the rows to show them. Fails on
     the page before, which counted the stale value."""
     held(page)
     page.locator(RANGE).wait_for(state="visible")
     rids = page.evaluate("state.rooms.filter((r) => r.vwt && r.vwt.state && r.vwt.state.actual_temp !== undefined).map((r) => r.id)")
     assert len(rids) >= 2, f"rooms with a measured temperature: {rids}"
-    stale_vwt(page, rids[0], 9.5)
-    frames(page)
-    want = [page.evaluate("(v) => fmtTemp(v, '°')", v) for v in vwt_range(page, "actual_temp")]
-    shown = range_texts(page, "range-is")
-    assert shown == want and shown[0] != page.evaluate("fmtTemp(9.5, '°')"), f"the stale 9.5 left out: {shown} for {want}"
-    low = page.locator(RANGE + " .range-is .range-low")
-    assert "stale" not in (low.get_attribute("class") or ""), "fresh values, not greyed"
+    low = page.evaluate("fmtTemp(9.5, '°')")
+    tell_vwt(page, reads, rids[0], stale=True, actual_temp=9.5)
+
+    def one_stale(g):
+        mine = next((v for v in g["vwts"] if v["id"] == rids[0]), None)
+        return bool(mine) and mine["stale"] and mine["actual"] == 9.5 and g["is"] == g["want"]["is"] and g["is"][0] != low \
+            and all("stale" not in c for c in g["isCls"])
+
+    ok, got = looked_until(page, lambda: page.evaluate(RANGE_LOOK), one_stale)
+    assert ok, f"the stale 9.5 left out, the fresh values not greyed: {got}"
     for rid in rids[1:]:
-        stale_vwt(page, rid)
-    frames(page)
-    want = [page.evaluate("(v) => fmtTemp(v, '°')", v) for v in vwt_range(page, "actual_temp")]
-    shown = range_texts(page, "range-is")
-    assert shown == want and shown[0] == page.evaluate("fmtTemp(9.5, '°')"), f"only stale ones, shown: {shown} for {want}"
-    for which in ("low", "high"):
-        cls = page.locator(RANGE + " .range-is .range-" + which).get_attribute("class") or ""
-        assert "stale" in cls, f"the {which} greyed: {cls!r}"
+        tell_vwt(page, reads, rid, stale=True)
+
+    def all_stale(g):
+        return all(v["stale"] for v in g["vwts"] if v["actual"] is not None) and g["is"] == g["want"]["is"] and g["is"][0] == low \
+            and all("stale" in c for c in g["isCls"])
+
+    ok, got = looked_until(page, lambda: page.evaluate(RANGE_LOOK), all_stale)
+    assert ok, f"only stale ones: shown, greyed: {got}"
 
 
 # A device without a room, as GET …/devices gives one (the fake Cube has
