@@ -485,6 +485,16 @@ func (s *Server) beginUpdate(ctx context.Context, userID int64, auto bool) (upda
 	// and start, and the helper that start left at work answers it.
 	s.updateMu.Lock()
 	defer s.updateMu.Unlock()
+	// The helper's status again, after the release check: updateRelease
+	// read it before, when the helper a POST of the moment before started
+	// may not have written its first state yet. Refused here, this POST
+	// writes no request, which a path unit (PathExists) would take for a
+	// second run and which the Windows starter's guard leaves behind.
+	if path := s.opts.Update.Status; path != "" {
+		if st, err := update.ReadStatus(path); err == nil && st.Running() {
+			return v, fail(http.StatusConflict, "an update is already running (%s)", st.State)
+		}
+	}
 	s.keepChannel(ctx, v.Channel, rel)
 	asked := time.Now()
 	if err := update.WriteRequest(s.opts.Update.Request, v.Channel); err != nil {

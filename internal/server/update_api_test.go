@@ -321,6 +321,47 @@ func TestUpdatePostsOneAtATime(t *testing.T) {
 	}
 }
 
+// TestUpdateRefusedAfterTheCheck: the helper the first POST started
+// writes its first state while a second POST's release check runs; the
+// second is refused then, before it writes a request.
+func TestUpdateRefusedAfterTheCheck(t *testing.T) {
+	t.Parallel()
+	req := filepath.Join(t.TempDir(), "update-request")
+	found := &fakeFinder{tag: "v0.1.0-alpha.10"}
+	var status string // updateServerWith's status file, set before the first POST
+	var checks atomic.Int32
+	f := finderFunc(func(ctx context.Context, channel string) (*update.Release, error) {
+		// A POST checks afresh (refresh), so the second POST's check is
+		// the second call: the helper's first state lands after that POST
+		// read the status file.
+		if checks.Add(1) == 2 {
+			if err := update.WriteStatus(status, update.Status{State: "checking", Channel: channel}); err != nil {
+				t.Error(err)
+			}
+		}
+		return found.Latest(ctx, channel)
+	})
+	ts, path := updateServerWith(t, "secret", UpdateOptions{Request: req, Finder: f})
+	status = path
+	if code, out := call(t, ts, "POST", "secret"); code != 202 {
+		t.Fatalf("POST: %d %v", code, out)
+	}
+	// The helper takes the request, as the path unit starts it.
+	if _, ok, err := update.TakeRequest(req); !ok || err != nil {
+		t.Fatalf("no request to take: %v", err)
+	}
+	code, out := call(t, ts, "POST", "secret")
+	if msg, _ := out["error"].(string); code != 409 || !strings.Contains(msg, "already running (checking)") {
+		t.Fatalf("POST while the helper checks: %d %v", code, out)
+	}
+	if _, err := os.Stat(req); !errors.Is(err, os.ErrNotExist) {
+		t.Fatalf("the refused POST left a request: %v", err)
+	}
+	if n := checks.Load(); n != 2 {
+		t.Fatalf("%d release checks, want one per POST", n)
+	}
+}
+
 // The channel is MASSIMO_UPDATE_CHANNEL where set, else the store's
 // update.channel, else the build's flavour; an update to a release of
 // another flavour stores the channel first, so that the box stays on it.
