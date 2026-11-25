@@ -32,7 +32,8 @@ type Server struct {
 	// DiscardIf, when set, makes the S reply to each s: or r: line it
 	// reports report the command as discarded.
 	DiscardIf func(cube.Message) bool
-	// Pair, when set, is a device that joins during inclusion mode.
+	// Pair, when set, is a device that joins during inclusion mode and
+	// is one of the fake's devices from then on, until a t: deletes it.
 	Pair *Pairing
 	// Keep names devices that t: does not delete, as the Cube keeps a
 	// device that never answers.
@@ -66,7 +67,9 @@ type Server struct {
 	received []cube.Message
 	conns    int
 	open     map[net.Conn]bool
-	joined   bool                    // the Pair device has joined
+	joined   bool                    // the Pair device has joined, see join
+	meta     []cube.Message          // the M lines an m: wrote, see writeMetadata; nil: the greeting's
+	blocks   []string                // the blocks of the m: write under way
 	configs  map[string]cube.Message // C lines set with SetConfig, by address
 	list     *cube.Message           // the L line set with SetDeviceList
 	deleted  map[cube.RFAddress]bool // deleted with t:
@@ -162,25 +165,88 @@ func (s *Server) audibleOr(gone <-chan struct{}) bool {
 	}
 }
 
-// paired returns the Pair device once it has joined.
-func (s *Server) paired() *Pairing {
+// join makes the Pair device one of the fake's devices: its C line, and
+// its entry in the L line in place of one it had before it was deleted,
+// are those of c:, l: and a new connection's greeting from now on. A C
+// line SetConfig set for it stays.
+func (s *Server) join(p *Pairing) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	if s.joined {
+	rf := p.Device.RFAddress
+	s.joined = true
+	delete(s.deleted, rf)
+	if s.configs == nil {
+		s.configs = map[string]cube.Message{}
+	}
+	if _, ok := s.configs[rf.String()]; !ok {
+		s.configs[rf.String()] = p.Config
+	}
+	if raw := s.listLocked(); raw != nil && len(p.Entry) > 0 {
+		var list []byte
+		for _, e := range entries(raw) {
+			if cube.RFAddressFromBytes(e[1:4]) != rf {
+				list = append(list, e...)
+			}
+		}
+		list = append(list, p.Entry...)
+		s.list = &cube.Message{Type: 'L', Data: base64.StdEncoding.EncodeToString(list)}
+	}
+	s.live = true
+}
+
+// joinedLocked returns the Pair device while it is one of the fake's.
+func (s *Server) joinedLocked() *Pairing {
+	if s.joined && s.Pair != nil && !s.deleted[s.Pair.Device.RFAddress] {
 		return s.Pair
 	}
 	return nil
 }
 
+// writeMetadata takes an m: line, one block of the room and device list
+// numbered from 00 in decimal, as the original software writes them:
+// once the blocks since the last 00 are a list the fake can read, they
+// are a new connection's M lines, as the Cube's next M line showed an
+// m: on hardware (docs/cube-protocol.md). A block out of order drops
+// the write.
+func (s *Server) writeMetadata(data string) {
+	idx, block, ok := strings.Cut(strings.TrimSpace(data), ",")
+	i, err := strconv.Atoi(idx)
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if !ok || err != nil || i != 0 && i != len(s.blocks) {
+		s.blocks = nil
+		return
+	}
+	if i == 0 {
+		s.blocks = nil
+	}
+	s.blocks = append(s.blocks, block)
+	parts := make([]cube.MetadataPart, len(s.blocks))
+	for j, b := range s.blocks {
+		parts[j] = cube.MetadataPart{Index: j, Count: len(s.blocks), Data: b}
+	}
+	if _, err := cube.ParseMetadata(parts); err != nil {
+		return
+	}
+	s.meta = make([]cube.Message, len(parts))
+	for j, b := range s.blocks {
+		s.meta[j] = cube.Message{Type: 'M', Data: fmt.Sprintf("%02x,%02x,%s", j, len(parts), b)}
+	}
+}
+
 // Pairing describes the device that joins after n:. Delay after the n:
-// the fake sends its N line and from then on answers c: for it with
-// Config; the inclusion ends with an empty N line when the n: timeout is
-// over or on x:. A real Cube sends that line when the time is up (seen
-// on hardware, 2026-11-14); the N line of a device that joins and the
-// end by x: are how it is expected to behave, still to be confirmed.
+// the fake sends its N line, and from then on the device is one of the
+// fake's (join): c: answers for it with Config, and l: and a new
+// connection's greeting carry Config and Entry, as a Cube lists a paired
+// device that is in no room, until a t: deletes it. The inclusion ends
+// with an empty N line when the n: timeout is over or on x:. A real Cube
+// sends that line when the time is up (seen on hardware, 2026-11-14);
+// the N line of a device that joins and the end by x: are how it is
+// expected to behave, still to be confirmed.
 type Pairing struct {
 	Device cube.NewDevice
 	Config cube.Message // the device's C line
+	Entry  []byte       // the device's entry in the L line, with its length byte; nil for none
 	Delay  time.Duration
 }
 
@@ -206,11 +272,13 @@ func (s *Server) SetConfig(line cube.Message) {
 
 // SetGreeting replaces the lines a new connection is greeted with, as
 // the Cube's rooms, names and configurations change while no client is
-// connected (another app, a button at a device).
+// connected (another app, a button at a device): its M lines replace
+// those an m: wrote too.
 func (s *Server) SetGreeting(lines []cube.Message) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	s.Greeting = append([]cube.Message(nil), lines...)
+	s.meta, s.blocks = nil, nil
 }
 
 // greeting returns the lines a new connection is greeted with, with the
@@ -682,9 +750,6 @@ func (s *Server) serve(conn net.Conn) {
 			if rf, err := cube.ParseRFAddress(m.Data); err == nil && s.isDeleted(rf) {
 				break
 			}
-			if p := s.paired(); p != nil && strings.EqualFold(strings.TrimSpace(m.Data), p.Device.RFAddress.String()) {
-				reply = p.Config.Wire()
-			}
 			for _, g := range greeting {
 				if g.Type == 'C' && strings.HasPrefix(strings.ToLower(g.Data), strings.ToLower(strings.TrimSpace(m.Data))+",") {
 					reply = g.Wire()
@@ -727,6 +792,9 @@ func (s *Server) serve(conn net.Conn) {
 			}
 		case 'e', 'd':
 			reply = fmt.Sprintf("%c:%s\r\n", m.Type-32, m.Data)
+		case 'm':
+			s.writeMetadata(m.Data)
+			reply = "A:\r\n"
 		case 'n':
 			// No immediate reply: N lines come when devices join. The
 			// time is the low byte, as a real Cube reads it (n:012c
@@ -744,10 +812,7 @@ func (s *Server) serve(conn net.Conn) {
 			}
 			if p := s.Pair; p != nil {
 				join = time.AfterFunc(p.Delay, func() {
-					s.mu.Lock()
-					s.joined = true
-					delete(s.deleted, p.Device.RFAddress)
-					s.mu.Unlock()
+					s.join(p)
 					write(NewDeviceLine(p.Device).Wire())
 				})
 			}
@@ -774,8 +839,26 @@ func (s *Server) serve(conn net.Conn) {
 
 // PairingFrom builds a Pairing for a new device that is a copy of the
 // device template in greeting with another address and serial, in no
-// room, joining delay after n:.
+// room, joining delay after n:: its C line, and its L entry where the
+// greeting's L line has one of template.
 func PairingFrom(greeting []cube.Message, template, rf cube.RFAddress, serial string, delay time.Duration) (*Pairing, error) {
+	var entry []byte
+	for _, g := range greeting {
+		if g.Type != 'L' {
+			continue
+		}
+		raw, err := base64.StdEncoding.DecodeString(g.Data)
+		if err != nil {
+			return nil, err
+		}
+		entry = nil
+		for _, e := range entries(raw) {
+			if cube.RFAddressFromBytes(e[1:4]) == template {
+				b := rf.Bytes()
+				entry = append(append([]byte{e[0]}, b[:]...), e[4:]...)
+			}
+		}
+	}
 	for _, g := range greeting {
 		if g.Type != 'C' || !strings.HasPrefix(strings.ToLower(g.Data), template.String()+",") {
 			continue
@@ -795,6 +878,7 @@ func PairingFrom(greeting []cube.Message, template, rf cube.RFAddress, serial st
 		return &Pairing{
 			Device: cube.NewDevice{Type: c.Type, RFAddress: rf, Serial: c.Serial},
 			Config: cube.Message{Type: 'C', Data: rf.String() + "," + base64.StdEncoding.EncodeToString(raw)},
+			Entry:  entry,
 			Delay:  delay,
 		}, nil
 	}

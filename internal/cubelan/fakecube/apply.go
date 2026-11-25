@@ -7,6 +7,7 @@ import (
 	"encoding/base64"
 	"fmt"
 	"math"
+	"slices"
 	"strings"
 	"time"
 
@@ -452,7 +453,9 @@ func (s *Server) editConfigLocked(rf cube.RFAddress, edit func(c []byte, t cube.
 }
 
 // liveGreetingLocked is the greeting with the lines the fake changed: the
-// current L line and C lines, without removed devices.
+// M lines an m: wrote, the current L line and C lines, and the C line of
+// the Pair device while it is joined, after the others; the devices
+// deleted or removed are left out as the lines are sent (visible).
 func (s *Server) liveGreetingLocked() []cube.Message {
 	out := append([]cube.Message(nil), s.Greeting...)
 	if s.free != nil {
@@ -462,6 +465,18 @@ func (s *Server) liveGreetingLocked() []cube.Message {
 				out[i] = cube.Message{Type: 'H', Data: strings.Join(f, ",")}
 			}
 		}
+	}
+	if s.meta != nil {
+		isM := func(g cube.Message) bool { return g.Type == 'M' }
+		at := slices.IndexFunc(out, isM)
+		out = slices.DeleteFunc(out, isM)
+		if at < 0 { // a greeting without M lines: after its H line
+			at = 0
+			if len(out) > 0 && out[0].Type == 'H' {
+				at = 1
+			}
+		}
+		out = slices.Insert(out, at, s.meta...)
 	}
 	if !s.live {
 		return out
@@ -478,6 +493,29 @@ func (s *Server) liveGreetingLocked() []cube.Message {
 				out[i] = c
 			}
 		}
+	}
+	if p := s.joinedLocked(); p != nil {
+		rf := p.Device.RFAddress.String()
+		at := -1 // after the last C line, or before the L line
+		for i, g := range out {
+			if g.Type != 'C' {
+				continue
+			}
+			if strings.HasPrefix(strings.ToLower(g.Data), rf+",") {
+				return out // the greeting has its own
+			}
+			at = i + 1
+		}
+		if at < 0 {
+			if at = slices.IndexFunc(out, func(g cube.Message) bool { return g.Type == 'L' }); at < 0 {
+				at = len(out)
+			}
+		}
+		c, ok := s.configs[rf]
+		if !ok {
+			c = p.Config
+		}
+		out = slices.Insert(out, at, c)
 	}
 	return out
 }

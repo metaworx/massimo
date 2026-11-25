@@ -81,6 +81,15 @@ def serve_log():
         return f.read()
 
 
+def reconnected(start):
+    """For a failure's message: the server's `cube reconnecting` lines
+    after start, a length of its log. A reconnect reads the fake Cube's
+    greeting again, and the server drops what the greeting does not
+    carry."""
+    lines = [line for line in serve_log()[start:].splitlines() if "cube reconnecting" in line]
+    return "; the server reconnected meanwhile: " + " | ".join(lines) if lines else ""
+
+
 def pair_by_api():
     """Pairing through the API until the fake's device is on the server,
     then stopped: a device that joined while the page was not looking."""
@@ -159,12 +168,14 @@ def test_pair_put_into_a_room_and_remove(page, case, clean):
     assert form.locator("input[name=copy]").is_checked(), "the copy is on by default"
     with page.expect_response(lambda r: r.request.method == "PUT" and CUBE + "/devices/" in r.url, timeout=60000) as put:
         form.locator("button[type=submit]").click()
-    copied = put.value.json()["copied"]
-    assert wait_until(page, IN_ROOM % room["id"], 30), "the device is in the room"
+    answer = put.value.json()
+    assert "copied" in answer, f"the PUT's answer: {answer}{reconnected(len(before))}"
+    copied = answer["copied"]
+    assert wait_until(page, IN_ROOM % room["id"], 30), "the device is in the room" + reconnected(len(before))
     done = "(() => { const r = document.querySelector(\"%s .pair-device[data-rf='%s']\"); return !!r && !r.querySelector('form'); })()" % (PANEL, DEV)
-    assert wait_until(page, done, 30), "the row says how it went once the copy is done"
+    assert wait_until(page, done, 30), "the row says how it went once the copy is done" + reconnected(len(before))
     outcome = row.locator(".pair-result").inner_text()
-    assert room["name"] in outcome, "the outcome names the room"
+    assert room["name"] in outcome, "the outcome names the room" + reconnected(len(before))
     # The state the copy's 0x40 carried, the room's from before (AP
     # RoomMajority, Block 2), worded as the form words it, and the days.
     said = page.evaluate("""(c) => {
@@ -175,14 +186,14 @@ def test_pair_put_into_a_room_and_remove(page, case, clean):
         : t(c.mode_not_set ? (c.room_mode ? "put.roomMode" : "put.modeNotSet") : "put.state", { state });
       return [head, t("put.copied", { days: c.days })];
     }""", copied)
-    assert "state" in copied and copied.get("state_from") == "room" and not copied.get("config_skipped"), f"the copy's answer: {copied}"
-    assert said[0] in outcome and said[1] in outcome, f"the outcome names the state and the days: {outcome!r}, want {said}"
+    assert "state" in copied and copied.get("state_from") == "room" and not copied.get("config_skipped"), f"the copy's answer: {copied}{reconnected(len(before))}"
+    assert said[0] in outcome and said[1] in outcome, f"the outcome names the state and the days: {outcome!r}, want {said}{reconnected(len(before))}"
     assert wait_until(page, "(document.querySelector(\"%s .pairing-msg\") || {}).textContent === %s" % (PANEL, json.dumps(ENDED[case.lang])), 15), \
         "the end of pairing said"
     assert pairing.locator(".pairing-running").is_hidden() and pairing.locator(".pair-open").is_visible(), "Pair a device again"
     if SERVE_LOG:
         new = serve_log()[len(before):]
-        assert "device paired" in new and "settings copied" in new and "device=0abcde" in new, "the server paired, put and copied"
+        assert "device paired" in new and "settings copied" in new and "device=0abcde" in new, "the server paired, put and copied" + reconnected(len(before))
 
     show_view(page, "tiles")
     tile = page.locator(".room[data-id='%d']" % room["id"])
@@ -191,11 +202,12 @@ def test_pair_put_into_a_room_and_remove(page, case, clean):
     dev = tile.locator(".cfg-device", has_text="Pair test")
     dev.locator(".remove-device").click()
     dev.locator(".confirm-box .confirm-yes").click()
-    assert wait_until(page, GONE, 15), "the device is gone"
-    assert page.evaluate("state.rooms.find((r) => r.id === %d).devices.length" % room["id"]) == room["n"], "the room as before"
+    assert wait_until(page, GONE, 15), "the device is gone" + reconnected(len(before))
+    assert page.evaluate("state.rooms.find((r) => r.id === %d).devices.length" % room["id"]) == room["n"], \
+        "the room as before" + reconnected(len(before))
     assert tile.locator(".config-body").is_visible(), "the configuration stays open"
     if SERVE_LOG:
-        assert "device removed" in serve_log()[len(before):], "the server removed it"
+        assert "device removed" in serve_log()[len(before):], "the server removed it" + reconnected(len(before))
     assert scroll_width(page) <= case.width, "no horizontal scroll in the Devices tab"
     tile.locator(".config-tabs .close").click()
 

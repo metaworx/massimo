@@ -157,6 +157,153 @@ func TestDeletedPairDeviceJoinsAgain(t *testing.T) {
 	}
 }
 
+// metadataOf is the room and device list of a greeting's M lines.
+func metadataOf(t *testing.T, greeting []cube.Message) *cube.Metadata {
+	t.Helper()
+	var parts []cube.MetadataPart
+	for _, m := range greeting {
+		if m.Type == 'M' {
+			p, err := cube.ParseMetadataPart(m.Data)
+			if err != nil {
+				t.Fatal(err)
+			}
+			parts = append(parts, p)
+		}
+	}
+	md, err := cube.ParseMetadata(parts)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return md
+}
+
+// greeted reports whether a greeting holds rf's C line and its entry in
+// the L line.
+func greeted(t *testing.T, greeting []cube.Message, rf cube.RFAddress) (config, entry bool) {
+	t.Helper()
+	for _, m := range greeting {
+		switch m.Type {
+		case 'C':
+			config = config || strings.HasPrefix(m.Data, rf.String()+",")
+		case 'L':
+			entry = listed(t, m, rf)
+		}
+	}
+	return config, entry
+}
+
+// The fake keeps what a Cube keeps across connections: a device that
+// joined is in a new connection's greeting, its C line and its L entry,
+// in no room, until a t: deletes it; an m: the fake acknowledged is the
+// greeting's room and device list from then on, of one block or of
+// several, until SetGreeting gives another.
+func TestGreetingKeepsTheJoinedDeviceAndTheWrittenList(t *testing.T) {
+	t.Parallel()
+	greeting, err := LoadGreeting(fixture)
+	if err != nil {
+		t.Fatal(err)
+	}
+	const rf cube.RFAddress = 0x0a0b0c
+	pair, err := PairingFrom(greeting, 0x0a010d, rf, "TEQ0000001", time.Millisecond)
+	if err != nil {
+		t.Fatal(err)
+	}
+	s := &Server{Greeting: greeting, Pair: pair}
+	addr, err := s.Start("127.0.0.1:0")
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { s.Close() })
+	c := dial(t, addr)
+	if config, entry := greeted(t, c.greet, rf); config || entry {
+		t.Fatalf("the device in the greeting before it joined: C line %v, L entry %v", config, entry)
+	}
+	if n := c.send(cube.CmdInclusion(time.Minute)); n.String() != NewDeviceLine(pair.Device).String() {
+		t.Fatalf("n: brought %s, want the N line", n)
+	}
+	if n := c.send(cube.CmdCancelInclusion); n.Type != 'N' || n.Data != "" {
+		t.Fatalf("x: answered %s", n)
+	}
+	if l := c.send(cube.CmdList); !listed(t, l, rf) {
+		t.Fatalf("l: after the join: %s", l)
+	}
+
+	// A new connection: the device that joined, in no room.
+	again := dial(t, addr)
+	if config, entry := greeted(t, again.greet, rf); !config || !entry {
+		t.Fatalf("the joined device in a new greeting: C line %v, L entry %v", config, entry)
+	}
+	if cfg := again.config(rf); cfg == nil || cfg.RoomID != 0 || cfg.Serial != "TEQ0000001" {
+		t.Fatalf("its C line %+v", cfg)
+	}
+	md := metadataOf(t, again.greet)
+	for _, d := range md.Devices {
+		if d.RFAddress == rf {
+			t.Fatal("the joined device in the recorded list")
+		}
+	}
+
+	// An m: puts it into room 1: the next greeting has the list written.
+	md.Devices = append(md.Devices, cube.DeviceMeta{Type: pair.Device.Type, RFAddress: rf, Serial: "TEQ0000001", Name: "Neu", RoomID: 1})
+	cmds, err := cube.WriteMetadataCommands(md)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, m := range cmds {
+		if a := again.send(m); a.Type != 'A' {
+			t.Fatalf("m:%s answered %s", m.Data[:2], a)
+		}
+	}
+	written := dial(t, addr)
+	got := metadataOf(t, written.greet)
+	if len(got.Devices) != len(md.Devices) || got.Devices[len(got.Devices)-1] != md.Devices[len(md.Devices)-1] {
+		t.Fatalf("the list after the m: %+v, want %+v", got.Devices, md.Devices)
+	}
+	if config, entry := greeted(t, written.greet, rf); !config || !entry {
+		t.Fatalf("the device after the m:: C line %v, L entry %v", config, entry)
+	}
+
+	// A list of two blocks: both are the greeting's M lines.
+	long := *md
+	long.Devices = append([]cube.DeviceMeta(nil), md.Devices...)
+	for i := range 50 {
+		long.Devices = append(long.Devices, cube.DeviceMeta{Type: cube.DeviceShutterContact, RFAddress: cube.RFAddress(0x0a2000 + i),
+			Serial: "IEQ0000001", Name: "Fenster " + strings.Repeat("x", 10), RoomID: 2})
+	}
+	if cmds, err = cube.WriteMetadataCommands(&long); err != nil || len(cmds) != 2 {
+		t.Fatalf("%d blocks, %v; want 2", len(cmds), err)
+	}
+	for _, m := range cmds {
+		if a := written.send(m); a.Type != 'A' {
+			t.Fatalf("m:%s answered %s", m.Data[:2], a)
+		}
+	}
+	two := dial(t, addr)
+	var ms []string
+	for _, m := range two.greet {
+		if m.Type == 'M' {
+			ms = append(ms, m.Data[:5])
+		}
+	}
+	if strings.Join(ms, " ") != "00,02 01,02" || len(metadataOf(t, two.greet).Devices) != len(long.Devices) {
+		t.Fatalf("the M lines of two blocks: %v", ms)
+	}
+
+	// t: deletes the device: it is gone from the greeting, and SetGreeting
+	// brings back the recorded list.
+	if a := two.send(cube.CmdDeleteDevices(true, rf)); a.Type != 'A' {
+		t.Fatalf("t: answered %s", a)
+	}
+	gone := dial(t, addr)
+	if config, entry := greeted(t, gone.greet, rf); config || entry {
+		t.Fatalf("the deleted device in a new greeting: C line %v, L entry %v", config, entry)
+	}
+	s.SetGreeting(greeting)
+	if got := metadataOf(t, dial(t, addr).greet); len(got.Devices) != len(metadataOf(t, greeting).Devices) {
+		t.Fatalf("the list after SetGreeting: %d devices", len(got.Devices))
+	}
+}
+
 // The device that joins after n: does not join once x: ended the
 // inclusion before its delay, and a second n: makes it join once.
 func TestPairDeviceJoinsOnlyWhileIncluding(t *testing.T) {
