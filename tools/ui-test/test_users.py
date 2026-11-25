@@ -632,7 +632,7 @@ def test_new_user_name_checked_while_typed(page, case, watch):
     name.press("Tab")
     assert name_msg(page, msg) == NAME_TAKEN[case.lang].format(name="operator"), "a listed name is in use, in lower case"
     name.fill("bad name")
-    page.locator("#user-new input[name=password]").fill("pw")
+    page.locator("#user-new input[name=password]").fill("owner-pass")
     page.locator("#user-new button[type=submit]").click()
     page.wait_for_timeout(300)
     assert name_msg(page, msg) == NAME_BAD[case.lang] and not posts, f"Create with a bad name sends nothing: {posts}"
@@ -670,8 +670,8 @@ def test_first_owner_name_checked(page, case):
         name.fill("test manager")
         name.press("Tab")
         assert name_msg(page, "#setup-name-msg") == NAME_BAD[case.lang], "leaving the field checks it"
-        page.locator("#setup-password").fill("pw")
-        page.locator("#setup-again").fill("pw")
+        page.locator("#setup-password").fill("owner-pass")
+        page.locator("#setup-again").fill("owner-pass")
         page.locator("#setup-form button[type=submit]").click()
         page.wait_for_timeout(300)
         assert not posts, f"Create the owner with a bad name sends nothing: {posts}"

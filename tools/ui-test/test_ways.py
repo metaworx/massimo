@@ -66,8 +66,8 @@ def stub_creation(page, stage):
 
 def create(page, name="owner"):
     page.locator("#setup-user").fill(name)
-    page.locator("#setup-password").fill("pw")
-    page.locator("#setup-again").fill("pw")
+    page.locator("#setup-password").fill("owner-pass")
+    page.locator("#setup-again").fill("owner-pass")
     page.locator("#setup-form button[type=submit]").click()
 
 
@@ -192,22 +192,22 @@ def test_skip_back_and_escape_empty_nothing(new_context, case, watch, guard):
     before."""
     page = start_page(new_context, guard, watch, OPEN)
     owner_card(page)
-    typed(page, "skipped")
+    typed(page, "skipped-pass")
     page.locator("#setup-skip").click()
-    kept(page, "skipped", "Skip for now")
+    kept(page, "skipped-pass", "Skip for now")
     page.wait_for_selector(".room", timeout=10000)
     assert wait_until(page, "state.eventsOpen", 10), "the page started"
     open_by(page, "banner")
     emptied_at_the_opening(page, "Skip for now")
-    typed(page, "back")
+    typed(page, "back-to-page")
     page.locator("#setup-skip").click()
-    kept(page, "back", "Back to the page")
+    kept(page, "back-to-page", "Back to the page")
     open_by(page, "menu")
     emptied_at_the_opening(page, "Back to the page")
-    typed(page, "escaped")
+    typed(page, "escaped-pass")
     page.keyboard.press("Escape")
     assert wait_until(page, f"!({DIALOG_OPEN})", 5), "Escape closes the card"
-    kept(page, "escaped", "Escape")
+    kept(page, "escaped-pass", "Escape")
     open_by(page, "users")
     emptied_at_the_opening(page, "Escape")
 
