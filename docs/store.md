@@ -1179,7 +1179,7 @@ The capabilities, what each allows, and the routes it guards:
 | `cubes` | add, configure and remove Cubes | `POST /api/v1/cubes`, `PUT`/`DELETE /api/v1/cubes/{sn}` |
 | `cubes.reboot` | reboot a Cube, which drops the radiograms it has not delivered | `POST /api/v1/cubes/{sn}/reboot` |
 | `settings` | the server's settings | `GET`/`PUT /api/v1/settings` |
-| `update` | start a software update | `POST /api/v1/update` |
+| `update` | start a software update, and read the restart's state, since an update restarts the server | `POST /api/v1/update`, `GET /api/v1/restart` |
 | `restart` | restart the server, read its settings file again, and read a Cube again at once | `GET`/`POST /api/v1/restart`, `POST /api/v1/reload`, `POST /api/v1/cubes/{sn}/refresh` |
 | `reboot` | reboot the computer the server runs on, where its owner switched that on | `GET`/`POST`/`DELETE /api/v1/reboot` |
 | `audit` | read the audit | `GET /api/v1/audit` |

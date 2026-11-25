@@ -71,8 +71,8 @@ func TestRestartRoutes(t *testing.T) {
 	if code, text := callAPI(t, ts, "GET", path, manager, ""); code != 200 || !decodeRestart(t, text).Available {
 		t.Fatalf("GET as manager: %d %s", code, text)
 	}
-	for _, m := range []string{"GET", "POST"} {
-		if code, text := callAPI(t, ts, m, path, operator, "{}"); code != 403 || errorOf(text) != `capability "restart" required` {
+	for m, want := range map[string]string{"GET": `capability "restart" or "update" required`, "POST": `capability "restart" required`} {
+		if code, text := callAPI(t, ts, m, path, operator, "{}"); code != 403 || errorOf(text) != want {
 			t.Fatalf("%s as operator: %d %s", m, code, text)
 		}
 		if code, text := callAPI(t, ts, m, path, "", "{}"); code != 401 {
@@ -118,6 +118,74 @@ func TestRestartRoutes(t *testing.T) {
 	if got := received.Since(before, cubewatch.Except('l')); len(got) != 0 {
 		t.Fatalf("the restart sent the Cube %v", got)
 	}
+}
+
+// A holder of update alone reads GET /api/v1/restart, since every update
+// restarts the server (AP StartConfiguration, D34-A): a restart holder's
+// answer, what the next start refuses and who restarts included, but for
+// available and blocked, which say that its own POST is refused; a role
+// with neither is refused the GET, and both the POST.
+func TestRestartReadWithUpdate(t *testing.T) {
+	t.Parallel()
+	c := &restartCounter{}
+	opts := storeOptions(t, t.TempDir(), "secret")
+	opts.Restart = RestartOptions{By: "systemd", Restart: c.restart}
+	r := startServer(t, withOptions(opts))
+	ts, s := r.ts, r.s
+	st := s.opts.Store
+	for _, role := range []store.Role{
+		{Key: "updater", Capabilities: []string{"read", "update"}},
+		{Key: "restarter", Capabilities: []string{"read", "restart"}},
+		{Key: "reader", Capabilities: []string{"read", "settings"}},
+	} {
+		if _, err := st.AddRole(t.Context(), role, 0); err != nil {
+			t.Fatal(err)
+		}
+	}
+	updater := userToken(t, st, "updater1", "updater")
+	restarter := userToken(t, st, "restarter1", "restarter")
+	reader := userToken(t, st, "reader1", "reader")
+	path := "/api/v1/restart"
+	s.SetReloader("/etc/massimo/env", func(context.Context) (ReloadResult, error) { return ReloadResult{}, nil })
+	s.SetSettingsRead(time.Date(2026, 11, 8, 19, 52, 0, 0, time.UTC))
+	s.SetPendingRestart([]string{"MASSIMO_HSTS"})
+	refused := []Refusal{{Settings: []string{"MASSIMO_HSTS"}, Error: `-hsts or MASSIMO_HSTS "-1": want a number of days, 0 or more`}}
+	s.SetRefused(refused)
+	code, text := callAPI(t, ts, "GET", path, restarter, "")
+	want := decodeRestart(t, text)
+	if code != 200 || !want.Available || want.Blocked != "" || want.By != "systemd" || want.File == "" || want.ReadAt == nil || len(want.Pending) != 1 || !sameRefusals(want.Refused, refused) {
+		t.Fatalf("GET with restart: %d %s", code, text)
+	}
+	code, text = callAPI(t, ts, "GET", path, updater, "")
+	got := decodeRestart(t, text)
+	if code != 200 || got.Available || got.Blocked != `capability "restart" required` {
+		t.Fatalf("GET with update: %d %s, want available false and the capability", code, text)
+	}
+	got.Available, got.Blocked = want.Available, want.Blocked
+	if g, w := toJSON(t, got), toJSON(t, want); g != w {
+		t.Fatalf("GET with update, but for available and blocked: %s, want %s", g, w)
+	}
+	if code, text := callAPI(t, ts, "GET", path, reader, ""); code != 403 || errorOf(text) != `capability "restart" or "update" required` {
+		t.Fatalf("GET with neither: %d %s", code, text)
+	}
+	for _, who := range []struct{ name, token string }{{"update", updater}, {"neither", reader}} {
+		if code, text := callAPI(t, ts, "POST", path, who.token, "{}"); code != 403 || errorOf(text) != `capability "restart" required` {
+			t.Fatalf("POST with %s: %d %s", who.name, code, text)
+		}
+	}
+	if n := c.calls.Load(); n != 0 {
+		t.Fatalf("restart asked %d times", n)
+	}
+}
+
+// toJSON is a value as JSON, for comparing two answers.
+func toJSON(t *testing.T, v any) string {
+	t.Helper()
+	b, err := json.Marshal(v)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return string(b)
 }
 
 // Without a service manager that starts the server again, while an

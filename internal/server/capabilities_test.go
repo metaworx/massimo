@@ -215,16 +215,49 @@ func TestRolesAgainstRoutes(t *testing.T) {
 			code, text := callAPI(t, ts, r.method, fillRoute(r.path), tok, body)
 			refused := code == 403 && strings.Contains(text, "capability")
 			// The users routes admit a guests holder too; the handlers narrow.
-			want := role == store.RoleOwner || has[r.capability] || r.capability == capNone || r.capability == capAny || r.capability == "users" && has["guests"]
+			// A route of two capabilities admits a holder of either.
+			want := role == store.RoleOwner || r.capability == capNone || r.capability == capAny || r.capability == "users" && has["guests"]
+			for _, c := range strings.Split(r.capability, " or ") {
+				want = want || has[c]
+			}
 			if want && refused {
 				t.Errorf("%s: %s %s refused: %s", role, r.method, r.path, text)
 			}
 			if !want && !refused {
 				t.Errorf("%s: %s %s answered %d %s, want 403 for %q", role, r.method, r.path, code, text, r.capability)
 			}
-			if !want && errorOf(text) != `capability "`+r.capability+`" required` {
+			if !want && errorOf(text) != `capability "`+strings.ReplaceAll(r.capability, " or ", `" or "`)+`" required` {
 				t.Errorf("%s: %s %s: message %q", role, r.method, r.path, text)
 			}
+		}
+	}
+}
+
+// A route's capability is checked at its registration: none and any
+// alone, else one or two known ones, each of them checked.
+func TestRouteCapabilityError(t *testing.T) {
+	t.Parallel()
+	const route = "GET /api/v1/restart"
+	for _, c := range []struct{ capability, want string }{
+		{"restart", ""},
+		{"restart or update", ""},
+		{capNone, ""},
+		{capAny, ""},
+		{"updat", `unknown capability "updat"`},
+		{"restart or updat", `unknown capability "updat"`},
+		{"updat or restart", `unknown capability "updat"`},
+		{"restart or update or reboot", `more than two capabilities "restart or update or reboot"`},
+		{"none or restart", `unknown capability "none"`},
+		{"any or restart", `unknown capability "any"`},
+		{"restart or ", `unknown capability ""`},
+		{"", `unknown capability ""`},
+	} {
+		want := c.want
+		if want != "" {
+			want = "route " + route + ": " + want
+		}
+		if got := routeCapabilityError(route, c.capability); got != want {
+			t.Errorf("%q: %q, want %q", c.capability, got, want)
 		}
 	}
 }

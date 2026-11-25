@@ -156,8 +156,9 @@ those that are not an integration's, disabled ones included:
   (or made from a key by `POST /api/v1/login/key`) or
   an API key from `POST /api/v1/users/{name}/tokens`; otherwise `401`.
   The token names a user, the user's role grants capabilities,
-  and every route needs one of them (the table below);
-  a request without it is `403` with the message `capability "pair" required`.
+  and every route needs one of them, or either of two (the table below);
+  a request without it is `403` with the message `capability "pair" required`,
+  or `capability "restart" or "update" required` for a route either of two admits.
   A disabled user, a guest past its end date or a disabled role is `403` too,
   with the reason.
 - **Open**, a store without regular users, the state before the first owner:
@@ -232,7 +233,8 @@ The file stays the way to recover an owner who lost the password:
 put a token into it, log in with it, set a password; no restart is needed.
 
 The capabilities, what each allows and the routes it guards;
-the OpenAPI file carries each operation's as `x-capability`:
+the OpenAPI file carries each operation's as `x-capability`,
+`restart or update` for `GET /api/v1/restart`, which a holder of either reads:
 
 | Capability | Allows | Routes |
 |---|---|---|
@@ -257,7 +259,7 @@ the OpenAPI file carries each operation's as `x-capability`:
 | `cubes` | add, configure and remove Cubes | `POST /api/v1/cubes`, `PUT`/`DELETE /api/v1/cubes/{sn}` |
 | `cubes.reboot` | reboot a Cube, which drops the radiograms it has not delivered; seeded for no role | `POST /api/v1/cubes/{sn}/reboot` |
 | `settings` | the server's settings, its store and the settings in effect | `GET`/`PUT /api/v1/settings`, `GET /api/v1/store`, `GET /api/v1/config` |
-| `update` | start a software update | `POST /api/v1/update` |
+| `update` | start a software update, and read the restart's state, since an update restarts the server | `POST /api/v1/update`, `GET /api/v1/restart` |
 | `restart` | restart the server through the service manager that runs it, read its settings file again, and read a Cube again at once | `GET`/`POST /api/v1/restart`, `POST /api/v1/reload`, `POST /api/v1/cubes/{sn}/refresh` |
 | `reboot` | reboot the computer the server runs on, where its owner switched that on; seeded for no role | `GET`/`POST`/`DELETE /api/v1/reboot` |
 | `audit` | read the audit | `GET /api/v1/audit` |
@@ -4445,6 +4447,12 @@ A read that finds nothing refused clears it,
 and the start has none, since it would have refused it.
 It blocks nothing: the restart is offered all the same,
 and so are an update and a reboot.
+A holder of `update` reads the `GET` as well as one of `restart`,
+since every update restarts the server:
+without `restart` its `available` is false
+and `blocked` is `capability "restart" required`, as its own `POST` would be,
+and the rest is a restart holder's,
+`by` and what the next start refuses included.
 `by` is `systemd`, `launchd` (also Homebrew's job), `windows`
 (the Windows service manager) or `exit` (`serve -restart exit`:
 whatever runs the server, told by the exit status).
@@ -4466,7 +4474,8 @@ a loopback peer with no `X-Forwarded-For`, `X-Real-IP` or `Forwarded` header,
 so that nobody on the LAN, and no client of a reverse proxy on the box,
 can restart it;
 anyone else gets `403` with the reason.
-`403` also without the capability `restart`;
+`403` also for the `POST` without the capability `restart`,
+and for the `GET` without `restart` or `update`;
 `409` when no service manager would start the server again (`serve` in a terminal,
 or `-restart off`),
 while a restart is under way,
