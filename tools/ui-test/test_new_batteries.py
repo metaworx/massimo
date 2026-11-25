@@ -25,11 +25,11 @@ STILL_LOW = "device %s still reports its batteries low: wait for its next report
 
 class Device:
     """A reported thermostat of the rooms, its level and flag as the
-    test tells them to the page's reads of the rooms; its row in its
-    tile's device list."""
+    test tells them to the page's reads of the rooms, kept through the
+    server's own events of it; its row in its tile's device list."""
 
     def __init__(self, page, reads):
-        self.page = page
+        self.page, self.reads = page, reads
         found = page.evaluate("""() => {
           const r = state.rooms.find((r) => r.devices.some((d) => isThermostat(d) && !d.virtual && d.reported));
           const d = r.devices.find((d) => isThermostat(d) && !d.virtual && d.reported);
@@ -58,8 +58,11 @@ class Device:
 
     def told(self, level, flag):
         """The device's level and flag in the rooms read from now on, and
-        read at once."""
+        read at once; kept (reads.keep), since a state or config event of
+        the device that the server sends by itself, after an earlier
+        test's write, brings the server's battery and starts no read."""
         self.want = {"level": level, "flag": flag}
+        self.reads.keep(self.rf)
         self.page.evaluate("loadRooms()")
         js_level = "undefined" if level is None else json.dumps(level)
         assert wait_until(self.page, "(() => { const d = state.rooms.flatMap((r) => r.devices).find((d) => d.rf_address === %s);"
