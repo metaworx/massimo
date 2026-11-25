@@ -1,4 +1,4 @@
-# Testing the web UI (v1.25.0)
+# Testing the web UI (v1.26.0)
 
 An evaluation of a Cypress suite for the web UI, against the alternatives:
 what the Playwright smoke test covers today and what it cannot do well,
@@ -818,9 +818,26 @@ The suite's helpers for it are in `tools/ui-test/helpers.py`
   taken on the page before the data became signals (AP UiParts, Block 15):
   a part's effect that read again at each write of the data it follows fails it.
   What each showing of a page reads is `test_shell_updates.py`'s.
-- **What the reads do not keep yet:**
-  a device's state applied in the page (`updateDevice`, a dispatched `state` event)
-  lasts until the rooms are loaded again.
+- **What the reads keep** (`reads.keep(rf)`, AP ServerTraffic, D3-A):
+  a device's data told through the rooms' read lasts until the server's next
+  `state` or `config` event of the device, which brings it as the server has it
+  and starts no read;
+  the server sends them by itself, at its poll after an earlier test's write
+  and at a follow-up's re-read of a C line, when no test can time them.
+  With `keep`, the page reads its rooms again after each such event of the server's,
+  once its own listeners have drawn it,
+  so that what the test told is drawn again.
+  `PAGE_KIT` does it on every stream of the page, a reopened one too;
+  an event a test dispatches is not the server's and starts no read,
+  so a test that counts the rooms' reads after its own events still can
+  (`test_room_marks.py`).
+  It holds within one document, as a mark does,
+  and `reads.clear` of the rooms' read forgets it.
+  A test takes it where it tells a device through the rooms' read
+  and then checks what it told while the server may speak (`test_confirm.py`).
+  Nothing keeps a device's state applied in the page alone,
+  by `updateDevice` or a dispatched `state` event:
+  it lasts until the rooms are loaded again.
   The poll does not load them while the stream is open,
   but the events that start a load do (`connected`, `metadata`, `unconfirmed` and others),
   among them those the server sends by itself.
