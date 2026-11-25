@@ -13,7 +13,7 @@ import json
 import pytest
 
 from conftest import TOKEN, URL
-from helpers import NAME_BAD, OPERATOR_PASSWORD, ApiReads, assert_login_card_centred, frames, pause_clock, scroll_width, wait_held, wait_until
+from helpers import NAME_BAD, OPERATOR_PASSWORD, ApiReads, assert_login_card_centred, assert_login_card_placed, frames, pause_clock, scroll_width, wait_held, wait_until
 from test_connect import FAKE_BRIDGE
 
 OPEN = {"mode": "open", "user": None, "role": None, "capabilities": [], "setup": True}
@@ -370,33 +370,67 @@ def test_a_page_left_open_learns_of_the_owner(new_context, case, watch, guard, w
     assert wait_until(page, f"!({DIALOG_OPEN}) && state.eventsOpen", 10), "signed in, the stream open again"
 
 
+def each_language(page, case, title, check):
+    """check(lang) with each of French, Italian, Dutch and Polish chosen
+    in the card's ☰, the card's title then the words of title in it; the
+    browser's language, the case's, chosen again after, and ☰ closed."""
+    page.locator("#login-menu summary").click()
+    for lang in ("fr", "it", "nl", "pl"):
+        page.locator("#login-lang").select_option(lang)
+        assert wait_until(page, f"i18n.lang === {lang!r} && document.getElementById('login-title').textContent === t({title!r})", 5), \
+            f"the card in {lang}"
+        frames(page)
+        check(lang)
+    page.locator("#login-lang").select_option("auto")
+    assert wait_until(page, f"i18n.lang === {case.lang!r} && document.getElementById('login-title').textContent === t({title!r})", 5), \
+        f"the card in {case.lang} again"
+    page.keyboard.press("Escape")
+    frames(page)
+
+
+def dice_pressed(page):
+    """The dice beside the first owner's Password pressed: the field
+    filled with a suggestion and the rule's line written anew, the part
+    drawn (test_password_suggest.py's press, which imports this module)."""
+    old = page.locator("#setup-password").input_value()
+    page.locator(".pw-box:has(> #setup-password) > .pw-dice").click()
+    assert wait_until(page, f"document.getElementById('setup-password').value !== {old!r} && document.getElementById('setup-password').value !== ''", 5), \
+        "the dice fills Password"
+    assert wait_until(page, "document.getElementById('setup-password-rule').textContent !== ''", 3), "the line written anew"
+    frames(page)
+
+
 @pytest.mark.parametrize("app", (False, True), ids=("browser", "app"))
 def test_the_owner_card_measures(new_context, case, watch, guard, app):
-    """The card with the first owner's form in the middle of the window,
-    no wider than it, in a browser and in the app with its switch and
-    Cancel; at 390 px in French, Italian, Dutch and Polish as well,
-    chosen in the card's ☰ (FirstOwner D23: the owner's state at its own
-    height). Fails on the page before: no card."""
+    """The card with the first owner's form placed in the window, no
+    wider than it, each button's text on one line, in a browser and in
+    the app with its switch and Cancel: in the middle where it fits the
+    room the window leaves it, at its top with the page scrolling to its
+    end where it is taller (assert_login_card_placed; AP PasswordRules,
+    D57-A); before a press of the dice and after one, whose row makes the
+    card taller, in the app at 390 px in French taller than its room; at
+    390 px in French,
+    Italian, Dutch and Polish as well, chosen in the card's ☰ (FirstOwner
+    D23: the owner's state at its own height). Fails on the page before:
+    no card; with the sign-in card's measure (assert_login_card_centred),
+    on the French card after a press in the app at 390 px."""
     page = start_page(new_context, guard, watch, OPEN, app=APP if app else None)
     owner_card(page)
     if app:
         page.locator("#setup-keep-row").wait_for(state="visible")
         assert page.locator("#setup-cancel").is_visible(), "Cancel in the app"
-    assert_login_card_centred(page, "the first owner's card")
-    assert scroll_width(page) <= case.width, "no horizontal scroll"
-    assert not wrapped(page), f"each button's text on one line: {wrapped(page)}"
+
+    def placed(what):
+        assert_login_card_placed(page, what)
+        assert scroll_width(page) <= case.width, f"no horizontal scroll on {what}"
+        assert not wrapped(page), f"each button's text on one line on {what}: {wrapped(page)}"
+    placed("the first owner's card")
     if case.width == 390:
-        page.locator("#login-menu summary").click()
-        for lang in ("fr", "it", "nl", "pl"):
-            page.locator("#login-lang").select_option(lang)
-            assert wait_until(page, f"i18n.lang === {lang!r} && document.getElementById('login-title').textContent === t('setup.title')", 5), \
-                f"the card in {lang}"
-            frames(page)
-            assert_login_card_centred(page, f"the first owner's card in {lang}")
-            assert scroll_width(page) <= case.width, f"no horizontal scroll in {lang}"
-            assert not wrapped(page), f"each button's text on one line in {lang}: {wrapped(page)}"
-        page.locator("#login-lang").select_option("auto")
-        page.keyboard.press("Escape")
+        each_language(page, case, "setup.title", lambda lang: placed(f"the first owner's card in {lang}"))
+    dice_pressed(page)
+    placed("the first owner's card after a press of the dice")
+    if case.width == 390:
+        each_language(page, case, "setup.title", lambda lang: placed(f"the first owner's card after a press in {lang}"))
 
 
 def test_a_touch_screen_gets_no_focus_in_the_owner_card(new_context, case, watch, guard):
@@ -633,20 +667,17 @@ def test_the_toast_says_the_login_was_not_kept(new_context, case, watch, guard):
 
 def test_the_owner_card_on_a_short_screen(new_context, case, watch, guard):
     """In the app on a phone of 390 by 640 px, the owner's card, taller
-    than the window, starts at the window's top and its last button can
-    be scrolled to (AP MobileApp, F27). Fails on the page before: no card."""
+    than the window, starts at the window's top and the page scrolls to
+    its end, the card showing all it holds and each of its controls inside
+    it and in view at some scroll (AP MobileApp, F27;
+    assert_login_card_placed). Fails on the page before: no card."""
     page = start_page(new_context, guard, watch, OPEN, app=APP)
     page.set_viewport_size({"width": 390, "height": 640})
     owner_card(page)
     page.locator("#setup-keep-row").wait_for(state="visible")
     box = page.evaluate("(() => { const r = document.getElementById('login-dialog').getBoundingClientRect(); return [r.top, r.height, innerHeight]; })()")
     assert box[1] > box[2], f"the card is taller than the window: {box}"
-    assert 0 <= box[0] <= 17, f"it starts at the window's top: {box}"
-    skip = page.locator("#setup-skip")
-    skip.scroll_into_view_if_needed()
-    b = skip.bounding_box()
-    assert b and b["y"] >= 0 and b["y"] + b["height"] <= 640, f"Skip for now scrolled into view: {b}"
-    assert scroll_width(page) <= 390, "no horizontal scroll"
+    assert_login_card_placed(page, "a phone of 640 px")
 
 
 def test_no_sign_in_notice_on_the_owner_card_over_plain_http(new_context, case, watch, guard):
