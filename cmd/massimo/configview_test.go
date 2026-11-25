@@ -8,12 +8,9 @@ import (
 	"io"
 	"log/slog"
 	"net/http/httptest"
-	"os"
-	"path/filepath"
 	"strings"
 	"testing"
 
-	"go.metaworx.ch/massimo/internal/env"
 	"go.metaworx.ch/massimo/internal/server"
 	"go.metaworx.ch/massimo/internal/testkit/storekit"
 )
@@ -51,17 +48,14 @@ func TestConfigViewHidesSecrets(t *testing.T) {
 	}
 }
 
-// A settings file's MASSIMO_API_Token, which Windows' start takes as the
-// owner's key, shows no value in GET /api/v1/config, on every system (AP
-// StartConfiguration, D53-A).
+// MASSIMO_API_Token, which Windows' start takes from the settings file
+// as the owner's key, shows no value in GET /api/v1/config, on every
+// system (AP StartConfiguration, D53-A). The environment holds it, as
+// the file's line sets it on Windows; elsewhere the file's line is set
+// aside (TestKnownNameInAnotherCase of internal/env).
 func TestConfigHidesASecretInAnyCase(t *testing.T) {
-	unsetForTest(t, tokenVar, "MASSIMO_API_Token")
-	p := filepath.Join(t.TempDir(), "env")
-	os.WriteFile(p, []byte("MASSIMO_API_Token=placeholder-token-1\n"), 0o600)
-	t.Cleanup(func() { os.WriteFile(p, nil, 0o600); env.ReloadFile(p) }) // the env package forgets the test's names
-	if _, err := env.LoadFile(p); err != nil {
-		t.Fatal(err)
-	}
+	unsetForTest(t, tokenVar)
+	t.Setenv("MASSIMO_API_Token", "placeholder-token-1")
 	srv := server.New(server.Options{Store: storekit.Open(t, ""), Logger: slog.New(slog.NewTextHandler(io.Discard, nil))})
 	srv.SetConfigView(func() server.ConfigView { return configView(":8099", "off") })
 	req := httptest.NewRequest("GET", "/api/v1/config", nil)
