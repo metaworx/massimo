@@ -7,6 +7,7 @@ package main
 import (
 	"errors"
 	"fmt"
+	"io"
 	"os"
 
 	"go.metaworx.ch/massimo/internal/env"
@@ -23,7 +24,8 @@ func main() {
 		os.Exit(2)
 	}
 	useServiceDefaults()
-	if err := env.LoadFile(env.File()); err != nil {
+	startStamp = stampOf(env.File())
+	if startNotes, err = env.LoadFile(env.File()); err != nil {
 		fmt.Fprintln(os.Stderr, "error:", err)
 		os.Exit(1)
 	}
@@ -34,8 +36,10 @@ func main() {
 	case "version", "--version", "-v", "-V", "help", "-h", "--help":
 	default:
 		// Every run announces its version on stderr, so logs and bug
-		// reports say which build produced them. stdout stays data-only.
+		// reports say which build produced them, and the notes on the
+		// settings file it read. stdout stays data-only.
 		fmt.Fprintln(os.Stderr, versionString())
+		warnNotes(os.Stderr, env.File(), startNotes)
 	}
 	rest := args[1:]
 	switch args[0] {
@@ -97,6 +101,36 @@ func main() {
 	if code := exitCode(err); code != 0 {
 		os.Exit(code)
 	}
+}
+
+// startNotes are the notes on the settings file as the start read it
+// (env.LoadFile): the lines it set aside, which set nothing. Every
+// command but version and help says them on stderr at its start
+// (warnNotes), config after the settings, and serve in its log after its
+// server_started (AP StartConfiguration, D3-B, D33-A).
+var startNotes []env.Note
+
+// startStamp is the settings file's size and time just before the start
+// read it, where serve's watch begins (watchSettings): an edit made
+// while serve starts, before its watch looks for the first time, is
+// read again, not taken as the file the start read.
+var startStamp fileStamp
+
+// warnNotes says each note on the settings file on w, a line each:
+// "warning: <file>: <note>".
+func warnNotes(w io.Writer, file string, notes []env.Note) {
+	for _, n := range notes {
+		fmt.Fprintf(w, "warning: %s: %s\n", file, n.Text)
+	}
+}
+
+// noteTexts are the notes' texts, in their order; nil for none.
+func noteTexts(notes []env.Note) []string {
+	var out []string
+	for _, n := range notes {
+		out = append(out, n.Text)
+	}
+	return out
 }
 
 func usage() {

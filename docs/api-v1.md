@@ -3899,7 +3899,7 @@ of the same Cube, or of the server for the server's own:
 | `command` retried, failed or dropped | the same command key acknowledged for the same device |
 | `hold` | its end: the duty cycle's reset, or the wait for free slots |
 | `backup`, `restore_done`, `update_result`, `log_rotated` failed | the next one of its kind below warn |
-| `settings_read` with a value the next start would refuse, or a file that does not parse or is there but cannot be read | the next `settings_read` below warn, or `server_started` |
+| `settings_read` with a value the next start would refuse, a file that does not parse or is there but cannot be read, or a note on the file | the next `settings_read` below warn, or `server_started` (a start's own notes follow it, as a `settings_read` of their own) |
 | `proxy_refused` | the Cube's `connected`, or `proxy_connected` |
 | `proxy_warning`, a pairing not stopped or not started | `pairing_ended`; `pairing_started` or `proxy_pairing` |
 | `disagree`, a room's thermostats differing or its state not sent again | a `disagree` of the same `room` whose `outcome` is `agree` |
@@ -4029,7 +4029,23 @@ GET /api/v1/restart's `refused` says the same, each with its settings,
 and a read whose settings did not change writes its `settings_read`
 where that differs from the last read's,
 as a DNS hook made or removed meanwhile makes it;
-README.md, "Server", says which settings it checks),
+README.md, "Server", says which settings it checks;
+at `warn` too where the read found notes on the file,
+the lines it set aside, which set nothing
+(a later line of a name given twice, a line without a name,
+a `MASSIMO_ENV_FILE` line),
+after "the settings file: ", each naming its lines by their numbers,
+never a value, and after the refusals where both stand:
+`the next start refuses: -hsts or MASSIMO_HSTS "-1": want a number of days, 0 or more; the settings file: MASSIMO_HSTS is given on lines 3 and 4; the first wins`,
+each list joined by "; ",
+one line holding all that its read found;
+a read whose settings did not change writes its `settings_read`
+where its notes differ from the last read's,
+and GET /api/v1/restart's `refused` never names a note;
+a start whose read found notes writes a `settings_read` of them,
+`why` `start`, after its `server_started`,
+which settles every earlier warning of the kind,
+so that a note that stands stays a warning across a restart),
 `restart`, `reboot`, `reboot_cancelled`, `update` (`from`, `to`, `channel`),
 `update_result` (the helper's outcome after the restart, once:
 `state`, `from`, `to`; a failure at `warn` with its `error`),
@@ -4565,6 +4581,10 @@ each with its settings and the start's own text, `[]` for none;
 the log's `settings_read` (under GET /api/v1/cubes/{sn}/events) is then at `warn`,
 its `error` those texts after "the next start refuses: ", joined by "; ",
 and a reboot's switch the start would refuse is off.
+A note on the file, a line the read set aside, is no refusal:
+`refused` does not name it,
+and the log's `settings_read` is at `warn` with it after "the settings file: ",
+after the refusals where both stand.
 It sends nothing to a Cube, and is an audit row (`server.reload`) but no
 command, so a retry is harmless.
 `409` when the server reads no settings file,
@@ -4656,7 +4676,8 @@ and tenant identities and the rows per table:
 `GET /api/v1/config` answers the version, the settings file and whether it
 was found, the data directory, the address `serve` listens on, its TLS mode,
 the log level and every `MASSIMO_*` variable in effect with where it came
-from (`environment` or the settings file).
+from (`environment` or the settings file, with its lines where the file
+gives the name more than once: `file, lines 3 and 4: the first wins`).
 A key's, an IV's, a token's or a password's value never leaves the server:
 such a variable has `"secret": true` and no `value`;
 a name Massimo does not know has `"unknown": true`.

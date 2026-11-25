@@ -870,6 +870,7 @@
   "log.why.stop": "fermato",
   "log.sum.read": "file delle impostazioni riletto ({why}): modificato {changed}; al prossimo avvio {pending}",
   "log.sum.readNothing": "file delle impostazioni riletto ({why}): nulla di modificato",
+  "log.sum.readStart": "file delle impostazioni letto all'avvio",
   "log.readWhy.file": "il file è cambiato",
   "log.readWhy.sighup": "SIGHUP",
   "log.readWhy.api": "richiesto nell'interfaccia",

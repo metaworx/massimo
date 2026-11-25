@@ -905,6 +905,7 @@
   "log.why.stop": "zatrzymano",
   "log.sum.read": "ponownie odczytano plik ustawień ({why}): zmieniono {changed}; przy następnym starcie {pending}",
   "log.sum.readNothing": "ponownie odczytano plik ustawień ({why}): nic nie zmieniono",
+  "log.sum.readStart": "odczytano plik ustawień przy starcie",
   "log.readWhy.file": "plik się zmienił",
   "log.readWhy.sighup": "SIGHUP",
   "log.readWhy.api": "zlecono w interfejsie",

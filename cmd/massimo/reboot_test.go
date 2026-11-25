@@ -171,7 +171,7 @@ func TestReloadAppliesTheRebootSwitch(t *testing.T) {
 		}
 		return v.Available
 	}
-	r := newSettingsReloader(p, quiet, srv, settings(), nil)
+	r := newSettingsReloader(p, quiet, srv, settings(), nil, nil)
 	if available(srv) {
 		t.Fatal("available before the switch")
 	}
@@ -187,7 +187,7 @@ func TestReloadAppliesTheRebootSwitch(t *testing.T) {
 	}
 	opts.Allowed = true
 	srv2 := server.New(server.Options{Store: st, Logger: quiet, Reboot: opts})
-	r2 := newSettingsReloader(p, quiet, srv2, settings(), fixedSettings(map[string]string{"allow-reboot": "on"}))
+	r2 := newSettingsReloader(p, quiet, srv2, settings(), fixedSettings(map[string]string{"allow-reboot": "on"}), nil)
 	os.WriteFile(p, []byte(rebootVar+"=off\n"), 0o600)
 	r2.reload(t.Context(), "test")
 	if !available(srv2) || len(r2.pending()) != 0 {

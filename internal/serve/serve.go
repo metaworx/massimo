@@ -61,6 +61,10 @@ type Config struct {
 	// from, for the log; the Cubes of the file are read from the
 	// environment (FileCubes).
 	SettingsFile string
+	// SettingsNotes are the notes on the settings file the start read,
+	// their texts, which the log's settings_read says after the start's
+	// server_started (server.Options.SettingsNotes).
+	SettingsNotes []string
 	// Serial is the Cube chosen with -sn or MASSIMO_CUBE_SN, which the
 	// per-Cube variables are read for; SerialGiven says it came from
 	// -sn, and then that Cube alone is served.
@@ -327,7 +331,7 @@ func open(ctx context.Context, cfg Config, root *slog.Logger, src certs.Source, 
 		find = findIntegrations
 	}
 	srv := server.New(server.Options{Cubes: su.cubes, Token: cfg.Token, PollInterval: poll, CubeHold: cfg.CubeHold, RefreshInterval: refresh, DiscoverInterval: discover, DiscoveryTargets: cfg.DiscoveryTargets, DiscoveryAddr: cfg.DiscoveryListen, DiscoveryWait: cfg.discoveryWait, Logger: root, Version: cfg.Version, Proxy: su.listeners, ShowHidden: cfg.ShowHidden,
-		Store: st, Queue: queue, FileCubes: su.fileCubes, SettingsFile: cfg.SettingsFile, StaleAfter: staleAfter, StaleAfterWall: staleAfterWall, SettingsFixedBy: fixedBy, ProxyFixed: len(cfg.Proxies) > 0, Update: cfg.Update, TLS: src, HSTSDays: cfg.HSTSDays, TrustedProxies: cfg.TrustedProxies,
+		Store: st, Queue: queue, FileCubes: su.fileCubes, SettingsFile: cfg.SettingsFile, SettingsNotes: cfg.SettingsNotes, StaleAfter: staleAfter, StaleAfterWall: staleAfterWall, SettingsFixedBy: fixedBy, ProxyFixed: len(cfg.Proxies) > 0, Update: cfg.Update, TLS: src, HSTSDays: cfg.HSTSDays, TrustedProxies: cfg.TrustedProxies,
 		Restart: cfg.Restart, Reboot: cfg.Reboot, Install: cfg.Install, Deliverers: cfg.Deliverers, FindIntegrations: find, BrowseServers: browseServers,
 		Announce: server.AnnounceState{On: cfg.Announce.On && st != nil, FixedBy: cfg.Announce.FixedBy, Loopback: LoopbackListen(cfg.Listen)}})
 	ln, err := net.Listen("tcp", cfg.Listen)
