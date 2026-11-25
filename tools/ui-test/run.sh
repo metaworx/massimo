@@ -13,7 +13,9 @@
 # and of a run whose tests failed each set's serve.log and fakecube.log
 # under results/logs/set<n>/, which CI uploads with the screenshots, so
 # that a failure shows what the servers did meanwhile (AP ServerTraffic,
-# D4-A).
+# D4-A). A suite's run empties results/ at its start, so that what it
+# holds is always the last run's, and a run that passes leaves it empty
+# (AP CleanRuns, D3-A).
 # The first pass records no trace, whose DOM snapshots make every step
 # slower, and no video, which lengthens every test's tear-down (AP
 # TestSpeed, D8-A); when tests fail, they run once more with both, the
@@ -70,13 +72,22 @@
 # (KEQ0000200), from a directory of its own, with the same token; the
 # suite gets its address in UI_TEST_DOWN_URL.
 #
+# The sets, the binary and their logs are in the run's work directory,
+# massimo-ui-test.XXXXXX under TMPDIR (default /tmp), which holds the
+# run's PID and goes at its end. A run that was killed, whose cleanup
+# could not run, leaves its own; a later run removes those whose run is
+# gone and that are older than a day, and never one in use, another
+# user's or one that KEEP=1 kept: KEEP=1 keeps the run's, with a file
+# kept in it from the start, and prints its path (AP CleanRuns, D3-A,
+# D4-A).
+#
 # Environment: UI_TEST_PYTHON (default tools/ui-test/.venv/bin/python
 # when present, else python3), UI_TEST_REQUIRED, UI_TEST_WORKERS (4),
 # UI_TEST_CASES (the cases to run, such as 390-en,390-de; all four), and
 # set 0's ports: UI_TEST_CUBE_PORT (62919), UI_TEST_API_PORT (8119),
 # UI_TEST_DISCOVERY_PORT (23919), UI_TEST_DOWN_PORT (the second server's,
 # UI_TEST_API_PORT + 1); set n takes the fake Cube's two ports + n and
-# the servers' two + 2n.
+# the servers' two + 2n; KEEP (1 keeps the work directory).
 set -eu
 
 mode=${1:-smoke}
@@ -121,13 +132,34 @@ api_port=${UI_TEST_API_PORT:-8119}
 discovery_port=${UI_TEST_DISCOVERY_PORT:-23919}
 down_port=${UI_TEST_DOWN_PORT:-$((api_port + 1))}
 token=ui-test-token
-work=$(mktemp -d)
+
+# The work directories of earlier runs that are gone, older than a day
+# (-mmin, since BSD's find rounds -mtime's days up), not kept and this
+# user's; a directory without its PID is one whose run was killed as it
+# began. A directory that cannot be removed stays, and the run goes on.
+tmp=${TMPDIR:-/tmp}
+for d in "$tmp"/massimo-ui-test.*; do
+	if [ ! -d "$d" ] || [ ! -O "$d" ] || [ -e "$d/kept" ]; then continue; fi
+	p=$(cat "$d/pid" 2>/dev/null) || p=""
+	if [ -n "$p" ] && kill -0 "$p" 2>/dev/null; then continue; fi
+	[ -n "$(find "$d" -maxdepth 0 -mmin +1440 2>/dev/null)" ] || continue
+	rm -rf "$d" 2>/dev/null || :
+done
+if [ "$mode" = smoke ]; then rm -rf "$here/results"; fi
+work=$(mktemp -d "$tmp/massimo-ui-test.XXXXXX")
+echo $$ >"$work/pid"
+# kept from the start, so that a run killed before its cleanup keeps it
+if [ "${KEEP:-}" = 1 ]; then : >"$work/kept"; fi
 pids=""
 # The trap below runs cleanup, which shellcheck takes for unreachable.
 # shellcheck disable=SC2317
 cleanup() {
 	for p in $pids; do kill "$p" 2>/dev/null || true; done
-	rm -rf "$work"
+	if [ "${KEEP:-}" = 1 ]; then
+		echo "ui-test: KEEP=1, the work directory is kept: $work" >&2
+	else
+		rm -rf "$work"
+	fi
 }
 trap cleanup EXIT INT TERM
 
@@ -267,7 +299,7 @@ export UI_TEST_URL="http://127.0.0.1:$api_port/" UI_TEST_DOWN_URL="http://127.0.
 # keep_logs: each set's serve.log and fakecube.log copied into
 # results/logs/set<n>/, for a run whose tests failed, after the retry, so
 # that they hold both passes, and before the cleanup removes them with
-# the work directory.
+# the work directory (KEEP=1 keeps them there too).
 keep_logs() {
 	n=0
 	while [ $n -lt "$workers" ]; do
@@ -278,9 +310,6 @@ keep_logs() {
 	echo "ui-test: the servers' logs are in tools/ui-test/results/logs/" >&2
 }
 
-# A run's logs go before it starts: the first pass empties results/ only
-# once a test has started, and a passing run leaves none.
-rm -rf "$here/results/logs"
 rc=0
 PYTEST_ADDOPTS="--durations=20 ${PYTEST_ADDOPTS:-}" "$py" -m pytest --output "$here/results" "$@" || rc=$?
 # Only failed tests (exit 1) run again: not an interrupted or empty run.

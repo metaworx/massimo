@@ -65,6 +65,7 @@ UI_TEST_CASES=390-en,390-de make ui-test              # some cases; a CI job run
 tools/ui-test/run.sh smoke test_log.py                # one file
 tools/ui-test/run.sh smoke 'test_log.py::test_log_changes[1100-en-chromium]' -x
 UI_TEST_WORKERS=1 make ui-test                        # in one process
+KEEP=1 make ui-test                                   # the work directory kept
 PYTEST_ADDOPTS='test_parts_guard.py' make ui-test    # the parts' guard alone
 PYTEST_ADDOPTS='test_parts_guard.py -k rooms' make ui-test  # the guard of one region
 ```
@@ -76,7 +77,11 @@ A test's id carries its case: `1100-en`, `390-en`, `1100-de`, `390-de`,
 then the browser.
 
 pytest-playwright keeps a failed test's screenshot in `tools/ui-test/results/`,
-one directory per test (gitignored, emptied at the start of every run).
+one directory per test (gitignored).
+`run.sh` empties `results/` at the start of every run of the suite,
+so that what it holds is always the last run's,
+also of one that stopped before its first test,
+and a passing run leaves it empty (AP CleanRuns, D3-A).
 A run whose tests failed also keeps each set's `serve.log` and `fakecube.log`
 in `tools/ui-test/results/logs/set<n>/`, copied at its end, after the retry,
 so that they hold both passes,
@@ -109,6 +114,18 @@ in CI's UI jobs' logs too, so that a run shows where its time went;
 the retry lists none of its own.
 `python -m playwright show-trace <trace.zip>` replays a trace step by step,
 with the page's DOM, console and network at every step.
+
+The run's sets, its `massimo` and the servers' logs and stores
+are in its work directory,
+`massimo-ui-test.XXXXXX` under `TMPDIR` (`/tmp` where it is not set),
+which holds the run's PID in `pid` and goes at the run's end.
+A run that was killed, whose cleanup did not run, leaves its own behind;
+a later run removes each of the user's whose run is gone
+and that is older than a day,
+never one in use, so that another checkout's run keeps its own.
+`KEEP=1` keeps the run's work directory, passed or failed,
+with a file `kept` in it from the start, which the later runs leave alone,
+and prints its path; it is then removed by hand (AP CleanRuns, D4-A).
 
 ## The fixtures
 
