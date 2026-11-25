@@ -186,6 +186,47 @@ func TestPausedFromTheStart(t *testing.T) {
 	}
 }
 
+// A fake that never served closes without a panic and without an
+// error, paused or not: it has no listener to close.
+func TestCloseBeforeItServed(t *testing.T) {
+	t.Parallel()
+	for _, pause := range []bool{false, true} {
+		t.Run(map[bool]string{false: "not paused", true: "paused"}[pause], func(t *testing.T) {
+			t.Parallel()
+			srv := &Server{}
+			if pause {
+				srv.Pause()
+			}
+			if err := srv.Close(); err != nil {
+				t.Fatalf("Close: %v", err)
+			}
+		})
+	}
+}
+
+// A fake closed before it served, paused or not, closes the listener a
+// later Serve hands it at once: nothing takes a client on its port, and
+// no hold keeps the port from another listener.
+func TestServeAfterCloseServesNothing(t *testing.T) {
+	t.Parallel()
+	for _, pause := range []bool{false, true} {
+		t.Run(map[bool]string{false: "not paused", true: "paused"}[pause], func(t *testing.T) {
+			t.Parallel()
+			srv := &Server{}
+			if pause {
+				srv.Pause()
+			}
+			srv.Close()
+			addr := srv.Serve(testkit.Listen(t))
+			ln, err := net.Listen("tcp", addr)
+			if err != nil {
+				t.Fatalf("%s is still taken after a Serve on the closed fake: %v", addr, err)
+			}
+			ln.Close()
+		})
+	}
+}
+
 // wrapped is a listener holdPort does not know, so that a paused fake
 // keeps it open and resets what it accepts, as outside Linux, and
 // setBacklog cannot cut its backlog.
