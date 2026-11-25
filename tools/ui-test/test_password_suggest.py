@@ -394,6 +394,7 @@ def test_copy(page, case):
         page.evaluate("document.getElementById('copy-status').textContent = ''")
         copy.click()
         assert wait_until(page, "document.getElementById('copy-status').textContent === t('copy.done')", 3), "without the clipboard: said"
+        assert page.evaluate("document.activeElement === document.querySelector('.pw-suggest .pw-copy')"), "the focus stays on Copy"
     finally:
         page.evaluate("""() => Object.defineProperty(navigator, "clipboard", { value: window.__clip, configurable: true })""")
     assert page.evaluate("navigator.clipboard.readText()") == v, "the fallback copies"

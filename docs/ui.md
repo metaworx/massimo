@@ -1633,7 +1633,8 @@ what it was built with (the header's does too, without the icon);
 so do each Cube proxy's serial, the serial it answers discovery with ("as …",
 where it answers discovery) and its address, which the original software connects to.
 A copy says "Copied"; on a page served over plain HTTP the browser gives no
-clipboard to the page, and the copy goes through its copy command instead.
+clipboard to the page, and the copy goes through its copy command instead,
+the focus given back to where it was.
 At its end, for a holder of `settings`,
 **Store** opens to what `massimo store info` shows:
 the file, the schema version, the node and tenant and the rows per table,
