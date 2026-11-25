@@ -28,10 +28,11 @@
  * password, PasswordRule, says what the rule finds while it is typed
  * (D6-A). The first new password of each form that sets one has a dice
  * beside its eye that suggests one (D14-A to D19-A; shared/suggest.ts),
- * fills the form with it and shows it, and from then on offers Words or
- * Characters and Copy under the field. The sign-in, and the upgrade of a
- * version-1 user at its sign-in (login.js upgradePassword), hold no rule:
- * they take the password a user has.
+ * fills the form with it and shows it, in the field and whole in a line
+ * under it (D58-A), and from then on offers Words or Characters and Copy
+ * under the field. The sign-in, and the upgrade of a version-1 user at
+ * its sign-in (login.js upgradePassword), hold no rule: they take the
+ * password a user has.
  */
 
 import { signal } from "@preact/signals";
@@ -464,20 +465,34 @@ export function PasswordInput(props: One & {
  * so that the line and the caller's state follow, fills also (the form's
  * other field, which also.get reads), and shows it as text, eye or none,
  * while the field holds it: edited, emptied or changed by its form
- * (Reset, a save), or submitted, or at a new start (reset), it is a
- * password's field again. The line says that a password was suggested,
- * never which, written anew at each fill. From the first press on a row
- * under the line offers Words or Characters, which suggests one of that
- * kind and is kept in this browser, and while the field holds the
- * suggestion Copy, which copies it; a key never takes the row away, so
- * that nothing under the field moves while one types: it goes with a
- * value changed from outside (Reset, a save) and at a new start. It is
- * not there before, so that a form keeps its height until the dice is
- * used. A suggestion drawn while another press, a key in the field, a
- * submit, a change from outside, a new start or a sign-out came, or
- * after either field changed, fills nothing. The word list not had says
- * so in the line ("nolist"); any other failure, that no suggestion could
- * be made.
+ * (Reset, a save), or submitted, or the dialog it is in closed (the
+ * sign-in card's dismissal, which keeps the fields' values), or at a new
+ * start (reset), it is a password's field again. The rule's line says
+ * that a password was
+ * suggested, never which, written anew at each fill. While the field
+ * holds the suggestion, a line right under it shows the suggestion
+ * whole (AP PasswordRules, D58-A), which the field, narrower, shows a
+ * part of: in the body's font at 16 px, aria-hidden, since the field,
+ * text then, gives the value and the rule's line says that it was
+ * suggested, and a line read out inside the live regions of My profile
+ * and Users would speak the password; translate="no", so that a page's
+ * translation leaves its words alone (AP AccessEnds, D20-A to D22-A).
+ * From the first press on a row under the rule's line offers Words or
+ * Characters, which suggests one of that kind and is kept in this
+ * browser, and while the field holds the suggestion Copy, which copies
+ * it; the shown line keeps its place, two lines tall, from the first
+ * press on too, empty while the suggestion is not shown (AP AccessEnds,
+ * D19-A). A key never takes the row or that place away, so that nothing
+ * under the field moves between presses or while one types, but after
+ * the rarest draws at a phone's width, whose five words take a third
+ * line, which the first key gives back: they go with a value changed
+ * from outside (Reset, a save) and at a new start. They are not there
+ * before, so that a form keeps its height until the dice is used. A
+ * suggestion drawn while another press, a key in the field, a submit, a
+ * change from outside, the dialog's close, a new start or a sign-out
+ * came, or after either field changed, fills nothing. The word
+ * list not had says so in the line ("nolist"); any other failure, that
+ * no suggestion could be made.
  */
 export function PasswordField(props: One & {
   label: string;
@@ -538,6 +553,19 @@ export function PasswordField(props: One & {
     };
     form.addEventListener("submit", hide, true);
     return () => form.removeEventListener("submit", hide, true);
+  }, [suggest]);
+  // a suggestion shown ends as the dialog the field is in closes (the sign-in card's dismissal, which keeps what the
+  // fields hold), so that no line holds the password in a card nobody sees; one still drawn fills nothing after it
+  useEffect(() => {
+    const dialog = el.current?.closest("dialog");
+    if (!dialog || !suggest) return;
+    const watch = new MutationObserver(() => {
+      if (dialog.open) return;
+      turn.current++;
+      setFilled("");
+    });
+    watch.observe(dialog, { attributes: true, attributeFilter: ["open"] });
+    return () => watch.disconnect();
   }, [suggest]);
   // at each submit a field not controlled is read as it is, in the capture before the form's own handler, so that the
   // line says what the submit reads, also of a fill that sent no event
@@ -619,6 +647,11 @@ export function PasswordField(props: One & {
     <Field label={label} id={id} wide hint={hint} cls={cls}>
       <PasswordInput {...input} inputRef={bind} id={id} cls="field-control" describedBy={rule ? id + "-rule" : undefined} invalid={said}
         typed={rule ? key : undefined} suggest={dice} />
+      {dice && offered && (
+        // the suggestion whole while the field holds it, its place there from the first press with the row; translate
+        // false, the property, writes the attribute translate="no", where a string would turn it on
+        <p id={id + "-shown"} class="pw-shown" aria-hidden="true" translate={false}>{suggested ? filled : ""}</p>
+      )}
       {rule && <PasswordRule id={id + "-rule"} value={value} context={rule} refused={said} note={note || (suggested ? "suggested" : "")} fresh={fills} />}
       {dice && offered && (
         <div class="pw-suggest small">
@@ -655,7 +688,7 @@ type Pair =
  * submits the rule refused; suggest gives the first field its dice
  * (PasswordField's suggest), whose suggestion fills the second too: by
  * setAgain, or the field not controlled, by its element and an input
- * event.
+ * event; it shows whole under the first alone.
  */
 export function NewPassword(props: Pair & {
   ids: [string, string];

@@ -415,7 +415,11 @@ def test_keep_open_measures(new_context, case, watch, guard, app):
     page.locator("#keep-open-back").click()
     page.locator("#setup-form").wait_for(state="visible")
     dice_pressed(page)
+    before = page.evaluate(BOX)
     keep_step(page)
+    # the page at its start again, as the form was measured: Keep it open… is scrolled into view to be clicked
+    page.evaluate("scrollTo({ top: 0, behavior: 'instant' })")
+    same_box(page, before, "the confirmation after a press of the dice, of the form's height")
     placed("the confirmation after a press of the dice")
     if case.width == 390:
         each_language(page, case, "keepOpen.title", lambda lang: placed(f"the confirmation after a press in {lang}"))

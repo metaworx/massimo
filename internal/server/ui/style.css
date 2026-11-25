@@ -1660,9 +1660,10 @@ button.pw-eye:focus-visible { outline-offset: -2px; }
 button.pw-eye .ni { width: 20px; height: 20px; }
 /* a new password's dice (AP PasswordRules, D19-A): beside the eye, before
    it, or at the field's end where there is no eye; the text kept clear of
-   both, two buttons at 390 px leaving the field room for its words; and the
-   row under the rule's line that comes with the first press, Words or
-   Characters and Copy */
+   both, two buttons at 390 px leaving the field room for its words; the
+   line right under the field that shows the suggestion whole (D58-A), and
+   the row under the rule's line, Words or Characters and Copy, both coming
+   with the first press */
 .pw-box.has-dice > input { padding-right: 42px; }
 .pw-box.has-dice.has-eye > input { padding-right: 80px; }
 button.pw-dice { position: absolute; top: 2px; right: 2px; bottom: 2px; display: inline-flex; align-items: center; justify-content: center; width: 38px; padding: 0; border: 0; border-radius: 6px; background: none; color: var(--muted); }
@@ -1670,6 +1671,14 @@ button.pw-dice { position: absolute; top: 2px; right: 2px; bottom: 2px; display:
 button.pw-dice:hover, button.pw-dice:focus-visible { color: var(--accent); }
 button.pw-dice:focus-visible { outline-offset: -2px; }
 button.pw-dice .ni { width: 20px; height: 20px; }
+/* the suggestion whole (PasswordField): the field's whole width, the
+   body's font at 16 px, readable to copy by hand, broken after a "-", a
+   word too long for the line broken rather than past the field; its place
+   two lines tall, held while it is empty, so that nothing under it moves
+   between presses or while one types (AP AccessEnds, D19-A, D21-A), but
+   after the rarest draws at a phone's width, whose five words take a
+   third line, which the first key gives back */
+.pw-shown { flex-basis: 100%; min-width: 0; min-height: calc(2em * 1.45); margin: 2px 0 0; font-size: 1rem; line-height: 1.45; overflow-wrap: anywhere; }
 .pw-suggest { display: flex; flex-basis: 100%; flex-wrap: wrap; align-items: center; gap: 4px 16px; margin-top: 4px; }
 .pw-suggest .checks.one label { flex-direction: row; margin: 0; font-weight: inherit; }
 .pw-suggest .pw-copy { margin-left: auto; color: var(--accent); }
