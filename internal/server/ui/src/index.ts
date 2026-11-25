@@ -46,6 +46,7 @@ import { forgetForms } from "./shared/forms";
 import { languageChanged } from "./shared/lang";
 import { pagesPart } from "./shared/pages";
 import { iconsChanged } from "./shared/look";
+import { closePopups } from "./shared/popup";
 import { parts, register } from "./shared/region";
 import { forgetRepairs } from "./shared/repair";
 import { hostWord, passwordProblem } from "./shared/password";
@@ -62,8 +63,10 @@ export interface MassimoParts {
   minute(): void;
   /**
    * A sign-out, or another user's sign-in after a 401 (login.js
-   * forgetSession): every form's drafts and marks forgotten
-   * (shared/forms.ts), every box of repairs (shared/repair.tsx), and
+   * forgetSession): the open popup closed, a tip or a room's SET list
+   * with what is typed in it (shared/popup.ts), every form's drafts and
+   * marks forgotten (shared/forms.ts), every box of repairs
+   * (shared/repair.tsx), and
    * every Cube's pairing and rooms (cubes/), and System settings' lists
    * with what is typed in their new items' forms (admin/) and the
    * integrations with the readings of an approval (integrations/), and
@@ -147,6 +150,7 @@ register("session", session);
 register("stillSession", stillSession);
 register("signedOut", () => {
   newSession(); // first: an answer still on its way for the user who was is dropped
+  closePopups();
   forgetForms("");
   forgetRepairs();
   cubesSignedOut();

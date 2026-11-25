@@ -23,7 +23,12 @@ the House tile waits for them to show it, a write of theirs is pending
 or a window of the room is open, and goes once they agree. The
 setpoint row fits its tile in every language (AP RoomsPage v1.0,
 Block 3), its short labels whole, and a tap on IS or SET shows the full
-term in a tip (Block 4).
+term in a tip (Block 4). A chevron under SET's ° opens a list of the
+room's temperatures, OFF and every half degree up to its highest, and
+a field, whose choice or typed value is sent as the stepper sends it,
+the value set already not sent again, a value outside the list refused
+on the field; the list stays inside the window, upward where the room
+below is short (Block 6).
 
 The states come from state events applied in the page (updateDevice);
 every write is held at its route and answered with a stub, so nothing
@@ -857,6 +862,540 @@ def test_an_open_tip_lies_over_the_modes_row(page, case):
         page.keyboard.press("Escape")
         page.evaluate("(k) => { I18N[i18n.lang][k] = window.__term; delete window.__term; }", "room.setTemp")
         page.evaluate(SET, [room["id"], {room["devices"][0]["rf"]: {"setpoint": 20}}])
+
+
+# SET's chevron and list (AP RoomsPage v1.0, Block 6, D4-A, D5-A). The
+# first room of the fake Cube's whose highest setpoint is max, or the
+# last where last is given, its id: the recorded greeting has rooms with
+# 23 and with 30.5 (ON), each with 4.5 (OFF) its lowest.
+ROOM_OF_MAX = """([m, last]) => {
+  const rs = state.rooms.filter((r) => r.max_setpoint === m && r.devices.some((d) => isThermostat(d) && d.reported));
+  return rs[last ? rs.length - 1 : 0].id;
+}"""
+
+# The words of SET's chevron, and what its field takes for a room
+# whose highest setpoint is 23 °C, and for one whose highest is 30.5 °C.
+CHOOSE = {"en": "Choose the set temperature", "de": "Solltemperatur wählen"}
+RANGE_23 = {"en": "only OFF or 5.0 to 23.0 °C", "de": "nur OFF oder 5,0 bis 23,0 °C"}
+RANGE_30 = {"en": "only OFF or 5.0 to 30.0 °C", "de": "nur OFF oder 5,0 bis 30,0 °C"}
+
+# SET's chevron in a tile: the box of its icon, of the value's last
+# sign (the °, a letter of OFF), of the text before it, of the value and
+# of the setpoint row; the value's text, the last sign, the chevron's
+# name and whether it is shown.
+CHEVRON = """(s) => {
+  const big = document.querySelector(s + ' .setpoint-big'), last = big.querySelector('.set-last'), b = big.querySelector('.set-open');
+  const rect = (r) => ({ l: r.left, r: r.right, t: r.top, b: r.bottom });
+  const g = document.createRange();
+  g.selectNodeContents(last.firstChild);
+  const sign = rect(g.getBoundingClientRect());
+  g.selectNodeContents(big.firstChild);
+  return { icon: rect(b.querySelector('svg').getBoundingClientRect()), sign, head: rect(g.getBoundingClientRect()),
+    value: rect(big.getBoundingClientRect()), row: rect(document.querySelector(s + ' .setpoint-row').getBoundingClientRect()),
+    text: big.innerText, last: last.firstChild.textContent, name: b.getAttribute('aria-label'), shown: getComputedStyle(b).display !== 'none' };
+}"""
+
+# SET's chevron and list in a tile: the chevron's state, whether it has
+# the focus; the list shown, its entries' texts, the marks of those
+# marked by their values, the entry marked current, whether it is in the
+# entries' view; where the focus is in the list (an entry's value, or
+# the field), what the field holds, the keypad it asks for, whether it
+# is marked as refused, its message and whether it names it; the list's
+# box, the value's top, the window's width and height, the bottom of the
+# page's header pinned at the window's top, whether the field is what
+# lies at its own middle (not under the header), the entries' height,
+# the page's height and scroll. The chevron is off where it says so
+# (aria-disabled), as it keeps the focus while a write runs.
+LIST = """(s) => {
+  const tile = document.querySelector(s), b = tile.querySelector('.set-open'), pop = tile.querySelector('.set-pop');
+  const items = pop.querySelector('.set-items'), field = pop.querySelector('.set-field'), msg = pop.querySelector('.set-msg');
+  const entries = items ? [...items.querySelectorAll('.set-item')] : [];
+  const cur = entries.find((e) => e.getAttribute('aria-current') === 'true');
+  const a = document.activeElement, r = pop.getBoundingClientRect();
+  const inView = (e) => { const ir = items.getBoundingClientRect(), er = e.getBoundingClientRect(); return er.top >= ir.top - 0.5 && er.bottom <= ir.bottom + 0.5; };
+  return {
+    shown: getComputedStyle(pop).display !== 'none', expanded: b.getAttribute('aria-expanded'), btnFocus: a === b,
+    disabled: b.disabled || b.getAttribute('aria-disabled') === 'true',
+    entries: entries.map((e) => e.textContent),
+    marks: Object.fromEntries(entries.filter((e) => e.querySelector('.preset-mark')).map((e) => [e.dataset.value,
+      [...e.querySelector('.preset-mark').classList].find((c) => c.startsWith('preset-') && c !== 'preset-mark').slice(7)])),
+    current: cur ? cur.dataset.value : null, inView: !!cur && inView(cur),
+    focus: pop.contains(a) ? (a === field ? 'field' : a.dataset.value) : null, focusInView: pop.contains(a) && a !== field && inView(a),
+    field: field ? field.value : null, mode: field ? field.inputMode : null, invalid: field ? field.getAttribute('aria-invalid') : null,
+    message: msg ? msg.textContent : null,
+    described: !!field && !!msg && field.getAttribute('aria-describedby') === msg.id,
+    box: { l: r.left, r: r.right, t: r.top, b: r.bottom }, valueTop: tile.querySelector('.setpoint-big').getBoundingClientRect().top,
+    vw: document.documentElement.clientWidth, vh: innerHeight, h: document.documentElement.scrollHeight, y: scrollY,
+    pinned: Math.max(0, document.querySelector('header.top').getBoundingClientRect().bottom),
+    fieldSeen: !!field && (() => { const f = field.getBoundingClientRect(); return document.elementFromPoint((f.left + f.right) / 2, (f.top + f.bottom) / 2) === field; })(),
+    itemsH: items ? items.getBoundingClientRect().height : 0,
+  };
+}"""
+
+# What SET's open list in a tile overlaps: each control of the tiles
+# outside the list (a button or a menu's summary) whose box meets the
+# list's within the window, whether it is of the tile's modes' row or of
+# another tile, and whether the list is what lies at the middle of the
+# overlap (elementFromPoint); and the setpoint row's z-index.
+COVER = """(s) => {
+  const tile = document.querySelector(s), pop = tile.querySelector('.set-pop'), b = pop.getBoundingClientRect();
+  const overlaps = [];
+  for (const c of document.querySelectorAll('.tile button, .tile summary')) {
+    if (pop.contains(c)) continue;
+    const r = c.getBoundingClientRect();
+    const l = Math.max(b.left, r.left) + 1, rt = Math.min(b.right, r.right) - 1;
+    const tp = Math.max(b.top, r.top) + 1, bt = Math.min(b.bottom, r.bottom, innerHeight) - 1;
+    if (r.width === 0 || l >= rt || tp >= bt) continue;
+    const e = document.elementFromPoint((l + rt) / 2, (tp + bt) / 2);
+    overlaps.push({ what: c.className, modes: tile.contains(c) && !!c.closest('.mode-row'), other: !tile.contains(c), top: !!e && pop.contains(e) });
+  }
+  return { z: getComputedStyle(tile.querySelector('.setpoint-row')).zIndex, overlaps };
+}"""
+
+
+def set_list(page, sel):
+    """SET's chevron and list in the tile sel, as LIST reads them."""
+    return page.evaluate(LIST, sel)
+
+
+def armed(sel):
+    """An expression true while SET's chevron in the tile sel is on."""
+    return "document.querySelector(%r).getAttribute('aria-disabled') !== 'true'" % (sel + " .set-open")
+
+
+def inside_window(m):
+    """Whether SET's list, as LIST reads it, lies in the window: 16 px or
+    more within its sides, its top 16 px or more under the page's header
+    pinned there, its field seen (not under the header), and its bottom
+    16 px or more above the window's, but where its entries are at their
+    least, 160 px, in a window where the room above and below is short."""
+    b = m["box"]
+    return (b["l"] >= 16 - 0.5 and b["r"] <= m["vw"] - 16 + 0.5 and b["t"] >= max(16, m["pinned"] + 16) - 0.5 and m["fieldSeen"]
+            and (b["b"] <= m["vh"] - 16 + 0.5 or abs(m["itemsH"] - 160) < 1))
+
+
+def set_room(page, lang, max_setpoint, setpoint, eco=17, comfort=21, last=False):
+    """The first room of the highest setpoint given, or the last, at
+    setpoint, its presets eco and comfort, in the page: its id, its tile's
+    selector and the tile."""
+    rid = page.evaluate(ROOM_OF_MAX, [max_setpoint, last])
+    room = page.evaluate(ROOM, [rid, False])
+    page.evaluate(SET, [rid, {d["rf"]: {"setpoint": setpoint, "eco": eco, "comfort": comfort} for d in room["devices"]}])
+    page.evaluate(PRESETS, [rid, eco, comfort])
+    sel = '.room[data-id="%s"]' % rid
+    assert wait_until(page, "document.querySelector(%r).textContent === %r" % (sel + " .setpoint-big", shown(setpoint, lang, "°")), 5), \
+        f"the room shows {setpoint}"
+    return rid, sel, page.locator(sel)
+
+
+def test_sets_chevron_stands_under_the_degree(page, case):
+    """SET's chevron (AP RoomsPage v1.0, Block 6) is a button named in
+    the page's language under the value's last sign, centred on the °,
+    not under the number before it, between the value and the setpoint
+    row's end; at OFF under its last letter; the value's text stays
+    "20.5°"; hidden for a user who may not set a temperature."""
+    rid, sel, tile = set_room(page, case.lang, 23, 20.5)
+    for sp, last in ((20.5, "°"), (4.5, "F")):
+        page.evaluate(SET, [rid, {d["rf"]: {"setpoint": sp} for d in page.evaluate(ROOM, [rid, False])["devices"]}])
+        assert wait_until(page, "document.querySelector(%r).textContent === %r" % (sel + " .setpoint-big", shown(sp, case.lang, "°")), 5), f"{sp} shown"
+        m = page.evaluate(CHEVRON, sel)
+        assert m["shown"] and m["name"] == CHOOSE[case.lang], f"{sp}: the chevron is a button named {CHOOSE[case.lang]!r}: {m}"
+        assert m["text"] == shown(sp, case.lang, "°") and m["last"] == last, f"{sp}: the value's text as before, {last!r} its last sign: {m}"
+        centre, sign = (m["icon"]["l"] + m["icon"]["r"]) / 2, (m["sign"]["l"] + m["sign"]["r"]) / 2
+        assert abs(centre - sign) <= 1.5, f"{sp}: the chevron centred under {last!r}: {centre:.1f}, {sign:.1f}"
+        assert centre > m["head"]["r"], f"{sp}: the chevron right of the number before {last!r}: {centre:.1f}, {m['head']}"
+        assert m["icon"]["t"] >= m["value"]["b"] - 0.5 and m["icon"]["b"] <= m["row"]["b"] + 0.5, \
+            f"{sp}: the chevron under the value, within the setpoint row: {m}"
+    page.evaluate("document.body.classList.add('no-setpoint')")
+    try:
+        assert not page.evaluate(CHEVRON, sel)["shown"], "no chevron for a user who may not set a temperature"
+    finally:
+        page.evaluate("document.body.classList.remove('no-setpoint')")
+
+
+def test_sets_list_runs_from_off_to_the_highest(page, case):
+    """A click on SET's chevron opens its list without moving the page: a
+    field holding the value shown in the page's language, then OFF once,
+    every half degree from 5.0 to the room's highest setpoint, 23.0 °C
+    or, where the highest is 30.5 °C (ON), 30.0 °C, without ON; the eco
+    temperature marked with the moon, the comfort temperature with the
+    sun; the value shown marked, in the list's view and with the focus;
+    the chevron says it is open. A value the list has not got, ON, is
+    marked nowhere. The list lies inside the window, 16 px from each of
+    its edges and under the page's header pinned at its top, its field
+    seen, in windows under 700 px tall and in expert mode, whose header is
+    taller, too; where the room above and below is short, it opens
+    downward, its entries at 160 px at least. The page does not grow:
+    with the chevron near the window's bottom, the list opens upward, over
+    the value; in the middle and at the page's end too."""
+    size = page.viewport_size
+    try:
+        # (where the chevron is, the room's highest, its setpoint, the last
+        # room of that highest, the window's height with the room's device
+        # list open for a longer page, or None for the page's end in the
+        # window as it is; expert mode, whose header is taller; and where
+        # the chevron's bottom is put, from the window's top, or from its
+        # bottom where negative)
+        for where, most, sp, last, height, expert, at in (
+                ("80 px from the bottom", 23, 20.5, True, 560, False, -80),
+                ("260 px from the top", 30.5, 22, False, 560, False, 260),
+                ("80 px from the bottom", 30.5, 30.5, True, 560, False, -80),
+                ("370 px from the top of a 600 px window", 23, 20.5, True, 600, False, 370),
+                ("370 px from the top of a 680 px window, expert mode", 30.5, 22, True, 680, True, 370),
+                ("at the page's end", 30.5, 21, True, None, False, None)):
+            rid, sel, tile = set_room(page, case.lang, most, sp, last=last)
+            page.evaluate("(on) => { state.settings.expert = on; applySettings(); }", expert)
+            if height:
+                page.set_viewport_size({"width": size["width"], "height": height})
+                tile.locator(".room-name-btn").click()
+                want_at = at if at > 0 else height + at
+                for _ in range(2):  # the header compacts once scrolled: once more where it moved the chevron
+                    y = page.evaluate("(s) => scrollY + document.querySelector(s).getBoundingClientRect().bottom", sel + " .set-open")
+                    page.evaluate("(y) => window.scrollTo(0, y)", y - want_at)
+                    page.wait_for_timeout(100)
+                got_at = page.evaluate("(s) => document.querySelector(s).getBoundingClientRect().bottom", sel + " .set-open")
+                assert abs(got_at - want_at) <= 10, f"{where}: the chevron's bottom at {got_at:.0f} px"
+            else:
+                page.evaluate("window.scrollTo(0, document.documentElement.scrollHeight)")
+            before, height_before = page.evaluate("[scrollY, document.documentElement.scrollHeight]")
+            tile.locator(".set-open").click()
+            m = set_list(page, sel)
+            assert m["shown"] and m["expanded"] == "true", f"{where}: the list opens: {m}"
+            assert m["y"] == before, f"{where}: the page stays where it was: {m['y']}, {before}"
+            want = ["OFF"] + [num(v / 2, case.lang) + "°" for v in range(10, int(min(most, 30) * 2) + 1)]
+            assert m["entries"] == want, f"OFF, then 5.0 to {min(most, 30)}: {m['entries']}"
+            assert m["entries"].count("OFF") == 1 and not any(e.startswith(num(30.5, case.lang)) for e in m["entries"]), "OFF once, no ON"
+            assert m["marks"] == {"17": "eco", "21": "comfort"}, f"the presets' marks: {m['marks']}"
+            if sp == 30.5:
+                assert m["current"] is None, f"ON is in no entry: {m}"
+                assert m["focus"] == "30" and m["focusInView"], f"the focus on the nearest entry, in view: {m}"
+            else:
+                assert m["current"] == "%g" % sp and m["inView"] and m["focus"] == "%g" % sp, f"{sp} marked, in view, the focus on it: {m}"
+            assert m["field"] == shown(sp, case.lang, "") and m["mode"] == "decimal", f"the field holds {sp}, a decimal keypad's: {m}"
+            assert inside_window(m), f"{where}: the list inside the window, 16 px from its edges: {m['box']}, {m['vw']} × {m['vh']}"
+            assert m["h"] == height_before, f"{where}: the page does not grow: {m['h']}, {height_before}"
+            if where.endswith("bottom"):
+                assert m["box"]["b"] <= m["valueTop"] + 0.5, f"{where}: the list opens upward, over the value: {m['box']}, {m['valueTop']}"
+            page.keyboard.press("Escape")
+            assert not set_list(page, sel)["shown"], "Escape closes it"
+            assert page.evaluate("[scrollY, document.documentElement.scrollHeight]") == [before, height_before], f"{where}: the page as it was once closed"
+            if height:
+                tile.locator(".room-name-btn").click()
+            page.evaluate("() => { state.settings.expert = false; applySettings(); }")
+            page.set_viewport_size(size)
+        # in the narrowest window, kept inside it
+        page.set_viewport_size({"width": 320, "height": size["height"]})
+        tile.locator(".set-open").click()
+        m = set_list(page, sel)
+        assert m["shown"] and inside_window(m), f"at 320 px the list inside the window: {m['box']}, {m['vw']} × {m['vh']}"
+    finally:
+        page.keyboard.press("Escape")
+        page.set_viewport_size(size)
+
+
+def test_a_choice_or_a_typed_value_sends_the_setpoint(page, case):
+    """A choice in SET's list, and a value typed into its field with a
+    comma or a point and Enter, close the list and send the room's
+    setpoint as the stepper sends it, manual at that temperature: Save
+    turns until the answer, the value shown meanwhile, the chevron off but
+    keeping the focus; a typed value is rounded to the half degree, 4.6 to
+    4.5, OFF."""
+    rid, sel, tile = set_room(page, case.lang, 23, 20.5)
+    held, sent = [], []
+    hold(page, PUT, "PUT", held, sent)
+    try:
+        tile.locator(".set-open").click()
+        tile.locator(".set-item[data-value='22']").click()
+        assert wait_held(page, held), "the choice sends the room's setpoint"
+        assert sent[-1] == {"mode": "manual", "temp": 22}, f"the stepper's body: {sent}"
+        m = set_list(page, sel)
+        assert not m["shown"] and m["disabled"] and m["btnFocus"], f"the list closed, the chevron off while it is sent, the focus on it: {m}"
+        assert busy_state(page, sel + " .pending-save") == [True, True, "true"], "Save turns"
+        assert tile.locator(".setpoint-big.pending").inner_text() == num(22, case.lang) + "°", "the value chosen shown"
+        answer_all(page, held, '{"ok": true, "devices": []}')
+        for typed, temp in (("21,5", 21.5), ("19.5", 19.5), ("4,6", 4.5)):
+            assert wait_until(page, armed(sel), 5), "the chevron is back once answered"
+            tile.locator(".set-open").click()
+            field = tile.locator(".set-field")
+            field.fill(typed)
+            field.press("Enter")
+            assert wait_held(page, held), f"{typed} and Enter send"
+            assert sent[-1] == {"mode": "manual", "temp": temp}, f"{typed} sends {temp}: {sent}"
+            assert not set_list(page, sel)["shown"], "the list closed"
+            answer_all(page, held, '{"ok": true, "devices": []}')
+        page.wait_for_timeout(300)
+        assert len(sent) == 4, f"one PUT each: {sent}"
+    finally:
+        answer_all(page, held, '{"ok": true, "devices": []}')
+        page.unroute(PUT)
+        page.keyboard.press("Escape")
+
+
+def test_the_value_set_already_sends_nothing(page, case):
+    """A choice of the value every thermostat of the room shows already
+    in manual mode, a tap on the marked entry, Enter in the field as it
+    opened, or the value typed again, closes the list and sends nothing,
+    sparing the radio's duty cycle, the focus on the chevron; a stepped
+    value waiting is dropped then, and not sent either. The same value is
+    sent where the room is in auto or boost, where its thermostats
+    differ, and where a write of the room's setpoint is not confirmed by
+    its thermostats (unconfirmed after its deadline)."""
+    rid, sel, tile = set_room(page, case.lang, 23, 20.5)
+    rfs = [d["rf"] for d in page.evaluate(ROOM, [rid, True])["devices"]]  # two thermostats at least, a twin where it has one
+    held, sent = [], []
+    hold(page, PUT, "PUT", held, sent)
+    try:
+        for how in ("the marked entry", "Enter in the field", "the value typed again"):
+            tile.locator(".set-open").click()
+            if how == "the marked entry":
+                tile.locator(".set-item[data-value='20.5']").click()
+            else:
+                field = tile.locator(".set-field")
+                if how == "the value typed again":
+                    field.fill(num(20.5, case.lang))
+                field.press("Enter")
+            page.wait_for_timeout(300)
+            assert sent == [], f"{how}: nothing sent: {sent}"
+            m = set_list(page, sel)
+            assert not m["shown"] and m["btnFocus"], f"{how}: the list closed, the focus on the chevron: {m}"
+        for how, states in (("in auto", {rf: {"setpoint": 20.5, "mode": "auto"} for rf in rfs}),
+                            ("in boost", {rf: {"setpoint": 20.5, "mode": "boost"} for rf in rfs}),
+                            ("the thermostats differing", {rfs[0]: {"setpoint": 20.5}, rfs[1]: {"setpoint": 21}}),
+                            ("a write not confirmed", {rf: {"setpoint": 20.5, "confirmation": {"state": "unconfirmed", "fields": ["setpoint"]}} for rf in rfs})):
+            # the room's thermostats at 20.5 in manual first, which ends the
+            # wait of the write before (awaitMembers), then the case's states
+            page.evaluate(SET, [rid, {rf: {"setpoint": 20.5, "confirmation": None} for rf in rfs}])
+            assert wait_until(page, "!roomUI(state.rooms.find((r) => r.id === %d)).awaiting" % rid, 5), "no write waits"
+            page.evaluate(SET, [rid, states])
+            assert wait_until(page, armed(sel), 5), "the chevron is on"
+            tile.locator(".set-open").click()
+            tile.locator(".set-item[data-value='20.5']").click()
+            assert wait_held(page, held), f"{how}: 20.5 is sent"
+            assert sent[-1] == {"mode": "manual", "temp": 20.5}, f"{how}: the stepper's body: {sent}"
+            answer_all(page, held, '{"ok": true, "devices": []}')
+        # a stepped value waiting, the value held chosen: the stepped value
+        # dropped, nothing sent, also when its time would have come
+        page.evaluate(SET, [rid, {rf: {"setpoint": 20.5, "confirmation": None} for rf in rfs}])
+        assert wait_until(page, "!roomUI(state.rooms.find((r) => r.id === %d)).awaiting" % rid, 5), "no write waits"
+        tile.hover()
+        tile.locator(".step-plus").click()
+        assert tile.locator(".pending-row").is_visible(), "a stepped value waits"
+        tile.locator(".set-open").click()
+        tile.locator(".set-item[data-value='20.5']").click()
+        assert wait_until(page, "document.querySelector(%r).classList.contains('hidden')" % (sel + " .pending-row"), 5), "the stepped value dropped"
+        assert page.evaluate("(rid) => { const u = roomUI(state.rooms.find((r) => r.id === rid)); return u.pending === null && !u.timer; }", rid), \
+            "no stepped value, no timer"
+        page.wait_for_timeout(2500)  # the stepper's own timer would have sent by now
+        assert len(sent) == 4, f"one PUT for each case that sends, none for the stepped value dropped: {sent}"
+    finally:
+        answer_all(page, held, '{"ok": true, "devices": []}')
+        page.unroute(PUT)
+        page.keyboard.press("Escape")
+
+
+def test_a_value_outside_the_list_is_marked_and_not_sent(page, case):
+    """A value typed into SET's field that the list has not got, above
+    the room's highest, under 5 °C but OFF, ON, or no number, is marked
+    on the field (aria-invalid, a message that names what it takes,
+    described by it) and not sent, the list staying open; typing again
+    clears the mark. What is typed stays through a state event, whose
+    setpoint the list then marks."""
+    rid, sel, tile = set_room(page, case.lang, 23, 20.5)
+    held, sent = [], []
+    hold(page, PUT, "PUT", held, sent)
+    try:
+        tile.locator(".set-open").click()
+        field = tile.locator(".set-field")
+        for typed in ("23,5", "4", "abc", "30.5"):
+            field.fill(typed)
+            field.press("Enter")
+            m = set_list(page, sel)
+            assert m["shown"] and m["invalid"] == "true" and m["message"] == RANGE_23[case.lang] and m["described"], f"{typed} is marked: {m}"
+            field.press("Backspace")
+            m = set_list(page, sel)
+            assert m["invalid"] is None and m["message"] == "" and not m["described"], f"typing clears the mark: {m}"
+        field.fill("22")
+        page.evaluate(SET, [rid, {d["rf"]: {"setpoint": 19} for d in page.evaluate(ROOM, [rid, False])["devices"]}])
+        assert wait_until(page, "document.querySelector(%r)?.getAttribute('aria-current') === 'true'" % (sel + " .set-item[data-value='19']"), 5), \
+            "the list marks the setpoint a state event brings"
+        assert set_list(page, sel)["field"] == "22", "what is typed stays"
+        page.keyboard.press("Escape")
+        # ON, where the room's highest is 30.5 °C: not in the list, refused
+        rid, sel, tile = set_room(page, case.lang, 30.5, 20.5)
+        tile.locator(".set-open").click()
+        tile.locator(".set-field").fill("30,5")
+        tile.locator(".set-field").press("Enter")
+        m = set_list(page, sel)
+        assert m["shown"] and m["invalid"] == "true" and m["message"] == RANGE_30[case.lang], f"ON is marked: {m}"
+        page.wait_for_timeout(300)
+        assert sent == [], f"nothing sent: {sent}"
+    finally:
+        answer_all(page, held, '{"ok": true, "devices": []}')
+        page.unroute(PUT)
+        page.keyboard.press("Escape")
+
+
+def test_escape_closes_the_list_alone(page, case):
+    """An Escape while SET's list is open closes the list and nothing
+    else, the focus back on the chevron, from an entry and from the
+    field: the room's holiday form, open with a temperature typed into
+    it, stays open with the temperature; a click outside the list closes
+    it too."""
+    rid, sel, tile = set_room(page, case.lang, 23, 20.5)
+    form = sel + " .vacation-panel"
+    try:
+        tile.locator(".more-sum").click()
+        tile.locator(".menu-holiday").click()
+        temp = tile.locator(".vacation-temp")
+        temp.click()
+        temp.press("Control+a")
+        page.keyboard.type("23.5")
+        for where in ("entry", "field"):
+            tile.locator(".set-open").click()
+            if where == "field":
+                tile.locator(".set-field").click()
+            assert set_list(page, sel)["focus"] == ("20.5" if where == "entry" else "field"), f"the focus in the list's {where}"
+            page.keyboard.press("Escape")
+            m = set_list(page, sel)
+            assert not m["shown"] and m["expanded"] == "false" and m["btnFocus"], f"Escape from the {where} closes the list, the focus on the chevron: {m}"
+            assert page.evaluate("(s) => !document.querySelector(s).classList.contains('hidden')", form), "the holiday form stays open"
+            assert temp.input_value() == "23.5", f"with the temperature typed: {temp.input_value()!r}"
+        tile.locator(".set-open").click()
+        tile.locator(".temp-is").click()
+        assert not set_list(page, sel)["shown"], "a click outside closes it"
+        page.keyboard.press("Escape")
+        assert page.evaluate("(s) => document.querySelector(s).classList.contains('hidden')", form), "the next Escape closes the form"
+    finally:
+        page.keyboard.press("Escape")
+
+
+def test_sets_list_by_keyboard(page, case):
+    """Tab reaches SET's chevron after SET's tip; Enter opens the list,
+    the focus on the value shown; the arrow keys move between the
+    entries, Home and End to the first and the last, each in the list's
+    view and the page not moving, also where the page was scrolled under
+    the open list so that its end lies below the window's bottom; up from
+    OFF is the field, down from it the value shown. Enter on an entry
+    sends it, the focus staying on the chevron, which does nothing while
+    the write runs; Space opens the list again; Tab out of it closes it;
+    Escape closes it, the focus back on the chevron."""
+    size = page.viewport_size
+    rid, sel, tile = set_room(page, case.lang, 23, 20.5, last=True)
+    held, sent = [], []
+    hold(page, PUT, "PUT", held, sent)
+    try:
+        # the page longer than the window, the chevron 200 px from its top:
+        # the list opens downward to near the window's bottom
+        page.set_viewport_size({"width": size["width"], "height": 520})
+        tile.locator(".room-name-btn").click()
+        y = page.evaluate("(s) => { const b = document.querySelector(s).getBoundingClientRect(); return scrollY + b.bottom; }", sel + " .set-open")
+        page.evaluate("(y) => window.scrollTo(0, y)", y - 200)
+        tile.locator(".setpoint-row .tip > button").nth(1).focus()
+        page.keyboard.press("Tab")
+        assert set_list(page, sel)["btnFocus"], "Tab reaches the chevron after SET's tip"
+        y = page.evaluate("scrollY")
+        page.keyboard.press("Enter")
+        m = set_list(page, sel)
+        assert m["shown"] and m["focus"] == "20.5" and m["y"] == y, f"Enter opens it, the focus on the value shown, the page still: {m}"
+        page.evaluate("window.scrollBy(0, -150)")
+        y = page.evaluate("scrollY")
+        assert set_list(page, sel)["box"]["b"] > m["vh"], "the page scrolled under the open list, its end below the window's bottom"
+        for key, want in (("ArrowDown", "21"), ("ArrowDown", "21.5"), ("ArrowUp", "21"), ("End", "23"), ("Home", "4.5"), ("ArrowUp", "field"),
+                          ("ArrowDown", "20.5"), ("ArrowUp", "20"), ("ArrowDown", "20.5"), ("End", "23"), ("ArrowUp", "22.5"), ("ArrowUp", "22"),
+                          ("ArrowUp", "21.5"), ("ArrowUp", "21")):
+            page.keyboard.press(key)
+            m = set_list(page, sel)
+            assert m["focus"] == want and (want == "field" or m["focusInView"]), f"{key} goes to {want}, in the list's view: {m}"
+            assert m["y"] == y, f"{key}: the page stays where it was: {m['y']}, {y}"
+        page.keyboard.press("Enter")
+        assert wait_held(page, held), "Enter on an entry sends it"
+        assert sent == [{"mode": "manual", "temp": 21}], f"21 sent: {sent}"
+        m = set_list(page, sel)
+        assert not m["shown"] and m["disabled"] and m["btnFocus"], f"the list closed, the chevron off with the focus on it: {m}"
+        page.keyboard.press("Enter")
+        assert not set_list(page, sel)["shown"], "the chevron does nothing while the write runs"
+        answer_all(page, held, '{"ok": true, "devices": []}')
+        assert wait_until(page, armed(sel), 5), "the chevron is back once answered"
+        assert set_list(page, sel)["btnFocus"], "the focus still on the chevron"
+        page.keyboard.press("Space")
+        assert set_list(page, sel)["shown"], "Space opens it"
+        page.keyboard.press("Tab")
+        assert not set_list(page, sel)["shown"], "Tab out of the list closes it"
+        tile.locator(".set-open").focus()
+        page.keyboard.press("Enter")
+        assert set_list(page, sel)["shown"], "Enter opens it again"
+        page.keyboard.press("Escape")
+        m = set_list(page, sel)
+        assert not m["shown"] and m["btnFocus"], f"Escape closes it, the focus on the chevron: {m}"
+    finally:
+        answer_all(page, held, '{"ok": true, "devices": []}')
+        page.unroute(PUT)
+        page.keyboard.press("Escape")
+        page.set_viewport_size(size)
+
+
+def test_one_list_open_on_top_of_the_page(page, case):
+    """One list is open at a time, and one with the page's menus and
+    tips: a menu (⋯) or a tip that opens closes it, and it closes an open
+    menu (More) or tip as it opens, and another tile's list; open, the setpoint
+    row is a layer of its own, so that the list lies over the tile's
+    modes' row and over the next tile wherever it overlaps them; closed,
+    the row is none."""
+    rid, sel, tile = set_room(page, case.lang, 23, 20.5)
+    other = '.room[data-id="%s"]' % page.evaluate(ROOM_OF_MAX, [30.5, False])
+    dots = tile.locator(".tile-head > details.menu")
+    more = tile.locator("details.more-menu")
+    # the tile near the window's top, so that the list opens downward,
+    # leaving the tile's head and the IS tip free
+    page.evaluate("(s) => window.scrollTo(0, scrollY + document.querySelector(s).getBoundingClientRect().top - 80)", sel)
+    try:
+        tile.locator(".set-open").click()
+        dots.locator("summary").click()
+        assert dots.get_attribute("open") is not None and not set_list(page, sel)["shown"], "⋯ opening closes the list"
+        page.keyboard.press("Escape")
+        tile.locator(".more-sum").click()
+        assert more.get_attribute("open") is not None, "More opens"
+        tile.locator(".set-open").click()
+        assert more.get_attribute("open") is None and set_list(page, sel)["shown"], "the list opening closes More"
+        tile.locator(".setpoint-row .tip > button").first.click()
+        assert not set_list(page, sel)["shown"], "a tip opening closes the list"
+        tile.locator(".set-open").click()
+        assert tile.locator(".setpoint-row .tip > button").first.get_attribute("aria-expanded") == "false", "the list opening closes the tip"
+        page.locator(other + " .set-open").click()
+        assert set_list(page, other)["shown"] and not set_list(page, sel)["shown"], "another tile's list closes the first"
+        page.keyboard.press("Escape")
+        assert tile.locator(".setpoint-row").evaluate("(r) => getComputedStyle(r).zIndex") == "auto", "no layer while the list is closed"
+        page.evaluate("(s) => window.scrollTo(0, scrollY + document.querySelector(s).getBoundingClientRect().top - 80)", sel)
+        tile.locator(".set-open").click()
+        m = page.evaluate(COVER, sel)
+        assert m["z"] != "auto", f"the setpoint row a layer of its own while the list is open: {m['z']}"
+        assert any(o["modes"] for o in m["overlaps"]) and any(o["other"] for o in m["overlaps"]), \
+            f"the list overlaps the modes' row and the next tile: {m}"
+        assert all(o["top"] for o in m["overlaps"]), f"the list lies over them: {m}"
+    finally:
+        page.keyboard.press("Escape")
+
+
+def test_a_sign_out_closes_the_list_and_the_tip(page, case):
+    """A sign-out (MassimoParts.signedOut) closes an open SET list and an
+    open tip (shared/popup.ts), so that the next Escape is no longer
+    theirs and nothing typed into the list stays for the next user: it
+    opens again from the value shown."""
+    rid, sel, tile = set_room(page, case.lang, 23, 20.5)
+    try:
+        tile.locator(".set-open").click()
+        tile.locator(".set-field").fill("22")
+        page.evaluate("MassimoParts.signedOut()")
+        assert wait_until(page, "getComputedStyle(document.querySelector(%r)).display === 'none'" % (sel + " .set-pop"), 5), "the sign-out closes the list"
+        tile.locator(".setpoint-row .tip > button").first.click()
+        assert page.evaluate(TIP, [sel, 0])["shown"], "a tip opens"
+        page.evaluate("MassimoParts.signedOut()")
+        assert wait_until(page, "document.querySelector(%r).getAttribute('aria-expanded') === 'false'" % (sel + " .setpoint-row .tip > button"), 5), \
+            "the sign-out closes the tip"
+        tile.locator(".set-open").click()
+        assert set_list(page, sel)["field"] == shown(20.5, case.lang, ""), "the list opens again from the value shown"
+    finally:
+        page.keyboard.press("Escape")
 
 
 def test_more_shows_off_from_the_entry(page, case):

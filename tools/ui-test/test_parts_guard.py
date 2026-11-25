@@ -126,6 +126,14 @@ def rooms_problems(page):
     room.locator(".room-problems .problems-sum").click()
 
 
+def rooms_set_list(page):
+    """A tile's SET list open (AP RoomsPage v1.0, Block 6), its field and
+    its entries."""
+    on_rooms(page)
+    tile(page).locator(".set-open").click()
+    tile(page).locator(".set-pop .set-item").first.wait_for(state="visible")
+
+
 def rooms_holiday_and_devices(page):
     on_rooms(page)
     tile(page).locator(".more-sum").click()
@@ -856,6 +864,7 @@ REGIONS = (
     Region("rooms", ("#rooms",), (
         View("a tile's ⋯ menu open", rooms_menu),
         View("a tile's More menu open", rooms_more),
+        View("a tile's SET list open", rooms_set_list),
         View("a tile's problems list open", rooms_problems),
         View("a tile's holiday form, another's device list", rooms_holiday_and_devices),
         View("the virtual thermostat's settings, expert mode", rooms_virtual),
