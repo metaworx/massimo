@@ -144,7 +144,8 @@ func TestDiscoveryFindsUnconfiguredCubes(t *testing.T) {
 	}
 
 	// GET /cubes: the configured Cube, then the found one, in the same
-	// object as the discovery answer.
+	// object as the discovery answer, with the backups the store keeps of
+	// it, none here (AP BackupWatch v1.0, D5-A).
 	var cubes []map[string]any
 	if getJSON(t, ts, "", "/api/v1/cubes", &cubes) != 200 || len(cubes) != 2 {
 		t.Fatalf("cubes %v", cubes)
@@ -154,13 +155,17 @@ func TestDiscoveryFindsUnconfiguredCubes(t *testing.T) {
 	}
 	for k := range cubes[1] {
 		switch k {
-		case "serial", "kind", "serves", "host", "configured", "other_network", "address", "mac", "rf_address", "firmware", "dhcp", "gateway", "netmask", "dns", "proxies", "found_at", "last_seen":
+		case "serial", "kind", "serves", "host", "configured", "other_network", "address", "mac", "rf_address", "firmware", "dhcp", "gateway", "netmask", "dns", "proxies", "found_at", "last_seen",
+			"backups":
 		default:
 			t.Errorf("unexpected field %q in a found cube", k)
 		}
 	}
-	if cubes[1]["serial"] != "KEQ0000000" || cubes[1]["configured"] != false {
+	if cubes[1]["serial"] != "KEQ0000000" || cubes[1]["configured"] != false || cubes[1]["backups"] != 0.0 {
 		t.Fatalf("found cube in the list %v", cubes[1])
+	}
+	if _, has := f["backups"]; has {
+		t.Errorf("the discovery answer counts backups: %v", f)
 	}
 
 	// cube_found once per new serial, not on later runs.

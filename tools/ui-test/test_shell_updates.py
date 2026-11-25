@@ -31,15 +31,17 @@ WALK = ("system", "maint", "info", "me", "cube", "tiles") * 2
 # and in each of three walks of a page but for the Cube's devices, read
 # at the first showing of Cube settings alone; since UiParts D216 Cube
 # settings' pairing takes the chosen Cube's rooms from the page's own,
-# state.rooms, where it read them again at each showing.
+# state.rooms, where it read them again at each showing; since AP
+# BackupWatch D6-A System settings also reads the Cubes not served
+# that keep backups, backups/unserved, at each showing.
 READS = (
-    ("system", {"cubes/KEQ0000100/backups": 1, "integrations": 1, "integrations/found": 1, "login/providers": 1, "providers": 1, "roles": 1, "settings": 2, "users": 2}),
+    ("system", {"backups/unserved": 1, "cubes/KEQ0000100/backups": 1, "integrations": 1, "integrations/found": 1, "login/providers": 1, "providers": 1, "roles": 1, "settings": 2, "users": 2}),
     ("maint", {"reboot": 1, "restart": 1, "settings": 2, "update": 1}),
     ("info", {"config": 1, "store": 1, "system": 1}),
     ("me", {"login/providers": 1, "me/preferences": 1, "me/push": 1, "users/owner": 1, "users/owner/identities": 1, "users/owner/tokens": 1}),
     ("cube", {"cubes/KEQ0000100/backups": 1, "cubes/KEQ0000100/devices": 1, "cubes/KEQ0000100/pairing": 1}),
     ("tiles", {}),
-    ("system", {"cubes/KEQ0000100/backups": 1, "integrations": 1, "integrations/found": 1, "login/providers": 1, "providers": 1, "roles": 1, "settings": 2, "users": 2}),
+    ("system", {"backups/unserved": 1, "cubes/KEQ0000100/backups": 1, "integrations": 1, "integrations/found": 1, "login/providers": 1, "providers": 1, "roles": 1, "settings": 2, "users": 2}),
     ("maint", {"reboot": 1, "restart": 1, "settings": 2, "update": 1}),
     ("info", {"config": 1, "store": 1, "system": 1}),
     ("me", {"login/providers": 1, "me/preferences": 1, "me/push": 1, "users/owner": 1, "users/owner/identities": 1, "users/owner/tokens": 1}),

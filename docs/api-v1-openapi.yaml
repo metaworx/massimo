@@ -1745,7 +1745,7 @@ paths:
     get:
       summary: List the Cubes
       x-capability: read
-      description: The configured Cubes (configured true), then the Cubes discovery found that are not configured (configured false), while they answer - from the first answer to the end of the first complete run without one; after a restart, once a run has heard them.
+      description: The configured Cubes (configured true), then the Cubes discovery found that are not configured (configured false), while they answer - from the first answer to the end of the first complete run without one; after a restart, once a run has heard them. Each has backups, the number of backups the store keeps of it, which GET …/backups lists also for a found Cube.
       responses:
         "200":
           description: The Cubes
@@ -2499,6 +2499,13 @@ paths:
         automatic backup follows (backups.auto_min after the last change,
         at the latest backups.auto_max after the first). A Cube without a
         row in the store has no history (503).
+
+        A Cube the store keeps a row of that no runtime serves (one taken
+        out of the configuration, or only found by discovery) is listed
+        too, without changed and due; its backups download, compare and
+        delete as a served Cube's, while POST …/backups and the restore
+        answer 409. GET /api/v1/backups/unserved lists such Cubes. A
+        serial with neither is 404.
       parameters: [{$ref: "#/components/parameters/sn"}]
       responses:
         "200":
@@ -2544,12 +2551,13 @@ paths:
         "403": {$ref: "#/components/responses/Forbidden"}
         "429": {$ref: "#/components/responses/LockedOut"}
         "404": {$ref: "#/components/responses/NotFound"}
+        "409": {$ref: "#/components/responses/NotServed"}
         "503": {$ref: "#/components/responses/NotConnected"}
   /api/v1/cubes/{sn}/backups/{id}:
     get:
       summary: A stored backup's file
       x-capability: backup
-      description: The file as it was stored, or in the format asked for, as an attachment.
+      description: The file as it was stored, or in the format asked for, as an attachment; also of a Cube that is not served (GET …/backups).
       parameters:
         - {$ref: "#/components/parameters/sn"}
         - {$ref: "#/components/parameters/backupID"}
@@ -2578,7 +2586,7 @@ paths:
     delete:
       summary: Remove a stored backup
       x-capability: restore
-      description: The backup leaves the history; the store keeps a tombstone without the file until the retention removes it.
+      description: The backup leaves the history; the store keeps a tombstone without the file until the retention removes it. Also of a Cube that is not served (GET …/backups).
       parameters:
         - {$ref: "#/components/parameters/idempotencyKey"}
         - {$ref: "#/components/parameters/sn"}
@@ -2600,7 +2608,8 @@ paths:
         recorded it (its raw lines and NTP servers), with the notes and
         the radio commands. Nothing is sent. The restore's options apply,
         so skip=clock leaves the clock out; hidden devices are not
-        compared.
+        compared. Also of a Cube that is not served (GET …/backups), its
+        row's hidden list applying.
       parameters:
         - {$ref: "#/components/parameters/sn"}
         - {$ref: "#/components/parameters/backupID"}
@@ -2637,6 +2646,30 @@ paths:
         "429": {$ref: "#/components/responses/LockedOut"}
         "404": {$ref: "#/components/responses/NotFound"}
         "503": {$ref: "#/components/responses/NotReady"}
+  /api/v1/backups/unserved:
+    get:
+      summary: The Cubes not served that keep backups
+      x-capability: backup
+      description: |
+        The Cube rows of the store that no runtime serves, that are not
+        removed and keep at least one backup, by serial: one taken out of
+        the configuration, or one only found by discovery, also while
+        discovery does not hear it, which GET /api/v1/cubes then does not
+        list. Their backups are listed, downloaded, compared and deleted
+        through GET …/backups and its routes; they take no backup and no
+        restore (409). The served Cubes are not in it, and a server
+        without a store lists none.
+      responses:
+        "200":
+          description: The Cubes not served that keep backups; empty where none does
+          content:
+            application/json:
+              schema:
+                type: array
+                items: {$ref: "#/components/schemas/UnservedCube"}
+        "401": {$ref: "#/components/responses/Unauthorized"}
+        "403": {$ref: "#/components/responses/Forbidden"}
+        "429": {$ref: "#/components/responses/LockedOut"}
   /api/v1/cubes/{sn}/restore/plan:
     post:
       summary: What restoring a backup would send
@@ -2650,7 +2683,10 @@ paths:
         of the plan that POST …/restore takes. Nothing is written. The
         clock group reads the Cube's NTP servers first; hidden devices
         are neither compared nor written. With backup=<id> the stored
-        backup is the file, and the body is left empty.
+        backup is the file, and the body is left empty. A Cube the store
+        keeps a row of that no runtime serves is 409: a backup of it is
+        put onto another Cube by downloading it (GET …/backups/{id}) and
+        sending it to that Cube's restore.
       parameters:
         - {$ref: "#/components/parameters/idempotencyKey"}
         - {$ref: "#/components/parameters/sn"}
@@ -2674,6 +2710,7 @@ paths:
         "403": {$ref: "#/components/responses/Forbidden"}
         "429": {$ref: "#/components/responses/LockedOut"}
         "404": {$ref: "#/components/responses/NotFound"}
+        "409": {$ref: "#/components/responses/NotServed"}
         "413": {$ref: "#/components/responses/TooLarge"}
         "503": {$ref: "#/components/responses/NotConnected"}
   /api/v1/cubes/{sn}/restore:
@@ -2721,7 +2758,7 @@ paths:
         "429": {$ref: "#/components/responses/LockedOut"}
         "404": {$ref: "#/components/responses/NotFound"}
         "409":
-          description: A restore is running, the plan has changed since it was made (both hashes in the message), or the duty cycle is above 80 % and the plan has radio commands (the percentage in the message)
+          description: A restore is running, the plan has changed since it was made (both hashes in the message), the duty cycle is above 80 % and the plan has radio commands (the percentage in the message), or the Cube is not served (as POST …/restore/plan)
           content:
             application/json:
               schema: {$ref: "#/components/schemas/Error"}
@@ -4242,6 +4279,11 @@ components:
       content:
         application/json:
           schema: {$ref: "#/components/schemas/Error"}
+    NotServed:
+      description: "The store keeps a row of the Cube, but no runtime serves it: it takes no backup and no restore; its stored backups can still be listed, downloaded, compared and deleted"
+      content:
+        application/json:
+          schema: {$ref: "#/components/schemas/Error"}
     NotConnected:
       description: The Cube is not connected
       content:
@@ -4266,6 +4308,15 @@ components:
         sha256: {type: string}
         user: {type: string, description: Who asked; absent for the server's own}
         note: {type: string}
+    UnservedCube:
+      type: object
+      description: A Cube row of the store that no runtime serves and that keeps backups, as GET /api/v1/backups/unserved lists it
+      required: [serial, backups, newest]
+      properties:
+        serial: {type: string, example: KEQ0000000}
+        name: {type: string, description: The row's name; absent where it has none}
+        backups: {type: integer, description: The backups kept}
+        newest: {type: string, format: date-time, description: When the newest backup was taken}
     BackupList:
       type: object
       required: [backups]
@@ -5130,6 +5181,7 @@ components:
               uuid: {type: string, format: uuid, description: "The row's, for POST /api/v1/cubes's restore"}
               name: {type: string, description: "The name it had; empty where it had none"}
               removed_at: {type: string, format: date-time, description: When it was removed}
+        backups: {type: integer, description: "In GET /api/v1/cubes: the backups the store keeps of the serial's row, which GET …/backups lists while no runtime serves it; 0 without a row; absent in the answer of a discovery"}
         found_at: {type: string, format: date-time, description: When the server first saw it}
         last_seen: {type: string, format: date-time, description: Its latest answer}
     Discovery:
@@ -5155,7 +5207,7 @@ components:
         warning: {type: string, description: Set while something needs the owner.}
     Cube:
       type: object
-      required: [serial, address, configured_address, follow_discovery, proxy_virtual, hidden, connected, link, budget, pending_radiograms, updated]
+      required: [serial, address, configured_address, follow_discovery, proxy_virtual, hidden, backups, connected, link, budget, pending_radiograms, updated]
       properties:
         serial: {type: string}
         name: {type: string, description: "User-friendly name from the store (seeded from MASSIMO_CUBE_<SN>_NAME), when set"}
@@ -5166,6 +5218,7 @@ components:
           type: array
           description: The settings file's lines for this Cube whose values differ from the store's, which wins
           items: {$ref: "#/components/schemas/FileDifference"}
+        backups: {type: integer, description: "The backups the store keeps of the Cube (GET …/backups); 0 for a Cube without a row in the store, and without a store"}
         configured_address: {type: string, description: "The stored address; empty: from discovery (address is where it connects now)"}
         follow_discovery: {type: boolean}
         proxy_address: {type: string, description: "The configured proxy address; empty: the default"}

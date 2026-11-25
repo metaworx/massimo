@@ -26,6 +26,23 @@ export interface StoredBackup {
   note?: string;
 }
 
+/**
+ * A Cube row of the store that no runtime serves and that keeps backups, as GET
+ * /api/v1/backups/unserved lists it
+ */
+export interface UnservedCube {
+  serial: string;
+  /** The row's name; absent where it has none */
+  name?: string;
+  /** The backups kept */
+  backups: number;
+  /**
+   * When the newest backup was taken
+   * @format date-time
+   */
+  newest: string;
+}
+
 export interface BackupList {
   backups: StoredBackup[];
   /**
@@ -1308,6 +1325,12 @@ export interface FoundCube {
     removed_at: string;
   }[];
   /**
+   * In GET /api/v1/cubes: the backups the store keeps of the serial's row,
+   * which GET …/backups lists while no runtime serves it; 0 without a row;
+   * absent in the answer of a discovery
+   */
+  backups?: number;
+  /**
    * When the server first saw it
    * @format date-time
    */
@@ -1365,6 +1388,11 @@ export interface Cube {
    * store's, which wins
    */
   file_differs?: FileDifference[];
+  /**
+   * The backups the store keeps of the Cube (GET …/backups); 0 for a Cube
+   * without a row in the store, and without a store
+   */
+  backups: number;
   /**
    * The stored address; empty: from discovery (address is where it connects
    * now)

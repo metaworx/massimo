@@ -245,7 +245,7 @@ the OpenAPI file carries each operation's as `x-capability`:
 | `structure` | move and remove devices, delete rooms | `PUT …/devices/{rf}` with `room_id`, `DELETE …/devices/{rf}`, `DELETE …/rooms/{id}` |
 | `pair` | put the Cube into pairing mode and stop it | `POST …/pairing`, `DELETE …/pairing` |
 | `discover` | search for Cubes on the LAN | `POST /api/v1/cubes/discover` |
-| `backup` | download a backup | `GET …/backup` |
+| `backup` | download a backup, and the backups the server keeps | `GET …/backup`, `GET`/`POST …/backups`, `GET …/backups/{id}` and its `diff`, `GET /api/v1/backups/unserved` |
 | `restore` | plan and run a restore | `POST …/restore/plan`, `POST …/restore` |
 | `repair` | the repairs of a Cube's rooms and devices: their communication errors reset, a device's configuration re-sent from its room, a device placed or listed where the Cube and its list disagree, a room's master named, a room re-linked; "unlink all and re-link" needs `structure` as well ("Repairs", below) | `GET`/`POST …/repair/…` |
 | `guests` | create, change and remove users whose role is `guest` | the users routes, limited to guests |
@@ -1580,6 +1580,7 @@ then every Cube discovery found on the LAN that is not configured:
     "file_differs": [
       {"field": "name", "variable": "MASSIMO_CUBE_KEQ0000200_NAME", "file": "Downstairs", "store": "Ground floor"}
     ],
+    "backups": 10,
     "mac": "00:1a:22:0a:0b:0c",
     "last_seen": "2026-11-04T15:00:02+01:00",
     "connected": true,
@@ -1609,6 +1610,7 @@ then every Cube discovery found on the LAN that is not configured:
     "dns": ["192.168.1.1"],
     "proxies": ["192.168.1.40"],
     "host": {"name": "box-a", "url": "https://box-a.example:8443"},
+    "backups": 2,
     "found_at": "2026-11-04T14:30:01+01:00",
     "last_seen": "2026-11-04T15:00:02+01:00"
   }
@@ -1616,6 +1618,10 @@ then every Cube discovery found on the LAN that is not configured:
 ```
 
 `configured` tells the two apart.
+Both have `backups`, the number of backups the store keeps of the Cube's row
+(0 without one, and without a store),
+which `GET …/backups` lists also for a found Cube (see Backups);
+the answer of a discovery has no such field.
 A configured Cube has the fields below;
 `mac`, `last_seen` (when it last answered discovery) and `found_address` only once
 discovery has seen it:
@@ -3307,6 +3313,8 @@ the backup follows once `backups.auto_min` minutes passed without a further chan
 at the latest `backups.auto_max` minutes after the first,
 and a Cube that has none gets one at once:
 at its first connection, or once its last backup is deleted or pruned.
+The windows hold across a start of the server, `changed` and `due` with them;
+a clean stop takes the backup of a change pending before the Cubes close.
 Changes made outside Massimo count as well, once the Cube reports them,
 at the latest at the six-hourly refresh.
 A restore keeps the Cube's configuration before its first step (`before_restore`)
@@ -3318,6 +3326,22 @@ of the others an automatic one for `backups.keep_days_auto` days and the rest fo
 `backups.keep_days_manual`.
 A Cube without a row in the store (`serve -addr`) has no history:
 these routes answer `503`, and `GET …/backup` works as before.
+
+A Cube the store keeps a row of and no runtime serves keeps its backups in reach:
+one taken out of the configuration, or one only found by discovery.
+`GET …/backups` lists them, without `changed` and `due`;
+`GET …/backups/{id}`, its `diff` and `DELETE` work as for a served Cube,
+the comparison leaving out the devices its row hides.
+It takes no backup and no restore:
+`POST …/backups` and the restore's plan and restore answer `409`,
+and `GET …/backup` stays `404`.
+Such a backup goes onto another Cube as a file:
+downloaded, then sent to that Cube's `POST …/restore/plan` and `POST …/restore`.
+A serial with neither a runtime nor a row is `404`.
+`GET /api/v1/backups/unserved` lists such Cubes (below),
+also one that discovery does not hear;
+`GET /api/v1/cubes` counts each Cube's backups kept,
+served or found (`backups`).
 
 #### GET /api/v1/cubes/{sn}/backups
 
@@ -3340,6 +3364,7 @@ when it last changed and when the automatic backup follows:
 
 `size` is the file's, before the store compresses it; `user` is absent for the
 server's own backups.
+A Cube that is not served has no `changed` or `due` (above).
 `id` names one backup for good:
 the store never gives it to another, also once the backup is deleted or pruned.
 Capability `backup`.
@@ -3351,7 +3376,8 @@ and keep it as `manual` with the user and an optional note,
 `{"note": "before the holidays"}` (at most 200 characters;
 another field answers `400`).
 `201` with the backup as the list shows it;
-`503` while the Cube is not connected.
+`503` while the Cube is not connected,
+`409` for a Cube the store keeps a row of and no runtime serves.
 Capability `backup`, audited as `backup.take`.
 
 #### GET /api/v1/cubes/{sn}/backups/{id}?format=json|yaml
@@ -3393,6 +3419,27 @@ No steps when the two hold the same configuration.
 The restore's options apply (`skip=clock`, `state`, `portal`),
 and hidden devices are not compared.
 `400` without `against`, `404` for an id the Cube does not have.
+Capability `backup`.
+
+#### GET /api/v1/backups/unserved
+
+The Cubes the store keeps backups of and no runtime serves, by serial:
+each row that is not removed and keeps at least one backup,
+one taken out of the configuration or one only found by discovery,
+also while discovery does not hear it and `GET /api/v1/cubes` does not list it:
+
+```json
+[
+  {"serial": "KEQ0000000", "name": "Old hall", "backups": 3, "newest": "2026-11-09T10:00:00Z"}
+]
+```
+
+`name` is the row's, absent where it has none;
+`backups` counts the backups kept, `newest` is when the newest was taken.
+Their backups are listed, downloaded, compared and deleted through
+`GET …/backups` and its routes (above).
+The served Cubes are not in it, and a server without a store lists none (`[]`).
+Web UI: System settings → Backup and restore draws a fold for each.
 Capability `backup`.
 
 ### POST /api/v1/cubes/{sn}/restore/plan
@@ -3456,7 +3503,8 @@ unless the server runs with `-show-hidden`.
 `400` for a backup the server cannot read, one from another Cube or
 without a serial (`cube.serial` must be this Cube's), a bad option or
 an unknown `skip` group; `413` for a body over 1 MB; `503` while the
-Cube is not connected.
+Cube is not connected;
+`409` for a Cube the store keeps a row of and no runtime serves (see Backups).
 
 ### POST /api/v1/cubes/{sn}/restore?plan=<hash>
 
@@ -3492,7 +3540,7 @@ the message saying the percentage (the write test on hardware ran up to there;
 a restore without radio commands, names and clock only,
 is sent whatever the duty cycle);
 `400` without `plan` and for everything the plan request refuses with `400`;
-`413` and `503` as for the plan.
+`409`, `413` and `503` as for the plan.
 The Cube changes a device's configuration only once the device acknowledged the
 write (one to four minutes),
 so a plan made right after a restore still lists the radio steps until the

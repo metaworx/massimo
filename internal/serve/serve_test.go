@@ -8,16 +8,19 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"log/slog"
 	"net"
 	"net/http"
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
 	"go.metaworx.ch/massimo/internal/announce"
+	"go.metaworx.ch/massimo/internal/backup"
 	"go.metaworx.ch/massimo/internal/cubelan/fakecube"
 	"go.metaworx.ch/massimo/internal/store"
 	"go.metaworx.ch/massimo/internal/testkit"
@@ -482,5 +485,84 @@ func TestOpenNotLookingOnTheLoopback(t *testing.T) {
 	getJSON(t, ts.URL+"/api/v1/integrations/found", &found)
 	if found.Looks || found.Announce.Why != "loopback" {
 		t.Errorf("found %+v, want not looking for the loopback", found)
+	}
+}
+
+// A clean stop takes the automatic backup of a change pending before the
+// store closes (AP BackupWatch v1.0, Block 1; docs/store.md section 9
+// (e)): a room renamed after a backup by hand, with no look of the
+// automatic backup since, is in massimo.db once Run has returned.
+func TestStopTakesThePendingBackup(t *testing.T) {
+	t.Parallel()
+	noCubeEnv(t)
+	ctx := context.Background()
+	data := t.TempDir()
+	st := testStore(t, data)
+	if _, err := st.AddCube(ctx, store.Cube{Serial: "KEQ0000100", Configured: true, Address: startFakeCube(t), Source: store.SourceUI}); err != nil {
+		t.Fatal(err)
+	}
+	st.Close()
+	inst, err := Open(ctx, Config{Listen: "127.0.0.1:0", DataDir: data, Version: "massimo test", Proxies: []string{"off"},
+		RefreshInterval: &never, DiscoverInterval: &never, Logger: quietLog()})
+	if err != nil {
+		t.Fatal(err)
+	}
+	stop := runInstance(t, inst)
+	base := "http://" + inst.Addr()
+	waitForCube(t, base)
+	send := func(method, path, body string, want int) {
+		t.Helper()
+		req, _ := http.NewRequest(method, base+path, strings.NewReader(body))
+		req.Header.Set("Content-Type", "application/json")
+		resp, err := http.DefaultClient.Do(req)
+		if err != nil {
+			t.Fatal(err)
+		}
+		resp.Body.Close()
+		if resp.StatusCode != want {
+			t.Fatalf("%s %s: %s", method, path, resp.Status)
+		}
+	}
+	send("POST", "/api/v1/cubes/KEQ0000100/backups", "", http.StatusCreated)
+	send("PUT", "/api/v1/cubes/KEQ0000100/rooms/6", `{"name":"Renamed"}`, http.StatusOK)
+	roomName := func(f *backup.File) string {
+		for _, r := range f.Rooms {
+			if r.ID == 6 {
+				return r.Name
+			}
+		}
+		return ""
+	}
+	if !testkit.Within(5*time.Second, func() bool {
+		resp, err := http.Get(base + "/api/v1/cubes/KEQ0000100/backup")
+		if err != nil {
+			return false
+		}
+		defer resp.Body.Close()
+		data, _ := io.ReadAll(resp.Body)
+		f, err := backup.Unmarshal(data, false)
+		return err == nil && roomName(f) == "Renamed"
+	}) {
+		t.Fatal("the rename never reached the Cube's configuration")
+	}
+	if err := stop(); err != nil {
+		t.Fatal(err)
+	}
+
+	st = testStore(t, data)
+	row, _, _ := st.Cube(ctx, "KEQ0000100")
+	list, err := st.Backups(ctx, row.ID)
+	if err != nil || len(list) != 2 || list[0].Reason != store.ReasonAuto || list[1].Reason != store.ReasonManual {
+		t.Fatalf("the backups after the stop: %+v %v", list, err)
+	}
+	body, _, err := st.BackupBody(ctx, row.ID, list[0].ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if f, err := backup.Unmarshal(body, false); err != nil || roomName(f) != "Renamed" {
+		t.Fatalf("the stop's backup is not of the change (%v)", err)
+	}
+	if p, ok, err := st.BackupPending(ctx, row.ID); ok || err != nil {
+		t.Fatalf("windows kept after the stop's backup: %+v %v", p, err)
 	}
 }

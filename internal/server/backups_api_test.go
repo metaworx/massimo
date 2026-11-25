@@ -7,6 +7,7 @@ import (
 	"context"
 	"encoding/json"
 	"io"
+	"net"
 	"net/http"
 	"strconv"
 	"strings"
@@ -14,6 +15,7 @@ import (
 	"time"
 
 	"go.metaworx.ch/massimo/internal/backup"
+	"go.metaworx.ch/massimo/internal/cubelan"
 	"go.metaworx.ch/massimo/internal/store"
 	"go.metaworx.ch/massimo/internal/testkit"
 )
@@ -454,5 +456,235 @@ func TestBackupDiff(t *testing.T) {
 	}
 	if code := getJSON(t, ts, "", backupsBase+"/"+strconv.FormatInt(a, 10)+"/diff", &d); code != 400 {
 		t.Fatalf("without against: %d", code)
+	}
+}
+
+// A Cube the store keeps a row of and no runtime serves, here one only
+// found, keeps its backups within reach (AP BackupWatch v1.0, D4-B):
+// listed without changed or due, downloaded as stored and in the other
+// format, compared and deleted, the delete in its row's log; a backup by
+// hand and a restore, of a stored backup or of a file, answer 409, and
+// the live Cube's download stays 404. A serial without a row is 404.
+// GET /api/v1/cubes counts the backups of the served Cube and of the
+// found one (D5-A).
+func TestBackupsOfACubeNotServed(t *testing.T) {
+	t.Parallel()
+	// No discovery run leaves this machine, and none runs to take the
+	// found Cube out of the list; no automatic backup changes the count.
+	opts := Options{BackupMinute: time.Hour, DiscoveryAddr: "127.0.0.1:0", DiscoveryTargets: []string{testkit.ListenPacket(t).LocalAddr().String()}}
+	r := startServer(t, stored(), withOptions(opts))
+	ts, s, st := r.ts, r.s, r.st
+	ctx := context.Background()
+	const other = "KEQ0000200"
+	base := "/api/v1/cubes/" + other + "/backups"
+	s.note(ctx, cubelan.Discovered{Serial: other, IP: net.ParseIP("192.0.2.20"), RFAddress: 0x0a0b0d, Firmware: "1.1.3", Kind: cubelan.KindCube}, time.Now())
+	row, ok, err := st.Cube(ctx, other)
+	if err != nil || !ok || row.Configured {
+		t.Fatalf("the found Cube's row: %+v %v %v", row, ok, err)
+	}
+	f := backupOf(t, ts)
+	f.Cube.Serial = other
+	older, err := st.AddBackup(ctx, store.Backup{CubeID: row.ID, Reason: store.ReasonAuto, Format: "json"}, marshal(t, f))
+	if err != nil {
+		t.Fatal(err)
+	}
+	yaml, err := withRoomName(f, "Edited").Marshal(true)
+	if err != nil {
+		t.Fatal(err)
+	}
+	newer, err := st.AddBackup(ctx, store.Backup{CubeID: row.ID, Reason: store.ReasonManual, Format: "yaml", Note: "the old Cube"}, yaml)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if code, out := do(t, ts, "POST", backupsBase, ""); code != 201 {
+		t.Fatalf("the served Cube's backup: %d %v", code, out)
+	}
+	counts := func() map[string]any {
+		t.Helper()
+		var cubes []map[string]any
+		if code := getJSON(t, ts, "", "/api/v1/cubes", &cubes); code != 200 {
+			t.Fatalf("GET /api/v1/cubes: %d", code)
+		}
+		out := map[string]any{}
+		for _, c := range cubes {
+			out[c["serial"].(string)+" "+strconv.FormatBool(c["configured"].(bool))] = c["backups"]
+		}
+		return out
+	}
+	if got := counts(); got["KEQ0000100 true"] != 1.0 || got[other+" false"] != 2.0 {
+		t.Fatalf("the counts: %v", got)
+	}
+
+	var l backupList
+	if code := getJSON(t, ts, "", base, &l); code != 200 || reasons(l) != "manual,auto" || l.Changed != nil || l.Due != nil || l.Backups[0].Note != "the old Cube" {
+		t.Fatalf("the list: %d %+v", code, l)
+	}
+	get := func(path string) (int, string, string, []byte) {
+		t.Helper()
+		resp, err := http.Get(ts.URL + path)
+		if err != nil {
+			t.Fatal(err)
+		}
+		defer resp.Body.Close()
+		data, _ := io.ReadAll(resp.Body)
+		return resp.StatusCode, resp.Header.Get("Content-Type"), resp.Header.Get("Content-Disposition"), data
+	}
+	id := func(b store.Backup) string { return strconv.FormatInt(b.ID, 10) }
+	code, ctype, disp, data := get(base + "/" + id(newer))
+	y, err := backup.Unmarshal(data, true)
+	if code != 200 || ctype != "application/yaml" || err != nil || y.Cube.Serial != other || !strings.Contains(disp, "massimo-backup-"+other+"-") {
+		t.Fatalf("as stored: %d %s %s %v", code, ctype, disp, err)
+	}
+	code, ctype, _, data = get(base + "/" + id(newer) + "?format=json")
+	if j, err := backup.Unmarshal(data, false); code != 200 || ctype != "application/json" || err != nil || backup.ConfigHash(j) != backup.ConfigHash(y) {
+		t.Fatalf("as JSON: %d %s %v", code, ctype, err)
+	}
+	var d backupDiff
+	if code := getJSON(t, ts, "", base+"/"+id(newer)+"/diff?against="+id(older), &d); code != 200 || len(d.Steps) != 1 || !strings.Contains(d.Steps[0].What, `"Edited"`) {
+		t.Fatalf("the diff: %d %+v", code, d)
+	}
+
+	// What needs the Cube served.
+	body := marshal(t, f)
+	for _, c := range []struct {
+		path string
+		body []byte
+	}{
+		{base, nil},
+		{"/api/v1/cubes/" + other + "/restore/plan?backup=" + id(older), nil},
+		{"/api/v1/cubes/" + other + "/restore/plan", body},
+		{"/api/v1/cubes/" + other + "/restore?plan=x&backup=" + id(older), nil},
+		{"/api/v1/cubes/" + other + "/restore?plan=x", body},
+	} {
+		if code, out := postBackup(t, ts, c.path, "application/json", c.body); code != http.StatusConflict || !strings.Contains(out["error"].(string), "not served") {
+			t.Errorf("POST %s: %d %v", c.path, code, out)
+		}
+	}
+	if code, _, _, _ := get("/api/v1/cubes/" + other + "/backup"); code != 404 {
+		t.Errorf("the live Cube's download: %d", code)
+	}
+	if code := getJSON(t, ts, "", base+"/999", nil); code != 404 {
+		t.Errorf("an unknown id: %d", code)
+	}
+
+	if code, _ := do(t, ts, "DELETE", base+"/"+id(newer), ""); code != 204 {
+		t.Fatalf("delete: %d", code)
+	}
+	if code, _ := do(t, ts, "DELETE", base+"/"+id(newer), ""); code != 404 {
+		t.Fatalf("delete again: %d", code)
+	}
+	if code := getJSON(t, ts, "", base, &l); code != 200 || reasons(l) != "auto" {
+		t.Fatalf("after the delete: %d %s", code, reasons(l))
+	}
+	if got := counts(); got[other+" false"] != 1.0 {
+		t.Fatalf("the count after the delete: %v", got)
+	}
+	if err := st.FlushEvents(ctx); err != nil {
+		t.Fatal(err)
+	}
+	if evs, err := st.Events(ctx, store.EventQuery{CubeID: row.ID, Kind: "backup_deleted", Limit: 10}); err != nil || len(evs) != 1 {
+		t.Fatalf("the delete in the row's log: %d %v", len(evs), err)
+	}
+
+	// A serial with neither a runtime nor a row.
+	for _, c := range [][2]string{{"GET", "/api/v1/cubes/KEQ0000999/backups"}, {"POST", "/api/v1/cubes/KEQ0000999/backups"},
+		{"GET", "/api/v1/cubes/KEQ0000999/backups/" + id(older)}, {"DELETE", "/api/v1/cubes/KEQ0000999/backups/" + id(older)},
+		{"POST", "/api/v1/cubes/KEQ0000999/restore/plan?backup=" + id(older)}} {
+		if code, _ := do(t, ts, c[0], c[1], ""); code != 404 {
+			t.Errorf("%s %s: %d", c[0], c[1], code)
+		}
+	}
+}
+
+// GET /api/v1/backups/unserved lists the Cube rows no runtime serves that
+// keep a backup, by serial, with the count kept and the newest backup's
+// time, from the store alone (AP BackupWatch v1.0, D6-A): a row that
+// discovery has not heard in this run, which GET /api/v1/cubes does not
+// list, and one with a name; not the served Cube, a row without a
+// backup, one whose only backup is a tombstone, nor a removed row. It
+// needs the capability backup, and a server without a store lists none.
+func TestUnservedBackupsListed(t *testing.T) {
+	t.Parallel()
+	opts := storeOptions(t, t.TempDir(), "secret")
+	opts.BackupMinute = time.Hour // no automatic backup of the served Cube meanwhile
+	ts, st := startServer(t, withOptions(opts)).ts, opts.Store
+	ctx := context.Background()
+	t0 := time.Now().UTC().Truncate(time.Millisecond)
+	row := func(c store.Cube) store.Cube {
+		t.Helper()
+		got, err := st.AddCube(ctx, c)
+		if err != nil {
+			t.Fatal(err)
+		}
+		return got
+	}
+	add := func(c store.Cube, at time.Time) store.Backup {
+		t.Helper()
+		b, err := st.AddBackup(ctx, store.Backup{CubeID: c.ID, Reason: store.ReasonManual, Format: "json", TakenAt: at}, []byte(`{"version": 1}`))
+		if err != nil {
+			t.Fatal(err)
+		}
+		return b
+	}
+	served, _, _ := st.Cube(ctx, "KEQ0000100")
+	add(served, t0)
+	gone, _, err := st.NoteDiscovered(ctx, store.Discovered{Serial: "KEQ0000200", Address: "192.0.2.20", At: t0.Add(-48 * time.Hour)})
+	if err != nil {
+		t.Fatal(err)
+	}
+	add(gone, t0.Add(-2*time.Hour))
+	add(gone, t0.Add(-time.Hour))
+	add(row(store.Cube{Serial: "KEQ0000201", Name: "Old hall"}), t0.Add(-3*time.Hour))
+	tomb := row(store.Cube{Serial: "KEQ0000202"})
+	if ok, err := st.DeleteBackup(ctx, tomb.ID, add(tomb, t0).ID); !ok || err != nil {
+		t.Fatalf("delete: %v %v", ok, err)
+	}
+	row(store.Cube{Serial: "KEQ0000203"})
+	add(row(store.Cube{Serial: "KEQ0000204"}), t0)
+	if _, err := st.RemoveCube(ctx, "KEQ0000204", 0); err != nil {
+		t.Fatal(err)
+	}
+
+	get := func(path, token string, v any) int {
+		t.Helper()
+		code, body := callAPI(t, ts, "GET", path, token, "")
+		if v != nil && code == 200 {
+			if err := json.Unmarshal([]byte(body), v); err != nil {
+				t.Fatalf("%s: %v %s", path, err, body)
+			}
+		}
+		return code
+	}
+	var list []unservedView
+	if code := get("/api/v1/backups/unserved", "secret", &list); code != 200 || len(list) != 2 {
+		t.Fatalf("the list: %d %+v", code, list)
+	}
+	if c := list[0]; c.Serial != "KEQ0000200" || c.Name != "" || c.Backups != 2 || !c.Newest.Equal(t0.Add(-time.Hour)) {
+		t.Errorf("the row not heard: %+v", c)
+	}
+	if c := list[1]; c.Serial != "KEQ0000201" || c.Name != "Old hall" || c.Backups != 1 || !c.Newest.Equal(t0.Add(-3*time.Hour)) {
+		t.Errorf("the row with a name: %+v", c)
+	}
+	var cubes []map[string]any
+	get("/api/v1/cubes", "secret", &cubes)
+	for _, c := range cubes {
+		if c["serial"] == "KEQ0000200" {
+			t.Fatalf("the row not heard in the Cubes' list: %v", c)
+		}
+	}
+	var l backupList
+	if code := get("/api/v1/cubes/KEQ0000200/backups", "secret", &l); code != 200 || len(l.Backups) != 2 {
+		t.Fatalf("its backups: %d %+v", code, l)
+	}
+
+	if code := get("/api/v1/backups/unserved", userToken(t, st, "v", store.RoleViewer), nil); code != 403 {
+		t.Errorf("without backup: %d", code)
+	}
+	if code := get("/api/v1/backups/unserved", userToken(t, st, "o", store.RoleOperator), nil); code != 200 {
+		t.Errorf("with backup: %d", code)
+	}
+	plain := startServer(t).ts
+	if code, body := callAPI(t, plain, "GET", "/api/v1/backups/unserved", "", ""); code != 200 || strings.TrimSpace(body) != "[]" {
+		t.Errorf("without a store: %d %s", code, body)
 	}
 }

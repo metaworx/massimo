@@ -2045,7 +2045,13 @@ settings forms and have none of it.
   before a restore, or the file a restore was sent), its size and who asked:
   one follows by itself an hour after the Cube's configuration last changed,
   at the latest two hours after the first change (the settings `backups.*`,
-  docs/api-v1.md, "Backups"), and a line says when while one is pending.
+  docs/api-v1.md, "Backups"), also across a restart of the server,
+  which takes a pending one as it stops,
+  and a line says when while one is pending;
+  while none is, a line under a list of backups says that nothing changed
+  since the newest one, and that the server takes one after a change.
+  Each list is read when its page is shown,
+  and after a load onto the page once the page knows its Cubes.
   **Take a backup now** keeps one by hand.
   Each row has **Download**, **Compare with the one before**,
   which lists what changed as the restore would send it,
@@ -2066,6 +2072,24 @@ settings forms and have none of it.
   did not see, the log saying how it ended, and the buttons are back.
   A Cube that is not in the server's store (a run with `-addr`) has no list;
   its download and the restore from a file work as before.
+  After the served Cubes' folds,
+  each Cube the server keeps backups of and does not serve,
+  one taken out of the configuration or only found on the network,
+  also one no longer on the network,
+  has a fold of its own (`GET /api/v1/backups/unserved`,
+  read when the page is shown and after a delete),
+  closed at first, with its name where it has one, marked **not served**,
+  with its count kept;
+  the card's head counts its backups too.
+  Its box has the format,
+  its backups with **Download**, **Compare with the one before** and,
+  with `restore`, **Delete**,
+  and a note that a backup of it goes onto another Cube by downloading it
+  and that Cube's **Restore from file…**;
+  it has no **Download backup**, **Take a backup now**,
+  **Restore…** or **Restore from file…**.
+  A Cube without backups has no such fold,
+  and the last backup deleted takes it away.
 
 ## Maintenance
 
@@ -3226,9 +3250,15 @@ show the same: its list, whether the server keeps it, the comparisons, the resto
 shown and the one sent, a running one shown as unseen at a resync
 (`app.js`'s resync handler calls `resynced`);
 each box's message line and format by its place and serial;
-each fold open, a single Cube's at first; and what it reads and sends;
+each fold open, a single Cube's at first;
+the Cubes not served that keep backups,
+as `GET /api/v1/backups/unserved` last listed them (`unserved`,
+read at the page's showing and after a delete, not `state.found`);
+and what it reads and sends;
 `Backups.tsx` the box, a fold a `Fold` whose `FoldHead` has the Cube's sign
-`after` its serial, a deletion a `useAsk` with a `Question` in its row.
+`after` its serial, a deletion a `useAsk` with a `Question` in its row;
+a Cube not served has a fold whose head has a `Badge` in place of the sign,
+and a box drawn with `served` false.
 Leaving the page (`ui/src/leaving/`) is a region of its own,
 a dialog without a place in any page's region:
 it is no part of the page's chrome, and no region imports another,
