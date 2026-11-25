@@ -26,6 +26,23 @@ export interface StoredBackup {
   note?: string;
 }
 
+/**
+ * A Cube row of the store that no runtime serves and that keeps backups, as GET
+ * /api/v1/backups/unserved lists it
+ */
+export interface UnservedCube {
+  serial: string;
+  /** The row's name; absent where it has none */
+  name?: string;
+  /** The backups kept */
+  backups: number;
+  /**
+   * When the newest backup was taken
+   * @format date-time
+   */
+  newest: string;
+}
+
 export interface BackupList {
   backups: StoredBackup[];
   /**
@@ -181,7 +198,11 @@ export interface UserCreate {
   display_name?: string;
   /** A role's key; viewer when absent, owner for the first owner */
   role?: string;
-  /** Absent for a user with keys only; this or record for the first owner */
+  /**
+   * 8 to 64 characters, Unicode code points as sent, without the user's or the
+   * server's name. Absent for a user with keys only, and an empty one counts as
+   * absent; this or record for the first owner
+   */
   password?: string;
   /**
    * A password of auth_version 2 in place of password: the registration record,
@@ -210,7 +231,10 @@ export interface UserChange {
    * @format date-time
    */
   expires_at?: string | null;
-  /** Empty removes the password */
+  /**
+   * Empty removes the password; any other has 8 to 64 characters, Unicode code
+   * points as sent, without the user's or the server's name
+   */
   password?: string;
   /** Required when a user sets its own password, unless proof is given */
   current_password?: string;
@@ -615,6 +639,12 @@ export interface Token {
    * session of a sign-in and for a key
    */
   key_id?: number;
+  /**
+   * In a user's token list, true on the key that is the settings file's
+   * MASSIMO_API_TOKEN, which is changed or removed there and not revoked
+   * through the API; absent on any other
+   */
+  from_settings?: boolean;
 }
 
 export interface Me {
@@ -632,7 +662,10 @@ export interface Me {
    */
   kept_open?: boolean;
   token?: Token;
-  /** The registered integration whose key it is; null for any other key */
+  /**
+   * The registered integration whose key it is; null for any other key, and on
+   * an open server, which does not look at the key (mode open)
+   */
   integration?: {
     uuid?: string;
     /** Its name as the owner gives it, its own user's display name */
@@ -644,7 +677,8 @@ export interface Me {
   } | null;
   /**
    * With X-MassimoHA-On-Behalf-Of: the integration's user the call acts for;
-   * capabilities is then what the chain leaves
+   * capabilities is then what the chain leaves. On an open server the header is
+   * not read and nothing is attributed
    */
   acts_for?: {
     id?: string;
@@ -840,11 +874,17 @@ export interface RestoreProgress {
 }
 
 export interface RestartInfo {
-  /** Whether this caller's POST would restart the server now */
+  /**
+   * Whether this caller's POST would restart the server now; false for a caller
+   * without restart
+   */
   available: boolean;
   /** Who starts the server again; absent when nobody would */
   by?: "systemd" | "launchd" | "windows" | "exit";
-  /** Why the restart is not available */
+  /**
+   * Why the restart is not available, 'capability "restart" required' for a
+   * caller without restart
+   */
   blocked?: string;
   /**
    * The settings file's variables that changed since the start and apply only
@@ -966,6 +1006,10 @@ export interface SystemInfo {
   api_port?: number;
   /** The Cubes' proxy listeners, listening or not. */
   cube_proxies: {
+    /**
+     * The Cube's serial; absent until the Cube of a plain MASSIMO_CUBE_ADDRESS
+     * reports it.
+     */
     serial?: string;
     /**
      * The serial it answers discovery with: the Cube's proxy serial where set,
@@ -1114,12 +1158,27 @@ export interface UpdateInfo {
    */
   manager?: string;
   /**
-   * Newest signed release the channel takes: of its own flavour or a more
-   * stable one
+   * The version an update would install: the newest signed release the channel
+   * takes, of its own flavour or a more stable one; where apt or brew owns the
+   * binary, the newest its package source has, never newer than the signed
+   * release
    */
   latest?: string;
+  /** The newest signed release, where the package source has it not yet */
+  released?: string;
+  /**
+   * Why the package source (apt's index, brew's formula) could not be read;
+   * nothing is available then
+   */
+  source_error?: string;
+  /**
+   * A version the update helper found nothing to install for (up-to-date), held
+   * back until a check made after it finds it in the package source
+   */
+  held?: string;
+  /** The page of the newest signed release */
   release_url?: string;
-  /** latest is newer than current */
+  /** latest is newer than current, and not held back */
   available: boolean;
   /** @format date-time */
   checked_at: string;
@@ -1128,11 +1187,51 @@ export interface UpdateInfo {
   can_update: boolean;
   /**
    * Why an update cannot be started from the API (a package manager owning the
-   * binary without a helper of its own, no token, no helper, a development
-   * build)
+   * binary without a helper of its own, no token, no helper, on Windows and
+   * under brew a listen address the helper cannot ask /healthz at, named by its
+   * setting, a development build)
    */
   blocked?: string;
   helper?: UpdateStatus;
+  /** The automatic update at night; absent without a store */
+  auto?: {
+    /** The setting update.auto */
+    mode: "off" | "night";
+    /** The setting update.auto_window, HH:MM-HH:MM in the server's time */
+    window: string;
+    /**
+     * When the box will try: inside the window now, else at its next opening;
+     * absent while no update is due or the version is skipped
+     * @format date-time
+     */
+    next?: string;
+    /**
+     * What the next try waits for, where next is set: settings while the
+     * server's next start refuses the settings file (GET /api/v1/restart's
+     * refused); absent otherwise, a busy radio included
+     */
+    waits?: "settings";
+    /**
+     * The box's answer to the question (PUT /api/v1/update/answer), where it
+     * names the version offered or a newer one
+     */
+    answer?: {
+      version: string;
+      answer: "tonight" | "skip";
+      /** Who answered; absent for the owner's key */
+      by?: {
+        name?: string;
+        display_name?: string;
+      };
+      /** @format date-time */
+      at: string;
+    };
+    /**
+     * The page asks a holder of update Install now, Tonight or Skip this
+     * version: automatic updates on, an update due, no answer for it
+     */
+    ask: boolean;
+  };
   /** The last ten updates, newest first; empty without a store */
   history: UpdateEntry[];
 }
@@ -1163,11 +1262,25 @@ export interface UpdateEntry {
   from?: string;
   /** The version asked for, where Massimo started it */
   to?: string;
-  /** The version the next start ran; absent while the update runs */
+  /**
+   * The channel asked for, where Massimo started it; for an update from
+   * outside, the one the box followed at the start that found it
+   */
+  channel?: string;
+  /**
+   * The version the next start ran, the one asked for or another apt chose;
+   * absent while the update runs
+   */
   reached?: string;
   /** @format date-time */
   reached_at?: string;
-  /** The update helper's outcome where it ended without reaching to */
+  /** The server started it itself, at night; by is absent then */
+  auto?: boolean;
+  /**
+   * The update helper's outcome where the box did not stay on a new version,
+   * rolled-back after reached ran: taken at the next read or the next update
+   * started where the helper did not restart the server, else at the next start
+   */
   result?: "failed" | "rolled-back" | "up-to-date";
 }
 
@@ -1279,6 +1392,12 @@ export interface FoundCube {
     removed_at: string;
   }[];
   /**
+   * In GET /api/v1/cubes: the backups the store keeps of the serial's row,
+   * which GET …/backups lists while no runtime serves it; 0 without a row;
+   * absent in the answer of a discovery
+   */
+  backups?: number;
+  /**
    * When the server first saw it
    * @format date-time
    */
@@ -1336,6 +1455,11 @@ export interface Cube {
    * store's, which wins
    */
   file_differs?: FileDifference[];
+  /**
+   * The backups the store keeps of the Cube (GET …/backups); 0 for a Cube
+   * without a row in the store, and without a store
+   */
+  backups: number;
   /**
    * The stored address; empty: from discovery (address is where it connects
    * now)

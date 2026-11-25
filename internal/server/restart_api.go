@@ -18,6 +18,9 @@ package server
 // /api/v1/restart names the file and when it was last read, and both
 // answer what the last read found the next start refuses (SetRefused),
 // which blocks nothing: the restart still goes (AP ReloadChecks, D8-B).
+// The GET takes restart or update, since every update restarts the
+// server (AP StartConfiguration, D34-A), and tells a caller without
+// restart that its POST, which takes restart alone, is not available.
 
 import (
 	"context"
@@ -212,6 +215,11 @@ func (s *Server) restartState(r *http.Request) (v restartView, open bool) {
 
 func (s *Server) getRestart(w http.ResponseWriter, r *http.Request) error {
 	v, _ := s.restartState(r)
+	if !principalOf(r).has("restart") {
+		// A holder of update alone (D34-A): its own POST is refused, the
+		// rest of the answer is a restart holder's.
+		v.Available, v.Blocked = false, capabilityRequired("restart")
+	}
 	v.Pending = s.pendingRestart()
 	v.Refused = s.refusedAtNextStart()
 	v.File, v.ReadAt, _ = s.settingsState()

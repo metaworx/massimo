@@ -2,7 +2,8 @@
 # Copyright (C) 2026 The Massimo Authors
 """Copying (components.js copyable, copyIcon, copyEl): a text that copies
 on a click, its copy icon, Enter, and the fallback a page over plain HTTP
-needs, where the browser gives it no clipboard."""
+needs, where the browser gives it no clipboard, which gives the focus back
+where it was."""
 from helpers import wait_until
 
 DONE = {"en": "Copied", "de": "Kopiert"}
@@ -50,6 +51,15 @@ def test_copy(page, case):
         text.click()
         page.evaluate("""() => Object.defineProperty(navigator, "clipboard", { value: window.__clip, configurable: true })""")
         assert clipboard(page) == "KEQ0000100", "the fallback copies"
+        assert page.evaluate("document.activeElement === document.querySelector('#test-copy .mono')"), \
+            "the focus back where it was, not on the page's body"
+        # by the keyboard too: the copy icon, Enter
+        page.evaluate("""() => Object.defineProperty(navigator, "clipboard", { value: undefined, configurable: true })""")
+        page.locator("#test-copy .copy-icon").focus()
+        page.keyboard.press("Enter")
+        page.evaluate("""() => Object.defineProperty(navigator, "clipboard", { value: window.__clip, configurable: true })""")
+        assert wait_until(page, "document.getElementById('copy-status').textContent !== ''", 3)
+        assert page.evaluate("document.activeElement === document.querySelector('#test-copy .copy-icon')"), "the focus back on the icon"
     finally:
         page.evaluate("document.getElementById('test-copy').remove()")
 

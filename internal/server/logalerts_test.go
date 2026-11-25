@@ -9,6 +9,7 @@ package server
 
 import (
 	"encoding/base64"
+	"errors"
 	"slices"
 	"strconv"
 	"testing"
@@ -36,8 +37,8 @@ func TestSettleRulesKnowTheirKinds(t *testing.T) {
 }
 
 // A warning or an error is settled by a later counterpart of the same
-// Cube below warn; a hold by its end; a kind without a counterpart only
-// by a mark.
+// Cube below warn, or at any level where its rule says any; a hold by
+// its end; a kind without a counterpart only by a mark.
 func TestUnsettled(t *testing.T) {
 	t.Parallel()
 	now := time.Now()
@@ -56,8 +57,8 @@ func TestUnsettled(t *testing.T) {
 		ev(12, "backup", "warn", "KEQ0000100", nil),
 		ev(13, "backup", "warn", "KEQ0000100", nil),
 		ev(14, "proxy_delete_refused", "warn", "KEQ0000100", nil),
-		// a value the next start refuses: settled by the file read again
-		// without one, or by a start; not by another that refuses one
+		// a value the next start refuses: settled by the file read again,
+		// a warning too, the newest the alert, or by a start
 		ev(15, "settings_read", "warn", "", nil),
 		ev(17, "settings_read", "warn", "", nil),
 		ev(20, "settings_read", "warn", "", nil),
@@ -81,8 +82,65 @@ func TestUnsettled(t *testing.T) {
 	for _, a := range unsettled(lines, settling, now) {
 		got = append(got, a.ID)
 	}
-	if want := []int64{3, 7, 9, 12, 13, 14, 20, 21}; !slices.Equal(got, want) {
+	if want := []int64{3, 7, 9, 12, 13, 14, 21}; !slices.Equal(got, want) {
 		t.Fatalf("unsettled %v, want %v", got, want)
+	}
+}
+
+// settings_read's line holds all that its read found, so that a later
+// one settles it, a warning too, and the newest is the alert while it
+// warns; a start settles it, and the start's own notes, a warning after
+// its server_started, are the alert (AP StartConfiguration, D11-A).
+// Another kind's lines settle it not, at any level: any keeps to by.
+func TestSettingsReadSettles(t *testing.T) {
+	t.Parallel()
+	now := time.Now()
+	ev := func(id int64, kind, level string) event {
+		return event{ID: id, Kind: kind, Level: level, Source: "system", Time: now.Add(time.Duration(id-100) * time.Second)}
+	}
+	warned := func(id int64) event { return ev(id, "settings_read", "warn") }
+	read := func(id int64) event { return ev(id, "settings_read", "info") }
+	started := func(id int64) event { return ev(id, "server_started", "info") }
+	rotated := func(id int64, level string) event { return ev(id, "log_rotated", level) }
+	for _, c := range []struct {
+		name string
+		log  []event // oldest first
+		want []int64
+	}{
+		{"two warnings in a row", []event{warned(1), warned(2)}, []int64{2}},
+		{"three warnings in a row", []event{warned(1), warned(2), warned(3)}, []int64{3}},
+		{"a warning, then an info line", []event{warned(1), read(2)}, nil},
+		{"a warning, then a start", []event{warned(1), started(2)}, nil},
+		{"a warning, then a start that writes its notes", []event{warned(1), started(2), warned(3)}, []int64{3}},
+		{"the start's notes, then a read that warns", []event{started(1), warned(2), warned(3)}, []int64{3}},
+		{"the start's notes, then a read without a finding", []event{started(1), warned(2), read(3)}, nil},
+		{"an info line, then a warning", []event{read(1), warned(2)}, []int64{2}},
+		{"a warning, then another kind's warning and its counterpart", []event{warned(1), rotated(2, "warn"), rotated(3, "info")}, []int64{1}},
+	} {
+		// As logAlerts reads them: the warnings and errors, and every
+		// line, whatever its level, of the kinds that settle one of them.
+		var lines, settling []event
+		kinds := map[string]bool{}
+		for _, e := range c.log {
+			if !belowWarn(&e) {
+				lines = append(lines, e)
+				for _, k := range settleRules[e.Kind].by {
+					kinds[k] = true
+				}
+			}
+		}
+		for _, e := range c.log {
+			if kinds[e.Kind] {
+				settling = append(settling, e)
+			}
+		}
+		var got []int64
+		for _, a := range unsettled(lines, settling, now) {
+			got = append(got, a.ID)
+		}
+		if !slices.Equal(got, c.want) {
+			t.Errorf("%s: unsettled %v, want %v", c.name, got, c.want)
+		}
 	}
 }
 
@@ -185,6 +243,90 @@ func TestLogAlertsRoute(t *testing.T) {
 	if code, _ := callAPI(t, ts, "GET", "/api/v1/log/alerts?after=x", "", ""); code != 400 {
 		t.Fatalf("a bad after: %d", code)
 	}
+}
+
+// GET /api/v1/log/alerts over the settings file read again and again
+// (AP StartConfiguration, D11-A): of the reads that warn in a row, the
+// newest alone is the alert, and the answer's level, the log's sign, is
+// warn with it; a read without a finding leaves neither; another kind's
+// warning and its counterpart leave it as it is; a start settles a
+// read's warning, and its own notes, after its server_started, are the
+// alert; a start without notes leaves none.
+func TestLogAlertsSettingsReadInARow(t *testing.T) {
+	t.Parallel()
+	refused := []Refusal{{Settings: []string{"MASSIMO_HSTS"}, Error: `-hsts or MASSIMO_HSTS "-1": want a number of days, 0 or more`}}
+	notes := []string{"MASSIMO_HSTS is given on lines 3 and 4; the first wins"}
+	// newest is the newest settings_read's id, with the store's written.
+	newest := func(r *rig) int64 {
+		t.Helper()
+		if err := r.st.FlushEvents(t.Context()); err != nil {
+			t.Fatal(err)
+		}
+		rows, err := r.st.Events(t.Context(), store.EventQuery{Kind: "settings_read", Limit: 1})
+		if err != nil || len(rows) != 1 {
+			t.Fatalf("the newest settings_read: %v %v", rows, err)
+		}
+		return rows[0].ID
+	}
+	// read writes a read's settings_read, a warning where it found a
+	// refusal or a note, and answers its id.
+	read := func(r *rig, refused []Refusal, notes []string) int64 {
+		t.Helper()
+		r.s.LogSettingsRead(t.Context(), "the settings file changed", nil, nil, refused, notes)
+		return newest(r)
+	}
+	// sign checks the alerts, with the store's written: want's, newest
+	// first, settings_read at warn, and the level warn with one, "" with
+	// none.
+	sign := func(r *rig, what string, want ...int64) {
+		t.Helper()
+		if err := r.st.FlushEvents(t.Context()); err != nil {
+			t.Fatal(err)
+		}
+		var out logAlertsView
+		if code := getJSON(t, r.ts, "", "/api/v1/log/alerts", &out); code != 200 {
+			t.Fatalf("%s: GET: %d", what, code)
+		}
+		var got []int64
+		for _, a := range out.Alerts {
+			if a.Kind != "settings_read" || a.Level != "warn" {
+				t.Fatalf("%s: an alert %+v", what, a)
+			}
+			got = append(got, a.ID)
+		}
+		level := ""
+		if len(want) > 0 {
+			level = "warn"
+		}
+		if !slices.Equal(got, want) || out.Level != level {
+			t.Fatalf("%s: the alerts %v at %q, want %v at %q", what, got, out.Level, want, level)
+		}
+	}
+	first := startServer(t, stored())
+	sign(first, "the start")
+	sign(first, "a refusal", read(first, refused, nil))
+	sign(first, "a note after it", read(first, nil, notes))
+	sign(first, "both after it", read(first, refused, notes))
+	read(first, nil, nil)
+	sign(first, "a read without a finding")
+	last := read(first, refused, nil)
+	sign(first, "a refusal again", last)
+	first.s.LogRotated("size", "serve.log.1", 1, nil, errors.New("log not rotated: permission denied"))
+	first.s.LogRotated("size", "serve.log.1", 1, nil, nil)
+	sign(first, "a failed rotation and a good one after it", last)
+	first.stop()
+
+	second := startServer(t, again(first), withOptions(Options{SettingsNotes: notes}))
+	start := newest(second)
+	if start <= last {
+		t.Fatalf("the start's notes: no settings_read after %d", last)
+	}
+	sign(second, "the start's notes", start)
+	sign(second, "a read after the start's notes", read(second, refused, notes))
+	second.stop()
+
+	third := startServer(t, again(second))
+	sign(third, "a start without notes")
 }
 
 // A person's marks (Block 2): all hides the alerts up to its id, a

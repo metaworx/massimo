@@ -33,13 +33,16 @@ import (
 	"go.metaworx.ch/massimo/internal/announce"
 	"go.metaworx.ch/massimo/internal/certs"
 	"go.metaworx.ch/massimo/internal/engine"
+	"go.metaworx.ch/massimo/internal/env"
 	"go.metaworx.ch/massimo/internal/push"
 	"go.metaworx.ch/massimo/internal/server"
 	"go.metaworx.ch/massimo/internal/store"
 )
 
-// stopGrace is how long Run waits for the server to stop, writing the
-// log's pending events, before the store closes under it.
+// stopGrace is how long Run waits for the server to stop, taking the
+// backups of the changes pending (5 s at most, server's backupsAtStop)
+// and writing the log's pending events, before the store closes under
+// it.
 const stopGrace = 10 * time.Second
 
 // Config is what a server is started with.
@@ -59,6 +62,10 @@ type Config struct {
 	// from, for the log; the Cubes of the file are read from the
 	// environment (FileCubes).
 	SettingsFile string
+	// SettingsNotes are the notes on the settings file the start read,
+	// their texts, which the log's settings_read says after the start's
+	// server_started (server.Options.SettingsNotes).
+	SettingsNotes []string
 	// Serial is the Cube chosen with -sn or MASSIMO_CUBE_SN, which the
 	// per-Cube variables are read for; SerialGiven says it came from
 	// -sn, and then that Cube alone is served.
@@ -325,12 +332,14 @@ func open(ctx context.Context, cfg Config, root *slog.Logger, src certs.Source, 
 		find = findIntegrations
 	}
 	srv := server.New(server.Options{Cubes: su.cubes, Token: cfg.Token, PollInterval: poll, CubeHold: cfg.CubeHold, RefreshInterval: refresh, DiscoverInterval: discover, DiscoveryTargets: cfg.DiscoveryTargets, DiscoveryAddr: cfg.DiscoveryListen, DiscoveryWait: cfg.discoveryWait, Logger: root, Version: cfg.Version, Proxy: su.listeners, ShowHidden: cfg.ShowHidden,
-		Store: st, Queue: queue, FileCubes: su.fileCubes, SettingsFile: cfg.SettingsFile, StaleAfter: staleAfter, StaleAfterWall: staleAfterWall, SettingsFixedBy: fixedBy, ProxyFixed: len(cfg.Proxies) > 0, Update: cfg.Update, TLS: src, HSTSDays: cfg.HSTSDays, TrustedProxies: cfg.TrustedProxies,
+		Store: st, Queue: queue, FileCubes: su.fileCubes, SettingsFile: cfg.SettingsFile, SettingsNotes: cfg.SettingsNotes, StaleAfter: staleAfter, StaleAfterWall: staleAfterWall, SettingsFixedBy: fixedBy, ProxyFixed: len(cfg.Proxies) > 0, Update: cfg.Update, TLS: src, HSTSDays: cfg.HSTSDays, TrustedProxies: cfg.TrustedProxies,
 		Restart: cfg.Restart, Reboot: cfg.Reboot, Install: cfg.Install, Deliverers: cfg.Deliverers, FindIntegrations: find, BrowseServers: browseServers,
 		Announce: server.AnnounceState{On: cfg.Announce.On && st != nil, FixedBy: cfg.Announce.FixedBy, Loopback: LoopbackListen(cfg.Listen)}})
+	// An error of the box's state, such as a port taken, names its
+	// setting as the start's checks name theirs (cmd/massimo).
 	ln, err := net.Listen("tcp", cfg.Listen)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("serve: -listen or MASSIMO_LISTEN: %w", err)
 	}
 	srv.SetAPIAddr(ln.Addr()) // System Info's interfaces
 	return &Instance{cfg: cfg, log: log, root: root, src: src, st: st, srv: srv, ln: ln, cubes: su.cubes}, nil
@@ -348,8 +357,9 @@ func (i *Instance) Server() *server.Server { return i.srv }
 func (i *Instance) Store() *store.Store { return i.st }
 
 // Run serves the API and every Cube until ctx ends, then closes the
-// store: once the server has stopped and written the log's pending
-// events, or after a grace of ten seconds. An instance runs once.
+// store: once the server has stopped, taken the automatic backup of
+// each Cube with a change pending and written the log's pending events,
+// or after a grace of ten seconds. An instance runs once.
 func (i *Instance) Run(ctx context.Context) error {
 	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
@@ -388,7 +398,7 @@ func (i *Instance) Run(ctx context.Context) error {
 		// https://; serving it is what lets the manager use HTTP-01.
 		hln, err := net.Listen("tcp", i.cfg.TLS.HTTP)
 		if err != nil {
-			return fmt.Errorf("serve: -tls-http: %w", err)
+			return fmt.Errorf("serve: -tls-http or %s: %w", env.TLSHTTP, err)
 		}
 		i.log.Info("http helper listening", "addr", hln.Addr().String(), "for", "the ACME HTTP-01 challenge and the redirect to https://")
 		go func() {
@@ -470,14 +480,20 @@ func (i *Instance) Close() error {
 
 // openStore opens the store of the data directory, or, with Config.Addr,
 // none: such a run serves one Cube for this run only and writes nothing,
-// not even the found Cubes.
+// not even the found Cubes. Its error names the setting of the
+// directory, whose store it is, but for a store refused
+// (store.ErrRefused), whose text says what to do: install the newer
+// release again, or downgrade the store; the directory is the right one.
 func openStore(cfg Config, log *slog.Logger) (*store.Store, error) {
 	if cfg.Addr != "" {
 		return nil, nil
 	}
 	st, err := store.Open(cfg.DataDir, store.Options{Version: cfg.Version, Logger: log})
-	if err != nil {
+	if errors.Is(err, store.ErrRefused) {
 		return nil, fmt.Errorf("serve: %w", err)
+	}
+	if err != nil {
+		return nil, fmt.Errorf("serve: -data or %s: %w", env.DataVar, err)
 	}
 	return st, nil
 }

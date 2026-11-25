@@ -287,23 +287,6 @@ func TestAptUpdateOnlyAsTheHelper(t *testing.T) {
 	}
 }
 
-func TestDebTag(t *testing.T) {
-	t.Parallel()
-	for v, want := range map[string]string{
-		"0.13.0~alpha.1": "v0.13.0-alpha.1", "1.0.0": "v1.0.0", "0.13.0~alpha.1~rc~2": "v0.13.0-alpha.1-rc-2",
-		"0.13.0~alpha.2+3.gabc1234":       "v0.13.0-alpha.2-3-gabc1234",
-		"0.13.0~alpha.2+3.gabc1234.dirty": "v0.13.0-alpha.2-3-gabc1234-dirty",
-		"0.13.0~alpha.2+dirty":            "v0.13.0-alpha.2-dirty",
-		"1.0.0+3.gabc1234":                "v1.0.0-3-gabc1234",
-		// The older form of a build between tags, still installed on a box.
-		"0.13.0~alpha.2~3~gabc1234": "v0.13.0-alpha.2-3-gabc1234",
-	} {
-		if got := debTag(v); got != want {
-			t.Errorf("debTag(%q) = %q, want %q", v, got, want)
-		}
-	}
-}
-
 // TestMakeVersionTags: the Makefile's VERSION and FLAVOUR count a version
 // tag alone. A repository of its own carries v0.1.0-alpha.1 and, on later
 // commits, tags that only look like one. git describe takes a glob, which
@@ -362,10 +345,10 @@ func TestMakeVersionTags(t *testing.T) {
 }
 
 // TestDebVersion: the Makefile's DEBVER for each form git describe gives,
-// which debTag reads back to the version the binary reports, and, where
-// dpkg is installed, the order apt sees: a build between tags after the
-// tag it follows and before the next one, so that apt never takes it
-// back to its tag.
+// which update.DebTag reads back to the version the binary reports, and,
+// where dpkg is installed, the order apt sees: a build between tags
+// after the tag it follows and before the next one, so that apt never
+// takes it back to its tag.
 func TestDebVersion(t *testing.T) {
 	t.Parallel()
 	makeCmd, err := exec.LookPath("make")
@@ -387,8 +370,8 @@ func TestDebVersion(t *testing.T) {
 		if got := strings.TrimSpace(string(out)); got != deb {
 			t.Errorf("DEBVER of %s = %q, want %q", version, got, deb)
 		}
-		if got := debTag(deb); got != version {
-			t.Errorf("debTag(%q) = %q, want %q", deb, got, version)
+		if got := update.DebTag(deb); got != version {
+			t.Errorf("DebTag(%q) = %q, want %q", deb, got, version)
 		}
 	}
 	dpkg, err := exec.LookPath("dpkg")

@@ -15,6 +15,8 @@ import (
 	"strconv"
 	"strings"
 	"time"
+
+	"go.metaworx.ch/massimo/internal/credits"
 )
 
 // The web UI: HTML, CSS and plain JavaScript, and the page's parts,
@@ -24,13 +26,16 @@ import (
 // served at / (the page, assembled from index.html and the partials at
 // start) and /ui/ (the files, the translations under /ui/i18n/, Massimo's
 // mark under /ui/brand/, which make ui-brand writes from tools/brand,
-// the vendored OPAQUE client under /ui/vendor/, ui/vendor/README.md) and
+// the vendored OPAQUE client under /ui/vendor/, ui/vendor/README.md, the
+// credits and licences at /ui/credits.json, internal/credits, and EFF's
+// long word list a suggested password draws from, /ui/words-en.txt,
+// third_party/eff-wordlist/) and
 // talks to the API; beside the page, /sw.js is its service worker, whose
 // scope is the page's, /manifest.webmanifest makes it installable, and
 // /favicon.ico is where browsers look for an icon. /ui/connect.html is the
 // apps' connect page, a page of its own (docs/app.md).
 //
-//go:embed ui/index.html ui/connect.html ui/connect.js ui/i18n.js ui/components.js ui/app.js ui/header.js ui/home.js ui/rooms.js ui/tiles.js ui/week-program.js ui/config.js ui/login.js ui/providers.js ui/theme.js ui/notify.js ui/notifytext.js ui/sw.js ui/manifest.webmanifest ui/style.css ui/i18n/*.json ui/brand/*.svg ui/brand/*.css ui/brand/*.png ui/brand/*.ico ui/partials/*.html ui/vendor/opaque.js ui/vendor/opaque.LICENSE ui/parts.js
+//go:embed ui/index.html ui/connect.html ui/connect.js ui/i18n.js ui/components.js ui/app.js ui/header.js ui/home.js ui/rooms.js ui/tiles.js ui/week-program.js ui/config.js ui/login.js ui/providers.js ui/theme.js ui/notify.js ui/notifytext.js ui/sw.js ui/manifest.webmanifest ui/style.css ui/i18n/*.json ui/brand/*.svg ui/brand/*.css ui/brand/*.png ui/brand/*.ico ui/partials/*.html ui/vendor/opaque.js ui/vendor/opaque.LICENSE ui/words-en.txt ui/parts.js
 var uiFiles embed.FS
 
 // uiPartials are the frames of the page's skeleton in ui/partials/, a
@@ -180,6 +185,16 @@ func (s *Server) uiRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("GET /favicon.ico", func(w http.ResponseWriter, r *http.Request) {
 		brand(w, r, "favicon.ico")
 	})
+	// The credits and licences of what the binary includes, which System
+	// info shows (internal/credits): the embedded list, a file as the
+	// others are.
+	// Its ETag holds Go's version too, which the file carries: a server of
+	// the same version built with another Go serves another file.
+	mux.HandleFunc("GET /ui/credits.json", func(w http.ResponseWriter, r *http.Request) {
+		securityHeaders(w)
+		cache(w, "credits.json/go"+etagChars(credits.GoVersion()))
+		http.ServeContent(w, r, "credits.json", time.Time{}, bytes.NewReader(credits.JSON()))
+	})
 	mux.HandleFunc("GET /ui/vendor/{file}", func(w http.ResponseWriter, r *http.Request) {
 		securityHeaders(w)
 		serve(w, r, "vendor/"+r.PathValue("file"))
@@ -209,12 +224,17 @@ func uiETagVersion(v string, started time.Time) string {
 	if short == "dev" || strings.Contains(short, "dirty") {
 		short += "+" + strconv.FormatInt(started.UnixNano(), 36)
 	}
+	return etagChars(short)
+}
+
+// etagChars is s in the characters an ETag may hold, '_' for the others.
+func etagChars(s string) string {
 	return strings.Map(func(c rune) rune {
 		if c <= ' ' || c == '"' || c == 0x7f || c > 0x7e {
 			return '_'
 		}
 		return c
-	}, short)
+	}, s)
 }
 
 // securityHeaders restricts the page to its own origin: scripts, styles

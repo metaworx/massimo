@@ -16,7 +16,12 @@
  * A change reads the integrations again and says how it went under the
  * section; an integration gone from a load that went through forgets its
  * forms and its panel's state; an answer after a sign-out is dropped
- * (shared/session.ts).
+ * (shared/session.ts), and so is one that a later read of its kind was
+ * asked after: the list, the users, the LAN's answer and each open
+ * panel's integration show the newest asked for of their reads, whatever
+ * order the answers come in. A newer read that fails leaves what was
+ * shown as it was, the older answer dropped all the same, until the next
+ * read.
  */
 
 import { signal } from "@preact/signals";
@@ -56,6 +61,8 @@ export const data = live({
   loaded: false,
   /** Per uuid, an open panel's integration with its users. */
   details: {} as Record<string, Integration>,
+  /** The LAN's answer came: found, looks and announce are the server's. */
+  seen: false,
   /** The installations the last look at the LAN saw. */
   found: [] as FoundIntegration[],
   /** The server looks at the LAN. */
@@ -76,6 +83,25 @@ export const requestUI = liveMap(() => ({ closed: false }));
 
 /** The outcome the section's message line shows. */
 export const said = signal<Outcome | null>(null);
+
+/**
+ * The number of the newest read of each kind: a read takes the next one
+ * before its request and writes its answer only where no read of its
+ * kind was asked after it, so that two showings of System settings whose
+ * reads overlap leave the newer answers, as the session's number leaves
+ * nothing of a session that ended (AP LooseEnds, Block 3).
+ */
+const newest = { list: 0, seen: 0, users: 0 };
+
+/** The number of the newest read of each integration with its users, by uuid, for its open panel, as newest has them. */
+const newestDetails = new Map<string, number>();
+
+/** detailsRead takes the next number of an integration's own read. */
+function detailsRead(uuid: string): number {
+  const read = (newestDetails.get(uuid) || 0) + 1;
+  newestDetails.set(uuid, read);
+  return read;
+}
 
 /** The timers reading an approved integration again until its key is collected, by uuid. */
 const watch = new Map<string, ReturnType<typeof setTimeout>>();
@@ -121,8 +147,9 @@ export function keyState(i: Integration): "" | "waiting" | "expired" {
 /** loadDetails reads an integration with its users, for its open panel. */
 export async function loadDetails(uuid: string): Promise<void> {
   const n = session();
+  const read = detailsRead(uuid);
   const i = await api<Integration>("GET", integrationPath(uuid));
-  if (stillSession(n)) data.details = { ...data.details, [uuid]: i };
+  if (stillSession(n) && read === newestDetails.get(uuid)) data.details = { ...data.details, [uuid]: i };
 }
 
 /**
@@ -134,8 +161,10 @@ export async function loadDetails(uuid: string): Promise<void> {
 export async function loadIntegrations(): Promise<void> {
   if (!can("integrations")) return;
   const n = session();
+  const read = ++newest.list;
   const list = (await api<Integration[]>("GET", "api/v1/integrations")) || [];
   if (!stillSession(n)) return; // signed out meanwhile: nothing of it is the next user's
+  if (read !== newest.list) return; // a later read's answer is the list
   // a key collected while no reading followed it (another page shown, the card folded) is said all the same
   for (const i of list) {
     const was = data.list.find((x) => x.uuid === i.uuid);
@@ -158,8 +187,10 @@ export async function loadIntegrations(): Promise<void> {
 /** loadSeen reads what the last look at the LAN saw; refresh looks now. */
 export async function loadSeen(refresh: boolean): Promise<void> {
   const n = session();
+  const read = ++newest.seen;
   const f = (await api<{ found: FoundIntegration[]; looks: boolean; announce?: NotLooking }>("GET", "api/v1/integrations/found" + (refresh ? "?refresh=1" : ""))) || {};
-  if (!stillSession(n)) return;
+  if (!stillSession(n) || read !== newest.seen) return;
+  data.seen = true;
   data.found = f.found || [];
   data.looks = !!f.looks;
   data.announce = f.announce || null;
@@ -167,6 +198,7 @@ export async function loadSeen(refresh: boolean): Promise<void> {
 
 /** loadLinkUsers reads the Massimo users an integration's user may be linked to: none of an integration; null where they may not be read. */
 async function loadLinkUsers(): Promise<void> {
+  const read = ++newest.users;
   if (!canManageUsersOf()) {
     data.users = null;
     return;
@@ -178,7 +210,7 @@ async function loadLinkUsers(): Promise<void> {
   } catch {
     users = null;
   }
-  if (stillSession(n)) data.users = users;
+  if (stillSession(n) && read === newest.users) data.users = users;
 }
 
 /** refresh reads everything the section shows and draws it. */
@@ -257,6 +289,7 @@ export function watchApproval(uuid: string): void {
   const tick = async () => {
     watch.delete(uuid);
     if (!stillSession(n) || !listEl?.offsetParent) return;
+    const read = detailsRead(uuid);
     let i: Integration;
     try {
       i = await api<Integration>("GET", integrationPath(uuid));
@@ -271,7 +304,7 @@ export function watchApproval(uuid: string): void {
       delete next.users; // the list's entries carry none
       data.list = data.list.map((x, k) => (k === at ? next : x));
     }
-    if (panelUI.of(uuid).open) data.details = { ...data.details, [uuid]: i };
+    if (panelUI.of(uuid).open && read === newestDetails.get(uuid)) data.details = { ...data.details, [uuid]: i };
     const now = keyState(i);
     if (now !== was) {
       if (was === "waiting" && !now) msg(t("integrations.collected", { name: i.name }), true);
@@ -294,6 +327,7 @@ export function forgetIntegrations(): void {
   data.list = [];
   data.loaded = false;
   data.details = {};
+  data.seen = false;
   data.found = [];
   data.looks = false;
   data.announce = null;

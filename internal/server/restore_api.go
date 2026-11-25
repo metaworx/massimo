@@ -120,9 +120,10 @@ type restoreProgress struct {
 
 // planRestore handles POST …/restore/plan: the backup in the body is
 // compared with the Cube and the steps a restore would send are
-// answered, nothing is written.
+// answered, nothing is written; a Cube no runtime serves is 409
+// (servedCube).
 func (s *Server) planRestore(w http.ResponseWriter, r *http.Request) error {
-	rt, err := s.cube(r)
+	rt, err := s.servedCube(r)
 	if err != nil {
 		return err
 	}
@@ -136,9 +137,9 @@ func (s *Server) planRestore(w http.ResponseWriter, r *http.Request) error {
 
 // startRestore handles POST …/restore?plan=<hash>: the plan is computed
 // again from the body, and when its hash is the one given, its steps are
-// sent in the background.
+// sent in the background; a Cube no runtime serves is 409 (servedCube).
 func (s *Server) startRestore(w http.ResponseWriter, r *http.Request) error {
-	rt, err := s.cube(r)
+	rt, err := s.servedCube(r)
 	if err != nil {
 		return err
 	}
@@ -255,7 +256,7 @@ func (s *Server) readRestoreSource(w http.ResponseWriter, r *http.Request, rt *r
 	if err != nil || id < 1 {
 		return nil, fail(http.StatusBadRequest, "backup=%q is not a backup's id", q)
 	}
-	f, err := s.storedFile(r, rt, rt.store, rt.storeID.Load(), id)
+	f, err := s.storedFile(r, servedHistory(rt), id)
 	if err != nil {
 		return nil, err
 	}
@@ -549,7 +550,11 @@ func (s *Server) runRestore(ctx context.Context, rt *runtime, run *restoreRun, p
 	if err == nil {
 		// The file restored is the reference now: the next look says
 		// whether the Cube took all of it.
-		rt.bk.restored(hash)
+		rt.bk.rows.Lock()
+		if rt.bk.restored(hash) {
+			s.dropKept(ctx, rt)
+		}
+		rt.bk.rows.Unlock()
 	}
 	finished := time.Now()
 	rt.restoreMu.Lock()

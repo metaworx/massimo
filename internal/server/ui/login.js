@@ -250,7 +250,9 @@ let startWaits = 0;
 // loadMeAndPreferences reads who is in, through the sign-in dialog where
 // the server asks for one, and through the first owner's card where the
 // server asks for its owner (loadMe), then the user's settings from the
-// server.
+// server; once both have settled, a card closed on a sign-in or a new
+// owner meanwhile empties its secret fields (MassimoParts.signIn.settled,
+// AP LooseEnds, D13, D41-A).
 async function loadMeAndPreferences() {
   startWaits++;
   try {
@@ -259,7 +261,11 @@ async function loadMeAndPreferences() {
   } finally {
     startWaits--;
   }
-  await loadPreferences();
+  try {
+    await loadPreferences();
+  } finally {
+    MassimoParts.signIn.settled(); // the first reads after a sign-in of the card settled: its secrets go (ui/src/signin/)
+  }
 }
 
 // whoIs names who the page is signed in as, from /me: a user by name,
@@ -290,14 +296,18 @@ function resumePushes(held) {
 // forgets the one who was, as a sign-out does (forgetSession), and drops
 // the pushes held: the next user neither sees nor saves nor receives
 // anything of the last. A sign-in that nobody was signed in before has
-// nothing to forget.
-async function settleSignIn(was, held) {
+// nothing to forget. known is who is in as the sign-in read it already
+// (the API key's way reads it with the key first, AP LooseEnds, D43), so
+// that it is not read twice; undefined reads it.
+async function settleSignIn(was, held, known) {
   if (!was) return resumePushes(held);
-  let me = null;
-  try {
-    me = await apiRequest("GET", "api/v1/me");
-  } catch (e) {
-    // not known: forgotten, to be safe
+  let me = known === undefined ? null : known;
+  if (known === undefined) {
+    try {
+      me = await apiRequest("GET", "api/v1/me");
+    } catch (e) {
+      // not known: forgotten, to be safe
+    }
   }
   if (whoIs(me) === was) return resumePushes(held);
   await forgetSession(canSync());
@@ -322,7 +332,7 @@ async function forgetSession(synced) {
   forgetNotSent();
   MassimoParts.rooms.closeHouse();
   closeEvents();
-  clearCubeData(); // app.js: nothing of this session behind the sign-in; the poll forgetUserSettings started stops
+  clearCubeData(); // app.js: nothing of this session behind the sign-in; the poll stops
   MassimoParts.pages.showView("tiles", "replace");
   await language;
 }
@@ -431,7 +441,7 @@ function askLogin(on) {
       ask.closed = true;
       dlg.onclose = null;
       if (dlg.open) dlg.close();
-      MassimoParts.signIn.closed();
+      MassimoParts.signIn.closed(ok); // ui/src/signin/: on a success the card's secrets go once the reads after it settle
       document.body.classList.remove("signed-out");
       loginPromise = null;
       resolve(ok);
@@ -473,11 +483,12 @@ function askLogin(on) {
 // not the open server for a moment, and Create the owner turns until
 // then (AP FirstOwner); on a running page the page it was opened on is
 // shown again, read anew under the owner (D37). An ask closed meanwhile (dismissed, or ended by
-// another way) is left as it is: nothing is closed or started twice. It
+// another way) is left as it is: nothing is closed or started twice. me,
+// where given, is who is in as the sign-in read it (settleSignIn). It
 // reports whether it ended the ask.
-async function finishSignIn(ask) {
+async function finishSignIn(ask, me) {
   if (ask.closed) return false;
-  await settleSignIn(ask.was, ask.held);
+  await settleSignIn(ask.was, ask.held, me);
   if (ask.closed) return false;
   if (ask.owner) await loadMe();
   if (ask.closed) return false;
@@ -600,11 +611,14 @@ async function currentPassword(user, password) {
 // ended while the page ran, a key pasted, the first owner. A write that
 // was not sent while the sign-in was open (notSent, app.js) and said so
 // on the page's message line, which the reload of the data clears, is
-// said there again, where the reload left the line empty.
+// said there again, where the reload left the line empty. Once who is in
+// and the settings are read, answered or failed, the card empties its
+// secret fields (MassimoParts.signIn.settled, AP LooseEnds, D13, D41-A).
 function afterLogin(read = true) {
   const said = notSentSaid();
   (read ? loadMe() : Promise.resolve())
     .then(loadPreferences)
+    .finally(() => MassimoParts.signIn.settled()) // the first reads after the sign-in settled: the card's secrets go (ui/src/signin/)
     .then(() => {
       startPolling(); // app.js: stopped where another user's sign-in forgot the session
       refresh().then((fresh) => {

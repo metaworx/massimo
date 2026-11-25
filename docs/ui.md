@@ -16,6 +16,26 @@ which is chosen from the start once the page has seen a server without a store
 ask for no key (its only way in is `MASSIMO_API_TOKEN`),
 the field of the form shown in focus.
 A screen reader names the row's group "Sign in with"; no label shows it.
+A wrong name or password is said in the page's language,
+any other refusal, too many attempts for example, in the server's words.
+**Sign in** turns while it signs in, by the password or by a key,
+and a second Enter meanwhile sends nothing.
+An API key is tried before the page takes it:
+a key the server does not know is said under its field, in the page's language,
+the card staying on the API key's way with the field emptied and in focus;
+a key refused for a reason (a user or an integration disabled, for example)
+is said in the server's words and goes from its field too;
+too many attempts, a server error or a server out of reach are said in the
+server's or the browser's words, the key kept for the retry.
+A refused key is not kept, neither by the page nor in the app,
+and on a running page the session signed in goes on
+while the address is not locked out: a wrong key counts against the lockout,
+which refuses the session's own requests too until it ends (AP LooseEnds, D43).
+At the start's card the key's try is one read of who is in more,
+the start's own read that waited for the card following it;
+on a running page the sign-in takes the try's answer and reads none more for it.
+An answer to the key's try that comes after another way has signed in,
+or after the card was closed or opened anew, does nothing.
 The password form holds the one password field, its fields named,
 so that a password manager such as KeePassXC fills it.
 Every password field of the page, the sign-in's, the first owner's two,
@@ -26,6 +46,14 @@ an open one while it shows in clear text, labelled **Show password** and
 it keeps what is typed, the caret and the field's focus,
 and the password is hidden again at the submit and at each opening of the
 sign-in card.
+Once the card has closed on a sign-in or a new owner
+and the page's first reads after it, of who is in and of the user's settings,
+have settled,
+its password fields and the API key's are emptied (AP LooseEnds, D13, D41-A):
+not at the close itself, since a password manager takes a sign-in for done
+at the first request that completes after the form is hidden;
+a refused password keeps what was typed for the retry,
+where a refused API key goes from its field (below).
 A password shown is hidden again when its fold opens again
 (My profile's Change password, a user's panel),
 and when the eye is switched off, staying hidden when it comes back;
@@ -39,6 +67,90 @@ the page learns it from `/healthz` before anyone signs in,
 so that the card shows the eye or not from its first drawing,
 and none shows until it has answered.
 An API key's field, and a provider's client secret, have no eye.
+A new password, in the five forms that set one
+(the first owner's, My profile's **Change password** and **Set a password**,
+and in System settings → Users adding a user and a user's panel),
+has 8 to 64 characters, counted as typed, one per code point,
+as `massimo user` and the users' API hold it (AP PasswordRules, D4-A, D7-A):
+a line under the field, its description and a status region,
+says while it is typed what the rule finds:
+the hint "Min. 8 characters; better 15 or a few words." with an i while it is empty,
+then **Too short** or **Too long** with a warning's sign,
+or **Contains the user's or the server's name**, with the same sign,
+or that the password can be set, with a tick (D6-A).
+The names are the user's login name and display name as they are typed
+(the first owner's name, a new user's name and display name,
+the display name typed in a user's panel beside the one stored),
+so that the line follows a name changed after the password;
+the server's, as far as the page knows it:
+the first label of the page's host where it is no IP address and not `localhost`,
+and in the app the name it gives the server, every run of letters in it,
+where Go takes of a host its first label alone,
+none where that name is the server's address or its host and port,
+or holds `://`;
+and `massimo` and `maxcube`;
+each, and each run of letters in it, a word where it has 4 letters or more,
+found in the password whatever the case,
+as `internal/password` finds it (D50-A).
+The page does not know the host's own name,
+and its passwords go to the server as an OPAQUE record,
+which the server never checks:
+a page opened by an IP address takes a password with the host's name,
+which `massimo user` on that box refuses;
+it is written again only when what it says changes,
+and its place is as tall as its longest text, one line at 390 px in each language,
+so that the rows under it do not move.
+A submit the rule refuses, also by Enter in the field, sends nothing:
+the line says that it was refused, the field is outlined as refused and has the focus,
+until the next key, which brings the line back to what the password is,
+and only while the field holds a password the rule refuses (Reset empties it);
+the form's own message line says nothing of it,
+so that nothing says "too short" once the line says the password can be set.
+The rule's refusal comes before the mismatch of the two fields.
+The first new password of each of the five forms has a dice beside its eye,
+before it, or at the field's end where there is no eye,
+labelled **Suggest a password** (AP PasswordRules, D14-A to D19-A):
+a press fills the form with a suggestion, both fields where it has two,
+and shows it in the field as text, also where the eye is switched off,
+while the field holds it: edited, emptied or changed by its form (**Reset**, a
+save), submitted, or its fold or the card closed, it is a password's field
+again, the eye as it was; another press gives another.
+A suggestion still drawn when another press, a key in either field, a submit
+or the form's **Reset** came fills nothing.
+A suggestion is five words of EFF's long list (`/ui/words-en.txt`,
+`third_party/eff-wordlist/`), lower case and joined by "-",
+or twenty characters of letters and digits without `0 O o 1 l I`;
+each word and character is picked without bias,
+by `crypto.getRandomValues` with the numbers above the last whole multiple
+drawn again, and a suggestion the rule refuses, one holding the user's name,
+is drawn again, at most 20 times,
+after which the line says that no suggestion could be made and the field keeps
+what it had.
+The line says that a password was suggested, never which,
+written anew at each suggestion, so that a screen reader hears each.
+From the first press on, a row under the line offers **Words** or
+**Characters**, which suggests one of that kind and is remembered in this
+browser, and, while the field holds the suggestion, **Copy**, which copies it
+and says so (over plain HTTP by the browser's copy command, as every copy of
+the page);
+the row is not there before, so that a form keeps its height until the dice
+is used, and once there a key never takes it away, so that nothing under the
+field moves while one types; it goes with **Reset**, a save, or the fold or the
+card closed.
+It is 28 px tall: a first owner's card it makes taller than the window
+(in the app at 390 by 900 px, the French one) starts at its top and the page
+scrolls, and one that still fits stays in the middle and moves up by half
+the row, the dice with it.
+The list is fetched at the first press that needs it, once,
+and taken only as 7,776 lines, each a word of `a-z` with `-` inside, none twice;
+a fetch that fails, or a file of another form, says so in the line
+("Word list not loaded"), and **Characters** still suggests.
+The sign-in takes any password a user has, of any length,
+and so does the upgrade of a user of version 1 at its sign-in (below).
+At the page's start and after a sign-out the page waits for the card:
+the Cubes, the rooms, the log's alerts and the stream are read,
+and the poll that reads them again starts,
+once it has closed.
 The page keeps the session in the browser for 30 days from its last use;
 **Sign out** in ☰, or on the personal settings, ends it.
 The card's ☰, at the end of that row, shows the version first,
@@ -111,13 +223,20 @@ and the page registers the password by OPAQUE at once:
 it is the last time that password goes to the server.
 A server without users asks whoever opens its page from the local network
 to create the owner, in the sign-in card,
-at each load of the page (AP FirstOwner):
+at each load of the page (AP FirstOwner);
+an integration's users do not count,
+so an integration approved on an open server leaves it open (AP LooseEnds, D1):
 the card is titled that there are no users yet,
 and has the form that creates the first owner instead of the ways to sign in:
 its name, its password typed twice and, in the app, the switch and Cancel;
 its ☰ as at a sign-in, no provider.
-Its fields are emptied at an opening alone, never when the card closes,
-so that a password manager finds what was typed (FirstOwner D43);
+Its fields are emptied at each opening, and its two passwords once the
+owner is made, the card has closed and the page's first reads after it have settled
+(AP LooseEnds, D13), never at a refusal, Skip for now, Back or Escape;
+what Create the owner finds wrong is said alone,
+the focus on the field to change: the name, Password where the rule refuses it,
+which its line under Password says (above), or Again where the two passwords differ;
+a missing password the browser refuses itself, its focus on Password;
 under the form, **Skip for now**, which shows the page as it is for this load,
 and the next load asks again,
 and **Keep it open…**, where the server is not kept open already.
@@ -142,7 +261,8 @@ a refusal is said under the field, and one that says the server has users now
 turns the card to the sign-in.
 The page behind the card is hidden as at a sign-in.
 At the page's start and after a sign-out the start waits for the card:
-the Cubes, the rooms, the stream and the providers are read once it has closed,
+the Cubes, the rooms, the stream and the providers are read,
+and the poll starts, once it has closed,
 only the version and the update's state before;
 where a read of who is in opens it on a running page,
 the poll and the stream go on behind it.
@@ -172,6 +292,18 @@ from who is in or from a sign-in asked for (FirstOwner D45),
 so that a server open again shows its warning (FirstOwner D2).
 A server without a store keeps it as it is, without buttons (FirstOwner D39).
 ☰'s Create the owner… and System settings → Users open the card too.
+
+Under it, for a holder of `update`, the automatic update's question,
+on every page, where automatic updates are on and an update is due,
+as GET /api/v1/update's `auto.ask` says (`docs/api-v1.md`):
+the version out, the window it is installed in tonight, the server's time,
+and **Install now**, **Tonight** and **Skip this version**.
+The answer is the box's (`PUT /api/v1/update/answer`):
+Install now starts the update, Tonight leaves it to the night,
+Skip this version keeps the night from installing it until a newer release is out.
+The question goes in every other browser at the answer's line in the log,
+and a refused answer says why under the buttons.
+Everyone else sees nothing new.
 Opened so on a running page, the card hides the page as at every opening,
 and the page stands still behind it, its poll stopped and its stream closed,
 a restart's end opening none meanwhile (FirstOwner D34, D35);
@@ -181,6 +313,12 @@ a read of it refused while the owner is being made waiting for the sign-in;
 **Back to the page**, in Skip for now's place, closes the card,
 starts both again and gives the focus back to what opened it,
 marking nothing as skipped (FirstOwner D36);
+Escape does the same, on the form and on the confirmation that keeps the
+server open, but not while a request of the card runs,
+and where the card's ☰ is open the first Escape closes the ☰ alone
+(AP LooseEnds, D3);
+the card at the page's start and a sign-in the server asks for
+are not left by Escape;
 after Create the owner the page it was opened on is shown again,
 read anew as the owner (FirstOwner D37).
 A request refused while the owner is being made waits for the sign-in it ends in,
@@ -446,7 +584,8 @@ The compacted header has **↑**, back to the top, first of the page buttons: �
   its state named first in the pill's label:
   the plug in green while the server answers;
   a blue "i" while an update is out,
-  for one who may install it (the list's second item opens Software update);
+  for one who may install it or choose its channel,
+  a holder of `update` or `settings` (the list's second item opens Software update);
   an amber triangle, blinking, once the server runs a new version
   (the list's second item reloads the page);
   the open plug, blinking, the pill filled red, after a poll without an answer:
@@ -948,10 +1087,17 @@ The server's own lines are there too: its start with its version, its stop
 and why, the settings file read again with the names of what changed
 (a warning, in the start's own words,
 where the next start would refuse a setting, or the file,
-one that does not parse or is there but cannot be read),
-a restart, a reboot or an update asked for and its outcome, the backups, their
-prune and the log's, a restore started; and a Cube's new address or its
-leaving the LAN.
+one that does not parse or is there but cannot be read,
+and a warning of the lines it set aside, after "the settings file: ",
+which the start's own line says after its start too:
+"settings file read at the start: the settings file:
+MASSIMO_HSTS is given on lines 3 and 4; the first wins"),
+a restart, a reboot or an update asked for and its outcome,
+an automatic update asked for at night ("update v… → v… asked for automatically")
+or postponed because the radio stayed busy,
+or the next start refused the settings file, until its window closed,
+the backups, their prune and the log's, a restore started;
+and a Cube's new address or its leaving the LAN.
 A line someone asked for says by whom ("backup 12 taken (by hand), by Anna").
 Every change made through the web UI, the API or `massimo user` is a line
 of its own, with who made it: "Cube changed KEQ0000000: name – → Upstairs, by
@@ -1079,8 +1225,9 @@ or the person marks it seen (`docs/api-v1.md`, "GET /api/v1/log/alerts"):
 a lost connection until the next one,
 a failed command until the same one is acknowledged,
 a failed backup until the next, a hold until it ends,
-a setting the next start would refuse until the settings file is read
-again without it or the server starts,
+a setting the next start would refuse, or a note on the settings file,
+until the file is read again without it or the server starts without one,
+the newest read's line standing for the ones before it,
 a room whose thermostats disagree until they agree again,
 a thermostat off its week programme until it follows it again,
 a room's setpoint not confirmed until every thermostat shows its re-send;
@@ -1199,6 +1346,8 @@ as the settings' ⓘ do:
   A user with keys only, such as the owner made from `MASSIMO_API_TOKEN`,
   has **Set a password** instead, without a current one, and a line saying
   that it lets the user sign in by name in any browser.
+  The new password has the rule's line under it;
+  a Save the rule refuses says so there, puts the focus in it, and sends nothing.
   **Reset** empties the fields; a new password typed is marked as the display name is,
   but kept nowhere but in its field, and gone at a sign-out;
   the current one alone, as a password manager fills it in, is no change.
@@ -1214,6 +1363,9 @@ as the settings' ⓘ do:
   in the app the key the phone keeps for the server says **this device's key**,
   in place of its key where both hold, however the session was made
   (the app's status, `key_id`, read again each time the page is shown; D65-A);
+  the key that is the settings file's `MASSIMO_API_TOKEN` (`from_settings`)
+  says **from the settings file: change or remove it there** in place of Revoke,
+  which the server refuses for it (D86-A);
   **Create key** shows the new key once.
   In the app the list is read once the app has revoked what the last sign-in
   revoked there, the keys and sessions of the phone's left valid (D67-A),
@@ -1514,7 +1666,8 @@ what it was built with (the header's does too, without the icon);
 so do each Cube proxy's serial, the serial it answers discovery with ("as …",
 where it answers discovery) and its address, which the original software connects to.
 A copy says "Copied"; on a page served over plain HTTP the browser gives no
-clipboard to the page, and the copy goes through its copy command instead.
+clipboard to the page, and the copy goes through its copy command instead,
+the focus given back to where it was.
 At its end, for a holder of `settings`,
 **Store** opens to what `massimo store info` shows:
 the file, the schema version, the node and tenant and the rows per table,
@@ -1524,12 +1677,37 @@ settings file, the data directory, the listen address, TLS, the log level
 and every `MASSIMO_*` variable with where it came from, a key, an IV, a
 token or a password as "set, not shown"
 (`docs/api-v1.md`, "GET /api/v1/store, GET /api/v1/config").
+Last, for every role, **Credits and licences** lists everything the server includes:
+Massimo itself, Go's runtime and standard library, the Go modules it links,
+and what the repository vendors (Preact and its signals, Tabler's icons,
+the OPAQUE client), its head the number of entries;
+each entry a fold of its own, its head the name, the version and the licence,
+Go's the version the server was built with,
+"licence in its text" where the text is known by no name,
+and "other licences among its files" where not all its files are under that one;
+its body where it comes from, what else it includes where its note names it
+(the Rust crates in the OPAQUE client), with the words that their own licence
+texts are not reproduced here,
+and each file of its licence (`LICENSE`, `NOTICE`, `PATENTS` and the like)
+with the licence it is known by, its text as text in a box that scrolls,
+which the file's name labels.
+The list is `/ui/credits.json`, the file `make credits` writes into `internal/credits/`
+and the server embeds, Go's version set to the binary's,
+served as the page's other files are (revalidated, an ETag);
+the data hold names and identifiers, every sentence around them is the page's;
+the page fetches the list as the fold is first opened, and not again while it holds it;
+a fetch that fails says why in the fold, with **Try again**;
+once the list comes its first entry takes the focus,
+and a try that fails again gives it back to **Try again**;
+an answer that comes after a sign-out, or after the page has left System info,
+changes nothing, and a fold left open fetches the list when the page is shown again.
+`massimo credits` prints the same list (`README.md`, "Command line").
 The page is drawn in place as its facts are read again,
 while a certificate is being read and each time the page is shown,
 and as its clock ticks:
 the folds stay open, a text selected stays selected
 and a copy says "Copied" until it fades.
-A sign-out forgets the facts, the store and the settings in effect,
+A sign-out forgets the facts, the store, the settings in effect and the credits,
 and ends the readings of a certificate;
 the next user who opens the page reads them again.
 While it is shown, the page follows the server's events:
@@ -1775,6 +1953,9 @@ settings forms and have none of it.
   **Save**, off while nothing differs from the user, and **Reset**;
   a new password typed stays in its field alone, in no draft, and goes
   with a Save, a Reset or a sign-out;
+  it is typed once (AP PasswordRules, D51-A), the rule's line under it,
+  and a Save the rule refuses sends nothing and puts the focus in it;
+  left empty, the password stays as it is, unchecked;
   **Remove**, which asks in place of the panel's actions;
   the user's sessions and API keys, each with its id, and **Revoke**,
   read when the panel opens and after every change of the users while it is open;
@@ -1785,6 +1966,8 @@ settings forms and have none of it.
   in whichever user's panel it is listed, as under My profile:
   the phone may keep a login of another user than the one signed in,
   and an administrator looking at that user's panel sees the phone's key rightly;
+  the settings file's key says it comes from there in place of Revoke,
+  as under My profile;
   and **Create key**, which shows the new key once: from the read that follows it
   until the next, in that panel alone, kept nowhere;
   where a sign-in provider is enabled, the user's identities at the providers,
@@ -1800,7 +1983,9 @@ settings forms and have none of it.
   the letters a to z, digits and `. _ - @`, starting with a letter or a digit,
   at most 64 characters, capitals taken as lower case, and not a name in use.
   **Create** sends nothing while the name is wrong,
-  and turns until the browser has registered the password and the server has
+  nor while the rule refuses the password, typed once with its line under it,
+  the focus then in it; an empty password is a user with keys only, unchecked;
+  Create turns until the browser has registered the password and the server has
   added the user.
   With `settings`, **Password sign-in** switches off the sign-in that sends a
   password to the server,
@@ -1812,11 +1997,13 @@ settings forms and have none of it.
   on every device; off, no field has one,
   and this page's fields lose theirs at once, the others' at their next look
   at the server.
-  On a server without users (FirstOwner D14) the section says so instead,
+  On a server without users (FirstOwner D14),
+  an integration's beside it or not (AP LooseEnds, D42),
+  the section says so instead,
   with **Create the owner…**, which opens the sign-in card with its form,
   and no password sign-in, no list and no Add a user;
   while the server is kept open (Keep it open… of the sign-in card),
-  **This server is kept open without an owner** follows, on:
+  **Keep this server open without an owner** follows, on:
   turned off, it is saved at once and stays in sight, off, for that showing,
   with the line that the page asks for the owner again at its next load;
   who is in is read again then, by the one read that asks for nobody,
@@ -1889,7 +2076,13 @@ settings forms and have none of it.
   what to change: Off, Automatic on the loopback, a change waiting for
   the restart, or `-announce` or `MASSIMO_ANNOUNCE`, which decides;
   with `settings`, **Open Maintenance**, but where the flag or the
-  variable decides.
+  variable decides;
+  nothing of the LAN until the server's answer of what it saw has come.
+  Where System settings is shown again before its reads have answered,
+  or a panel's integration is read again,
+  the integrations, the users to act as, the LAN and the open panels
+  show the answers of the newest reads asked for, in whatever order they come;
+  a newer read that fails leaves them as they were until the next.
   In **Users**, an integration's user is shown by its chain,
   "<the integration's name> › <its display name>", with
   ", as <login name>" where it is linked (AP StoreRaise v1.2), without
@@ -1897,6 +2090,14 @@ settings forms and have none of it.
   shown by the integration's name, **integration**); a linked one
   **acts as** the user; a user that integration users act as counts them
   as a badge and names them, by their chains, at the top of its panel.
+  An integration's user acts through its integration alone (AP LooseEnds, D1):
+  its panel has no password field, no new key and no identity to assign or change,
+  a line saying it has no sign-in of its own in their place,
+  and **Remove the password** where it holds one from before;
+  its role, disabled, its display name and Remove stay,
+  and a key it holds from before is listed with Revoke.
+  My profile of one, in with such a key, says the same line in place of the
+  password, and offers no new key and no Link.
   The log's lines, a command's detail and its audit row name who
   started them the same way ("…, by Home › Anna, as anna"), and the
   log's user filter lists the users so.
@@ -1921,7 +2122,13 @@ settings forms and have none of it.
   before a restore, or the file a restore was sent), its size and who asked:
   one follows by itself an hour after the Cube's configuration last changed,
   at the latest two hours after the first change (the settings `backups.*`,
-  docs/api-v1.md, "Backups"), and a line says when while one is pending.
+  docs/api-v1.md, "Backups"), also across a restart of the server,
+  which takes a pending one as it stops,
+  and a line says when while one is pending;
+  while none is, a line under a list of backups says that nothing changed
+  since the newest one, and that the server takes one after a change.
+  Each list is read when its page is shown,
+  and after a load onto the page once the page knows its Cubes.
   **Take a backup now** keeps one by hand.
   Each row has **Download**, **Compare with the one before**,
   which lists what changed as the restore would send it,
@@ -1942,6 +2149,24 @@ settings forms and have none of it.
   did not see, the log saying how it ended, and the buttons are back.
   A Cube that is not in the server's store (a run with `-addr`) has no list;
   its download and the restore from a file work as before.
+  After the served Cubes' folds,
+  each Cube the server keeps backups of and does not serve,
+  one taken out of the configuration or only found on the network,
+  also one no longer on the network,
+  has a fold of its own (`GET /api/v1/backups/unserved`,
+  read when the page is shown and after a delete),
+  closed at first, with its name where it has one, marked **not served**,
+  with its count kept;
+  the card's head counts its backups too.
+  Its box has the format,
+  its backups with **Download**, **Compare with the one before** and,
+  with `restore`, **Delete**,
+  and a note that a backup of it goes onto another Cube by downloading it
+  and that Cube's **Restore from file…**;
+  it has no **Download backup**, **Take a backup now**,
+  **Restore…** or **Restore from file…**.
+  A Cube without backups has no such fold,
+  and the last backup deleted takes it away.
 
 ## Maintenance
 
@@ -1968,6 +2193,27 @@ The server's sign, when it says an update is out, opens it at Software update.
   brew's formula, which another channel's formula replaces
   (the rolling ones from the tap `metaworx/massimo-rolling`);
   or `MASSIMO_UPDATE_CHANNEL`, until it is removed.
+  Under it **Automatic updates**, for a holder of `settings`,
+  saved at once as the channel is:
+  **Off**, the default, says updates are installed only when someone starts one;
+  **At night** names its window and shows it, its start and its end
+  as two times on the server's clock, 03:00 to 05:00 unless changed,
+  each saved as its field is left changed;
+  a window the server refuses, one shorter than 30 minutes,
+  goes back, and the note says why.
+  Under the window, "Next try: 25.11.2026, 03:00, the server's time",
+  where an update is due, on the server's clock whatever this browser's zone;
+  while the server's next start refuses the settings file,
+  "The next try waits until the settings file is fixed:
+  the server's next start refuses it." in its place.
+  At night the server installs the update itself inside the window,
+  once a night, while no command waits for the radio
+  and the next start takes the settings file;
+  a file fixed inside the window lets it come that night (`docs/api-v1.md`,
+  "GET /api/v1/update?refresh=1").
+  Where updates cannot be started from here, the choice is off, with the reason.
+  Under the version lines the automatic update's question, as under the header,
+  with the same three answers.
   On a box with the update helper installed (packaging/README.md, "Updating"),
   **Update** (with `update`) installs it and restarts the server.
   If the new version does not come up, the old one is put back.
@@ -1979,15 +2225,30 @@ The server's sign, when it says an update is out, opens it at Software update.
   Under Homebrew's service it says "Installed by brew",
   and **Update** runs `brew upgrade` as the service's user
   (packaging/README.md, "Homebrew").
+  There a release is offered once apt's index or brew's tap has it:
+  one out on GitHub that the source has not yet, without **Update**,
+  reads "v0.16.0-alpha.2 is out; apt has it not yet",
+  and a source that cannot be read says why.
+  A version the helper found nothing to install for,
+  "apt has nothing newer yet",
+  is held back without **Update** until a check finds it (`docs/api-v1.md`,
+  "GET /api/v1/update?refresh=1").
   While the helper works, **Check for updates** and **Update** are greyed out,
   also after a reload of the page, until it reports that it is done.
-  **Last updates** lists the last three under the version lines:
-  the version reached,
-  or the one asked for with "under way" until the next start,
-  when, and who started it,
-  or "outside Massimo" with apt or brew where Massimo did not start it;
-  one the helper ended without its version says how it ended (`docs/api-v1.md`,
-  "GET /api/v1/update?refresh=1").
+  **Last updates** lists the last three under the version lines,
+  the date first, then the version with its channel in brackets,
+  then who started it, "automatically" for one the server started at night,
+  or "outside Massimo" with apt or brew where Massimo did not start it:
+  "24.11.2026, 15:53 · v0.16.0-alpha.1 (devel) · by Anna".
+  The version is the one reached, the one apt chose where it is another,
+  or the one asked for with "under way" while the update runs;
+  the channel is the one the update asked for,
+  or, from outside, the one the box followed at the start that found it.
+  One the helper ended without its version says how it ended,
+  "nothing to install" where apt had nothing newer,
+  from the page's next reading, not the next start;
+  one it rolled back says "failed and rolled back" after the version reached
+  (`docs/api-v1.md`, "GET /api/v1/update?refresh=1").
   The section is drawn in place as a check comes in,
   the header's every half hour, Check for updates, the reading while the helper works
   and Maintenance shown again:
@@ -2010,7 +2271,7 @@ The server's sign, when it says an update is out, opens it at Software update.
   | Event | When the server sends it | What Software update reads |
   |---|---|---|
   | `resync` | the stream opened again with no replay: after the server's restart, an update's among them | the versions, the helper's state and the last updates (`GET /api/v1/update`), and the setting |
-  | `change` of `update.channel` | the channel set, from any browser | the same |
+  | `change` of `update.channel`, `update.auto` or `update.auto_window` | the channel, the automatic update or its window set, from any browser | the same |
   | `update` | an update asked for from another browser | nothing at once: the page takes Update's question back and follows it as its own, the reading every 3 s with its 30 s of grace; an event more than a minute old by the server's clock, replayed after a gap of the stream, reads the versions once |
 
   The server's start and an update's end are written before any stream opens,
@@ -2059,8 +2320,19 @@ The server's sign, when it says an update is out, opens it at Software update.
   because a restart, an update or a reboot then leaves the server down
   until the file is fixed:
   the owner reads it where the restart is asked for.
-  It blocks nothing, and the restart is offered all the same;
-  a read that finds nothing refused, Reload now's among them, takes it away.
+  Meanwhile the card's head says so in a badge of its own, amber,
+  **next start fails**, beside the count of what waits, where something does,
+  also while the card is folded;
+  and the restart's question and the reboot's,
+  which otherwise promise a server back,
+  end with a sentence of their own:
+  the server's next start refuses the settings file as it is,
+  and the server does not come back until the file is fixed.
+  The card reads what the next start refuses only with `restart`,
+  so the reboot's question says it only to a holder of `restart` as well.
+  The notice blocks nothing, and the restart is offered all the same;
+  a read that finds nothing refused, Reload now's among them,
+  takes it away, with the badge and the sentence.
   **Announce on the LAN** (with `settings`) chooses **Automatic**, **On**
   or **Off** for the setting `announce`: the announcement by mDNS for
   `massimo discover`, the apps and Home Assistant, Automatic on unless the
@@ -2130,7 +2402,7 @@ The server's sign, when it says an update is out, opens it at Software update.
   | Event | When the server sends it | What Maintenance reads |
   |---|---|---|
   | `change` of `announce` or an interval | the setting set, from any browser | the settings (`GET /api/v1/settings`) |
-  | `settings_read` | the settings file read again: changed on disk, SIGHUP, Reload now | at `info` nothing: the event names what waits for the next start, its time is when the file was read, and the next start refuses nothing, so the card takes a refusal away; at `warn` the restart's row (`GET /api/v1/restart`): the read found the next start refuses something, and the row names what |
+  | `settings_read` | the settings file read again: changed on disk, SIGHUP, Reload now; and at the start, after `server_started`, where the start found notes on the file | at `info` nothing: the event names what waits for the next start, its time is when the file was read, and the next start refuses nothing, so the card takes a refusal away; at `warn` the restart's row (`GET /api/v1/restart`): the read found the next start refuses something, or a note on the file, and the row names what the next start refuses, never a note |
   | `reboot` | a reboot asked for, begun or failed | the reboot's state (`GET /api/v1/reboot`) |
   | `reboot_cancelled` | a reboot taken back, or the owner's switch turned off | the same |
   | `resync` | the stream opened again with no replay: after the server's restart | the settings, the restart's row and the reboot's |
@@ -2233,9 +2505,10 @@ A `data-help` slot of a card's head gets its help button from `app.js`
 `go test ./internal/server` holds every id a plain script looks up to the skeleton's
 (`TestUIPage`), and refuses a plain script's `document.querySelector` and
 `document.querySelectorAll` but of what every element of a kind shares, a part's too:
-the menus (`details.menu[open]`: one open at a time, closed by Escape
-and by a click outside, `components.js`) and the help slots of the cards' heads
-(`[data-help]`, `initHelpSlots` of `app.js`).
+the menus (`details.menu[open]`: one open at a time, closed by Escape,
+which marks an Escape that closed one so that a part that leaves its place
+by Escape leaves it at the next, and by a click outside, `components.js`)
+and the help slots of the cards' heads (`[data-help]`, `initHelpSlots` of `app.js`).
 Through a `root` the document is by default, two more look over the whole page,
 which the test does not see: `applyI18n` (`[data-i18n]` and the templates'),
 which finds none in a part, and `brandMarks` (`[data-brand]`),
@@ -2581,7 +2854,7 @@ a value's age it takes from `received` of `rooms.js`, as the rooms do.
 | `localOf`, `isoOf` | `time.ts` | a `DateTime`'s value and the API's time as each other, for a field that shows a stored end and sends it (a user's end); the draft compares the field's minute, all it holds | `iso`; `local` |
 | `fmtWhen` | `time.ts` | an API time as date and time in the page's language, the hour of 24 (a backup's time, a device's in Notifications) | `iso` |
 | `Switch` | `field.tsx` | a checkbox drawn as a switch (`switchEl`), in its own row with its help where asked (`fieldRow` without a label) | `name`, `label`, `checked` and `onChange`, or `draft` and `show`; `row`, `help`, `rowCls` (classes its own row adds, a capability's `needs-…`), `cls` (the switch's classes), `id`, `disabled`, `title`, `aria` (its name where `label` is empty, which draws no text: My settings' "only on this device"), `data` (the checkbox's `data-` attributes), `badge` (inside the switch after its label, a capability's state), children after the switch |
-| `Choices` | `choices.tsx` | a choice of several among a list: a group of switches under its heading, All and None as buttons where asked (the configuration's Copy tab), under a legend (an integration's maximum) or without a heading (a role's capabilities, Capabilities for every role), or of checkboxes, All a checkbox first (`look` `check`, the House panel); an option locked shows whether it is chosen and is off (the owner's set, a capability while its request runs) | `title`, `legend` (a fieldset under it), `label` (the group's name for a screen reader), `id`, `cls` (a class the group adds, `cap-grid`, `integration-caps`), `options` (`[value, label, disabled, { title, badge, lock }]`, the last for switches alone), `chosen`, `set(chosen)`, `all` (`{ all, none }`, their labels, `none` left out for All alone), `empty` (said where there is no option), `look` (`switch`, the default, or `check`) |
+| `Choices` | `choices.tsx` | a choice of several among a list: a group of switches under its heading, All and None as buttons where asked (the configuration's Copy tab), under a legend (an integration's maximum) or without a heading (a role's capabilities, Capabilities for every role), or of checkboxes, All a checkbox first (`look` `check`, the House panel), or of radio buttons in a row where one option alone is chosen (`look` `one`, a suggested password's Words or Characters); an option locked shows whether it is chosen and is off (the owner's set, a capability while its request runs) | `title`, `legend` (a fieldset under it), `label` (the group's name for a screen reader), `id`, `cls` (a class the group adds, `cap-grid`, `integration-caps`), `options` (`[value, label, disabled, { title, badge, lock }]`, the last for switches alone), `chosen`, `set(chosen)`, `all` (`{ all, none }`, their labels, `none` left out for All alone), `empty` (said where there is no option), `look` (`switch`, the default, `check` or `one`, its group named `id`) |
 | `ChoiceGroup` | `choices.tsx` | the frame of a choice of several drawn as switches, which `Choices` is drawn with and a region uses where each switch is a part of its own (Capabilities for every role, each switch saved at once) | `id`, `cls`, `label` (the group's name for a screen reader), `legend` (a fieldset under it), `head`, the switches as children |
 | `Tabs` | `tabs.tsx` | a row of tabs: a tab list of buttons, each with its key in `data-tab`, the one shown active and selected, and what follows the list (a close button) | `cls` (the row's class), `listCls`, `label` (the list's name), `tabs` (`{ key, label, cls }`), `current`, `onPick(key)`, children after the list |
 | `Stepper` | `field.tsx` | a number field between − and +, the step within its range; its buttons are named for a temperature, half a degree less and more, and the first user of another unit adds their names | `value`, `set`, `min`, `max`, `step`, `id` and `cls` of the field, `hidden` (the whole kept in its place unseen), children after the + (a unit) |
@@ -2611,13 +2884,15 @@ a value's age it takes from `received` of `rooms.js`, as the rooms do.
 | `Brand`, `BrandName` | `brand.tsx` | Massimo's logo and small mark from the sprite (`brandMarks` of `components.js`, which draws them over the skeleton's `data-brand`), of which the place's style shows one, hidden from screen readers: ☰'s first row; `BrandName`, the big name under the logo, the first owner's form and the sign-in's card | |
 | `page`, `isShown`, `showView`, `onView`, `mayShow`, `setAddress`, `definePages`, `pagesPart` | `pages.ts` | the page of the main area shown, a signal: a drawing that reads `page.value` follows it, `isShown` asks at that moment and follows nothing (a handler, a reader, a timer), so that no request is sent again at a change of page; showing a page puts it into the address, as a new entry of the history or in place of the current one, and brings each page back at the scroll it was left at; `onView` runs at each showing, on the `viewshown` event; `mayShow` says who may open which, reading who is in; a page with an address of its own (the log's, `ui/src/log/index.tsx`) hands it over with `ownAddress`, a card's region what the card's address holds after its `?` with `readCardAddress` (My profile's key to mark), told of every address read, null for another, before the page is shown; the page's chrome hands over the pages at the start (`definePages`, `chrome/pages.ts`), the log puts its choices into the address in place (`setAddress`), and the plain code calls these as `MassimoParts.pages` (`pagesPart`) | `view`, `address`, `card`; `card`, `read(q)` |
 | `userPath`, `Run`, `loadTokens`, `revokeToken`, `revokeOwn`, `createKey`, `loadIdentities`, `addIdentity`, `changeIdentity`, `removeIdentity` | `account.ts` | what a user's sessions, keys and identities read and send (`…/users/{name}/tokens`, `…/identities`), for System settings → Users and My profile alike; a change through the caller's runner (`Run`), which reloads what it shows and says how it went in its own line; Revoke of the token in use signs out | `name`, `rest`; `run`, `name`, and what each sends |
-| `Tokens` | `tokens.tsx` | a user's sessions and keys (a user's panel, My profile): each with its id and Revoke, "this device" and "its key" by `own`, in the app "this device's key" by the app's status (`app.ts`), Create key and the key just made, shown once by the read that follows and kept in the part's own state alone; read when its place opens and again at each change of the caller's counter while open, in the app once the last sign-in's revoke is done (`signInRevoked`); an answer after a sign-out dropped; the API key the caller names tinted (`token-marked`), and the caller told of each read drawn with that row (My profile's key of its address) | `u`, `off`, `open`, `reads` (the caller's counter), `run`, `say` (the caller's message line), `labelId` (the new key's field's id), `help` (the group's ⓘ after Create key, My profile's), `marked` (the id of the API key marked), `drawn(row)` (told of each read drawn, with the row marked or null) |
+| `Tokens` | `tokens.tsx` | a user's sessions and keys (a user's panel, My profile): each with its id and Revoke, the settings file's key (`from_settings`) saying so in Revoke's place, "this device" and "its key" by `own`, in the app "this device's key" by the app's status (`app.ts`), Create key and the key just made, shown once by the read that follows and kept in the part's own state alone; read when its place opens and again at each change of the caller's counter while open, in the app once the last sign-in's revoke is done (`signInRevoked`); an answer after a sign-out dropped; the API key the caller names tinted (`token-marked`), and the caller told of each read drawn with that row (My profile's key of its address) | `u`, `off`, `open`, `reads` (the caller's counter), `run`, `say` (the caller's message line), `labelId` (the new key's field's id), `help` (the group's ⓘ after Create key, My profile's), `marked` (the id of the API key marked), `drawn(row)` (told of each read drawn, with the row marked or null), `listOnly` (the list with Revoke, no new key: an integration's user's) |
 | `Identities`, `Changes` | `identities.tsx` | a user's identities at the sign-in providers (a user's panel, My profile): each with what the provider said and Remove; with `changes`, Change of one no sign-in used, a settings form kept by its key, the forms of identities gone or made unchangeable forgotten, and all of them where the box goes off; with `assign`, Assign; `after` what follows the list once read (My profile's Link buttons); `quiet` draws nothing while the list is empty and the caller offers nothing after it (`offer`: My profile's Link buttons, none in the app, where the rows are still named from every provider) | `u`, `off`, `open`, `reads`, `providers` (the enabled ones), `run`, `say`, `title`, `none`, `cls`, `changes` (`key(id)`, `under`, `ui(key)`, `forget(key)`, `show(key)`: the caller's forms and how one is brought into sight), `assign`, `after(list)`, `quiet`, `offer` |
 | `FileButton` | `file.tsx` | a button that opens the browser's choice of a file of the types it accepts, the same file again too | `id` (the button's), `cls`, `label`, `accept`, `off`, `inputId` and `inputLabel` (the input's id and its name in the page's language: the Appearance card's Import…), `onFile(file)` |
 | `Adder` | `adder.tsx` | the end of a list that adds an item: the new item's form in its place while shown, the button that shows it hidden meanwhile, the focus in the form's first field when it comes, in the drawing's own turn, and back on the button when it goes (Users, Roles, Sign-in providers) | `id` (the button's), `formId` (the form's place), `label`, `shown`, `set(shown)`, the form as children |
-| `UserNameField`, `useNameCheck`, `wordNameError` | `username.tsx` | a new user's login name (Add a user, the first owner's form): checked 2 s after the last keystroke and when left, the store's rule and the names in use; a fixed name clears the line at once; the server's refusal worded alike | `label`, `id`, `msgId` (the line under it, which describes it), `value` and `set` (Add a user's), or neither, the field not controlled and read through `inputRef` (the first owner's, UiParts D210), `nc` (`useNameCheck(taken)`: `problem`, `say`, `check(v)`, `typed(v)`), `name` (the input's, Add a user's alone), `autocomplete`, `placeholder`, `inputRef` |
-| `PasswordInput`, `PasswordField`, `reveal` | `password.tsx` | a password's input with its eye, every password field's (AP MobileApp, D84-A): the button at the field's right end, inside its box, labelled Show password and Hide password, `aria-pressed`, that turns the type between `password` and `text`, the value, the caret and the `autocomplete` kept, the click keeping the focus in the field; hidden again at each change of `reset` (the card's openings, a fold's open state) and at the form's submit, in the capture before the form's handler, and when switched off, the type never turned inside a closed fold, but as it opens; no eye while `reveal`, the setting `auth.password_reveal` as `/healthz` says it (`MassimoParts.chrome.reveal`), is not `true`; the field in its row | `id`, `name`, `autocomplete`, `value` and `set`, or `inputRef`, `required`, `disabled`, `placeholder`, `reset`; the row's `label`, `hint`, `cls` |
-| `NewPassword`, `newPasswordProblem` | `password.tsx` | a new password typed twice (My profile's Change password, the first owner's form), each field with its eye, free fields of the caller's own state, never a draft, or fields not controlled, read through their refs (the first owner's, UiParts D210); the pair's one check, the mismatch first, then none typed | `ids` (the two inputs'), `names` (their name attributes, My profile's alone), `label` (the first's), `value`, `set`, `again`, `setAgain`, or instead `inputRefs` (the two inputs' refs), `required`, `reset` |
+| `UserNameField`, `useNameCheck`, `wordNameError` | `username.tsx` | a new user's login name (Add a user, the first owner's form): checked 2 s after the last keystroke and when left, the store's rule and the names in use; a fixed name clears the line at once; the server's refusal worded alike | `label`, `id`, `msgId` (the line under it, which describes it), `value` and `set` (Add a user's), or neither, the field not controlled and read through `inputRef` (the first owner's, UiParts D210), `nc` (`useNameCheck(taken)`: `problem`, `say`, `check(v)`, `typed(v)`), `name` (the input's, Add a user's alone), `autocomplete`, `placeholder`, `inputRef`, `typed` (told of each keystroke and change event: the first owner's password line, whose rule takes the name) |
+| `PasswordInput`, `PasswordField`, `reveal` | `password.tsx` | a password's input with its eye, every password field's (AP MobileApp, D84-A): the button at the field's right end, inside its box, labelled Show password and Hide password, `aria-pressed`, that turns the type between `password` and `text`, the value, the caret and the `autocomplete` kept, the click keeping the focus in the field; hidden again at each change of `reset` (the card's openings, a fold's open state) and at the form's submit, in the capture before the form's handler, and when switched off, the type never turned inside a closed fold, but as it opens; no eye while `reveal`, the setting `auth.password_reveal` as `/healthz` says it (`MassimoParts.chrome.reveal`), is not `true`; the field in its row | `id`, `name`, `autocomplete`, `value` and `set`, or `inputRef`, `required`, `disabled`, `placeholder`, `reset`, `describedBy` (the line that describes it), `typed` (told of each keystroke and change event), `invalid`; the row's `label`, `hint`, `cls`, `rule` (the rule's context words: given, its line under the field, following the value, or the keystrokes, change events and the value at each refusal of a field not controlled, empty again at each change of `reset`), `refused` (the caller's count of the submits the rule refused: the line says so until the next key, the field marked invalid, while its value is still refused), `suggest` (with `rule`, the dice before the eye: a press fills the field with a suggestion, `shared/suggest.ts`, drawn again where the rule refuses it, a controlled field by `set`, one not controlled by its element and an input event, shows it as text while the field holds it, not after an edit, a change by the form, a submit or a new start, writes the line anew, and brings the row of Words or Characters, and Copy while the field holds the suggestion, under the line; a suggestion drawn while another press, a key, a submit, a change from outside (Reset, a save), a new start or a sign-out came, or after either field changed, fills nothing; the row, once there, stays through keys; the list not had says so, any other failure that no suggestion could be made), `also` (the form's other field: `set` filled with the suggestion, `get` what it holds) |
+| `NewPassword`, `newPasswordProblem` | `password.tsx` | a new password typed twice (My profile's Change password, the first owner's form), each field with its eye, the rule's line under the first, free fields of the caller's own state, never a draft, or fields not controlled, read through their refs (the first owner's, UiParts D210); the pair's one check, the rule first (its line says it, the focus then in the first field), then the mismatch, then none typed | `ids` (the two inputs'), `names` (their name attributes, My profile's alone), `label` (the first's), `value`, `set`, `again`, `setAgain` and `inputRef` (the first's), or instead `inputRefs` (the two inputs' refs), `required`, `reset`, `context` (the rule's words), `refused` (the submits the rule refused), `suggest` (the first field's dice, its suggestion filling the second too); `password`, `again`, `context` |
+| `passwordProblem`, `passwordRefusal`, `serverNames`, `hostWord`, `passwordSaid`, `PasswordRule` | `password.tsx` | the rule of a new password, as Go's `internal/password` holds it (AP PasswordRules, D7-A, D50-A): `too_short` below 8 code points, `too_long` above 64, then `context` where it contains a word of the names given, `massimo` or `maxcube` (each name and each run of letters in it, of 4 letters or more, compared lower-cased a code point at a time), `""` where it may be set, the answers of its `testdata/cases.json`, which the UI test gives it through `MassimoParts.passwordProblem`; `passwordRefusal`, the rule with the server's names beside the user's, which every form asks; `serverNames`, the first label of the page's host (`hostWord`, none for an IP address or `localhost`, as Go's `HostWord` answers the hosts of `cases.json` through `MassimoParts.hostWord`) and in the app the name it gives the server; a refusal's words, while typed or for a refused submit; the line under a new password's field (D6-A), drawn by `PasswordField`'s `rule`: the hint with an i while empty, the refusal with a warning's sign or a tick, a refused submit until the next key, what it says of a suggestion (shown, the list not loaded, none found), never the password, a status region written only when what it says changes, its place the tallest of its texts | `password`, `context`; `password`, `names`; `host`; `answer`, `refused`; `id`, `value`, `context`, `refused`, `note`, `fresh` (raised at each suggestion: the line emptied and written again) |
+| `suggestPassword`, `words`, `chars`, `wordList`, `suggestKind`, `chooseKind` | `suggest.ts` | a suggested password (AP PasswordRules, D14-A to D19-A): five words of EFF's long list joined by "-" or twenty characters of the 56 letters and digits without `0 O o 1 l I`, picked by `crypto.getRandomValues` without bias (a word's 32-bit number at or above floor(2^32 / 7776) × 7776, a character's byte at or above 224, drawn again), drawn again where the rule given refuses it, at most 20 times, null after; the list `/ui/words-en.txt` fetched once at the first suggestion of words, a fetch running shared, taken only as 7,776 lines of the list's form (`a-z`, `-` inside, none twice), one that fails a `ListError`, tried again at the next; the kind chosen, a signal kept in this browser (`massimo.suggest`); `MassimoParts.suggestPassword`, so that the UI test draws a thousand | `kind`, `refused(password)`; `list`; —; —; —; `kind` |
 | `toServers` | `app.ts` | back to the app's servers where the page is in the app (`appConnect` of `login.js`): ☰'s Select server, the sign-in's ☰ and Cancels, the first owner's Cancel | |
 | `toServerSettings`, `toAppSettings` | `app.ts` | to this server's settings and to the app's on the app's own page (`appServerSettings` and `appAppSettings` of `login.js`, contract version 5): ☰'s two entries after Select server | |
 | `app`, `readApp`, `appKeyId`, `signInRevoked` | `app.ts` | the app's status of the login by fingerprint, a signal read again at each opening of the sign-in, a fingerprint refused, the first owner's form and My profile shown (`login.status`), null in a browser; its key of this device's id, 0 for none; the ids of what the last sign-in's `setToken` revoked, `[]` in a browser (`tokenAnswer` of `login.js`) | `st` (the status) |
@@ -3071,6 +3346,10 @@ No plain script calls it.
 Integrations (`ui/src/integrations/`) is a part alone, drawn into `#sys-integrations-body`
 and read each time System settings is shown; no plain script calls it:
 `store.ts` holds what it shows as the last loads gave it,
+the newest read of each kind, a number per kind, and per integration for its panel,
+beside the session's dropping the answer of a read that a later one of its kind
+was asked after,
+whether the LAN's answer has come (`seen`),
 each panel open, each request closed, the message line and the readings of an approval
 again, every 3 s in its first minute and every 15 s after, stopped while the list is not
 visible (another page, the card folded) and at a sign-out, and started again by every load
@@ -3089,9 +3368,15 @@ show the same: its list, whether the server keeps it, the comparisons, the resto
 shown and the one sent, a running one shown as unseen at a resync
 (`app.js`'s resync handler calls `resynced`);
 each box's message line and format by its place and serial;
-each fold open, a single Cube's at first; and what it reads and sends;
+each fold open, a single Cube's at first;
+the Cubes not served that keep backups,
+as `GET /api/v1/backups/unserved` last listed them (`unserved`,
+read at the page's showing and after a delete, not `state.found`);
+and what it reads and sends;
 `Backups.tsx` the box, a fold a `Fold` whose `FoldHead` has the Cube's sign
-`after` its serial, a deletion a `useAsk` with a `Question` in its row.
+`after` its serial, a deletion a `useAsk` with a `Question` in its row;
+a Cube not served has a fold whose head has a `Badge` in place of the sign,
+and a box drawn with `served` false.
 Leaving the page (`ui/src/leaving/`) is a region of its own,
 a dialog without a place in any page's region:
 it is no part of the page's chrome, and no region imports another,
@@ -3135,8 +3420,16 @@ and starts the page as the plain handlers did.
 Its fields are not controlled (UiParts D210):
 no draw sets what a name, a password or a key field holds,
 so that a password manager's fill stays; they are read at the submit
-and emptied at each opening alone, never at the closing,
-so that a password manager can still save them.
+and emptied at each opening;
+once the card has closed on a sign-in or a new owner (`done(true)` of `askLogin`,
+`MassimoParts.signIn.closed(ok)`) and the page's first reads after it have settled,
+answered or failed (`afterLogin`, `loadMeAndPreferences`, `MassimoParts.signIn.settled`,
+`card.succeeded`), the password, Again and the API key are emptied too,
+and an eye that shows a password is hidden again; the name stays until the next opening
+(AP LooseEnds, D13, D41-A, which changes UiParts D210 and FirstOwner D43).
+A refusal, Skip for now, Back to the page, Escape, Keep it open and the app's Cancel
+empty nothing; a card opened again before the reads settle has emptied its fields
+at the opening, and nothing empties what is typed in it then.
 The app's status of the login by fingerprint is read at each opening
 and after a fingerprint refused
 (`app.ts`), and with it the server the line under the title names (`Server.tsx`,

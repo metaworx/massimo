@@ -306,6 +306,8 @@ function logSummaryText(kind: string, s: Loose, serial: string): string {
     case "server_stopping":
       return t("log.sum.stopping", { why: logWord("log.why.", s.why) });
     case "settings_read": {
+      // the start's notes on the file, after its server_started (AP StartConfiguration, D33-A)
+      if (s.why === "start") return t("log.sum.readStart");
       const why = logWord("log.readWhy.", ({ "the settings file changed": "file", SIGHUP: "sighup", "the API": "api" } as Record<string, string>)[s.why] || s.why);
       const changed = (s.changed || []).join(", ");
       const pending = (s.at_next_start || []).join(", ");
@@ -319,9 +321,11 @@ function logSummaryText(kind: string, s: Loose, serial: string): string {
     case "reboot_cancelled":
       return t(s.why ? "log.sum.rebootOff" : "log.sum.rebootCancelled");
     case "update":
-      return t("log.sum.update", { from: s.from || "–", to: s.to || "–" });
+      return t(s.auto ? "log.sum.updateAuto" : "log.sum.update", { from: s.from || "–", to: s.to || "–" });
     case "update_result":
       return t("log.sum.updateResult", { from: s.from || "–", to: s.to || "–", state: logWord("log.updateState.", s.state) });
+    case "update_postponed":
+      return t("log.sum.updatePostponed", { version: s.version || "–", why: s.why || "–" });
     case "backup":
       return s.id ? t("log.sum.backup", { id: s.id, reason: logWord("log.reason.", s.reason) }) : t("log.sum.backupFailed", { reason: logWord("log.reason.", s.reason) });
     case "backup_deleted":

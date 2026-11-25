@@ -573,6 +573,15 @@ body.scrolled #pending { display: none !important; }
 .sys-sub > summary { gap: 2px 10px; align-items: baseline; }
 .sys-sub > summary > .muted { font-size: 0.85rem; }
 .sys-sub[open] > summary { margin-bottom: 6px; }
+/* the credits: an entry a fold as the store's (sys-sub), indented under
+   its head, its licence's texts each in a box that scrolls */
+.credit { padding: 4px 0; }
+.sys-sub.credit > summary { gap: 2px 8px; flex-wrap: nowrap; align-items: baseline; }
+.credit-head { flex: 1 1 auto; min-width: 0; overflow-wrap: anywhere; }
+.credit-id { white-space: nowrap; }
+.credit-origin, .credit-includes { margin: 2px 0 2px 18px; overflow-wrap: anywhere; }
+.credit-file { margin: 6px 0 0 18px; }
+.credit-text { margin: 2px 0 0; max-height: 16em; overflow: auto; padding: 6px 8px; border: 1px solid var(--line); border-radius: 4px; font-size: 0.8rem; white-space: pre-wrap; overflow-wrap: anywhere; }
 /* a list of facts (components.js kvList) and of counts (countList) */
 .kv { display: grid; grid-template-columns: max-content minmax(0, 1fr); gap: 2px 14px; margin: 4px 0; font-size: 0.9rem; }
 .kv dt { color: var(--muted); }
@@ -1569,6 +1578,39 @@ button.pw-eye { position: absolute; top: 2px; right: 2px; bottom: 2px; display: 
 button.pw-eye:hover, button.pw-eye:focus-visible { color: var(--accent); }
 button.pw-eye:focus-visible { outline-offset: -2px; }
 button.pw-eye .ni { width: 20px; height: 20px; }
+/* a new password's dice (AP PasswordRules, D19-A): beside the eye, before
+   it, or at the field's end where there is no eye; the text kept clear of
+   both, two buttons at 390 px leaving the field room for its words; and the
+   row under the rule's line that comes with the first press, Words or
+   Characters and Copy */
+.pw-box.has-dice > input { padding-right: 42px; }
+.pw-box.has-dice.has-eye > input { padding-right: 80px; }
+button.pw-dice { position: absolute; top: 2px; right: 2px; bottom: 2px; display: inline-flex; align-items: center; justify-content: center; width: 38px; padding: 0; border: 0; border-radius: 6px; background: none; color: var(--muted); }
+.pw-box.has-eye > button.pw-dice { right: 40px; }
+button.pw-dice:hover, button.pw-dice:focus-visible { color: var(--accent); }
+button.pw-dice:focus-visible { outline-offset: -2px; }
+button.pw-dice .ni { width: 20px; height: 20px; }
+.pw-suggest { display: flex; flex-basis: 100%; flex-wrap: wrap; align-items: center; gap: 4px 16px; margin-top: 4px; }
+.pw-suggest .checks.one label { flex-direction: row; margin: 0; font-weight: inherit; }
+.pw-suggest .pw-copy { margin-left: auto; color: var(--accent); }
+/* the rule's line under a new password (PasswordRule, AP PasswordRules,
+   D6-A): the line and, hidden in the same cell, each of its texts, so
+   that its place is the tallest one's and the rows under it stay where
+   they are as it changes; the text kept clear of the sign beside it,
+   an i for the hint, a warning for a refusal, a tick for a password
+   taken */
+.pw-rule { display: grid; flex-basis: 100%; margin-top: 2px; color: var(--muted); }
+.pw-rule > *, .pw-rule-room > span { grid-area: 1 / 1; }
+.pw-rule-room { display: grid; visibility: hidden; }
+.pw-rule-line, .pw-rule-room > span { position: relative; margin: 0; padding-left: 1.4em; }
+.pw-rule-line.bad { color: var(--warn); }
+.pw-rule-line.ok { color: var(--ok); }
+.pw-rule-sign { position: absolute; left: 0; top: 0.1em; width: 1.1em; height: 1.1em; }
+.pw-rule-line.bad .pw-rule-sign { color: var(--warn-mark); }
+/* a new password a submit refused, until the next key: its box outlined
+   as a refused value's, and its line, sign and words, in the same red */
+.pw-box > input[aria-invalid="true"] { border-color: var(--bad); outline-color: var(--bad); }
+.pw-rule-line.refused, .pw-rule-line.refused .pw-rule-sign { color: var(--bad); }
 /* a switch's label beside it, the switch at the left */
 dialog label.switch { flex-direction: row; align-items: center; align-self: flex-start; gap: 8px; }
 dialog .actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 8px; }
@@ -1859,7 +1901,7 @@ massimo-week-program { display: contents; }
 .no-lock.no-structure.no-repair .room .menu { display: none; }
 
 /* the sign-in dialog, the first-owner form, System settings → Users and Roles */
-#login-error.bad { color: var(--bad); }
+#login-error.bad, #login-key-error.bad, #login-providers-error.bad { color: var(--bad); }
 /* the first owner's form in the sign-in card (ui/src/signin/Owner.tsx), at
    its own height (AP FirstOwner, D23), Skip for now in a row under it */
 .setup-form { display: flex; flex-direction: column; gap: 8px; }
@@ -1975,7 +2017,8 @@ massimo-week-program { display: contents; }
 /* a grid item's margins collapse with nothing outside it: the first line's
    top margin, which collapsed with the row's above it, would add itself */
 .login-forms > * > :first-child { margin-top: 0; }
-.user-tokens li .revoke-token { margin-left: auto; }
+/* Revoke, or in its place the settings file's key's word (shared/tokens.tsx), at the row's end */
+.user-tokens li .revoke-token, .user-tokens li .token-settings { margin-left: auto; }
 /* the key My profile was opened with (#profile?key=<id>, ui/src/profile/
    store.ts markKey, shared/tokens.tsx): tinted and outlined in the
    accent, in either theme */
@@ -2117,6 +2160,20 @@ massimo-week-program { display: contents; }
 /* the open server's warning's buttons (ui/src/signin/Banner.tsx): Create the
    owner… and Hide after its text, wrapping under it on a phone */
 .open-banner-actions { display: inline-flex; flex-wrap: wrap; gap: 6px; margin-left: 6px; vertical-align: middle; }
+/* The automatic update's question under the header and in Software update (ui/src/software/Ask.tsx). */
+.update-ask {
+  background: var(--card);
+  color: var(--fg);
+  border: 1px solid var(--accent);
+  border-left-width: 4px;
+  padding: 8px 12px;
+  border-radius: 8px;
+  margin: 12px 0;
+  overflow-wrap: anywhere;
+}
+.update-ask-actions { display: inline-flex; flex-wrap: wrap; gap: 6px; margin-left: 6px; vertical-align: middle; }
+.update-ask-actions button { white-space: nowrap; }
+.update-card-ask { margin: 6px 0; }
 .open-banner-actions button { white-space: nowrap; }
 /* System settings → Users on a server without users (ui/src/admin/Users.tsx) */
 .users-open { display: flex; flex-direction: column; gap: 8px; }

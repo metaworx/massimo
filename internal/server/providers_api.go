@@ -74,7 +74,7 @@ func providerFail(err error) error {
 	case errors.Is(err, store.ErrBadProvider), errors.Is(err, store.ErrBadEmail), errors.Is(err, store.ErrNoRole):
 		return fail(http.StatusBadRequest, "%s", text)
 	}
-	return userFail(err)
+	return userFail(err) // ErrIntegrationUser among them: 403
 }
 
 // providerRequest is the body of POST /api/v1/providers and PUT
@@ -372,6 +372,9 @@ func (s *Server) postIdentity(w http.ResponseWriter, r *http.Request) error {
 		return err
 	}
 	auditTarget(r, "user:"+u.Name)
+	if err := noWayIn(u); err != nil {
+		return err
+	}
 	var req struct {
 		Provider string `json:"provider"`
 		Email    string `json:"email"`
@@ -409,6 +412,9 @@ func (s *Server) putIdentity(w http.ResponseWriter, r *http.Request) error {
 		return err
 	}
 	auditTarget(r, "user:"+u.Name)
+	if err := noWayIn(u); err != nil {
+		return err
+	}
 	id, err := strconv.ParseInt(r.PathValue("id"), 10, 64)
 	if err != nil {
 		return fail(http.StatusBadRequest, "bad identity id %q", r.PathValue("id"))

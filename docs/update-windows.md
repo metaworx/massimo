@@ -13,6 +13,11 @@ the helper's environment keeps the test-only `MASSIMO_UPDATE_API` besides
 `MASSIMO_GITHUB_TOKEN` (stage 2 needs it in the helper),
 and the client sends no GitHub token to an API base set that way;
 a job object that would kill the helper reaches `blocked` through `UpdateOptions.Blocked`;
+so does, since 2026-11-25, a `-listen` with no health URL the helper can ask,
+port 0 or a service name, and the start goes on as under brew:
+`install.HealthURL`'s reason names the setting,
+`-listen or MASSIMO_LISTEN: the update helper cannot ask "127.0.0.1:0" for /healthz: bad port`
+(AP StartConfiguration, D21-A);
 a 409 from the starter's own guard leaves the request file alone (the running
 helper may not have taken it yet);
 the stage 2 stand-in's rollback is checked for event 7000, 7009 or 7034,
@@ -24,6 +29,11 @@ is up (GUIDELINES/project/CI.md, "Runner Constraints").
 Since 2026-11-07 the restart from the API (`POST /api/v1/restart`)
 uses the same starter for `massimo restart -service massimo`, detached,
 its output in `service.log`.
+Since 2026-11-24 the automatic update at night (the setting `update.auto`,
+docs/api-v1.md, "GET /api/v1/update?refresh=1") goes the same way:
+the server's own try calls the starter as `POST /api/v1/update` does,
+so the service needs nothing of its own for it;
+the starter's refusals end the night's try, and the next night tries again.
 
 The text below is the design as written before it.
 Written on 2026-11-06 from the code on `main` after v0.5.0-alpha.1 (internal/update,
@@ -164,6 +174,8 @@ The process answers the service manager itself (cmd/massimo/service_windows.go):
 on `Stop` or `Shutdown` the handler reports stop pending with a wait hint of 20 s,
 ends `serve`'s context and waits for `serve` to return,
 which shuts the HTTP server down,
+takes the automatic backup of each Cube with a change pending
+(docs/store.md section 9 (e)),
 writes the log's pending events and closes the store,
 then returns, and the goroutine calls `os.Exit(0)`.
 A `serve` that has not returned after 20 s is ended all the same.

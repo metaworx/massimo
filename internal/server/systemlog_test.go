@@ -15,6 +15,7 @@ import (
 	"log/slog"
 	"net"
 	"path/filepath"
+	"slices"
 	"strconv"
 	"strings"
 	"testing"
@@ -80,7 +81,7 @@ func TestSettingsReadNamesOnly(t *testing.T) {
 	ts, s, st := r.ts, r.s, r.st
 	token := userToken(t, st, "anna", store.RoleOwner)
 	s.SetReloader("/etc/massimo/massimo.env", func(ctx context.Context) (ReloadResult, error) {
-		s.LogSettingsRead(ctx, "the API", []string{"MASSIMO_LOG_LEVEL"}, []string{"MASSIMO_CUBE_KEQ0000000_ADDRESS"}, nil)
+		s.LogSettingsRead(ctx, "the API", []string{"MASSIMO_LOG_LEVEL"}, []string{"MASSIMO_CUBE_KEQ0000000_ADDRESS"}, nil, nil)
 		return ReloadResult{Changed: []string{"MASSIMO_LOG_LEVEL"}, Pending: []string{}, ReadAt: time.Now()}, nil
 	})
 	if code, body := callAPI(t, ts, "POST", "/api/v1/reload", token, ""); code != 200 {
@@ -96,6 +97,105 @@ func TestSettingsReadNamesOnly(t *testing.T) {
 	pending, _ := sum["at_next_start"].([]any)
 	if sum["why"] != "the API" || len(changed) != 1 || changed[0] != "MASSIMO_LOG_LEVEL" || len(pending) != 1 || len(sum) != 3 {
 		t.Fatalf("the summary: %v", sum)
+	}
+}
+
+// settings_read's error keeps what the next start refuses and the notes
+// on the file apart, the refusals first, each kind after its own words
+// and none of them for a kind the read did not find (AP
+// StartConfiguration, D3-B).
+func TestSettingsReadErrorKeepsTheKindsApart(t *testing.T) {
+	t.Parallel()
+	refused := []Refusal{{Settings: []string{"MASSIMO_HSTS"}, Error: `-hsts or MASSIMO_HSTS "-1": want a number of days, 0 or more`}, {Error: "env:3: expected KEY=VALUE"}}
+	notes := []string{"MASSIMO_HSTS is given on lines 1 and 4; the first wins", "line 5 has no name before its =, ignored"}
+	for _, c := range []struct {
+		what    string
+		refused []Refusal
+		notes   []string
+		want    string
+	}{
+		{"both", refused, notes, `the next start refuses: -hsts or MASSIMO_HSTS "-1": want a number of days, 0 or more; env:3: expected KEY=VALUE; ` +
+			"the settings file: MASSIMO_HSTS is given on lines 1 and 4; the first wins; line 5 has no name before its =, ignored"},
+		{"refusals alone", refused[:1], nil, `the next start refuses: -hsts or MASSIMO_HSTS "-1": want a number of days, 0 or more`},
+		{"notes alone", nil, notes[1:], "the settings file: line 5 has no name before its =, ignored"},
+		{"neither", []Refusal{}, []string{}, ""},
+	} {
+		if got := settingsReadError(c.refused, c.notes); got != c.want {
+			t.Errorf("%s:\n%q, want\n%q", c.what, got, c.want)
+		}
+	}
+}
+
+// The notes on the settings file the start read are a settings_read
+// warning, why "start", after its server_started, which settles every
+// settings_read warning before it: the log's sign stays across a restart
+// while a note stands, and goes with the first start without one, which
+// writes no settings_read (AP StartConfiguration, D33-A).
+func TestStartLogsTheSettingsNotes(t *testing.T) {
+	t.Parallel()
+	discard := slog.New(slog.NewTextHandler(io.Discard, nil))
+	notes := []string{"MASSIMO_HSTS is given on lines 3 and 4; the first wins", "line 7 has no name before its =, ignored"}
+	// started checks a start's lines, with the store's written: its
+	// server_started the newest but for the settings_read of notes, at
+	// warn with them after "the settings file: ", where it has any; and
+	// the log's sign, a settings_read the alert where it has notes, that
+	// one, and none where it has none.
+	starts := 0
+	started := func(r *rig, notes []string) {
+		t.Helper()
+		starts++
+		if err := r.st.FlushEvents(t.Context()); err != nil {
+			t.Fatal(err)
+		}
+		rows, err := r.st.Events(t.Context(), store.EventQuery{Source: "system", Limit: 100})
+		if err != nil {
+			t.Fatal(err)
+		}
+		var ours []store.Event // the starts' and their notes', oldest first
+		for _, row := range slices.Backward(rows) {
+			if row.Kind == "server_started" || row.Kind == "settings_read" {
+				ours = append(ours, row)
+			}
+		}
+		last := ours[len(ours)-1]
+		var alerts logAlertsView
+		if code := getJSON(t, r.ts, "", "/api/v1/log/alerts", &alerts); code != 200 {
+			t.Fatalf("start %d: the alerts: %d", starts, code)
+		}
+		var signs []logAlert
+		for _, a := range alerts.Alerts {
+			if a.Kind == "settings_read" {
+				signs = append(signs, a)
+			}
+		}
+		if len(notes) == 0 {
+			if last.Kind != "server_started" || len(signs) != 0 {
+				t.Fatalf("start %d without notes: its last line %s, the settings_read alerts %+v", starts, last.Kind, signs)
+			}
+			return
+		}
+		var ev event
+		json.Unmarshal(last.Data, &ev)
+		before := ours[len(ours)-2]
+		if last.Kind != "settings_read" || before.Kind != "server_started" || last.ID <= before.ID || last.Level != store.LevelWarn ||
+			ev.Error != "the settings file: "+strings.Join(notes, "; ") || ev.Summary["why"] != "start" {
+			t.Fatalf("start %d: %s %d then %s %d at %d: %+v", starts, before.Kind, before.ID, last.Kind, last.ID, last.Level, ev)
+		}
+		if len(signs) != 1 || signs[0].ID != last.ID || signs[0].Level != "warn" {
+			t.Fatalf("start %d: the settings_read alerts %+v, want the start's line %d", starts, signs, last.ID)
+		}
+	}
+	first := startServer(t, stored(), withOptions(Options{SettingsNotes: notes, Logger: discard}))
+	started(first, notes)
+	first.stop()
+	second := startServer(t, again(first), withOptions(Options{SettingsNotes: notes[:1], Logger: discard}))
+	started(second, notes[:1])
+	second.stop()
+	third := startServer(t, again(second), withOptions(Options{Logger: discard}))
+	started(third, nil)
+	third.stop()
+	if n := len(systemRows(t, first.st, "settings_read")); n != 2 {
+		t.Fatalf("%d settings_read lines, want the two starts' with notes", n)
 	}
 }
 

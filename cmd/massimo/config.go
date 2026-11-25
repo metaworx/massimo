@@ -26,7 +26,8 @@ import (
 // runConfig prints the MASSIMO_* settings in effect. Keys, IVs and
 // tokens are redacted to their length, so the output can be pasted into
 // a bug report; a Cube key or IV left over from the portal commands is
-// named as ignored (env.Removed).
+// named as ignored (env.Removed). The notes on the settings file follow
+// the settings, as they name lines by their numbers and never a value.
 func runConfig(args []string) error {
 	fs := flag.NewFlagSet("config", flag.ContinueOnError)
 	snFlag(fs)
@@ -79,8 +80,21 @@ func runConfig(args []string) error {
 		}
 		fmt.Printf("  %-40s %-45s (%s)%s\n", k, v, src, note)
 	}
+	printNotes(os.Stdout, startNotes)
 	printStore(os.Stdout)
 	return nil
+}
+
+// printNotes prints the notes on the settings file as the start read it,
+// a line each, under the settings; nothing where it has none.
+func printNotes(w io.Writer, notes []env.Note) {
+	if len(notes) == 0 {
+		return
+	}
+	fmt.Fprintln(w, "\nthe settings file, lines set aside:")
+	for _, n := range notes {
+		fmt.Fprintf(w, "  %s\n", n.Text)
+	}
 }
 
 // configView is what massimo config shows, for GET /api/v1/config
@@ -191,6 +205,13 @@ func printStore(w io.Writer) {
 		if sn, _ := st.PlainSerial(context.Background()); sn != "" && plain != nil {
 			plain.Serial = sn
 			file, plain = append(file, *plain), nil
+		} else if plain != nil {
+			if row, ok := serve.PlainRow(rows, *plain); ok {
+				// serve ties the plain lines to the Cube at their
+				// address at its next start.
+				plain.Serial = row.Serial
+				file, plain = append(file, *plain), nil
+			}
 		}
 		st.Close()
 		if err != nil {

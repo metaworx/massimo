@@ -146,26 +146,46 @@ The page and its files are public, the API behind them is not.
 
 ## Authentication
 
-The server authenticates in one of three ways, by what it has:
+The server authenticates in one of three ways, by what it has.
+In this document a server's users are its regular users,
+those that are not an integration's, disabled ones included:
+"a server without users" is one whose only users, if any, are an integration's.
 
-- **Users**, a store with at least one user: every `/api` request carries
+- **Users**, a store with at least one regular user: every `/api` request carries
   `Authorization: Bearer <token>`, a session from `POST /api/v1/login`
   (or made from a key by `POST /api/v1/login/key`) or
   an API key from `POST /api/v1/users/{name}/tokens`; otherwise `401`.
   The token names a user, the user's role grants capabilities,
-  and every route needs one of them (the table below);
-  a request without it is `403` with the message `capability "pair" required`.
+  and every route needs one of them, or either of two (the table below);
+  a request without it is `403` with the message `capability "pair" required`,
+  or `capability "restart" or "update" required` for a route either of two admits.
   A disabled user, a guest past its end date or a disabled role is `403` too,
   with the reason.
-- **Open**, a store without users, the state before the first owner:
+- **Open**, a store without regular users, the state before the first owner:
   every request from the local network may do everything,
   as the original software can on the LAN.
+  A regular user is every user that is not an integration's,
+  a disabled one included;
+  an integration's users do not count, so a server with an integration
+  approved and no owner stays open.
+  Its calls are then anyone's from the local network, as every other:
+  not attributed to its users,
+  `X-MassimoHA-On-Behalf-Of` not read, its maximum not applied,
+  and `GET /api/v1/me` with its key says `"mode": "open"`;
+  an installation beyond the local network is refused.
+  Its chain of rights begins with the first owner.
+  The start of a server whose only users are an integration's warns
+  `the server is open: its only users are an integration's; create the owner`,
+  unless it is kept open on purpose (`auth.keep_open`);
+  the removal of the last regular user warns
+  `the server is open: its last regular user was removed; create the owner`,
+  naming whom and by whom.
   `POST /api/v1/users` from an address on the local network creates the first
   owner (see that route), and `massimo user add` does the same on the box.
   The setting `auth.keep_open` says the server is kept open on purpose,
   so that the web UI does not ask for the first owner;
   it changes nothing about who is let in,
-  and goes with the first user (GET and PUT /api/v1/settings).
+  and goes with the first regular user (GET and PUT /api/v1/settings).
 - **Token**, no store (`serve -addr`):
   `MASSIMO_API_TOKEN` (or `-token`) is the one token, as before the store;
   without it the API is open as in open mode.
@@ -206,11 +226,15 @@ At every later start, and whenever the server reads the file again while it runs
 (it looks every five seconds, and on SIGHUP; see README.md, "Server"),
 a token in the file that the store does not know is added to an enabled owner's keys,
 and a key with that label whose secret is not the file's any more is revoked.
+The file's key that an older start gave to an integration's user, live or revoked since,
+moves to that owner, or to the user `owner` the start makes where there is no other,
+since an integration's user holds no key of its own.
 The file stays the way to recover an owner who lost the password:
 put a token into it, log in with it, set a password; no restart is needed.
 
 The capabilities, what each allows and the routes it guards;
-the OpenAPI file carries each operation's as `x-capability`:
+the OpenAPI file carries each operation's as `x-capability`,
+`restart or update` for `GET /api/v1/restart`, which a holder of either reads:
 
 | Capability | Allows | Routes |
 |---|---|---|
@@ -223,7 +247,7 @@ the OpenAPI file carries each operation's as `x-capability`:
 | `structure` | move and remove devices, delete rooms | `PUT …/devices/{rf}` with `room_id`, `DELETE …/devices/{rf}`, `DELETE …/rooms/{id}` |
 | `pair` | put the Cube into pairing mode and stop it | `POST …/pairing`, `DELETE …/pairing` |
 | `discover` | search for Cubes on the LAN | `POST /api/v1/cubes/discover` |
-| `backup` | download a backup | `GET …/backup` |
+| `backup` | download a backup, and the backups the server keeps | `GET …/backup`, `GET`/`POST …/backups`, `GET …/backups/{id}` and its `diff`, `GET /api/v1/backups/unserved` |
 | `restore` | plan and run a restore | `POST …/restore/plan`, `POST …/restore` |
 | `repair` | the repairs of a Cube's rooms and devices: their communication errors reset, a device's configuration re-sent from its room, a device placed or listed where the Cube and its list disagree, a room's master named, a room re-linked; "unlink all and re-link" needs `structure` as well ("Repairs", below) | `GET`/`POST …/repair/…` |
 | `guests` | create, change and remove users whose role is `guest` | the users routes, limited to guests |
@@ -235,7 +259,7 @@ the OpenAPI file carries each operation's as `x-capability`:
 | `cubes` | add, configure and remove Cubes | `POST /api/v1/cubes`, `PUT`/`DELETE /api/v1/cubes/{sn}` |
 | `cubes.reboot` | reboot a Cube, which drops the radiograms it has not delivered; seeded for no role | `POST /api/v1/cubes/{sn}/reboot` |
 | `settings` | the server's settings, its store and the settings in effect | `GET`/`PUT /api/v1/settings`, `GET /api/v1/store`, `GET /api/v1/config` |
-| `update` | start a software update | `POST /api/v1/update` |
+| `update` | start a software update, answer the automatic update's question, and read the restart's state, since an update restarts the server | `POST /api/v1/update`, `PUT /api/v1/update/answer`, `GET /api/v1/restart` |
 | `restart` | restart the server through the service manager that runs it, read its settings file again, and read a Cube again at once | `GET`/`POST /api/v1/restart`, `POST /api/v1/reload`, `POST /api/v1/cubes/{sn}/refresh` |
 | `reboot` | reboot the computer the server runs on, where its owner switched that on; seeded for no role | `GET`/`POST`/`DELETE /api/v1/reboot` |
 | `audit` | read the audit | `GET /api/v1/audit` |
@@ -475,7 +499,7 @@ user's name: the integration revokes its key without the header.
 The settings file's token, `MASSIMO_API_TOKEN`, is `409`:
 the next start would not add the owner's key back, its hash being taken,
 so it is changed or removed in the settings file;
-revoked under the user's tokens by the owner's choice, it stays revoked too.
+a revoke under the user's tokens is `409` too (below).
 
 `GET /api/v1/me` says who the caller is:
 
@@ -495,7 +519,8 @@ the role's minus the disabled capabilities, every one for `owner`,
 none for a disabled role) and `token`, the one presented;
 outside users mode `user` and `role` are null and `capabilities` is every one.
 `setup` is true on an open server for a caller on the local network,
-the one that may create the first owner.
+the one that may create the first owner,
+an integration's users beside it or not.
 `kept_open` is true on an open server while the setting `auth.keep_open` is on,
 and absent otherwise: the web UI then does not ask for the first owner.
 `auth_version` 1 says the server hashes the password;
@@ -668,6 +693,29 @@ kept in lower case; `role` is a role's key, `viewer` when absent;
 `password` may be absent for a user that logs in with keys only,
 or replaced by `record` and `ksf`, a password of version 2 (below);
 `disabled` and, for a guest, `expires_at` (RFC 3339) as well.
+A new `password` has 8 to 64 characters, counted in Unicode code points as sent,
+not normalised;
+outside that it is `400` with `password: at least 8 characters`
+or `password: at most 64 characters`, and nothing is written.
+Nor does it contain a name, whatever the case of either:
+the user's login name and display name (in `PUT` the new one too),
+each and each run of letters in them,
+the server's name (the first label of its host's name),
+the first label of the request's `Host` where it is no IP address and not `localhost`,
+`massimo` and `maxcube`;
+a name or a run of fewer than 4 letters is none.
+Such a password is `400` with `password: contains the user's or the server's name`,
+which names none of them, and nothing is written.
+A `Host` that a reverse proxy rewrites, or a client sets,
+only adds a word to the request's own check or takes one away:
+it decides nothing else.
+`massimo user` checks against the user's names and the host's name;
+the web UI, which sends a `record`,
+checks against the host it was opened by and, in the app,
+the name the app gives the server, not the host's own name (docs/ui.md).
+A `record` is not checked: the server never sees the password in it,
+so a client that registers by OPAQUE holds its users to the rule itself.
+A password set before the rule signs in as it is.
 A `guests` holder creates guests only (`403` otherwise).
 The answer is `201` with the user; a name in use is `409`, a bad name,
 an unknown role or an unknown field `400`,
@@ -676,13 +724,14 @@ The name of a removed user can be used again,
 for a new user in a row of its own,
 which starts without the old one's preferences or history.
 
-On a server without users, `POST /api/v1/users` creates the first owner:
+On a server without regular users (an integration's do not count),
+`POST /api/v1/users` creates the first owner:
 open to a caller on the local network (loopback, a private range, link-local),
 `role` `owner` (absent, or that) and a password or a record required,
 `403` from anywhere else; `massimo user add` on the box is the other way.
 The first owner is created once:
 where two requests come at the same moment,
-the server counts the users again as it writes the owner,
+the server counts the regular users again as it writes the owner,
 and the second is `409` with `the first owner exists already: sign in`;
 its registration (below) kept nothing, so nothing is left of it.
 From then on the server is in users mode (Authentication).
@@ -697,7 +746,10 @@ a user with keys only (`has_password` false) sets its first one without,
 as its key could as well make another key;
 the rest needs `users` (`guests` for a guest), a password `passwords` too,
 each for a user the caller outranks ("Authentication").
-A password set by someone else ends the user's sessions;
+A `password` is held to the rule of `POST`,
+before anything of the request is written,
+and for an integration's user it is `403` before that, whatever its length;
+a password set by someone else ends the user's sessions;
 an empty password removes it.
 
 A password of version 2 is set in two steps.
@@ -716,7 +768,8 @@ a `password` set later makes it version 1 again.
 A record that does not decode, or a `ksf` below the cost of
 `m=19456,t=2,p=1` or above 256 MiB, 16 passes or 16 lanes, is `400`.
 The last enabled owner without an end date cannot be disabled, demoted
-or given an end date (`409`): an owner with one does not count.
+or given an end date (`409`): an owner with one does not count,
+nor does an integration's user, whatever its role.
 
 `DELETE /api/v1/users/{name}` removes a user: its sessions and keys are revoked,
 its preferences removed,
@@ -725,6 +778,12 @@ of the removal in UTC (`-<id>` added where that is taken),
 which frees the name; `{"ok": true, "name": "anna"}`.
 The last enabled owner without an end date stays (`409`);
 a user cannot remove itself.
+The user that holds the settings file's key, `MASSIMO_API_TOKEN`,
+stays too (`409`), as the key's revoke is refused (below, "Tokens"):
+the removal would revoke the key with the user's tokens,
+and the next start would not add it back, its hash being taken;
+the key is changed or removed in the settings file first
+(AP MobileApp v1.4, D89-A).
 
 ### Tokens: /api/v1/users/{name}/tokens
 
@@ -733,9 +792,13 @@ a user cannot remove itself.
 A user's sessions and API keys, as `GET /api/v1/me` shows the one presented;
 the same rules of access as the user.
 
-`GET` lists the live ones, oldest first, without their secrets.
+`GET` lists the live ones, oldest first, without their secrets;
+the key that is the settings file's `MASSIMO_API_TOKEN` carries `"from_settings": true`,
+found by the hash of the file's token, not by its label
+(AP MobileApp v1.4, D86-A).
 `POST` with `{"label": "Loxone"}` creates an API key, which never expires,
-and answers `201` with the key once:
+and answers `201` with the key once;
+an integration's user gets none (`403`, "Acting for an integration's users"):
 
 ```json
 {"token": "…", "id": 4, "kind": "api", "label": "Loxone", "created_at": "…"}
@@ -747,6 +810,9 @@ and a retry with its `Idempotency-Key` answers `201` without it too.
 
 `DELETE …/tokens/{id}` revokes a session or a key by the `id` of the list;
 a token of another user is `404`.
+The settings file's key is `409`, as `DELETE /api/v1/me/token` answers it:
+it is changed or removed in the settings file,
+since the next start would not add it back, its hash being taken.
 A session made from a key (`POST /api/v1/login/key`) carries the key's id
 as `key_id`; revoking the key revokes that session with it.
 A token revokes itself the same way, as its own bearer:
@@ -860,6 +926,13 @@ An integration, Home Assistant first, is a program that acts for users of
 its own: each of its calls can name the user it acts for and the level
 the user has for that call, and Massimo allows only what every link of
 that chain allows ("Acting for an integration's users", below).
+On an open server, one without regular users (Authentication),
+the key is not looked at:
+every request from the local network is anyone's,
+`GET /api/v1/me` says `"mode": "open"` without `integration`,
+nothing is attributed to the integration or its users,
+and a request from beyond the local network is `403`;
+the integration's chain begins with the first owner (AP LooseEnds, D40-A).
 An integration is registered by the owner, without a key typed anywhere:
 
 1. The integration asks: `POST /api/v1/integrations/requests`, without a key,
@@ -958,7 +1031,9 @@ A registered integration's key with the header
 X-MassimoHA-On-Behalf-Of: id=<the user's id, 32 hex>; level=control; name*=UTF-8''J%C3%BCrg; instance=<installation id, 32 hex>
 ```
 
-acts for one of the integration's users.
+acts for one of the integration's users,
+on a server with regular users: on an open server the header is not read
+("Integrations", above).
 
 - **The header's parameters:**
   - `id` is the user's id at the integration (Home Assistant's `user.id`),
@@ -990,7 +1065,24 @@ acts for one of the integration's users.
   5. the level: `view` reads, `control` also sets, locks and configures,
      and `admin` adds nothing of its own.
 - **Without the header** the key acts as the integration itself:
-  its role and its maximum (an integration's own polls and stream).
+  its role and its maximum (an integration's own polls and stream),
+  within the role `integration` as every call through it.
+- **No way in of its own:** an integration's user acts through its integration
+  alone, whatever role the owner gives it.
+  The users' routes refuse it a key (`POST /api/v1/users/{name}/tokens`),
+  a password, plain or by a record (`PUT /api/v1/users/{name}`,
+  `POST /api/v1/users/{name}/register`),
+  and an identity at a provider (`POST` and `PUT /api/v1/users/{name}/identities`,
+  the link's start), with `403`, before any other change of the request;
+  no sign-in makes it a session, the integration's key at
+  `POST /api/v1/login/key` included.
+  An empty `password` that removes one is taken.
+  A key it was given before this version keeps working
+  while its integration is active (else `403` with `integration_disabled`),
+  within the role `integration` and the integration's maximum,
+  as every call of such a user, whatever its role;
+  `GET /api/v1/me` with it says what is left.
+  A password or a provider's identity it holds signs in nowhere.
 - **The audit and the log** name the user the call acted as,
   `effective_user`, and the integration's user, `real_user`
   (GET /api/v1/audit, "Who did it");
@@ -1169,7 +1261,7 @@ keep the default:
 | `device_stale` | a thermostat went past the stale threshold (`stale_after`, `stale_after_wall`) | off |
 | `paired` | a device joined by pairing | off |
 | `cube_found` | discovery found a Cube that is not configured | off |
-| `update` | `GET /api/v1/update` saw a newer release | off |
+| `update` | the server's own check, after its start and every six hours, or `GET /api/v1/update` saw a newer release; once per release | off |
 
 `after_min` is 1 to 1440, `below_c` −10 to 20.
 A `PUT` of a document the rules cannot read (an unknown kind,
@@ -1311,7 +1403,7 @@ Needs `audit`, which only `owner` has by default; `503` without a store.
 
 Every route but the `GET`s and the stream ticket leaves a row:
 `action` names what was asked (`setpoint`, `device.lock`, `device.update`,
-`room.rename`, `room.config`, `room.program`, `room.delete`,
+`room.rename`, `room.config`, `room.program`, `room.delete`, `update.answer`,
 `pairing.start`, `restore.start`, `cube.add`, `settings.update`, `login`,
 `login.failed`, `logout`, `user.add`, `token.add`, `role.update`,
 `capability.disable`, …), `cube` the Cube of the route, `target` the device,
@@ -1490,6 +1582,7 @@ then every Cube discovery found on the LAN that is not configured:
     "file_differs": [
       {"field": "name", "variable": "MASSIMO_CUBE_KEQ0000200_NAME", "file": "Downstairs", "store": "Ground floor"}
     ],
+    "backups": 10,
     "mac": "00:1a:22:0a:0b:0c",
     "last_seen": "2026-11-04T15:00:02+01:00",
     "connected": true,
@@ -1519,6 +1612,7 @@ then every Cube discovery found on the LAN that is not configured:
     "dns": ["192.168.1.1"],
     "proxies": ["192.168.1.40"],
     "host": {"name": "box-a", "url": "https://box-a.example:8443"},
+    "backups": 2,
     "found_at": "2026-11-04T14:30:01+01:00",
     "last_seen": "2026-11-04T15:00:02+01:00"
   }
@@ -1526,6 +1620,10 @@ then every Cube discovery found on the LAN that is not configured:
 ```
 
 `configured` tells the two apart.
+Both have `backups`, the number of backups the store keeps of the Cube's row
+(0 without one, and without a store),
+which `GET …/backups` lists also for a found Cube (see Backups);
+the answer of a discovery has no such field.
 A configured Cube has the fields below;
 `mac`, `last_seen` (when it last answered discovery) and `found_address` only once
 discovery has seen it:
@@ -1811,6 +1909,8 @@ The server's settings in the store:
   "window_warn_after": {"value": "5m",  "default": "5m",  "set": false, "in_effect": "5m",  "applies": "now"},
   "window_alert_after": {"value": "10m", "default": "10m", "set": false, "in_effect": "10m", "applies": "now"},
   "update.channel":    {"value": "alpha", "default": "alpha", "set": false, "in_effect": "alpha", "applies": "now"},
+  "update.auto":       {"value": "off", "default": "off", "set": false, "in_effect": "off", "applies": "now"},
+  "update.auto_window": {"value": "03:00-05:00", "default": "03:00-05:00", "set": false, "in_effect": "03:00-05:00", "applies": "now"},
   "node.id":           {"value": "01a1ae5a-6bee-7ed4-bb4e-3baa2c43fe55", "set": true, "read_only": true},
   "tenant.id":         {"value": "01a1ae5a-6bee-7edb-b3d5-390730e9e1c5", "set": true, "read_only": true}
 }
@@ -1869,21 +1969,22 @@ until someone with `users` sets a password for it.
 `integrations.requests`, true by default, says whether integrations may
 ask to be registered (`POST /api/v1/integrations/requests`), and applies
 at once; the announcement's `reg` says it on the LAN.
-`auth.keep_open`, false by default, says that a server without users is kept
-open on purpose, and applies at once:
+`auth.keep_open`, false by default, says that a server without regular users
+is kept open on purpose, and applies at once:
 `GET /api/v1/me` then says `kept_open`, and the web UI does not ask for the
 first owner.
 The web UI sets it from the sign-in card once the page's own address is entered,
 and System settings → Users turns it off again (docs/ui.md).
 It changes nothing about who is let in:
 the local network alone, as on any open server (Authentication).
-It counts only while the server has no users:
-the first user removes it, however it is made
-(the API, `massimo user add`, `MASSIMO_API_TOKEN`, an integration approved),
+It counts only while the server has no regular users:
+the first regular user removes it, however it is made
+(the API, `massimo user add`, `MASSIMO_API_TOKEN`, a sign-in through a provider),
 and so do the server's start and a reload of the settings file
-where they find users beside it;
+where they find regular users beside it;
 the log says `keep-open setting removed`.
-With users, `in_effect` is `false`, and `true` is `409`;
+An integration approved and its users leave it as it is.
+With regular users, `in_effect` is `false`, and `true` is `409`;
 `false` and `null` are taken.
 `auth.password_reveal`, true by default, says whether the web UI's password
 fields offer their eye, a button at a field's end that shows the password as
@@ -1901,13 +2002,19 @@ run, and where `-announce` or `MASSIMO_ANNOUNCE` decides instead,
 one of `devel`, `nightly`, `alpha`, `beta` and `stable`,
 the build's flavour by default, and applies at once;
 `MASSIMO_UPDATE_CHANNEL`, where set, is used instead, as `in_effect` shows.
+`update.auto` says whether the box installs a release by itself:
+`off`, the default, or `night`,
+inside the window `update.auto_window`, `HH:MM-HH:MM` in the server's time,
+`03:00-05:00` by default, at least 30 minutes, its end past midnight allowed
+(`23:30-01:30`); both apply at once (see `GET /api/v1/update`, `auto`).
 `PUT` takes an object of keys and durations,
 `{"stale_after": "36h", "refresh_interval": null}`,
 with `null` for the default and `"0"` to switch the refresh or the periodic discovery off.
 A number setting takes a JSON number, or the number as a string,
 `auth.password_login`, `integrations.requests`, `auth.keep_open`
 and `auth.password_reveal` `true` or `false`,
-`announce` `auto`, `on` or `off`, and `update.channel` a name.
+`announce` `auto`, `on` or `off`, `update.channel` a name,
+`update.auto` `off` or `night`, and `update.auto_window` a window as above.
 The ranges: `stale_after` and `stale_after_wall` 1h to 720h, `poll_interval` 10s to 1h,
 `refresh_interval` 10m to 168h, `discover_interval` 1m to 24h, `duty_wait` 1m to 1h,
 `window_warn_after` and `window_alert_after` 1m to 24h.
@@ -3216,6 +3323,8 @@ the backup follows once `backups.auto_min` minutes passed without a further chan
 at the latest `backups.auto_max` minutes after the first,
 and a Cube that has none gets one at once:
 at its first connection, or once its last backup is deleted or pruned.
+The windows hold across a start of the server, `changed` and `due` with them;
+a clean stop takes the backup of a change pending before the Cubes close.
 Changes made outside Massimo count as well, once the Cube reports them,
 at the latest at the six-hourly refresh.
 A restore keeps the Cube's configuration before its first step (`before_restore`)
@@ -3227,6 +3336,22 @@ of the others an automatic one for `backups.keep_days_auto` days and the rest fo
 `backups.keep_days_manual`.
 A Cube without a row in the store (`serve -addr`) has no history:
 these routes answer `503`, and `GET …/backup` works as before.
+
+A Cube the store keeps a row of and no runtime serves keeps its backups in reach:
+one taken out of the configuration, or one only found by discovery.
+`GET …/backups` lists them, without `changed` and `due`;
+`GET …/backups/{id}`, its `diff` and `DELETE` work as for a served Cube,
+the comparison leaving out the devices its row hides.
+It takes no backup and no restore:
+`POST …/backups` and the restore's plan and restore answer `409`,
+and `GET …/backup` stays `404`.
+Such a backup goes onto another Cube as a file:
+downloaded, then sent to that Cube's `POST …/restore/plan` and `POST …/restore`.
+A serial with neither a runtime nor a row is `404`.
+`GET /api/v1/backups/unserved` lists such Cubes (below),
+also one that discovery does not hear;
+`GET /api/v1/cubes` counts each Cube's backups kept,
+served or found (`backups`).
 
 #### GET /api/v1/cubes/{sn}/backups
 
@@ -3249,6 +3374,7 @@ when it last changed and when the automatic backup follows:
 
 `size` is the file's, before the store compresses it; `user` is absent for the
 server's own backups.
+A Cube that is not served has no `changed` or `due` (above).
 `id` names one backup for good:
 the store never gives it to another, also once the backup is deleted or pruned.
 Capability `backup`.
@@ -3260,7 +3386,8 @@ and keep it as `manual` with the user and an optional note,
 `{"note": "before the holidays"}` (at most 200 characters;
 another field answers `400`).
 `201` with the backup as the list shows it;
-`503` while the Cube is not connected.
+`503` while the Cube is not connected,
+`409` for a Cube the store keeps a row of and no runtime serves.
 Capability `backup`, audited as `backup.take`.
 
 #### GET /api/v1/cubes/{sn}/backups/{id}?format=json|yaml
@@ -3302,6 +3429,27 @@ No steps when the two hold the same configuration.
 The restore's options apply (`skip=clock`, `state`, `portal`),
 and hidden devices are not compared.
 `400` without `against`, `404` for an id the Cube does not have.
+Capability `backup`.
+
+#### GET /api/v1/backups/unserved
+
+The Cubes the store keeps backups of and no runtime serves, by serial:
+each row that is not removed and keeps at least one backup,
+one taken out of the configuration or one only found by discovery,
+also while discovery does not hear it and `GET /api/v1/cubes` does not list it:
+
+```json
+[
+  {"serial": "KEQ0000000", "name": "Old hall", "backups": 3, "newest": "2026-11-09T10:00:00Z"}
+]
+```
+
+`name` is the row's, absent where it has none;
+`backups` counts the backups kept, `newest` is when the newest was taken.
+Their backups are listed, downloaded, compared and deleted through
+`GET …/backups` and its routes (above).
+The served Cubes are not in it, and a server without a store lists none (`[]`).
+Web UI: System settings → Backup and restore draws a fold for each.
 Capability `backup`.
 
 ### POST /api/v1/cubes/{sn}/restore/plan
@@ -3365,7 +3513,8 @@ unless the server runs with `-show-hidden`.
 `400` for a backup the server cannot read, one from another Cube or
 without a serial (`cube.serial` must be this Cube's), a bad option or
 an unknown `skip` group; `413` for a body over 1 MB; `503` while the
-Cube is not connected.
+Cube is not connected;
+`409` for a Cube the store keeps a row of and no runtime serves (see Backups).
 
 ### POST /api/v1/cubes/{sn}/restore?plan=<hash>
 
@@ -3401,7 +3550,7 @@ the message saying the percentage (the write test on hardware ran up to there;
 a restore without radio commands, names and clock only,
 is sent whatever the duty cycle);
 `400` without `plan` and for everything the plan request refuses with `400`;
-`413` and `503` as for the plan.
+`409`, `413` and `503` as for the plan.
 The Cube changes a device's configuration only once the device acknowledged the
 write (one to four minutes),
 so a plan made right after a restore still lists the radio steps until the
@@ -3760,7 +3909,7 @@ of the same Cube, or of the server for the server's own:
 | `command` retried, failed or dropped | the same command key acknowledged for the same device |
 | `hold` | its end: the duty cycle's reset, or the wait for free slots |
 | `backup`, `restore_done`, `update_result`, `log_rotated` failed | the next one of its kind below warn |
-| `settings_read` with a value the next start would refuse, or a file that does not parse or is there but cannot be read | the next `settings_read` below warn, or `server_started` |
+| `settings_read` with a value the next start would refuse, a file that does not parse or is there but cannot be read, or a note on the file | the next `settings_read`, also one at `warn`, whose line holds all that its read found, so that the newest is the alert; or `server_started` (a start's own notes follow it, as a `settings_read` of their own) |
 | `proxy_refused` | the Cube's `connected`, or `proxy_connected` |
 | `proxy_warning`, a pairing not stopped or not started | `pairing_ended`; `pairing_started` or `proxy_pairing` |
 | `disagree`, a room's thermostats differing or its state not sent again | a `disagree` of the same `room` whose `outcome` is `agree` |
@@ -3890,10 +4039,30 @@ GET /api/v1/restart's `refused` says the same, each with its settings,
 and a read whose settings did not change writes its `settings_read`
 where that differs from the last read's,
 as a DNS hook made or removed meanwhile makes it;
-README.md, "Server", says which settings it checks),
-`restart`, `reboot`, `reboot_cancelled`, `update` (`from`, `to`, `channel`),
+README.md, "Server", says which settings it checks;
+at `warn` too where the read found notes on the file,
+the lines it set aside, which set nothing
+(a later line of a name given twice, a line without a name,
+a `MASSIMO_ENV_FILE` line),
+after "the settings file: ", each naming its lines by their numbers,
+never a value, and after the refusals where both stand:
+`the next start refuses: -hsts or MASSIMO_HSTS "-1": want a number of days, 0 or more; the settings file: MASSIMO_HSTS is given on lines 3 and 4; the first wins`,
+each list joined by "; ",
+one line holding all that its read found;
+a read whose settings did not change writes its `settings_read`
+where its notes differ from the last read's,
+and GET /api/v1/restart's `refused` never names a note;
+a start whose read found notes writes a `settings_read` of them,
+`why` `start`, after its `server_started`,
+which settles every earlier warning of the kind,
+so that a note that stands stays a warning across a restart),
+`restart`, `reboot`, `reboot_cancelled`, `update` (`from`, `to`, `channel`,
+and `auto` for one the server started itself at night, by nobody),
 `update_result` (the helper's outcome after the restart, once:
 `state`, `from`, `to`; a failure at `warn` with its `error`),
+`update_postponed` (the night's window closed while the radio,
+or a settings file the next start refuses, held a due automatic update back:
+`version`, `why`, `window`),
 `backup` (`reason`, `id`, `bytes`; an automatic one that failed at `warn`),
 `backup_deleted` (`id`), `backups_pruned`, `log_pruned` and `audit_pruned` (`removed`),
 `log_rotated` (serve's `-log` file rotated: `why`, `size`, `format`, `sighup`
@@ -4205,10 +4374,12 @@ one on an address that address's interface;
 an interface comes with its MAC and its addresses but link-local ones,
 `api` marking those the API listens on, at `api_port`.
 `cube_proxies` are the Cubes' proxy listeners, listening or not,
-by Cube serial and address, with `discovery_serial`, the serial a listener
-answers discovery with: the Cube's proxy serial where one is set, else the
-Cube's own; absent for a listener that answers no discovery
-(only one on the Cube port does, docs/proxy.md);
+by Cube serial and address,
+the serial absent for the Cube of a plain `MASSIMO_CUBE_ADDRESS` until it reports one,
+with `discovery_serial`, the serial a listener answers discovery with:
+the Cube's proxy serial where one is set, else the Cube's own;
+absent for a listener that answers no discovery (only one on the Cube port does,
+docs/proxy.md);
 one that does not listen has the fields of a Cube's `proxy_failing`
 (`GET /api/v1/cubes`), and is tried again.
 
@@ -4245,6 +4416,12 @@ A channel takes the releases of its own flavour and of every more stable one,
 in the order `devel`, `nightly`, `alpha`, `beta`, `rc`, `stable`
 ([README.md](../README.md), "Versions").
 The server asks GitHub at most every ten minutes; `refresh` asks now.
+It also checks by itself, whatever its settings say:
+a minute after its start, then every six hours,
+and ten minutes after a check that failed,
+so that the notification `update` reaches people without an open page.
+It does so only with a store and a valid channel;
+a channel set later is checked within a minute.
 
 ```json
 {
@@ -4257,15 +4434,39 @@ The server asks GitHub at most every ten minutes; `refresh` asks now.
   "checked_at": "2026-11-05T13:40:00+01:00",
   "can_update": true,
   "helper": {"state": "done", "from": "v0.1.0-alpha.8", "to": "v0.1.0-alpha.9", "channel": "alpha", "time": "…"},
+  "auto": {"mode": "night", "window": "03:00-05:00", "next": "2026-11-06T03:00:00+01:00"},
   "history": [
-    {"at": "2026-11-05T12:01:00Z", "by": {"name": "anna", "display_name": "Anna"}, "from": "v0.1.0-alpha.8", "to": "v0.1.0-alpha.9", "reached": "v0.1.0-alpha.9", "reached_at": "2026-11-05T12:02:10Z"},
-    {"at": "2026-10-30T07:15:00Z", "outside": true, "manager": "apt", "from": "v0.1.0-alpha.7", "reached": "v0.1.0-alpha.8", "reached_at": "2026-10-30T07:15:00Z"}
+    {"at": "2026-11-05T12:01:00Z", "by": {"name": "anna", "display_name": "Anna"}, "from": "v0.1.0-alpha.8", "to": "v0.1.0-alpha.9", "channel": "alpha", "reached": "v0.1.0-alpha.9", "reached_at": "2026-11-05T12:02:10Z"},
+    {"at": "2026-10-30T07:15:00Z", "outside": true, "manager": "apt", "from": "v0.1.0-alpha.7", "channel": "alpha", "reached": "v0.1.0-alpha.8", "reached_at": "2026-10-30T07:15:00Z"}
   ]
 }
 ```
 
-`latest` is only a release whose manifest verifies against the key compiled into
-the server (see `internal/update`).
+`latest` is the version an update would install,
+never newer than the newest release whose manifest verifies against the key
+compiled into the server (see `internal/update`).
+On a box `massimo install` set up it is that release.
+Where apt or brew owns the binary,
+a release is offered only once the box's package source has it,
+since GitHub's release is out before the apt index and the tap have it:
+the server reads, without root, apt's index of the suite the next update uses
+(the channel's, which the helper switches the source to,
+`dists/<suite>/main/binary-<arch>/Packages.gz` of the source's `URIs`,
+`armhf` for an ARM 32-bit box),
+or the formula of brew's tap on GitHub, the file `brew update` fetches;
+`latest` is then the newest version the source has,
+and `released` the signed release where the source has it not yet.
+The source is read with the release check,
+where the release is newer than the running version.
+`source_error` says why the source could not be read,
+and nothing is available then: apt could not fetch it either.
+After the helper's `up-to-date` ("apt has nothing newer yet")
+for the version an update asked for,
+`held` names that version, which is not available, nor can it be started,
+until a check made after that answer finds it in the source,
+or in the signed release on a box without one;
+a newer version is not held.
+The hold is kept in memory: a restart is followed by a check.
 `check_error` says why a check failed.
 `manager` is the package manager that owns the binary, `apt`,
 where the Debian package installed it, or `brew` under Homebrew's service;
@@ -4275,19 +4476,77 @@ otherwise `blocked` says why it cannot be started from here (a package
 manager owning the binary without a helper of its own, which then upgrades it;
 for apt, its source missing, `MASSIMO_UPDATE_CHANNEL` naming another channel
 than its suite, or the package's helper turned off;
-no API token; no update helper; a development build).
+no API token; no update helper;
+on Windows and under brew, a listen address the helper cannot ask `/healthz` at,
+port 0 or a service name, named by its setting,
+`-listen or MASSIMO_LISTEN: the update helper cannot ask "127.0.0.1:0" for /healthz: bad port`,
+under brew in brackets after the manager's text;
+a development build).
 `helper` is the update helper's last run: `state` is one of `checking`,
 `installing`, `restarting`, `done`, `up-to-date`, `failed`, `rolled-back`,
 with `message` on failure.
+`auto` is the automatic update,
+as the settings `update.auto` and `update.auto_window` set it (`GET /api/v1/settings`):
+`mode` `off` or `night`, its `window`,
+and `next`, when the box will try, absent while no update is due:
+the window's next opening, or now inside it before the night's try.
+At night the server installs what `POST` would, itself and by nobody,
+inside the window while the radio is quiet on every Cube:
+no command with a radio line waiting for the Cube or on its way,
+the proxy's clients' among them, no write waiting for its devices to show it,
+no restore and no pairing;
+a page open in a browser holds nothing back,
+nor do the Cube's own memory slots in use.
+It also waits while the server's next start refuses the settings file
+(`GET /api/v1/restart`, `refused`):
+the update restarts the server, which would not come back,
+the old version no more than the new.
+Neither wait uses up the night's try, and each tick, once a minute, asks again,
+so that a file fixed inside the window, which the server reads within seconds,
+lets the update come that same night.
+`waits` names what the next try waits for, where `next` is set:
+`settings` while the next start refuses the settings file;
+a busy radio sets none, since it passes within minutes.
+It checks afresh at the window's opening and every half hour inside it,
+so that a release built in the night is taken the same night,
+and tries once a night, a start that failed included, across a restart too.
+It tries nothing that `POST` would refuse:
+a version held back, an update running, nothing newer,
+a box that cannot start updates from here (`blocked`).
+A window that closes while the radio,
+or a settings file the next start refuses, held a due update back
+writes `update_postponed` to the log, its `why` the last reason;
+the next night tries again.
+`ask` says that the page asks a holder of `update`:
+Install now, Tonight or Skip this version,
+automatic updates at night, an update that `POST` would start,
+and no answer for it yet;
+`answer` is the box's answer (`PUT /api/v1/update/answer`)
+where it names the version offered or a newer one:
+`version`, `answer` `tonight` or `skip`,
+`by` (absent for the owner's key) and `at`.
+A version skipped is not installed at night, and `next` is absent,
+until a newer release is out; `Update` still installs it.
 `history` is the last ten updates, newest first,
 kept in the setting `update.history`:
 an update started here names who started it (`by`, absent for the owner's key),
-the version it ran (`from`) and the one it asked for (`to`);
-the next start with another version adds `reached` and `reached_at`.
+the version it ran (`from`), the one it asked for (`to`)
+and the channel it asked on (`channel`);
+one the server started itself at night has `auto` and no `by`;
+the next start with another version adds `reached` and `reached_at`,
+whichever version that is:
+apt may install an older one than `to`, in between, or a newer one.
 A new version that no entry waits for came from outside Massimo (`outside`):
-apt, brew (`manager`) or a person on the box.
-`result` is the update helper's outcome where it ended without reaching `to`:
-`failed`, `rolled-back` or `up-to-date`.
+apt, brew (`manager`) or a person on the box;
+its `channel` is the one the box followed at the start that found it.
+`result` is the helper's outcome where the box did not stay on a new version:
+`failed` or `up-to-date`, without `reached`,
+or `rolled-back`, after the version `reached` ran.
+An outcome the helper reports while the server runs on,
+`up-to-date` where apt has nothing newer yet or a failure before the restart,
+is taken at the next read of this route or at the next update started;
+one that comes with a restart, at that start.
+An entry the helper reports no outcome for stays open.
 The log keeps an update's lines for a month only.
 
 ### POST /api/v1/update
@@ -4311,18 +4570,43 @@ and nothing is rolled back: the helper's last run names the way back
 Where it is `brew`, the server starts a helper as its own user that runs
 `brew upgrade` and restarts the job (packaging/README.md, "Homebrew").
 The request names no version and no file,
-so the most the API can do is install the newest signed release.
+so the most the API can do is install the newest signed release,
+or what the box's package source has of it (`latest`).
 Answers `202` with `{"ok":true,"requested":"v…", "channel":"…"}`;
 follow the progress with GET.
 
 Needs the API token: without `MASSIMO_API_TOKEN` it answers `403` even though
 the other routes are open.
-`403` also when no helper is configured (`serve -update-request`);
+`403` also when no helper is configured (`serve -update-request`),
+and with GET's `blocked` as the error wherever that names a reason;
 `409` when already up to date,
-when the channel has no release or while an update is running (on Windows also
-in the moment between the start of the helper and its first status);
+when the channel has no release, while an update is running (on Windows also
+in the moment between the start of the helper and its first status),
+when the package source has the release not yet, or while it is held;
 `500` on Windows when the helper could not be started (the request is withdrawn);
-`502` when GitHub could not be asked.
+`502` when GitHub or the package source could not be asked.
+
+### PUT /api/v1/update/answer
+
+The box's answer to the automatic update's question (`auto.ask` of GET),
+for a holder of `update`:
+
+```json
+{"version": "v0.1.0-alpha.10", "answer": "tonight"}
+```
+
+`version` is the one asked about, `latest` of GET; another is `409`.
+`now` starts the update at once, as `POST /api/v1/update` does,
+with its answers, and keeps nothing.
+`tonight` ends the question for the version, which the night installs
+as it would unanswered;
+`skip` holds the version back from the night, and the question with it,
+until a newer release is out.
+Both need automatic updates at night (`409` while `update.auto` is `off`),
+are kept in the setting `update.answer`, one answer for the box,
+and answer `200` with what GET answers.
+Audited as `update.answer`, a change line in the log:
+every page reads the versions again at it, so that the question goes everywhere.
 
 ### GET /api/v1/restart, POST /api/v1/restart
 
@@ -4364,6 +4648,12 @@ A read that finds nothing refused clears it,
 and the start has none, since it would have refused it.
 It blocks nothing: the restart is offered all the same,
 and so are an update and a reboot.
+A holder of `update` reads the `GET` as well as one of `restart`,
+since every update restarts the server:
+without `restart` its `available` is false
+and `blocked` is `capability "restart" required`, as its own `POST` would be,
+and the rest is a restart holder's,
+`by` and what the next start refuses included.
 `by` is `systemd`, `launchd` (also Homebrew's job), `windows`
 (the Windows service manager) or `exit` (`serve -restart exit`:
 whatever runs the server, told by the exit status).
@@ -4385,7 +4675,8 @@ a loopback peer with no `X-Forwarded-For`, `X-Real-IP` or `Forwarded` header,
 so that nobody on the LAN, and no client of a reverse proxy on the box,
 can restart it;
 anyone else gets `403` with the reason.
-`403` also without the capability `restart`;
+`403` also for the `POST` without the capability `restart`,
+and for the `GET` without `restart` or `update`;
 `409` when no service manager would start the server again (`serve` in a terminal,
 or `-restart off`),
 while a restart is under way,
@@ -4398,8 +4689,9 @@ Reads the settings file again at once, as SIGHUP does on Unix:
 `MASSIMO_API_TOKEN` applies at once unless `-token` was given,
 and so does the reboot's switch, `MASSIMO_REBOOT`,
 unless `-allow-reboot` was given;
-every other setting that changed applies at the next start,
-and the store is checkpointed.
+every other setting that changed applies at the next start;
+the log file is rotated, where `serve` writes one (`-log`),
+and the store is checkpointed, whatever the read finds.
 `serve` also reads the file by itself within seconds of a change,
 so this is for not waiting, and for systems without SIGHUP.
 Needs the capability `restart`, and answers what it found:
@@ -4416,10 +4708,15 @@ each with its settings and the start's own text, `[]` for none;
 the log's `settings_read` (under GET /api/v1/cubes/{sn}/events) is then at `warn`,
 its `error` those texts after "the next start refuses: ", joined by "; ",
 and a reboot's switch the start would refuse is off.
+A note on the file, a line the read set aside, is no refusal:
+`refused` does not name it,
+and the log's `settings_read` is at `warn` with it after "the settings file: ",
+after the refusals where both stand.
 It sends nothing to a Cube, and is an audit row (`server.reload`) but no
 command, so a retry is harmless.
 `409` when the server reads no settings file,
-`500` when the file could not be read, with the error:
+`500` when the file could not be read, with the error,
+after the rotation and the checkpoint:
 nothing is applied, and what waits for the next start stays as it was,
 and the log's `settings_read` is at `warn`
 with the start's own error after "the next start refuses: "
@@ -4507,7 +4804,8 @@ and tenant identities and the rows per table:
 `GET /api/v1/config` answers the version, the settings file and whether it
 was found, the data directory, the address `serve` listens on, its TLS mode,
 the log level and every `MASSIMO_*` variable in effect with where it came
-from (`environment` or the settings file).
+from (`environment` or the settings file, with its lines where the file
+gives the name more than once: `file, lines 3 and 4: the first wins`).
 A key's, an IV's, a token's or a password's value never leaves the server:
 such a variable has `"secret": true` and no `value`;
 a name Massimo does not know has `"unknown": true`.

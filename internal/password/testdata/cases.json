@@ -1,0 +1,367 @@
+{
+ "cases": [
+  {
+   "password": "",
+   "context": [],
+   "answer": "too_short",
+   "why": "the empty password: where empty means none, the caller does not ask"
+  },
+  {
+   "password": "mxtqvzl",
+   "context": [],
+   "answer": "too_short",
+   "why": "seven letters"
+  },
+  {
+   "password": "mxtqvzlp",
+   "context": [],
+   "answer": "ok",
+   "why": "eight letters, the fewest"
+  },
+  {
+   "password": "       x",
+   "context": [],
+   "answer": "ok",
+   "why": "spaces count, and are not trimmed"
+  },
+  {
+   "password": "äöüäöüä",
+   "context": [],
+   "answer": "too_short",
+   "why": "seven letters of two bytes each in UTF-8: 14 bytes, 7 characters"
+  },
+  {
+   "password": "äöüäöüäö",
+   "context": [],
+   "answer": "ok",
+   "why": "eight letters of two bytes each: äöü is three characters, not six"
+  },
+  {
+   "password": "éééé",
+   "context": [],
+   "answer": "ok",
+   "why": "four letters, each an e and a combining accent: 8 code points, not normalised"
+  },
+  {
+   "password": "😀😀😀😀😀😀😀",
+   "context": [],
+   "answer": "too_short",
+   "why": "seven characters beyond the basic plane: 14 UTF-16 units, 7 characters"
+  },
+  {
+   "password": "😀😀😀😀😀😀😀😀",
+   "context": [],
+   "answer": "ok",
+   "why": "eight characters beyond the basic plane: 16 UTF-16 units, 32 bytes"
+  },
+  {
+   "password": "ferry-lamp-olive-quartz",
+   "context": [
+    "anna",
+    "Anna"
+   ],
+   "answer": "ok",
+   "why": "a few words, none of them its context's"
+  },
+  {
+   "password": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+   "context": [],
+   "answer": "ok",
+   "why": "sixty-four letters, the most"
+  },
+  {
+   "password": "😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀",
+   "context": [],
+   "answer": "ok",
+   "why": "sixty-four characters beyond the basic plane: 128 UTF-16 units, 256 bytes"
+  },
+  {
+   "password": "ääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääää",
+   "context": [],
+   "answer": "ok",
+   "why": "sixty-four letters of two bytes each: 128 bytes, 64 characters"
+  },
+  {
+   "password": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+   "context": [],
+   "answer": "too_long",
+   "why": "sixty-five letters"
+  },
+  {
+   "password": "äääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääää",
+   "context": [],
+   "answer": "too_long",
+   "why": "sixty-five letters of two bytes each"
+  },
+  {
+   "password": "😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀",
+   "context": [],
+   "answer": "too_long",
+   "why": "sixty-five characters beyond the basic plane: 130 UTF-16 units, 65 characters"
+  },
+  {
+   "password": "ANNA-river-2026",
+   "context": [
+    "anna"
+   ],
+   "answer": "context",
+   "why": "the user's name in capitals inside a longer password"
+  },
+  {
+   "password": "anne-river-2026",
+   "context": [
+    "anna"
+   ],
+   "answer": "ok",
+   "why": "the name with one letter changed"
+  },
+  {
+   "password": "kim-river-2026",
+   "context": [
+    "kim"
+   ],
+   "answer": "ok",
+   "why": "a name of three letters is no word"
+  },
+  {
+   "password": "my-massimo-1",
+   "context": [],
+   "answer": "context",
+   "why": "massimo inside, with no name given: Massimo's name is always a word"
+  },
+  {
+   "password": "MaxCube-2026",
+   "context": [],
+   "answer": "context",
+   "why": "maxcube, whatever its case: the Cube's name is always a word"
+  },
+  {
+   "password": "massimo",
+   "context": [],
+   "answer": "too_short",
+   "why": "massimo alone is too short before it is a name"
+  },
+  {
+   "password": "river-BERG-2026",
+   "context": [
+    "Anna Berg"
+   ],
+   "answer": "context",
+   "why": "a word of a display name of several words"
+  },
+  {
+   "password": "xx-li wu ma-1",
+   "context": [
+    "Li Wu Ma"
+   ],
+   "answer": "context",
+   "why": "a display name whose words are short: the whole name is a word"
+  },
+  {
+   "password": "li-wu-ma-2026",
+   "context": [
+    "Li Wu Ma"
+   ],
+   "answer": "ok",
+   "why": "the same short words, and the whole name not as it stands"
+  },
+  {
+   "password": "Anna-is-here",
+   "context": [
+    "anna2026"
+   ],
+   "answer": "context",
+   "why": "a login name with digits: its run of letters is a word"
+  },
+  {
+   "password": "x-anna2026-x",
+   "context": [
+    "anna2026"
+   ],
+   "answer": "context",
+   "why": "and the whole login name, its digits with it"
+  },
+  {
+   "password": "op7op7op7",
+   "context": [
+    "op7"
+   ],
+   "answer": "ok",
+   "why": "a login name of two letters and a digit is no word"
+  },
+  {
+   "password": "the-berg-river",
+   "context": [
+    "anna.berg"
+   ],
+   "answer": "context",
+   "why": "a login name with a dot: each run of letters is a word"
+  },
+  {
+   "password": "pw-2026-ferry",
+   "context": [
+    "2026"
+   ],
+   "answer": "ok",
+   "why": "a name of digits alone has no letter and is no word"
+  },
+  {
+   "password": "ferry-lamp-olive",
+   "context": [
+    "",
+    " ",
+    "-"
+   ],
+   "answer": "ok",
+   "why": "an empty name, or one without a letter, is no word"
+  },
+  {
+   "password": "mxtqvzlp",
+   "context": [
+    "mxtqvzlpqrstu"
+   ],
+   "answer": "ok",
+   "why": "a word longer than the password is not in it"
+  },
+  {
+   "password": "JÜRGEN-2026",
+   "context": [
+    "Jürgen"
+   ],
+   "answer": "context",
+   "why": "whatever the case beyond ASCII"
+  },
+  {
+   "password": "the-ipek-river",
+   "context": [
+    "İpek"
+   ],
+   "answer": "context",
+   "why": "İ lowered a code point at a time is i, as Go's unicode.ToLower: JavaScript's toLowerCase of the whole word gives i and a combining dot"
+  },
+  {
+   "password": "οδοσα-12",
+   "context": [
+    "ΟΔΟΣ"
+   ],
+   "answer": "context",
+   "why": "Σ lowered a code point at a time is σ wherever it stands: JavaScript's toLowerCase of the whole word ends in ς"
+  },
+  {
+   "password": "ferry-kitchen-7",
+   "context": [
+    "kitchen"
+   ],
+   "answer": "context",
+   "why": "the server's name, as HostWord gives it"
+  },
+  {
+   "password": "οδος-river-1",
+   "context": [
+    "ΟΔΟΣ"
+   ],
+   "answer": "ok",
+   "why": "the simple lower-casing: Σ is σ, so a name ending in a capital sigma refuses no word written with a final ς; too little is refused, never too much, alike in both languages"
+  },
+  {
+   "password": "ırmak-river-1",
+   "context": [
+    "Irmak"
+   ],
+   "answer": "ok",
+   "why": "the simple lower-casing: I is i, and a dotless ı is no i; too little is refused, never too much, alike in both languages"
+  }
+ ],
+ "hosts": [
+  {
+   "host": "kitchen",
+   "word": "kitchen",
+   "why": "a host name of one label"
+  },
+  {
+   "host": "kitchen.example.org",
+   "word": "kitchen",
+   "why": "the first label of a full name"
+  },
+  {
+   "host": "kitchen.example.org:8443",
+   "word": "kitchen",
+   "why": "a request's Host, with its port"
+  },
+  {
+   "host": "KITCHEN.local",
+   "word": "KITCHEN",
+   "why": "as it is written: Check lowers it"
+  },
+  {
+   "host": "pi4",
+   "word": "pi4",
+   "why": "a short label is given; Check takes no word of it"
+  },
+  {
+   "host": "localhost:9500",
+   "word": "",
+   "why": "localhost names no server"
+  },
+  {
+   "host": "localhost.localdomain",
+   "word": "",
+   "why": "nor its full name"
+  },
+  {
+   "host": "127.0.0.1:9500",
+   "word": "",
+   "why": "an IPv4 address, with its port"
+  },
+  {
+   "host": "192.168.1.5",
+   "word": "",
+   "why": "an IPv4 address"
+  },
+  {
+   "host": "[::1]:9500",
+   "word": "",
+   "why": "an IPv6 address, with its port"
+  },
+  {
+   "host": "[fd00::beef]",
+   "word": "",
+   "why": "an IPv6 address in brackets, as a page's host gives it"
+  },
+  {
+   "host": "fd00::beef",
+   "word": "",
+   "why": "an IPv6 address without brackets"
+  },
+  {
+   "host": "",
+   "word": "",
+   "why": "no host"
+  },
+  {
+   "host": "kitchen:abc",
+   "word": "kitchen",
+   "why": "what follows a single colon is left out, a port or not"
+  },
+  {
+   "host": "[kitchen]",
+   "word": "",
+   "why": "anything in brackets is taken for an IPv6 address"
+  },
+  {
+   "host": "localhoſt",
+   "word": "localhoſt",
+   "why": "localhost with a long s is no localhost: lowered as Check lowers, ſ stays ſ"
+  },
+  {
+   "host": "01.2.3.4",
+   "word": "01",
+   "why": "no IPv4 address with a leading zero: its label, of no letter, gives Check no word"
+  },
+  {
+   "host": "999.1.1.1",
+   "word": "999",
+   "why": "nor with a number above 255"
+  }
+ ]
+}

@@ -48,6 +48,8 @@ import { pagesPart } from "./shared/pages";
 import { iconsChanged } from "./shared/look";
 import { parts, register } from "./shared/region";
 import { forgetRepairs } from "./shared/repair";
+import { hostWord, passwordProblem } from "./shared/password";
+import { suggestPassword } from "./shared/suggest";
 import { newSession, session, stillSession } from "./shared/session";
 
 /** The parts the plain code calls, by region. */
@@ -89,6 +91,12 @@ export interface MassimoParts {
    * Cube's log shown loads again at a resync (log/).
    */
   serverEvent(ev: ServerEvent): void;
+  /** The rule a new password is held to (shared/password.tsx): "too_short", "too_long" or "" for one it takes, as Go's internal/password answers its testdata/cases.json; the UI test gives it every case. */
+  passwordProblem: typeof passwordProblem;
+  /** The server's name a host gives (shared/password.tsx), as Go's password.HostWord answers the hosts of its testdata/cases.json; the UI test gives it every host. */
+  hostWord: typeof hostWord;
+  /** A suggested password (shared/suggest.ts): five words of EFF's list or twenty characters, drawn again where the rule given refuses it; the UI test draws a thousand. */
+  suggestPassword: typeof suggestPassword;
   /** The pages of the main area: which is shown, its address, who may open it (shared/pages.ts; app.js, home.js, login.js and header.js call it). */
   pages: typeof pagesPart;
   /** Backup and restore: Cube settings' box and System settings' fold per Cube (backups/). */
@@ -126,6 +134,9 @@ register("language", languageChanged);
 register("icons", iconsChanged);
 register("minute", minuteTick);
 register("pages", pagesPart);
+register("passwordProblem", passwordProblem);
+register("hostWord", hostWord);
+register("suggestPassword", suggestPassword);
 register("serverEvent", (ev: ServerEvent) => {
   logEvent(ev);
   softwareEvent(ev);

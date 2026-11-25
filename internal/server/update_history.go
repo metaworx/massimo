@@ -6,10 +6,13 @@ package server
 // The last updates (AP UpdateHistory v1.0): one settings row,
 // update.history, a JSON list of the last ten, newest first. An update
 // started in Massimo adds an entry with who started it, the version it
-// ran and the one it asked for; the next start with another version
-// completes it with the version reached. A new version that no entry
-// waits for came from outside Massimo: apt, brew or a person on the box.
-// The log says the same in its lines, but keeps them for a month only.
+// ran, the one it asked for and the channel; the next start with another
+// version completes it with the version reached. A new version that no
+// entry waits for came from outside Massimo: apt, brew or a person on
+// the box, on the channel the box followed at that start. An update the
+// helper ended without restarting the server ends at the next read of
+// the update's state (AP UpdateHistory v1.1). The log says the same in
+// its lines, but keeps them for a month only.
 
 import (
 	"context"
@@ -38,6 +41,10 @@ type updateEntry struct {
 	Manager string `json:"manager,omitempty"` // the package manager of a box that has one, for Outside
 	From    string `json:"from,omitempty"`    // the version that ran before
 	To      string `json:"to,omitempty"`      // the version asked for, where Massimo started it
+	// Channel is the channel the update came from: the one asked for,
+	// where Massimo started it, else the one the box followed at the
+	// start that found it (updateChannel).
+	Channel string `json:"channel,omitempty"`
 	// Reached is the version the next start ran, and ReachedAt when; both
 	// empty while the update runs.
 	Reached   string     `json:"reached,omitempty"`
@@ -45,6 +52,9 @@ type updateEntry struct {
 	// Result is the update helper's outcome where it ended without
 	// reaching To: failed, rolled-back or up-to-date.
 	Result string `json:"result,omitempty"`
+	// Auto is set where the server started it itself, at night
+	// (update_auto.go); By is nil then.
+	Auto bool `json:"auto,omitempty"`
 }
 
 // waiting reports whether the entry waits for the start that completes
@@ -93,26 +103,39 @@ func (s *Server) editHistory(ctx context.Context, edit func([]updateEntry) []upd
 
 // noteUpdateStart adds the entry of an update started in Massimo at at:
 // by whom (userID, 0 for the owner's key), from the running version to
-// the one asked for.
-func (s *Server) noteUpdateStart(ctx context.Context, at time.Time, userID int64, from, to string) {
-	e := updateEntry{At: at.UTC(), From: from, To: to}
+// the one asked for on channel; auto where the server started it at
+// night (update_auto.go). The entry before it, still waiting, ends
+// with the outcome the update helper reported for it (helper, read just
+// before; helperFinal), so that a second Update leaves no entry open for
+// good; one the helper has no outcome for stays as it is.
+func (s *Server) noteUpdateStart(ctx context.Context, at time.Time, userID int64, from, to, channel string, helper *update.Status, auto bool) {
+	e := updateEntry{At: at.UTC(), From: from, To: to, Channel: channel, Auto: auto}
 	if userID != 0 {
 		if u, ok, err := s.opts.Store.UserByID(ctx, userID); err == nil && ok {
 			e.By = &eventUser{Name: u.Name, DisplayName: u.DisplayName}
 		}
 	}
 	s.editHistory(ctx, func(list []updateEntry) []updateEntry {
+		if len(list) > 0 && list[0].waiting() {
+			if r := helperFinal(helper, &list[0]); r != "" {
+				list[0].Result = r
+			}
+		}
 		return append([]updateEntry{e}, list...)
 	})
 }
 
 // noteVersionStart completes the history at a start of version, where
 // the last start ran before ("" for none known). A new version completes
-// the newest entry where it waits for it, or for an unknown version;
-// one that no entry waits for is an update from outside Massimo, through
-// the box's package manager where it has one. An entry the update
-// helper ended without reaching its version gets the helper's outcome
-// (helper, nil where the box has none).
+// the newest entry where it waits, whatever version it is: Massimo
+// started that update, and apt or brew may install another than the
+// one asked for, an older one in between or a newer one. Where no entry
+// waits, or the helper had ended the waiting one without a restart, the
+// new version came from outside Massimo, through the box's package
+// manager where it has one, on the channel the box follows now. An entry
+// the update helper ended without reaching its version gets the
+// helper's outcome (helper, nil where the box has none); an entry it
+// completes keeps its own channel.
 func (s *Server) noteVersionStart(ctx context.Context, before, version string, helper *update.Status) {
 	now := time.Now().UTC()
 	s.editHistory(ctx, func(list []updateEntry) []updateEntry {
@@ -131,36 +154,93 @@ func (s *Server) noteVersionStart(ctx context.Context, before, version string, h
 				}
 			}
 			return nil
-		case newest != nil && newest.waiting() && (newest.To == "" || newest.To == version):
+		case newest != nil && newest.waiting() && helperFinal(helper, newest) == "":
 			newest.Reached, newest.ReachedAt = version, &now
 			return list
+		case newest != nil && newest.waiting():
+			// The helper ended it without a restart ("apt has nothing
+			// newer yet"); the new version came another way.
+			newest.Result = helperFinal(helper, newest)
 		case newest != nil && newest.Reached == before && newest.From == version && helperEnded(helper, newest, version) == "rolled-back":
 			// The new version ran, and the helper put the old one back.
 			newest.Result = "rolled-back"
 			return list
 		}
-		e := updateEntry{At: now, Outside: true, Manager: s.opts.Update.Manager, From: before, Reached: version, ReachedAt: &now}
+		e := updateEntry{At: now, Outside: true, Manager: s.opts.Update.Manager, Channel: s.updateChannel(ctx), From: before, Reached: version, ReachedAt: &now}
 		return append([]updateEntry{e}, list...)
 	})
 }
 
+// noteHelperOutcome ends the newest entry where it still waits and the
+// update helper has reported a final state since it was started
+// (helperFinal): an update the helper ended without restarting the
+// server, "apt has nothing newer yet", is not under way until the next
+// start, but ends at the next read of the update's state (updateRelease).
+// A helper that restarts the server is left to that start: while it
+// says restarting, the old version still answers, and the version it
+// came from being the one running is no rollback there. The row is
+// written only where the entry ends. An up-to-date also holds the
+// version the entry asked for back from Update (holdVersion).
+func (s *Server) noteHelperOutcome(ctx context.Context, helper *update.Status) {
+	if helper == nil || !unreached(helper.State) {
+		return
+	}
+	held := ""
+	s.editHistory(ctx, func(list []updateEntry) []updateEntry {
+		if len(list) == 0 || !list[0].waiting() {
+			return nil
+		}
+		r := helperFinal(helper, &list[0])
+		if r == "" {
+			return nil
+		}
+		list[0].Result = r
+		if r == "up-to-date" {
+			held = list[0].To
+		}
+		return list
+	})
+	if held != "" {
+		// apt had nothing newer: the version asked for is held back
+		// until a later check finds it (AP AutoUpdate D5-B)
+		s.holdVersion(held, helper.Time)
+	}
+}
+
 // helperEnded is how the update helper's run of e ended without reaching
 // its version, "" while it runs or where its status is older than e: a
-// final state, or rolled-back where it restarts the version it came from
-// (version, the one starting) before it says so.
+// final state (helperFinal), or, at a start, rolled-back where it
+// restarts the version it came from (version, the one starting) before
+// it says so.
 func helperEnded(helper *update.Status, e *updateEntry, version string) string {
-	if helper == nil || !helper.Time.After(e.At) {
-		return ""
+	if r := helperFinal(helper, e); r != "" {
+		return r
 	}
-	switch helper.State {
-	case "failed", "rolled-back", "up-to-date":
-		return helper.State
-	case "restarting":
-		if helper.From == version && helper.Running() {
-			return "rolled-back"
-		}
+	if helper != nil && helper.Time.After(e.At) && helper.State == "restarting" && helper.From == version && helper.Running() {
+		return "rolled-back"
 	}
 	return ""
+}
+
+// helperFinal is the final state the update helper reported for e
+// without reaching its version, failed, rolled-back or up-to-date; ""
+// while it runs, where it says done, and where its status is older than
+// e.
+func helperFinal(helper *update.Status, e *updateEntry) string {
+	if helper == nil || !unreached(helper.State) || !helper.Time.After(e.At) {
+		return ""
+	}
+	return helper.State
+}
+
+// unreached reports whether state is one of the update helper's final
+// states that leave the version asked for unreached.
+func unreached(state string) bool {
+	switch state {
+	case "failed", "rolled-back", "up-to-date":
+		return true
+	}
+	return false
 }
 
 // helperStatus is the update helper's last status, nil where the box

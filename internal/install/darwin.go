@@ -147,6 +147,9 @@ func InstallDarwin(o Options) error {
 	if err := o.checkTLS(); err != nil {
 		return err
 	}
+	if err := o.checkSettingsFile(); err != nil {
+		return err
+	}
 	in := newInstaller(o)
 	in.svcUser, in.darwin = DarwinUser, true
 
@@ -285,11 +288,8 @@ func darwinEnvTemplate() string {
 // checkDarwinSettings warns about MASSIMO_LOG, which the plist's -log
 // overrides on macOS.
 func (in *installer) checkDarwinSettings() {
-	env := in.path(EnvPath)
-	if _, err := os.Stat(env); err != nil {
-		env = in.Settings
-	}
-	if vars, err := readEnv(env); err == nil && vars["MASSIMO_LOG"] != "" {
+	env := in.checkedFile(in.path(EnvPath))
+	if vars, err := in.readSettings(env); err == nil && vars["MASSIMO_LOG"] != "" {
 		fmt.Fprintf(in.Out, "warning: MASSIMO_LOG in %s is not read: the plist passes -log %s\n", EnvPath, DarwinLog)
 	}
 }

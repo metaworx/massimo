@@ -23,6 +23,7 @@ import (
 	"strings"
 	"time"
 
+	"go.metaworx.ch/massimo/internal/env"
 	"go.metaworx.ch/massimo/internal/safefile"
 	"go.metaworx.ch/massimo/packaging"
 )
@@ -97,7 +98,9 @@ type Options struct {
 	Root string
 	// Binary is the file installed as BinPath; "" is the running one.
 	Binary string
-	// Settings, when set, is copied as EnvPath if there is none yet.
+	// Settings, when set, is copied as EnvPath if there is none yet;
+	// UTF-16 text is refused before anything is written
+	// (checkSettingsFile).
 	Settings string
 	// NoUpdateHelper leaves out massimo-update.path and .service.
 	NoUpdateHelper bool
@@ -149,6 +152,8 @@ type installer struct {
 	darwin  bool   // macOS, whose settings template has no MASSIMO_LOG
 	stopped bool   // stopped for the account's rename: it ran, so it is started again
 	reboot  bool   // the reboot helper stays or comes (rebootWanted)
+	noted   bool   // the settings file's notes are said (readSettings)
+	copies  bool   // -settings is copied, or in a dry run would be (settingsCopy)
 }
 
 func newInstaller(o Options) *installer {
@@ -228,6 +233,9 @@ func Install(o Options) error {
 		}
 	}
 	if err := o.checkTLS(); err != nil {
+		return err
+	}
+	if err := o.checkSettingsFile(); err != nil {
 		return err
 	}
 	in := newInstaller(o)
@@ -320,6 +328,9 @@ func configure(o Options, m Manager) error {
 	if err := o.checkTLS(); err != nil {
 		return err
 	}
+	if err := o.checkSettingsFile(); err != nil {
+		return err
+	}
 	// Only the Debian package ships an update helper, and only apt is
 	// what it runs.
 	helper := m.Name == "apt"
@@ -409,7 +420,7 @@ func (in *installer) packagedSettings() (bool, error) {
 		fmt.Fprintf(in.Out, "%s exists; kept it and did not copy %s\n", EnvPath, in.Settings)
 		return true, nil
 	}
-	b, err := os.ReadFile(in.Settings)
+	b, err := in.settingsCopy()
 	if err != nil {
 		return false, err
 	}
@@ -540,10 +551,11 @@ func envTemplate() string {
 }
 
 // settingLines is what a settings file sets: its lines, trimmed, without
-// the comments and blank lines.
+// the comments and blank lines, and without a UTF-8 byte order mark at
+// its start, which serve skips.
 func settingLines(b []byte) []string {
 	var out []string
-	for _, l := range strings.Split(string(b), "\n") {
+	for _, l := range strings.Split(strings.TrimPrefix(string(b), utf8BOM), "\n") {
 		if l = strings.TrimSpace(l); l != "" && !strings.HasPrefix(l, "#") {
 			out = append(out, l)
 		}
@@ -665,7 +677,7 @@ func (in *installer) settings() (bool, error) {
 	}
 	content, startable := tmpl, false
 	if in.Settings != "" {
-		b, err := os.ReadFile(in.Settings)
+		b, err := in.settingsCopy()
 		if err != nil {
 			return false, err
 		}
@@ -687,14 +699,11 @@ func (in *installer) settings() (bool, error) {
 // address), or serve fails to bind and restarts every ten seconds; the
 // install adds no addresses, that is the network's owner's choice.
 func (in *installer) checkSettings() {
-	env := in.path(EnvPath)
-	if _, err := os.Stat(env); err != nil {
-		env = in.Settings // a dry run: the file that would be copied
-	}
+	env := in.checkedFile(in.path(EnvPath))
 	if env == "" {
 		return
 	}
-	vars, err := readEnv(env)
+	vars, err := in.readSettings(env)
 	if err != nil {
 		fmt.Fprintf(in.Out, "warning: cannot check %s: %v\n", EnvPath, err)
 		return
@@ -747,30 +756,93 @@ func localAddrs() ([]net.IP, error) {
 	return ips, nil
 }
 
-// readEnv reads KEY=VALUE lines as massimo's .env loader does, enough to
-// check them: comments and blank lines skipped, quotes removed.
-func readEnv(path string) (map[string]string, error) {
-	b, err := os.ReadFile(path)
+// checkSettingsFile refuses a -settings file in UTF-16 text, as
+// PowerShell 5.1's > writes it, with the parser's error (env.ErrUTF16),
+// before an install writes anything: the service could not start on its
+// copy. It refuses it also where a settings file is kept and it would
+// not be copied.
+func (o Options) checkSettingsFile() error {
+	if o.Settings == "" {
+		return nil
+	}
+	if _, _, err := env.ReadFileLenient(o.Settings); errors.Is(err, env.ErrUTF16) {
+		return err
+	}
+	return nil
+}
+
+// checkedFile is the settings file install's checks read for file, the
+// service's under Root: the -settings file in a dry run that would copy
+// it there (copies), or where file is not there yet; else file. It is ""
+// where neither is.
+func (in *installer) checkedFile(file string) string {
+	if in.DryRun && in.copies {
+		return in.Settings
+	}
+	if _, err := os.Stat(file); err != nil {
+		return in.Settings
+	}
+	return file
+}
+
+// readSettings reads the settings file at path with env's parser, as
+// serve reads it, leniently (env.ReadFileLenient): the first line of a
+// name, a UTF-8 byte order mark skipped, a MASSIMO_ENV_FILE line and
+// one without a name ignored, and a line that is not KEY=VALUE, where
+// serve refuses the file, skipped, so that a re-install keeps what the
+// other lines set; UTF-16 text is refused. The run's first read says the
+// parser's notes on the file as each command says those on its own
+// settings at its start (cmd/massimo), "warning: <file>: <note>", once:
+// install reads one file a run, EnvPath, or in a dry run the -settings
+// file it would copy; and not where the command's start read that file,
+// or the copy's source, and said them already (readByStart,
+// settingsCopy).
+func (in *installer) readSettings(path string) (map[string]string, error) {
+	vars, notes, err := env.ReadFileLenient(path)
 	if err != nil {
 		return nil, err
 	}
-	vars := map[string]string{}
-	for _, line := range strings.Split(string(b), "\n") {
-		line = strings.TrimSpace(strings.TrimPrefix(strings.TrimSpace(line), "export "))
-		if line == "" || strings.HasPrefix(line, "#") {
-			continue
-		}
-		k, v, ok := strings.Cut(line, "=")
-		if !ok {
-			continue
-		}
-		v = strings.TrimSpace(v)
-		if len(v) >= 2 && (v[0] == '"' || v[0] == '\'') && v[len(v)-1] == v[0] {
-			v = v[1 : len(v)-1]
-		}
-		vars[strings.TrimSpace(k)] = v
+	if in.noted || readByStart(path) {
+		return vars, nil
+	}
+	in.noted = true
+	name := path
+	if path == in.path(EnvPath) {
+		name = EnvPath
+	}
+	for _, n := range notes {
+		fmt.Fprintf(in.Out, "warning: %s: %s\n", name, n.Text)
 	}
 	return vars, nil
+}
+
+// readByStart reports whether path is the settings file the command's
+// start read, env.File(), and whose notes it said (cmd/massimo): the
+// same file, by os.SameFile, whatever its name, a link's too. A dry run
+// of "install -settings .env" in the directory of that .env reads the
+// command's own settings file, and a run copies it.
+func readByStart(path string) bool {
+	a, err := os.Stat(path)
+	if err != nil {
+		return false
+	}
+	b, err := os.Stat(env.File())
+	return err == nil && os.SameFile(a, b)
+}
+
+// settingsCopy reads the -settings file for its copy, and notes that the
+// run copies it (copies) and, where it is the file the command's start
+// read, that its notes are said (noted): the copy says the same.
+func (in *installer) settingsCopy() ([]byte, error) {
+	b, err := os.ReadFile(in.Settings)
+	if err != nil {
+		return nil, err
+	}
+	in.copies = true
+	if readByStart(in.Settings) {
+		in.noted = true
+	}
+	return b, nil
 }
 
 // unitFiles lists what goes where: embedded name → installed path.

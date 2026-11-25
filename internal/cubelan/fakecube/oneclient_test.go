@@ -42,6 +42,41 @@ func refused(addr string) bool {
 	return err != nil
 }
 
+// dialWhenFree dials addr until the fake serves the connection, its
+// greeting read to the L line, and keeps that connection as the client.
+// A probe that found the slot free (refused) holds it until the fake
+// has seen it closed, and on Windows, where the fake ends a connection
+// the taken slot cannot serve, a dial right after the probe can end
+// before its greeting.
+func dialWhenFree(t *testing.T, addr, what string) *client {
+	t.Helper()
+	var c *client
+	testkit.Eventually(t, what, func() bool {
+		conn, err := net.DialTimeout("tcp", addr, 300*time.Millisecond)
+		if err != nil {
+			return false
+		}
+		conn.SetDeadline(time.Now().Add(testkit.Scale(5 * time.Second)))
+		r := cube.NewReader(conn)
+		var greet []cube.Message
+		for {
+			m, err := r.Read()
+			if err != nil {
+				conn.Close()
+				return false
+			}
+			greet = append(greet, m)
+			if m.Type == 'L' {
+				break
+			}
+		}
+		t.Cleanup(func() { conn.Close() })
+		c = &client{t: t, conn: conn, r: r, greet: greet}
+		return true
+	})
+	return c
+}
+
 // A SingleClient fake refuses a second client while one is connected,
 // and takes the next once that one has left.
 func TestSingleClientRefusesASecond(t *testing.T) {
@@ -80,8 +115,8 @@ func TestADeadSessionIsHeldUntilHoldDead(t *testing.T) {
 func TestReleaseAndRestartFreeTheCube(t *testing.T) {
 	t.Parallel()
 	srv, addr := startSingle(t, time.Hour)
+	c := dial(t, addr)
 	for _, free := range []func(){srv.Release, srv.Restart} {
-		c := dial(t, addr)
 		srv.SetSilent(true)
 		c.conn.Close()
 		testkit.Eventually(t, "the dead session", srv.HeldDead)
@@ -90,9 +125,10 @@ func TestReleaseAndRestartFreeTheCube(t *testing.T) {
 		if srv.HeldDead() {
 			t.Fatal("the dead session is still held")
 		}
-		testkit.Eventually(t, "a client served again", func() bool { return !refused(addr) })
+		// the client served is the next round's, and the last one's the
+		// restart's below
+		c = dialWhenFree(t, addr, "a client served again")
 	}
-	c := dial(t, addr)
 	srv.Restart()
 	// The read ends with the close; one that times out found the
 	// connection open.

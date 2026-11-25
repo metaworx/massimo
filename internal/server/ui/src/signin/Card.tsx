@@ -15,7 +15,8 @@
  * end with the version, the language, the mode and in the app Select
  * server; the notice where the address takes no kept key; a form for
  * each way, in the app with Cancel, the password's field with its eye
- * (shared/password.tsx), hidden again at each opening; the box that says the login by
+ * (shared/password.tsx), hidden again at each opening and after a
+ * success; the box that says the login by
  * fingerprint was not kept, the two forms and the box in one place of one
  * height (style.css .login-forms), so that a switch of the way moves
  * nothing of the card (UiParts D224); on a server without users, in
@@ -24,12 +25,28 @@
  * provider read (AP FirstOwner, D23); the version at the foot. The forms
  * are real forms with named fields, for a password manager, and their fields are
  * not controlled (UiParts D210): a draw never sets what they hold, they
- * are read at the submit and emptied at each opening alone, as
- * askLogin did. Each way signs in as askLogin's handlers did, then
+ * are read at the submit and emptied at each opening, as askLogin did,
+ * and the password and the key once the card has closed on a sign-in and
+ * the page's first reads after it have settled (store.ts settled; AP
+ * LooseEnds, D13, D41-A), so that a password manager has taken the
+ * sign-in for done first; a dismissal empties nothing, nor does a
+ * refused password, kept for the retry, where a refused API key goes
+ * from its field (below). Each way signs in as askLogin's handlers did, then
  * finishSignIn of login.js goes on as they went on. The card is never
  * drawn anew: its buttons, their busy states and its fields stay through
  * every draw, the app's status, the providers, the language, a 401's
- * askLogin, which hands out the same opening.
+ * askLogin, which hands out the same opening. The server's 401 is said
+ * as a wrong name or password in the page's language, a sign-in that
+ * took too long included, which a new try passes; any other refusal (too
+ * many attempts, a server not ready) with the server's words; Sign in
+ * turns while a key signs in as while a password does, so that a second
+ * Enter meanwhile signs in no second time (AP LooseEnds, Block 2). A key
+ * is read with first and becomes the page's token only once the server
+ * has taken it: a refused one is said on the key's way, under its field,
+ * the field emptied and in focus, and the page's token and the app's
+ * bridge stay as they were (AP LooseEnds, D43). An answer to the key's
+ * read that comes once its opening has ended (another way signed in
+ * meanwhile, the card closed or opened anew, a sign-out) does nothing.
  */
 
 import { useLayoutEffect, useRef, useState } from "preact/hooks";
@@ -45,6 +62,7 @@ import { ModeSelect } from "../shared/mode";
 import { PasswordInput } from "../shared/password";
 import { BusyButton, busyProps, useBusy } from "../shared/question";
 import { VersionRow, version } from "../shared/server";
+import { session, stillSession } from "../shared/session";
 import { keepLogin, kept, offer, plainHere } from "./app";
 import { Owner } from "./Owner";
 import { ServerLine } from "./Server";
@@ -77,6 +95,7 @@ function Menu() {
 export function Card() {
   useLang();
   const opened = card.opened;
+  const succeeded = card.succeeded;
   const focus = card.focus;
   const way = card.way;
   const owner = card.owner;
@@ -86,19 +105,29 @@ export function Card() {
   const servers = !!appConnect();
   const [keep, setKeep] = useState(false);
   const pw = useBusy();
+  const kb = useBusy();
   const fp = useBusy();
   const userRef = useRef<HTMLInputElement>(null);
   const passRef = useRef<HTMLInputElement>(null);
   const keyRef = useRef<HTMLInputElement>(null);
   const retryRef = useRef<HTMLButtonElement>(null);
-  // each opening empties the fields and turns the switch off, as askLogin did; never the closing, so that a password
-  // manager still finds what was signed in with (the app's word on UiParts D210)
+  // each opening empties the fields and turns the switch off, as askLogin did; a closing empties nothing but after a
+  // success, below (AP LooseEnds, D13, which changes UiParts D210's closing that emptied nothing)
   // biome-ignore lint/correctness/useExhaustiveDependencies: opened is read from the card's store, which Biome takes for a stable import; the effect is for each opening, so it is listed.
   useLayoutEffect(() => {
     if (!opened) return;
     for (const r of [userRef, passRef, keyRef]) if (r.current) r.current.value = "";
     setKeep(false);
   }, [opened]);
+  // a sign-in done, the card closed and the page's first reads after it settled (store.ts settled): the password and
+  // the key emptied (AP LooseEnds, D13, D41-A), the password's eye hidden again by its reset; the name stays until the
+  // next opening. A refusal, a dismissal and a card opened again meanwhile are left as they are: no timer empties a
+  // field the user may be typing in
+  // biome-ignore lint/correctness/useExhaustiveDependencies: succeeded is read from the card's store, which Biome takes for a stable import; the effect is for each success, so it is listed.
+  useLayoutEffect(() => {
+    if (!succeeded) return;
+    for (const r of [passRef, keyRef]) if (r.current) r.current.value = "";
+  }, [succeeded]);
   // the focus asked for, given in the drawing that shows its place: the chosen way's first field at an opening and at a
   // way's click, the password after a refusal, Try again where the login by fingerprint was not kept; the first owner's
   // name is Owner's
@@ -107,6 +136,7 @@ export function Card() {
     if (!focus.n) return;
     if (focus.on === "way") wayFocus();
     else if (focus.on === "password") passRef.current?.focus();
+    else if (focus.on === "key") keyRef.current?.focus();
     else if (focus.on === "retry") retryRef.current?.focus();
   }, [focus]);
   // the one place that puts the focus into the chosen way's first field, at an opening and at a way's click; none on a
@@ -132,7 +162,10 @@ export function Card() {
       try {
         session = await signIn(user, password);
       } catch (e) {
-        fail(t("login.failed", { error: (e as Error).message }));
+        const err = e as Error & { status?: number };
+        // the server's 401 in the page's language; any other refusal (too many attempts, a server not ready) says more
+        // in the server's own words than a key would
+        fail(err.status === 401 ? t("login.wrong") : t("login.failed", { error: err.message }));
         askFocus("password");
         return;
       }
@@ -147,11 +180,36 @@ export function Card() {
   };
   const submitKey = (ev: Event) => {
     ev.preventDefault();
+    if (kb.busy) return; // a second Enter while it signs in
     const a = ask();
     const key = (keyRef.current?.value || "").trim();
     if (!key) return;
-    setToken(key);
-    if (a) finishSignIn(a);
+    card.keySaid = null;
+    const n = session();
+    kb.run(async () => {
+      // the key read with first, as who it is, before it becomes the page's token: a key the server refuses replaces
+      // no session of the page's, and no bridge keeps it (AP LooseEnds, D43)
+      // the opening the key was typed in still the card's and open, in the same session: an answer after another way
+      // signed in, after the card closed or opened anew, or after a sign-out, makes no token and writes nothing
+      const still = () => stillSession(n) && !!a && ask() === a && !a.closed;
+      let me: unknown;
+      try {
+        me = await apiRequest("GET", "api/v1/me", undefined, { token: key });
+      } catch (e) {
+        if (!still()) return;
+        const err = e as Error & { status?: number };
+        // a key the server does not know (401) in the page's language; a key it refuses for a reason (403, such as an
+        // integration disabled), a lockout, a server not reached with the server's or the browser's words, as the
+        // password's way says them; a refused key, a secret still, goes from its field
+        card.keySaid = { text: err.status === 401 ? t("login.keyRefused") : t("login.failed", { error: err.message }), ok: false };
+        if ((err.status === 401 || err.status === 403) && keyRef.current) keyRef.current.value = "";
+        askFocus("key");
+        return;
+      }
+      if (!still() || !a) return;
+      await setToken(key); // in the app, the key kept by the bridge before the sign-in's reads go out with it
+      await finishSignIn(a, me); // who is in as the key read it: settleSignIn reads it no second time
+    });
   };
   // the login by fingerprint: a session from the key the app keeps
   const fingerprint = () => fp.run(async () => {
@@ -206,7 +264,7 @@ export function Card() {
           <label><span>{t("login.user")}</span> <input ref={userRef} type="text" id="login-user" name="username" autocomplete="username" autocapitalize="none" spellcheck={false} /></label>
           <div class="login-field">
             <label for="login-password">{t("login.password")}</label>
-            <PasswordInput id="login-password" name="password" autocomplete="current-password" inputRef={passRef} reset={opened} />
+            <PasswordInput id="login-password" name="password" autocomplete="current-password" inputRef={passRef} reset={opened + succeeded} />
           </div>
           <label id="login-keep-row" class={"switch login-keep" + hid(!offered)}>
             <input type="checkbox" id="login-keep" checked={keep && offered} onChange={(ev) => setKeep(ev.currentTarget.checked)} />
@@ -228,9 +286,10 @@ export function Card() {
         </div>
         <form id="login-key-form" class={hid(way !== "key").trim() || undefined} onSubmit={submitKey}>
           <label><span>{t("login.token")}</span> <input ref={keyRef} type="password" id="login-token" name="api-key" autocomplete="off" /></label>
+          <ResultLine id="login-key-error" cls="small" role="alert" res={card.keySaid} />
           <div class="actions">
             <button type="button" id="login-key-cancel" class={"form-cancel" + hid(!servers)} onClick={toServers}>{t("action.cancel")}</button>
-            <button type="submit" class="primary">{t("login.submit")}</button>
+            <button type="submit" {...busyProps("primary", kb.busy)}>{t("login.submit")}</button>
           </div>
         </form>
       </div>

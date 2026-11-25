@@ -606,6 +606,7 @@ with `Idempotency-Key` answering a retry without a second radio command.
 `MASSIMO_API_TOKEN` (or `-token`) becomes the owner's key at the first start,
 and is the one token without a store (`serve -addr`);
 while there are no users the API is open to the local network only,
+an integration's users not counting,
 and the first owner is created with `massimo user add` or by the web UI from
 the local network.
 See docs/api-v1.md, "Authentication".
@@ -765,6 +766,8 @@ and on Unix also on SIGHUP (`systemctl reload massimo`),
 which checkpoints the store too;
 `POST /api/v1/reload` does what SIGHUP does, on every system
 (System settings → Maintenance → **Reload now** in the web UI).
+Both rotate the log file and checkpoint the store whatever the read finds,
+a file that does not parse or cannot be read included.
 `MASSIMO_API_TOKEN` applies at once, as at a start, unless `-token` was given;
 every other setting that changed is listed by `GET /api/v1/restart`
 as applying at the next restart.
@@ -777,6 +780,11 @@ changes nothing and is such a warning too,
 since every command stops on it at its start;
 the warning names the bad line by its number and never quotes it.
 A missing one changes nothing either, as an editor may be replacing it.
+A line the read sets aside (see "Cube variables") is a warning too,
+on the process's log and in the log after "the settings file: ",
+but no refusal: `GET /api/v1/restart` and the web UI's **Restart** do not name it.
+A start that finds one says it in the log after its start,
+so that the warning stays until a read finds the file fixed.
 `GET /api/v1/restart` and `POST /api/v1/reload` name what the next start refuses
 until a read finds nothing refused,
 and System settings → Maintenance says it under **Restart**,
@@ -1052,6 +1060,22 @@ the server's count), so it warns and asks first (`-yes` skips that).
 On the box of a running `serve` the Cube answers `serve`'s port:
 give the serial with `-sn` there, and the answer to `R` goes to `serve`.
 
+```bash
+massimo credits
+massimo credits preact
+```
+
+`credits` lists everything the binary includes, a line each with its name,
+version (Go's the one the binary was built with), licence and where it comes from,
+"and others" where its files are under other licences too,
+then what an entry includes whose own licence texts are not reproduced
+(the Rust crates in the web UI's OPAQUE client),
+as System info's **Credits and licences** does from the same embedded list;
+`credits <name>`, the name as the list prints it, prints that entry's licence,
+the text of each of its files with the licence it is known by.
+It needs no store, no settings file and no running server;
+a name the list does not hold is an error that names `massimo credits`.
+
 ### Cube variables
 
 The Cubes are configured in the environment or in `.env` in the current
@@ -1059,6 +1083,25 @@ directory (`KEY=VALUE` lines,
 `-env <file>` or `MASSIMO_ENV_FILE` for another file,
 `-no-env` for none;
 the environment wins over the file).
+A name given twice takes its first line, at a start as at a reload,
+and `massimo config` names its lines;
+on Windows a name in two cases is given twice,
+as `MASSIMO_X` and `massimo_x` are one variable there.
+A UTF-8 byte order mark at the file's start is skipped,
+and UTF-16 text, as PowerShell 5.1's `>` or `>>` writes it, is refused,
+by `install -settings` too, before it installs anything:
+save it as UTF-8.
+A line without a name is ignored, and so is a `MASSIMO_ENV_FILE` line:
+name the file with `-env`.
+Every command but `version` and `help` warns of a line set aside
+on stderr at its start, by its number and never its value
+(`warning: /etc/massimo/env: MASSIMO_HSTS is given on lines 3 and 4; the first wins`),
+`massimo config` lists them after the settings,
+`serve` says them in its log too,
+and `install` on Linux and macOS among its warnings
+those of the settings file it installs, unless the command's start read it;
+its checks read the file as `serve` does,
+but skip a line that is not `KEY=VALUE`, which `serve` refuses, with a warning.
 On Linux and macOS the service user, the owner of `/etc/massimo/env`,
 reads that file alone and keeps its data in `/var/lib/massimo`,
 from any directory, as `sudo sshd` reads sshd's own configuration;
@@ -1138,6 +1181,15 @@ which asks for the password again since it goes with the name
 `user token <name> -label Loxone` prints a new API key once,
 `user tokens <name>` lists the user's sessions and keys with their ids,
 and `user revoke <name> [<token id>]` revokes one token or every one.
+A new password has 8 to 64 characters; 15 or a few words are better.
+It contains no name of the user's or the box's, whatever the case:
+not the login name, the display name or a word of either,
+not the first label of the box's host name, not `massimo` or `maxcube`,
+each a word where it has 4 letters or more.
+A password set before stays valid,
+but `user rename` asks for one again:
+where the old one is shorter or holds the new name, give a new one there,
+or `-no-password`, which leaves the user with its keys only.
 A password set with `user add` or `user passwd` is of `auth_version` 2:
 the command registers it by OPAQUE in its own process,
 with the browser's key stretching, so the web UI signs in with it and the
@@ -1173,10 +1225,10 @@ the plain form applies to any Cube unless the table says otherwise.
 | Variable (per-Cube form) | Meaning |
 |---|---|
 | `MASSIMO_CUBE_<SERIAL>_ADDRESS` | The Cube's address, host[:port]. `serve` serves every Cube that has one. |
-| `MASSIMO_CUBE_<SERIAL>_PROXY` | The address of a running `massimo serve` that answers as this Cube. Every command except `serve` connects to it instead of the Cube, because the Cube serves one client at a time and `serve` usually holds that connection; `serve` listens on it. When the proxy does not answer within two seconds, the command prints a warning and connects to the Cube's own address: during the few seconds `serve` restarts, for example after an update, that direct connection takes the Cube's only slot and keeps `serve` from reconnecting until the command ends. Before the command name, `-no-direct` (`massimo -no-direct status`, for scripts) makes that an error instead, and `-direct` skips the proxy and connects to the Cube itself even when the proxy answers; the two exclude each other, and `-addr` always wins. The plain form only with a single Cube. |
-| `MASSIMO_CUBE_<SERIAL>_PROXY_SERIAL` | The serial `serve` uses in UDP discovery replies for this Cube, see [docs/proxy.md](docs/proxy.md). The plain form only with a single Cube. |
+| `MASSIMO_CUBE_<SERIAL>_PROXY` | The address of a running `massimo serve` that answers as this Cube. Every command except `serve` connects to it instead of the Cube, because the Cube serves one client at a time and `serve` usually holds that connection; `serve` listens on it. When the proxy does not answer within two seconds, the command prints a warning and connects to the Cube's own address: during the few seconds `serve` restarts, for example after an update, that direct connection takes the Cube's only slot and keeps `serve` from reconnecting until the command ends. Before the command name, `-no-direct` (`massimo -no-direct status`, for scripts) makes that an error instead, and `-direct` skips the proxy and connects to the Cube itself even when the proxy answers; the two exclude each other, and `-addr` always wins. For `serve` the plain form only with a single Cube in the file. |
+| `MASSIMO_CUBE_<SERIAL>_PROXY_SERIAL` | The serial `serve` uses in UDP discovery replies for this Cube, see [docs/proxy.md](docs/proxy.md). For `serve` the plain form only with a single Cube in the file. |
 | `MASSIMO_CUBE_<SERIAL>_IGNORE` | Radio addresses to hide, comma separated, in addition to room 255 (below). |
-| `MASSIMO_CUBE_<SERIAL>_NAME` | A user-friendly name the API and the UI show next to the serial. The plain form only with a single Cube. |
+| `MASSIMO_CUBE_<SERIAL>_NAME` | A user-friendly name the API and the UI show next to the serial. For `serve` the plain form only with a single Cube in the file. |
 | `MASSIMO_CUBE_SN` | The Cube to use when no `-sn` is given. |
 | `MASSIMO_DATA` | The data directory, where `serve` keeps `massimo.db` (also `-data <dir>` before the command name); default the current directory, `/var/lib/massimo` for the service user. |
 
@@ -1195,8 +1247,25 @@ else is configured.
 A Cube without an address is connected at the address it answers UDP discovery from,
 and reconnected when that changes.
 A key alone does not make `serve` take a Cube.
-A lone `MASSIMO_CUBE_ADDRESS` without a serial is served from the file until the
-Cube reports its serial, and then added to the store.
+A lone `MASSIMO_CUBE_ADDRESS` without a serial is served from the file,
+beside the Cubes of the web UI too, until the Cube reports its serial,
+and then added to the store;
+its proxy listens on the plain `MASSIMO_CUBE_PROXY` from the start,
+before the serial is known.
+A Cube added in the web UI beside it is another Cube,
+with a proxy only on an address of its own.
+Where that is the plain Cube itself, `serve` serves it once:
+a plain address equal to its address, the Cube's port where one gives none,
+ties the plain lines to it at the start,
+and so does the serial the plain Cube reports.
+The plain lines are then that Cube's, compared with its row, whose values win,
+as for its other lines in the file:
+a plain `MASSIMO_CUBE_PROXY` that differs from the row, an empty one included,
+is shown on the Cube with its button and listens nowhere.
+The log says so: take the plain lines out of the file,
+or take a value from the file in the web UI.
+A plain `MASSIMO_CUBE_PROXY` without the plain address is the proxy of the one
+Cube with lines of its own in the file, and `serve` ignores it otherwise.
 Beside the variables of one Cube, such as its `_PROXY`,
 the plain `MASSIMO_CUBE_ADDRESS` is that Cube's when `MASSIMO_CUBE_SN` names it,
 as for the other commands.
@@ -1341,6 +1410,12 @@ report the commit only with `go run -buildvcs=true`.
 ## Legal
 
 Licensed under the [GNU Affero General Public License v3.0 or later](LICENSE).
+What the binary includes besides Massimo's own code, Go, the Go modules it
+links and what [third_party/](third_party) and the web UI's vendor directory hold,
+is listed in the web UI under ☰ → System info → **Credits and licences**,
+each with its licence's text, and by `massimo credits` on the command line;
+`make credits` writes the list into `internal/credits/`, and `go test` fails
+while it has fallen behind ([tools/credits/README.md](tools/credits/README.md)).
 The privacy policy of the software, the apps and the project's site is
 <https://massimo.metaworx.ch/privacy.html>.
 

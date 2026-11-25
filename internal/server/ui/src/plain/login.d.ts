@@ -63,7 +63,7 @@ declare global {
   /** Opens the sign-in's card, or with "owner" the first owner's form in it, and answers whether one is in; while it is open, a refusal turns the first owner's form to the sign-in and the same promise is handed out. */
   function askLogin(on?: "owner"): Promise<boolean>;
   /** Goes on after a sign-in of the card: settleSignIn, the card closed and askLogin answered, the page started where no start waits for it; nothing for an ask closed already, and it reports whether it ended the ask. */
-  function finishSignIn(ask: SignInAsk): Promise<boolean>;
+  function finishSignIn(ask: SignInAsk, me?: unknown): Promise<boolean>;
   /** Starts a sign-in through a provider and opens its page; its refusal is thrown. */
   function startProvider(key: string): Promise<void>;
   /** Keeps the page's token, or forgets it with null: in the browser's storage, or in the app's; a session it replaces is ended at the server once. Its promise is the bridge's answer, null in a browser and where the bridge failed. */

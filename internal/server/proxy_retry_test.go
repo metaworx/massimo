@@ -126,7 +126,9 @@ func TestProxyRetriedUntilTheAddressIsThere(t *testing.T) {
 }
 
 // A slot that is trying stops with a new proxy address and with the
-// Cube's removal: nothing listens on its address afterwards.
+// Cube's removal: it tries its address no more afterwards. The test
+// holds the address throughout, so that no other program takes it, and
+// counts the slot's listens there.
 func TestProxyRetryStops(t *testing.T) {
 	t.Parallel()
 	ports := &heldPorts{}
@@ -136,14 +138,11 @@ func TestProxyRetryStops(t *testing.T) {
 		{"PUT", `{"proxy_address":"%s"}`},
 		{"DELETE", ""},
 	} {
-		taken, err := net.Listen("tcp", "127.0.0.1:0")
-		if err != nil {
-			t.Fatal(err)
-		}
-		addr := taken.Addr().String()
+		addr, _ := ports.taken(t) // never given: each listen there fails
 		if code, out := do(t, ts, "PUT", "/api/v1/cubes/KEQ0000100", `{"proxy_address":"`+addr+`"}`); code != 200 {
 			t.Fatalf("put %d %v", code, out)
 		}
+		testkit.Eventually(t, "the slot to try "+addr+" again", func() bool { return ports.listens(addr) >= 2 })
 		body := step.body
 		if body != "" {
 			body = strings.Replace(body, "%s", ports.hold(t), 1)
@@ -151,12 +150,16 @@ func TestProxyRetryStops(t *testing.T) {
 		if code, out := do(t, ts, step.method, "/api/v1/cubes/KEQ0000100", body); code != 200 {
 			t.Fatalf("%s %d %v", step.method, code, out)
 		}
-		taken.Close()
-		time.Sleep(5 * quickRetry[1])
-		if conn, err := net.Dial("tcp", addr); err == nil {
-			conn.Close()
-			t.Fatalf("after %s, the old address %s listens", step.method, addr)
-		}
+		// The end is a fixed time here, where Never's end is otherwise an
+		// event: the stop waits for the slot's end before the answer comes
+		// (stopProxies), and the test holds the address, so no listen
+		// belongs there after the answer at all. The window only catches a
+		// stop that does not wait, whose next try comes within a few of
+		// the slot's longest waits; it cannot fail a slow runner.
+		tried, after := ports.listens(addr), time.Now().Add(5*quickRetry[1])
+		testkit.Never(t, "a listen at "+addr+" after "+step.method, func() bool { return ports.listens(addr) > tried }, func() bool {
+			return time.Now().After(after) && getJSON(t, ts, "", "/api/v1/cubes", nil) == 200
+		})
 		s.proxyMu.Lock()
 		for _, pr := range s.proxies {
 			if pr.pl.Addr == addr {

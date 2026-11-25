@@ -75,6 +75,27 @@ CI's jobs run the same targets, and so the same scales.
 A wait that holds returns at once, so a larger scale costs time only where a
 test would fail anyway.
 
+**A `-race` run by hand** takes what `make race` gives its tests:
+scale 2, and `RACEGCFLAGS` ("The race detector").
+A plain `go test -race` gives each wait half that time,
+and a store-heavy test needs about twice its time with `checkptr` on in SQLite,
+so a wait that holds under `make race` can time out there:
+that timeout is the run's, not a flaky test's.
+Where a document names `go test -race ./...`, as the shared Go baseline does,
+it means `make race` here.
+One package or one test runs through the target:
+
+```
+make race RACEPKGS=./internal/server TESTFLAGS='-run TestLogAfter'
+```
+
+or, after `make ui`, by hand with both:
+
+```
+MASSIMO_ENV_FILE=/dev/null MASSIMO_TEST_SCALE=2 go test -race -count=1 \
+	'-gcflags=modernc.org/...=-d=checkptr=0' ./internal/server
+```
+
 What does not take the scale:
 
 - **A window after which the test passes** because nothing came,
@@ -357,8 +378,10 @@ When a test needs it:
 What it does not cover:
 
 - **a change the client makes outside the Cube's lines** -
-  a lost connection, a held connection that resumes, a pairing -
-  which the test waits for by its event,
+  a lost connection, a first dial that fails
+  (the `disconnected` of a Cube that never answers, `secondCube`),
+  a held connection that resumes, a pairing -
+  which the test waits for by its event or its line,
   or by the call that made it, as a device forgotten by the removal;
 - **what the pump starts and does not wait for**:
   a command it queues (its line on the fake Cube, through `cubewatch`),
@@ -602,6 +625,9 @@ such as another package's tests under `make race`.
   `ports.taken(t)` is one the proxy gets only once the test frees it:
   until then its listens fail as at a port another program holds,
   since the test holds it.
+  `ports.listens(addr)` counts the listens at an address:
+  `TestProxyRetryStops` holds a port it never gives,
+  and checks that a stopped slot tries it no more.
 - **The announcer** takes its two sockets through `options.listen`
   (`heldSockets` in `internal/announce`).
 - **The Cube goes and comes back** with `fc.Pause()` and `fc.Resume()`,
@@ -645,4 +671,3 @@ and the free-port helper stays there, its comment saying why:
   is a listener opened and closed: `deadAddr` in `internal/env`,
   `dead` in `cmd/massimo`'s `options_test.go`,
   `closed` in `internal/server`'s `proxied_test.go`.
-  So is the address `TestProxyRetryStops` frees to see that no proxy takes it.

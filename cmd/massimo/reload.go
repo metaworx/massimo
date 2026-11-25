@@ -18,11 +18,14 @@ package main
 // next start refuses, which GET /api/v1/restart and POST /api/v1/reload
 // answer (Server.SetRefused): a read that finds nothing clears it, and
 // one that finds otherwise than the last writes its settings_read,
-// though no setting changed, so that the log's sign agrees.
+// though no setting changed, so that the log's sign agrees. A read that
+// finds notes on the file, lines it set aside (env.Note), says them as a
+// warning on serve's log, and its settings_read is a warning of them
+// too, after what the next start refuses; they are not refusals, and
+// GET /api/v1/restart does not name them (AP StartConfiguration, D3-B).
 
 import (
 	"context"
-	"errors"
 	"log/slog"
 	"os"
 	"slices"
@@ -87,12 +90,13 @@ func stampOf(path string) fileStamp {
 	return fileStamp{size: fi.Size(), mod: fi.ModTime().UnixNano(), ok: true}
 }
 
-// watchSettings calls reload once the file at path has changed and held
-// still for one more look, so that a file an editor is still writing is
-// not read; a missing file changes nothing, since an editor may be
-// replacing it. It returns when ctx ends.
-func watchSettings(ctx context.Context, path string, every time.Duration, reload func()) {
-	applied, seen := stampOf(path), fileStamp{}
+// watchSettings calls reload once the file at path has changed from
+// applied, the file as the start read it (startStamp), and held still
+// for one more look, so that a file an editor is still writing is not
+// read; a missing file changes nothing, since an editor may be replacing
+// it. It returns when ctx ends.
+func watchSettings(ctx context.Context, path string, applied fileStamp, every time.Duration, reload func()) {
+	seen := fileStamp{}
 	t := time.NewTicker(every)
 	defer t.Stop()
 	for {
@@ -149,11 +153,22 @@ type settingsReloader struct {
 	// having answered otherwise (a DNS hook made, a key file put in
 	// place), so that the log's sign and GET /api/v1/restart agree.
 	lastRefused []server.Refusal
-	mu          sync.Mutex
+	// lastNotes are the texts of the notes on the file the last read
+	// found, the start's until the first reload (serve.go, which writes
+	// them after server_started): a read whose settings did not change
+	// writes its settings_read where they differ, so that the log's sign
+	// goes once the file is fixed.
+	lastNotes []string
+	mu        sync.Mutex
 }
 
-func newSettingsReloader(path string, log *slog.Logger, srv *server.Server, start, fixed map[string]string) *settingsReloader {
-	return &settingsReloader{path: path, log: log, srv: srv, start: start, fixed: fixed}
+// newSettingsReloader is the reloader of the settings file at path, for
+// serve's server: start are the settings as the start read them, fixed
+// the variables of the flags given (fixedSettings), and notes the texts
+// of the notes on the file the start found, which its log says after
+// server_started (lastNotes).
+func newSettingsReloader(path string, log *slog.Logger, srv *server.Server, start, fixed map[string]string, notes []string) *settingsReloader {
+	return &settingsReloader{path: path, log: log, srv: srv, start: start, fixed: fixed, lastNotes: notes}
 }
 
 // isFixed reports whether a flag given fixed the variable k.
@@ -169,10 +184,16 @@ func (r *settingsReloader) isFixed(k string) bool {
 func (r *settingsReloader) reload(ctx context.Context, why string) (changed, pending []string, refused []server.Refusal, err error) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
-	changed, err = env.ReloadFile(r.path)
+	changed, found, err := env.ReloadFile(r.path)
 	if err != nil {
 		r.unreadable(ctx, why, err)
 		return nil, nil, nil, err
+	}
+	// The notes, at each read that finds them, as each command's start
+	// says them on stderr; settings_read says them where it is written.
+	notes := noteTexts(found)
+	if len(notes) > 0 {
+		r.log.Warn("settings file lines set aside", "file", r.path, "why", why, "notes", strings.Join(notes, "; "))
 	}
 	r.srv.SetSettingsRead(time.Now())
 	if slices.Contains(changed, tokenVar) && !r.isFixed(tokenVar) {
@@ -199,30 +220,37 @@ func (r *settingsReloader) reload(ctx context.Context, why string) (changed, pen
 	refused = r.refused()
 	r.srv.SetRefused(refused)
 	refusalsChanged := !slices.EqualFunc(refused, r.lastRefused, sameRefusal)
-	r.lastRefused = refused
-	if len(changed) > 0 || why != "the settings file changed" || r.unread || refusalsChanged {
+	notesChanged := !slices.Equal(notes, r.lastNotes)
+	r.lastRefused, r.lastNotes = refused, notes
+	if len(changed) > 0 || why != "the settings file changed" || r.unread || refusalsChanged || notesChanged {
 		r.unread = false
 		r.log.Info("settings file read again", "why", why, "changed", strings.Join(changed, ","), "at_next_restart", strings.Join(pending, ","))
 		// The names, never the values; the errors of the refused
-		// settings quote theirs, a secret's by its name. The event's
-		// own line is the warning, on stderr as in the web UI's log, as
-		// log_rotated's is.
-		r.srv.LogSettingsRead(ctx, why, changed, pending, refusedError(refused))
+		// settings quote theirs, a secret's by its name, and the notes
+		// name lines by their numbers. The event's own line is the
+		// warning of the refusals, on stderr as in the web UI's log, as
+		// log_rotated's is, and of the notes beside the reloader's own;
+		// one line holds all that this read found.
+		r.srv.LogSettingsRead(ctx, why, changed, pending, refused, notes)
 	}
 	return changed, pending, refused, nil
 }
 
 // apiReload is POST /api/v1/reload's read of the file (Server.SetReloader):
 // reload, then after, what else the API's read does (serve.go: the log
-// file's rotation, the store's checkpoint); its answer is what reload
-// found, every list [] rather than null for none.
+// file's rotation, the store's checkpoint), whatever the read found, as
+// SIGHUP's does: on Windows, which has no SIGHUP, the API's read is the
+// only one that rotates the log file and checkpoints the store (AP
+// StartConfiguration, D8-A). Its answer is what reload
+// found, every list [] rather than null for none, or the read's error,
+// which the server answers 500.
 func (r *settingsReloader) apiReload(after func(context.Context)) func(context.Context) (server.ReloadResult, error) {
 	return func(ctx context.Context) (server.ReloadResult, error) {
 		changed, pending, refused, err := r.reload(ctx, "the API")
+		after(ctx)
 		if err != nil {
 			return server.ReloadResult{}, err
 		}
-		after(ctx)
 		return server.ReloadResult{Changed: nonNil(changed), Pending: nonNil(pending), Refused: refused, ReadAt: time.Now()}, nil
 	}
 }
@@ -240,7 +268,9 @@ func (r *settingsReloader) apiReload(after func(context.Context)) func(context.C
 // error names the file and the line by its number, never the line,
 // which may hold a secret (env.ReloadFile). The server keeps it as what
 // the next start refuses, the file's alone, without a setting: the
-// start refuses the file before it looks at one (D8-B).
+// start refuses the file before it looks at one (D8-B). Such a read
+// finds no notes on the file: its settings_read holds the file's error
+// alone, the newest line saying all that its read found.
 func (r *settingsReloader) unreadable(ctx context.Context, why string, err error) {
 	if os.IsNotExist(err) {
 		r.log.Warn("settings file not read again", "file", r.path, "why", why, "error", err)
@@ -249,8 +279,8 @@ func (r *settingsReloader) unreadable(ctx context.Context, why string, err error
 	refused := []server.Refusal{{Error: err.Error()}}
 	r.srv.SetSettingsRead(time.Now())
 	r.srv.SetRefused(refused)
-	r.lastRefused = refused
-	r.srv.LogSettingsRead(ctx, why, nil, r.pending(), refusedError(refused))
+	r.lastRefused, r.lastNotes = refused, nil
+	r.srv.LogSettingsRead(ctx, why, nil, r.pending(), refused, nil)
 	r.unread = true
 }
 
@@ -290,20 +320,6 @@ func (r *settingsReloader) refused() []server.Refusal {
 // say the same.
 func sameRefusal(a, b server.Refusal) bool {
 	return slices.Equal(a.Settings, b.Settings) && a.Error == b.Error
-}
-
-// refusedError is settings_read's error of what the next start refuses:
-// the start's texts after "the next start refuses: ", in its order, nil
-// for none.
-func refusedError(refused []server.Refusal) error {
-	if len(refused) == 0 {
-		return nil
-	}
-	texts := make([]string, len(refused))
-	for i, f := range refused {
-		texts[i] = f.Error
-	}
-	return errors.New("the next start refuses: " + strings.Join(texts, "; "))
 }
 
 // hideSecrets names a secret the start's checks read by its variable

@@ -87,9 +87,10 @@ var boolSettings = []boolSetting{
 	// Integrations may ask to be registered (integrations_api.go); the
 	// announcement's reg says it on the LAN.
 	{key: store.IntegrationRequestsKey, def: true},
-	// A server without users kept open on purpose (AP FirstOwner, D11):
-	// the web UI does not ask for the first owner. It counts only while
-	// the server has no users, and goes with the first one (D12).
+	// A server without regular users kept open on purpose (AP FirstOwner,
+	// D11): the web UI does not ask for the first owner. It counts only
+	// while the server has no regular user, and goes with the first one
+	// (D12); an integration's users leave it (AP LooseEnds, D1).
 	{key: store.KeepOpenKey, def: false},
 	// The web UI's password fields offer their eye (AP MobileApp, D84-A);
 	// GET /healthz says it, for the sign-in before anyone is in.
@@ -210,7 +211,7 @@ func (s *Server) settingsView(r *http.Request) (map[string]settingView, error) {
 		}
 		inEffect := v
 		if d.key == store.KeepOpenKey && v && s.authMode(r.Context()) != modeOpen {
-			inEffect = false // it counts only while the server has no users
+			inEffect = false // it counts only while the server has no regular users
 		}
 		out[d.key] = settingView{Value: strconv.FormatBool(v), Default: strconv.FormatBool(d.def), Set: ok, InEffect: strconv.FormatBool(inEffect), Applies: "now"}
 	}
@@ -224,6 +225,13 @@ func (s *Server) settingsView(r *http.Request) (map[string]settingView, error) {
 	}
 	flavour := s.opts.Update.Flavour
 	out[store.UpdateChannelKey] = settingView{Value: cmp.Or(ch, flavour), Default: flavour, Set: ch != "", InEffect: s.updateChannel(r.Context()), Applies: "now"}
+	for _, d := range []struct{ key, def string }{{store.UpdateAutoKey, store.UpdateAutoOff}, {store.UpdateWindowKey, store.DefaultUpdateWindow}} {
+		v, err := st.SettingString(r.Context(), d.key)
+		if err != nil {
+			return nil, fail(http.StatusInternalServerError, "%v", err)
+		}
+		out[d.key] = settingView{Value: cmp.Or(v, d.def), Default: d.def, Set: v != "", InEffect: cmp.Or(v, d.def), Applies: "now"}
+	}
 	ann, err := st.SettingString(r.Context(), store.AnnounceKey)
 	if err != nil {
 		return nil, fail(http.StatusInternalServerError, "%v", err)
@@ -271,7 +279,7 @@ func (s *Server) putSettings(w http.ResponseWriter, r *http.Request) error {
 		duration *time.Duration // a duration setting
 		number   *int           // a whole-number setting
 		on       *bool          // a switch
-		name     *string        // a name of a few: the update channel
+		name     *string        // a name of a few, or the update window
 		clear    bool
 	}
 	var writes []write
@@ -308,6 +316,24 @@ func (s *Server) putSettings(w http.ResponseWriter, r *http.Request) error {
 				return fail(http.StatusBadRequest, "%s: want one of %s, or null for the build's flavour", k, strings.Join(update.Flavours, ", "))
 			}
 			writes = append(writes, write{key: k, name: &name})
+			continue
+		}
+		if k == store.UpdateAutoKey || k == store.UpdateWindowKey {
+			if isNull {
+				writes = append(writes, write{key: k, clear: true})
+				continue
+			}
+			var v string
+			if json.Unmarshal(raw, &v) != nil {
+				return fail(http.StatusBadRequest, "%s: want a string", k)
+			}
+			if k == store.UpdateAutoKey && v != store.UpdateAutoOff && v != store.UpdateAutoNight {
+				return fail(http.StatusBadRequest, "%s: want %s or %s, or null for %s", k, store.UpdateAutoOff, store.UpdateAutoNight, store.UpdateAutoOff)
+			}
+			if _, _, err := parseWindow(v); k == store.UpdateWindowKey && err != nil {
+				return fail(http.StatusBadRequest, "%s: %v", k, err)
+			}
+			writes = append(writes, write{key: k, name: &v})
 			continue
 		}
 		var d *durationSetting

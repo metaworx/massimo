@@ -3,6 +3,7 @@
 
 package ch.metaworx.massimo
 
+import android.app.ActivityManager
 import android.app.KeyguardManager
 import android.content.Context
 import android.os.SystemClock
@@ -112,6 +113,27 @@ object Rig {
     /** bringBack shows the app again as its icon would, the one task brought to the front (singleTask). */
     fun bringBack() {
         device.executeShellCommand("am start -a android.intent.action.MAIN -c android.intent.category.LAUNCHER -n ${app.packageName}/${MainActivity::class.java.name}")
+    }
+
+    /**
+     * removeTasks takes the app's tasks out of the system's recents, its
+     * process left alone, once a test has closed its activity; a task not
+     * removed is said in the log, not thrown. Between two tests the
+     * orchestrator clears the app's data (pm clear), which removes every
+     * task of the app still in recents and kills its processes; where that
+     * task's activity is still closing, Android 14 waits a second for it
+     * (KILL_TASK_PROCESSES_TIMEOUT_MS) and then kills every process of the
+     * app, the next test's instrumentation among them where it has not
+     * attached yet: "Test instrumentation process crashed", and that test
+     * does not run (tools/app-emulator/README.md, "The results"). With no
+     * task left, the clear starts no such wait.
+     */
+    fun removeTasks() {
+        val tasks = runCatching { app.getSystemService(ActivityManager::class.java).appTasks }
+            .getOrElse { say("the app's tasks were not read, so they stay in recents: $it"); return }
+        for (t in tasks) {
+            runCatching { t.finishAndRemoveTask() }.onFailure { say("a task of the app stays in recents: $it") }
+        }
     }
 
     /** SHOTS is where a failed test's screen is kept on the emulator, which run.sh takes home. */

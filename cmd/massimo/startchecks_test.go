@@ -78,19 +78,19 @@ func TestHideSecrets(t *testing.T) {
 // beside others, or one it takes any value of, for a reason. The built
 // massimo runs once per bad value, nothing else wrong, and stops with
 // the table's own error, the one a reload warns of; a value the start
-// alone refuses, on the box's state, the table leaves be (D1-A); and,
-// with every variable that takes any value set to an odd one, it starts.
+// alone refuses, on the box's state, the table leaves be (D1-A), and
+// the start's error names its setting as the table's do (AP
+// StartConfiguration, D20-A); and, with every variable that takes any
+// value set to an odd one, it starts.
 // The table runs here too, over the same settings in the environment,
 // where its check of the Cubes reads them (serve.FileCubes). It catches
 // a variable nobody classified, a refusal of the start's without its
-// entry, a text the start says otherwise than the table, and an entry
-// for a value the start takes; not a pairing nobody listed.
+// entry, a text the start says otherwise than the table or its case,
+// an error of the start's own that names no setting, and an entry for a
+// value the start takes; not a pairing nobody listed.
 func TestStartChecksCoverTheStart(t *testing.T) {
 	if testing.Short() {
 		t.Skip("runs the built massimo once per refused setting")
-	}
-	if runtime.GOOS == "windows" {
-		t.Skip("the built massimo is no .exe (builtBinary)")
 	}
 	cases := startRefusalCases(t, t.TempDir())
 	refused := map[string]bool{}
@@ -198,8 +198,10 @@ func TestStartChecksCoverTheStart(t *testing.T) {
 			if len(errs) > 0 {
 				t.Errorf("%s: the table refuses it, which the start alone was to (%s): %v", c.what, c.alone, errs)
 			}
-			if c.says == "" {
+			if named := "serve: " + startSetting(c.of) + ": "; c.says == "" {
 				t.Errorf("%s: no beginning of the start's own error", c.what)
+			} else if !strings.HasPrefix(c.says, named) {
+				t.Errorf("%s: the start's own error begins %q, naming no setting as %q", c.what, c.says, named)
 			}
 		case len(errs) == 0:
 			t.Errorf("%s: the table refuses nothing of %q", c.what, c.lines)
@@ -269,6 +271,20 @@ type startRefusal struct {
 	listens     bool
 }
 
+// startSetting names the variable v as the start's errors do, its flag
+// first: the flag of flagVars, or massimo's own -data.
+func startSetting(v string) string {
+	if v == env.DataVar {
+		return "-data or " + v
+	}
+	for f, fv := range flagVars {
+		if fv == v {
+			return "-" + f + " or " + v
+		}
+	}
+	return v
+}
+
 // linesOf are the cases' settings files, their lines each.
 func linesOf(cases []startRefusal) [][]string {
 	var out [][]string
@@ -297,13 +313,12 @@ func startRefusalCases(t *testing.T, dir string) []startRefusal {
 	cert := file("cert.pem", "not read: the key is missing\n", 0o600)
 	key := file("key.pem", "not read: the certificate is missing\n", 0o600)
 	hook := file("hook.sh", "#!/bin/sh\n", 0o755)
-	noExec := file("noexec.sh", "#!/bin/sh\n", 0o644)
 	notDir := file("file", "a file where a directory belongs\n", 0o600)
 	logFile := filepath.Join(notDir, "serve.log")
 	missing := filepath.Join(dir, "missing")
 	acme := []string{env.TLS + "=acme", env.TLSNames + "=massimo.example.net"}
 	cubeAddress := env.PerCube(env.Address, guardCube) + "=127.0.0.1:1"
-	return []startRefusal{
+	cases := []startRefusal{
 		{of: env.LogFormat, what: "a bad format", lines: []string{env.LogFormat + "=xml"}},
 		{of: env.LogFileFormat, what: "none in the file", lines: []string{env.LogFileFormat + "=none"}},
 		{of: env.LogProcessFormat, what: "a bad format on stderr", lines: []string{env.LogProcessFormat + "=yaml"}},
@@ -329,7 +344,12 @@ func startRefusalCases(t *testing.T, dir string) []startRefusal {
 		{of: env.TLSHTTP, what: "the HTTP-01 port beside a DNS hook", lines: append(slices.Clone(acme), env.TLSHTTP+"=:80", env.ACMEDNSHook+"="+hook)},
 		{of: env.ACMEDNSHook, what: "a DNS hook without acme", lines: []string{env.ACMEDNSHook + "=" + hook}},
 		{of: env.ACMEDNSHook, what: "a DNS hook that is not there", lines: append(slices.Clone(acme), env.ACMEDNSHook+"="+missing)},
-		{of: env.ACMEDNSHook, what: "a DNS hook that is not executable", lines: append(slices.Clone(acme), env.ACMEDNSHook+"="+noExec)},
+	}
+	if runtime.GOOS != "windows" { // which checks no execute bit
+		noExec := file("noexec.sh", "#!/bin/sh\n", 0o644)
+		cases = append(cases, startRefusal{of: env.ACMEDNSHook, what: "a DNS hook that is not executable", lines: append(slices.Clone(acme), env.ACMEDNSHook+"="+noExec)})
+	}
+	return append(cases, []startRefusal{
 		{of: env.PerCube(env.Ignore, guardCube), what: "a Cube's bad hidden list", lines: []string{cubeAddress, env.PerCube(env.Ignore, guardCube) + "=zz"}},
 		{of: env.Ignore, what: "the plain hidden list beside a Cube", lines: []string{cubeAddress, env.Ignore + "=zz"}},
 
@@ -337,19 +357,19 @@ func startRefusalCases(t *testing.T, dir string) []startRefusal {
 		// "not a directory".
 		{of: "MASSIMO_LISTEN", what: "a listen address that does not parse", lines: []string{"MASSIMO_LISTEN=127.0.0.1:99999"},
 			alone: "a port taken shows at the listen alone, and every packaged service gives -listen",
-			says:  "listen tcp: address 99999: invalid port"},
+			says:  "serve: -listen or MASSIMO_LISTEN: listen tcp: address 99999: invalid port"},
 		{of: "MASSIMO_LOG", what: "a log file that does not open", lines: []string{"MASSIMO_LOG=" + logFile},
 			alone: "a directory missing or not writable shows at the open alone, and every packaged service gives -log",
-			says:  "serve: open " + logFile + ": "},
+			says:  "serve: -log or MASSIMO_LOG: open " + logFile + ": "},
 		{of: env.DataVar, what: "a data directory that is a file", lines: []string{env.DataVar + "=" + notDir},
 			alone: "a directory missing or not writable shows at the store's open alone, and every packaged service gives -data",
-			says:  "serve: store: mkdir " + notDir + ": "},
+			says:  "serve: -data or MASSIMO_DATA: store: mkdir " + notDir + ": "},
 		// Refused after the API listens, so the ACME directory is the
 		// loopback's, which nothing asks before the start ends.
 		{of: env.TLSHTTP, what: "an HTTP-01 port that does not parse", alone: "a port taken shows at the listen alone", listens: true,
 			lines: append(slices.Clone(acme), env.TLSHTTP+"=127.0.0.1:99999", env.ACMEDirectory+"=http://127.0.0.1:1/directory"),
-			says:  "serve: -tls-http: listen tcp: address 99999: invalid port"},
-	}
+			says:  "serve: -tls-http or MASSIMO_TLS_HTTP: listen tcp: address 99999: invalid port"},
+	}...)
 }
 
 // anyValue is a variable the start takes any value of: an odd one, for

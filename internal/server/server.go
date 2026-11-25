@@ -27,6 +27,7 @@
 //	GET  /api/v1/cubes/{sn}/backups/{id}             a stored backup's file
 //	DELETE /api/v1/cubes/{sn}/backups/{id}           remove one
 //	GET  /api/v1/cubes/{sn}/backups/{id}/diff        what would turn another into it
+//	GET  /api/v1/backups/unserved                    the Cubes not served that keep backups
 //	POST /api/v1/cubes/{sn}/restore/plan             what restoring the backup in the body (or backup=<id>) would send
 //	POST /api/v1/cubes/{sn}/restore?plan=<hash>      send it; progress as restore_step events
 //	GET  /api/v1/cubes/{sn}/restore                  how the last restore went
@@ -39,6 +40,7 @@
 //	GET  /api/v1/system                              how the server is installed, the computer, the caller's address (system_api.go)
 //	GET  /api/v1/update                              newest signed release on the update channel
 //	POST /api/v1/update                              ask the update helper to install it (needs a token)
+//	PUT  /api/v1/update/answer                       answer the question of the automatic update: now, tonight or skip (update_answer.go)
 //	GET  /api/v1/restart                             whether the server can be restarted from here (restart_api.go)
 //	POST /api/v1/restart                             restart it through its service manager
 //	POST /api/v1/reload                              read the settings file again at once, as SIGHUP does
@@ -221,6 +223,13 @@ type Options struct {
 	// "brew"), else what runs it (InstallWindowsService, InstallSystemd,
 	// InstallLaunchd); empty is InstallOther.
 	Install string
+	// ServerName is the server's name, which a new password set through
+	// the users' API must not contain, beside the first label of the
+	// request's host (AP PasswordRules, D50-A; password.Check), given as
+	// a name: each run of letters in it is a word. Empty, as massimo
+	// serve leaves it, takes the first label of the host's name
+	// (password.HostWord of os.Hostname).
+	ServerName string
 	// DiscoverInterval is how often the server looks for Cubes on the LAN
 	// (discovery.go), with a first run at the start; 0 runs it only on
 	// request, and while a Cube configured by serial has no address or a
@@ -272,6 +281,10 @@ type Options struct {
 	FileCubes map[string]store.FileCube
 	// SettingsFile names the settings file, for the log.
 	SettingsFile string
+	// SettingsNotes are the notes on the settings file the start read,
+	// their texts (cmd/massimo, env.LoadFile): the start writes them as
+	// a settings_read warning after its server_started (logStarted).
+	SettingsNotes []string
 	// ProxyFixed says the proxy listeners came from the command line
 	// (-proxy): a proxy address changed through the API is stored, and
 	// takes effect at the next start without -proxy.
@@ -288,6 +301,9 @@ type Options struct {
 	// (autoreset.go) and the error watch's timers (errorwatch.go), for
 	// the tests; nil is the real one.
 	clock notify.Clock
+	// selfCheckTick is the tick of the server's own release check
+	// (updateLoop), for the tests; 0 is a minute.
+	selfCheckTick time.Duration
 	// checkClock is the clock of the radio health checks, such as the
 	// readings of the Cubes' free slots (slots.go), for the tests; nil is
 	// the real one.
@@ -311,6 +327,9 @@ type Options struct {
 	// confirmWithin is how long a write's devices have to show it, for
 	// the tests; zero for defaultConfirmWithin (confirm.go).
 	confirmWithin time.Duration
+	// noStopBackups leaves out the backups a stop takes (backupsAtStop),
+	// for the tests of a stop that is not clean, as a crash or a kill.
+	noStopBackups bool
 	// discoveryLate is how long, from an answer, a discovery run waits
 	// for its N and c answers where DiscoveryWait ends sooner
 	// (cubelan.SearchOptions.LateWait), for the tests, whose proxies never
@@ -337,8 +356,14 @@ type Options struct {
 
 // ProxyListener describes one Cube-protocol listener of the server.
 type ProxyListener struct {
-	Serial string // which Cube; empty with a single configured Cube
-	Addr   string // host:port to listen on, usually ":62910"
+	Serial string // which Cube; empty with a single configured Cube, or with CubeAddr
+	// CubeAddr names the Cube by its configured address (CubeConfig.Addr)
+	// where Serial is empty: a Cube whose serial was not known at the
+	// start, such as the plain MASSIMO_CUBE_ADDRESS's, served beside
+	// others. The server keys such a Cube by that address (register),
+	// and keeps that key beside the serial once it reports one (pump).
+	CubeAddr string
+	Addr     string // host:port to listen on, usually ":62910"
 	// Discovery answers UDP discovery requests for this Cube; only
 	// meaningful for a listener on the Cube's port 62910.
 	Discovery bool
@@ -383,6 +408,11 @@ type Server struct {
 	// steps writes the queues' step rows in order (commands.go).
 	steps   serialWorker
 	updates updateCheck
+	// updateNext is when the server's own release check is due
+	// (updateTick), zero before the first, and auto the night's
+	// automatic update (update_auto.go); the update loop's alone.
+	updateNext time.Time
+	auto       autoState
 	// updateMu holds one update request at a time (startUpdate).
 	updateMu sync.Mutex
 	// historyMu holds the last updates' row while it is read and written
@@ -422,6 +452,7 @@ type Server struct {
 	discRun   *discoveryRun   // the run going on, if any
 	discNext  *discoveryRun   // the run to start when discRun ends, if any
 	ctx       context.Context // Run's, for work that outlives a request
+	cubesCtx  context.Context // the runtimes', which outlives Run's by the stop's backups
 	foundMu   sync.Mutex
 	found     map[string]*foundCube // by serial, upper case
 	servers   []announce.Found      // the servers announced at the latest run, under foundMu
@@ -474,6 +505,10 @@ type runtime struct {
 	// confirms are the writes the devices have not shown yet
 	// (confirm.go).
 	confirms confirmations
+	// removed is set, under the server's proxyMu, once removeCube has
+	// begun: no listener starts for the runtime from then on
+	// (startProxyOn).
+	removed bool
 
 	// last is each device's state as the last state event had it, for
 	// the changes of the next one; only the pump uses it.
@@ -836,6 +871,7 @@ func New(opts Options) *Server {
 			s.log.Error("store: bootstrap failed", "error", err)
 		}
 		s.DropKeepOpen(context.Background())
+		s.warnIntegrationUsersOnly(context.Background())
 		if n, err := opts.Store.DropUnfinished(context.Background(), "server restarted"); err != nil {
 			s.log.Error("store: unfinished commands not dropped", "error", err)
 		} else if n > 0 {
@@ -853,9 +889,14 @@ func New(opts Options) *Server {
 
 // Run connects every Cube and blocks until ctx ends. Cubes added
 // through the API while it runs are started the same way (runtimes.go).
+// Their runtimes run on a context of their own, which ends after ctx:
+// the stop first takes the automatic backup of each Cube whose change
+// is pending, within a few seconds (backupsAtStop).
 func (s *Server) Run(ctx context.Context) error {
+	cubesCtx, stopCubes := context.WithCancel(context.WithoutCancel(ctx))
+	defer stopCubes()
 	s.mu.Lock()
-	s.ctx = ctx
+	s.ctx, s.cubesCtx = ctx, cubesCtx
 	s.mu.Unlock()
 	// The log's writer (log.go), before the Cubes connect, on a context
 	// of its own: it ends once the server's goroutines have, so that what
@@ -871,9 +912,10 @@ func (s *Server) Run(ctx context.Context) error {
 		close(writerDone)
 	}
 	s.logStarted(ctx)
-	for _, rt := range s.runtimes() {
-		s.startRuntime(rt)
-	}
+	// The listeners before the Cubes' connections: a runtime that has not
+	// connected is removed by nothing but the API, so the pump finds the
+	// listeners of a runtime it removes among s.proxies and stops them,
+	// where a listener started after the removal would fail its lookup.
 	for _, pl := range s.opts.Proxy {
 		if pl.Discovery {
 			s.ensureResponder()
@@ -882,6 +924,9 @@ func (s *Server) Run(ctx context.Context) error {
 	}
 	for _, pl := range s.opts.Proxy {
 		s.startProxy(pl)
+	}
+	for _, rt := range s.runtimes() {
+		s.startRuntime(rt)
 	}
 	s.wg.Add(1)
 	go func() { defer s.wg.Done(); s.discoveryLoop(ctx) }()
@@ -893,8 +938,18 @@ func (s *Server) Run(ctx context.Context) error {
 		s.wg.Add(1)
 		go func() { defer s.wg.Done(); s.notify.Run(ctx) }()
 	}
+	if s.opts.Store != nil {
+		s.wg.Add(1)
+		go func() { defer s.wg.Done(); s.updateLoop(ctx) }()
+	}
 	<-ctx.Done()
 	s.logStopping() // before the writer stops, which writes it
+	// The Cubes are still connected: a change pending gets its backup
+	// before they close, and before serve closes the store.
+	if !s.opts.noStopBackups {
+		s.backupsAtStop(cubesCtx)
+	}
+	stopCubes()
 	// Once ctx is done nothing new is tracked (track); taking the lock
 	// waits for a track that saw ctx alive, so Wait cannot race an Add.
 	s.mu.Lock()
@@ -958,10 +1013,18 @@ func (rt *runtime) hidden() view.Hidden {
 	return view.NewHidden(rt.config().Hidden, rt.client.Snapshot().Metadata(), rt.showHidden)
 }
 
-// proxyRuntime picks the Cube a proxy listener serves.
+// proxyRuntime picks the Cube a proxy listener serves: by its serial,
+// by its address (CubeAddr), or the single Cube. The listener keeps the
+// runtime, and serves it under the serial it reports from then on.
 func (s *Server) proxyRuntime(pl ProxyListener) (*runtime, error) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
+	if pl.Serial == "" && pl.CubeAddr != "" {
+		if rt, ok := s.cubes[strings.ToLower(pl.CubeAddr)]; ok {
+			return rt, nil
+		}
+		return nil, fmt.Errorf("no cube at %s configured", pl.CubeAddr)
+	}
 	if pl.Serial == "" {
 		if len(s.order) != 1 {
 			return nil, fmt.Errorf("several cubes configured, name one as <serial>=%s", pl.Addr)
@@ -999,10 +1062,17 @@ func (s *Server) pump(ctx context.Context, rt *runtime) {
 					}
 					s.mu.Unlock()
 					if taken && other != rt {
-						// Another runtime serves the serial, one added by
-						// serial meanwhile: two clients would compete for a
-						// one-client Cube, so this one stops, as register
-						// refuses a second runtime for a serial.
+						// Another runtime serves the serial, one of the
+						// store's or one added by serial meanwhile: two
+						// clients would compete for a one-client Cube, so
+						// this one stops, as register refuses a second
+						// runtime for a serial. The plain lines are the
+						// other's Cube's from now on.
+						if rt.config().SeedFromFile {
+							s.log.Warn(PlainServedNote, "serial", h.Serial, "addr", rt.client.Address())
+							go s.plainServedAlready(rt)
+							return
+						}
 						s.log.Error("cube served twice: its serial is served already, the connection by address stops", "serial", h.Serial, "addr", rt.client.Address())
 						go s.removeCube(rt)
 						return
@@ -1362,12 +1432,13 @@ func (s *Server) routes() {
 		}
 		writeJSON(w, http.StatusOK, h)
 	})
-	// api registers a route with the capability it needs (auth.go): the
+	// api registers a route with the capability it needs (auth.go), or
+	// with two of which either will do ("restart or update", capOr): the
 	// wrapper authenticates, checks the capability, and maps the handler's
 	// error to a status.
 	api := func(pattern, capability string, h func(http.ResponseWriter, *http.Request) error) {
-		if capability != capNone && capability != capAny && !validCapability(capability) {
-			panic(fmt.Sprintf("route %s: unknown capability %q", pattern, capability))
+		if msg := routeCapabilityError(pattern, capability); msg != "" {
+			panic(msg)
 		}
 		action, audited := actions[pattern]
 		if strings.HasPrefix(pattern, "GET ") {
@@ -1512,6 +1583,7 @@ func (s *Server) routes() {
 	api("GET /api/v1/cubes/{sn}/backups/{id}", "backup", s.getStoredBackup)
 	api("DELETE /api/v1/cubes/{sn}/backups/{id}", "restore", s.deleteBackup)
 	api("GET /api/v1/cubes/{sn}/backups/{id}/diff", "backup", s.diffBackups)
+	api("GET /api/v1/backups/unserved", "backup", s.listUnserved)
 	api("POST /api/v1/cubes/{sn}/restore/plan", "restore", s.planRestore)
 	api("POST /api/v1/cubes/{sn}/restore", "restore", s.startRestore)
 	api("GET /api/v1/cubes/{sn}/restore", "read", s.getRestore)
@@ -1526,7 +1598,8 @@ func (s *Server) routes() {
 	api("GET /api/v1/system", "read", s.getSystem)
 	api("GET /api/v1/update", "read", s.getUpdate)
 	api("POST /api/v1/update", "update", s.startUpdate)
-	api("GET /api/v1/restart", "restart", s.getRestart)
+	api("PUT /api/v1/update/answer", "update", s.putUpdateAnswer)
+	api("GET /api/v1/restart", "restart or update", s.getRestart)
 	api("POST /api/v1/restart", "restart", s.startRestart)
 	api("POST /api/v1/reload", "restart", s.reloadSettings)
 	api("GET /api/v1/reboot", "reboot", s.getReboot)
@@ -1682,6 +1755,10 @@ type cubeView struct {
 	// FileDiffers lists the settings file's lines for this Cube whose
 	// values differ from the store's, which wins.
 	FileDiffers []fileDifference `json:"file_differs,omitempty"`
+	// Backups counts the backups the store keeps of the Cube (GET
+	// …/backups); 0 for a Cube without a row in the store, and without a
+	// store.
+	Backups int `json:"backups"`
 	// The configuration PUT /api/v1/cubes/{sn} changes: whether the
 	// address follows discovery, the proxy listener's address and the
 	// serial of its discovery replies, and the hidden radio addresses.
@@ -1758,13 +1835,18 @@ type deviceDetail struct {
 	Wall       *cube.WallConfig       `json:"wall_thermostat,omitempty"`
 }
 
-func (s *Server) summary(rt *runtime) cubeView {
+// summary is a served Cube's view; counts are the store's backup counts
+// (backupCounts), nil for none.
+func (s *Server) summary(rt *runtime, counts map[string]int) cubeView {
 	snap := rt.client.Snapshot()
 	b := rt.client.Budget()
 	cfg := rt.config()
 	v := cubeView{Serial: rt.cubeSerial(), Name: cfg.Name, Address: rt.client.Address(), Configured: true, Source: cfg.Source, ConfiguredAddress: cfg.Addr, FollowDiscovery: cfg.Addr == "" || cfg.FollowDiscovery,
 		ProxyAddress: s.proxyAddress(rt), ProxySerial: cfg.ProxySerial, ProxyVirtual: rt.proxyVirtual.Load(), Hidden: hiddenStrings(cfg.Hidden), Budget: b, Pending: view.Pending(snap, b), Queued: rt.queue.Len()}
 	v.FileDiffers = s.fileDiffers(rt.cubeSerial())
+	if rt.storeID.Load() != 0 {
+		v.Backups = counts[store.NormalSerial(rt.cubeSerial())]
+	}
 	link := rt.client.Link()
 	v.Link = &link
 	v.ProxyListening = s.proxyListening(rt)
@@ -1794,17 +1876,37 @@ func (s *Server) summary(rt *runtime) cubeView {
 // Handlers.
 
 // listCubes handles GET /cubes: the configured Cubes, then the ones
-// discovery found that are not configured.
+// discovery found that are not configured, each with the backups the
+// store keeps of it, from one count (AP BackupWatch v1.0, D5-A).
 func (s *Server) listCubes(w http.ResponseWriter, r *http.Request) error {
+	counts := s.backupCounts(r.Context())
 	out := []any{}
 	for _, rt := range s.runtimes() {
-		out = append(out, s.summary(rt))
+		out = append(out, s.summary(rt, counts))
 	}
 	for _, f := range s.unconfigured() {
+		n := counts[store.NormalSerial(f.Serial)]
+		f.Backups = &n
 		out = append(out, f)
 	}
 	writeJSON(w, http.StatusOK, out)
 	return nil
+}
+
+// backupCounts are the store's backup counts by serial
+// (store.BackupCounts); nil without a store, or where they could not be
+// read, which the views then show as none.
+func (s *Server) backupCounts(ctx context.Context) map[string]int {
+	st := s.opts.Store
+	if st == nil {
+		return nil
+	}
+	counts, err := st.BackupCounts(ctx)
+	if err != nil {
+		s.log.Warn("store: backup counts not read", "error", err)
+		return nil
+	}
+	return counts
 }
 
 func (s *Server) getCube(w http.ResponseWriter, r *http.Request) error {
@@ -1816,7 +1918,7 @@ func (s *Server) getCube(w http.ResponseWriter, r *http.Request) error {
 	if err != nil {
 		return err
 	}
-	v := s.summary(rt)
+	v := s.summary(rt, s.backupCounts(r.Context()))
 	v.RoomList = s.roomsOf(rt, kind)
 	writeJSON(w, http.StatusOK, v)
 	return nil

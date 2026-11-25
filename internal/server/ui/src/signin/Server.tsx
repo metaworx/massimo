@@ -19,12 +19,11 @@
  */
 
 import { useLayoutEffect, useState } from "preact/hooks";
-import { app } from "../shared/app";
+import { app, serverOf } from "../shared/app";
 import { hid } from "../shared/cls";
 import { Copy } from "../shared/copy";
 import { IconButton } from "../shared/icon";
 import { useLang } from "../shared/lang";
-import { serverOf } from "./app";
 import { card } from "./store";
 
 /** ServerLine is the server's line under the card's title, with its ⓘ and the facts it shows; nothing in a browser. */

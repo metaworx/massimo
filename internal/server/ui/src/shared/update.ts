@@ -18,10 +18,10 @@ import { can } from "./me";
 /** GET /api/v1/update's last answer, null before one came; every user may read the versions. */
 export const update = signal<UpdateInfo | null>(null);
 
-/** updateOut tells whether an update is out, for one who may install it. */
+/** updateOut tells whether an update is out, for one who may install it or choose the channel. */
 export function updateOut(): boolean {
   const u = update.value;
-  return !!u && !!u.available && can("settings");
+  return !!u && !!u.available && (can("settings") || can("update"));
 }
 
 /** updateLatest is the version an update would install, "" for none. */

@@ -4,6 +4,7 @@
 package main
 
 import (
+	"cmp"
 	"context"
 	"encoding/json"
 	"io"
@@ -89,7 +90,7 @@ func TestWatchSettings(t *testing.T) {
 	calls := make(chan struct{}, 10)
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
-	go watchSettings(ctx, p, 20*time.Millisecond, func() { calls <- struct{}{} })
+	go watchSettings(ctx, p, stampOf(p), 20*time.Millisecond, func() { calls <- struct{}{} })
 	quiet := func(what string) {
 		t.Helper()
 		select {
@@ -113,6 +114,40 @@ func TestWatchSettings(t *testing.T) {
 	case <-calls:
 	case <-time.After(testkit.Scale(2 * time.Second)):
 		t.Fatal("no reload after the file came back changed")
+	}
+}
+
+// The watch starts from the file as the start read it (startStamp), not
+// as it finds it: an edit made while serve starts, before the watch's
+// first look, is read again, once (AP StartConfiguration, the notes'
+// test on CI).
+func TestWatchSettingsFromTheStart(t *testing.T) {
+	t.Parallel()
+	p := filepath.Join(t.TempDir(), "env")
+	if err := os.WriteFile(p, []byte("MASSIMO_LOG=a\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	atStart := stampOf(p)
+	// The edit, a size of its own, before the watch begins.
+	if err := os.WriteFile(p+".new", []byte("MASSIMO_LOG=bb\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Rename(p+".new", p); err != nil {
+		t.Fatal(err)
+	}
+	calls := make(chan struct{}, 10)
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	go watchSettings(ctx, p, atStart, 20*time.Millisecond, func() { calls <- struct{}{} })
+	select {
+	case <-calls:
+	case <-time.After(testkit.Scale(5 * time.Second)):
+		t.Fatal("the edit made before the watch began: no reload")
+	}
+	select {
+	case <-calls:
+		t.Fatal("the edit made before the watch began: a second reload")
+	case <-time.After(150 * time.Millisecond):
 	}
 }
 
@@ -148,7 +183,7 @@ func TestSettingsReloader(t *testing.T) {
 	t.Cleanup(func() { os.WriteFile(p, nil, 0o600); env.ReloadFile(p) }) // the env package forgets the test's names
 	st := storekit.Open(t, "")
 	srv := server.New(server.Options{Store: st, Logger: slog.New(slog.NewTextHandler(io.Discard, nil)), Restart: server.RestartOptions{By: "systemd", Restart: func() error { return nil }}})
-	r := newSettingsReloader(p, slog.New(slog.NewTextHandler(io.Discard, nil)), srv, settings(), fixedSettings(map[string]string{"log": "/tmp/x.log"}))
+	r := newSettingsReloader(p, slog.New(slog.NewTextHandler(io.Discard, nil)), srv, settings(), fixedSettings(map[string]string{"log": "/tmp/x.log"}), nil)
 	if srv.AuthMode() != "open" {
 		t.Fatalf("mode %s", srv.AuthMode())
 	}
@@ -177,7 +212,7 @@ func TestSettingsReloader(t *testing.T) {
 	srv2 := server.New(server.Options{Store: st2, Logger: slog.New(slog.NewTextHandler(io.Discard, nil))})
 	os.WriteFile(p, nil, 0o600)
 	env.ReloadFile(p)
-	r2 := newSettingsReloader(p, slog.New(slog.NewTextHandler(io.Discard, nil)), srv2, settings(), fixedSettings(map[string]string{"token": "placeholder-token-0"}))
+	r2 := newSettingsReloader(p, slog.New(slog.NewTextHandler(io.Discard, nil)), srv2, settings(), fixedSettings(map[string]string{"token": "placeholder-token-0"}), nil)
 	os.WriteFile(p, []byte(tokenVar+"=placeholder-token-2\n"), 0o600)
 	r2.reload(t.Context(), "test")
 	if srv2.AuthMode() != "open" || len(r2.pending()) != 0 {
@@ -335,7 +370,7 @@ func TestReloadWarnsOfARefusedSetting(t *testing.T) {
 		}
 	}
 	covered := map[string]bool{} // the checks a case refuses, by their first variable
-	r := newSettingsReloader(p, sysLog, srv, settings(), nil)
+	r := newSettingsReloader(p, sysLog, srv, settings(), nil, nil)
 	level := logLevel.Level()
 
 	reload(r, "a good change of every check's, none for stderr alone",
@@ -445,10 +480,10 @@ func TestReloadWarnsOfARefusedSetting(t *testing.T) {
 	startWith := func(text string, flags map[string]string) *settingsReloader {
 		t.Helper()
 		os.WriteFile(p, []byte(text), 0o600)
-		if _, err := env.ReloadFile(p); err != nil {
+		if _, _, err := env.ReloadFile(p); err != nil {
 			t.Fatal(err)
 		}
-		return newSettingsReloader(p, sysLog, srv, settings(), fixedSettings(flags))
+		return newSettingsReloader(p, sysLog, srv, settings(), fixedSettings(flags), nil)
 	}
 	paired := startWith(env.TLS+"=acme\n"+acme+env.Ignore+"=zz\n", nil)
 	// Each named by the setting that changed, not by the one the start's text names.
@@ -503,7 +538,8 @@ func TestReloadWarnsOfARefusedSetting(t *testing.T) {
 // parses settles it and clears that, though it changed nothing; a
 // missing file is the reloader's warning alone. What the API's read does
 // after the read (serve's rotation and checkpoint, apiReload) runs once
-// for a good read, and not for one that failed.
+// for each read, before its answer, the one that failed included, as
+// SIGHUP's does (AP StartConfiguration, D8-A).
 func TestReloadWarnsOfAnUnreadableFile(t *testing.T) {
 	unsetForTest(t, tokenVar, env.HSTS)
 	p := filepath.Join(t.TempDir(), "env")
@@ -524,7 +560,7 @@ func TestReloadWarnsOfAnUnreadableFile(t *testing.T) {
 	// One process log, as serve's: the reloader's lines and the server's.
 	log, w := testkit.LogWatch(nil)
 	srv := server.New(server.Options{Store: st, Logger: log})
-	r := newSettingsReloader(p, log.With("source", "system"), srv, settings(), nil)
+	r := newSettingsReloader(p, log.With("source", "system"), srv, settings(), nil, nil)
 	// The API's reload as serve hands it over, counting what runs after.
 	afters := 0
 	srv.SetReloader(p, r.apiReload(func(context.Context) { afters++ }))
@@ -595,10 +631,10 @@ func TestReloadWarnsOfAnUnreadableFile(t *testing.T) {
 	}
 	// The start's own error, which every command stops with.
 	parseErr := p + ":3: expected KEY=VALUE"
-	if err := env.LoadFile(p); err == nil || err.Error() != parseErr {
+	if _, err := env.LoadFile(p); err == nil || err.Error() != parseErr {
 		t.Fatalf("the start's own error: %v, want %s", err, parseErr)
 	}
-	if code != 500 || answer.Error != "reading the settings file: "+parseErr || afters != 0 {
+	if code != 500 || answer.Error != "reading the settings file: "+parseErr || afters != 1 {
 		t.Fatalf("POST /api/v1/reload: %d %q, what runs after it %d times", code, answer.Error, afters)
 	}
 	want := "the next start refuses: " + parseErr
@@ -646,9 +682,9 @@ func TestReloadWarnsOfAnUnreadableFile(t *testing.T) {
 	m = w.Mark()
 	r.reload(t.Context(), "the settings file changed")
 	w.HasNot(t, m, "a settings_read of an unchanged file", settingsRead)
-	// The API's good read, and what runs after it, once.
+	// The API's good read, and what runs after it, once more.
 	var res server.ReloadResult
-	if code := api("POST", "/api/v1/reload", &res); code != 200 || afters != 1 {
+	if code := api("POST", "/api/v1/reload", &res); code != 200 || afters != 2 {
 		t.Fatalf("the API's good read: %d %+v, what runs after it %d times", code, res, afters)
 	}
 
@@ -685,7 +721,7 @@ func TestReloadWarnsAsTheBoxChanges(t *testing.T) {
 	t.Cleanup(func() { stopWriter(); <-writerDone })
 	log, w := testkit.LogWatch(nil)
 	srv := server.New(server.Options{Store: st, Logger: log})
-	r := newSettingsReloader(p, log.With("source", "system"), srv, settings(), nil)
+	r := newSettingsReloader(p, log.With("source", "system"), srv, settings(), nil, nil)
 	apiGet := func(path string, v any) {
 		t.Helper()
 		req := httptest.NewRequest("GET", path, nil)
@@ -747,6 +783,199 @@ func TestReloadWarnsAsTheBoxChanges(t *testing.T) {
 	save("the hook removed, the file saved again", "# a third comment\n", refused)
 }
 
+// A reload that finds notes on the settings file, lines it set aside,
+// says them on the process's log, the reloader's warning of its own, and
+// its settings_read is a warning of them after "the settings file: ",
+// after what the next start refuses where both stand: one line of all
+// that the read found. They are no refusals: POST /api/v1/reload and GET
+// /api/v1/restart name the refusals alone. A read whose settings did not
+// change writes its settings_read where the notes changed, which settles
+// the warning once the file is fixed, and none where they did not; a
+// note names a secret given twice by its name, never a value (AP
+// StartConfiguration, D3-B).
+func TestReloadTellsTheNotes(t *testing.T) {
+	const cubeKey = "MASSIMO_CUBE_KEQ0000000_KEY"
+	unsetForTest(t, tokenVar, env.HSTS, cubeKey)
+	p := filepath.Join(t.TempDir(), "env")
+	put := func(text string) {
+		t.Helper()
+		if err := os.WriteFile(p, []byte(text), 0o600); err != nil {
+			t.Fatal(err)
+		}
+	}
+	put("")
+	t.Cleanup(func() { os.WriteFile(p, nil, 0o600); env.ReloadFile(p) }) // the env package forgets the test's names
+	st := storekit.Open(t, "")
+	// The log's writer, which the server's Run would start.
+	wctx, stopWriter := context.WithCancel(context.Background())
+	writerDone := make(chan struct{})
+	go func() { st.RunEvents(wctx); close(writerDone) }()
+	t.Cleanup(func() { stopWriter(); <-writerDone })
+	// One process log, as serve's: the reloader's lines and the server's.
+	log, w := testkit.LogWatch(nil)
+	srv := server.New(server.Options{Store: st, Logger: log})
+	r := newSettingsReloader(p, log.With("source", "system"), srv, settings(), nil, nil)
+	srv.SetReloader(p, r.apiReload(func(context.Context) {}))
+	api := func(method, path string, v any) {
+		t.Helper()
+		req := httptest.NewRequest(method, path, strings.NewReader("{}"))
+		req.RemoteAddr = "127.0.0.1:5000"
+		rec := httptest.NewRecorder()
+		srv.Handler().ServeHTTP(rec, req)
+		if rec.Code != 200 || json.Unmarshal(rec.Body.Bytes(), v) != nil {
+			t.Fatalf("%s %s: %d %s", method, path, rec.Code, rec.Body.String())
+		}
+	}
+	warned := func(rec testkit.Record) bool { return rec.Level >= slog.LevelWarn }
+	settingsRead := testkit.Msg("settings read", "kind", "settings_read")
+	setAside := func(why, notes string) func(testkit.Record) bool {
+		return testkit.MsgAt(slog.LevelWarn, "settings file lines set aside", "file", p, "why", why, "notes", notes)
+	}
+	reads := 0 // the settings_read lines written
+	// check waits for the server's newest settings_read, the reads'th,
+	// and checks it, the log's sign and GET /api/v1/restart's refused:
+	// the line at warn with want as its error, or at info for want "",
+	// and refused the same as the reload's.
+	check := func(what, want string, refused []server.Refusal) {
+		t.Helper()
+		var lines []struct{ Level, Error string }
+		testkit.Eventually(t, what+": the settings_read in the server's log", func() bool {
+			lines = nil
+			api("GET", "/api/v1/log?kind=settings_read", &lines)
+			return len(lines) == reads
+		})
+		var sign struct {
+			Level string `json:"level"`
+		}
+		api("GET", "/api/v1/log/alerts", &sign)
+		var after struct {
+			Refused []server.Refusal `json:"refused"`
+		}
+		api("GET", "/api/v1/restart", &after)
+		level := "warn"
+		if want == "" {
+			level = ""
+		}
+		if l := lines[len(lines)-1]; l.Error != want || l.Level != cmp.Or(level, "info") || sign.Level != level || !slices.EqualFunc(after.Refused, refused, sameRefusal) {
+			t.Fatalf("%s: the line %+v, the sign %q, refused %+v; want the error\n%q, refused %+v", what, l, sign.Level, after.Refused, want, refused)
+		}
+	}
+	hsts := `-hsts or MASSIMO_HSTS "-1": want a number of days, 0 or more`
+	twice := env.HSTS + " is given on lines 1 and 2; the first wins"
+
+	// A start that found a note, as serve makes its reloader with the
+	// notes its log says after server_started: the file read again as
+	// the start read it writes no line, the start's standing; the later
+	// line deleted, which changes no value, writes its line at info,
+	// which settles the start's warning.
+	put(env.HSTS + "=30\n" + env.HSTS + "=60\n")
+	found, err := env.LoadFile(p)
+	if err != nil {
+		t.Fatal(err)
+	}
+	startNotes := noteTexts(found)
+	atStart := newSettingsReloader(p, log.With("source", "system"), srv, settings(), nil, startNotes)
+	srv.LogSettingsRead(t.Context(), "start", nil, nil, nil, startNotes) // logStarted's line
+	reads++
+	check("the start's note", "the settings file: "+twice, nil)
+	m := w.Mark()
+	atStart.reload(t.Context(), "the settings file changed")
+	w.HasNot(t, m, "the start's note read again: a settings_read", settingsRead)
+	put(env.HSTS + "=30\n")
+	if changed, _, _, err := atStart.reload(t.Context(), "the settings file changed"); err != nil || len(changed) != 0 {
+		t.Fatalf("the start's note fixed: %v %v", changed, err)
+	}
+	reads++
+	check("the start's note fixed", "", nil)
+
+	// A note and a refusal: the line holds both, the refusal first, and
+	// the API names the refusal alone.
+	put(env.HSTS + "=-1\n" + env.HSTS + "=30\n")
+	m = w.Mark()
+	var answer server.ReloadResult
+	api("POST", "/api/v1/reload", &answer)
+	reads++
+	refused := []server.Refusal{{Settings: []string{env.HSTS}, Error: hsts}}
+	if !slices.EqualFunc(answer.Refused, refused, sameRefusal) {
+		t.Fatalf("a note and a refusal: the reload's refused %+v, want the refusal alone", answer.Refused)
+	}
+	want := "the next start refuses: " + hsts + "; the settings file: " + twice
+	check("a note and a refusal", want, refused)
+	w.Has(t, m, "a note and a refusal: the reloader's warning of the note", setAside("the API", twice))
+	rec, _ := w.Has(t, m, "a note and a refusal: the settings_read line at warn", testkit.MsgAt(slog.LevelWarn, "settings read", "kind", "settings_read"))
+	if rec.Attrs["error"] != want {
+		t.Fatalf("a note and a refusal: the line's error\n%q, want\n%q", rec.Attrs["error"], want)
+	}
+	if n := w.Count(m, warned); n != 2 {
+		t.Fatalf("a note and a refusal: %d warnings, want the reloader's and the event's line: %v", n, w.Since(m, warned))
+	}
+
+	// A note alone: a warning of it, nothing refused.
+	put(env.HSTS + "=30\n" + env.HSTS + "=-1\n")
+	m = w.Mark()
+	answer = server.ReloadResult{}
+	api("POST", "/api/v1/reload", &answer)
+	reads++
+	if answer.Refused == nil || len(answer.Refused) != 0 {
+		t.Fatalf("a note alone: the reload's refused %+v, want []", answer.Refused)
+	}
+	check("a note alone", "the settings file: "+twice, nil)
+	w.Has(t, m, "a note alone: the reloader's warning", setAside("the API", twice))
+
+	// The file saved again, its settings and notes the same: the
+	// reloader's warning, and no settings_read.
+	put(env.HSTS + "=30\n" + env.HSTS + "=-1\n# a comment\n")
+	m = w.Mark()
+	r.reload(t.Context(), "the settings file changed")
+	w.Has(t, m, "the same note: the reloader's warning", setAside("the settings file changed", twice))
+	w.HasNot(t, m, "the same note: a settings_read", settingsRead)
+
+	// The note fixed, nothing else changed: the read writes its line,
+	// which settles the warning.
+	put(env.HSTS + "=30\n")
+	m = w.Mark()
+	if changed, _, _, err := r.reload(t.Context(), "the settings file changed"); err != nil || len(changed) != 0 {
+		t.Fatalf("the note fixed: %v %v", changed, err)
+	}
+	reads++
+	check("the note fixed", "", nil)
+	w.HasNot(t, m, "the note fixed: a warning", warned)
+
+	// A secret given twice, the token and a Cube key: named, never its
+	// value, in the log as in the server's line (which the store holds:
+	// the token now asks the API for itself).
+	secrets := []string{"placeholder-token-1", "placeholder-token-2", "00112233445566778899aabbccddeeff", "ffeeddccbbaa99887766554433221100"}
+	put(tokenVar + "=" + secrets[0] + "\n" + tokenVar + "=" + secrets[1] + "\n" + cubeKey + "=" + secrets[2] + "\n" + cubeKey + "=" + secrets[3] + "\n")
+	m = w.Mark()
+	if _, _, _, err := r.reload(t.Context(), "SIGHUP"); err != nil {
+		t.Fatal(err)
+	}
+	notes := tokenVar + " is given on lines 1 and 2; the first wins; " + cubeKey + " is given on lines 3 and 4; the first wins"
+	w.Has(t, m, "a secret given twice: the reloader's warning", setAside("SIGHUP", notes))
+	rec, _ = w.Has(t, m, "a secret given twice: the settings_read line at warn", testkit.MsgAt(slog.LevelWarn, "settings read", "kind", "settings_read"))
+	if rec.Attrs["error"] != "the settings file: "+notes {
+		t.Fatalf("a secret given twice: the line's error %q", rec.Attrs["error"])
+	}
+	if err := st.FlushEvents(t.Context()); err != nil {
+		t.Fatal(err)
+	}
+	rows, err := st.Events(t.Context(), store.EventQuery{Kind: "settings_read", Limit: 100})
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, secret := range secrets {
+		w.HasNot(t, 0, "a secret's value in the log", testkit.Contains(secret))
+		for _, row := range rows {
+			if strings.Contains(string(row.Data), secret) {
+				t.Fatalf("a secret's value in the server's line: %s", row.Data)
+			}
+		}
+	}
+	if os.Getenv(tokenVar) != secrets[0] {
+		t.Fatal("the token's first line does not win")
+	}
+}
+
 // A reload removes the keep-open setting where the server has users
 // beside it, as a process of an older version, or a store put in place
 // by hand, can leave them (AP FirstOwner, D12).
@@ -757,7 +986,7 @@ func TestSettingsReloaderDropsKeepOpen(t *testing.T) {
 	t.Cleanup(func() { os.WriteFile(p, nil, 0o600); env.ReloadFile(p) })
 	st := storekit.Open(t, "")
 	srv := server.New(server.Options{Store: st, Logger: slog.New(slog.NewTextHandler(io.Discard, nil))})
-	r := newSettingsReloader(p, slog.New(slog.NewTextHandler(io.Discard, nil)), srv, settings(), nil)
+	r := newSettingsReloader(p, slog.New(slog.NewTextHandler(io.Discard, nil)), srv, settings(), nil, nil)
 	if _, err := st.AddUser(t.Context(), store.User{Name: "anna", Role: store.RoleOwner}, "", 0); err != nil {
 		t.Fatal(err)
 	}
@@ -824,11 +1053,13 @@ func TestServeAppliesTheTokenOnSIGHUP(t *testing.T) {
 	os.WriteFile(settingsFile, []byte(tokenVar+"=placeholder-token-1\n"+env.TrustedProxies+"=127.0.0.1\n"), 0o600)
 	m := s.log.Mark()
 	s.cmd.Process.Signal(syscall.SIGHUP)
-	if !testkit.Within(5*time.Second, func() bool {
-		code, _ := get(t, base+"/api/v1/cubes", "")
-		return code == 401
-	}) {
-		t.Fatal("the server does not ask for the token after the SIGHUP") // serve's log follows
+	// The reload's end, its own line, which it writes once it has set
+	// what waits for the next start: it sets the token first, so a 401
+	// alone may come before the pending settings.
+	s.log.Await(t, m, "the settings file read again for the SIGHUP, with what changed",
+		testkit.Contains(`msg="settings file read again"`, "source=system", "why=SIGHUP", "changed="), serveWait)
+	if code, text := get(t, base+"/api/v1/cubes", ""); code != 401 {
+		t.Fatalf("the server does not ask for the token after the SIGHUP: %d %s", code, text) // serve's log follows
 	}
 	if code, text := get(t, base+"/api/v1/cubes", "placeholder-token-1"); code != 200 {
 		t.Fatalf("with the token: %d %s", code, text)
@@ -836,14 +1067,71 @@ func TestServeAppliesTheTokenOnSIGHUP(t *testing.T) {
 	if code, text := get(t, base+"/api/v1/restart", "placeholder-token-1"); code != 200 || !strings.Contains(text, `"pending": [`) || !strings.Contains(text, env.TrustedProxies) {
 		t.Fatalf("GET /api/v1/restart: %d %s", code, text)
 	}
+	// The SIGHUP's last step, the store's checkpoint, comes after the
+	// reload: awaited before the stop, which would cancel it.
+	s.log.Await(t, m, "the store checkpointed", testkit.Msg("store checkpointed"), serveWait)
 	// Once serve ended, its log is read whole; the token first, which no
 	// line shows.
 	s.stop(t)
 	s.log.HasNot(t, 0, "the token in the log", testkit.Contains("placeholder-token-1"))
-	s.log.Has(t, m, "the settings file read again for the SIGHUP, with what changed",
-		testkit.Contains(`msg="settings file read again"`, "source=system", "why=SIGHUP", "changed="))
 	s.log.Has(t, m, "the token applied, its owner created", testkit.Msg("api token applied", "source", "server", "owner_created", "true"))
-	s.log.Has(t, m, "the store checkpointed", testkit.Msg("store checkpointed"))
+}
+
+// POST /api/v1/reload does what SIGHUP does whatever the read finds: a
+// settings file that does not parse, and one that is there but cannot be
+// read, rotate serve's log file and checkpoint its store, and are then
+// answered 500 with the read's error; a good read is answered 200 after
+// the same. Windows has no SIGHUP, so the API's read is its only one that
+// rotates the log file and checkpoints the store (AP StartConfiguration,
+// D8-A).
+func TestServeReloadFromTheAPIRotatesAndCheckpoints(t *testing.T) {
+	t.Parallel()
+	skipBuilt(t)
+	dir := t.TempDir()
+	settingsFile := filepath.Join(dir, "env")
+	os.WriteFile(settingsFile, []byte("# nothing yet\n"), 0o600)
+	s := startServe(t, settingsFile, t.TempDir(), "-log", filepath.Join(dir, "serve.log"))
+	// reload asks for the read and answers its status and body, once
+	// serve's log has said the read's rotation and checkpoint.
+	reload := func(what string) (int, []byte) {
+		t.Helper()
+		m := s.log.Mark()
+		resp, err := http.Post("http://"+s.addr+"/api/v1/reload", "application/json", strings.NewReader("{}"))
+		if err != nil {
+			t.Fatal(err)
+		}
+		body, _ := io.ReadAll(resp.Body)
+		resp.Body.Close()
+		s.log.Await(t, m, what+": the log file rotated", testkit.MsgAt(slog.LevelInfo, "log rotated", "reason", "reload"), serveWait)
+		s.log.Await(t, m, what+": the store checkpointed", testkit.Msg("store checkpointed"), serveWait)
+		return resp.StatusCode, body
+	}
+	failed := func(what, want string) {
+		t.Helper()
+		var answer struct{ Error string }
+		if code, body := reload(what); code != 500 || json.Unmarshal(body, &answer) != nil || answer.Error != "reading the settings file: "+want {
+			t.Fatalf("%s: %d %s, want 500 with %q", what, code, body, want)
+		}
+	}
+
+	os.WriteFile(settingsFile, []byte(env.HSTS+"=60\nwrapped\n"), 0o600)
+	failed("a file that does not parse", settingsFile+":2: expected KEY=VALUE")
+	os.Remove(settingsFile)
+	if err := os.Mkdir(settingsFile, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	// The system's text: "is a directory", on Windows "Incorrect function."
+	_, readErr := os.ReadFile(settingsFile)
+	failed("a file that cannot be read", settingsFile+":1: "+readErr.Error())
+	os.Remove(settingsFile)
+	os.WriteFile(settingsFile, []byte(env.HSTS+"=60\n"), 0o600)
+	var res server.ReloadResult
+	if code, body := reload("a good read"); code != 200 || json.Unmarshal(body, &res) != nil || strings.Join(res.Pending, ",") != env.HSTS {
+		t.Fatalf("a good read: %d %s", code, body)
+	}
+	if runtime.GOOS != "windows" { // no SIGTERM to send: the test's end kills serve
+		s.stop(t)
+	}
 }
 
 // With -sighup stop, a SIGHUP stops serve as SIGTERM does: exit 0 and

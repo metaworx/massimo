@@ -61,10 +61,12 @@ declare global {
   function deviceOnly(key: string): boolean;
   /** Keeps a setting for this device alone with the value in effect, or stops: the user's value applies again. */
   function setDeviceOnly(key: string, on: boolean): void;
-  /** Applies the settings in effect to the page: expert mode, the appearance, the header, the poll. */
+  /** Applies the settings in effect to the page: expert mode, the appearance, the header, the poll's pace where it runs. */
   function applySettings(): void;
   /** Starts the page's poll again at the poll setting's pace. */
   function startPolling(): void;
+  /** Starts the page's poll again at the poll setting's pace where it runs; a poll that does not run stays stopped. */
+  function restartPolling(): void;
   /** Loads the language of a setting (auto: the browser's) and makes it the page's. */
   function changeLanguage(setting: string): Promise<void>;
   /** Draws every text of the page again after a change of language. */
@@ -82,7 +84,7 @@ declare global {
   /** The Massimo app's bridge on the page it opened (docs/app.md), null in a browser; connect, from version 2, shows the app's servers. */
   function appBridge(): { connect?: () => Promise<null> } | null;
   /** A request to the API, without the page's token where auth is false (/healthz, always open); the answer's JSON, or an error with the server's message. */
-  function apiRequest<T = unknown>(method: string, path: string, body?: unknown, opts?: { auth?: boolean }): Promise<T>;
+  function apiRequest<T = unknown>(method: string, path: string, body?: unknown, opts?: { auth?: boolean; token?: string }): Promise<T>;
   /** Opens the chosen Cube's event stream again. */
   function connectEvents(): Promise<void>;
   /** A request to the API with the page's token, headers added to its own; the answer's JSON, or an error with the server's message (and its status). */

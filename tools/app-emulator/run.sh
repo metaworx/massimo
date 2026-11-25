@@ -18,17 +18,23 @@
 # phone, the device's log kept from the moment adb sees it; while it
 # boots, the servers and the app's two APKs built; once it has booted,
 # its animations and autofill off, the screen kept on and the PIN set,
-# which a fingerprint needs; adb reverse for both servers' ports, the
-# owner's key written to a file on the emulator, the helper started; the
-# finger enrolled by EnrollTest alone, the run stopped where that fails;
+# which a fingerprint needs, the lock screen away before and after it;
+# adb reverse for both servers' ports, the owner's key written to a file
+# on the emulator, the helper started; a guard that keeps the lock
+# screen away while Gradle runs (keyguard.log); the finger enrolled by
+# EnrollTest alone, the run stopped where that fails;
 # then Gradle's :app:connectedFossDebugAndroidTest on that one emulator
 # (ANDROID_SERIAL), the servers, the user, the PIN and the key's file as
 # the instrumentation's arguments; after each of the two Gradle runs, what
 # it ran, counted from its JUnit results against the tests the sources
-# declare (tally/); then everything stopped, and what the run leaves kept
-# in results/ next to this script (the emulator's log with the kernel's,
-# the device's, the helper's, the servers', the screen of a failed test,
-# Gradle's report and results).
+# declare (tally/), and where it failed or ran short, what the device's
+# log says of how the app's processes ended (deaths); where the suite
+# passed, a warning for the system's remove-task timer in that log, which
+# kills a test as it starts (Rig.removeTasks in the app's androidTest);
+# then everything stopped, and what the run leaves kept in results/ next
+# to this script (the emulator's log with the kernel's, the device's and
+# its crash buffer, the helper's, the servers', the screen of a failed
+# test, Gradle's report and results).
 #
 # Gradle passes a run whose tests were skipped, or that ran fewer than
 # declared: strict (APP_EMU_STRICT=1, or CI=true as GitHub sets it), the
@@ -86,13 +92,20 @@ disc_a=${APP_EMU_DISCOVERY_PORT_A:-23941} disc_b=${APP_EMU_DISCOVERY_PORT_B:-239
 avd=massimo-test
 avd_home=${ANDROID_AVD_HOME:-$HOME/.android/avd}
 user=tester
-password=tester-pass-0000
+# not the user's name in it, which a new password may not hold
+password=quiet-harbour-0000
 pin=1111
 # on the emulator: the screens of failed tests (Rig.SHOTS in the app's
 # androidTest), and the owner's key (Rig.auditKey)
 shots=/data/local/tmp/massimo-emu
 key_file=/data/local/tmp/massimo-emu-key
 build="$root/app/android/app/build"
+# in the device's log: the app's package, and the system's timer that
+# kills every process of the app a second after the orchestrator's clear
+# removed a task of it whose activity was still closing
+# (tools/app-emulator/README.md, "The results")
+app_re='ch\.metaworx\.massimo'
+timer_re='Destroy timeout of remove-task, attempt to kill Task\{[^}]* A=[0-9]+:ch\.metaworx\.massimo\}'
 
 if ! [[ $port =~ ^[0-9]+$ ]] || [ "$port" -lt 5554 ] || [ "$port" -gt 5682 ] || [ $((port % 2)) -ne 0 ]; then
 	die "APP_EMU_PORT is an emulator's console port, even, from 5554 to 5682, not '$port'"
@@ -164,6 +177,8 @@ cleanup() {
 	for p in "${pids[@]}"; do kill "$p" 2>/dev/null; done
 	if [ -n "$emu_pid" ] && kill -0 "$emu_pid" 2>/dev/null; then
 		timeout 10 "$adb" -s "$serial" pull "$shots" "$out/shots" </dev/null >/dev/null 2>&1
+		# the crash buffer, each crash's stack whole, a Java or a native one
+		timeout 10 "$adb" -s "$serial" logcat -d -b crash </dev/null >"$out/crash.txt" 2>/dev/null
 	fi
 	reports "$out"
 	if [ -n "$emu_pid" ] && kill -0 "$emu_pid" 2>/dev/null; then
@@ -192,6 +207,74 @@ adbs() {
 # ask it; an adb that hangs is given 10 s.
 booted() {
 	timeout 10 "$adb" -s "$serial" shell getprop sys.boot_completed </dev/null 2>/dev/null | tr -d '\r' || true
+}
+
+# keyguard prints whether the emulator's lock screen shows, true or
+# false, "" while adb cannot say: true where the window manager's policy
+# (isKeyguardShowing) or the activities' (KeyguardController,
+# mKeyguardShowing) says it shows; an adb that hangs is given 10 s. The
+# policy is read alone: dumpsys window's whole dump starts with the last
+# ANR's, a copy of the state then, which a busy boot has.
+keyguard() {
+	local s
+	s=$( { timeout 10 "$adb" -s "$serial" shell dumpsys window policy </dev/null 2>/dev/null; timeout 10 "$adb" -s "$serial" shell dumpsys activity activities </dev/null 2>/dev/null; } | tr -d '\r' | grep -o -E '(isKeyguardShowing|mKeyguardShowing)=[a-z]+' || true)
+	case "$s" in
+	*=true*) echo true ;;
+	*=false*) echo false ;;
+	esac
+}
+
+# wakefulness prints the emulator's power state (Awake, Asleep, Dozing,
+# Dreaming), "" while adb cannot say.
+wakefulness() {
+	timeout 10 "$adb" -s "$serial" shell dumpsys power </dev/null 2>/dev/null | tr -d '\r' | sed -n 's/.*mWakefulness=\([A-Za-z]*\).*/\1/p' | head -n 1 || true
+}
+
+# guard keeps the lock screen away while the Gradle runs run, looking
+# every 5 s, and says each change of what it sees (the power state,
+# whether the lock screen shows) with the time, for keyguard.log: a busy
+# host's boot showed it again minutes after run.sh had taken it away and
+# set the PIN, under the enrollment.
+guard() {
+	local seen="" now
+	trap 'exit 0' TERM
+	while :; do
+		now="$(wakefulness) $(keyguard)"
+		if [ "$now" != "$seen" ]; then
+			echo "$(date +%T) $now"
+			seen=$now
+		fi
+		case "$now" in
+		*true) unlocked pin || echo "$(date +%T) the lock screen stays" ;;
+		esac
+		sleep 5
+	done
+}
+
+# unlocked takes the lock screen away where it shows, and fails where it
+# still shows after 120 s: woken and dismissed every few seconds, and with
+# pin as its argument the PIN typed after a dismiss, three times at most.
+# On a busy host the boot can show the lock screen still as run.sh sets
+# the PIN, SystemUI slow to take the dismiss, and Settings' enrollment
+# then runs under it, where UiAutomator finds nothing of Settings and the
+# run waits out its four minutes.
+unlocked() {
+	local until=$((SECONDS + 120)) typed=0 said=""
+	while [ "$(keyguard)" = true ]; do
+		[ "$SECONDS" -lt "$until" ] || return 1
+		[ -n "$said" ] || echo "app-emulator: the lock screen shows${1:+ (the PIN set)}; taking it away"
+		said=1
+		adbs shell input keyevent KEYCODE_WAKEUP >/dev/null 2>&1 || true
+		adbs shell wm dismiss-keyguard >/dev/null 2>&1 || true
+		# the PIN's field takes some seconds to show on a busy emulator
+		sleep 5
+		if [ "${1:-}" = pin ] && [ "$typed" -lt 3 ] && [ "$(keyguard)" = true ]; then
+			typed=$((typed + 1))
+			adbs shell input text "$pin" >/dev/null 2>&1 || true
+			adbs shell input keyevent KEYCODE_ENTER >/dev/null 2>&1 || true
+			sleep 3
+		fi
+	done
 }
 
 # step runs a long step of the run, Gradle's, in the background and waits
@@ -308,8 +391,11 @@ adbs shell svc power stayon true || echo "app-emulator: warning: the screen may 
 adbs shell settings put secure autofill_service null || echo "app-emulator: warning: autofill stays on" >&2
 adbs shell input keyevent KEYCODE_WAKEUP || true
 adbs shell wm dismiss-keyguard || true
+# the lock screen away before the PIN, and again after it
+unlocked || die "the emulator's lock screen stays 120 s, before its PIN is set; the device's log: $out/logcat.txt"
 adbs shell locksettings set-pin "$pin" >/dev/null || die "the emulator's PIN was not set"
 adbs shell locksettings verify --old "$pin" >/dev/null || die "the emulator's PIN does not verify"
+unlocked pin || die "the emulator's lock screen stays after its PIN was set; the device's log: $out/logcat.txt"
 adbs reverse "tcp:$api_a" "tcp:$api_a" >/dev/null || die "adb reverse failed for port $api_a"
 adbs reverse "tcp:$api_b" "tcp:$api_b" >/dev/null || die "adb reverse failed for port $api_b"
 # the owner's key as a file on the emulator, which the tests read
@@ -343,19 +429,46 @@ tally() {
 	"$work/tally" "${a[@]}" "$2"
 }
 
+# deaths says what the device's log holds on how the app's processes
+# ended, beyond the orchestrator's own end of each test (finished inst,
+# clear data) and the uninstall after a Gradle run (deletePackageX): a
+# kill by the system with its reason, the remove-task timer before one, a
+# process that never attached, a crash (its stack in crash.txt), an ANR,
+# the low-memory killer. Gradle's logcat of a test whose instrumentation
+# was killed before the test began holds none of it.
+deaths() {
+	local lines=()
+	mapfile -t lines < <(grep -E "ActivityManager: Killing [0-9]+:$app_re(\.test)?/|$timer_re|$app_re(\.test)?/u0a[0-9]+\} failed to attach|AndroidRuntime: Process: $app_re|Fatal signal .*massimo|ANR in $app_re|lowmemorykiller: Kill '$app_re" "$out/logcat.txt" 2>/dev/null |
+		grep -v -E 'due to (finished inst|clear data|deletePackageX)$' | head -n 40 || true)
+	if [ "${#lines[@]}" -eq 0 ]; then
+		echo "app-emulator: the device's log holds no kill, crash or failed start of the app's processes ($out/logcat.txt)"
+		return 0
+	fi
+	echo "app-emulator: the device's log on the app's processes, beyond the orchestrator's own ends ($out/logcat.txt; a crash's stack in $out/crash.txt):"
+	printf 'app-emulator:   device: %s\n' "${lines[@]}"
+}
+
 # The finger once, before the suite: a finger not enrolled is this one
 # failure, and not a wait in each case.
 echo "app-emulator: the finger, enrolled by EnrollTest alone"
 enroll=ch.metaworx.massimo.EnrollTest
+unlocked pin || die "the emulator's lock screen stays before the enrollment; the device's log: $out/logcat.txt"
+guard >"$out/keyguard.log" 2>&1 &
+pids+=("$!")
 if ! connected "$arg.class=$enroll"; then
 	reports "$out/enroll"
 	tally "the enrollment" "$out/enroll/test-results" "$enroll" || true
+	deaths
 	die "no finger was enrolled, which every case needs, so the suite did not start; Settings' screen is kept in $out/shots, the steps in $out/logcat.txt (MassimoEmu), Gradle's report in $out/enroll/report"
 fi
 reports "$out/enroll"
-tally "the enrollment" "$out/enroll/test-results" "$enroll" || die "the enrollment did not run as it should (above), so the suite did not start"
+if ! tally "the enrollment" "$out/enroll/test-results" "$enroll"; then
+	deaths
+	die "the enrollment did not run as it should (above), so the suite did not start"
+fi
 
 echo "app-emulator: the suite"
+unlocked pin || die "the emulator's lock screen stays before the suite; the device's log: $out/logcat.txt"
 suite=()
 [ -z "${APP_EMU_CLASS:-}" ] || suite+=("$arg.class=$APP_EMU_CLASS")
 rc=0
@@ -363,11 +476,22 @@ connected "${suite[@]}" || rc=$?
 reports "$out"
 counted=0
 tally "the suite" "$out/test-results" "${APP_EMU_CLASS:-}" || counted=$?
+if [ "$rc" -ne 0 ] || [ "$counted" -ne 0 ]; then
+	deaths
+fi
 if [ "$rc" -ne 0 ]; then
 	echo "app-emulator: the suite failed; its report, the logs and the screens of failed tests are kept in $out" >&2
 	exit "$rc"
 fi
 if [ "$counted" -ne 0 ]; then
-	die "Gradle passed the suite, but not every test the sources declare ran and passed (above): a test skipped or left out passes there"
+	die "Gradle passed the suite, but not every test the sources declare ran and passed (above): a test skipped, left out, or whose instrumentation was killed before it began passes there"
+fi
+# the timer Rig.removeTasks keeps away, said where this run's tests
+# survived it
+timers=()
+mapfile -t timers < <(grep -E "$timer_re" "$out/logcat.txt" 2>/dev/null || true)
+if [ "${#timers[@]}" -ne 0 ]; then
+	echo "app-emulator: warning: the device removed a task of the app whose activity was still closing, and a second later killed the app's processes, which takes the next test's instrumentation where it lands as that starts (tools/app-emulator/README.md, \"The results\"); this run's tests all ran:" >&2
+	printf 'app-emulator:   device: %s\n' "${timers[@]}" >&2
 fi
 echo "app-emulator: the suite passed"

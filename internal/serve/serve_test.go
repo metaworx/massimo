@@ -5,19 +5,23 @@ package serve
 
 import (
 	"context"
+	"database/sql"
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"log/slog"
 	"net"
 	"net/http"
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
 	"go.metaworx.ch/massimo/internal/announce"
+	"go.metaworx.ch/massimo/internal/backup"
 	"go.metaworx.ch/massimo/internal/cubelan/fakecube"
 	"go.metaworx.ch/massimo/internal/store"
 	"go.metaworx.ch/massimo/internal/testkit"
@@ -184,6 +188,69 @@ func TestCloseWithoutRun(t *testing.T) {
 	}
 	if _, err := os.Stat(filepath.Join(data, store.FileName+"-wal")); err == nil {
 		t.Fatal("the store was not closed: its -wal file is left")
+	}
+}
+
+// The start's own errors, of the box's state, name their setting as
+// the start's checks do (AP StartConfiguration, D20-A), "serve: " once:
+// an API address that does not parse, a data directory that is a file,
+// for the store, the self-signed pair and DNS-01's cache alike, and,
+// once the API listens, an HTTP-01 address that does not parse.
+func TestOpenErrorsNameTheSetting(t *testing.T) {
+	t.Parallel()
+	noCubeEnv(t)
+	notDir := filepath.Join(t.TempDir(), "file")
+	if err := os.WriteFile(notDir, nil, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	hook := filepath.Join(t.TempDir(), "hook.sh")
+	if err := os.WriteFile(hook, []byte("#!/bin/sh\n"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	// A store refused, here a stranger's file, says what to do, not the
+	// directory's setting.
+	stranger := t.TempDir()
+	db, err := sql.Open("sqlite", store.Path(stranger))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := db.Exec(`CREATE TABLE other (x INTEGER)`); err != nil {
+		t.Fatal(err)
+	}
+	db.Close()
+	// Nothing asks the ACME directory before Run ends.
+	acme := TLS{Mode: "acme", Names: "massimo.example.net", HTTP: "127.0.0.1:99999", ACMEDirectory: "http://127.0.0.1:1/directory"}
+	for _, c := range []struct {
+		what string
+		cfg  Config
+		want string
+	}{
+		{"the API's address", Config{Listen: "127.0.0.1:99999", Addr: "127.0.0.1:1"},
+			"serve: -listen or MASSIMO_LISTEN: listen tcp: address 99999: invalid port"},
+		{"the data directory", Config{Listen: "127.0.0.1:0", DataDir: notDir},
+			"serve: -data or MASSIMO_DATA: store: mkdir " + notDir + ": "},
+		{"a store refused", Config{Listen: "127.0.0.1:0", DataDir: stranger}, "serve: store: "},
+		{"the data directory, self-signed", Config{Listen: "127.0.0.1:0", DataDir: notDir, TLS: TLS{Mode: "self-signed"}},
+			"serve: -data or MASSIMO_DATA: mkdir " + notDir + ": "},
+		{"the data directory, DNS-01", Config{Listen: "127.0.0.1:0", DataDir: notDir,
+			TLS: TLS{Mode: "acme", Names: "massimo.example.net", DNSHook: hook, ACMEDirectory: "http://127.0.0.1:1/directory"}},
+			"serve: -data or MASSIMO_DATA: mkdir " + notDir + ": "},
+		{"the HTTP-01 address", Config{Listen: "127.0.0.1:0", Addr: "127.0.0.1:1", TLS: acme},
+			"serve: -tls-http or MASSIMO_TLS_HTTP: listen tcp: address 99999: invalid port"},
+	} {
+		c.cfg.Proxies, c.cfg.RefreshInterval, c.cfg.DiscoverInterval, c.cfg.Logger = []string{"off"}, &never, &never, quietLog()
+		if c.cfg.DataDir == "" {
+			c.cfg.DataDir = t.TempDir()
+		}
+		inst, err := Open(context.Background(), c.cfg)
+		if err == nil {
+			ctx, cancel := context.WithTimeout(context.Background(), testkit.Scale(20*time.Second))
+			err = inst.Run(ctx)
+			cancel()
+		}
+		if err == nil || !strings.HasPrefix(err.Error(), c.want) {
+			t.Errorf("%s: %v, want %s…", c.what, err, c.want)
+		}
 	}
 }
 
@@ -482,5 +549,84 @@ func TestOpenNotLookingOnTheLoopback(t *testing.T) {
 	getJSON(t, ts.URL+"/api/v1/integrations/found", &found)
 	if found.Looks || found.Announce.Why != "loopback" {
 		t.Errorf("found %+v, want not looking for the loopback", found)
+	}
+}
+
+// A clean stop takes the automatic backup of a change pending before the
+// store closes (AP BackupWatch v1.0, Block 1; docs/store.md section 9
+// (e)): a room renamed after a backup by hand, with no look of the
+// automatic backup since, is in massimo.db once Run has returned.
+func TestStopTakesThePendingBackup(t *testing.T) {
+	t.Parallel()
+	noCubeEnv(t)
+	ctx := context.Background()
+	data := t.TempDir()
+	st := testStore(t, data)
+	if _, err := st.AddCube(ctx, store.Cube{Serial: "KEQ0000100", Configured: true, Address: startFakeCube(t), Source: store.SourceUI}); err != nil {
+		t.Fatal(err)
+	}
+	st.Close()
+	inst, err := Open(ctx, Config{Listen: "127.0.0.1:0", DataDir: data, Version: "massimo test", Proxies: []string{"off"},
+		RefreshInterval: &never, DiscoverInterval: &never, Logger: quietLog()})
+	if err != nil {
+		t.Fatal(err)
+	}
+	stop := runInstance(t, inst)
+	base := "http://" + inst.Addr()
+	waitForCube(t, base)
+	send := func(method, path, body string, want int) {
+		t.Helper()
+		req, _ := http.NewRequest(method, base+path, strings.NewReader(body))
+		req.Header.Set("Content-Type", "application/json")
+		resp, err := http.DefaultClient.Do(req)
+		if err != nil {
+			t.Fatal(err)
+		}
+		resp.Body.Close()
+		if resp.StatusCode != want {
+			t.Fatalf("%s %s: %s", method, path, resp.Status)
+		}
+	}
+	send("POST", "/api/v1/cubes/KEQ0000100/backups", "", http.StatusCreated)
+	send("PUT", "/api/v1/cubes/KEQ0000100/rooms/6", `{"name":"Renamed"}`, http.StatusOK)
+	roomName := func(f *backup.File) string {
+		for _, r := range f.Rooms {
+			if r.ID == 6 {
+				return r.Name
+			}
+		}
+		return ""
+	}
+	if !testkit.Within(5*time.Second, func() bool {
+		resp, err := http.Get(base + "/api/v1/cubes/KEQ0000100/backup")
+		if err != nil {
+			return false
+		}
+		defer resp.Body.Close()
+		data, _ := io.ReadAll(resp.Body)
+		f, err := backup.Unmarshal(data, false)
+		return err == nil && roomName(f) == "Renamed"
+	}) {
+		t.Fatal("the rename never reached the Cube's configuration")
+	}
+	if err := stop(); err != nil {
+		t.Fatal(err)
+	}
+
+	st = testStore(t, data)
+	row, _, _ := st.Cube(ctx, "KEQ0000100")
+	list, err := st.Backups(ctx, row.ID)
+	if err != nil || len(list) != 2 || list[0].Reason != store.ReasonAuto || list[1].Reason != store.ReasonManual {
+		t.Fatalf("the backups after the stop: %+v %v", list, err)
+	}
+	body, _, err := st.BackupBody(ctx, row.ID, list[0].ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if f, err := backup.Unmarshal(body, false); err != nil || roomName(f) != "Renamed" {
+		t.Fatalf("the stop's backup is not of the change (%v)", err)
+	}
+	if p, ok, err := st.BackupPending(ctx, row.ID); ok || err != nil {
+		t.Fatalf("windows kept after the stop's backup: %+v %v", p, err)
 	}
 }

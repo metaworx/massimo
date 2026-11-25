@@ -161,7 +161,10 @@ func (s *Server) integrationPrincipal(ctx context.Context, r *http.Request, p *p
 	if integ.State != store.IntegrationActive {
 		return nil, &onBehalfRefusal{http.StatusForbidden, "integration_disabled", "the integration " + integ.UUID + " is disabled"}
 	}
-	caps := intersect(p.caps, integ.MaxCaps)
+	// 2 and 4: the role integration bounds every call through the
+	// integration, whatever role its own user was given, and so does its
+	// maximum.
+	caps := intersect(intersect(p.caps, integrationCeiling), integ.MaxCaps)
 	if h == "" {
 		q := *p
 		q.caps, q.integration = caps, &integ
@@ -196,7 +199,7 @@ func (s *Server) integrationPrincipal(ctx context.Context, r *http.Request, p *p
 	if off {
 		return nil, &onBehalfRefusal{http.StatusForbidden, "user_disabled", "the role " + own.Role + " is disabled"}
 	}
-	// 1 and 2: the user's role within the ceiling; 4 is in caps already.
+	// 1: the user's role; 2 and 4 are in caps already.
 	caps = intersect(caps, ownCaps)
 	acting := own
 	if id.Linked() {

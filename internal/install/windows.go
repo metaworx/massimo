@@ -54,6 +54,9 @@ func InstallWindows(o Options) error {
 	if err := o.checkTLS(); err != nil {
 		return err
 	}
+	if err := o.checkSettingsFile(); err != nil {
+		return err
+	}
 	in := newInstaller(o)
 	p := winPaths()
 	m, err := connect()
@@ -221,7 +224,7 @@ func (in *installer) winSettings(p WinPaths) (bool, error) {
 	}
 	content, startable := tmpl, false
 	if in.Settings != "" {
-		b, err := os.ReadFile(in.Settings)
+		b, err := in.settingsCopy()
 		if err != nil {
 			return false, err
 		}

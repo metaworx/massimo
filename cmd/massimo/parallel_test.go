@@ -25,6 +25,7 @@ import (
 var serialTests = map[string]string{
 	// The settings in the process environment (t.Setenv).
 	"TestConfigPrintsTLS":                   "sets the TLS variables",
+	"TestConfigTiesThePlainLines":           "clears the Cube variables, sets MASSIMO_DATA and the plain Cube's variables",
 	"TestConfigViewHidesSecrets":            "sets MASSIMO_API_TOKEN, a Cube's key and MASSIMO_LISTEN",
 	"TestDataDir":                           "sets MASSIMO_DATA",
 	"TestNoEnv":                             "sets MASSIMO_ENV_FILE, as -no-env does",
@@ -32,6 +33,7 @@ var serialTests = map[string]string{
 	"TestReloadWarnsOfARefusedSetting":      "unsets settings variables (unsetForTest), clears the Cube variables, sets MASSIMO_HSTS and reloads a settings file into the environment",
 	"TestReloadWarnsOfAnUnreadableFile":     "unsets settings variables (unsetForTest) and reloads a settings file into the environment",
 	"TestReloadWarnsAsTheBoxChanges":        "clears the Cube variables, unsets the TLS variables (unsetForTest) and reloads a settings file into the environment",
+	"TestReloadTellsTheNotes":               "unsets settings variables (unsetForTest) and reloads a settings file into the environment",
 	"TestRestartHelper":                     "sets ProgramData",
 	"TestSettingsReloader":                  "unsets settings variables (unsetForTest) and reloads a settings file into the environment",
 	"TestSettingsReloaderDropsKeepOpen":     "unsets settings variables (unsetForTest) and reloads a settings file into the environment",
@@ -43,6 +45,8 @@ var serialTests = map[string]string{
 	"TestUserCommands":                      "sets MASSIMO_DATA, swaps stdin and stdout (runUserWith)",
 	"TestUserCommandsLog":                   "sets MASSIMO_DATA, swaps stdin and stdout (runUserWith)",
 	"TestUserListChain":                     "sets MASSIMO_DATA, swaps stdin and stdout (runUserWith)",
+	"TestUserPasswordRule":                  "sets MASSIMO_DATA, swaps stdin and stdout (runUserWith)",
+	"TestUserPasswordNames":                 "sets MASSIMO_DATA, swaps stdin and stdout (runUserWith)",
 	"TestUserRename":                        "sets MASSIMO_DATA, swaps stdin and stdout (runUserWith)",
 	"TestUserTokens":                        "sets MASSIMO_DATA, swaps stdin and stdout (runUserWith)",
 	"TestStoreDowngradeCommand":             "sets MASSIMO_DATA, swaps serviceStateDir (raisedStore)",
@@ -71,6 +75,7 @@ var serialTests = map[string]string{
 	"TestServiceEndWithoutStop":                    "swaps theService, sets ProgramData (tempServiceLog)",
 	"TestServiceStopWaitsForServe":                 "swaps theService, sets ProgramData (tempServiceLog)",
 	"TestServiceStopClosesTheStore":                "swaps theService, sets the Cube's address",
+	"TestUpdateHelperListenKeepsTheStart":          "swaps theService, sets ProgramData (tempServiceLog) and MASSIMO_UPDATE_API",
 	"TestRebootRequester":                          "sets rebootTake and rebootPoll",
 	"TestWindowsRebooter":                          "swaps runCommand, sets SystemRoot",
 	"TestHealthClientOwnAddresses":                 "swaps interfaceAddrs",

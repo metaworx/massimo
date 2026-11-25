@@ -359,3 +359,40 @@ func TestMigration15(t *testing.T) {
 		t.Fatalf("the name of a user removed before: %v", err)
 	}
 }
+
+// CountUsers counts the regular users, a disabled one included and a
+// removed one not, and none of an integration's, a revoked one's
+// included, which CountIntegrationUsers counts (AP LooseEnds, D1).
+func TestCountUsersRegular(t *testing.T) {
+	t.Parallel()
+	s := open(t, t.TempDir())
+	ctx := context.Background()
+	i := integrationOnly(t, s)
+	if n, err := s.CountUsers(ctx); n != 0 || err != nil {
+		t.Fatalf("an integration's users alone: %d %v", n, err)
+	}
+	if _, err := s.AddUser(ctx, User{Name: "anna", Role: RoleOwner, Disabled: true}, "", 0); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := s.AddUser(ctx, User{Name: "bob"}, "", 0); err != nil {
+		t.Fatal(err)
+	}
+	if err := s.DeleteUser(ctx, "bob", 0); err != nil {
+		t.Fatal(err)
+	}
+	if n, err := s.CountUsers(ctx); n != 1 || err != nil {
+		t.Fatalf("a disabled owner beside them: %d %v", n, err)
+	}
+	if n, err := s.CountIntegrationUsers(ctx); n != 3 || err != nil {
+		t.Fatalf("the integration's: %d %v", n, err)
+	}
+	if err := s.RevokeIntegration(ctx, i.UUID, 0); err != nil {
+		t.Fatal(err)
+	}
+	if n, _ := s.CountUsers(ctx); n != 1 {
+		t.Fatalf("beside a revoked integration's users: %d", n)
+	}
+	if n, _ := s.CountIntegrationUsers(ctx); n != 3 {
+		t.Fatalf("a revoked integration's users: %d", n)
+	}
+}

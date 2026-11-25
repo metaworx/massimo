@@ -52,12 +52,20 @@ func (s *Server) loadFound() {
 	}
 }
 
+// PlainServedNote is the log's line where the plain
+// MASSIMO_CUBE_ADDRESS names a Cube the store serves already, at the
+// start (internal/serve) or once that Cube reported its serial
+// (plainServedAlready): its serial is the line's.
+const PlainServedNote = "the plain MASSIMO_CUBE_ADDRESS is a cube the store serves: the plain lines are that cube's from now on, compared with its row, whose values win; take the plain lines out of the settings file, or take a value from the file in the web UI"
+
 // seedLearned adds the plain MASSIMO_CUBE_ADDRESS Cube to the store once
 // it has reported its serial, with the file's values (FileCubes[""]),
 // and remembers which serial the plain lines belong to. That comes
 // first: a stop before the row leaves the setting, by which the next
 // start seeds the row from the file itself, while a row without it
-// would be served beside the plain lines, as several Cubes.
+// would be served beside the plain lines, as several Cubes. A Cube the
+// store has already keeps its row, and the plain lines are compared
+// with it (store.Seed).
 func (s *Server) seedLearned(ctx context.Context, rt *runtime) {
 	if !rt.config().SeedFromFile || s.opts.Store == nil {
 		return
@@ -114,4 +122,24 @@ func (s *Server) fileDiffers(serial string) []fileDifference {
 	s.fileMu.Lock()
 	defer s.fileMu.Unlock()
 	return s.diffs[strings.ToUpper(serial)]
+}
+
+// plainServedAlready ends the runtime of the plain MASSIMO_CUBE_ADDRESS
+// whose Cube reported a serial another runtime serves, one of the
+// store's Cubes: its listeners stop with it, and the plain lines belong
+// to that Cube from now on (seedLearned), compared with its row, so
+// that the next start serves it once. The other runtime keeps the
+// listeners of its row. It runs beside the pump, which removeCube waits
+// for, and under cubeMu, as the Cube routes change the Cubes.
+func (s *Server) plainServedAlready(rt *runtime) {
+	ctx := s.track()
+	if ctx == nil {
+		s.removeCube(rt)
+		return
+	}
+	defer s.wg.Done()
+	s.cubeMu.Lock()
+	defer s.cubeMu.Unlock()
+	s.removeCube(rt)
+	s.seedLearned(ctx, rt)
 }

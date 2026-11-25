@@ -248,6 +248,5 @@ func TestPauseKeepsADeadSession(t *testing.T) {
 	}
 	refusedWhileTaken(t, addr)
 	srv.Release()
-	testkit.Eventually(t, "the slot freed", func() bool { return !refused(addr) })
-	dial(t, addr)
+	dialWhenFree(t, addr, "the slot freed")
 }

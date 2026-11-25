@@ -20,7 +20,10 @@
  * that follows its making and gone at the next, kept in this part's own
  * state alone. An API key the caller names is marked, its row tinted,
  * and the caller is told of every read drawn, with that row, to bring it
- * into view (My profile's key of its address). Moved from System
+ * into view (My profile's key of its address). The key that is the
+ * settings file's MASSIMO_API_TOKEN (from_settings in the list) says so
+ * in place of Revoke, which the server refuses for it: it is changed or
+ * removed in the file (AP MobileApp v1.4, D86-A). Moved from System
  * settings' users (AP UiParts, Block 13), its texts the users.… keys both
  * places use.
  */
@@ -44,7 +47,8 @@ import { session, stillSession } from "./session";
  * one's own user, the token the page is signed in with says "this
  * device", the key that session was made of "its key"; in the app the key
  * the phone keeps, of the id deviceKey, says "this device's key" in its
- * place; Revoke on "this device" signs out.
+ * place; Revoke on "this device" signs out. The settings file's key has
+ * no Revoke, and says where it is changed in its place.
  */
 function TokenRow({ u, tk, labels, run, marked, deviceKey }: {
   u: User;
@@ -71,8 +75,10 @@ function TokenRow({ u, tk, labels, run, marked, deviceKey }: {
       <span class="muted small token-used">
         {tk.last_used_at ? <>{t("users.lastUsed", { from: tk.last_used_from || "?" }) + " "}<Age at={tk.last_used_at} plain /></> : t("users.neverUsed")}
       </span>
-      <BusyButton cls="revoke-token" label={t("users.revoke")} aria={t("users.revokeLabel", { label: tk.label || kind })}
-        run={() => (current ? revokeOwn(u.name, tk) : revokeToken(run, u.name, tk))} />
+      {tk.from_settings
+        ? <span class="muted small token-settings">{t("users.fromSettings")}</span>
+        : <BusyButton cls="revoke-token" label={t("users.revoke")} aria={t("users.revokeLabel", { label: tk.label || kind })}
+          run={() => (current ? revokeOwn(u.name, tk) : revokeToken(run, u.name, tk))} />}
     </li>
   );
 }
@@ -88,9 +94,10 @@ function TokenRow({ u, tk, labels, run, marked, deviceKey }: {
  * end (My profile's); marked, where given, is the id of the API key
  * whose row is tinted, a session of that id marking nothing; drawn, where
  * given, is told each time the list a read gave is drawn, with the row
- * marked or null (My profile's).
+ * marked or null (My profile's); listOnly lists them, each with its
+ * Revoke, and offers no new key (an integration's user's).
  */
-export function Tokens({ u, off, open, reads, run, say, labelId, help, marked, drawn }: {
+export function Tokens({ u, off, open, reads, run, say, labelId, help, marked, drawn, listOnly }: {
   u: User;
   off: boolean;
   open: boolean;
@@ -101,6 +108,7 @@ export function Tokens({ u, off, open, reads, run, say, labelId, help, marked, d
   help?: string;
   marked?: number | null;
   drawn?: (row: HTMLElement | null) => void;
+  listOnly?: boolean;
 }) {
   useLang();
   const deviceKey = appKeyId(app.value); // the key the phone keeps for this server, in the app
@@ -158,18 +166,22 @@ export function Tokens({ u, off, open, reads, run, say, labelId, help, marked, d
           <TokenRow key={tk.id} u={u} tk={tk} labels={labels} run={run} marked={tk.kind === "api" && tk.id === marked} deviceKey={deviceKey} />
         ))}
       </ul>
-      <div class={"user-key-box" + hid(!shown)}>
-        <p class="small">{t("users.keyShown")}</p>
-        <p class="mono user-key">{shown}</p>
-      </div>
-      <TextField label={t("users.newKey")} id={labelId} name="label" maxLength={64} placeholder={t("users.keyLabel")} value={label} set={setLabel} />
-      <div class="actions">
-        <span class="actions-right">
-          <BusyButton cls="create-key" label={t("users.createKey")} run={make} />
-          {help && helps.button}
-        </span>
-      </div>
-      {help && helps.text}
+      {!listOnly && (
+        <>
+          <div class={"user-key-box" + hid(!shown)}>
+            <p class="small">{t("users.keyShown")}</p>
+            <p class="mono user-key">{shown}</p>
+          </div>
+          <TextField label={t("users.newKey")} id={labelId} name="label" maxLength={64} placeholder={t("users.keyLabel")} value={label} set={setLabel} />
+          <div class="actions">
+            <span class="actions-right">
+              <BusyButton cls="create-key" label={t("users.createKey")} run={make} />
+              {help && helps.button}
+            </span>
+          </div>
+          {help && helps.text}
+        </>
+      )}
     </div>
   );
 }

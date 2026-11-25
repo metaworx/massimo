@@ -286,8 +286,9 @@ function keepBlink(use, key) {
 // copyText puts text on the clipboard: through navigator.clipboard where
 // the page may use it (HTTPS or localhost), else through a hidden text
 // area and the browser's copy command, which every browser still runs on
-// a click, as a page served over plain HTTP on the LAN needs. Resolves to
-// whether it copied.
+// a click, as a page served over plain HTTP on the LAN needs, the focus
+// given back to the element that had it, which the text area took.
+// Resolves to whether it copied.
 async function copyText(text) {
   if (navigator.clipboard && window.isSecureContext) {
     try {
@@ -297,6 +298,7 @@ async function copyText(text) {
       // refused: the fallback may still work
     }
   }
+  const had = document.activeElement;
   const area = document.createElement("textarea");
   area.value = text;
   area.setAttribute("readonly", "");
@@ -310,6 +312,7 @@ async function copyText(text) {
     ok = false;
   }
   area.remove();
+  if (had instanceof HTMLElement && had !== document.body && had.isConnected) had.focus({ preventScroll: true });
   return ok;
 }
 
@@ -731,10 +734,15 @@ document.addEventListener("click", (ev) => {
     if (!m.contains(ev.target)) m.open = false;
   }
 });
+// Escape closes every open menu, and where it closed one it marks the
+// event (preventDefault), so that a listener after this one that leaves a
+// place by Escape (the sign-in card the user opened, ui/src/signin/) leaves
+// it at the next Escape only: the menu first, as everywhere.
 document.addEventListener("keydown", (ev) => {
   if (ev.key !== "Escape") return;
   for (const m of document.querySelectorAll("details.menu[open]")) {
     m.open = false;
+    ev.preventDefault();
     if (m.contains(document.activeElement)) m.querySelector("summary").focus();
   }
 });

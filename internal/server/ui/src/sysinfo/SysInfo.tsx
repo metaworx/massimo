@@ -10,7 +10,8 @@
  * how it was installed, the computer, its full name, the interfaces it
  * listens on, the Cube proxies' listeners, copyable, the address it sees
  * this browser at), then the store and the settings in effect in folds of
- * their own, for a holder of settings. A new answer, a certificate's
+ * their own, for a holder of settings, and the credits and licences of
+ * what the server includes, for everyone (Credits.tsx). A new answer, a certificate's
  * reading again and the clock's tick leave the folds open, a copy's
  * "copied" until it fades and a text selected where they are; the page's
  * row counts the proxies that do not listen.
@@ -26,6 +27,7 @@ import { CountList, KvList } from "../shared/kv";
 import { tParts } from "../shared/lang";
 import { Link } from "../shared/link";
 import { data, folds, tick } from "./store";
+import { CreditsFold } from "./Credits";
 import { cardBadges } from "../shared/card";
 import { useLook } from "../shared/look";
 
@@ -315,7 +317,7 @@ function ConfigBody({ c }: { c: ConfigView | null }) {
   );
 }
 
-/** SysInfo is the page's card: the facts, then the store and the settings in effect (with settings), and the page row's badge. */
+/** SysInfo is the page's card: the facts, then the store and the settings in effect (with settings), the credits, and the page row's badge. */
 export function SysInfo() {
   useLook();
   const v = data.sys;
@@ -342,6 +344,7 @@ export function SysInfo() {
       }} summary={<><span>{t("maint.config")}</span><span id="config-info-sum" class="muted">{c ? c.file : ""}</span></>}>
         <ConfigBody c={c} />
       </Fold>
+      <CreditsFold />
     </>
   );
 }

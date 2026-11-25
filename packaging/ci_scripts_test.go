@@ -944,6 +944,29 @@ func TestCIGatesHoldTheirWorkflow(t *testing.T) {
 	}
 }
 
+// TestCIGatesHoldTheWindowsTests: a pull request that changes the
+// start's guard or the other tests that run the built massimo.exe on
+// Windows, the notes' and the reload's, or the settings file's parser,
+// which Windows reads otherwise, names in any case, runs the Windows job
+// (AP StartConfiguration, D22-A, D23-A); the guard's neighbours do not.
+func TestCIGatesHoldTheWindowsTests(t *testing.T) {
+	asks := []string{"cmd/massimo/startchecks.go", "cmd/massimo/startchecks_test.go", "cmd/massimo/serve_stop_test.go",
+		"cmd/massimo/notes_test.go", "cmd/massimo/reload.go", "cmd/massimo/reload_test.go",
+		"internal/env/env.go", "internal/env/dotenv.go", "internal/env/dotenv_windows_test.go"}
+	not := []string{"cmd/massimo/config.go", "cmd/massimo/serve_test.go", "internal/server/restart_api.go"}
+	_, win, _, _ := ciPlatformGates(t, append(slices.Clone(asks), not...))
+	for _, p := range asks {
+		if !win[p] {
+			t.Errorf("%s does not run the Windows job", p)
+		}
+	}
+	for _, p := range not {
+		if win[p] {
+			t.Errorf("%s runs the Windows job", p)
+		}
+	}
+}
+
 // ciUILines open the lines of ci.yml's What to test that answer ui on a
 // pull request: the paths the UI tests read, and the answer.
 var ciUILines = []string{"uifiles=", `[ -n "$uifiles" ] || ui=false`}

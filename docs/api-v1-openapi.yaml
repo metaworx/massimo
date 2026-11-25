@@ -411,7 +411,9 @@ paths:
         The mode (users, open, token, none), the caller's user, role and
         effective capabilities, and the token presented; outside users
         mode user and role are null and the capabilities are all of
-        them. setup is true on an open server for a caller on the local
+        them. An open server has no regular user: an integration's users
+        do not count, and its key is answered as anyone's, mode open.
+        setup is true on an open server for a caller on the local
         network, which may create the first owner; kept_open is true on an
         open server while the setting auth.keep_open is on, and absent
         otherwise.
@@ -701,10 +703,15 @@ paths:
       x-capability: users
       description: |
         With users, any role; with guests alone, the role guest. On a
-        server without users, the first owner: open to a caller on the
+        server without regular users (an integration's do not count), the
+        first owner: open to a caller on the
         local network (loopback, a private range, link-local), the role
         owner and a password required, refused from anywhere else, and
-        created once: a second request at the same moment is 409.
+        created once: a second request at the same moment is 409. A
+        password has 8 to 64 characters, Unicode code points as sent,
+        and contains neither the user's names nor the server's, nor
+        massimo or maxcube, or it is 400 and nothing is written; a record
+        is not checked, since the server never sees the password in it.
       parameters: [{$ref: "#/components/parameters/idempotencyKey"}]
       requestBody:
         required: true
@@ -751,7 +758,13 @@ paths:
         display_name and, with current_password, its password; the
         role, disabled and expires_at need users (guests for a guest). A
         password set by someone else ends the user's sessions. The last
-        enabled owner cannot be disabled or demoted (409).
+        enabled owner cannot be disabled or demoted (409); an
+        integration's user is none. An integration's user gets no password
+        or record (403): it acts through its integration alone. A
+        password other than the empty one has 8 to 64 characters and
+        contains neither the user's names nor the server's, nor massimo or
+        maxcube, or it is 400 and nothing of the request is written; a
+        record is not checked.
       parameters: [{$ref: "#/components/parameters/name"}, {$ref: "#/components/parameters/idempotencyKey"}]
       requestBody:
         required: true
@@ -778,7 +791,10 @@ paths:
     delete:
       summary: Remove a user
       x-capability: users
-      description: The user's tokens are revoked; its row stays for the audit. The last enabled owner without an end date stays (409).
+      description: >-
+        The user's tokens are revoked; its row stays for the audit. The last enabled owner without an end date stays
+        (409), and so does the user that holds the settings file's MASSIMO_API_TOKEN (409), whose key the next start
+        would not add back: it is changed or removed in the settings file first.
       parameters: [{$ref: "#/components/parameters/name"}, {$ref: "#/components/parameters/idempotencyKey"}]
       responses:
         "200":
@@ -794,7 +810,7 @@ paths:
         "403": {$ref: "#/components/responses/Forbidden"}
         "404": {$ref: "#/components/responses/NoUser"}
         "409":
-          description: The last enabled owner without an end date
+          description: The last enabled owner without an end date, or the user that holds the settings file's MASSIMO_API_TOKEN
           content:
             application/json:
               schema: {$ref: "#/components/schemas/Error"}
@@ -838,7 +854,7 @@ paths:
       parameters: [{$ref: "#/components/parameters/name"}]
       responses:
         "200":
-          description: The live tokens, oldest first, without their secrets
+          description: The live tokens, oldest first, without their secrets; the settings file's MASSIMO_API_TOKEN with from_settings
           content:
             application/json:
               schema:
@@ -854,7 +870,8 @@ paths:
       x-capability: users
       description: >-
         The key is shown once, in token; the store keeps its hash. It never expires. A retry with the same
-        Idempotency-Key answers 201 without token.
+        Idempotency-Key answers 201 without token. An integration's user gets none (403): it acts through
+        its integration alone.
       parameters: [{$ref: "#/components/parameters/name"}, {$ref: "#/components/parameters/idempotencyKey"}]
       requestBody:
         required: true
@@ -888,6 +905,11 @@ paths:
     delete:
       summary: Revoke a session or an API key
       x-capability: users
+      description: |
+        A session made from a key goes with the key. The settings file's
+        token (MASSIMO_API_TOKEN, from_settings in the list) is 409, as
+        DELETE /api/v1/me/token answers it: it is changed or removed in
+        the settings file, since the next start would not add it back.
       parameters:
         - {$ref: "#/components/parameters/idempotencyKey"}
         - {$ref: "#/components/parameters/name"}
@@ -907,6 +929,11 @@ paths:
         "403": {$ref: "#/components/responses/Forbidden"}
         "404":
           description: No such user, or no such live token of the user
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/Error"}
+        "409":
+          description: The token is the settings file's MASSIMO_API_TOKEN
           content:
             application/json:
               schema: {$ref: "#/components/schemas/Error"}
@@ -1718,7 +1745,7 @@ paths:
     get:
       summary: List the Cubes
       x-capability: read
-      description: The configured Cubes (configured true), then the Cubes discovery found that are not configured (configured false), while they answer - from the first answer to the end of the first complete run without one; after a restart, once a run has heard them.
+      description: The configured Cubes (configured true), then the Cubes discovery found that are not configured (configured false), while they answer - from the first answer to the end of the first complete run without one; after a restart, once a run has heard them. Each has backups, the number of backups the store keeps of it, which GET …/backups lists also for a found Cube.
       responses:
         "200":
           description: The Cubes
@@ -2472,6 +2499,13 @@ paths:
         automatic backup follows (backups.auto_min after the last change,
         at the latest backups.auto_max after the first). A Cube without a
         row in the store has no history (503).
+
+        A Cube the store keeps a row of that no runtime serves (one taken
+        out of the configuration, or only found by discovery) is listed
+        too, without changed and due; its backups download, compare and
+        delete as a served Cube's, while POST …/backups and the restore
+        answer 409. GET /api/v1/backups/unserved lists such Cubes. A
+        serial with neither is 404.
       parameters: [{$ref: "#/components/parameters/sn"}]
       responses:
         "200":
@@ -2517,12 +2551,13 @@ paths:
         "403": {$ref: "#/components/responses/Forbidden"}
         "429": {$ref: "#/components/responses/LockedOut"}
         "404": {$ref: "#/components/responses/NotFound"}
+        "409": {$ref: "#/components/responses/NotServed"}
         "503": {$ref: "#/components/responses/NotConnected"}
   /api/v1/cubes/{sn}/backups/{id}:
     get:
       summary: A stored backup's file
       x-capability: backup
-      description: The file as it was stored, or in the format asked for, as an attachment.
+      description: The file as it was stored, or in the format asked for, as an attachment; also of a Cube that is not served (GET …/backups).
       parameters:
         - {$ref: "#/components/parameters/sn"}
         - {$ref: "#/components/parameters/backupID"}
@@ -2551,7 +2586,7 @@ paths:
     delete:
       summary: Remove a stored backup
       x-capability: restore
-      description: The backup leaves the history; the store keeps a tombstone without the file until the retention removes it.
+      description: The backup leaves the history; the store keeps a tombstone without the file until the retention removes it. Also of a Cube that is not served (GET …/backups).
       parameters:
         - {$ref: "#/components/parameters/idempotencyKey"}
         - {$ref: "#/components/parameters/sn"}
@@ -2573,7 +2608,8 @@ paths:
         recorded it (its raw lines and NTP servers), with the notes and
         the radio commands. Nothing is sent. The restore's options apply,
         so skip=clock leaves the clock out; hidden devices are not
-        compared.
+        compared. Also of a Cube that is not served (GET …/backups), its
+        row's hidden list applying.
       parameters:
         - {$ref: "#/components/parameters/sn"}
         - {$ref: "#/components/parameters/backupID"}
@@ -2610,6 +2646,30 @@ paths:
         "429": {$ref: "#/components/responses/LockedOut"}
         "404": {$ref: "#/components/responses/NotFound"}
         "503": {$ref: "#/components/responses/NotReady"}
+  /api/v1/backups/unserved:
+    get:
+      summary: The Cubes not served that keep backups
+      x-capability: backup
+      description: |
+        The Cube rows of the store that no runtime serves, that are not
+        removed and keep at least one backup, by serial: one taken out of
+        the configuration, or one only found by discovery, also while
+        discovery does not hear it, which GET /api/v1/cubes then does not
+        list. Their backups are listed, downloaded, compared and deleted
+        through GET …/backups and its routes; they take no backup and no
+        restore (409). The served Cubes are not in it, and a server
+        without a store lists none.
+      responses:
+        "200":
+          description: The Cubes not served that keep backups; empty where none does
+          content:
+            application/json:
+              schema:
+                type: array
+                items: {$ref: "#/components/schemas/UnservedCube"}
+        "401": {$ref: "#/components/responses/Unauthorized"}
+        "403": {$ref: "#/components/responses/Forbidden"}
+        "429": {$ref: "#/components/responses/LockedOut"}
   /api/v1/cubes/{sn}/restore/plan:
     post:
       summary: What restoring a backup would send
@@ -2623,7 +2683,10 @@ paths:
         of the plan that POST …/restore takes. Nothing is written. The
         clock group reads the Cube's NTP servers first; hidden devices
         are neither compared nor written. With backup=<id> the stored
-        backup is the file, and the body is left empty.
+        backup is the file, and the body is left empty. A Cube the store
+        keeps a row of that no runtime serves is 409: a backup of it is
+        put onto another Cube by downloading it (GET …/backups/{id}) and
+        sending it to that Cube's restore.
       parameters:
         - {$ref: "#/components/parameters/idempotencyKey"}
         - {$ref: "#/components/parameters/sn"}
@@ -2647,6 +2710,7 @@ paths:
         "403": {$ref: "#/components/responses/Forbidden"}
         "429": {$ref: "#/components/responses/LockedOut"}
         "404": {$ref: "#/components/responses/NotFound"}
+        "409": {$ref: "#/components/responses/NotServed"}
         "413": {$ref: "#/components/responses/TooLarge"}
         "503": {$ref: "#/components/responses/NotConnected"}
   /api/v1/cubes/{sn}/restore:
@@ -2694,7 +2758,7 @@ paths:
         "429": {$ref: "#/components/responses/LockedOut"}
         "404": {$ref: "#/components/responses/NotFound"}
         "409":
-          description: A restore is running, the plan has changed since it was made (both hashes in the message), or the duty cycle is above 80 % and the plan has radio commands (the percentage in the message)
+          description: A restore is running, the plan has changed since it was made (both hashes in the message), the duty cycle is above 80 % and the plan has radio commands (the percentage in the message), or the Cube is not served (as POST …/restore/plan)
           content:
             application/json:
               schema: {$ref: "#/components/schemas/Error"}
@@ -3399,7 +3463,7 @@ paths:
         stream's user is told in "notification", on that user's streams
         alone); the server's own, source system:
         server_started, server_stopping, settings_read, restart, reboot,
-        reboot_cancelled, update, update_result, backup, backup_deleted,
+        reboot_cancelled, update, update_result, update_postponed, backup, backup_deleted,
         backups_pruned, log_pruned, audit_pruned, log_rotated, restore_started; a Cube's own:
         address_changed, cube_gone; a change made through the API, source
         config: change, with the action, target, set, changes and subject in
@@ -3533,6 +3597,8 @@ paths:
                 auth.password_reveal: {value: "true", default: "true", set: false, in_effect: "true", applies: now}
                 announce: {value: auto, default: auto, set: false, in_effect: "off", applies: restart}
                 update.channel: {value: alpha, default: alpha, set: false, in_effect: alpha, applies: now}
+                update.auto: {value: "off", default: "off", set: false, in_effect: "off", applies: now}
+                update.auto_window: {value: "03:00-05:00", default: "03:00-05:00", set: false, in_effect: "03:00-05:00", applies: now}
                 poll_interval: {value: 10s, default: 10s, set: false, in_effect: 10s, applies: restart}
                 node.id: {value: 01a1ae5a-6bee-7ed4-bb4e-3baa2c43fe55, set: true, read_only: true}
         "401": {$ref: "#/components/responses/Unauthorized"}
@@ -3562,17 +3628,21 @@ paths:
         /api/v1/login takes a password (off, the users sign in by OPAQUE
         alone); integrations.requests, true or false, whether
         integrations may ask to be registered; auth.keep_open, true or
-        false, whether a server without users is kept open on purpose, so
-        that the web UI does not ask for the first owner (it changes
-        nothing about who is let in, counts only while the server has no
-        users, goes with the first user, and true is 409 on a server with
+        false, whether a server without regular users is kept open on
+        purpose, so that the web UI does not ask for the first owner (it
+        changes nothing about who is let in, counts only while the server
+        has no regular users, and goes with the first regular user, not
+        with an integration's; true is 409 on a server with regular
         users); auth.password_reveal, true or false, whether the web UI's
         password fields offer their eye (true by default; GET /healthz says
         it before anyone signs in); announce, auto, on or off,
         the announcement on the LAN at the next start; update.channel, devel, nightly, alpha, beta, rc or stable,
         the releases the box takes (its own flavour's and every more
-        stable one's; the default is the build's flavour); null goes back
-        to the default. Every value is checked before any is written. The
+        stable one's; the default is the build's flavour); update.auto, off
+        or night, whether the box installs a release itself, inside the
+        window update.auto_window, HH:MM-HH:MM in the server's time, at
+        least 30 minutes, its end past midnight allowed (03:00-05:00 by
+        default); null goes back to the default. Every value is checked before any is written. The
         answer is that of GET.
       parameters: [{$ref: "#/components/parameters/idempotencyKey"}]
       requestBody:
@@ -3667,7 +3737,7 @@ paths:
         "401": {$ref: "#/components/responses/Unauthorized"}
         "429": {$ref: "#/components/responses/LockedOut"}
         "403":
-          description: The caller's role lacks update, no API token configured, no update helper, or Windows
+          description: The caller's role lacks update, no API token configured, no update helper, or the reason GET's blocked gives (a package manager, a job object on Windows, a listen address the helper cannot ask, a development build)
           content:
             application/json:
               schema: {$ref: "#/components/schemas/Error"}
@@ -3681,10 +3751,77 @@ paths:
           content:
             application/json:
               schema: {$ref: "#/components/schemas/Error"}
+  /api/v1/update/answer:
+    put:
+      summary: Answer the question of the automatic update, for the box
+      x-capability: update
+      description: |
+        Where automatic updates are on (the setting update.auto at night)
+        and an update is due, GET /api/v1/update says ask; the answer is
+        the box's, kept in the setting update.answer. now starts the update
+        at once, as POST /api/v1/update does; tonight ends the question for
+        the version, which the night installs; skip holds the version back
+        from the night, and the question with it, until a newer release is
+        out. tonight and skip need automatic updates on. Audited as
+        update.answer, a line of the log under Configuration.
+      parameters: [{$ref: "#/components/parameters/idempotencyKey"}]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [version, answer]
+              properties:
+                version: {type: string, description: "The version asked about, latest of GET /api/v1/update"}
+                answer: {type: string, enum: [now, tonight, skip]}
+      responses:
+        "200":
+          description: Kept (tonight, skip); the answer is that of GET /api/v1/update
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/UpdateInfo"}
+        "202":
+          description: Install now requested, as POST /api/v1/update answers
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  ok: {type: boolean}
+                  requested: {type: string}
+                  channel: {type: string}
+        "400":
+          description: Not a version and an answer
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/Error"}
+        "401": {$ref: "#/components/responses/Unauthorized"}
+        "403":
+          description: The caller's role lacks update; for now, as POST /api/v1/update refuses
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/Error"}
+        "409":
+          description: "Not the version offered, automatic updates off (tonight, skip), or as POST /api/v1/update refuses (now)"
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/Error"}
+        "429": {$ref: "#/components/responses/LockedOut"}
+        "503":
+          description: The server has no store
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/Error"}
   /api/v1/restart:
     get:
       summary: Whether the server can be restarted from here, and who starts it again
-      x-capability: restart
+      x-capability: restart or update
+      description: |
+        A holder of update reads it as well as one of restart, since every
+        update restarts the server: without restart, available is false and
+        blocked is 'capability "restart" required', as its own POST would be;
+        the rest is a restart holder's, by and refused included.
       responses:
         "200":
           description: The restart's state for this caller
@@ -3737,12 +3874,13 @@ paths:
       x-capability: restart
       description: |
         Reads the settings file again and applies MASSIMO_API_TOKEN at once, as
-        SIGHUP does, and checkpoints the store; every other setting that
-        changed applies at the next start. The server also reads the file by
-        itself within seconds of a change. A setting the next start would
-        refuse is not refused here: refused says it, as GET /api/v1/restart
-        does until a read finds nothing refused. Sends nothing to a Cube, so
-        a retry is harmless.
+        SIGHUP does, and rotates the log file and checkpoints the store,
+        whatever the read finds; every other setting that changed applies at
+        the next start. The server also reads the file by itself within
+        seconds of a change. A setting the next start would refuse is not
+        refused here: refused says it, as GET /api/v1/restart does until a
+        read finds nothing refused. Sends nothing to a Cube, so a retry is
+        harmless.
       responses:
         "200":
           description: What reading the file again found
@@ -3759,7 +3897,8 @@ paths:
               schema: {$ref: "#/components/schemas/Error"}
         "500":
           description: >-
-            The settings file could not be read, and nothing changed; the log's
+            The settings file could not be read, and no setting changed, though
+            the log file was rotated and the store checkpointed; the log's
             settings_read is a warning where it does not parse, or is there but
             cannot be read
           content:
@@ -3898,7 +4037,8 @@ components:
       description: >-
         A session or an API key of a user of the store, which names the
         user whose role grants the capabilities (x-capability on each
-        operation, docs/api-v1.md "Authentication"); without a store,
+        operation, two joined by "or" where either will do,
+        docs/api-v1.md "Authentication"); without a store,
         the one token of MASSIMO_API_TOKEN or -token. Required once a
         user exists, or a token is set. Ten failed checks from one
         address within a minute lock it out for five minutes (429).
@@ -4214,6 +4354,11 @@ components:
       content:
         application/json:
           schema: {$ref: "#/components/schemas/Error"}
+    NotServed:
+      description: "The store keeps a row of the Cube, but no runtime serves it: it takes no backup and no restore; its stored backups can still be listed, downloaded, compared and deleted"
+      content:
+        application/json:
+          schema: {$ref: "#/components/schemas/Error"}
     NotConnected:
       description: The Cube is not connected
       content:
@@ -4238,6 +4383,15 @@ components:
         sha256: {type: string}
         user: {type: string, description: Who asked; absent for the server's own}
         note: {type: string}
+    UnservedCube:
+      type: object
+      description: A Cube row of the store that no runtime serves and that keeps backups, as GET /api/v1/backups/unserved lists it
+      required: [serial, backups, newest]
+      properties:
+        serial: {type: string, example: KEQ0000000}
+        name: {type: string, description: The row's name; absent where it has none}
+        backups: {type: integer, description: The backups kept}
+        newest: {type: string, format: date-time, description: When the newest backup was taken}
     BackupList:
       type: object
       required: [backups]
@@ -4337,7 +4491,7 @@ components:
         name: {type: string, description: "The login name: 1 to 64 of letters, digits, '.', '_', '-' and '@', case does not matter", example: anna}
         display_name: {type: string, maxLength: 64}
         role: {type: string, description: "A role's key; viewer when absent, owner for the first owner"}
-        password: {type: string, description: Absent for a user with keys only; this or record for the first owner}
+        password: {type: string, minLength: 8, maxLength: 64, description: "8 to 64 characters, Unicode code points as sent, without the user's or the server's name. Absent for a user with keys only, and an empty one counts as absent; this or record for the first owner"}
         record: {type: string, description: "A password of auth_version 2 in place of password: the registration record, base64url (POST /api/v1/users/{name}/register)"}
         ksf: {type: string, description: "The record's key stretching, as the registration answered it: m=<KiB>,t=<passes>,p=<lanes>", example: "m=19456,t=2,p=1"}
         disabled: {type: boolean}
@@ -4349,7 +4503,7 @@ components:
         role: {type: string}
         disabled: {type: boolean}
         expires_at: {type: string, format: date-time, nullable: true, description: null clears the end date}
-        password: {type: string, description: Empty removes the password}
+        password: {type: string, description: "Empty removes the password; any other has 8 to 64 characters, Unicode code points as sent, without the user's or the server's name"}
         current_password: {type: string, description: "Required when a user sets its own password, unless proof is given"}
         record: {type: string, description: "A password of auth_version 2 in place of password: the registration record, base64url"}
         ksf: {type: string, description: "The record's key stretching: m=<KiB>,t=<passes>,p=<lanes>", example: "m=19456,t=2,p=1"}
@@ -4641,6 +4795,7 @@ components:
         last_used_at: {type: string, format: date-time}
         last_used_from: {type: string, description: The client's address}
         key_id: {type: integer, description: "The key a session was made from (POST /api/v1/login/key); absent for a session of a sign-in and for a key"}
+        from_settings: {type: boolean, description: "In a user's token list, true on the key that is the settings file's MASSIMO_API_TOKEN, which is changed or removed there and not revoked through the API; absent on any other"}
     Me:
       type: object
       properties:
@@ -4661,7 +4816,7 @@ components:
         integration:
           type: object
           nullable: true
-          description: "The registered integration whose key it is; null for any other key"
+          description: "The registered integration whose key it is; null for any other key, and on an open server, which does not look at the key (mode open)"
           properties:
             uuid: {type: string}
             name: {type: string, description: "Its name as the owner gives it, its own user's display name"}
@@ -4670,7 +4825,7 @@ components:
             instance_id: {type: string}
         acts_for:
           type: object
-          description: "With X-MassimoHA-On-Behalf-Of: the integration's user the call acts for; capabilities is then what the chain leaves"
+          description: "With X-MassimoHA-On-Behalf-Of: the integration's user the call acts for; capabilities is then what the chain leaves. On an open server the header is not read and nothing is attributed"
           properties:
             id: {type: string}
             name: {type: string}
@@ -4793,9 +4948,9 @@ components:
       type: object
       required: [available]
       properties:
-        available: {type: boolean, description: Whether this caller's POST would restart the server now}
+        available: {type: boolean, description: "Whether this caller's POST would restart the server now; false for a caller without restart"}
         by: {type: string, enum: [systemd, launchd, windows, exit], description: Who starts the server again; absent when nobody would}
-        blocked: {type: string, description: Why the restart is not available}
+        blocked: {type: string, description: "Why the restart is not available, 'capability \"restart\" required' for a caller without restart"}
         pending:
           type: array
           items: {type: string}
@@ -4908,7 +5063,7 @@ components:
             type: object
             required: [addr, listening]
             properties:
-              serial: {type: string}
+              serial: {type: string, description: "The Cube's serial; absent until the Cube of a plain MASSIMO_CUBE_ADDRESS reports it."}
               discovery_serial: {type: string, description: "The serial it answers discovery with: the Cube's proxy serial where set, else the Cube's; absent where it answers no discovery."}
               addr: {type: string}
               listening: {type: boolean}
@@ -5001,14 +5156,41 @@ components:
         channel: {type: string, description: "The update channel: MASSIMO_UPDATE_CHANNEL, else the setting update.channel, else the apt source's suite where apt owns the binary, else the flavour"}
         suite: {type: string, description: "The suite of the apt source, where apt owns the binary; where it differs from channel, the next update switches the source to the channel's suite"}
         manager: {type: string, description: "The package manager that owns the binary (apt, brew); absent on a box massimo install set up"}
-        latest: {type: string, description: "Newest signed release the channel takes: of its own flavour or a more stable one"}
-        release_url: {type: string}
-        available: {type: boolean, description: latest is newer than current}
+        latest: {type: string, description: "The version an update would install: the newest signed release the channel takes, of its own flavour or a more stable one; where apt or brew owns the binary, the newest its package source has, never newer than the signed release"}
+        released: {type: string, description: "The newest signed release, where the package source has it not yet"}
+        source_error: {type: string, description: "Why the package source (apt's index, brew's formula) could not be read; nothing is available then"}
+        held: {type: string, description: "A version the update helper found nothing to install for (up-to-date), held back until a check made after it finds it in the package source"}
+        release_url: {type: string, description: "The page of the newest signed release"}
+        available: {type: boolean, description: "latest is newer than current, and not held back"}
         checked_at: {type: string, format: date-time}
         check_error: {type: string}
         can_update: {type: boolean, description: POST would start an update}
-        blocked: {type: string, description: "Why an update cannot be started from the API (a package manager owning the binary without a helper of its own, no token, no helper, a development build)"}
+        blocked: {type: string, description: "Why an update cannot be started from the API (a package manager owning the binary without a helper of its own, no token, no helper, on Windows and under brew a listen address the helper cannot ask /healthz at, named by its setting, a development build)"}
         helper: {$ref: "#/components/schemas/UpdateStatus"}
+        auto:
+          type: object
+          description: "The automatic update at night; absent without a store"
+          required: [mode, window, ask]
+          properties:
+            mode: {type: string, enum: ["off", night], description: The setting update.auto}
+            window: {type: string, description: "The setting update.auto_window, HH:MM-HH:MM in the server's time"}
+            next: {type: string, format: date-time, description: "When the box will try: inside the window now, else at its next opening; absent while no update is due or the version is skipped"}
+            waits: {type: string, enum: [settings], description: "What the next try waits for, where next is set: settings while the server's next start refuses the settings file (GET /api/v1/restart's refused); absent otherwise, a busy radio included"}
+            answer:
+              type: object
+              description: "The box's answer to the question (PUT /api/v1/update/answer), where it names the version offered or a newer one"
+              required: [version, answer, at]
+              properties:
+                version: {type: string}
+                answer: {type: string, enum: [tonight, skip]}
+                by:
+                  type: object
+                  description: Who answered; absent for the owner's key
+                  properties:
+                    name: {type: string}
+                    display_name: {type: string}
+                at: {type: string, format: date-time}
+            ask: {type: boolean, description: "The page asks a holder of update Install now, Tonight or Skip this version: automatic updates on, an update due, no answer for it"}
         history:
           type: array
           description: The last ten updates, newest first; empty without a store
@@ -5028,9 +5210,11 @@ components:
         manager: {type: string, description: "The box's package manager (apt, brew), for an update from outside"}
         from: {type: string, description: The version that ran before}
         to: {type: string, description: "The version asked for, where Massimo started it"}
-        reached: {type: string, description: The version the next start ran; absent while the update runs}
+        channel: {type: string, description: "The channel asked for, where Massimo started it; for an update from outside, the one the box followed at the start that found it"}
+        reached: {type: string, description: "The version the next start ran, the one asked for or another apt chose; absent while the update runs"}
         reached_at: {type: string, format: date-time}
-        result: {type: string, enum: [failed, rolled-back, up-to-date], description: "The update helper's outcome where it ended without reaching to"}
+        auto: {type: boolean, description: "The server started it itself, at night; by is absent then"}
+        result: {type: string, enum: [failed, rolled-back, up-to-date], description: "The update helper's outcome where the box did not stay on a new version, rolled-back after reached ran: taken at the next read or the next update started where the helper did not restart the server, else at the next start"}
     UpdateStatus:
       type: object
       description: The update helper's last run
@@ -5100,6 +5284,7 @@ components:
               uuid: {type: string, format: uuid, description: "The row's, for POST /api/v1/cubes's restore"}
               name: {type: string, description: "The name it had; empty where it had none"}
               removed_at: {type: string, format: date-time, description: When it was removed}
+        backups: {type: integer, description: "In GET /api/v1/cubes: the backups the store keeps of the serial's row, which GET …/backups lists while no runtime serves it; 0 without a row; absent in the answer of a discovery"}
         found_at: {type: string, format: date-time, description: When the server first saw it}
         last_seen: {type: string, format: date-time, description: Its latest answer}
     Discovery:
@@ -5125,7 +5310,7 @@ components:
         warning: {type: string, description: Set while something needs the owner.}
     Cube:
       type: object
-      required: [serial, address, configured_address, follow_discovery, proxy_virtual, hidden, connected, link, budget, pending_radiograms, updated]
+      required: [serial, address, configured_address, follow_discovery, proxy_virtual, hidden, backups, connected, link, budget, pending_radiograms, updated]
       properties:
         serial: {type: string}
         name: {type: string, description: "User-friendly name from the store (seeded from MASSIMO_CUBE_<SN>_NAME), when set"}
@@ -5136,6 +5321,7 @@ components:
           type: array
           description: The settings file's lines for this Cube whose values differ from the store's, which wins
           items: {$ref: "#/components/schemas/FileDifference"}
+        backups: {type: integer, description: "The backups the store keeps of the Cube (GET …/backups); 0 for a Cube without a row in the store, and without a store"}
         configured_address: {type: string, description: "The stored address; empty: from discovery (address is where it connects now)"}
         follow_discovery: {type: boolean}
         proxy_address: {type: string, description: "The configured proxy address; empty: the default"}

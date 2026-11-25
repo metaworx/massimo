@@ -4,8 +4,10 @@
 package server
 
 import (
+	"bytes"
 	"context"
 	"crypto/sha256"
+	"encoding/base64"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -24,6 +26,7 @@ import (
 	"testing/fstest"
 	"time"
 
+	"go.metaworx.ch/massimo/internal/credits"
 	"go.metaworx.ch/massimo/internal/cubelan"
 	"go.metaworx.ch/massimo/internal/testkit"
 )
@@ -91,6 +94,20 @@ func TestUIServed(t *testing.T) {
 	if code, _, body := get("/ui/vendor/opaque.LICENSE"); code != 200 || !strings.HasPrefix(body, "MIT License") {
 		t.Fatalf("GET /ui/vendor/opaque.LICENSE: %d", code)
 	}
+	// The credits' ETag holds Go's version, which the file carries.
+	if resp, err := http.Get(ts.URL + "/ui/credits.json"); err != nil {
+		t.Fatal(err)
+	} else if resp.Body.Close(); !strings.HasSuffix(resp.Header.Get("ETag"), "/credits.json/go"+etagChars(credits.GoVersion())+`"`) {
+		t.Fatalf("GET /ui/credits.json: ETag %q, want Go's version %s in it", resp.Header.Get("ETag"), credits.GoVersion())
+	}
+	// The credits, without a token: the bytes internal/credits serves.
+	if code, ct, body := get("/ui/credits.json"); code != 200 || !strings.HasPrefix(ct, "application/json") || body != string(credits.JSON()) {
+		t.Fatalf("GET /ui/credits.json: %d %s, %d bytes, want the %d of internal/credits", code, ct, len(body), len(credits.JSON()))
+	}
+	// The word list a suggested password draws from, a file as the others.
+	if code, ct, body := get("/ui/words-en.txt"); code != 200 || !strings.HasPrefix(ct, "text/plain") || !strings.HasPrefix(body, "abacus\nabdomen\n") {
+		t.Fatalf("GET /ui/words-en.txt: %d %s %q", code, ct, body[:min(40, len(body))])
+	}
 	// The service worker and the manifest beside the page, so that the
 	// worker's scope and the manifest's addresses are the page's; the
 	// icons the manifest names.
@@ -137,7 +154,7 @@ func TestUIServed(t *testing.T) {
 		}
 	}
 	// Every file carries an ETag and answers 304 to it; no-cache stays.
-	for _, p := range []string{"/", "/ui/app.js", "/ui/i18n/de.json"} {
+	for _, p := range []string{"/", "/ui/app.js", "/ui/i18n/de.json", "/ui/credits.json"} {
 		resp, err := http.Get(ts.URL + p)
 		if err != nil {
 			t.Fatal(err)
@@ -475,6 +492,125 @@ func TestVendoredOpaque(t *testing.T) {
 	readme, _ := os.ReadFile("ui/vendor/README.md")
 	if !strings.Contains(string(readme), want) {
 		t.Error("ui/vendor/README.md does not name the file's SHA-256")
+	}
+}
+
+// TestWordList checks the word list a suggested password draws from
+// (ui/words-en.txt, third_party/eff-wordlist/): the bytes of EFF's long
+// list with its dice numbers dropped, held to their SHA-256, which the
+// directory's note names, and 7,776 words, each once, of a-z and "-"
+// alone, as the page's suggestion (ui/src/shared/suggest.ts) counts on;
+// and the directory's LICENSE, CC BY 4.0's legal code, to its SHA-256.
+func TestWordList(t *testing.T) {
+	t.Parallel()
+	b, err := uiFiles.ReadFile("ui/words-en.txt")
+	if err != nil {
+		t.Fatal(err)
+	}
+	const want = "6d557f0693958fb5e650b68b5bee585eb82cf4da32965505c789e924743bc522"
+	if got := fmt.Sprintf("%x", sha256.Sum256(b)); got != want {
+		t.Errorf("ui/words-en.txt: SHA-256 %s, want %s", got, want)
+	}
+	note, err := os.ReadFile("../../third_party/eff-wordlist/MASSIMO.md")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(note), want) {
+		t.Error("third_party/eff-wordlist/MASSIMO.md does not name the file's SHA-256")
+	}
+	// The licence's text is Creative Commons' legal code as fetched, which
+	// the note names by its SHA-256 too.
+	legal, err := os.ReadFile("../../third_party/eff-wordlist/LICENSE")
+	if err != nil {
+		t.Fatal(err)
+	}
+	const code = "9ba9550ad48438d0836ddab3da480b3b69ffa0aac7b7878b5a0039e7ab429411"
+	if got := fmt.Sprintf("%x", sha256.Sum256(legal)); got != code {
+		t.Errorf("third_party/eff-wordlist/LICENSE: SHA-256 %s, want %s, CC BY 4.0's legal code", got, code)
+	}
+	if !strings.Contains(string(note), code) {
+		t.Error("third_party/eff-wordlist/MASSIMO.md does not name the legal code's SHA-256")
+	}
+	if !bytes.HasSuffix(b, []byte("\n")) {
+		t.Error("ui/words-en.txt does not end with a newline")
+	}
+	word := regexp.MustCompile(`^[a-z]+(-[a-z]+)*$`)
+	seen := map[string]bool{}
+	for i, w := range strings.Split(strings.TrimSuffix(string(b), "\n"), "\n") {
+		if !word.MatchString(w) {
+			t.Errorf("ui/words-en.txt line %d: %q is no word of a-z and -", i+1, w)
+		}
+		if seen[w] {
+			t.Errorf("ui/words-en.txt line %d: %q again", i+1, w)
+		}
+		seen[w] = true
+	}
+	if len(seen) != 7776 {
+		t.Errorf("ui/words-en.txt: %d words, want 7776", len(seen))
+	}
+}
+
+// opaqueCrate is the path of a Rust crate's sources that the
+// WebAssembly of opaque.js keeps: <crate>-<version>/src/.
+var opaqueCrate = regexp.MustCompile(`/([A-Za-z0-9_-]+?)-([0-9]+\.[0-9]+\.[0-9]+[0-9A-Za-z.+-]*)/src/`)
+
+// TestVendoredOpaqueCrates checks that the opaque.js row of
+// ui/vendor/README.md names, in Includes, the Rust crates the file's
+// WebAssembly names, each with its version, and no other, so that an
+// update of the file cannot leave the list behind.
+func TestVendoredOpaqueCrates(t *testing.T) {
+	t.Parallel()
+	js, err := uiFiles.ReadFile("ui/vendor/opaque.js")
+	if err != nil {
+		t.Fatal(err)
+	}
+	var wasm []byte
+	for _, run := range regexp.MustCompile(`[A-Za-z0-9+/]{1000,}={0,2}`).FindAll(js, -1) {
+		if len(run) > len(wasm) {
+			wasm = run
+		}
+	}
+	if wasm, err = base64.StdEncoding.DecodeString(string(wasm)); err != nil || !bytes.HasPrefix(wasm, []byte("\x00asm")) {
+		t.Fatalf("opaque.js holds no WebAssembly in base64: %v", err)
+	}
+	named := map[string]bool{}
+	for _, m := range opaqueCrate.FindAllSubmatch(wasm, -1) {
+		named[string(m[1])+" "+string(m[2])] = true
+	}
+	readme, err := os.ReadFile("ui/vendor/README.md")
+	if err != nil {
+		t.Fatal(err)
+	}
+	var head []string
+	listed := map[string]bool{}
+	for line := range strings.Lines(string(readme)) {
+		cells := strings.Split(strings.Trim(strings.TrimSpace(line), "|"), "|")
+		switch {
+		case head == nil && strings.Contains(line, "| Includes |"):
+			head = cells
+		case head != nil && strings.HasPrefix(line, "| `opaque.js` |"):
+			for i, h := range head {
+				if strings.TrimSpace(h) != "Includes" {
+					continue
+				}
+				for _, c := range strings.Split(cells[i], ",") {
+					listed[strings.ReplaceAll(strings.TrimSpace(c), "`", "")] = true
+				}
+			}
+		}
+	}
+	if len(named) == 0 || len(listed) == 0 {
+		t.Fatalf("%d crates named in the file, %d listed in the README", len(named), len(listed))
+	}
+	for c := range named {
+		if !listed[c] {
+			t.Errorf("opaque.js names the crate %s, which ui/vendor/README.md's Includes does not list", c)
+		}
+	}
+	for c := range listed {
+		if !named[c] {
+			t.Errorf("ui/vendor/README.md's Includes lists %s, which opaque.js does not name", c)
+		}
 	}
 }
 
@@ -1159,10 +1295,16 @@ func TestUITranslations(t *testing.T) {
 	}
 	// The string literals of t("…") and tn("…") in the scripts, a key
 	// that is not put together ("help." + key); tn's have their plural
-	// forms, .one and .other at least.
+	// forms, .one and .other at least. Not in parts.js, the bundle, whose
+	// parts are read from their sources below: its minifier may name any
+	// function of theirs $t or tn, whose first argument is then taken for
+	// a text's key.
 	call := regexp.MustCompile(`\b(tn?)\("([^"]+)"\s*[,)]`)
 	scripts, _ := fs.Glob(uiFiles, "ui/*.js")
 	for _, f := range scripts {
+		if f == "ui/parts.js" {
+			continue
+		}
 		b, err := uiFiles.ReadFile(f)
 		if err != nil {
 			t.Fatal(err)

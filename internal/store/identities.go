@@ -116,9 +116,13 @@ func (s *Store) Identities(ctx context.Context, userID int64) ([]Identity, error
 
 // AddIdentity assigns an e-mail at a provider to a user, a pre-link that
 // the first sign-in with it binds. An e-mail waiting at the provider for
-// another user, or for this one, is ErrIdentityExists.
+// another user, or for this one, is ErrIdentityExists; an integration's
+// user is ErrIntegrationUser.
 func (s *Store) AddIdentity(ctx context.Context, userID int64, provider, email string, by int64) (Identity, error) {
 	if err := s.writable(); err != nil {
+		return Identity{}, err
+	}
+	if err := noWayIn(ctx, s.db, "id = ?", userID); err != nil {
 		return Identity{}, err
 	}
 	email, err := normalEmail(email)
@@ -151,9 +155,13 @@ func (s *Store) AddIdentity(ctx context.Context, userID int64, provider, email s
 
 // AddSubjectIdentity assigns the user id at a provider (its sub) to a
 // user, bound from the start: the next sign-in with it finds the user.
-// A subject another identity at the provider has is ErrIdentityExists.
+// A subject another identity at the provider has is ErrIdentityExists;
+// an integration's user is ErrIntegrationUser.
 func (s *Store) AddSubjectIdentity(ctx context.Context, userID int64, provider, subject string, by int64) (Identity, error) {
 	if err := s.writable(); err != nil {
+		return Identity{}, err
+	}
+	if err := noWayIn(ctx, s.db, "id = ?", userID); err != nil {
 		return Identity{}, err
 	}
 	subject = strings.TrimSpace(subject)
@@ -404,9 +412,13 @@ func groupsText(groups []string) string {
 // LinkIdentity links an account at a provider to a user, the user's own
 // doing: the account another user's is ErrIdentityTaken; the user's own
 // already, its details are written; else it replaces the user's other
-// identities at the provider, bound from now on.
+// identities at the provider, bound from now on. An integration's user
+// is ErrIntegrationUser.
 func (s *Store) LinkIdentity(ctx context.Context, userID, providerID int64, subject string, d IdentityDetails) (Identity, error) {
 	if err := s.writable(); err != nil {
+		return Identity{}, err
+	}
+	if err := noWayIn(ctx, s.db, "id = ?", userID); err != nil {
 		return Identity{}, err
 	}
 	if subject == "" {
@@ -457,9 +469,12 @@ func (s *Store) LinkIdentity(ctx context.Context, userID, providerID int64, subj
 // UpdateIdentity changes the e-mail, or the user id there, of one of a
 // user's identities no sign-in has used yet (ErrIdentityUsed): an e-mail
 // makes it a waiting one, a user id a bound one. The same rules as
-// AddIdentity and AddSubjectIdentity hold.
+// AddIdentity and AddSubjectIdentity hold, ErrIntegrationUser among them.
 func (s *Store) UpdateIdentity(ctx context.Context, userID, id int64, email, subject string) (Identity, error) {
 	if err := s.writable(); err != nil {
+		return Identity{}, err
+	}
+	if err := noWayIn(ctx, s.db, "id = ?", userID); err != nil {
 		return Identity{}, err
 	}
 	subject = strings.TrimSpace(subject)
