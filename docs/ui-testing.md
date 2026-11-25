@@ -863,7 +863,9 @@ The suite's helpers for it are in `tools/ui-test/helpers.py`
   The page shows it at its next read:
   the test reads the rooms (`loadRooms()`),
   or puts the same into the page itself where that is the event under test,
-  and a check after it waits.
+  and a check after it waits:
+  `wait_until`, or `settled(page, look, ok)` where a look takes several calls
+  (`test_room_marks.py`'s `Told`, `test_rooms.py`).
   A read that the patterns of several changes match takes each of them,
   so a test's own change under another spelling of the pattern goes with them
   (Playwright runs the later of two routes alone).

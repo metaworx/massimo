@@ -71,6 +71,27 @@ def wait_until(page, expr, seconds):
     return False
 
 
+def settled(page, look, ok, seconds=5):
+    """Looks (look(), from here) until ok holds of what it saw, for
+    seconds at most, and returns whether it held and the last look: for
+    a check of what a test told the page's reads (Reads.device), which a
+    server's own event of the device draws over until keep's read brings
+    it back, and which takes several of Playwright's calls to look at; a
+    Playwright error of a look, an element drawn anew meanwhile, is a
+    look that does not hold."""
+    end = time.time() + seconds
+    while True:
+        try:
+            got = look()
+        except Error as e:
+            got = e
+        if not isinstance(got, Error) and ok(got):
+            return True, got
+        if time.time() >= end:
+            return False, got
+        page.wait_for_timeout(100)
+
+
 def pause_clock(page, ahead_ms=50):
     """Playwright's clock paused at the page's now and ahead_ms on. At the
     pause Playwright runs once every timer due up to the pause's time, a
