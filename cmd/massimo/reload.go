@@ -90,12 +90,13 @@ func stampOf(path string) fileStamp {
 	return fileStamp{size: fi.Size(), mod: fi.ModTime().UnixNano(), ok: true}
 }
 
-// watchSettings calls reload once the file at path has changed and held
-// still for one more look, so that a file an editor is still writing is
-// not read; a missing file changes nothing, since an editor may be
-// replacing it. It returns when ctx ends.
-func watchSettings(ctx context.Context, path string, every time.Duration, reload func()) {
-	applied, seen := stampOf(path), fileStamp{}
+// watchSettings calls reload once the file at path has changed from
+// applied, the file as the start read it (startStamp), and held still
+// for one more look, so that a file an editor is still writing is not
+// read; a missing file changes nothing, since an editor may be replacing
+// it. It returns when ctx ends.
+func watchSettings(ctx context.Context, path string, applied fileStamp, every time.Duration, reload func()) {
+	seen := fileStamp{}
 	t := time.NewTicker(every)
 	defer t.Stop()
 	for {

@@ -24,6 +24,7 @@ func main() {
 		os.Exit(2)
 	}
 	useServiceDefaults()
+	startStamp = stampOf(env.File())
 	if startNotes, err = env.LoadFile(env.File()); err != nil {
 		fmt.Fprintln(os.Stderr, "error:", err)
 		os.Exit(1)
@@ -106,6 +107,12 @@ func main() {
 // (warnNotes), config after the settings, and serve in its log after its
 // server_started (AP StartConfiguration, D3-B, D33-A).
 var startNotes []env.Note
+
+// startStamp is the settings file's size and time just before the start
+// read it, where serve's watch begins (watchSettings): an edit made
+// while serve starts, before its watch looks for the first time, is
+// read again, not taken as the file the start read.
+var startStamp fileStamp
 
 // warnNotes says each note on the settings file on w, a line each:
 // "warning: <file>: <note>".

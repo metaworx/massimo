@@ -90,7 +90,7 @@ func TestWatchSettings(t *testing.T) {
 	calls := make(chan struct{}, 10)
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
-	go watchSettings(ctx, p, 20*time.Millisecond, func() { calls <- struct{}{} })
+	go watchSettings(ctx, p, stampOf(p), 20*time.Millisecond, func() { calls <- struct{}{} })
 	quiet := func(what string) {
 		t.Helper()
 		select {
@@ -114,6 +114,40 @@ func TestWatchSettings(t *testing.T) {
 	case <-calls:
 	case <-time.After(testkit.Scale(2 * time.Second)):
 		t.Fatal("no reload after the file came back changed")
+	}
+}
+
+// The watch starts from the file as the start read it (startStamp), not
+// as it finds it: an edit made while serve starts, before the watch's
+// first look, is read again, once (AP StartConfiguration, the notes'
+// test on CI).
+func TestWatchSettingsFromTheStart(t *testing.T) {
+	t.Parallel()
+	p := filepath.Join(t.TempDir(), "env")
+	if err := os.WriteFile(p, []byte("MASSIMO_LOG=a\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	atStart := stampOf(p)
+	// The edit, a size of its own, before the watch begins.
+	if err := os.WriteFile(p+".new", []byte("MASSIMO_LOG=bb\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Rename(p+".new", p); err != nil {
+		t.Fatal(err)
+	}
+	calls := make(chan struct{}, 10)
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	go watchSettings(ctx, p, atStart, 20*time.Millisecond, func() { calls <- struct{}{} })
+	select {
+	case <-calls:
+	case <-time.After(testkit.Scale(5 * time.Second)):
+		t.Fatal("the edit made before the watch began: no reload")
+	}
+	select {
+	case <-calls:
+		t.Fatal("the edit made before the watch began: a second reload")
+	case <-time.After(150 * time.Millisecond):
 	}
 }
 
