@@ -1,4 +1,4 @@
-# Massimo — CI Conventions (v1.72.0)
+# Massimo — CI Conventions (v1.73.0)
 
 What CI does in this project, for whoever has to change it.
 `/AGENTS.md` names this file as the canonical owner of CI conventions,
@@ -854,6 +854,9 @@ Where CI differs, and why:
   (packaging/README.md, "Homebrew").
 - UI types runs `make ui-check`, the type check and then the hooks lint,
   with the runner's Node.js and npm; no action installs them.
+  TypeScript and Biome go into the job's checkout's `GUIDELINES/temp/ui-check/`,
+  where a host keeps them for all its checkouts (`tools/ui-check/README.md`),
+  so they are installed at every run, as before.
 - `make race` is the contract's recommended `-race`, in a Race job of its own
   beside Vet and test, so that neither waits for the other:
   about 7 minutes in CI, up to 9.6 in November 2026, before Block 4 of AP TestSpeed,
