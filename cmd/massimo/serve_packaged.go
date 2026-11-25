@@ -4,12 +4,16 @@
 package main
 
 import (
+	"context"
 	"fmt"
 	"os"
 	"path/filepath"
+	"runtime"
+	"slices"
 
 	"go.metaworx.ch/massimo/internal/install"
 	"go.metaworx.ch/massimo/internal/server"
+	"go.metaworx.ch/massimo/internal/update"
 )
 
 // packagedUpdate sets the update options of a box whose binary a package
@@ -19,7 +23,8 @@ import (
 // source, read at each check, unless the store names another, to which
 // the helper switches the source; and the helper must be on. Anywhere
 // else, and where the source is missing or MASSIMO_UPDATE_CHANNEL names
-// another channel, the manager's reason stays.
+// another channel, the manager's reason stays. A release is offered once
+// apt's index has it (aptNewest).
 func packagedUpdate(upd *server.UpdateOptions, m install.Manager, root string, getenv func(string) string) {
 	upd.Managed = m.String()
 	if m.Name != "apt" {
@@ -47,4 +52,31 @@ func packagedUpdate(upd *server.UpdateOptions, m install.Manager, root string, g
 		}
 		return ""
 	}
+	upd.Source = func(ctx context.Context, channel string) (string, error) {
+		return aptNewest(ctx, source, channel, runtime.GOARCH)
+	}
+}
+
+// aptNewest is the newest massimo in the apt index the next update
+// fetches, as a tag: the suite of channel where that is an update
+// channel, as the helper switches the source to it (aptSwitch), else the
+// source's own; of the source's repository and component, for goarch.
+func aptNewest(ctx context.Context, source, channel, goarch string) (string, error) {
+	f, err := install.ReadAptSource(source)
+	if err != nil {
+		return "", err
+	}
+	suite := f.Suite
+	if slices.Contains(update.Flavours, channel) {
+		suite = channel
+	}
+	component := f.Component
+	if component == "" {
+		component = "main"
+	}
+	arch := update.AptArch(goarch)
+	if arch == "" {
+		return "", fmt.Errorf("the apt repository has no packages for %s", goarch)
+	}
+	return update.AptNewest(ctx, nil, f.URI, suite, component, arch)
 }

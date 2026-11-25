@@ -243,6 +243,10 @@ func startServer(t *testing.T, opts ...startOpt) *rig {
 	for _, f := range c.edits {
 		f(&o)
 	}
+	if (o.Update.Channel != "" || o.Update.Flavour != "") && o.Update.Finder == nil {
+		// the server's own check (updateLoop) would ask GitHub
+		t.Fatal("startServer: an update channel without UpdateOptions.Finder")
+	}
 	if c.quiet {
 		o.PollInterval, o.RefreshInterval = time.Hour, 0
 	}

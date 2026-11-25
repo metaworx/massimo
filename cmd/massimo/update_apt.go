@@ -96,7 +96,7 @@ func aptUpdate(ctx context.Context, status func(update.Status), channel, health 
 	if err != nil {
 		return fail("", err)
 	}
-	from = debTag(before)
+	from = update.DebTag(before)
 	status(update.Status{State: "checking", From: from, Channel: channel})
 	if err := aptRollingKey(ctx, channel); err != nil {
 		return fail("", err)
@@ -125,7 +125,7 @@ func aptUpdate(ctx context.Context, status func(update.Status), channel, health 
 	if err != nil {
 		return fail("", err)
 	}
-	to := debTag(after)
+	to := update.DebTag(after)
 	if after == before {
 		fmt.Println("apt has nothing newer than", before)
 		msg := "apt has nothing newer yet"
@@ -292,18 +292,4 @@ func dpkgVersion(ctx context.Context) (string, error) {
 		return "", errors.New("dpkg-query: the package massimo is not installed")
 	}
 	return v, nil
-}
-
-// debTag is the version the binary of a package reports: the Makefile's
-// DEBVER read backwards, 0.13.0~alpha.1 for v0.13.0-alpha.1, and for a
-// build between tags the part git describe adds behind the +,
-// 0.13.0~alpha.1+3.gabc1234 for v0.13.0-alpha.1-3-gabc1234. A package of
-// the older form, ~ throughout, reads as it did.
-func debTag(v string) string {
-	base, build, between := strings.Cut(v, "+")
-	tag := "v" + strings.ReplaceAll(base, "~", "-")
-	if between {
-		tag += "-" + strings.ReplaceAll(build, ".", "-")
-	}
-	return tag
 }

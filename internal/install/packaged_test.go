@@ -285,3 +285,26 @@ func TestAptSuite(t *testing.T) {
 		t.Error("a missing file read")
 	}
 }
+
+// The source's three fields, as publish.sh writes them and in a local
+// form; a field it lacks stays empty, a comment or a continuation line
+// is none.
+func TestReadAptSource(t *testing.T) {
+	dir := t.TempDir()
+	for content, want := range map[string]AptSourceFields{
+		"# The Massimo apt repository\n# URIs: https://comment.invalid\nTypes: deb\nURIs: https://massimo.example.invalid/apt\nSuites: alpha\nComponents: main\nSigned-By: /usr/share/keyrings/massimo-archive-keyring.gpg\n": {
+			URI: "https://massimo.example.invalid/apt", Suite: "alpha", Component: "main"},
+		"Types: deb\nuris: file:/srv/apt\nsuites: devel nightly\n components: other\n": {URI: "file:/srv/apt", Suite: "devel"},
+	} {
+		p := filepath.Join(dir, "massimo.sources")
+		os.WriteFile(p, []byte(content), 0o644)
+		if got, err := ReadAptSource(p); err != nil || got != want {
+			t.Errorf("%q: %+v, %v; want %+v", content, got, err, want)
+		}
+	}
+	p := filepath.Join(dir, "none.sources")
+	os.WriteFile(p, []byte("Types: deb\nURIs: https://massimo.example.invalid/apt\n"), 0o644)
+	if _, err := ReadAptSource(p); err == nil {
+		t.Error("a source without a suite read")
+	}
+}

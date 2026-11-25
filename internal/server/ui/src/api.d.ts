@@ -1158,12 +1158,27 @@ export interface UpdateInfo {
    */
   manager?: string;
   /**
-   * Newest signed release the channel takes: of its own flavour or a more
-   * stable one
+   * The version an update would install: the newest signed release the channel
+   * takes, of its own flavour or a more stable one; where apt or brew owns the
+   * binary, the newest its package source has, never newer than the signed
+   * release
    */
   latest?: string;
+  /** The newest signed release, where the package source has it not yet */
+  released?: string;
+  /**
+   * Why the package source (apt's index, brew's formula) could not be read;
+   * nothing is available then
+   */
+  source_error?: string;
+  /**
+   * A version the update helper found nothing to install for (up-to-date), held
+   * back until a check made after it finds it in the package source
+   */
+  held?: string;
+  /** The page of the newest signed release */
   release_url?: string;
-  /** latest is newer than current */
+  /** latest is newer than current, and not held back */
   available: boolean;
   /** @format date-time */
   checked_at: string;
@@ -1178,6 +1193,45 @@ export interface UpdateInfo {
    */
   blocked?: string;
   helper?: UpdateStatus;
+  /** The automatic update at night; absent without a store */
+  auto?: {
+    /** The setting update.auto */
+    mode: "off" | "night";
+    /** The setting update.auto_window, HH:MM-HH:MM in the server's time */
+    window: string;
+    /**
+     * When the box will try: inside the window now, else at its next opening;
+     * absent while no update is due or the version is skipped
+     * @format date-time
+     */
+    next?: string;
+    /**
+     * What the next try waits for, where next is set: settings while the
+     * server's next start refuses the settings file (GET /api/v1/restart's
+     * refused); absent otherwise, a busy radio included
+     */
+    waits?: "settings";
+    /**
+     * The box's answer to the question (PUT /api/v1/update/answer), where it
+     * names the version offered or a newer one
+     */
+    answer?: {
+      version: string;
+      answer: "tonight" | "skip";
+      /** Who answered; absent for the owner's key */
+      by?: {
+        name?: string;
+        display_name?: string;
+      };
+      /** @format date-time */
+      at: string;
+    };
+    /**
+     * The page asks a holder of update Install now, Tonight or Skip this
+     * version: automatic updates on, an update due, no answer for it
+     */
+    ask: boolean;
+  };
   /** The last ten updates, newest first; empty without a store */
   history: UpdateEntry[];
 }
@@ -1220,6 +1274,8 @@ export interface UpdateEntry {
   reached?: string;
   /** @format date-time */
   reached_at?: string;
+  /** The server started it itself, at night; by is absent then */
+  auto?: boolean;
   /**
    * The update helper's outcome where the box did not stay on a new version,
    * rolled-back after reached ran: taken at the next read or the next update

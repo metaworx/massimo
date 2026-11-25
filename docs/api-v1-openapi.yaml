@@ -3463,7 +3463,7 @@ paths:
         stream's user is told in "notification", on that user's streams
         alone); the server's own, source system:
         server_started, server_stopping, settings_read, restart, reboot,
-        reboot_cancelled, update, update_result, backup, backup_deleted,
+        reboot_cancelled, update, update_result, update_postponed, backup, backup_deleted,
         backups_pruned, log_pruned, audit_pruned, log_rotated, restore_started; a Cube's own:
         address_changed, cube_gone; a change made through the API, source
         config: change, with the action, target, set, changes and subject in
@@ -3597,6 +3597,8 @@ paths:
                 auth.password_reveal: {value: "true", default: "true", set: false, in_effect: "true", applies: now}
                 announce: {value: auto, default: auto, set: false, in_effect: "off", applies: restart}
                 update.channel: {value: alpha, default: alpha, set: false, in_effect: alpha, applies: now}
+                update.auto: {value: "off", default: "off", set: false, in_effect: "off", applies: now}
+                update.auto_window: {value: "03:00-05:00", default: "03:00-05:00", set: false, in_effect: "03:00-05:00", applies: now}
                 poll_interval: {value: 10s, default: 10s, set: false, in_effect: 10s, applies: restart}
                 node.id: {value: 01a1ae5a-6bee-7ed4-bb4e-3baa2c43fe55, set: true, read_only: true}
         "401": {$ref: "#/components/responses/Unauthorized"}
@@ -3636,8 +3638,11 @@ paths:
         it before anyone signs in); announce, auto, on or off,
         the announcement on the LAN at the next start; update.channel, devel, nightly, alpha, beta, rc or stable,
         the releases the box takes (its own flavour's and every more
-        stable one's; the default is the build's flavour); null goes back
-        to the default. Every value is checked before any is written. The
+        stable one's; the default is the build's flavour); update.auto, off
+        or night, whether the box installs a release itself, inside the
+        window update.auto_window, HH:MM-HH:MM in the server's time, at
+        least 30 minutes, its end past midnight allowed (03:00-05:00 by
+        default); null goes back to the default. Every value is checked before any is written. The
         answer is that of GET.
       parameters: [{$ref: "#/components/parameters/idempotencyKey"}]
       requestBody:
@@ -3743,6 +3748,68 @@ paths:
               schema: {$ref: "#/components/schemas/Error"}
         "502":
           description: The release check failed
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/Error"}
+  /api/v1/update/answer:
+    put:
+      summary: Answer the question of the automatic update, for the box
+      x-capability: update
+      description: |
+        Where automatic updates are on (the setting update.auto at night)
+        and an update is due, GET /api/v1/update says ask; the answer is
+        the box's, kept in the setting update.answer. now starts the update
+        at once, as POST /api/v1/update does; tonight ends the question for
+        the version, which the night installs; skip holds the version back
+        from the night, and the question with it, until a newer release is
+        out. tonight and skip need automatic updates on. Audited as
+        update.answer, a line of the log under Configuration.
+      parameters: [{$ref: "#/components/parameters/idempotencyKey"}]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [version, answer]
+              properties:
+                version: {type: string, description: "The version asked about, latest of GET /api/v1/update"}
+                answer: {type: string, enum: [now, tonight, skip]}
+      responses:
+        "200":
+          description: Kept (tonight, skip); the answer is that of GET /api/v1/update
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/UpdateInfo"}
+        "202":
+          description: Install now requested, as POST /api/v1/update answers
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  ok: {type: boolean}
+                  requested: {type: string}
+                  channel: {type: string}
+        "400":
+          description: Not a version and an answer
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/Error"}
+        "401": {$ref: "#/components/responses/Unauthorized"}
+        "403":
+          description: The caller's role lacks update; for now, as POST /api/v1/update refuses
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/Error"}
+        "409":
+          description: "Not the version offered, automatic updates off (tonight, skip), or as POST /api/v1/update refuses (now)"
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/Error"}
+        "429": {$ref: "#/components/responses/LockedOut"}
+        "503":
+          description: The server has no store
           content:
             application/json:
               schema: {$ref: "#/components/schemas/Error"}
@@ -5089,14 +5156,41 @@ components:
         channel: {type: string, description: "The update channel: MASSIMO_UPDATE_CHANNEL, else the setting update.channel, else the apt source's suite where apt owns the binary, else the flavour"}
         suite: {type: string, description: "The suite of the apt source, where apt owns the binary; where it differs from channel, the next update switches the source to the channel's suite"}
         manager: {type: string, description: "The package manager that owns the binary (apt, brew); absent on a box massimo install set up"}
-        latest: {type: string, description: "Newest signed release the channel takes: of its own flavour or a more stable one"}
-        release_url: {type: string}
-        available: {type: boolean, description: latest is newer than current}
+        latest: {type: string, description: "The version an update would install: the newest signed release the channel takes, of its own flavour or a more stable one; where apt or brew owns the binary, the newest its package source has, never newer than the signed release"}
+        released: {type: string, description: "The newest signed release, where the package source has it not yet"}
+        source_error: {type: string, description: "Why the package source (apt's index, brew's formula) could not be read; nothing is available then"}
+        held: {type: string, description: "A version the update helper found nothing to install for (up-to-date), held back until a check made after it finds it in the package source"}
+        release_url: {type: string, description: "The page of the newest signed release"}
+        available: {type: boolean, description: "latest is newer than current, and not held back"}
         checked_at: {type: string, format: date-time}
         check_error: {type: string}
         can_update: {type: boolean, description: POST would start an update}
         blocked: {type: string, description: "Why an update cannot be started from the API (a package manager owning the binary without a helper of its own, no token, no helper, on Windows and under brew a listen address the helper cannot ask /healthz at, named by its setting, a development build)"}
         helper: {$ref: "#/components/schemas/UpdateStatus"}
+        auto:
+          type: object
+          description: "The automatic update at night; absent without a store"
+          required: [mode, window, ask]
+          properties:
+            mode: {type: string, enum: ["off", night], description: The setting update.auto}
+            window: {type: string, description: "The setting update.auto_window, HH:MM-HH:MM in the server's time"}
+            next: {type: string, format: date-time, description: "When the box will try: inside the window now, else at its next opening; absent while no update is due or the version is skipped"}
+            waits: {type: string, enum: [settings], description: "What the next try waits for, where next is set: settings while the server's next start refuses the settings file (GET /api/v1/restart's refused); absent otherwise, a busy radio included"}
+            answer:
+              type: object
+              description: "The box's answer to the question (PUT /api/v1/update/answer), where it names the version offered or a newer one"
+              required: [version, answer, at]
+              properties:
+                version: {type: string}
+                answer: {type: string, enum: [tonight, skip]}
+                by:
+                  type: object
+                  description: Who answered; absent for the owner's key
+                  properties:
+                    name: {type: string}
+                    display_name: {type: string}
+                at: {type: string, format: date-time}
+            ask: {type: boolean, description: "The page asks a holder of update Install now, Tonight or Skip this version: automatic updates on, an update due, no answer for it"}
         history:
           type: array
           description: The last ten updates, newest first; empty without a store
@@ -5119,6 +5213,7 @@ components:
         channel: {type: string, description: "The channel asked for, where Massimo started it; for an update from outside, the one the box followed at the start that found it"}
         reached: {type: string, description: "The version the next start ran, the one asked for or another apt chose; absent while the update runs"}
         reached_at: {type: string, format: date-time}
+        auto: {type: boolean, description: "The server started it itself, at night; by is absent then"}
         result: {type: string, enum: [failed, rolled-back, up-to-date], description: "The update helper's outcome where the box did not stay on a new version, rolled-back after reached ran: taken at the next read or the next update started where the helper did not restart the server, else at the next start"}
     UpdateStatus:
       type: object

@@ -259,7 +259,7 @@ the OpenAPI file carries each operation's as `x-capability`,
 | `cubes` | add, configure and remove Cubes | `POST /api/v1/cubes`, `PUT`/`DELETE /api/v1/cubes/{sn}` |
 | `cubes.reboot` | reboot a Cube, which drops the radiograms it has not delivered; seeded for no role | `POST /api/v1/cubes/{sn}/reboot` |
 | `settings` | the server's settings, its store and the settings in effect | `GET`/`PUT /api/v1/settings`, `GET /api/v1/store`, `GET /api/v1/config` |
-| `update` | start a software update, and read the restart's state, since an update restarts the server | `POST /api/v1/update`, `GET /api/v1/restart` |
+| `update` | start a software update, answer the automatic update's question, and read the restart's state, since an update restarts the server | `POST /api/v1/update`, `PUT /api/v1/update/answer`, `GET /api/v1/restart` |
 | `restart` | restart the server through the service manager that runs it, read its settings file again, and read a Cube again at once | `GET`/`POST /api/v1/restart`, `POST /api/v1/reload`, `POST /api/v1/cubes/{sn}/refresh` |
 | `reboot` | reboot the computer the server runs on, where its owner switched that on; seeded for no role | `GET`/`POST`/`DELETE /api/v1/reboot` |
 | `audit` | read the audit | `GET /api/v1/audit` |
@@ -1261,7 +1261,7 @@ keep the default:
 | `device_stale` | a thermostat went past the stale threshold (`stale_after`, `stale_after_wall`) | off |
 | `paired` | a device joined by pairing | off |
 | `cube_found` | discovery found a Cube that is not configured | off |
-| `update` | `GET /api/v1/update` saw a newer release | off |
+| `update` | the server's own check, after its start and every six hours, or `GET /api/v1/update` saw a newer release; once per release | off |
 
 `after_min` is 1 to 1440, `below_c` −10 to 20.
 A `PUT` of a document the rules cannot read (an unknown kind,
@@ -1403,7 +1403,7 @@ Needs `audit`, which only `owner` has by default; `503` without a store.
 
 Every route but the `GET`s and the stream ticket leaves a row:
 `action` names what was asked (`setpoint`, `device.lock`, `device.update`,
-`room.rename`, `room.config`, `room.program`, `room.delete`,
+`room.rename`, `room.config`, `room.program`, `room.delete`, `update.answer`,
 `pairing.start`, `restore.start`, `cube.add`, `settings.update`, `login`,
 `login.failed`, `logout`, `user.add`, `token.add`, `role.update`,
 `capability.disable`, …), `cube` the Cube of the route, `target` the device,
@@ -1909,6 +1909,8 @@ The server's settings in the store:
   "window_warn_after": {"value": "5m",  "default": "5m",  "set": false, "in_effect": "5m",  "applies": "now"},
   "window_alert_after": {"value": "10m", "default": "10m", "set": false, "in_effect": "10m", "applies": "now"},
   "update.channel":    {"value": "alpha", "default": "alpha", "set": false, "in_effect": "alpha", "applies": "now"},
+  "update.auto":       {"value": "off", "default": "off", "set": false, "in_effect": "off", "applies": "now"},
+  "update.auto_window": {"value": "03:00-05:00", "default": "03:00-05:00", "set": false, "in_effect": "03:00-05:00", "applies": "now"},
   "node.id":           {"value": "01a1ae5a-6bee-7ed4-bb4e-3baa2c43fe55", "set": true, "read_only": true},
   "tenant.id":         {"value": "01a1ae5a-6bee-7edb-b3d5-390730e9e1c5", "set": true, "read_only": true}
 }
@@ -2000,13 +2002,19 @@ run, and where `-announce` or `MASSIMO_ANNOUNCE` decides instead,
 one of `devel`, `nightly`, `alpha`, `beta` and `stable`,
 the build's flavour by default, and applies at once;
 `MASSIMO_UPDATE_CHANNEL`, where set, is used instead, as `in_effect` shows.
+`update.auto` says whether the box installs a release by itself:
+`off`, the default, or `night`,
+inside the window `update.auto_window`, `HH:MM-HH:MM` in the server's time,
+`03:00-05:00` by default, at least 30 minutes, its end past midnight allowed
+(`23:30-01:30`); both apply at once (see `GET /api/v1/update`, `auto`).
 `PUT` takes an object of keys and durations,
 `{"stale_after": "36h", "refresh_interval": null}`,
 with `null` for the default and `"0"` to switch the refresh or the periodic discovery off.
 A number setting takes a JSON number, or the number as a string,
 `auth.password_login`, `integrations.requests`, `auth.keep_open`
 and `auth.password_reveal` `true` or `false`,
-`announce` `auto`, `on` or `off`, and `update.channel` a name.
+`announce` `auto`, `on` or `off`, `update.channel` a name,
+`update.auto` `off` or `night`, and `update.auto_window` a window as above.
 The ranges: `stale_after` and `stale_after_wall` 1h to 720h, `poll_interval` 10s to 1h,
 `refresh_interval` 10m to 168h, `discover_interval` 1m to 24h, `duty_wait` 1m to 1h,
 `window_warn_after` and `window_alert_after` 1m to 24h.
@@ -4048,9 +4056,13 @@ a start whose read found notes writes a `settings_read` of them,
 `why` `start`, after its `server_started`,
 which settles every earlier warning of the kind,
 so that a note that stands stays a warning across a restart),
-`restart`, `reboot`, `reboot_cancelled`, `update` (`from`, `to`, `channel`),
+`restart`, `reboot`, `reboot_cancelled`, `update` (`from`, `to`, `channel`,
+and `auto` for one the server started itself at night, by nobody),
 `update_result` (the helper's outcome after the restart, once:
 `state`, `from`, `to`; a failure at `warn` with its `error`),
+`update_postponed` (the night's window closed while the radio,
+or a settings file the next start refuses, held a due automatic update back:
+`version`, `why`, `window`),
 `backup` (`reason`, `id`, `bytes`; an automatic one that failed at `warn`),
 `backup_deleted` (`id`), `backups_pruned`, `log_pruned` and `audit_pruned` (`removed`),
 `log_rotated` (serve's `-log` file rotated: `why`, `size`, `format`, `sighup`
@@ -4404,6 +4416,12 @@ A channel takes the releases of its own flavour and of every more stable one,
 in the order `devel`, `nightly`, `alpha`, `beta`, `rc`, `stable`
 ([README.md](../README.md), "Versions").
 The server asks GitHub at most every ten minutes; `refresh` asks now.
+It also checks by itself, whatever its settings say:
+a minute after its start, then every six hours,
+and ten minutes after a check that failed,
+so that the notification `update` reaches people without an open page.
+It does so only with a store and a valid channel;
+a channel set later is checked within a minute.
 
 ```json
 {
@@ -4416,6 +4434,7 @@ The server asks GitHub at most every ten minutes; `refresh` asks now.
   "checked_at": "2026-11-05T13:40:00+01:00",
   "can_update": true,
   "helper": {"state": "done", "from": "v0.1.0-alpha.8", "to": "v0.1.0-alpha.9", "channel": "alpha", "time": "…"},
+  "auto": {"mode": "night", "window": "03:00-05:00", "next": "2026-11-06T03:00:00+01:00"},
   "history": [
     {"at": "2026-11-05T12:01:00Z", "by": {"name": "anna", "display_name": "Anna"}, "from": "v0.1.0-alpha.8", "to": "v0.1.0-alpha.9", "channel": "alpha", "reached": "v0.1.0-alpha.9", "reached_at": "2026-11-05T12:02:10Z"},
     {"at": "2026-10-30T07:15:00Z", "outside": true, "manager": "apt", "from": "v0.1.0-alpha.7", "channel": "alpha", "reached": "v0.1.0-alpha.8", "reached_at": "2026-10-30T07:15:00Z"}
@@ -4423,8 +4442,31 @@ The server asks GitHub at most every ten minutes; `refresh` asks now.
 }
 ```
 
-`latest` is only a release whose manifest verifies against the key compiled into
-the server (see `internal/update`).
+`latest` is the version an update would install,
+never newer than the newest release whose manifest verifies against the key
+compiled into the server (see `internal/update`).
+On a box `massimo install` set up it is that release.
+Where apt or brew owns the binary,
+a release is offered only once the box's package source has it,
+since GitHub's release is out before the apt index and the tap have it:
+the server reads, without root, apt's index of the suite the next update uses
+(the channel's, which the helper switches the source to,
+`dists/<suite>/main/binary-<arch>/Packages.gz` of the source's `URIs`,
+`armhf` for an ARM 32-bit box),
+or the formula of brew's tap on GitHub, the file `brew update` fetches;
+`latest` is then the newest version the source has,
+and `released` the signed release where the source has it not yet.
+The source is read with the release check,
+where the release is newer than the running version.
+`source_error` says why the source could not be read,
+and nothing is available then: apt could not fetch it either.
+After the helper's `up-to-date` ("apt has nothing newer yet")
+for the version an update asked for,
+`held` names that version, which is not available, nor can it be started,
+until a check made after that answer finds it in the source,
+or in the signed release on a box without one;
+a newer version is not held.
+The hold is kept in memory: a restart is followed by a check.
 `check_error` says why a check failed.
 `manager` is the package manager that owns the binary, `apt`,
 where the Debian package installed it, or `brew` under Homebrew's service;
@@ -4443,11 +4485,54 @@ a development build).
 `helper` is the update helper's last run: `state` is one of `checking`,
 `installing`, `restarting`, `done`, `up-to-date`, `failed`, `rolled-back`,
 with `message` on failure.
+`auto` is the automatic update,
+as the settings `update.auto` and `update.auto_window` set it (`GET /api/v1/settings`):
+`mode` `off` or `night`, its `window`,
+and `next`, when the box will try, absent while no update is due:
+the window's next opening, or now inside it before the night's try.
+At night the server installs what `POST` would, itself and by nobody,
+inside the window while the radio is quiet on every Cube:
+no command with a radio line waiting for the Cube or on its way,
+the proxy's clients' among them, no write waiting for its devices to show it,
+no restore and no pairing;
+a page open in a browser holds nothing back,
+nor do the Cube's own memory slots in use.
+It also waits while the server's next start refuses the settings file
+(`GET /api/v1/restart`, `refused`):
+the update restarts the server, which would not come back,
+the old version no more than the new.
+Neither wait uses up the night's try, and each tick, once a minute, asks again,
+so that a file fixed inside the window, which the server reads within seconds,
+lets the update come that same night.
+`waits` names what the next try waits for, where `next` is set:
+`settings` while the next start refuses the settings file;
+a busy radio sets none, since it passes within minutes.
+It checks afresh at the window's opening and every half hour inside it,
+so that a release built in the night is taken the same night,
+and tries once a night, a start that failed included, across a restart too.
+It tries nothing that `POST` would refuse:
+a version held back, an update running, nothing newer,
+a box that cannot start updates from here (`blocked`).
+A window that closes while the radio,
+or a settings file the next start refuses, held a due update back
+writes `update_postponed` to the log, its `why` the last reason;
+the next night tries again.
+`ask` says that the page asks a holder of `update`:
+Install now, Tonight or Skip this version,
+automatic updates at night, an update that `POST` would start,
+and no answer for it yet;
+`answer` is the box's answer (`PUT /api/v1/update/answer`)
+where it names the version offered or a newer one:
+`version`, `answer` `tonight` or `skip`,
+`by` (absent for the owner's key) and `at`.
+A version skipped is not installed at night, and `next` is absent,
+until a newer release is out; `Update` still installs it.
 `history` is the last ten updates, newest first,
 kept in the setting `update.history`:
 an update started here names who started it (`by`, absent for the owner's key),
 the version it ran (`from`), the one it asked for (`to`)
 and the channel it asked on (`channel`);
+one the server started itself at night has `auto` and no `by`;
 the next start with another version adds `reached` and `reached_at`,
 whichever version that is:
 apt may install an older one than `to`, in between, or a newer one.
@@ -4485,7 +4570,8 @@ and nothing is rolled back: the helper's last run names the way back
 Where it is `brew`, the server starts a helper as its own user that runs
 `brew upgrade` and restarts the job (packaging/README.md, "Homebrew").
 The request names no version and no file,
-so the most the API can do is install the newest signed release.
+so the most the API can do is install the newest signed release,
+or what the box's package source has of it (`latest`).
 Answers `202` with `{"ok":true,"requested":"v…", "channel":"…"}`;
 follow the progress with GET.
 
@@ -4494,10 +4580,33 @@ the other routes are open.
 `403` also when no helper is configured (`serve -update-request`),
 and with GET's `blocked` as the error wherever that names a reason;
 `409` when already up to date,
-when the channel has no release or while an update is running (on Windows also
-in the moment between the start of the helper and its first status);
+when the channel has no release, while an update is running (on Windows also
+in the moment between the start of the helper and its first status),
+when the package source has the release not yet, or while it is held;
 `500` on Windows when the helper could not be started (the request is withdrawn);
-`502` when GitHub could not be asked.
+`502` when GitHub or the package source could not be asked.
+
+### PUT /api/v1/update/answer
+
+The box's answer to the automatic update's question (`auto.ask` of GET),
+for a holder of `update`:
+
+```json
+{"version": "v0.1.0-alpha.10", "answer": "tonight"}
+```
+
+`version` is the one asked about, `latest` of GET; another is `409`.
+`now` starts the update at once, as `POST /api/v1/update` does,
+with its answers, and keeps nothing.
+`tonight` ends the question for the version, which the night installs
+as it would unanswered;
+`skip` holds the version back from the night, and the question with it,
+until a newer release is out.
+Both need automatic updates at night (`409` while `update.auto` is `off`),
+are kept in the setting `update.answer`, one answer for the box,
+and answer `200` with what GET answers.
+Audited as `update.answer`, a change line in the log:
+every page reads the versions again at it, so that the question goes everywhere.
 
 ### GET /api/v1/restart, POST /api/v1/restart
 

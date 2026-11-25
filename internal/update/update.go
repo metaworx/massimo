@@ -2,7 +2,9 @@
 // Copyright (C) 2026 The Massimo Authors
 
 // Package update finds Massimo releases on GitHub, verifies them and
-// replaces the running binary with a newer one.
+// replaces the running binary with a newer one; it also reads what a
+// box's package source, apt's index or brew's tap, has of them
+// (source.go).
 //
 // Every release carries massimo-release.json, a manifest naming the
 // version, the commit, the flavour (what the build was released as:

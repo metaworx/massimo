@@ -68,7 +68,7 @@ func TestUpdateHistoryOutsideChannel(t *testing.T) {
 	t.Parallel()
 	st := testStore(t, "")
 	s := New(Options{Store: st, Logger: slog.New(slog.NewTextHandler(io.Discard, nil)), Update: UpdateOptions{
-		Version: "v0.1.0-beta.2", Flavour: "alpha", Manager: "apt", Suite: func() string { return "beta" },
+		Version: "v0.1.0-beta.2", Flavour: "alpha", Manager: "apt", Suite: func() string { return "beta" }, Finder: &fakeFinder{},
 	}})
 	ctx := t.Context()
 	s.noteVersionStart(ctx, "v0.1.0-beta.1", "v0.1.0-beta.2", nil)
@@ -155,21 +155,21 @@ func TestUpdateHistoryOtherVersion(t *testing.T) {
 	s, _, _ := historyServer(t, st, "apt")
 	ctx := t.Context()
 	started := time.Now()
-	s.noteUpdateStart(ctx, started, 0, "v0.1.0-alpha.9", "v0.1.0-alpha.11", "alpha", nil)
+	s.noteUpdateStart(ctx, started, 0, "v0.1.0-alpha.9", "v0.1.0-alpha.11", "alpha", nil, false)
 	// apt restarts the server while the helper installs
 	s.noteVersionStart(ctx, "v0.1.0-alpha.9", "v0.1.0-alpha.10", &update.Status{State: "installing", Time: started.Add(time.Second)})
 	list := s.updateHistory(ctx)
 	if len(list) != 1 || list[0].Outside || list[0].To != "v0.1.0-alpha.11" || list[0].Reached != "v0.1.0-alpha.10" || list[0].Result != "" {
 		t.Fatalf("an older version in between: %+v", list)
 	}
-	s.noteUpdateStart(ctx, time.Now(), 0, "v0.1.0-alpha.10", "v0.1.0-alpha.11", "alpha", nil)
+	s.noteUpdateStart(ctx, time.Now(), 0, "v0.1.0-alpha.10", "v0.1.0-alpha.11", "alpha", nil, false)
 	s.noteVersionStart(ctx, "v0.1.0-alpha.10", "v0.1.0-alpha.12", nil)
 	list = s.updateHistory(ctx)
 	if len(list) != 2 || list[0].Outside || list[0].To != "v0.1.0-alpha.11" || list[0].Reached != "v0.1.0-alpha.12" {
 		t.Fatalf("a newer version: %+v", list)
 	}
 	started = time.Now()
-	s.noteUpdateStart(ctx, started, 0, "v0.1.0-alpha.12", "v0.1.0-alpha.13", "alpha", nil)
+	s.noteUpdateStart(ctx, started, 0, "v0.1.0-alpha.12", "v0.1.0-alpha.13", "alpha", nil, false)
 	s.noteVersionStart(ctx, "v0.1.0-alpha.12", "v0.1.0-alpha.13", &update.Status{State: "up-to-date", Time: started.Add(time.Second)})
 	list = s.updateHistory(ctx)
 	if len(list) != 4 || !list[0].Outside || list[0].Reached != "v0.1.0-alpha.13" || list[1].Result != "up-to-date" || list[1].Reached != "" {
@@ -190,7 +190,13 @@ func TestUpdateHistorySecondStart(t *testing.T) {
 	if code, body := callAPI(t, ts, "POST", "/api/v1/update", token, "{}"); code != 202 {
 		t.Fatalf("POST: %d %s", code, body)
 	}
-	if err := update.WriteStatus(status, update.Status{State: "up-to-date", Channel: "alpha", Time: time.Now().Add(time.Second)}); err != nil {
+	// the helper's outcome after the first entry, and before the second
+	// POST's check, which GitHub's release, the box's source here, ends
+	// the hold of
+	ended := time.Now()
+	for at := s.updateHistory(ctx)[0].At; !ended.After(at); ended = time.Now() {
+	}
+	if err := update.WriteStatus(status, update.Status{State: "up-to-date", Channel: "alpha", Time: ended}); err != nil {
 		t.Fatal(err)
 	}
 	if code, body := callAPI(t, ts, "POST", "/api/v1/update", token, "{}"); code != 202 {
@@ -203,15 +209,15 @@ func TestUpdateHistorySecondStart(t *testing.T) {
 
 	// the start alone, without the read before it
 	first := list[0].At
-	s.noteUpdateStart(ctx, time.Now(), 0, "v0.1.0-alpha.9", "v0.1.0-alpha.10", "alpha", &update.Status{State: "failed", Time: first.Add(-time.Second)})
+	s.noteUpdateStart(ctx, time.Now(), 0, "v0.1.0-alpha.9", "v0.1.0-alpha.10", "alpha", &update.Status{State: "failed", Time: first.Add(-time.Second)}, false)
 	if list = s.updateHistory(ctx); len(list) != 3 || !list[1].waiting() {
 		t.Fatalf("an older outcome ended the entry: %+v", list)
 	}
-	s.noteUpdateStart(ctx, time.Now(), 0, "v0.1.0-alpha.9", "v0.1.0-alpha.10", "alpha", nil)
+	s.noteUpdateStart(ctx, time.Now(), 0, "v0.1.0-alpha.9", "v0.1.0-alpha.10", "alpha", nil, false)
 	if list = s.updateHistory(ctx); len(list) != 4 || !list[1].waiting() {
 		t.Fatalf("an entry without an outcome ended: %+v", list)
 	}
-	s.noteUpdateStart(ctx, time.Now(), 0, "v0.1.0-alpha.9", "v0.1.0-alpha.10", "alpha", &update.Status{State: "failed", Time: time.Now().Add(time.Second)})
+	s.noteUpdateStart(ctx, time.Now(), 0, "v0.1.0-alpha.9", "v0.1.0-alpha.10", "alpha", &update.Status{State: "failed", Time: time.Now().Add(time.Second)}, false)
 	if list = s.updateHistory(ctx); len(list) != 5 || list[1].Result != "failed" || !list[0].waiting() || !list[2].waiting() {
 		t.Fatalf("the helper's outcome at the next start: %+v", list)
 	}
@@ -236,7 +242,7 @@ func TestUpdateHistoryKeepsTen(t *testing.T) {
 	st := testStore(t, "")
 	s, _, _ := historyServer(t, st, "")
 	for i := 1; i <= 11; i++ {
-		s.noteUpdateStart(t.Context(), time.Now(), 0, fmt.Sprintf("v1.0.%d", i-1), fmt.Sprintf("v1.0.%d", i), "stable", nil)
+		s.noteUpdateStart(t.Context(), time.Now(), 0, fmt.Sprintf("v1.0.%d", i-1), fmt.Sprintf("v1.0.%d", i), "stable", nil, false)
 	}
 	list := s.updateHistory(t.Context())
 	if len(list) != updateHistoryKeep || list[0].To != "v1.0.11" || list[9].To != "v1.0.2" {
@@ -254,7 +260,7 @@ func TestUpdateHistoryHelperOutcome(t *testing.T) {
 	s, _, _ := historyServer(t, st, "")
 	ctx := t.Context()
 	started := time.Now().Add(-time.Minute)
-	s.noteUpdateStart(ctx, started, 0, "v1.0.0", "v1.1.0", "stable", nil)
+	s.noteUpdateStart(ctx, started, 0, "v1.0.0", "v1.1.0", "stable", nil, false)
 	s.noteVersionStart(ctx, "v1.0.0", "v1.0.0", &update.Status{State: "failed", From: "v1.0.0", To: "v1.1.0", Time: started.Add(-time.Second)})
 	if list := s.updateHistory(ctx); !list[0].waiting() {
 		t.Fatalf("an older status ended the update: %+v", list[0])
@@ -268,7 +274,7 @@ func TestUpdateHistoryHelperOutcome(t *testing.T) {
 	// restarts it, and once it says so.
 	for _, state := range []string{"restarting", "rolled-back"} {
 		started = time.Now().Add(-time.Minute)
-		s.noteUpdateStart(ctx, started, 0, "v1.0.0", "v1.1.0", "stable", nil)
+		s.noteUpdateStart(ctx, started, 0, "v1.0.0", "v1.1.0", "stable", nil, false)
 		s.noteVersionStart(ctx, "v1.0.0", "v1.1.0", nil)
 		s.noteVersionStart(ctx, "v1.1.0", "v1.0.0", &update.Status{State: state, From: "v1.0.0", To: "v1.1.0", Time: time.Now()})
 		list := s.updateHistory(ctx)
