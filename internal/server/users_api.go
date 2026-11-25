@@ -593,7 +593,8 @@ func tokenSubject(tok store.Token, u store.User) map[string]any {
 }
 
 // deleteUser handles DELETE /api/v1/users/{name}: the user is removed
-// and its tokens revoked; the last enabled owner stays.
+// and its tokens revoked; the last enabled owner stays, and so does the
+// user that holds the settings file's key, 409 (settingsKey).
 func (s *Server) deleteUser(w http.ResponseWriter, r *http.Request) error {
 	st, err := s.userStore()
 	if err != nil {
@@ -602,6 +603,11 @@ func (s *Server) deleteUser(w http.ResponseWriter, r *http.Request) error {
 	u, _, err := s.targetUser(r, st, false)
 	if err != nil {
 		return err
+	}
+	if file, ok, err := s.settingsKey(r.Context()); err != nil {
+		return userFail(err)
+	} else if ok && file.UserID == u.ID {
+		return fail(http.StatusConflict, settingsKeyHeld, u.Name)
 	}
 	var by int64
 	if p := principalOf(r); p.named() {
@@ -631,14 +637,14 @@ func (s *Server) listTokens(w http.ResponseWriter, r *http.Request) error {
 	if err != nil {
 		return userFail(err)
 	}
-	file, err := s.settingsKeyID(r.Context())
+	file, held, err := s.settingsKey(r.Context())
 	if err != nil {
 		return userFail(err)
 	}
 	out := []tokenView{}
 	for _, t := range tokens {
 		v := viewToken(t)
-		v.FromSettings = file != 0 && t.ID == file
+		v.FromSettings = held && t.ID == file.ID
 		out = append(out, v)
 	}
 	writeJSON(w, http.StatusOK, out)
@@ -680,7 +686,7 @@ func (s *Server) postToken(w http.ResponseWriter, r *http.Request) error {
 
 // deleteToken handles DELETE /api/v1/users/{name}/tokens/{id}: the
 // session or key is revoked. The settings file's key is 409, as
-// DELETE /api/v1/me/token answers it (settingsKeyID).
+// DELETE /api/v1/me/token answers it (settingsKey).
 func (s *Server) deleteToken(w http.ResponseWriter, r *http.Request) error {
 	st, err := s.userStore()
 	if err != nil {
@@ -701,11 +707,11 @@ func (s *Server) deleteToken(w http.ResponseWriter, r *http.Request) error {
 	if !ok || tok.UserID != u.ID || !tok.DeletedAt.IsZero() {
 		return fail(http.StatusNotFound, "user %s has no token %d", u.Name, id)
 	}
-	file, err := s.settingsKeyID(r.Context())
+	file, held, err := s.settingsKey(r.Context())
 	if err != nil {
 		return userFail(err)
 	}
-	if file != 0 && id == file {
+	if held && id == file.ID {
 		return fail(http.StatusConflict, settingsKeyKept)
 	}
 	if err := st.RevokeToken(r.Context(), id); err != nil {
