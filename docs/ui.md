@@ -50,6 +50,10 @@ the page learns it from `/healthz` before anyone signs in,
 so that the card shows the eye or not from its first drawing,
 and none shows until it has answered.
 An API key's field, and a provider's client secret, have no eye.
+At the page's start and after a sign-out the page waits for the card:
+the Cubes, the rooms, the log's alerts and the stream are read,
+and the poll that reads them again starts,
+once it has closed.
 The page keeps the session in the browser for 30 days from its last use;
 **Sign out** in ☰, or on the personal settings, ends it.
 The card's ☰, at the end of that row, shows the version first,
@@ -157,7 +161,8 @@ a refusal is said under the field, and one that says the server has users now
 turns the card to the sign-in.
 The page behind the card is hidden as at a sign-in.
 At the page's start and after a sign-out the start waits for the card:
-the Cubes, the rooms, the stream and the providers are read once it has closed,
+the Cubes, the rooms, the stream and the providers are read,
+and the poll starts, once it has closed,
 only the version and the update's state before;
 where a read of who is in opens it on a running page,
 the poll and the stream go on behind it.
