@@ -282,6 +282,7 @@
   "update.history.outside": "fuori da Massimo",
   "update.history.outsideWith": "fuori da Massimo ({manager})",
   "update.history.by": "da {name}",
+  "update.history.withChannel": "{version} ({channel})",
   "update.to": "Aggiorna a {version}",
   "update.cannotAsk": "Impossibile chiedere al server degli aggiornamenti: {error}",
   "update.confirm": "Installare {version} e riavviare il server? Resterà offline per poco tempo; se la nuova versione non si avvia, viene ripristinata quella precedente.",

@@ -282,6 +282,7 @@
   "update.history.outside": "hors de Massimo",
   "update.history.outsideWith": "hors de Massimo ({manager})",
   "update.history.by": "par {name}",
+  "update.history.withChannel": "{version} ({channel})",
   "update.to": "Mettre à jour vers {version}",
   "update.cannotAsk": "Impossible d’interroger le serveur sur les mises à jour : {error}",
   "update.confirm": "Installer {version} et redémarrer le serveur ? Il sera brièvement hors ligne ; si la nouvelle version ne démarre pas, l’ancienne est rétablie.",

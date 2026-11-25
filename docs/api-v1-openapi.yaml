@@ -5057,9 +5057,10 @@ components:
         manager: {type: string, description: "The box's package manager (apt, brew), for an update from outside"}
         from: {type: string, description: The version that ran before}
         to: {type: string, description: "The version asked for, where Massimo started it"}
-        reached: {type: string, description: The version the next start ran; absent while the update runs}
+        channel: {type: string, description: "The channel asked for, where Massimo started it; for an update from outside, the one the box followed at the start that found it"}
+        reached: {type: string, description: "The version the next start ran, the one asked for or another apt chose; absent while the update runs"}
         reached_at: {type: string, format: date-time}
-        result: {type: string, enum: [failed, rolled-back, up-to-date], description: "The update helper's outcome where it ended without reaching to"}
+        result: {type: string, enum: [failed, rolled-back, up-to-date], description: "The update helper's outcome where the box did not stay on a new version, rolled-back after reached ran: taken at the next read or the next update started where the helper did not restart the server, else at the next start"}
     UpdateStatus:
       type: object
       description: The update helper's last run

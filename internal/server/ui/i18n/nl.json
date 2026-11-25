@@ -281,6 +281,7 @@
   "update.history.outside": "buiten Massimo",
   "update.history.outsideWith": "buiten Massimo ({manager})",
   "update.history.by": "door {name}",
+  "update.history.withChannel": "{version} ({channel})",
   "update.to": "Bijwerken naar {version}",
   "update.cannotAsk": "Kan de server niet naar updates vragen: {error}",
   "update.confirm": "{version} installeren en de server opnieuw starten? Hij is even niet bereikbaar; als de nieuwe versie niet opstart, wordt de oude teruggezet.",

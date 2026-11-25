@@ -4349,8 +4349,8 @@ The server asks GitHub at most every ten minutes; `refresh` asks now.
   "can_update": true,
   "helper": {"state": "done", "from": "v0.1.0-alpha.8", "to": "v0.1.0-alpha.9", "channel": "alpha", "time": "…"},
   "history": [
-    {"at": "2026-11-05T12:01:00Z", "by": {"name": "anna", "display_name": "Anna"}, "from": "v0.1.0-alpha.8", "to": "v0.1.0-alpha.9", "reached": "v0.1.0-alpha.9", "reached_at": "2026-11-05T12:02:10Z"},
-    {"at": "2026-10-30T07:15:00Z", "outside": true, "manager": "apt", "from": "v0.1.0-alpha.7", "reached": "v0.1.0-alpha.8", "reached_at": "2026-10-30T07:15:00Z"}
+    {"at": "2026-11-05T12:01:00Z", "by": {"name": "anna", "display_name": "Anna"}, "from": "v0.1.0-alpha.8", "to": "v0.1.0-alpha.9", "channel": "alpha", "reached": "v0.1.0-alpha.9", "reached_at": "2026-11-05T12:02:10Z"},
+    {"at": "2026-10-30T07:15:00Z", "outside": true, "manager": "apt", "from": "v0.1.0-alpha.7", "channel": "alpha", "reached": "v0.1.0-alpha.8", "reached_at": "2026-10-30T07:15:00Z"}
   ]
 }
 ```
@@ -4373,12 +4373,22 @@ with `message` on failure.
 `history` is the last ten updates, newest first,
 kept in the setting `update.history`:
 an update started here names who started it (`by`, absent for the owner's key),
-the version it ran (`from`) and the one it asked for (`to`);
-the next start with another version adds `reached` and `reached_at`.
+the version it ran (`from`), the one it asked for (`to`)
+and the channel it asked on (`channel`);
+the next start with another version adds `reached` and `reached_at`,
+whichever version that is:
+apt may install an older one than `to`, in between, or a newer one.
 A new version that no entry waits for came from outside Massimo (`outside`):
-apt, brew (`manager`) or a person on the box.
-`result` is the update helper's outcome where it ended without reaching `to`:
-`failed`, `rolled-back` or `up-to-date`.
+apt, brew (`manager`) or a person on the box;
+its `channel` is the one the box followed at the start that found it.
+`result` is the helper's outcome where the box did not stay on a new version:
+`failed` or `up-to-date`, without `reached`,
+or `rolled-back`, after the version `reached` ran.
+An outcome the helper reports while the server runs on,
+`up-to-date` where apt has nothing newer yet or a failure before the restart,
+is taken at the next read of this route or at the next update started;
+one that comes with a restart, at that start.
+An entry the helper reports no outcome for stays open.
 The log keeps an update's lines for a month only.
 
 ### POST /api/v1/update

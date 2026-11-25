@@ -280,6 +280,7 @@
   "update.history.outside": "outside Massimo",
   "update.history.outsideWith": "outside Massimo ({manager})",
   "update.history.by": "by {name}",
+  "update.history.withChannel": "{version} ({channel})",
   "update.to": "Update to {version}",
   "update.cannotAsk": "Cannot ask the server about updates: {error}",
   "update.confirm": "Install {version} and restart the server? It is offline for a short while; if the new version does not come up, the old one is put back.",
