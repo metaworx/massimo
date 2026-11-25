@@ -45,8 +45,11 @@ func (o Options) tlsMode() string {
 	return o.TLS
 }
 
-// checkTLS refuses TLS options that cannot be installed.
-func (o Options) checkTLS() error {
+// checkTLS refuses TLS options that cannot be installed: those that do
+// not go together, or name a file that is not there, the hook of
+// -acme-dns-hook where the service svc runs it (serviceStart.path). What
+// serve's start refuses of them is checkSettingsFile's.
+func (o Options) checkTLS(svc serviceStart) error {
 	switch o.tlsMode() {
 	case "":
 		return nil
@@ -83,15 +86,19 @@ func (o Options) checkTLS() error {
 			}
 		}
 		if o.TLSHTTP != "" {
-			if _, _, err := splitListen(o.TLSHTTP); err != nil {
-				return fmt.Errorf("-tls-http: %v", err)
+			if _, _, err := readListen(o.TLSHTTP); err != nil {
+				return fmt.Errorf("-tls-http %q: %w", o.TLSHTTP, err)
 			}
 		}
 		if o.ACMEDNSHook != "" {
 			if o.TLSHTTP != "" {
 				return errors.New("-tls-http is for the HTTP-01 challenge; with -acme-dns-hook the DNS-01 challenge needs no port")
 			}
-			fi, err := os.Stat(o.ACMEDNSHook)
+			hook, ok := svc.path(o.Root, o.ACMEDNSHook)
+			if !ok {
+				hook = o.ACMEDNSHook
+			}
+			fi, err := os.Stat(hook)
 			if err != nil {
 				return fmt.Errorf("-acme-dns-hook: %v", err)
 			}
@@ -110,41 +117,56 @@ func (o Options) checkTLS() error {
 // which serve refuses outside acme) does not outlive a switch.
 var modeVars = []string{tlsVar, tlsCertVar, tlsKeyVar, tlsNamesVar, acmeEmail, acmeDirectory, tlsHTTPVar, acmeDNSHook}
 
-// tlsFiles installs the TLS options: the files copied to certDst and
-// keyDst (system paths; owned by the service user where chown is set,
-// else the directory's rights hold), and the variables set in the
-// settings file env, those of modeVars the mode does not set removed.
-func (in *installer) tlsFiles(certDst, keyDst, env string, chown bool) error {
-	switch in.tlsMode() {
-	case "":
-		return nil
+// tlsSettings are the TLS variables the -tls options set in the
+// settings file, files mode's naming cert and key; none where -tls keeps
+// what the file says. The others of modeVars go from the file.
+func (o Options) tlsSettings(cert, key string) [][2]string {
+	switch o.tlsMode() {
 	case "off":
-		return in.setSettings(env, chown, [][2]string{{tlsVar, "off"}})
+		return [][2]string{{tlsVar, "off"}}
 	case "self-signed":
 		// The server makes the pair at its start, as the service user,
 		// into the data directory, which it may write.
 		vars := [][2]string{{tlsVar, "self-signed"}}
-		if in.TLSNames != "" {
-			vars = append(vars, [2]string{tlsNamesVar, in.TLSNames})
+		if o.TLSNames != "" {
+			vars = append(vars, [2]string{tlsNamesVar, o.TLSNames})
 		}
-		return in.setSettings(env, chown, vars)
+		return vars
 	case "acme":
 		// The server orders the certificate at its start, into the data
 		// directory's tls/acme/.
-		vars := [][2]string{{tlsVar, "acme"}, {tlsNamesVar, in.TLSNames}}
-		if in.ACMEEmail != "" {
-			vars = append(vars, [2]string{acmeEmail, in.ACMEEmail})
+		vars := [][2]string{{tlsVar, "acme"}, {tlsNamesVar, o.TLSNames}}
+		if o.ACMEEmail != "" {
+			vars = append(vars, [2]string{acmeEmail, o.ACMEEmail})
 		}
-		if in.ACMEDirectory != "" {
-			vars = append(vars, [2]string{acmeDirectory, in.ACMEDirectory})
+		if o.ACMEDirectory != "" {
+			vars = append(vars, [2]string{acmeDirectory, o.ACMEDirectory})
 		}
-		if in.TLSHTTP != "" {
-			vars = append(vars, [2]string{tlsHTTPVar, in.TLSHTTP})
+		if o.TLSHTTP != "" {
+			vars = append(vars, [2]string{tlsHTTPVar, o.TLSHTTP})
 		}
-		if in.ACMEDNSHook != "" {
-			vars = append(vars, [2]string{acmeDNSHook, in.ACMEDNSHook})
+		if o.ACMEDNSHook != "" {
+			vars = append(vars, [2]string{acmeDNSHook, o.ACMEDNSHook})
 		}
-		return in.setSettings(env, chown, vars)
+		return vars
+	case "files":
+		return [][2]string{{tlsVar, "files"}, {tlsCertVar, cert}, {tlsKeyVar, key}}
+	}
+	return nil
+}
+
+// tlsFiles installs the TLS options: the files copied to certDst and
+// keyDst (system paths; owned by the service user where chown is set,
+// else the directory's rights hold), and the variables set in the
+// settings file env (tlsSettings), those of modeVars the mode does not
+// set removed.
+func (in *installer) tlsFiles(certDst, keyDst, env string, chown bool) error {
+	switch in.tlsMode() {
+	case "":
+		return nil
+	case "files": // the files first, below
+	default:
+		return in.setSettings(env, chown, in.tlsSettings(certDst, keyDst))
 	}
 	for _, f := range [][2]string{{in.TLSCert, certDst}, {in.TLSKey, keyDst}} {
 		in.say("copy %s to %s", f[0], f[1])
@@ -163,7 +185,7 @@ func (in *installer) tlsFiles(certDst, keyDst, env string, chown bool) error {
 			}
 		}
 	}
-	return in.setSettings(env, chown, [][2]string{{tlsVar, "files"}, {tlsCertVar, certDst}, {tlsKeyVar, keyDst}})
+	return in.setSettings(env, chown, in.tlsSettings(certDst, keyDst))
 }
 
 // setSettings sets the TLS variables of a mode in the settings file env
@@ -299,22 +321,4 @@ func (in *installer) tlsHTTPEffective(env string) string {
 		return ""
 	}
 	return in.settingsVars(env)[tlsHTTPVar]
-}
-
-// checkTLSSettings warns when the settings name TLS files serve cannot
-// read.
-func (in *installer) checkTLSSettings(vars map[string]string) {
-	if !tlsOn(vars) || vars[tlsVar] != "" && vars[tlsVar] != "files" {
-		return
-	}
-	for _, k := range []string{tlsCertVar, tlsKeyVar} {
-		switch v := vars[k]; {
-		case v == "":
-			fmt.Fprintf(in.Out, "warning: no %s: serve cannot start with %s=files\n", k, tlsVar)
-		default:
-			if _, err := os.Stat(in.path(v)); err != nil {
-				fmt.Fprintf(in.Out, "warning: %s=%s: %v; serve cannot start without it\n", k, v, err)
-			}
-		}
-	}
 }

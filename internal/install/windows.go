@@ -36,6 +36,10 @@ func winPaths() WinPaths {
 
 const firewallRule = "Massimo"
 
+// connectManager is connect, which InstallWindows calls before it stops
+// the service; a test sees what was said by then.
+var connectManager = connect
+
 func connect() (*mgr.Mgr, error) {
 	m, err := mgr.Connect()
 	if errors.Is(err, windows.ERROR_ACCESS_DENIED) {
@@ -51,15 +55,20 @@ func InstallWindows(o Options) error {
 			return err
 		}
 	}
-	if err := o.checkTLS(); err != nil {
+	if err := o.checkTLS(serviceStart{}); err != nil {
 		return err
 	}
-	if err := o.checkSettingsFile(); err != nil {
+	if err := o.checkSettingsFile(serviceStart{}); err != nil {
 		return err
 	}
 	in := newInstaller(o)
+	in.svc = serviceStart{} // the service manager picks the working directory
 	p := winPaths()
-	m, err := connect()
+	// The settings file kept, read and warned of as on Linux, before the
+	// service manager is asked for the service, which is then stopped
+	// (AP StartConfiguration, D50-A).
+	in.checkKept(p.Env)
+	m, err := connectManager()
 	if err != nil && !in.DryRun {
 		return err
 	}
@@ -198,6 +207,22 @@ func (in *installer) winBinary(p WinPaths) error {
 		return err
 	}
 	return writeAtomic(p.Bin, b, 0o755)
+}
+
+// checkKept warns of the settings file env that the install keeps, as
+// checkSettings does on Linux: the notes on its lines (readSettings) and
+// what serve's next start refuses of it (warnRefused); a file the parser
+// does not read is said to be unchecked. Nothing where there is none.
+func (in *installer) checkKept(env string) {
+	if _, err := os.Stat(env); err != nil {
+		return
+	}
+	vars, err := in.readSettings(env)
+	if err != nil {
+		fmt.Fprintf(in.Out, "warning: cannot check %s: %v\n", env, err)
+		return
+	}
+	in.warnRefused(env, vars)
 }
 
 // winSettings makes the data directory, readable only by SYSTEM and the

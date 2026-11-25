@@ -18,6 +18,7 @@ import (
 	"strings"
 	"time"
 
+	"go.metaworx.ch/massimo/internal/env"
 	"go.metaworx.ch/massimo/packaging"
 )
 
@@ -144,14 +145,14 @@ func InstallDarwin(o Options) error {
 			return err
 		}
 	}
-	if err := o.checkTLS(); err != nil {
+	if err := o.checkTLS(launchdStart()); err != nil {
 		return err
 	}
-	if err := o.checkSettingsFile(); err != nil {
+	if err := o.checkSettingsFile(launchdStart()); err != nil {
 		return err
 	}
 	in := newInstaller(o)
-	in.svcUser, in.darwin = DarwinUser, true
+	in.svcUser, in.darwin, in.svc = DarwinUser, true, launchdStart()
 
 	listen := in.Listen
 	if listen == "" {
@@ -284,6 +285,12 @@ func darwinEnvTemplate() string {
 	return strings.Replace(envTemplate(), "MASSIMO_LOG=/var/log/massimo/serve.log\n",
 		"# The log is "+DarwinLog+", which the plist passes as -log; no MASSIMO_LOG here.\n", 1)
 }
+
+// darwinFixed are the settings the plist's own flags fix on macOS, which
+// the start then takes from the flag, not from the settings file
+// (launchdStart): -log-process-format none, nothing on stderr, which
+// launchd appends to a file beside the log.
+var darwinFixed = map[string]string{env.LogProcessFormat: "none"}
 
 // checkDarwinSettings warns about MASSIMO_LOG, which the plist's -log
 // overrides on macOS.

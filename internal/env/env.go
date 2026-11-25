@@ -18,6 +18,7 @@ import (
 	"io"
 	"net"
 	"os"
+	"runtime"
 	"sort"
 	"strings"
 	"time"
@@ -133,20 +134,20 @@ func PerCube(name, sn string) string {
 }
 
 // PerCubeValue returns the per-Cube variable of name for the Cube sn as
-// it is set, and its value: the serial in the name in any case, as a
-// settings file may write it, and the name as the environment holds it,
-// which os.Getenv does not tell on Windows, where it finds a name in any
-// case. The exact name comes first, then the first set whatever its
-// case; the upper-case name and "" when none is set.
-func PerCubeValue(name, sn string) (variable, value string) {
+// it is set in environ, KEY=VALUE lines as os.Environ gives them, and
+// its value: the serial in the name in any case, as a settings file may
+// write it, and the name as the environment holds it, which os.Getenv
+// does not tell on Windows, where it finds a name in any case. The exact
+// name comes first, then the first set whatever its case; the
+// upper-case name and "" when none is set.
+func PerCubeValue(name, sn string, environ []string) (variable, value string) {
 	want := PerCube(name, sn)
-	vars := os.Environ()
-	for _, kv := range vars {
+	for _, kv := range environ {
 		if k, v, _ := strings.Cut(kv, "="); v != "" && k == want {
 			return k, v
 		}
 	}
-	for _, kv := range vars {
+	for _, kv := range environ {
 		if k, v, _ := strings.Cut(kv, "="); v != "" && strings.EqualFold(k, want) {
 			return k, v
 		}
@@ -158,7 +159,7 @@ func PerCubeValue(name, sn string) (variable, value string) {
 // if set, else the plain one. With sn empty it is the plain one.
 func Get(name, sn string) string {
 	if sn != "" {
-		if _, v := PerCubeValue(name, sn); v != "" {
+		if _, v := PerCubeValue(name, sn, os.Environ()); v != "" {
 			return v
 		}
 	}
@@ -171,7 +172,7 @@ func Get(name, sn string) string {
 // listen address or a name.
 func Own(name, sn string, single bool) string {
 	if sn != "" {
-		if _, v := PerCubeValue(name, sn); v != "" || !single {
+		if _, v := PerCubeValue(name, sn, os.Environ()); v != "" || !single {
 			return v
 		}
 	}
@@ -179,12 +180,13 @@ func Own(name, sn string, single bool) string {
 }
 
 // Serials lists, sorted and in upper case, the serial numbers that have
-// the per-Cube form of name set to a non-empty value, with those values;
-// a serial written in lower case in the name is the same Cube.
-func Serials(name string) (serials []string, values map[string]string) {
+// the per-Cube form of name set to a non-empty value in environ, KEY=VALUE
+// lines as os.Environ gives them, with those values; a serial written in
+// lower case in the name is the same Cube.
+func Serials(name string, environ []string) (serials []string, values map[string]string) {
 	suffix := "_" + strings.TrimPrefix(name, Prefix)
 	values = map[string]string{}
-	for _, kv := range os.Environ() {
+	for _, kv := range environ {
 		k, v, _ := strings.Cut(kv, "=")
 		mid, ok := strings.CutPrefix(k, Prefix)
 		if !ok || v == "" {
@@ -203,6 +205,20 @@ func Serials(name string) (serials []string, values map[string]string) {
 	}
 	sort.Strings(serials)
 	return serials, values
+}
+
+// Lookup is the value of the variable name in environ, KEY=VALUE lines
+// as os.Environ gives them, found as os.Getenv finds it in the process's
+// own: by its name, on Windows, where a name is one variable in any case,
+// in any case; "" where it is not set. It reads a list that need not be
+// the process's, such as a settings file's lines (massimo install).
+func Lookup(name string, environ []string) string {
+	for _, kv := range environ {
+		if k, v, ok := strings.Cut(kv, "="); ok && (k == name || runtime.GOOS == "windows" && strings.EqualFold(k, name)) {
+			return v
+		}
+	}
+	return ""
 }
 
 // Known reports whether a MASSIMO_* name is one the program reads.
@@ -248,7 +264,7 @@ func ParseList(name, value string) ([]cube.RFAddress, error) {
 // MASSIMO_CUBE_<SN>_IGNORE, else MASSIMO_CUBE_IGNORE.
 func HiddenList(sn string) ([]cube.RFAddress, error) {
 	if sn != "" {
-		if name, v := PerCubeValue(Ignore, sn); v != "" {
+		if name, v := PerCubeValue(Ignore, sn, os.Environ()); v != "" {
 			return ParseList(name, v)
 		}
 	}

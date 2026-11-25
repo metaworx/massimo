@@ -1119,17 +1119,33 @@ on stderr at its start, by its number and never its value
 (`warning: /etc/massimo/env: MASSIMO_HSTS is given on lines 3 and 4; the first wins`),
 `massimo config` lists them after the settings,
 `serve` says them in its log too,
-and `install` on Linux and macOS among its warnings
-those of the settings file it installs, unless the command's start read it.
+and `install` among its warnings,
+on Linux and macOS those of the settings file it installs,
+on Windows those of the one it keeps, unless the command's start read it.
 `install -settings` refuses a path that is not there, with the system's error,
 and a file `serve` cannot read, with the error `serve` gives:
 UTF-16 text, a line that is not `KEY=VALUE`, a line too long to read.
+It refuses a value the next start refuses too, and a `-tls` option alike,
+every one on a line of its own, in the start's words,
+the file read as that start reads it after the install:
+`-tls` and its options in place of the file's,
+the `-tls-cert` and `-tls-key` pair loaded where it is,
+a path where the service opens it,
+a relative one at the service's working directory, `/var/lib/massimo`,
+and on macOS the service's `-log-process-format none`.
 It refuses them before it installs anything,
 also where a settings file is kept and the file would not be copied.
-On Linux and macOS its checks of a settings file a re-install keeps
-read it as `serve` does, but skip a line that is not `KEY=VALUE` with a warning,
-so that an upgrade does not fail on it;
-on Windows it does not read that file.
+A settings file a re-install keeps it reads as `serve` does,
+but skips a line that is not `KEY=VALUE` with a warning,
+and warns of a value the next start refuses,
+so that an upgrade does not fail on it,
+on Windows before it stops the service.
+What `install` cannot check stays the start's refusal:
+whether the service user may read a file or run the DNS hook;
+on Windows, whose service manager picks the service's working directory,
+the TLS settings beside a relative path, with a warning;
+and the box's state at the start, such as a port already taken,
+or the self-signed pair only the start makes.
 On Linux and macOS the service user, the owner of `/etc/massimo/env`,
 reads that file alone and keeps its data in `/var/lib/massimo`,
 from any directory, as `sudo sshd` reads sshd's own configuration;

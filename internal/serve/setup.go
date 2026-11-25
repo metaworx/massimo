@@ -45,7 +45,7 @@ type target struct {
 // has, the plain lines are that Cube's, compared with its row
 // (plainOfStore).
 func setupCubes(ctx context.Context, st *store.Store, cfg Config, logger *slog.Logger) (setup, error) {
-	file, plain, err := FileCubes(cfg.Serial)
+	file, plain, err := FileCubes(cfg.Serial, os.Environ())
 	if err != nil {
 		return setup{}, err
 	}
@@ -262,18 +262,22 @@ func parseHidden(list []string) ([]cube.RFAddress, error) {
 	return out, nil
 }
 
-// FileCubes reads the settings file's Cubes from the environment by the
-// rule serve used before the store: every Cube with an _ADDRESS, and by
-// serial every one with a _NAME or a _PROXY but no _ADDRESS; without any
-// of those, the plain MASSIMO_CUBE_ADDRESS, with the serial selected
-// (-sn or MASSIMO_CUBE_SN) when one is given, else returned as plain.
-// The plain forms of _NAME, _PROXY and _PROXY_SERIAL apply only with a
-// single Cube; the plain _IGNORE applies to every Cube.
-func FileCubes(selected string) (cubes []store.FileCube, plain *store.FileCube, err error) {
+// FileCubes reads the settings file's Cubes from environ, KEY=VALUE
+// lines as os.Environ gives them, by the rule serve used before the
+// store: every Cube with an _ADDRESS, and by serial every one with a
+// _NAME or a _PROXY but no _ADDRESS; without any of those, the plain
+// MASSIMO_CUBE_ADDRESS, with the serial selected (-sn or
+// MASSIMO_CUBE_SN) when one is given, else returned as plain. The plain
+// forms of _NAME, _PROXY and _PROXY_SERIAL apply only with a single
+// Cube; the plain _IGNORE applies to every Cube. The start and a reload
+// pass the process's environment, which the settings file was loaded
+// into; massimo install a settings file's lines alone, so that its own
+// environment does not count (AP StartConfiguration, D47-A).
+func FileCubes(selected string, environ []string) (cubes []store.FileCube, plain *store.FileCube, err error) {
 	have := map[string]bool{}
 	var serials []string
 	for _, name := range []string{env.Address, env.Name, env.Proxy} {
-		sns, _ := env.Serials(name)
+		sns, _ := env.Serials(name, environ)
 		for _, sn := range sns {
 			if !have[sn] {
 				have[sn] = true
@@ -283,10 +287,10 @@ func FileCubes(selected string) (cubes []store.FileCube, plain *store.FileCube, 
 	}
 	sort.Strings(serials)
 	if len(serials) == 0 {
-		if os.Getenv(env.Address) == "" {
+		if env.Lookup(env.Address, environ) == "" {
 			return nil, nil, nil
 		}
-		fc, err := fileCube(strings.ToUpper(selected), true, true)
+		fc, err := fileCube(strings.ToUpper(selected), true, true, environ)
 		if err != nil {
 			return nil, nil, err
 		}
@@ -299,7 +303,7 @@ func FileCubes(selected string) (cubes []store.FileCube, plain *store.FileCube, 
 	for _, sn := range serials {
 		// The plain address is the one Cube's when MASSIMO_CUBE_SN (or
 		// -sn) names it, as env.Get reads it for the other commands.
-		fc, err := fileCube(sn, single, single && strings.EqualFold(sn, selected))
+		fc, err := fileCube(sn, single, single && strings.EqualFold(sn, selected), environ)
 		if err != nil {
 			return nil, nil, err
 		}
@@ -308,21 +312,21 @@ func FileCubes(selected string) (cubes []store.FileCube, plain *store.FileCube, 
 	return cubes, nil, nil
 }
 
-// fileCube reads one Cube's lines; sn "" is the plain forms only. The
-// plain MASSIMO_CUBE_ADDRESS counts only for plainCube: the Cube served
-// when no Cube has lines of its own, or the one Cube that has some when
-// MASSIMO_CUBE_SN names it.
-func fileCube(sn string, single, plainCube bool) (store.FileCube, error) {
+// fileCube reads one Cube's lines from environ (FileCubes); sn "" is the
+// plain forms only. The plain MASSIMO_CUBE_ADDRESS counts only for
+// plainCube: the Cube served when no Cube has lines of its own, or the
+// one Cube that has some when MASSIMO_CUBE_SN names it.
+func fileCube(sn string, single, plainCube bool, environ []string) (store.FileCube, error) {
 	fc := store.FileCube{Serial: sn, Values: map[string]store.FileValue{}}
 	line := func(field, name string, plainToo bool) {
 		if sn != "" {
-			if variable, v := env.PerCubeValue(name, sn); v != "" {
+			if variable, v := env.PerCubeValue(name, sn, environ); v != "" {
 				fc.Values[field] = store.FileValue{Variable: variable, Value: v}
 				return
 			}
 		}
 		if plainToo || sn == "" {
-			if v := os.Getenv(name); v != "" {
+			if v := env.Lookup(name, environ); v != "" {
 				fc.Values[field] = store.FileValue{Variable: name, Value: v}
 			}
 		}

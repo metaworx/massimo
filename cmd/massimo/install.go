@@ -86,7 +86,7 @@ See packaging/README.md.
 	if *rebootHelper && *noRebootHelper {
 		return errors.New("-reboot-helper and -no-reboot-helper exclude each other")
 	}
-	o := install.Options{Root: *root, Settings: *settings, NoUpdateHelper: *noHelper, RebootHelper: *rebootHelper, NoRebootHelper: *noRebootHelper, NoStart: *noStart, DryRun: *dryRun, Listen: *listen, TLS: *tlsMode, TLSCert: *tlsCert, TLSKey: *tlsKey, TLSNames: *tlsNames, ACMEEmail: *acmeEmail, ACMEDirectory: *acmeDirectory, TLSHTTP: *tlsHTTP, ACMEDNSHook: *acmeDNSHook}
+	o := install.Options{Root: *root, Settings: *settings, NoUpdateHelper: *noHelper, RebootHelper: *rebootHelper, NoRebootHelper: *noRebootHelper, NoStart: *noStart, DryRun: *dryRun, Listen: *listen, TLS: *tlsMode, TLSCert: *tlsCert, TLSKey: *tlsKey, TLSNames: *tlsNames, ACMEEmail: *acmeEmail, ACMEDirectory: *acmeDirectory, TLSHTTP: *tlsHTTP, ACMEDNSHook: *acmeDNSHook, StartChecks: installChecks}
 	switch runtime.GOOS {
 	case "linux":
 		if *remove {

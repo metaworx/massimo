@@ -194,7 +194,7 @@ func storeState() string {
 // or the file (a Cube the store does not know yet, added at serve's next
 // start), with the file's line where it differs.
 func printStore(w io.Writer) {
-	file, plain, err := serve.FileCubes(selectedSN)
+	file, plain, err := serve.FileCubes(selectedSN, os.Environ())
 	if err != nil {
 		fmt.Fprintf(w, "\nsettings file: %v\n", err)
 		return

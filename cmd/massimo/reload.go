@@ -310,7 +310,7 @@ func (r *settingsReloader) refused() []server.Refusal {
 	}
 	get := settingOf(r.fixed)
 	out := []server.Refusal{}
-	for _, f := range startRefusals(get, differs) {
+	for _, f := range startRefusals(get, os.Environ(), differs) {
 		out = append(out, server.Refusal{Settings: f.vars, Error: hideSecrets(f.err.Error(), get)})
 	}
 	return out

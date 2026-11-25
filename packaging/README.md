@@ -154,9 +154,25 @@ On every system it refuses a `-settings` file that `serve` cannot read
 with the error `serve` gives, and a `-settings` path that is not there,
 before it writes anything, on Windows before it stops the service,
 also where a settings file is kept and the file would not be copied.
-On Linux and macOS it warns of a line that is not `KEY=VALUE` in a settings file it keeps
-instead, so that a re-install does not fail on it;
-on Windows install does not read that file.
+It refuses as well what the next start refuses
+of the file's values and of the `-tls` options,
+every refusal on a line of its own, in the start's words,
+the file read as that start reads it after the install:
+`-tls` and its options in place of the file's lines,
+the `-tls-cert` and `-tls-key` pair loaded where it is,
+a path of the file's and the hook of `-acme-dns-hook` checked as root sees them,
+a relative path at the service's `WorkingDirectory`, `/var/lib/massimo`,
+and on macOS the plist's `-log-process-format none` in place of that line.
+It cannot check whether `_massimo` may read the key or run the DNS hook,
+the box's state at the start, such as a port already taken,
+or the self-signed pair only the start makes:
+those stay the start's refusals.
+On Windows, whose service manager picks the working directory,
+it leaves the TLS settings beside a relative path to the start, with a warning.
+In a settings file it keeps it warns of a line that is not `KEY=VALUE`
+and of a value the next start refuses instead,
+so that a re-install does not fail on it,
+on Windows before it stops the service.
 Nothing needs to go into `/etc/massimo/env` for the first start.
 Either create the owner first and then start the service:
 
