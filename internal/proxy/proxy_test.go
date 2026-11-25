@@ -603,6 +603,64 @@ func TestProxyPairing(t *testing.T) {
 	}
 }
 
+// A client's c: for a device the server does not know yet, such as one
+// just paired, goes to the Cube, and its C line is one config event of
+// the device, which the server's copy then holds: the Cube client's Send
+// applies it, and the proxy does not apply it again (AP RereadOnce v1.0,
+// Block 1).
+func TestProxyConfigOfAnUnknownDeviceIsOneEvent(t *testing.T) {
+	greeting, err := fakecube.LoadGreeting(fixture)
+	if err != nil {
+		t.Fatal(err)
+	}
+	const newDevice cube.RFAddress = 0x0a0b0c
+	pair, err := fakecube.PairingFrom(greeting, 0x0a010d, newDevice, "TEQ0000001", 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	// The fake answers the device's c:, and its greeting leaves it out.
+	fc, p, c, ctx := setupWith(t, func(fc *fakecube.Server) { fc.SetConfig(pair.Config) })
+	lines := cubewatch.Lines(fc)
+	if c.Snapshot().Config(newDevice) != nil {
+		t.Fatalf("the server knows %s before its c:", newDevice)
+	}
+	ln, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatal(err)
+	}
+	go p.ServeTCP(ctx, ln)
+	conn, err := net.Dial("tcp", ln.Addr().String())
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer conn.Close()
+	conn.SetReadDeadline(time.Now().Add(testkit.Scale(10 * time.Second)))
+	r := cube.NewReader(conn)
+	for readLine(t, r).Type != 'L' {
+	}
+	evs := testkit.ChanWatch(t, c.Events(), func(e cubelan.Event) string { return e.Kind.String() + " " + e.Device.String() })
+	_, before := c.EventCounts()
+	from := lines.Mark()
+	if m := sendLine(t, conn, r, cube.Message{Type: 'c', Data: newDevice.String()}); m.Type != 'C' || !strings.HasPrefix(m.Data, "0a0b0c,") {
+		t.Fatalf("c: answered %s", m)
+	}
+	lines.Has(t, from, "the c: at the Cube", cubewatch.Type('c'))
+	// The proxy answers once the command is done: every event of it is
+	// out, up to the client's last, which the watch is to hold before it
+	// is counted.
+	_, sent := c.EventCounts()
+	evs.Await(t, 0, "the client's last event", func(e cubelan.Event) bool { return e.Seq() >= sent })
+	got := evs.Since(0, func(e cubelan.Event) bool {
+		return e.Seq() > before && e.Kind == cubelan.EventConfig && e.Device == newDevice
+	})
+	if len(got) != 1 {
+		t.Fatalf("one c: through the proxy gave %d config events of %s, want 1", len(got), newDevice)
+	}
+	if cfg := c.Snapshot().Config(newDevice); cfg == nil || cfg.Serial != "TEQ0000001" {
+		t.Fatalf("server's copy %+v", cfg)
+	}
+}
+
 // A client's n: for longer than a Cube keeps the mode (300 s, which the
 // Cube would read as 44) reaches the Cube as n:00ff, its event names the
 // time asked; a second n: while it runs joins it, reported as joined

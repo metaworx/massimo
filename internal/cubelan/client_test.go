@@ -489,6 +489,41 @@ func TestSendReturnsWithTheReplyApplied(t *testing.T) {
 	}
 }
 
+// A line ApplyLocal folds in while a command waits for its reply answers
+// no Send: a c: waiting for one device's C line returns that line as the
+// Cube sends it, not the C line of another device applied meanwhile (AP
+// RereadOnce v1.0, Block 2).
+func TestApplyLocalAnswersNoSend(t *testing.T) {
+	t.Parallel()
+	srv, lines, c, ctx := startTurnClient(t, Options{ReplyTimeout: testkit.Scale(testkit.Wait)})
+	const applied, asked cube.RFAddress = 0x0a010a, 0x0a010d
+	line, ok := c.Snapshot().ConfigLine(applied)
+	if !ok {
+		t.Fatalf("no C line of %s", applied)
+	}
+	// The fake holds the c: unanswered until it speaks again.
+	srv.SetSilent(true)
+	from := lines.Mark()
+	waiting := sendAsync(ctx, c, cube.Message{Type: 'c', Data: asked.String()})
+	lines.Await(t, from, "the c: read", cubewatch.Type('c'))
+	c.ApplyLocal(line)
+	// The line's address and type, as a failure shows a reply.
+	head := func(m cube.Message) string {
+		rf, _, _ := strings.Cut(m.Data, ",")
+		return string(m.Type) + ":" + rf
+	}
+	select {
+	case s := <-waiting:
+		t.Fatalf("the c: of %s returned at the apply of %s's C line: %s %v", asked, applied, head(s.reply), s.err)
+	default:
+	}
+	srv.SetSilent(false)
+	s := outcome(t, "the c: of "+asked.String(), waiting)
+	if s.err != nil || head(s.reply) != "C:"+asked.String() {
+		t.Fatalf("the c: of %s returned %s %v, want its own C line", asked, head(s.reply), s.err)
+	}
+}
+
 // A t: naming several devices is answered with an A line for each, and
 // Send returns only after the last, so that the next command's reply is
 // its own and not a late A of the deletion.
