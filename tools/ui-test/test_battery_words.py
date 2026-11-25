@@ -8,6 +8,10 @@ inside the list and the window at 390 px too, where they wrap in the
 list's 240 px as a long badge does; in the log, the level's line with
 the level before in a short word, and the device's flag as the battery
 warning; in the notification settings and a notification's toast."""
+import time
+
+from playwright.sync_api import Error as PlaywrightError
+
 from helpers import isolate_log, scroll_width, show_view, wait_log_live, wait_until
 from test_new_batteries import Device
 
@@ -40,8 +44,8 @@ WORDS = {
     },
 }
 
-# A badge in its open problem list: its box, the list's, the window's
-# width, and the lines its words take. The lists of a device's row and
+# A badge in its open problem list: whether the list is open, its box,
+# the list's, the window's width, and the lines its words take. The lists of a device's row and
 # a tile's head are 240 px wide at every width (.problems-list), so the
 # longer words wrap there, inside the badge.
 FIT = """(flag) => {
@@ -51,19 +55,32 @@ FIT = """(flag) => {
   const range = document.createRange();
   range.selectNodeContents(text);
   const lines = new Set([...range.getClientRects()].map((x) => Math.round(x.top))).size;
-  return { left: r.left, right: r.right, listLeft: list.left, listRight: list.right, vw: document.documentElement.clientWidth, lines,
-    words: text.textContent };
+  return { open: flag.closest("details").open, left: r.left, right: r.right, listLeft: list.left, listRight: list.right,
+    vw: document.documentElement.clientWidth, lines, words: text.textContent };
 }"""
 
 
 def assert_badge(page, case, problems, words, where):
     """The problem list of problems (its details) opened shows the badge
     with words, whole: inside the list and the window, on two lines at
-    most, without a horizontal scroll; the list closed again."""
-    problems.locator(":scope > summary").click()
+    most, without a horizontal scroll; the list closed again. A server's
+    event of the kept device draws the server's level, and keep's read
+    draws the told one again, each in a list of its own, closed: the list
+    is opened again until the badge shows in an open list, and measured
+    in that look (FIT)."""
     flag = problems.locator(".problems-list .flag", has_text=words).first
-    flag.wait_for(state="visible")
-    fit = flag.evaluate(FIT)
+    end = time.time() + 5
+    while True:
+        try:
+            if not problems.evaluate("(d) => d.open", timeout=1000):
+                problems.locator(":scope > summary").click(timeout=1000)
+            flag.wait_for(state="visible", timeout=1000)
+            fit = flag.evaluate(FIT, timeout=1000)
+            if fit["open"]:
+                break
+        except PlaywrightError:
+            pass
+        assert time.time() < end, f"{where}: the list open with its badge"
     assert fit["words"] == words, f"{where}: the badge says {fit['words']!r}, want {words!r}"
     assert fit["left"] >= fit["listLeft"] - 0.5 and fit["right"] <= fit["listRight"] + 0.5, f"{where}: inside its list ({fit})"
     assert fit["left"] >= 0 and fit["right"] <= fit["vw"] + 0.5, f"{where}: inside the window ({fit})"

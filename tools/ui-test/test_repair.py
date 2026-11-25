@@ -6,6 +6,7 @@ stubbed, a GET with a preview or a refusal, a POST with a run, so that
 nothing reaches the fake Cube; the routes have their Go tests
 (internal/server/repair_api_test.go)."""
 import json
+import time
 from urllib.parse import parse_qs, urlparse
 
 from helpers import REPAIR_BUDGET, RepairStub, focus_in_turn, named_buttons, scroll_width, show_view, wait_until
@@ -136,15 +137,8 @@ def test_listing_names_the_device(page, case, reads):
         # the lowest free number is 2, whatever the case.
         rename_room_devices(page, reads, 1, ["bath " + word.upper() + " 1", "Bath " + word + " 3", "Bath " + word + " x"])
         want = "Bath " + word + " 2"
-        tile = page.locator(".room").first
-        tile.locator(".room-name-btn").click()
-        device = tile.locator(".device").first
-        device.wait_for(state="visible")
-        device.locator(".repair-open").click()
-        listing = page.locator(".device .repair-box:not(.hidden) .repair-item[data-repair=list]").first
+        listing = listing_offering(page, 1, "bath " + word.upper() + " 1", want)
         field = listing.locator("input[name=name]")
-        field.wait_for(state="visible")
-        assert field.input_value() == want, "the name offered"
         assert listing.locator(".repair-device-name-form label").inner_text() == page.evaluate("t('repair.deviceName')"), "the name asked for"
         assert wait_until(page, "document.querySelector('.repair-item[data-repair=list] .repair-cost') !== null", 5), "the preview shown"
         assert names and names[-1] == [want], f"the preview read with the name offered: {names}"
@@ -177,18 +171,48 @@ def test_listing_names_the_device(page, case, reads):
 
 def rename_room_devices(page, reads, room, names):
     """The room's real devices named names, in their order, as far as it
-    has them (GET …/rooms answered so), and the rooms loaded again."""
-    def named(rooms):
-        for r in rooms or []:
-            if r.get("id") == room:
-                for d, name in zip([d for d in r.get("devices") or [] if not d.get("virtual")], names):
-                    d["name"] = name
-        return rooms
-
-    reads.change("**/api/v1/cubes/*/rooms?devices=all", named)
+    has them (GET …/rooms answered so, Reads.device), and the rooms loaded
+    again; the devices kept, since the server's own events of them bring
+    their names back (AP ToldData, Block 4): listing_offering waits for
+    them."""
+    rfs = page.evaluate("(room) => state.rooms.find((r) => r.id === room).devices.map((d) => d.rf_address)", room)
+    for rf, name in zip(rfs, names):
+        reads.device(rf, name=name)
     page.evaluate("loadRooms()")
     assert wait_until(page, "state.rooms.find((r) => r.id === %d).devices.some((d) => d.name === %s)" % (room, json.dumps(names[0])), 5), \
         "the room's devices renamed"
+
+
+# The name a device's listing offers, once its preview has come: "" before.
+OFFERED = """() => { const f = document.querySelector('.device .repair-box:not(.hidden) .repair-item[data-repair=list] input[name=name]');
+  return f ? f.value : ""; }"""
+
+
+def listing_offering(page, room, name, want):
+    """The first tile's device list open, its first device's repairs open
+    until their listing offers want: its item. The name is offered once,
+    from the names of the room's devices as the page has them when the
+    preview comes, and a server's event of a device renamed (Reads.device,
+    kept) draws the server's name until keep's read brings the told one
+    back; so where the name offered is not want, the repairs are closed
+    and opened again once the page has the told name (name, of the room
+    room) again."""
+    tile = page.locator(".room").first
+    tile.locator(".room-name-btn").click()
+    device = tile.locator(".device").first
+    device.wait_for(state="visible")
+    end = time.time() + 15
+    while True:
+        assert wait_until(page, "state.rooms.find((r) => r.id === %d).devices.some((d) => d.name === %s)" % (room, json.dumps(name)), 5), \
+            "the room's devices as renamed"
+        device.locator(".repair-open").click()
+        assert wait_until(page, "(%s)() !== ''" % OFFERED, 5), "a name offered"
+        got = page.evaluate(OFFERED)
+        if got == want:
+            return page.locator(".device .repair-box:not(.hidden) .repair-item[data-repair=list]").first
+        assert time.time() < end, f"the name offered: {got!r}, want {want!r}"
+        device.locator(".repair-open").click()  # closed, to be opened anew
+        assert wait_until(page, "(%s)() === ''" % OFFERED, 5), "the repairs closed"
 
 
 def open_device_listing(page):
@@ -212,9 +236,7 @@ def test_listing_without_a_room_name(page, case, reads):
                                    "type": "wall_thermostat"})
     stub = RepairStub(page, {"place": "the Cube's list does not list device 0a0101: list it instead", "list": unlisted})
     try:
-        field = open_device_listing(page).locator("input[name=name]")
-        field.wait_for(state="visible")
-        assert field.input_value() == word + " 2", "the type alone, the lowest free number"
+        listing_offering(page, 1, word + " 1", word + " 2")  # the type alone, the lowest free number
         assert not stub.runs, "nothing run"
     finally:
         stub.close()

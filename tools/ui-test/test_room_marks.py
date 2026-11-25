@@ -27,37 +27,50 @@ term in a tip (Block 4).
 
 The states come from state events applied in the page (updateDevice);
 every write is held at its route and answered with a stub, so nothing
-reaches the fake Cube."""
+reaches the fake Cube. Where a test acts on them while the server may
+speak, they are told to the rooms' read as well and kept (Told, AP
+ToldData, Block 3): the server's own state events of the room's
+thermostat and its virtual wall thermostat, which an earlier test's
+write brings, draw the server's own, and any read of the rooms, the
+page's or keep's, draws what was told, so a check of it waits."""
 import json
 
 import pytest
 
-from helpers import busy_state, hold, scroll_width, wait_held, wait_until
+from helpers import ROOMS, busy_state, hold, scroll_width, settled, wait_held, wait_until
+from test_room_more import open_list
 
 # The room of the id given, else the first with two reported
 # thermostats, else the first with one; with two given, a copy of its
-# thermostat is put beside it in the page (as test_room_more.py's TWIN),
-# so that its thermostats can differ. An open window of the room is
-# closed in the page, as it would hide the members' line. Returns the
-# room's id and its reported thermostats, the room thermostat first, by
-# radio address, name and its eco and comfort temperatures.
+# thermostat is put beside it in the page (as test_room_more.py's
+# Modes.twin), so that its thermostats can differ. An open window of the
+# room is closed in the page, as it would hide the members' line.
+# Returns the room's id and its reported thermostats, the room
+# thermostat first, by radio address, name and its eco and comfort
+# temperatures; the twin's source (twin) and the windows closed (closed),
+# by radio address, for Told.
 ROOM = """([rid, two]) => {
   const reported = (r) => r.devices.filter((d) => isThermostat(d) && d.reported);
   const r = rid ? state.rooms.find((x) => x.id === rid)
     : state.rooms.find((x) => reported(x).length >= 2) || state.rooms.find((x) => reported(x).length >= 1);
+  let source = null;
   if (two && reported(r).length < 2) {
     const twin = JSON.parse(JSON.stringify(reported(r)[0]));
+    source = twin.rf_address;
     Object.assign(twin, { rf_address: "0a0fff", serial: "MEQ0000999", name: "Twin" });
     r.devices = [...r.devices, twin]; // a room's devices are a signal: its tile follows
   }
+  const closed = [];
   for (const w of r.devices.filter((d) => d.type === "shutter_contact" && d.state && d.state.window_open)) {
     const d = JSON.parse(JSON.stringify(w));
     d.state.window_open = false;
+    closed.push(d.rf_address);
     updateDevice(d);
   }
   const th = roomThermostat(r);
   const ths = [th, ...reported(r).filter((d) => d !== th)];
-  return { id: r.id, devices: ths.map((d) => ({ rf: d.rf_address, name: deviceName(d), eco: d.eco_temp, comfort: d.comfort_temp })) };
+  return { id: r.id, devices: ths.map((d) => ({ rf: d.rf_address, name: deviceName(d), eco: d.eco_temp, comfort: d.comfort_temp })),
+    twin: source, closed };
 }"""
 
 # Sets thermostats of a room, by radio address, to a state and their eco
@@ -80,7 +93,8 @@ SET = """([rid, by]) => {
 
 # Puts a window contact into a room in the page, a copy of the fixture's,
 # and sets its window open or closed: [rid, open, stale], with stale an
-# out-of-date contact whose last report (last_known) says it.
+# out-of-date contact whose last report (last_known) says it. Returns the
+# copy's source and the contact as applied, for Told.
 WINDOW = """([rid, open, stale]) => {
   const r = state.rooms.find((x) => x.id === rid);
   let w = r.devices.find((d) => d.rf_address === "0a0ffe");
@@ -95,6 +109,8 @@ WINDOW = """([rid, open, stale]) => {
   if (stale) Object.assign(d, { reported: false, out_of_date: true, last_known: st, state: undefined });
   else Object.assign(d, { reported: true, out_of_date: undefined, last_known: undefined, state: st });
   updateDevice(JSON.parse(JSON.stringify(d)));
+  const src = state.rooms.flatMap((x) => x.devices).find((x) => x.type === "shutter_contact" && x.rf_address !== "0a0ffe");
+  return { source: src.rf_address, device: JSON.parse(JSON.stringify(d)) };
 }"""
 
 # Sets a room's eco and comfort temperatures, its entry's, as the server
@@ -109,7 +125,8 @@ PRESETS = """([rid, eco, comfort]) => {
 # thermostat with a wall thermostat's type, at a state and its own eco
 # and comfort temperatures, and names it the room's thermostat, its
 # entry's and its virtual wall thermostat's, as where the room's master
-# decides: [rid, setpoint, eco, comfort]; returns its address.
+# decides: [rid, setpoint, eco, comfort]; returns its address and that of
+# the thermostat it is a copy of.
 WALL = """([rid, setpoint, eco, comfort]) => {
   const r = state.rooms.find((x) => x.id === rid);
   const src = r.devices.find((d) => isThermostat(d) && d.reported);
@@ -120,7 +137,7 @@ WALL = """([rid, setpoint, eco, comfort]) => {
   r.devices = [...r.devices.filter((d) => d.rf_address !== "0a0ffd"), wall];
   r.thermostat = wall.rf_address;
   r.vwt = Object.assign({}, r.vwt, { sources: Object.assign({}, r.vwt && r.vwt.sources, { setpoint: [wall.rf_address] }) });
-  return wall.rf_address;
+  return [wall.rf_address, src.rf_address];
 }"""
 
 # Gives a room's virtual wall thermostat, as its state event brings it,
@@ -135,6 +152,99 @@ VWT_SETPOINT = """([rid, rfs]) => {
   state.events.dispatchEvent(new MessageEvent("state", { data: JSON.stringify({ kind: "state", source: "device", level: "info",
     device: d.rf_address, serial: d.serial, time: new Date().toISOString(), state: d }) }));
 }"""
+
+TWIN = "0a0fff"
+WINDOW_RF = "0a0ffe"
+
+
+class Told:
+    """A room (ROOM) whose states, presets, wall thermostat, window
+    contact, virtual wall thermostat's sources and thermostat named go
+    into the page as SET, PRESETS, WALL, WINDOW, VWT_SETPOINT and the
+    entry's thermostat do, and into the rooms' read as well (Reads.device,
+    Reads.room), the room's thermostats and its virtual wall thermostat
+    kept (AP ToldData, Block 3). Put into the page, a state is the event
+    under test where a test takes it so (updateDevice); told to the read,
+    it comes back after the server's own state events of the room's
+    devices, which draw the server's, and after any read of the rooms."""
+
+    def __init__(self, page, reads, rid=None, two=False):
+        self.page, self.reads = page, reads
+        self.room = page.evaluate(ROOM, [rid, two])
+        self.rid = self.room["id"]
+        if self.room["twin"]:
+            reads.device(TWIN, like=self.room["twin"], serial="MEQ0000999", name="Twin")
+        for rf in self.room["closed"]:
+            reads.device(rf, state={"window_open": False})
+        reads.room(self.rid)
+
+    def set(self, by):
+        """SET's states of thermostats, by radio address."""
+        by = {rf: dict(v) for rf, v in by.items()}
+        now = self.page.evaluate("new Date().toISOString()")
+        for rf, v in by.items():
+            st = {"mode": v.get("mode") or "manual"}
+            if v.get("setpoint") is not None:
+                st["setpoint"] = v["setpoint"]
+            if "valve" in v:
+                st["valve_pct"] = v["valve"]
+            fields = {"state": st}
+            if "eco" in v:
+                fields["eco_temp"] = v["eco"]
+            if "comfort" in v:
+                fields["comfort_temp"] = v["comfort"]
+            if "confirmation" in v:
+                if v["confirmation"]:
+                    v["confirmation"] = dict({"since": now}, **v["confirmation"])
+                fields["confirmation"] = v["confirmation"]
+            self.reads.device(rf, **fields)
+        self.page.evaluate(SET, [self.rid, by])
+
+    def presets(self, eco, comfort):
+        """PRESETS: the room's eco and comfort temperatures."""
+        self.reads.room(self.rid, eco_temp=eco, comfort_temp=comfort)
+        self.page.evaluate(PRESETS, [self.rid, eco, comfort])
+
+    def wall(self, setpoint, eco, comfort):
+        """WALL: a wall thermostat named the room's; returns its address."""
+        rf, src = self.page.evaluate(WALL, [self.rid, setpoint, eco, comfort])
+        self.reads.device(rf, like=src, serial="NEQ0000998", name="Wall", type="wall_thermostat", eco_temp=eco, comfort_temp=comfort,
+                          state={"mode": "manual", "setpoint": setpoint, "valve_pct": None})
+        self.reads.room(self.rid, thermostat=rf, sources={"setpoint": [rf]})
+        return rf
+
+    def window(self, is_open, stale):
+        """WINDOW: the room's window contact, open or closed, stale or not."""
+        got = self.page.evaluate(WINDOW, [self.rid, is_open, stale])
+        d = got["device"]
+        self.reads.device(WINDOW_RF, like=got["source"], room_id=self.rid, serial=d["serial"], name=d["name"], window=None,
+                          reported=d["reported"], out_of_date=d.get("out_of_date"), last_known=d.get("last_known"), state=d.get("state"))
+
+    def vwt_setpoint(self, rfs):
+        """VWT_SETPOINT: the virtual wall thermostat's sources.setpoint, its
+        state event dispatched in the page."""
+        self.reads.room(self.rid, sources={"setpoint": rfs})
+        self.page.evaluate(VWT_SETPOINT, [self.rid, rfs])
+
+    def thermostat(self, rf):
+        """The room entry's thermostat, None for none."""
+        self.reads.room(self.rid, thermostat=rf)
+        self.page.evaluate("([rid, rf]) => { state.rooms.find((r) => r.id === rid).thermostat = rf === null ? undefined : rf; }", [self.rid, rf])
+
+    def kept(self):
+        """The reads of the rooms keep has started on this page (PAGE_KIT)."""
+        return self.page.evaluate("window.__uiTest.kept")
+
+    def close(self):
+        """The rooms read as the server has them again."""
+        self.reads.clear(ROOMS)
+        self.page.evaluate("async () => { await loadRooms(); }")
+
+
+# The tile's SET and the room thermostat the page takes (roomThermostat),
+# in one look.
+SET_AND_NAMED = """([sel, text, rid, rf]) => document.querySelector(sel + ' .setpoint-big').textContent === text
+  && (rf === null || roomThermostat(state.rooms.find((r) => r.id === rid)).rf_address === rf)"""
 
 # What each case shows: the setpoint, the eco and comfort temperatures,
 # the mark (None for none).
@@ -206,6 +316,22 @@ def mark_of(where):
         return None
     assert len(marks) == 1, f"one mark: {marks}"
     return marks[0]
+
+
+# A case of test_marks_and_off in one look: the tile's SET and the marks
+# of its setpoint row; the value, unit and marks of the device row's Set
+# cell, found by its label (not Offset's), and its gauges; null without
+# the cell.
+CASE_LOOK = """([sel, rf, k]) => {
+  const marksOf = %s;
+  const tile = document.querySelector(sel);
+  const row = tile && tile.querySelector('.device[data-rf="' + rf + '"]');
+  const cell = row && [...row.querySelectorAll('.device-vals .cell')].find((c) => c.querySelector('.k')?.textContent === k);
+  if (!cell) return null;
+  return { set: tile.querySelector('.setpoint-big').textContent, marks: marksOf(tile.querySelector('.setpoint-row')),
+    num: cell.querySelector('.num').innerText, unit: cell.querySelector('.u').innerText, rowMarks: marksOf(cell),
+    gauge: cell.querySelectorAll("use[href='#icon-set']").length };
+}""" % MARKS
 
 
 def stroke(locator):
@@ -280,96 +406,105 @@ def test_rooms_name_their_thermostat(page, case):
         assert r["eco"] == r["want"]["eco"] and r["comfort"] == r["want"]["comfort"], f"room {r['id']}: its configuration's: {r}"
 
 
-def test_room_thermostat_follows_the_entry(page, case):
+def test_room_thermostat_follows_the_entry(page, case, reads):
     """Where the room's virtual wall thermostat names none
     (sources.setpoint, as from a server before it), the tile's SET is the
     setpoint of the thermostat the room's entry names (roomThermostat),
     whichever it names; an entry without it either takes the wall
-    thermostat."""
-    room = page.evaluate(ROOM, [None, True])
-    rid, (a, b) = room["id"], room["devices"][:2]
+    thermostat. All told to the rooms' read as well (Told), each check
+    of SET and the thermostat named in one look."""
+    told = Told(page, reads, two=True)
+    rid, (a, b) = told.rid, told.room["devices"][:2]
     sel = '.room[data-id="%s"]' % rid
-    page.evaluate(SET, [rid, {a["rf"]: {"setpoint": 21}, b["rf"]: {"setpoint": 18}}])
+    told.set({a["rf"]: {"setpoint": 21}, b["rf"]: {"setpoint": 18}})
     lang = case.lang
-    shows = lambda v: "document.querySelector(%r).textContent === %r" % (sel + " .setpoint-big", shown(v, lang, "°"))
+    shows = lambda v, rf=None: "(%s)(%s)" % (SET_AND_NAMED, json.dumps([sel, shown(v, lang, "°"), rid, rf]))
     named = lambda: page.evaluate("(rid) => roomThermostat(state.rooms.find((r) => r.id === rid)).rf_address", rid)
     try:
-        page.evaluate(VWT_SETPOINT, [rid, None])
-        page.evaluate("([rid, rf]) => { state.rooms.find((r) => r.id === rid).thermostat = rf; }", [rid, a["rf"]])
-        assert wait_until(page, shows(21), 5) and named() == a["rf"], f"the first named: {named()}"
-        page.evaluate("([rid, rf]) => { state.rooms.find((r) => r.id === rid).thermostat = rf; }", [rid, b["rf"]])
-        assert wait_until(page, shows(18), 5) and named() == b["rf"], f"the other named: {named()}"
-        wall = page.evaluate(WALL, [rid, 23, 16, 24])
-        assert wait_until(page, shows(23), 5) and named() == wall, f"a wall thermostat named: {named()}"
-        page.evaluate(VWT_SETPOINT, [rid, None])  # the wall thermostat named by the entry alone
-        page.evaluate("([rid, rf]) => { state.rooms.find((r) => r.id === rid).thermostat = rf; }", [rid, b["rf"]])
+        told.vwt_setpoint(None)
+        told.thermostat(a["rf"])
+        assert wait_until(page, shows(21, a["rf"]), 5), f"the first named: {named()}"
+        told.thermostat(b["rf"])
+        assert wait_until(page, shows(18, b["rf"]), 5), f"the other named: {named()}"
+        wall = told.wall(23, 16, 24)
+        assert wait_until(page, shows(23, wall), 5), f"a wall thermostat named: {named()}"
+        told.vwt_setpoint(None)  # the wall thermostat named by the entry alone
+        told.thermostat(b["rf"])
         assert wait_until(page, shows(18), 5), "the radiator named, the wall thermostat beside it"
-        page.evaluate("(rid) => { state.rooms.find((r) => r.id === rid).thermostat = undefined; }", rid)
-        assert wait_until(page, shows(23), 5) and named() == wall, f"none named: the wall thermostat: {named()}"
+        told.thermostat(None)
+        assert wait_until(page, shows(23, wall), 5), f"none named: the wall thermostat: {named()}"
     finally:
-        page.evaluate("async () => { await loadRooms(); }")
+        told.close()
 
 
-def test_set_follows_the_virtual_wall_thermostats_events(page, case):
+def test_set_follows_the_virtual_wall_thermostats_events(page, case, reads):
     """The tile's SET follows the thermostat whose setpoint the room's
     virtual wall thermostat shows (its sources.setpoint), which its state
     events bring, without a read of the rooms (D19-A): a member changed at
     its device moves the room's state to another, as a boost's end may,
     and SET shows that one's setpoint at once, ahead of the room's entry
-    (thermostat), which names it only at the next read."""
-    room = page.evaluate(ROOM, [None, True])
-    rid, (a, b) = room["id"], room["devices"][:2]
+    (thermostat), which names it only at the next read. The events are
+    dispatched in the page, their sources told to the rooms' read as well
+    (Told); the reads keep starts after the server's own events are left
+    out of the count (window.__uiTest.kept)."""
+    told = Told(page, reads, two=True)
+    rid, (a, b) = told.rid, told.room["devices"][:2]
     sel = '.room[data-id="%s"]' % rid
-    page.evaluate(SET, [rid, {a["rf"]: {"setpoint": 21}, b["rf"]: {"setpoint": 18}}])
+    told.set({a["rf"]: {"setpoint": 21}, b["rf"]: {"setpoint": 18}})
     shows = lambda v: "document.querySelector(%r).textContent === %r" % (sel + " .setpoint-big", shown(v, case.lang, "°"))
     loads = []
+    kept = told.kept()
     page.on("request", lambda r: loads.append(r.url) if r.method == "GET" and "/rooms?devices=all" in r.url else None)
     try:
-        page.evaluate("([rid, rf]) => { state.rooms.find((r) => r.id === rid).thermostat = rf; }", [rid, a["rf"]])
-        page.evaluate(VWT_SETPOINT, [rid, [a["rf"]]])
+        told.thermostat(a["rf"])
+        told.vwt_setpoint([a["rf"]])
         assert wait_until(page, shows(21), 5), "SET the room's thermostat's 21"
-        page.evaluate(VWT_SETPOINT, [rid, [b["rf"]]])
+        told.vwt_setpoint([b["rf"]])
         assert wait_until(page, shows(18), 5), "SET the one the virtual wall thermostat names now, ahead of the entry"
         assert page.evaluate("(rid) => state.rooms.find((r) => r.id === rid).thermostat", rid) == a["rf"], "the entry as it was"
-        page.evaluate(VWT_SETPOINT, [rid, [a["rf"], b["rf"]]])
+        told.vwt_setpoint([a["rf"], b["rf"]])
         assert wait_until(page, shows(21), 5), "and back, the first of them"
         page.wait_for_timeout(300)
-        assert not loads, f"no read of the rooms: {loads}"
+        assert len(loads) <= told.kept() - kept, f"no read of the rooms but keep's: {loads}, keep's {told.kept() - kept}"
     finally:
-        page.evaluate("async () => { await loadRooms(); }")
+        told.close()
 
 
-def test_the_rooms_presets_over_a_wall_thermostats(page, case):
+def test_the_rooms_presets_over_a_wall_thermostats(page, case, reads):
     """Where the room's thermostat is a wall thermostat whose own eco and
     comfort differ from most of the room's (D19-A): the tile marks the
     setpoint by the room's, More shows and sends the room's, with no
     request for a detail, and the members' line marks each by its own
-    (D11-A)."""
-    room = page.evaluate(ROOM, [None, False])
-    rid, th = room["id"], room["devices"][0]
+    (D11-A). All told to the rooms' read as well (Told): a read of the
+    rooms, the page's own or after a reconnect, gives the server's eco 15
+    and comfort 22 of the room otherwise; each check waits, in one
+    look."""
+    told = Told(page, reads)
+    rid, th = told.rid, told.room["devices"][0]
     sel = '.room[data-id="%s"]' % rid
     tile = page.locator(sel)
     lang = case.lang
     try:
-        wall = page.evaluate(WALL, [rid, 17, 16, 23])
-        page.evaluate(SET, [rid, {th["rf"]: {"setpoint": 17, "eco": 17, "comfort": 21}}])
-        page.evaluate(PRESETS, [rid, 17, 21])
+        wall = told.wall(17, 16, 23)
+        told.set({th["rf"]: {"setpoint": 17, "eco": 17, "comfort": 21}})
+        told.presets(17, 21)
         assert wait_until(page, "document.querySelector(%r).textContent === %r" % (sel + " .setpoint-big", shown(17, lang, "°")), 5), "SET the wall thermostat's 17"
         assert wait_until(page, "!!document.querySelector(%r)" % (sel + " .setpoint-row .preset-mark.preset-eco"), 5), \
             "17 is the room's eco: marked, though not the wall thermostat's (16)"
-        page.evaluate("([rid, rf]) => { const r = state.rooms.find((x) => x.id === rid); const d = JSON.parse(JSON.stringify(r.devices.find((x) => x.rf_address === rf))); d.state.setpoint = 16; updateDevice(d); }", [rid, wall])
-        assert wait_until(page, "document.querySelector(%r).textContent === %r" % (sel + " .setpoint-big", shown(16, lang, "°")), 5), "SET 16"
-        assert mark_of(tile.locator(".setpoint-row")) is None, "16 is the wall thermostat's eco, not the room's: no mark"
-        assert wait_until(page, line_shown(page, sel), 5), "the members' line while 16 and 17 differ"
-        marks = {rf: preset for rf, _, _, preset in members_line(tile)["members"]}
-        assert marks == {th["rf"]: "eco", wall: "eco"}, f"each member by its own eco, 17 and 16: {marks}"
+        told.set({wall: {"setpoint": 16}})
+        assert wait_until(page, "document.querySelector(%r).textContent === %r && !document.querySelector(%r)"
+                          % (sel + " .setpoint-big", shown(16, lang, "°"), sel + " .setpoint-row .preset-mark"), 5), \
+            "SET 16, the wall thermostat's eco, not the room's: no mark"
+        want = {th["rf"]: "eco", wall: "eco"}
+        ok, line = settled(page, lambda: members_line(tile), lambda m: m is not None and {rf: p for rf, _, _, p in m["members"]} == want)
+        assert ok, f"the members' line while 16 and 17 differ, each member by its own eco, 17 and 16: {line}"
 
         asked = []
         page.on("request", lambda r: asked.append(r.url) if r.method == "GET" and "/devices/" in r.url else None)
         tile.locator(".more-sum").click()
-        assert wait_until(page, "document.querySelector(%r).textContent !== ''" % (sel + " .menu-eco .more-temp"), 5), "Eco shows its temperature"
-        assert tile.locator(".menu-eco .more-temp").inner_text() == num(17, lang) + " °C", "More's Eco the room's 17, not 16"
-        assert tile.locator(".menu-comfort .more-temp").inner_text() == num(21, lang) + " °C", "More's Comfort the room's 21, not 23"
+        assert wait_until(page, "document.querySelector(%r).textContent === %r && document.querySelector(%r).textContent === %r"
+                          % (sel + " .menu-eco .more-temp", num(17, lang) + " °C", sel + " .menu-comfort .more-temp", num(21, lang) + " °C"), 5), \
+            "More's Eco the room's 17, not 16, its Comfort the room's 21, not 23"
         held, sent = [], []
         hold(page, PUT, "PUT", held, sent)
         try:
@@ -381,10 +516,10 @@ def test_the_rooms_presets_over_a_wall_thermostats(page, case):
             page.unroute(PUT)
         assert not asked, f"no detail asked for: {asked}"
     finally:
-        page.evaluate("async () => { await loadRooms(); }")
+        told.close()
 
 
-def test_marks_and_off(page, case):
+def test_marks_and_off(page, case, reads):
     """The tile's SET and a device row at OFF, at eco, at comfort, at
     comfort equal to eco, at none of them and at the highest: OFF
     without a unit; the preset's mark, labelled, in the tile's setpoint
@@ -396,9 +531,11 @@ def test_marks_and_off(page, case):
     staying put; the marks in the accent colour of the tile's and the
     row's other icons, in light and in dark; no horizontal scroll. Each
     place is measured in its row, which whatever is above the tile moves
-    as a whole."""
-    room = page.evaluate(ROOM, [None, False])
-    rid, ths = room["id"], room["devices"]
+    as a whole. The states and presets are told to the rooms' read as
+    well (Told), and each case's values and marks waited for in one
+    look."""
+    told = Told(page, reads)
+    rid, ths = told.rid, told.room["devices"]
     sel = '.room[data-id="%s"]' % rid
     tile = page.locator(sel)
     lang = case.lang
@@ -409,31 +546,20 @@ def test_marks_and_off(page, case):
     slots, geometry = [], []
     try:
         for name, sp, eco, comfort, preset in CASES:
-            page.evaluate(SET, [rid, {d["rf"]: {"setpoint": sp, "eco": eco, "comfort": comfort} for d in ths}])
-            page.evaluate(PRESETS, [rid, eco, comfort])  # every thermostat of the room at them: the room's
+            told.set({d["rf"]: {"setpoint": sp, "eco": eco, "comfort": comfort} for d in ths})
+            told.presets(eco, comfort)  # every thermostat of the room at them: the room's
             want = shown(sp, lang, "°")
-            assert wait_until(page, "document.querySelector(%r).textContent === %r" % (sel + " .setpoint-big", want), 5), \
-                f"{name}: the tile's SET shows {want}: {tile.locator('.setpoint-big').inner_text()!r}"
-            m = mark_of(tile.locator(".setpoint-row"))
-            if preset is None:
-                assert m is None, f"{name}: no mark in the tile: {m}"
-            else:
-                label = LABEL[lang][preset]
-                assert m == {"preset": preset, "label": label, "title": label, "role": "img", "symbol": SYMBOL[preset]}, f"{name}: the tile's mark: {m}"
+            mark = [] if preset is None else [{"preset": preset, "label": LABEL[lang][preset], "title": LABEL[lang][preset], "role": "img",
+                                               "symbol": SYMBOL[preset]}]
+            expect = {"set": want, "marks": mark, "num": shown(sp, lang, ""), "unit": "" if sp == 4.5 else UNIT[lang], "rowMarks": mark,
+                      "gauge": 0 if preset else 1}
+            ok, got = settled(page, lambda: page.evaluate(CASE_LOOK, [sel, ths[0]["rf"], VAL_SET[lang]]), lambda g: g == expect)
+            assert ok, f"{name}: the tile's SET {want} and its mark, the row's value, unit and mark in the gauge's place: {got}, want {expect}"
             assert tile.locator(".temp-tag use[href='#icon-set']").count() == 1, f"{name}: SET keeps its icon"
             assert tile.locator(".temp-tag .temp-label").nth(1).inner_text() == ("SET" if lang == "en" else "SOLL"), f"{name}: and its label"
             geometry.append((box(page, sel + " .set-val", sp_row), box(page, sel + " .stepper", sp_row), box(page, sp_row, sp_row)))
 
             cell = set_cell(row, lang)
-            assert cell.locator(".num").inner_text() == shown(sp, lang, ""), f"{name}: the row's value: {cell.locator('.num').inner_text()!r}"
-            assert cell.locator(".u").inner_text() == ("" if sp == 4.5 else UNIT[lang]), f"{name}: the row's unit"
-            rm = mark_of(cell)
-            if preset is None:
-                assert rm is None and cell.locator("use[href='#icon-set']").count() == 1, f"{name}: the gauge, no mark: {rm}"
-            else:
-                label = LABEL[lang][preset]
-                assert rm == {"preset": preset, "label": label, "title": label, "role": "img", "symbol": SYMBOL[preset]}, f"{name}: the row's mark: {rm}"
-                assert cell.locator("use[href='#icon-set']").count() == 0, f"{name}: the mark in the gauge's place"
             slots.append(cell.evaluate("(c) => { const r = c.querySelector('svg.di').getBoundingClientRect(), o = c.closest('.device').getBoundingClientRect(); return { x: r.x - o.x, width: r.width }; }"))
 
             row_box = page.evaluate("(s) => { const e = document.querySelector(s); return [e.scrollWidth, e.clientWidth]; }", sel + " .setpoint-row")
@@ -449,9 +575,10 @@ def test_marks_and_off(page, case):
 
         # The stepped value: half a degree under the eco temperature, then
         # stepped onto it; held at its route, so that nothing is sent.
-        page.evaluate(SET, [rid, {d["rf"]: {"setpoint": 16.5, "eco": 17, "comfort": 21} for d in ths}])
-        page.evaluate(PRESETS, [rid, 17, 21])
-        assert wait_until(page, "!document.querySelector(%r)" % (sel + " .setpoint-row .preset-mark"), 5), "16.5 is no preset"
+        told.set({d["rf"]: {"setpoint": 16.5, "eco": 17, "comfort": 21} for d in ths})
+        told.presets(17, 21)
+        assert wait_until(page, "document.querySelector(%r).textContent === %r && !document.querySelector(%r)"
+                          % (sel + " .setpoint-big", shown(16.5, lang, "°"), sel + " .setpoint-row .preset-mark"), 5), "16.5 is no preset"
         before = box(page, sel + " .stepper", sp_row)
         held, sent = [], []
         hold(page, PUT, "PUT", held, sent)
@@ -465,7 +592,8 @@ def test_marks_and_off(page, case):
             assert all(abs(x - y) < 0.5 for x, y in zip(after, before)), f"the chevrons stay put in the setpoint row as the step reaches eco: {after}, {before}"
             tile.locator(".pending-cancel").click()
             assert mark_of(tile.locator(".setpoint-row")) is None, "the setpoint again, no mark"
-            page.evaluate(SET, [rid, {d["rf"]: {"setpoint": 5, "eco": 17, "comfort": 21} for d in ths}])
+            told.set({d["rf"]: {"setpoint": 5, "eco": 17, "comfort": 21} for d in ths})
+            assert wait_until(page, "document.querySelector(%r).textContent === %r" % (sel + " .setpoint-big", shown(5, lang, "°")), 5), "SET 5"
             tile.hover()
             tile.locator(".step-minus").click()
             assert tile.locator(".setpoint-big.pending").inner_text() == "OFF", "stepped down to OFF"
@@ -476,7 +604,7 @@ def test_marks_and_off(page, case):
 
         # The marks' colour: the accent, as SET's icon and the row's
         # Actual, in light and in dark.
-        page.evaluate(SET, [rid, {d["rf"]: {"setpoint": 17, "eco": 17, "comfort": 21} for d in ths}])
+        told.set({d["rf"]: {"setpoint": 17, "eco": 17, "comfort": 21} for d in ths})
         assert wait_until(page, "!!document.querySelector(%r)" % (sel + " .setpoint-row .preset-mark"), 5), "the eco mark"
         was = page.evaluate("document.documentElement.dataset.theme || ''")
         colours = {}
@@ -859,23 +987,25 @@ def test_an_open_tip_lies_over_the_modes_row(page, case):
         page.evaluate(SET, [room["id"], {room["devices"][0]["rf"]: {"setpoint": 20}}])
 
 
-def test_more_shows_off_from_the_entry(page, case):
+def test_more_shows_off_from_the_entry(page, case, reads):
     """More's Eco and Comfort come from the room's entry (D19-A), with no
     request for its thermostat's detail (D13-A), and show OFF for an eco
-    temperature of 4.5 °C, as the devices' displays show it."""
-    room = page.evaluate(ROOM, [None, False])
-    rid, ths = room["id"], room["devices"]
-    tile = page.locator('.room[data-id="%s"]' % rid)
-    page.evaluate(SET, [rid, {d["rf"]: {"setpoint": 20, "eco": 4.5, "comfort": 21} for d in ths}])
-    page.evaluate(PRESETS, [rid, 4.5, 21])
+    temperature of 4.5 °C, as the devices' displays show it. The states
+    and presets are told to the rooms' read as well (Told), More's two
+    temperatures waited for in one look."""
+    told = Told(page, reads)
+    rid, ths = told.rid, told.room["devices"]
+    sel = '.room[data-id="%s"]' % rid
+    tile = page.locator(sel)
+    told.set({d["rf"]: {"setpoint": 20, "eco": 4.5, "comfort": 21} for d in ths})
+    told.presets(4.5, 21)
     asked = []
     page.on("request", lambda r: asked.append(r.url) if r.method == "GET" and "/devices/" in r.url else None)
     page.evaluate("state.details = {}")
     tile.locator(".more-sum").click()
-    assert wait_until(page, "document.querySelector(%r).textContent !== ''" % ('.room[data-id="%s"] .menu-eco .more-temp' % rid), 5), \
-        "Eco shows its temperature"
-    assert tile.locator(".menu-eco .more-temp").inner_text() == "OFF", "eco at 4.5 °C is OFF"
-    assert tile.locator(".menu-comfort .more-temp").inner_text() == num(21, case.lang) + " °C", "comfort as a temperature"
+    assert wait_until(page, "document.querySelector(%r).textContent === 'OFF' && document.querySelector(%r).textContent === %r"
+                      % (sel + " .menu-eco .more-temp", sel + " .menu-comfort .more-temp", num(21, case.lang) + " °C"), 5), \
+        "eco at 4.5 °C is OFF, comfort as a temperature"
     page.keyboard.press("Escape")
     assert not asked, f"no detail asked for: {asked}"
 
@@ -885,14 +1015,17 @@ def test_a_config_event_brings_new_presets(page, case, reads):
     comfort temperatures: the row's mark follows it at once; one that says
     its presets changed (changed: temps) reads the rooms again, and the
     tile's mark follows the room's new ones (D19-A); one that does not
-    reads nothing."""
-    room = page.evaluate(ROOM, [None, False])
-    rid, th = room["id"], room["devices"][0]
+    reads nothing. The states, the presets and the event's eco are told
+    to the rooms' read as well (Told); the reads keep starts after the
+    server's own events are left out of the count (window.__uiTest.kept)."""
+    told = Told(page, reads)
+    rid, th = told.rid, told.room["devices"][0]
     sel = '.room[data-id="%s"]' % rid
     tile = page.locator(sel)
-    page.evaluate(SET, [rid, {th["rf"]: {"setpoint": 18, "eco": 16, "comfort": 21}}])
-    page.evaluate(PRESETS, [rid, 16, 21])
-    assert wait_until(page, "!document.querySelector(%r)" % (sel + " .setpoint-row .preset-mark"), 5), "18 is no preset"
+    told.set({th["rf"]: {"setpoint": 18, "eco": 16, "comfort": 21}})
+    told.presets(16, 21)
+    assert wait_until(page, "document.querySelector(%r).textContent === %r && !document.querySelector(%r)"
+                      % (sel + " .setpoint-big", shown(18, case.lang, "°"), sel + " .setpoint-row .preset-mark"), 5), "18 is no preset"
     tile.locator(".room-name-btn").click()
     row = tile.locator('.device[data-rf="%s"]' % th["rf"])
     row.wait_for()
@@ -906,14 +1039,16 @@ def test_a_config_event_brings_new_presets(page, case, reads):
       state.events.dispatchEvent(new MessageEvent("config", { data: JSON.stringify(ev) }));
     }"""
     loads = []
+    kept = told.kept()
     page.on("request", lambda r: loads.append(r.url) if r.method == "GET" and "/rooms?devices=all" in r.url else None)
     try:
+        reads.device(th["rf"], eco_temp=18)  # the device's entry as the event brings it
         page.evaluate(config, [rid, th["rf"], None])
         assert wait_until(page, "document.querySelector(%r)?.classList.contains('preset-eco')" % (
             sel + ' .device[data-rf="%s"] .preset-mark' % th["rf"]), 5), "the row's eco mark at once"
         assert mark_of(tile.locator(".setpoint-row")) is None, "the tile's by the room's, which did not change"
         page.wait_for_timeout(300)
-        assert not loads, f"no read of the rooms without changed: {loads}"
+        assert len(loads) <= told.kept() - kept, f"no read of the rooms without changed but keep's: {loads}, keep's {told.kept() - kept}"
 
         def room_eco(rooms):
             for r in rooms or []:
@@ -924,8 +1059,7 @@ def test_a_config_event_brings_new_presets(page, case, reads):
                             d["eco_temp"] = 18
                             d.setdefault("state", {})["setpoint"] = 18
             return rooms
-        reads.change("**/api/v1/cubes/*/rooms?devices=all", room_eco)
-        reads.keep(th["rf"])  # the server's own events of it bring its eco of 16 back
+        reads.change(ROOMS, room_eco)  # after Told's, so that the room's new eco is the read's
         page.evaluate(config, [rid, th["rf"], ["temps"]])
         assert wait_until(page, "!!document.querySelector(%r)" % (sel + " .setpoint-row .preset-mark.preset-eco"), 5), \
             "the rooms read again: the tile's eco mark by the room's new eco"
@@ -935,8 +1069,7 @@ def test_a_config_event_brings_new_presets(page, case, reads):
         assert wait_until(page, "(%s)(%s) === 'eco'" % (ROW_SET_MARK, json.dumps(['%s .device[data-rf="%s"]' % (sel, th["rf"]), VAL_SET[case.lang]])), 5), \
             "the row's eco mark"
     finally:
-        reads.clear("**/api/v1/cubes/*/rooms?devices=all")
-        page.evaluate("async () => { await loadRooms(); }")
+        told.close()
         tile.locator(".room-name-btn").click()
 
 
@@ -1110,33 +1243,38 @@ def awaiting(page, rid):
     return page.evaluate("(rid) => roomUI(state.rooms.find((r) => r.id === rid)).awaiting", rid)
 
 
-def test_members_line(page, case):
+def test_members_line(page, case, reads):
     """While the room's thermostats show different setpoints, a line under
     the setpoint row names each with its setpoint, OFF included, and its
     own mark, " · " between them; it is the same element as they change;
     not while a write of the tile runs or waits for them to show it, a
     room command reaching one after the other; gone once they agree, and
-    at once again where one is changed by hand after that."""
-    room = page.evaluate(ROOM, [None, True])
-    rid, ths = room["id"], room["devices"][:2]
+    at once again where one is changed by hand after that. The states go
+    into the page, the events under test, and into the rooms' read as
+    well (Told): a read in the middle of the wait draws them as the page
+    has them, and ends nothing they would not end (settleAwaiting)."""
+    told = Told(page, reads, two=True)
+    rid, ths = told.rid, told.room["devices"][:2]
     a, b = ths
     sel = '.room[data-id="%s"]' % rid
     tile = page.locator(sel)
     lang = case.lang
-    page.evaluate(SET, [rid, {a["rf"]: {"setpoint": 21, "mode": "auto", "eco": 17, "comfort": 21},
-                              b["rf"]: {"setpoint": 21, "mode": "auto", "eco": 17, "comfort": 21}}])
+    told.set({a["rf"]: {"setpoint": 21, "mode": "auto", "eco": 17, "comfort": 21},
+              b["rf"]: {"setpoint": 21, "mode": "auto", "eco": 17, "comfort": 21}})
     assert wait_until(page, line_hidden(page, sel), 5), "no line while they agree"
 
-    page.evaluate(SET, [rid, {b["rf"]: {"setpoint": 4.5, "mode": "auto", "eco": 16, "comfort": 21}}])
+    told.set({b["rf"]: {"setpoint": 4.5, "mode": "auto", "eco": 16, "comfort": 21}})
     assert wait_until(page, line_shown(page, sel), 5), "the line once they differ"
-    line = members_line(tile)
-    assert line["label"] == MEMBERS[lang] and line["members"] == [(a["rf"], a["name"], num(21, lang) + " °C", "comfort"), (b["rf"], b["name"], "OFF", None)], line
+    want = [(a["rf"], a["name"], num(21, lang) + " °C", "comfort"), (b["rf"], b["name"], "OFF", None)]
+    ok, line = settled(page, lambda: members_line(tile), lambda m: m is not None and m["label"] == MEMBERS[lang] and m["members"] == want)
+    assert ok, line
     assert line["text"].count(" · ") == 1, f"a separator between the two: {line['text']!r}"
     el = page.evaluate_handle("(s) => document.querySelector(s)", sel + " .members-line")
     member = page.evaluate_handle("(s) => document.querySelector(s)", sel + ' .members-line .member[data-rf="%s"]' % b["rf"])
-    page.evaluate(SET, [rid, {b["rf"]: {"setpoint": 16, "mode": "auto", "eco": 16, "comfort": 21}}])
+    told.set({b["rf"]: {"setpoint": 16, "mode": "auto", "eco": 16, "comfort": 21}})
     assert wait_until(page, "document.querySelector(%r).textContent.includes(%r)" % (sel + " .members-line", num(16, lang)), 5), "the line follows"
-    assert members_line(tile)["members"][1] == (b["rf"], b["name"], num(16, lang) + " °C", "eco"), "each by its own eco temperature"
+    ok, line = settled(page, lambda: members_line(tile), lambda m: m is not None and m["members"][1:] == [(b["rf"], b["name"], num(16, lang) + " °C", "eco")])
+    assert ok, f"each by its own eco temperature: {line}"
     assert page.evaluate("([e, s]) => e === document.querySelector(s)", [el, sel + " .members-line"]), "the same line"
     assert page.evaluate("([e, s]) => e === document.querySelector(s)", [member, sel + ' .members-line .member[data-rf="%s"]' % b["rf"]]), \
         "the same member, updated in place"
@@ -1147,6 +1285,8 @@ def test_members_line(page, case):
     held, sent = [], []
     hold(page, PUT, "PUT", held, sent)
     try:
+        assert wait_until(page, "document.querySelector(%r).textContent === %r" % (sel + " .setpoint-big", shown(21, lang, "°")), 5), \
+            "SET the room thermostat's 21, which MANU sends"
         tile.locator(".mode-manual").click()
         assert wait_held(page, held), "MANU sends"
         assert sent[-1] == {"mode": "manual", "temp": 21}, f"the room thermostat's setpoint: {sent}"
@@ -1154,30 +1294,30 @@ def test_members_line(page, case):
         answer_all(page, held, PENDING)
         assert wait_until(page, "!document.querySelector(%r).classList.contains('busy')" % (sel + " .mode-manual"), 5), "the write answered"
         assert members_line(tile) is None, "no line while the thermostats do not show it yet"
-        page.evaluate(SET, [rid, {a["rf"]: {"setpoint": 21, "mode": "manual"}}])
+        told.set({a["rf"]: {"setpoint": 21, "mode": "manual"}})
         page.wait_for_timeout(300)
         assert members_line(tile) is None, "nor while one shows it and the other not"
-        page.evaluate(SET, [rid, {b["rf"]: {"setpoint": 21, "mode": "manual"}}])
+        told.set({b["rf"]: {"setpoint": 21, "mode": "manual"}})
         assert wait_until(page, "roomUI(state.rooms.find((r) => r.id === %d)).awaiting === null" % rid, 5), "the wait ends once both show it"
-        assert members_line(tile) is None, "they agree: no line"
-        page.evaluate(SET, [rid, {b["rf"]: {"setpoint": 18, "mode": "manual"}}])
+        assert wait_until(page, line_hidden(page, sel), 5), "they agree: no line"
+        told.set({b["rf"]: {"setpoint": 18, "mode": "manual"}})
         assert wait_until(page, line_shown(page, sel), 5), "a change by hand after the write shows at once"
     finally:
         page.unroute(PUT)
 
 
-def test_auto_into_auto_waits_for_the_setpoints(page, case):
+def test_auto_into_auto_waits_for_the_setpoints(page, case, reads):
     """AUTO while every thermostat is in auto already: the wait does not
     end with the answer, though they all show the mode, nor at a state
     event of another kind (a valve report, a window contact) while they
     still agree on their setpoints from before, but once they show
     agreeing setpoints taken since, so that the line does not flicker as
     one takes its programme's setpoint before the other (D17-A)."""
-    room = page.evaluate(ROOM, [None, True])
-    rid, (a, b) = room["id"], room["devices"][:2]
+    told = Told(page, reads, two=True)
+    rid, (a, b) = told.rid, told.room["devices"][:2]
     sel = '.room[data-id="%s"]' % rid
     tile = page.locator(sel)
-    page.evaluate(SET, [rid, {a["rf"]: {"setpoint": 17, "mode": "auto"}, b["rf"]: {"setpoint": 17, "mode": "auto"}}])
+    told.set({a["rf"]: {"setpoint": 17, "mode": "auto"}, b["rf"]: {"setpoint": 17, "mode": "auto"}})
     held, sent = [], []
     hold(page, PUT, "PUT", held, sent)
     try:
@@ -1187,30 +1327,30 @@ def test_auto_into_auto_waits_for_the_setpoints(page, case):
         answer_all(page, held, PENDING)
         assert wait_until(page, "!document.querySelector(%r).classList.contains('busy')" % (sel + " .mode-auto"), 5), "the write answered"
         assert (awaiting(page, rid) or {}).get("mode") == "auto", "the wait holds though both show auto"
-        page.evaluate(SET, [rid, {b["rf"]: {"setpoint": 17, "mode": "auto", "valve": 40}}])
-        page.evaluate(WINDOW, [rid, False, False])
+        told.set({b["rf"]: {"setpoint": 17, "mode": "auto", "valve": 40}})
+        told.window(False, False)
         page.wait_for_timeout(300)
         assert (awaiting(page, rid) or {}).get("mode") == "auto", "a valve report and a window contact before any takes the programme end nothing"
-        page.evaluate(SET, [rid, {a["rf"]: {"setpoint": 21, "mode": "auto"}}])
+        told.set({a["rf"]: {"setpoint": 21, "mode": "auto"}})
         page.wait_for_timeout(300)
         assert members_line(tile) is None, "no line while one has taken its programme's setpoint and the other not"
-        page.evaluate(SET, [rid, {b["rf"]: {"setpoint": 21, "mode": "auto"}}])
+        told.set({b["rf"]: {"setpoint": 21, "mode": "auto"}})
         assert wait_until(page, "roomUI(state.rooms.find((r) => r.id === %d)).awaiting === null" % rid, 5), "the wait ends once they agree"
-        page.evaluate(SET, [rid, {b["rf"]: {"setpoint": 19, "mode": "auto"}}])
+        told.set({b["rf"]: {"setpoint": 19, "mode": "auto"}})
         assert wait_until(page, line_shown(page, sel), 5), "a later difference shows at once"
     finally:
         page.unroute(PUT)
 
 
-def test_the_house_holds_the_line(page, case):
+def test_the_house_holds_the_line(page, case, reads):
     """A write of the House tile to the room, from its answer on, holds
     the room's line as the tile's own write does, until its thermostats
     show it."""
-    room = page.evaluate(ROOM, [None, True])
-    rid, (a, b) = room["id"], room["devices"][:2]
+    told = Told(page, reads, two=True)
+    rid, (a, b) = told.rid, told.room["devices"][:2]
     sel = '.room[data-id="%s"]' % rid
     tile = page.locator(sel)
-    page.evaluate(SET, [rid, {a["rf"]: {"setpoint": 20, "mode": "manual"}, b["rf"]: {"setpoint": 20, "mode": "manual"}}])
+    told.set({a["rf"]: {"setpoint": 20, "mode": "manual"}, b["rf"]: {"setpoint": 20, "mode": "manual"}})
     held, sent = [], []
     hold(page, PUT, "PUT", held, sent)
     try:
@@ -1225,27 +1365,27 @@ def test_the_house_holds_the_line(page, case):
             page.wait_for_timeout(200)
         assert busy_state(page, "#house-panel button[type=submit]")[1] is False, "every room answered"
         assert (awaiting(page, rid) or {}).get("mode") == "auto", "the House's write waits for the room's thermostats"
-        page.evaluate(SET, [rid, {a["rf"]: {"setpoint": 17, "mode": "auto"}}])
+        told.set({a["rf"]: {"setpoint": 17, "mode": "auto"}})
         page.wait_for_timeout(300)
         assert members_line(tile) is None, "no line while they take it one by one"
-        page.evaluate(SET, [rid, {b["rf"]: {"setpoint": 17, "mode": "auto"}}])
+        told.set({b["rf"]: {"setpoint": 17, "mode": "auto"}})
         assert wait_until(page, "roomUI(state.rooms.find((r) => r.id === %d)).awaiting === null" % rid, 5), "the wait ends once they agree"
     finally:
         page.unroute(PUT)
         page.locator("#house-panel .form-cancel").click()
 
 
-def test_a_write_not_taken_leaves_the_wait(page, case, watch):
+def test_a_write_not_taken_leaves_the_wait(page, case, watch, reads):
     """A write the Cube discarded or that failed replaces no wait: with
     none before it, the line shows at once after its answer; after a write
     the Cube took, the line stays away for that one, until its
     thermostats show it (D17-A)."""
-    room = page.evaluate(ROOM, [None, True])
-    rid, (a, b) = room["id"], room["devices"][:2]
+    told = Told(page, reads, two=True)
+    rid, (a, b) = told.rid, told.room["devices"][:2]
     sel = '.room[data-id="%s"]' % rid
     tile = page.locator(sel)
     watch.expected.append(("/rooms/%d/setpoint" % rid, 502))  # the failed write's answer, on purpose
-    page.evaluate(SET, [rid, {a["rf"]: {"setpoint": 21, "mode": "auto"}, b["rf"]: {"setpoint": 17, "mode": "auto"}}])
+    told.set({a["rf"]: {"setpoint": 21, "mode": "auto"}, b["rf"]: {"setpoint": 17, "mode": "auto"}})
     assert wait_until(page, line_shown(page, sel), 5), "the line while they differ"
     held, sent = [], []
     hold(page, PUT, "PUT", held, sent)
@@ -1257,6 +1397,8 @@ def test_a_write_not_taken_leaves_the_wait(page, case, watch):
         assert wait_until(page, line_shown(page, sel), 5), "discarded, with no wait before it: the line at once"
         assert awaiting(page, rid) is None, "and no wait"
 
+        assert wait_until(page, "document.querySelector(%r).textContent === %r" % (sel + " .setpoint-big", shown(21, case.lang, "°")), 5), \
+            "SET the room thermostat's 21, which MANU sends"
         tile.locator(".mode-manual").click()
         assert wait_held(page, held), "MANU sends"
         answer_all(page, held, PENDING)
@@ -1274,11 +1416,11 @@ def test_a_write_not_taken_leaves_the_wait(page, case, watch):
         page.unroute(PUT)
 
 
-def test_a_boost_waits_for_nothing(page, case):
+def test_a_boost_waits_for_nothing(page, case, reads):
     """A boost changes no setpoint the line shows: it starts no wait."""
-    room = page.evaluate(ROOM, [None, True])
-    rid, (a, b) = room["id"], room["devices"][:2]
-    page.evaluate(SET, [rid, {a["rf"]: {"setpoint": 21, "mode": "auto"}, b["rf"]: {"setpoint": 17, "mode": "auto"}}])
+    told = Told(page, reads, two=True)
+    rid, (a, b) = told.rid, told.room["devices"][:2]
+    told.set({a["rf"]: {"setpoint": 21, "mode": "auto"}, b["rf"]: {"setpoint": 17, "mode": "auto"}})
     held, sent = [], []
     hold(page, PUT, "PUT", held, sent)
     try:
@@ -1291,45 +1433,45 @@ def test_a_boost_waits_for_nothing(page, case):
         page.unroute(PUT)
 
 
-def test_a_pending_write_or_an_open_window_hides_the_line(page, case):
+def test_a_pending_write_or_an_open_window_hides_the_line(page, case, reads):
     """A thermostat showing a write of its mode or setpoint pending, as the
     server says it (another client's, one from before a reload), hides the
     line, an unconfirmed one or one of the key lock does not; so does an
     open window of the room, its radiators at their window-open
     temperature, as the room checks pause for it, an out-of-date
     contact's last report too (D17-A)."""
-    room = page.evaluate(ROOM, [None, True])
-    rid, (a, b) = room["id"], room["devices"][:2]
+    told = Told(page, reads, two=True)
+    rid, (a, b) = told.rid, told.room["devices"][:2]
     sel = '.room[data-id="%s"]' % rid
-    page.evaluate(SET, [rid, {a["rf"]: {"setpoint": 21, "mode": "manual"}, b["rf"]: {"setpoint": 17, "mode": "manual"}}])
+    told.set({a["rf"]: {"setpoint": 21, "mode": "manual"}, b["rf"]: {"setpoint": 17, "mode": "manual"}})
     assert wait_until(page, line_shown(page, sel), 5), "the line while they differ"
     for conf, hides in (({"state": "pending", "fields": ["setpoint"]}, True), ({"state": "pending", "fields": ["mode"]}, True),
                         ({"state": "pending", "fields": ["locked"]}, False), ({"state": "unconfirmed", "fields": ["mode", "setpoint"]}, False),
                         (None, False)):
-        page.evaluate(SET, [rid, {b["rf"]: {"setpoint": 17, "mode": "manual", "confirmation": conf}}])
+        told.set({b["rf"]: {"setpoint": 17, "mode": "manual", "confirmation": conf}})
         assert wait_until(page, line_hidden(page, sel) if hides else line_shown(page, sel), 5), f"{conf}: hidden {hides}"
-    page.evaluate(WINDOW, [rid, True, False])
+    told.window(True, False)
     assert wait_until(page, line_hidden(page, sel), 5), "an open window hides the line"
-    page.evaluate(WINDOW, [rid, False, False])
+    told.window(False, False)
     assert wait_until(page, line_shown(page, sel), 5), "the window closed, the line again"
-    page.evaluate(WINDOW, [rid, True, True])
+    told.window(True, True)
     assert wait_until(page, line_hidden(page, sel), 5), "an out-of-date contact whose last report is open hides the line"
-    page.evaluate(WINDOW, [rid, False, True])
+    told.window(False, True)
     assert wait_until(page, line_shown(page, sel), 5), "and one whose last report is closed does not"
     assert scroll_width(page) <= case.width, "no horizontal scroll"
 
 
 @pytest.mark.clock
 @pytest.mark.cases("1100-en", "390-de")
-def test_members_line_after_the_deadline(page, case):
+def test_members_line_after_the_deadline(page, case, reads):
     """A write some thermostat does not show: the line stays away for the
     confirmation's five minutes, then shows the setpoints that still
     differ."""
-    room = page.evaluate(ROOM, [None, True])
-    rid, (a, b) = room["id"], room["devices"][:2]
+    told = Told(page, reads, two=True)
+    rid, (a, b) = told.rid, told.room["devices"][:2]
     tile = page.locator('.room[data-id="%s"]' % rid)
     sel = '.room[data-id="%s"]' % rid
-    page.evaluate(SET, [rid, {a["rf"]: {"setpoint": 20, "mode": "manual"}, b["rf"]: {"setpoint": 20, "mode": "manual"}}])
+    told.set({a["rf"]: {"setpoint": 20, "mode": "manual"}, b["rf"]: {"setpoint": 20, "mode": "manual"}})
     held, sent = [], []
     hold(page, PUT, "PUT", held, sent)
     try:
@@ -1338,7 +1480,7 @@ def test_members_line_after_the_deadline(page, case):
         assert wait_held(page, held), "the write is sent"
         answer_all(page, held, PENDING)
         assert wait_until(page, "roomUI(state.rooms.find((r) => r.id === %d)).awaiting !== null" % rid, 5), "the write waits"
-        page.evaluate(SET, [rid, {a["rf"]: {"setpoint": 22, "mode": "manual"}}])
+        told.set({a["rf"]: {"setpoint": 22, "mode": "manual"}})
         page.clock.fast_forward(4 * 60 * 1000)
         assert members_line(tile) is None, "no line within the five minutes"
         page.clock.fast_forward(61 * 1000)
@@ -1347,17 +1489,18 @@ def test_members_line_after_the_deadline(page, case):
         page.unroute(PUT)
 
 
-def test_shows_off_of_a_write_not_confirmed(page, case):
+def test_shows_off_of_a_write_not_confirmed(page, case, reads):
     """A device that has not shown a setpoint write says what it shows,
-    OFF for 4.5 °C."""
-    room = page.evaluate(ROOM, [None, False])
-    rid, d = room["id"], room["devices"][0]
+    OFF for 4.5 °C. Told to the rooms' read as well (Told), the list
+    opened again where a redraw closed it (open_list)."""
+    told = Told(page, reads)
+    rid, d = told.rid, told.room["devices"][0]
     tile = page.locator('.room[data-id="%s"]' % rid)
-    page.evaluate(SET, [rid, {d["rf"]: {"setpoint": 4.5, "mode": "manual", "confirmation": {"state": "unconfirmed", "fields": ["setpoint"]}}}])
-    tile.locator(".tile-head .problems-sum").click()
-    flag = tile.locator(".tile-head .problem-flags .flag[title]", has_text="not confirmed" if case.lang == "en" else "nicht bestätigt").first
+    told.set({d["rf"]: {"setpoint": 4.5, "mode": "manual", "confirmation": {"state": "unconfirmed", "fields": ["setpoint"]}}})
+    flag = "not confirmed" if case.lang == "en" else "nicht bestätigt"
     want = "setpoint (shows OFF)" if case.lang == "en" else "Solltemperatur (zeigt OFF)"
-    assert want in (flag.get_attribute("title") or ""), flag.get_attribute("title")
+    open_list(tile, """(d) => [...d.querySelectorAll('.problem-flags .flag[title]')].some((f) => f.textContent.includes(%s)
+      && f.getAttribute('title').includes(%s))""" % (json.dumps(flag), json.dumps(want)), f"the flag {flag!r} says what it shows: {want!r}")
     page.keyboard.press("Escape")
 
 

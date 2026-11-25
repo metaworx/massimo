@@ -18,7 +18,7 @@ first requests are refused on purpose, as in test_login.py."""
 import json
 
 from conftest import URL
-from helpers import OPERATOR_PASSWORD, frames, named_buttons, show_view, wait_until
+from helpers import OPERATOR_PASSWORD, close_fold, frames, named_buttons, open_fold, show_view, wait_until
 from test_connect import server_page
 from test_first_owner import OPEN, owner_card, start_page
 from test_login import sign_in
@@ -188,22 +188,22 @@ def test_my_profiles_password_eyes(new_context, case, watch, guard):
     hidden again when the fold is closed and opened, the field drawn, also
     where the two come before the page takes the first, as one toggle
     event, as a loaded page meets them; hidden in the very task that
-    opens the fold, before a paint or a read can come between (the CI's)."""
+    opens the fold, before a paint or a read can come between (the CI's).
+    Before an eye is pressed, the fold's own toggle event is taken
+    (open_fold, close_fold), which starts its password fields anew and
+    would hide a password shown before it."""
     page = fresh_page(new_context, guard, watch)
     sign_in(page, "operator", OPERATOR_PASSWORD)
     show_view(page, "profile")
-    fold = page.locator("#me-password")
-    if fold.get_attribute("open") is None:
-        page.locator("#me-password-title").click()
+    open_fold(page, "#me-password")
     page.locator("#me-new").wait_for(state="visible")
     for field in ("me-current", "me-new", "me-again"):
         check_eye(page, case, field, "not-set-" + field)
     named_buttons(page, "My profile's password with its eyes")
     eye_of(page, "me-new").click()
     shown(state(page, "me-new"), case, "before the fold closes")
-    page.locator("#me-password-title").click()
-    assert wait_until(page, "!document.getElementById('me-password').open", 3)
-    page.locator("#me-password-title").click()
+    close_fold(page, "#me-password")
+    open_fold(page, "#me-password")
     page.locator("#me-new").wait_for(state="visible")
     s = state(page, "me-new")
     hidden(s, case, "the fold closed and opened again")
