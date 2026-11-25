@@ -13,7 +13,8 @@
  * Save by its state and the disk in the section's pill, Enabled, saved at
  * once, its users each with who it acts as and Link, and Revoke, which
  * asks first; the installations seen on the LAN, with Register, or why
- * the server does not look; Look again.
+ * the server does not look, nothing of either before the LAN's answer;
+ * Look again.
  */
 
 import { useLayoutEffect, useRef, useState } from "preact/hooks";
@@ -420,7 +421,7 @@ export function IntegrationsCard() {
       </div>
       <h4 class="integrations-found-h">{t("integrations.found")}</h4>
       <div id="integrations-found">
-        {data.loaded && !data.looks && <NotLooking />}
+        {data.seen && !data.looks && <NotLooking />}
         {data.looks && !data.found.length && <p class="muted small">{t("integrations.foundNone")}</p>}
         {data.looks && data.found.length > 0 && (
           <ul class="integrations-found-list">{data.found.map((f, n) => <Seen key={f.instance_id + "|" + f.address} f={f} n={n} />)}</ul>

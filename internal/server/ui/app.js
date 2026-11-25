@@ -739,7 +739,7 @@ function applySettings() {
   applyAppearance();
   const cube = state.cubes.find((c) => c.serial === state.serial);
   if (cube) renderHeader(cube);
-  startPolling();
+  restartPolling();
 }
 
 // --- loading ----------------------------------------------------------
@@ -957,10 +957,21 @@ function clearCubeData() {
   for (const id of ["stats-cube", "duty", "slots", "pending-n", "queued"]) $(id).textContent = "";
 }
 
-// startPolling runs poll every poll interval.
+// startPolling runs poll every poll interval. The page's start starts it
+// once the card it waits for has closed (init), and so do a sign-in no
+// start waits for, a sign-out's start and a card left that the running
+// page stood still behind (login.js).
 function startPolling() {
   if (state.pollTimer) clearInterval(state.pollTimer);
   state.pollTimer = setInterval(() => poll(false), state.settings.poll * 1000);
+}
+
+// restartPolling starts the poll again at the poll setting's pace where it
+// runs, for a change of the settings; a poll that does not run stays
+// stopped: nothing of the page is read behind the sign-in card or the
+// first owner's (AP LooseEnds, Block 3).
+function restartPolling() {
+  if (state.pollTimer) startPolling();
 }
 
 // --- events -----------------------------------------------------------
@@ -1200,6 +1211,7 @@ async function init() {
   initNotify(); // notify.js, before the page the address names is shown
   const hadSerial = !!state.serial;
   MassimoParts.pages.showAddress(); // the page the address names, the log with its choices
+  startPolling(); // only now, beside the first refresh: nothing of the page is read behind the start's card
   refresh().then((fresh) => {
     if (!fresh) return; // another user signed in meanwhile: their sign-in started the data (login.js afterLogin)
     store("massimo.serial", state.serial);
