@@ -504,3 +504,429 @@ func TestServePlainSeedCutShort(t *testing.T) {
 		})
 	}
 }
+
+// nowhere is a Cube address at which nothing answers: the dial is
+// refused.
+const nowhere = "127.0.0.1:9"
+
+// plainEnv loads a settings file with the plain MASSIMO_CUBE_ADDRESS and
+// MASSIMO_CUBE_PROXY, as the README's single-Cube setup has them.
+func plainEnv(t *testing.T, cubeAddr, proxyAddr string) {
+	t.Helper()
+	envFile := filepath.Join(t.TempDir(), "x.env")
+	if err := os.WriteFile(envFile, []byte("MASSIMO_CUBE_ADDRESS="+cubeAddr+"\nMASSIMO_CUBE_PROXY="+proxyAddr+"\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := env.LoadFile(envFile); err != nil {
+		t.Fatal(err)
+	}
+}
+
+// addUICube adds a Cube to the store as the web UI does.
+func addUICube(t *testing.T, st *store.Store, serial, addr string) {
+	t.Helper()
+	if _, err := st.AddCube(context.Background(), store.Cube{Serial: serial, Address: addr, Configured: true, Source: store.SourceUI}); err != nil {
+		t.Fatal(err)
+	}
+}
+
+// runSetup serves what setupCubes returned until the returned stop, or
+// the test's end, and returns the API's base URL.
+func runSetup(t *testing.T, st *store.Store, su setup, logger *slog.Logger) (base string, stop func()) {
+	t.Helper()
+	srv := server.New(server.Options{Cubes: su.cubes, Proxy: su.listeners, Store: st, FileCubes: su.fileCubes, Logger: logger})
+	ts := httptest.NewServer(srv.Handler())
+	ctx, cancel := context.WithCancel(context.Background())
+	done := make(chan struct{})
+	go func() { srv.Run(ctx); close(done) }()
+	var once bool
+	stop = func() {
+		if once {
+			return
+		}
+		once = true
+		ts.Close()
+		cancel()
+		<-done
+	}
+	t.Cleanup(stop)
+	return ts.URL, stop
+}
+
+// listenWait is how long a test waits for a proxy on freeAddr's port to
+// listen: another process may hold the port a while, and the server
+// tries again after 1, 2 and 4 s (docs/proxy.md).
+var listenWait = testkit.For(20 * time.Second)
+
+// listedProxy is a proxy listener as GET /api/v1/system lists it.
+type listedProxy struct {
+	Serial    string `json:"serial"`
+	Addr      string `json:"addr"`
+	Listening bool   `json:"listening"`
+}
+
+// proxyAt returns the listener at addr as GET /api/v1/system lists it.
+func proxyAt(t *testing.T, base, addr string) (listedProxy, bool) {
+	t.Helper()
+	var sys struct {
+		CubeProxies []listedProxy `json:"cube_proxies"`
+	}
+	getJSON(t, base+"/api/v1/system", &sys)
+	for _, p := range sys.CubeProxies {
+		if p.Addr == addr {
+			return p, true
+		}
+	}
+	return listedProxy{}, false
+}
+
+// The plain MASSIMO_CUBE_ADDRESS and MASSIMO_CUBE_PROXY beside a Cube
+// added in the web UI (D24-B): the start goes on, and the plain proxy
+// serves the plain Cube at once, tied to it by its address. A client
+// that comes before the Cube has reported its serial gets its greeting
+// once it has; the server then adds the Cube to the store, and the next
+// start ties the plain lines to its row. A -proxy flag without a serial
+// is refused as before.
+func TestServePlainCubeBesideStored(t *testing.T) {
+	clearCubeEnv(t)
+	// The plain Cube comes up only once a client waits at its proxy: its
+	// port is held, and the server's dial waits for the greeting.
+	held, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer held.Close()
+	greeting, err := fakecube.LoadGreeting(greetingFile)
+	if err != nil {
+		t.Fatal(err)
+	}
+	fc := &fakecube.Server{Greeting: greeting}
+	cubeAddr, proxyAddr := held.Addr().String(), freeAddr(t)
+	plainEnv(t, cubeAddr, proxyAddr)
+	t.Setenv(env.ProxySerial, "LEQ0000100")
+	st := testStore(t, "")
+	ctx := context.Background()
+	addUICube(t, st, "KEQ0000200", nowhere)
+
+	if _, err := setupCubes(ctx, st, Config{Proxies: []string{proxyAddr}}, quietLog()); err == nil || !strings.Contains(err.Error(), "several cubes") {
+		t.Fatalf("-proxy without a serial beside two cubes: %v", err)
+	}
+	su, err := setupCubes(ctx, st, Config{}, quietLog())
+	if err != nil {
+		t.Fatalf("the start: %v", err)
+	}
+	if len(su.cubes) != 2 || len(su.listeners) != 1 || su.listeners[0].Addr != proxyAddr || su.listeners[0].Serial != "" || su.listeners[0].CubeAddr != cubeAddr || su.listeners[0].DiscoverySerial != "LEQ0000100" {
+		t.Fatalf("cubes %+v listeners %+v", su.cubes, su.listeners)
+	}
+	base, stop := runSetup(t, st, su, quietLog())
+	var p listedProxy
+	testkit.Eventually(t, "the plain proxy listening", func() bool {
+		var ok bool
+		p, ok = proxyAt(t, base, proxyAddr)
+		return ok && p.Listening
+	}, listenWait)
+	if p.Serial != "" {
+		t.Fatalf("the plain Cube's serial known before it came up: %+v", p)
+	}
+	conn, err := net.DialTimeout("tcp", proxyAddr, time.Second)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer conn.Close()
+	fc.Serve(held)
+	defer fc.Close() // only once it serves: Close needs its listener
+	conn.SetReadDeadline(time.Now().Add(testkit.Scale(20 * time.Second)))
+	if m, err := cube.NewReader(conn).Read(); err != nil || m.Type != 'H' || !strings.HasPrefix(m.Data, "KEQ0000100,") {
+		t.Fatalf("greeting %v %v", m, err)
+	}
+	testkit.Eventually(t, "the plain proxy under the serial reported", func() bool {
+		p, _ = proxyAt(t, base, proxyAddr)
+		return p.Serial == "KEQ0000100" && p.Listening
+	})
+	if !testkit.Within(5*time.Second, func() bool { _, ok, _ := st.Cube(ctx, "KEQ0000100"); return ok }) {
+		t.Fatal("the plain Cube not added to the store")
+	}
+	stop()
+
+	// The next start: the plain lines belong to KEQ0000100's row.
+	su, err = setupCubes(ctx, st, Config{}, quietLog())
+	if err != nil || len(su.cubes) != 2 || len(su.listeners) != 1 || su.listeners[0].Serial != "KEQ0000100" || su.listeners[0].CubeAddr != "" || su.listeners[0].Addr != proxyAddr || su.listeners[0].DiscoverySerial != "LEQ0000100" {
+		t.Fatalf("the next start: cubes %+v listeners %+v %v", su.cubes, su.listeners, err)
+	}
+}
+
+// listedCube is a Cube as GET /api/v1/cubes lists it.
+type listedCube struct {
+	Serial         string   `json:"serial"`
+	Connected      bool     `json:"connected"`
+	ProxyAddress   string   `json:"proxy_address"`
+	ProxyListening []string `json:"proxy_listening"`
+	FileDiffers    []struct {
+		Field, Variable string
+		File, Store     any
+	} `json:"file_differs"`
+}
+
+// differs reports whether the Cube shows the settings file's variable as
+// a line that differs from its row, with the file's value.
+func (c listedCube) differs(variable, file string) bool {
+	for _, d := range c.FileDiffers {
+		if d.Variable == variable && d.File == file {
+			return true
+		}
+	}
+	return false
+}
+
+// cubeListed returns the Cube serial as GET /api/v1/cubes lists it, and
+// how many entries have that serial.
+func cubeListed(t *testing.T, base, serial string) (listedCube, int) {
+	t.Helper()
+	var list []listedCube
+	getJSON(t, base+"/api/v1/cubes", &list)
+	var out listedCube
+	n := 0
+	for _, c := range list {
+		if c.Serial == serial {
+			out, n = c, n+1
+		}
+	}
+	return out, n
+}
+
+// The plain MASSIMO_CUBE_ADDRESS is a stored Cube's where both name the
+// same host and port, whatever the host's case and brackets, the Cube's
+// port where one gives none; the plain address alone ties too, another
+// port does not. The start then serves the one Cube, and the setting
+// names it.
+func TestServePlainAddressOfAStoredCube(t *testing.T) {
+	ctx := context.Background()
+	for _, c := range []struct {
+		plain, row string
+		tied       bool
+	}{
+		{"192.0.2.1", "192.0.2.1:62910", true},
+		{"192.0.2.1:62910", "192.0.2.1", true},
+		{"Cube.example", "cube.example:62910", true},
+		{"fe80::1", "[fe80::1]:62910", true},
+		{"[fe80::1]", "[FE80::1]:62910", true},
+		{"192.0.2.1", "192.0.2.1:62911", false},
+		{"192.0.2.1", "192.0.2.10", false},
+	} {
+		t.Run(c.plain+" and "+c.row, func(t *testing.T) {
+			clearCubeEnv(t)
+			t.Setenv(env.Address, c.plain)
+			st := testStore(t, "")
+			addUICube(t, st, "KEQ0000100", c.row)
+			su, err := setupCubes(ctx, st, Config{}, quietLog())
+			sn, serr := st.PlainSerial(ctx)
+			if err != nil || serr != nil {
+				t.Fatal(err, serr)
+			}
+			if c.tied && (len(su.cubes) != 1 || su.cubes[0].Serial != "KEQ0000100" || sn != "KEQ0000100") {
+				t.Fatalf("not tied: cubes %+v, the setting %q", su.cubes, sn)
+			}
+			if !c.tied && (len(su.cubes) != 2 || sn != "") {
+				t.Fatalf("tied: cubes %+v, the setting %q", su.cubes, sn)
+			}
+		})
+	}
+}
+
+// The README's path where the plain Cube is one the store has: the first
+// start did not reach it, and the owner then added it in the web UI at
+// the plain address. The start ties the plain lines to it, so that the
+// Cube is dialed once: the setting names it, and its row wins over the
+// plain lines (docs/store.md, "Seeding and precedence"). The plain
+// MASSIMO_CUBE_PROXY, which the row lacks, is a line that differs, and
+// nothing listens on it. The next start is the same, without the note.
+func TestServePlainCubeAtStoredCube(t *testing.T) {
+	clearCubeEnv(t)
+	cubeAddr, proxyAddr := startFakeCube(t), freeAddr(t)
+	plainEnv(t, cubeAddr, proxyAddr)
+	st := testStore(t, "")
+	ctx := context.Background()
+	addUICube(t, st, "KEQ0000100", cubeAddr)
+	addUICube(t, st, "KEQ0000200", nowhere) // so that KEQ0000100 has no listener of the single Cube's
+	logger, logs := testkit.LogWatch(slog.LevelWarn)
+	su, err := setupCubes(ctx, st, Config{}, logger)
+	if err != nil || len(su.cubes) != 2 || su.cubes[0].Serial != "KEQ0000100" || su.cubes[0].SeedFromFile || len(su.listeners) != 0 {
+		t.Fatalf("the start: cubes %+v listeners %+v %v", su.cubes, su.listeners, err)
+	}
+	note := testkit.Msg(server.PlainServedNote, "serial", "KEQ0000100", "addr", cubeAddr)
+	logs.Has(t, 0, "the note that the plain lines are the stored Cube's", note)
+	logs.Has(t, 0, "the note's word on the row and the way out", testkit.Contains("compared with its row, whose values win", "take the plain lines out of the settings file, or take a value from the file in the web UI"))
+	if sn, err := st.PlainSerial(ctx); err != nil || sn != "KEQ0000100" {
+		t.Fatalf("the setting: %q %v", sn, err)
+	}
+	if row, _, _ := st.Cube(ctx, "KEQ0000100"); row.ProxyAddress != "" || row.Source != store.SourceUI || row.Address != cubeAddr {
+		t.Fatalf("the row changed: %+v", row)
+	}
+	base, _ := runSetup(t, st, su, quietLog())
+	var c listedCube
+	if !testkit.Within(10*time.Second, func() bool {
+		c, _ = cubeListed(t, base, "KEQ0000100")
+		return c.Connected
+	}) {
+		t.Fatalf("the stored Cube not served: %+v", c)
+	}
+	if !c.differs(env.Proxy, proxyAddr) || c.ProxyAddress != "" || len(c.ProxyListening) != 0 {
+		t.Fatalf("the plain proxy line: %+v", c)
+	}
+	if p, ok := proxyAt(t, base, proxyAddr); ok {
+		t.Fatalf("a listener on the plain proxy: %+v", p)
+	}
+
+	mark := logs.Mark()
+	su, err = setupCubes(ctx, st, Config{}, logger)
+	if err != nil || len(su.cubes) != 2 || len(su.listeners) != 0 || logs.Count(mark, note) != 0 {
+		t.Fatalf("the next start: cubes %+v listeners %+v %v %q", su.cubes, su.listeners, err, logs.Since(mark, nil))
+	}
+}
+
+// The plain Cube reports a serial the store serves, at another address:
+// here a second fake Cube with the same serial. The server stops the
+// plain lines' runtime with its listener, so that the Cube is served
+// once, and ties the plain lines to the stored Cube: the setting names
+// it, its row is as it was, the plain MASSIMO_CUBE_ADDRESS and
+// MASSIMO_CUBE_PROXY are lines that differ, and nothing listens on the
+// plain proxy, now or at the next start.
+func TestServePlainCubeServedAlready(t *testing.T) {
+	clearCubeEnv(t)
+	plainAddr, storedAddr, proxyAddr := startFakeCube(t), startFakeCube(t), freeAddr(t)
+	plainEnv(t, plainAddr, proxyAddr)
+	st := testStore(t, "")
+	ctx := context.Background()
+	addUICube(t, st, "KEQ0000100", storedAddr)
+	addUICube(t, st, "KEQ0000200", nowhere)
+	su, err := setupCubes(ctx, st, Config{}, quietLog())
+	if err != nil || len(su.cubes) != 3 || len(su.listeners) != 1 || su.listeners[0].CubeAddr != plainAddr {
+		t.Fatalf("the start: cubes %+v listeners %+v %v", su.cubes, su.listeners, err)
+	}
+	logger, logs := testkit.LogWatch(nil)
+	base, _ := runSetup(t, st, su, logger)
+	logs.Await(t, 0, "the note that the plain lines are the stored Cube's", testkit.Msg(server.PlainServedNote, "serial", "KEQ0000100", "addr", plainAddr), listenWait)
+	var c listedCube
+	var n int
+	var ok bool
+	if !testkit.Within(20*time.Second, func() bool {
+		c, n = cubeListed(t, base, "KEQ0000100")
+		_, ok = proxyAt(t, base, proxyAddr)
+		return n == 1 && !ok && c.differs(env.Proxy, proxyAddr) && c.differs(env.Address, plainAddr)
+	}) {
+		t.Fatalf("the plain lines not the stored Cube's: %d listed, %+v, a listener on the plain proxy %v", n, c, ok)
+	}
+	if c.ProxyAddress != "" || len(c.ProxyListening) != 0 {
+		t.Fatalf("the stored Cube's proxy: %+v", c)
+	}
+	if sn, err := st.PlainSerial(ctx); err != nil || sn != "KEQ0000100" {
+		t.Fatalf("the setting: %q %v", sn, err)
+	}
+	if row, _, _ := st.Cube(ctx, "KEQ0000100"); row.ProxyAddress != "" || row.Address != storedAddr {
+		t.Fatalf("the row changed: %+v", row)
+	}
+
+	su, err = setupCubes(ctx, st, Config{}, quietLog())
+	if err != nil || len(su.cubes) != 2 || su.cubes[0].Addr != storedAddr || len(su.listeners) != 0 {
+		t.Fatalf("the next start: cubes %+v listeners %+v %v", su.cubes, su.listeners, err)
+	}
+}
+
+// The README's path where the first start did not reach the plain Cube:
+// no serial is learned, the owner then adds the Cube in the web UI at its
+// right address, and the next start goes on (D24-B), where it stopped
+// with "several cubes configured" and a service restarted into that.
+// The Cube added is served, and the plain proxy listens for the plain
+// Cube, which is not reached.
+func TestServePlainCubeNotReachedThenAdded(t *testing.T) {
+	clearCubeEnv(t)
+	cubeAddr, proxyAddr := startFakeCube(t), freeAddr(t)
+	plainEnv(t, nowhere, proxyAddr)
+	st := testStore(t, "")
+	ctx := context.Background()
+
+	su, err := setupCubes(ctx, st, Config{}, quietLog())
+	if err != nil || len(su.cubes) != 1 || len(su.listeners) != 1 {
+		t.Fatalf("the first start: cubes %+v listeners %+v %v", su.cubes, su.listeners, err)
+	}
+	base, stop := runSetup(t, st, su, quietLog())
+	testkit.Eventually(t, "the plain proxy listening", func() bool { p, ok := proxyAt(t, base, proxyAddr); return ok && p.Listening }, listenWait)
+	stop()
+	if sn, err := st.PlainSerial(ctx); err != nil || sn != "" {
+		t.Fatalf("a serial learned from a Cube not reached: %q %v", sn, err)
+	}
+
+	addUICube(t, st, "KEQ0000100", cubeAddr)
+	su, err = setupCubes(ctx, st, Config{}, quietLog())
+	if err != nil {
+		t.Fatalf("the start after the Cube was added: %v", err)
+	}
+	if len(su.cubes) != 2 || len(su.listeners) != 1 || su.listeners[0].CubeAddr != nowhere {
+		t.Fatalf("cubes %+v listeners %+v", su.cubes, su.listeners)
+	}
+	base, _ = runSetup(t, st, su, quietLog())
+	var list []struct {
+		Serial    string `json:"serial"`
+		Connected bool   `json:"connected"`
+	}
+	if !testkit.Within(10*time.Second, func() bool {
+		list = nil
+		getJSON(t, base+"/api/v1/cubes", &list)
+		for _, c := range list {
+			if c.Serial == "KEQ0000100" && c.Connected {
+				return true
+			}
+		}
+		return false
+	}) {
+		t.Fatalf("the Cube added is not served: %+v", list)
+	}
+	testkit.Eventually(t, "the plain proxy listening", func() bool { p, ok := proxyAt(t, base, proxyAddr); return ok && p.Listening && p.Serial == "" }, listenWait)
+}
+
+// The plain MASSIMO_CUBE_ADDRESS without MASSIMO_CUBE_PROXY beside a
+// Cube of the store: each is served without a proxy, and the warning
+// names each by its address, the plain one as such.
+func TestServePlainCubeWithoutProxyBeside(t *testing.T) {
+	clearCubeEnv(t)
+	t.Setenv(env.Address, "192.0.2.1")
+	st := testStore(t, "")
+	addUICube(t, st, "KEQ0000200", "192.0.2.2")
+	logger, logs := testkit.LogWatch(slog.LevelWarn)
+	su, err := setupCubes(context.Background(), st, Config{}, logger)
+	if err != nil || len(su.cubes) != 2 || len(su.listeners) != 0 {
+		t.Fatalf("cubes %+v listeners %+v %v", su.cubes, su.listeners, err)
+	}
+	logs.Has(t, 0, "the plain Cube's warning", testkit.Contains("without a proxy", "plain MASSIMO_CUBE_ADDRESS's cube has no MASSIMO_CUBE_PROXY", "addr=192.0.2.1"))
+	logs.Has(t, 0, "the stored Cube's warning", testkit.Contains("without a proxy", "serial=KEQ0000200", "addr=192.0.2.2"))
+}
+
+// A plain MASSIMO_CUBE_PROXY without the plain address is as before,
+// with no warning (D24-B): serve ignores it beside the store's Cube,
+// which listens on the Cube port as the single Cube, and applies it to
+// the one Cube that has lines of its own in the file.
+func TestServePlainProxyAlone(t *testing.T) {
+	clearCubeEnv(t)
+	t.Setenv(env.Proxy, "192.0.2.7")
+	ctx := context.Background()
+	st := testStore(t, "")
+	addUICube(t, st, "KEQ0000200", "192.0.2.2")
+	logger, logs := testkit.LogWatch(slog.LevelWarn)
+	su, err := setupCubes(ctx, st, Config{}, logger)
+	if err != nil || len(su.cubes) != 1 || len(su.listeners) != 1 || su.listeners[0].Serial != "KEQ0000200" || su.listeners[0].Addr != ":62910" {
+		t.Fatalf("the store's Cube: cubes %+v listeners %+v %v", su.cubes, su.listeners, err)
+	}
+	if n := logs.Count(0, nil); n != 0 {
+		t.Fatalf("warnings: %q", logs.Since(0, nil))
+	}
+
+	t.Setenv("MASSIMO_CUBE_KEQ0000001_ADDRESS", "192.0.2.1")
+	mark := logs.Mark()
+	su, err = setupCubes(ctx, st, Config{}, logger)
+	if err != nil || len(su.cubes) != 2 || len(su.listeners) != 1 || su.listeners[0].Serial != "KEQ0000001" || su.listeners[0].Addr != "192.0.2.7:62910" || !su.listeners[0].Discovery {
+		t.Fatalf("the file's Cube: cubes %+v listeners %+v %v", su.cubes, su.listeners, err)
+	}
+	if n := logs.Count(mark, nil); n != 1 || logs.Count(mark, testkit.Contains("without a proxy", "KEQ0000200")) != 1 {
+		t.Fatalf("warnings: %q", logs.Since(mark, nil))
+	}
+}

@@ -10,6 +10,7 @@ import (
 	"maps"
 	"os"
 	"path/filepath"
+	"runtime"
 	"slices"
 	"strings"
 	"testing"
@@ -297,6 +298,23 @@ func TestFirstLineWins(t *testing.T) {
 		len(atStart) != 1 || !slices.EqualFunc(notes, atStart, sameNote) {
 		t.Errorf("the environment's value: %q from %q, changed %v, notes %v and %v, %v", os.Getenv(d), Source(d), changed, atStart, notes, err)
 	}
+}
+
+// Outside Windows a name in two cases is two variables, each set from
+// its own line, with no note (TestNameInTwoCases is Windows').
+func TestTwoCasesTwoNames(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("one variable in any case")
+	}
+	const d = "MASSIMO_TEST_W"
+	lower := strings.ToLower(d)
+	start, again, changed := readThrice(t, settingsFile(t, d+"=\n"+lower+"=placeholder-secret-2\n"), d, lower)
+	if v, set := os.LookupEnv(lower); !set || v != "placeholder-secret-2" || start.values[d] != "" ||
+		start.sources[d] != "file" || start.sources[lower] != "file" || start.notes != nil {
+		t.Errorf("the start set %s to %q (%v), %s to %q, sources %q, notes %v",
+			lower, v, set, d, start.values[d], start.sources, start.notes)
+	}
+	agrees(t, "a name in two cases", start, again, changed)
 }
 
 // A UTF-8 byte order mark at the start of the file, which Windows'

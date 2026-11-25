@@ -1,41 +1,45 @@
-# AP AutoUpdate v1.0: install updates at night
+# AP AutoUpdate v1.1: install updates at night
 
 ## TL;DR
 
 Automatic updates, Off or At night: where on, the box installs a new
-release in a night window while no command waits for the radio, once a
-night. The server checks by itself, and offers only what its package
-source has.
+release in a night window, once a night, while the radio is quiet and
+the next start would take the settings file. It checks by itself, and
+offers only what its package source has.
 
-- the check → at each start and every 6 h, whatever the setting; the
-  push `update` without an open page (D4)
+- the check → at each start and every 6 h; the push `update` (D4)
 - "available" → in apt's index or brew's formula, never newer than
-  GitHub's signed release; a hand install GitHub's; held after the
-  helper's "nothing newer yet" until a later check finds it (D5)
+  GitHub's signed release; held after "nothing newer yet" (D5)
 - settings → `update.auto` `off` | `night`, `update.auto_window`
-  `03:00-05:00`, the server's time (D1, D2)
-- the night → `POST /api/v1/update`'s start, no request; history and
-  log mark it `auto`
-- a holder of `update` → Install now · Tonight · Skip this version,
-  box-wide in `update.answer` (D3)
+  `03:00-05:00` (D1, D2)
+- a holder of `update` → Install now · Tonight · Skip this version (D3)
+- v1.1: next start refuses the settings file → the night waits, its try
+  kept, `auto.waits` `settings` (D15); Update's question says the server
+  stays down, Install now asks first (D12–D14)
 
-Its branch stands on UpdateHistory v1.1 Block 4's (#412): the same
-files.
+Blocks 1–5 are built, in #414; Block 6 goes onto #414, Block 7 into a
+pull request from main once #414 is merged (D16).
 
 ### Blocks
 
 1. ServerCheck: the server's own release check, at the start and every
-   6 h; tests, docs
+   6 h; tests, docs (built, #414)
 2. SourceCheck: available only where apt's index or brew's formula has
    it; the hold after "nothing newer yet"; the page's line; tests, docs
+   (built, #414)
 3. NightInstall: the settings, the install in the window while the
    radio is quiet, once a night; history and log `auto`; tests, docs
+   (built, #414)
 4. NightSetting: Automatic updates and its window in Software update;
-   the texts of an automatic update; UI test, docs
+   the texts of an automatic update; UI test, docs (built, #414)
 5. UpdateAsk: the question for a holder of `update`, Install now,
-   Tonight, Skip this version; the route; UI test, docs
-
-The five blocks are one pull request, on #412's branch.
+   Tonight, Skip this version; the route; UI test, docs (built, #414)
+6. NightRefusal: the night waits while the next start refuses the
+   settings file, its try kept; `auto.waits`; the next try's line;
+   tests, docs (on #414)
+7. AskRefusal: Update's question and Install now say the server stays
+   down until the file is fixed; Install now asks first; UI test, docs
+   (from main, after #414)
 
 ## Discussion
 
@@ -106,6 +110,54 @@ gate, so the owner may turn one at the completion gate:
   (raw), the tap named by the keg's `INSTALL_RECEIPT.json`: what the
   helper's `brew update` fetches. B: the local tap's file, which stays
   old until `brew update` runs.
+
+The handover of 2026-11-25. AP StartConfiguration adds a sentence to the
+restart's, the reboot's and the update's questions while the next start
+refuses the settings file (StartConfiguration.D10-C). It kept the
+restart's and the reboot's, built in its Block 7 (#427); it passed the
+update's to AP UpdateHistory's session (StartConfiguration.D35-A), whose
+v1.1 is merged (#412), and provides the read it needs
+(StartConfiguration.D34-A). Its session handed the update's question to
+this plan, which works in the same card. The owner's decisions on it,
+numbered on from v1.0's D11; the `PLAN++` named no option, so the
+recommended A holds for each:
+
+- **D12, how the card learns of the refusal:**
+  A: the Software card reads `GET /api/v1/restart` when Update or Install
+  now is pressed, and shows the question once the answer is in; a failed
+  read shows the question as today.
+  B: it reads with the card's other loads and on each settings change,
+  as Maintenance does.
+  Chosen: A (owner, PLAN++ 2026-11-25).
+- **D13, the sentence's text:**
+  A: #427's `restart.confirmRefused` as it is, appended to
+  `update.confirm` and `update.confirmManaged`; no new translations.
+  B: a new key `update.confirmRefused`.
+  Chosen: A (owner, PLAN++ 2026-11-25).
+- **D14, Install now:**
+  A: while a refusal stands, Install now (the banner's, and the card's
+  copy, `update-card-ask`) asks first, with the update's question and the
+  sentence; its yes answers `now`. Without a refusal it installs at once,
+  as now.
+  B: the banner shows the sentence, and the buttons stay as they are.
+  Chosen: A (owner, PLAN++ 2026-11-25).
+- **D15, the night's install:**
+  A: it waits while the next start would refuse the settings file, as it
+  waits for the radio. The try is not used up (no `update.auto_tried`
+  written). `update_postponed` says that reason (`why`) when the window
+  closes with the update still held back. `GET /api/v1/update`'s `auto`
+  tells the card why it waits, and the card's next-try line (hint
+  `update-auto-next`) says so: one new text key in all six i18n files,
+  FR/IT/NL/PL machine-translated and marked as the others are.
+  B: it installs anyway.
+  Chosen: A (owner, PLAN++ 2026-11-25).
+- **D16, where it is built:**
+  A: D15 is Block 6, on #414 now; D12–D14 are Block 7, in a pull request
+  of its own from main once #414 is on main (#427 is already there).
+  B: all on #414.
+  Chosen: A (owner, PLAN++ 2026-11-25).
+
+`PLAN++` on 2026-11-25.
 
 ## Analysis
 
@@ -284,7 +336,86 @@ its line says "automatically" where a person's says "by …". The log's
 automatic form; `update_postponed` is a new kind (`log/kinds.ts`,
 `log/text.ts`). An answer is audited as `update.answer`.
 
+**v1.1. Where v1.0's text and the build differ.** The run's NOTE,
+`wip/2026-11-24_21-15_NOTE_AutoUpdate_v1.0_how_the_run_went.md`, holds
+them. Three of them this revision builds on, and the paragraphs below
+take them as built: once a night is the store row `update.auto_tried`,
+written before each try, not the history's newest `auto` entry and a
+failed start in memory ("The night" above; the NOTE, Block 3); Install
+now answers `now` through `PUT /api/v1/update/answer`, which starts the
+update and is audited as `update.answer`, not `POST /api/v1/update`
+("The question" above; the NOTE, Block 5); and #412 is merged, so #414
+is based on main, no longer on #412's branch.
+
+**v1.1. The update's question while the next start refuses.** While the
+last read of the settings file found that the next start refuses it, the
+update's question promises a server back: `update.confirm` says "if the
+new version does not come up, the old one is put back",
+`update.confirmManaged` that the last update says how to go back
+(`Software` in `Software.tsx`). Neither holds: the refusal is the
+file's, so the old version would not start either. #427 gave the
+restart's and the reboot's questions the sentence
+`restart.confirmRefused`, "But the server's next start refuses the
+settings file as it is: it does not come back until the file is fixed.",
+which `downUntilFixed` (`src/maintenance/Maintenance.tsx`) appends while
+`refused` is not empty; it is in all six languages. Install now
+(`AskButtons`, `software/Ask.tsx`) answers `now` at once, with no
+question at all, in the banner (`#update-ask`) and in the card's copy
+(`#update-card-ask`).
+
+**v1.1. What the server knows, and what the page reads.** The server
+knows the refusal itself: `(*Server).refusedAtNextStart()`
+(`restart_api.go`) is what the last read of the settings file found the
+next start refuses, as cmd/massimo hands it over (`SetRefused`), empty
+after a read that found nothing. It is on #414's branch already, since
+AP ReloadChecks, so Block 6 needs nothing of #427. The page reads it in
+`GET /api/v1/restart`, which #427 opened to a holder of `update`
+(StartConfiguration.D34-A): a caller without `restart` gets `available`
+false and `blocked` naming the capability, while `refused` (a list),
+`pending`, `file` and `read_at` are as a holder of `restart` sees them.
+So the card decides on `refused` being non-empty, never on `available`;
+StartConfiguration.D37, `update` including `restart`, which waits for
+that plan's v1.1, changes nothing here for the same reason. A user with
+neither capability gets 403, which is a failed read.
+
+**v1.1. The night (D15).** `nightTick` (`update_auto.go`) checks
+afresh, reads the update (`updateRelease`), returns where nothing can
+be started (`CanUpdate`) or the version is skipped (`skippedVersion`),
+then asks `radioBusy()`. A reason there is kept in the window's state
+(`s.auto`: `busy`, `version`) and the tick returns before
+`update.auto_tried` is written, so the night's try is not used up; where
+the window closes so, `postponed` writes `update_postponed` once, its
+`why` the reason. The refusal joins that path just before the radio:
+the same fields, a `why` of its own, nothing written; the next tick asks
+again, so that a file fixed inside the window (the server reads it
+within seconds of a change) lets the try come that same night. It is not
+`updateBlocked`, which refuses `POST /api/v1/update` too: a refusal
+blocks nothing (ReloadChecks.D8-B), and a person may still install, after
+the question of D14. The event line of `update_postponed`
+(`eventMessages`, `eventline.go`) says "the radio was busy until the
+window closed"; it drops the radio, and its `why` says which. `autoFor`
+adds `waits` where it sets `next` and a refusal stands: a name,
+`settings`, so that another reason needs no new field, as D7 argues for
+`update.auto`; `next` stays the earliest try. The radio's wait gets no
+value: it passes within minutes, and only the loop knows it.
+
+**v1.1. The questions (D12–D14).** Update's question is `ask()` and
+`runUpdate()` (`software/store.ts`), drawn by `Software` with `useAsk`
+and `Question`. D12-A reads `GET /api/v1/restart` at the press, rather
+than with the loads (B): a refusal comes and goes between the card's
+loads, since a fixed file is read within seconds; a read at a press is
+one request; and the card needs no handling of `settings_read` events,
+which stay Maintenance's. The text is the question and the sentence, as
+`downUntilFixed` joins them (D13-A). Install now asks only while a
+refusal stands (D14-A): without one there is nothing to warn of, and it
+stays one press. Block 7 waits for #414 on main because `Ask.tsx` is
+#414's; the read it needs, #427, is on main already (D16-A).
+
 ## Implementation Plan
+
+Blocks 1 to 5 are built, in #414; how the run went is its NOTE. Block 6
+is built on #414; Block 7 in a pull request of its own from main, once
+#414 is merged.
 
 ### Block 1: ServerCheck
 
@@ -386,6 +517,127 @@ the three `go vet`, the touched UI test files in their four cases,
 the three `go vet`, the touched UI test files in their four cases,
 `GUIDELINES/shared/tools/check`; the whole suites in CI.
 
+### Block 6: NightRefusal
+
+- `internal/server/update_auto.go` `nightTick`: after `skippedVersion`
+  and before `radioBusy()`, a refusal (`refusedAtNextStart()` not
+  empty) holds the try back as a busy radio does: `a.busy` the reason,
+  `why` "the next start refuses the settings file", `a.version` the
+  update; it returns before `update.auto_tried` is written. The log's
+  info line, "automatic update waits for the radio" today, becomes
+  "automatic update waits" with its `why`, written where the reason
+  changes. Each tick asks again, so the try comes within a minute of the
+  fix, while the window is open. With both, the refusal is the reason.
+- `postponed` as it is: at the window's close, once, `update_postponed`
+  with the last reason as `why`. Its event line (`eventMessages`,
+  `eventline.go`) becomes "automatic update postponed: held back until
+  the window closed"; the comments of the file's head, `nightTick`,
+  `autoState` and `postponed` name both reasons.
+- `autoView.Waits`, `json:"waits,omitempty"`: `settings` where `autoFor`
+  sets `next` and a refusal stands; `next` stays the earliest try.
+- `internal/server/ui/src/software/Software.tsx` `Auto`: the hint under
+  the window (`update-auto-next`) is `update.autoWaitsSettings` where
+  `auto.waits` is `settings`, else the next try as now; any other value
+  shows the next try. `Window` takes the hint's text in place of `next`.
+- i18n, the key `update.autoWaitsSettings` in all six
+  `ui/i18n/<lang>.json`: EN "The next try waits until the settings file
+  is fixed: the server's next start refuses it.", DE "Der nächste Versuch
+  wartet, bis die Einstellungsdatei korrigiert ist: Der nächste Start des
+  Servers lehnt sie ab."; FR/IT/NL/PL machine-translated, under their
+  files' `i18n.machineNote`. `update.autoNight`, the note on what At
+  night does, stays as it is: D15-A asks for one key, and the hint says
+  it where it applies.
+- Tests, `internal/server/update_auto_test.go`:
+  `TestNightWaitsForTheSettingsFile`: with `SetRefused` of one refusal,
+  the ticks inside the window start nothing and write no
+  `update.auto_tried`, and `GET /api/v1/update`'s `auto` has `waits`
+  `settings` and `next`; the tick at the window's close writes one
+  `update_postponed`, its `why` the settings file's, and a later tick
+  none; with `SetRefused(nil)` the next night's first tick starts the
+  update once. A refusal ended inside the window: the next tick starts
+  it that night. Both a refusal and a busy radio: `why` is the settings
+  file's. `TestNightWaitsForTheRadio`: the event line's new message.
+- UI test, `tools/ui-test/test_update.py` (`auto_routes` with a `waits`
+  argument): the hint says `update.autoWaitsSettings` in place of the
+  next try; without `waits`, the next try as before.
+- Docs: `docs/api-v1.md` ("GET /api/v1/update?refresh=1": `auto.waits`;
+  the night waits while `GET /api/v1/restart`'s `refused` is not empty,
+  its try kept; the log's kinds: `update_postponed` while the radio, or
+  a settings file the next start refuses, held the update back); the
+  OpenAPI file (`UpdateInfo.auto.waits`, a string, enum `settings`);
+  `api.d.ts` by `make api-types`; `docs/ui.md` ("Software update": the
+  night installs while no command waits for the radio and the next start
+  takes the settings file, and the hint says when it waits for the file;
+  the log's lines: postponed while the radio stayed busy or the next
+  start refused the settings file).
+- CHANGELOG: the AutoUpdate fragment amended (COMMIT.md §5.2),
+  `CHANGELOG.d/Added/claude-auto-update.md`, three lines:
+
+  ```text
+  - Every six hours the server checks for a release apt or brew has; set
+    so, it installs at night, the radio quiet, once the next start takes
+    the settings file, asking Install now, Tonight or Skip (docs/ui.md).
+  ```
+
+**Verification:** `TestNightWaitsForTheSettingsFile` fails with the
+refusal's check taken out; `make ui`, `make ui-check`, `go test
+./internal/server/` (`TestOpenAPICoversRoutes`), `gofmt -l .`, the three
+`go vet`, the touched UI test files in their four cases,
+`GUIDELINES/shared/tools/check`; the whole suites in CI.
+
+### Block 7: AskRefusal
+
+- `internal/server/ui/src/software/store.ts`: `readRefused()`, `GET
+  /api/v1/restart` under the session's number: true where `refused` is
+  not empty; false where the read fails (a 403 for a user with neither
+  `update` nor `restart`, a network error), and nothing where the
+  session changed meanwhile. `ask()` reads it, then asks, the answer in
+  `question.refused`; Update is busy (`busyProps`) while it reads, and
+  a second press starts no second read.
+- `Software.tsx`: `updateQuestion(u, version, refused)`,
+  `update.confirm` or `update.confirmManaged` with
+  `restart.confirmRefused` after it where refused, as `downUntilFixed`
+  joins them (D13-A, no new key); Update's question uses it.
+- `software/Ask.tsx` `AskButtons`: Install now reads `readRefused()`;
+  refused, it asks in place of the three buttons, where it was pressed
+  (`useAsk`, `Question`: the update's question with the sentence, yes
+  `update.ask.now`, no `action.cancel`), its yes `answerUpdate(version,
+  "now")`, its no the buttons back, nothing sent; not refused, or a
+  failed read, `answerUpdate(version, "now")` at once (D14-A). The
+  banner (`#update-ask`) and the card's copy (`#update-card-ask`) become
+  `div`s, since the question's box is a block, their look as before; a
+  sign-out (`forgetSoftware`) and another version offered take the
+  question back.
+- Tests, `tools/ui-test/test_update.py`, `**/api/v1/restart` stubbed
+  (`refused` empty, one refusal, a 500), which serves Maintenance's own
+  read too: Update's question with and without the sentence, and as
+  today after the failed read; on an apt box `update.confirmManaged`
+  with it; Install now in the banner and in the card asks while refused,
+  Cancel sends nothing, yes sends `now`; without a refusal, and after a
+  failed read, it sends `now` at once.
+- Docs: `docs/ui.md` (the banner's paragraph: Install now asks first
+  while the next start refuses the settings file; "Software update":
+  Update's question says the server stays down until it is fixed).
+- CHANGELOG: a fragment of its own,
+  `CHANGELOG.d/Changed/claude-update-question-refused.md`, under
+  Changed: Update's question is in released versions, and this changes
+  what it says, as StartConfiguration's bullet for the restart's and the
+  reboot's questions is a Changed one; of its own, since its pull
+  request is a new one from main, and the area is Software update, not
+  Maintenance's card:
+
+  ```text
+  - While the next start refuses the settings file, the update's question
+    says the server stays down until it is fixed, and Install now asks
+    first (docs/ui.md).
+  ```
+
+**Verification:** a UI test with one refusal fails with the read taken
+out; `make ui`, `make ui-check`, `go test ./internal/server/`
+(`TestUIFileHeaders`, `TestUIPage`), `gofmt -l .`, the three `go vet`,
+the touched UI test files in their four cases,
+`GUIDELINES/shared/tools/check`; the whole suites in CI.
+
 ## Proposed commit messages
 
 The plan alone first, `chore(aps): +AutoUpdate v1.0`, on main; each
@@ -402,7 +654,62 @@ Block 4,
 Block 5,
 `feat(ui/auto-update): The page asks Install now, Tonight or Skip this version`.
 
+The revision v1.1 alone, `chore(aps): +AutoUpdate v1.1`, on main, and
+into #414's branch with main before Block 6's commit; Blocks 6 and 7
+name `AP AutoUpdate v1.1, Block N`.
+
+Block 6:
+
+```text
+feat(server/auto-update): The night waits while the next start refuses the settings file
+
+While the last read of the settings file found that the server's next start refuses it, the automatic update holds its try back as it does for a busy radio, keeps the night's try, and says why it waits (D15-A). The try comes within a minute of the fix while the window is open; a window that closes on the refusal writes update_postponed with it as the reason.
+
+AP AutoUpdate v1.1, Block 6.
+
+Key changes:
+- internal/server/update_auto.go: nightTick checks refusedAtNextStart before the radio, writes no update.auto_tried while it stands; auto's waits
+- internal/server/eventline.go: update_postponed's line names no reason of its own, its why does
+- internal/server/ui/src/software/Software.tsx: the next try's line says the update waits for the settings file
+- internal/server/ui/i18n/*.json: update.autoWaitsSettings in six languages
+- internal/server/update_auto_test.go: a refusal holds the night back, keeps its try, is the postponed reason, and the try comes once it ends
+- tools/ui-test/test_update.py: the next try's line while the night waits
+- docs/api-v1.md, docs/api-v1-openapi.yaml, internal/server/ui/src/api.d.ts: auto.waits, update_postponed's reasons
+- docs/ui.md: the next try's line, the log's postponed line
+- CHANGELOG.d/Added/claude-auto-update.md: the bullet amended
+
+Assisted-by: claude-code:claude-opus-5-5
+```
+
+Block 7:
+
+```text
+feat(ui/auto-update): Update and Install now say the server stays down until the settings file is fixed
+
+While the server's next start refuses the settings file, the update's question says that the server does not come back until the file is fixed, since the old version would not start either, and Install now asks first with the same question (D12-A to D14-A). The page reads GET /api/v1/restart when Update or Install now is pressed; a failed read asks as before.
+
+AP AutoUpdate v1.1, Block 7.
+
+Key changes:
+- internal/server/ui/src/software/store.ts: readRefused, read before Update's question and before Install now
+- internal/server/ui/src/software/Software.tsx: the update's question with restart.confirmRefused while refused
+- internal/server/ui/src/software/Ask.tsx: Install now asks in its place while refused, at once otherwise
+- tools/ui-test/test_update.py: the question with and without a refusal, after a failed read, for Update, the banner and the card
+- docs/ui.md: the banner and Software update
+- CHANGELOG.d/Changed/claude-update-question-refused.md: the bullet
+
+Assisted-by: claude-code:claude-opus-5-5
+```
+
 ## Change History
 
 - v1.0 (2026-11-24): the first revision, from the owner's EVAL of
   automatic updates and PLAN++ (D1-A, D2-A as set, D3-A, D4-A, D5-A+B).
+- v1.1 (2026-11-25): the update's question while the next start refuses
+  the settings file, handed over by AP StartConfiguration's session
+  under its D10-C and D35-A; the owner's PLAN++ on D12-A to D16-A;
+  Block 6, the night waits on a refusal, on #414; Block 7, the sentence
+  in Update's question and Install now asking first, a pull request of
+  its own from main after #414; the TL;DR rewritten, and where v1.0's
+  text and the build differ named (#412 merged, `update.auto_tried`,
+  Install now through the answer).

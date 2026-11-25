@@ -10,7 +10,9 @@ package main
 // the start's own words, what the next start would refuse. The table
 // holds the checks without side effects only (D1-A): MASSIMO_LISTEN,
 // MASSIMO_LOG, MASSIMO_DATA and the -tls-http bind fail on the box's
-// state, a port taken or a directory not writable, and stay the start's.
+// state, a port taken or a directory not writable, and stay the start's,
+// whose errors name the setting as the table's do, "-listen or
+// MASSIMO_LISTEN: …" (AP StartConfiguration, D20-A).
 
 import (
 	"fmt"

@@ -13,6 +13,7 @@ import (
 	"testing"
 	"time"
 
+	"go.metaworx.ch/massimo/internal/cubelan"
 	"go.metaworx.ch/massimo/internal/cubelan/fakecube"
 	"go.metaworx.ch/massimo/internal/testkit"
 )
@@ -180,5 +181,60 @@ func TestLearnedSerialServedAlready(t *testing.T) {
 	}
 	if lookup(strings.ToLower(addr)) != nil {
 		t.Fatal("the runtime by address still served")
+	}
+}
+
+// A listener whose start found its runtime before removeCube took that
+// runtime out does not start on it: the check and the listener's place
+// in s.proxies are under proxyMu, where removeCube marks the runtime,
+// so that no proxy listens for a Cube no longer served.
+func TestProxyNotStartedOnRemovedCube(t *testing.T) {
+	t.Parallel()
+	ports := &heldPorts{}
+	r := startServer(t, listenOn(ports))
+	pl := ProxyListener{Serial: "KEQ0000100", Addr: ports.hold(t)}
+	rt, err := r.s.proxyRuntime(pl) // the start's lookup, before the removal
+	if err != nil || rt != r.rt {
+		t.Fatalf("lookup: %p %v", rt, err)
+	}
+	r.s.removeCube(rt)
+	if r.s.startProxyOn(rt, pl) {
+		t.Fatal("a proxy started on a removed cube")
+	}
+	if st := r.s.proxyStatuses(); len(st) != 0 {
+		t.Fatalf("listeners after the removal: %+v", st)
+	}
+}
+
+// Run starts the proxy listeners before the Cubes' connections: the
+// pump removes a runtime only once it has connected, so it finds that
+// runtime's listeners to stop (plainServedAlready), where a listener
+// started after the removal would fail its lookup. The listens and the
+// dials are taken in their order through the server's hooks.
+func TestRunListensBeforeDialing(t *testing.T) {
+	t.Parallel()
+	ports := &heldPorts{}
+	addr := ports.hold(t)
+	var mu sync.Mutex
+	var order []string
+	note := func(what string) {
+		mu.Lock()
+		defer mu.Unlock()
+		order = append(order, what)
+	}
+	startServer(t, withOptions(Options{Proxy: []ProxyListener{{Addr: addr}}}), editOptions(func(o *Options) {
+		o.proxyListen = func(a string) (net.Listener, error) { note("listen " + a); return ports.listen(a) }
+		o.cubeOptions = func(c *cubelan.Options) {
+			c.Dialer = func(ctx context.Context, a string) (net.Conn, error) {
+				note("dial")
+				var d net.Dialer
+				return d.DialContext(ctx, "tcp", a)
+			}
+		}
+	}))
+	mu.Lock()
+	defer mu.Unlock()
+	if len(order) < 2 || order[0] != "listen "+addr || order[1] != "dial" {
+		t.Fatalf("listens and dials: %q", order)
 	}
 }

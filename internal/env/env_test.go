@@ -6,6 +6,7 @@ package env
 import (
 	"io"
 	"net"
+	"runtime"
 	"strings"
 	"testing"
 
@@ -202,7 +203,9 @@ func TestLowerCaseSerial(t *testing.T) {
 }
 
 // PerCubeValue names the variable as it is set, for massimo config and
-// the store's file view.
+// the store's file view, on Windows too, where os.Getenv finds it by
+// the upper-case name; where two spellings are set, as Linux can have
+// them, the upper-case name wins.
 func TestPerCubeValue(t *testing.T) {
 	t.Setenv("MASSIMO_CUBE_keq0000000_ADDRESS", "192.0.2.5")
 	if name, v := PerCubeValue(Address, "KEQ0000000"); name != "MASSIMO_CUBE_keq0000000_ADDRESS" || v != "192.0.2.5" {
@@ -210,5 +213,12 @@ func TestPerCubeValue(t *testing.T) {
 	}
 	if name, v := PerCubeValue(Address, "KEQ0000001"); name != "MASSIMO_CUBE_KEQ0000001_ADDRESS" || v != "" {
 		t.Fatalf("PerCubeValue of a Cube without one: %s=%q", name, v)
+	}
+	if runtime.GOOS == "windows" { // one variable in any case
+		return
+	}
+	t.Setenv("MASSIMO_CUBE_KEQ0000000_ADDRESS", "192.0.2.6")
+	if name, v := PerCubeValue(Address, "KEQ0000000"); name != "MASSIMO_CUBE_KEQ0000000_ADDRESS" || v != "192.0.2.6" {
+		t.Fatalf("PerCubeValue of two spellings: %s=%q", name, v)
 	}
 }

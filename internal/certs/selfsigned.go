@@ -139,7 +139,9 @@ func (s *SelfSigned) Check(now time.Time) {
 // names and addresses; the first DNS name is the subject) valid from an
 // hour before now, for a clock a little behind, for SelfSignedValidity
 // in all, the files mode 0600 in a directory mode 0700, each written
-// beside its place and renamed over.
+// beside its place and renamed over. The directory is the data
+// directory's tls/ (SelfSignedPaths), and an error making it names the
+// data directory's setting (mkdirData).
 func Generate(certPath, keyPath string, names []string, now time.Time) (Status, error) {
 	if len(names) == 0 {
 		return Status{}, fmt.Errorf("tls: a certificate needs at least one name")
@@ -181,7 +183,7 @@ func Generate(certPath, keyPath string, names []string, now time.Time) (Status, 
 	if err != nil {
 		return Status{}, err
 	}
-	if err := os.MkdirAll(filepath.Dir(certPath), 0o700); err != nil {
+	if err := mkdirData(filepath.Dir(certPath)); err != nil {
 		return Status{}, err
 	}
 	if err := writeAtomic(keyPath, pem.EncodeToMemory(&pem.Block{Type: "EC PRIVATE KEY", Bytes: keyDER})); err != nil {
@@ -192,6 +194,16 @@ func Generate(certPath, keyPath string, names []string, now time.Time) (Status, 
 	}
 	_, st, err := Load("self-signed", certPath, keyPath)
 	return st, err
+}
+
+// mkdirData makes dir, mode 0700, a directory of the data directory's:
+// an error names the data directory's setting, as serve's start names
+// it where the store does not open (AP StartConfiguration, D20-A).
+func mkdirData(dir string) error {
+	if err := os.MkdirAll(dir, 0o700); err != nil {
+		return fmt.Errorf("-data or MASSIMO_DATA: %w", err)
+	}
+	return nil
 }
 
 // writeAtomic writes b to path whole, mode 0600 (internal/safefile).

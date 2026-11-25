@@ -73,14 +73,17 @@ jobs:
       - uses: ./.github/actions/ui-bundle
 
       # Discovery's tests as well: Windows binds UDP ports otherwise than
-      # Linux, a wildcard beside an address's own port (CI.md, section 3).
+      # Linux, a wildcard beside an address's own port (CI.md, section 3);
+      # and the settings file's, as Windows takes a variable's name in any
+      # case. ./cmd/... holds the start's guard, which runs the built
+      # massimo.exe once per refused setting.
       # -count=1: setup-go's cache, which main's run of this job saved,
       # holds that run's results, and go test would take a package's pass
       # from it where it sees no change (AP TestSpeed, D10-A).
       - name: Unit tests
         shell: bash
         run: |
-          go test -count=1 ./internal/update/... ./internal/install/... ./cmd/... ./internal/cubelan/... ./internal/safefile/...
+          go test -count=1 ./internal/update/... ./internal/install/... ./cmd/... ./internal/cubelan/... ./internal/safefile/... ./internal/env/...
           go test -count=1 -run 'Update|Discovery|Search|FailedRun|FoundCube|RemovedCubeIsListedAsFound|FollowsItsAddress' ./internal/server/
 
       # The service against the fake Cube, with the update from the web

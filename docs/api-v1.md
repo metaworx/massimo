@@ -4373,10 +4373,12 @@ one on an address that address's interface;
 an interface comes with its MAC and its addresses but link-local ones,
 `api` marking those the API listens on, at `api_port`.
 `cube_proxies` are the Cubes' proxy listeners, listening or not,
-by Cube serial and address, with `discovery_serial`, the serial a listener
-answers discovery with: the Cube's proxy serial where one is set, else the
-Cube's own; absent for a listener that answers no discovery
-(only one on the Cube port does, docs/proxy.md);
+by Cube serial and address,
+the serial absent for the Cube of a plain `MASSIMO_CUBE_ADDRESS` until it reports one,
+with `discovery_serial`, the serial a listener answers discovery with:
+the Cube's proxy serial where one is set, else the Cube's own;
+absent for a listener that answers no discovery (only one on the Cube port does,
+docs/proxy.md);
 one that does not listen has the fields of a Cube's `proxy_failing`
 (`GET /api/v1/cubes`), and is tried again.
 
@@ -4473,7 +4475,12 @@ otherwise `blocked` says why it cannot be started from here (a package
 manager owning the binary without a helper of its own, which then upgrades it;
 for apt, its source missing, `MASSIMO_UPDATE_CHANNEL` naming another channel
 than its suite, or the package's helper turned off;
-no API token; no update helper; a development build).
+no API token; no update helper;
+on Windows and under brew, a listen address the helper cannot ask `/healthz` at,
+port 0 or a service name, named by its setting,
+`-listen or MASSIMO_LISTEN: the update helper cannot ask "127.0.0.1:0" for /healthz: bad port`,
+under brew in brackets after the manager's text;
+a development build).
 `helper` is the update helper's last run: `state` is one of `checking`,
 `installing`, `restarting`, `done`, `up-to-date`, `failed`, `rolled-back`,
 with `message` on failure.
@@ -4557,7 +4564,8 @@ follow the progress with GET.
 
 Needs the API token: without `MASSIMO_API_TOKEN` it answers `403` even though
 the other routes are open.
-`403` also when no helper is configured (`serve -update-request`);
+`403` also when no helper is configured (`serve -update-request`),
+and with GET's `blocked` as the error wherever that names a reason;
 `409` when already up to date,
 when the channel has no release, while an update is running (on Windows also
 in the moment between the start of the helper and its first status),

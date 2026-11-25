@@ -1084,7 +1084,9 @@ directory (`KEY=VALUE` lines,
 `-no-env` for none;
 the environment wins over the file).
 A name given twice takes its first line, at a start as at a reload,
-and `massimo config` names its lines.
+and `massimo config` names its lines;
+on Windows a name in two cases is given twice,
+as `MASSIMO_X` and `massimo_x` are one variable there.
 A UTF-8 byte order mark at the file's start is skipped,
 and UTF-16 text, as PowerShell 5.1's `>` or `>>` writes it, is refused,
 by `install -settings` too, before it installs anything:
@@ -1223,10 +1225,10 @@ the plain form applies to any Cube unless the table says otherwise.
 | Variable (per-Cube form) | Meaning |
 |---|---|
 | `MASSIMO_CUBE_<SERIAL>_ADDRESS` | The Cube's address, host[:port]. `serve` serves every Cube that has one. |
-| `MASSIMO_CUBE_<SERIAL>_PROXY` | The address of a running `massimo serve` that answers as this Cube. Every command except `serve` connects to it instead of the Cube, because the Cube serves one client at a time and `serve` usually holds that connection; `serve` listens on it. When the proxy does not answer within two seconds, the command prints a warning and connects to the Cube's own address: during the few seconds `serve` restarts, for example after an update, that direct connection takes the Cube's only slot and keeps `serve` from reconnecting until the command ends. Before the command name, `-no-direct` (`massimo -no-direct status`, for scripts) makes that an error instead, and `-direct` skips the proxy and connects to the Cube itself even when the proxy answers; the two exclude each other, and `-addr` always wins. The plain form only with a single Cube. |
-| `MASSIMO_CUBE_<SERIAL>_PROXY_SERIAL` | The serial `serve` uses in UDP discovery replies for this Cube, see [docs/proxy.md](docs/proxy.md). The plain form only with a single Cube. |
+| `MASSIMO_CUBE_<SERIAL>_PROXY` | The address of a running `massimo serve` that answers as this Cube. Every command except `serve` connects to it instead of the Cube, because the Cube serves one client at a time and `serve` usually holds that connection; `serve` listens on it. When the proxy does not answer within two seconds, the command prints a warning and connects to the Cube's own address: during the few seconds `serve` restarts, for example after an update, that direct connection takes the Cube's only slot and keeps `serve` from reconnecting until the command ends. Before the command name, `-no-direct` (`massimo -no-direct status`, for scripts) makes that an error instead, and `-direct` skips the proxy and connects to the Cube itself even when the proxy answers; the two exclude each other, and `-addr` always wins. For `serve` the plain form only with a single Cube in the file. |
+| `MASSIMO_CUBE_<SERIAL>_PROXY_SERIAL` | The serial `serve` uses in UDP discovery replies for this Cube, see [docs/proxy.md](docs/proxy.md). For `serve` the plain form only with a single Cube in the file. |
 | `MASSIMO_CUBE_<SERIAL>_IGNORE` | Radio addresses to hide, comma separated, in addition to room 255 (below). |
-| `MASSIMO_CUBE_<SERIAL>_NAME` | A user-friendly name the API and the UI show next to the serial. The plain form only with a single Cube. |
+| `MASSIMO_CUBE_<SERIAL>_NAME` | A user-friendly name the API and the UI show next to the serial. For `serve` the plain form only with a single Cube in the file. |
 | `MASSIMO_CUBE_SN` | The Cube to use when no `-sn` is given. |
 | `MASSIMO_DATA` | The data directory, where `serve` keeps `massimo.db` (also `-data <dir>` before the command name); default the current directory, `/var/lib/massimo` for the service user. |
 
@@ -1245,8 +1247,25 @@ else is configured.
 A Cube without an address is connected at the address it answers UDP discovery from,
 and reconnected when that changes.
 A key alone does not make `serve` take a Cube.
-A lone `MASSIMO_CUBE_ADDRESS` without a serial is served from the file until the
-Cube reports its serial, and then added to the store.
+A lone `MASSIMO_CUBE_ADDRESS` without a serial is served from the file,
+beside the Cubes of the web UI too, until the Cube reports its serial,
+and then added to the store;
+its proxy listens on the plain `MASSIMO_CUBE_PROXY` from the start,
+before the serial is known.
+A Cube added in the web UI beside it is another Cube,
+with a proxy only on an address of its own.
+Where that is the plain Cube itself, `serve` serves it once:
+a plain address equal to its address, the Cube's port where one gives none,
+ties the plain lines to it at the start,
+and so does the serial the plain Cube reports.
+The plain lines are then that Cube's, compared with its row, whose values win,
+as for its other lines in the file:
+a plain `MASSIMO_CUBE_PROXY` that differs from the row, an empty one included,
+is shown on the Cube with its button and listens nowhere.
+The log says so: take the plain lines out of the file,
+or take a value from the file in the web UI.
+A plain `MASSIMO_CUBE_PROXY` without the plain address is the proxy of the one
+Cube with lines of its own in the file, and `serve` ignores it otherwise.
 Beside the variables of one Cube, such as its `_PROXY`,
 the plain `MASSIMO_CUBE_ADDRESS` is that Cube's when `MASSIMO_CUBE_SN` names it,
 as for the other commands.

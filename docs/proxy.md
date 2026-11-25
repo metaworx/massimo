@@ -18,8 +18,10 @@ massimo serve -proxy KEQ0000200=:62910 -proxy KEQ0000100=:62911
 
 Without `-proxy`, each Cube listens on its `MASSIMO_CUBE_<SERIAL>_PROXY` address,
 which is also the address clients use,
+the Cube of a plain `MASSIMO_CUBE_ADDRESS` on the plain `MASSIMO_CUBE_PROXY`,
+beside other Cubes too,
 and a single Cube without that variable listens on `:62910`.
-With several Cubes each listener names its Cube,
+With several Cubes each `-proxy` listener names its Cube,
 or `-sn <serial>` restricts the server to one Cube.
 Discovery is answered only for a listener on port 62910,
 since a discovery reply carries no port.
@@ -69,7 +71,8 @@ and the servers that announce themselves by mDNS in a table of their own (README
 "Server").
 The proxy answers a search with the serial of the Cube it serves,
 unless `-proxy-serial` gives another,
-so a search hears that serial twice, from the Cube and from the proxy:
+once the Cube has sent its first greeting, which carries the serial;
+a search then hears that serial twice, from the Cube and from the proxy:
 `discover` lists both answers, each with its address and MAC.
 It tells the proxy's by the MAC, which the client's ARP cache has for the
 address that answered:

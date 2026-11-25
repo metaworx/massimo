@@ -58,7 +58,8 @@ var built struct {
 
 // builtBinary returns massimo built from this package, once for every
 // test that runs it: the tests run the one binary side by side, each
-// with a data directory and an API port of its own.
+// with a data directory and an API port of its own. On Windows it is
+// massimo.exe, a name Windows runs.
 func builtBinary(t *testing.T) string {
 	t.Helper()
 	built.once.Do(func() {
@@ -68,6 +69,9 @@ func builtBinary(t *testing.T) string {
 			return
 		}
 		built.dir, built.bin = dir, filepath.Join(dir, "massimo")
+		if runtime.GOOS == "windows" {
+			built.bin += ".exe"
+		}
 		if built.out, err = exec.Command("go", "build", "-o", built.bin, ".").CombinedOutput(); err != nil {
 			built.err = fmt.Errorf("go build: %w", err)
 		}

@@ -36,6 +36,14 @@ func TestWindowsLayout(t *testing.T) {
 	if _, err := HealthURL("8099", false); err == nil {
 		t.Fatal("health of a bare port")
 	}
+	// An address with no port the helper can ask, port 0 or a service
+	// name, names serve's setting (AP StartConfiguration, D21-A).
+	for _, bad := range []string{"127.0.0.1:0", ":http"} {
+		want := `-listen or MASSIMO_LISTEN: the update helper cannot ask "` + bad + `" for /healthz: bad port`
+		if _, err := HealthURL(bad, false); err == nil || err.Error() != want {
+			t.Errorf("health of %s: %v, want %s", bad, err, want)
+		}
+	}
 	cmdline := `"C:\Program Files\Massimo\massimo.exe" -env "C:\ProgramData\Massimo\env" serve -listen 192.168.1.200:80 -log x`
 	if got := ListenFromCommandLine(cmdline); got != "192.168.1.200:80" {
 		t.Fatalf("listen %q", got)
