@@ -412,6 +412,8 @@ whose tooltip names the chosen Cube and which opens the same list;
 then the pile goes to a row of its own under them, at the left.
 The M stays at every width.
 The row is measured as if ↑ were there, so that scrolling never changes how it folds.
+What sticks out of the row while it is measured is cut off,
+so that the page never becomes wider than the screen for that moment.
 
 The logo lies over the word "Massimo", which a screen reader reads:
 the word shows until the drawing has come (`ui/brand/brand.svg`,
