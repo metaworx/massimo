@@ -289,6 +289,7 @@
   "restart.pending": "Obowiązuje od następnego ponownego uruchomienia: {names}.",
   "restart.refused": "Następne uruchomienie odrzuca poniższe; serwer nie wróci po ponownym uruchomieniu, aktualizacji ani ponownym uruchomieniu komputera, dopóki plik ustawień nie zostanie poprawiony:",
   "restart.refusal": "{names}: {error}",
+  "restart.confirmRefused": "Jednak następne uruchomienie serwera odrzuca plik ustawień w obecnej postaci: serwer nie wróci, dopóki plik nie zostanie poprawiony.",
   "restart.unavailable": "Ponowne uruchomienie stąd nie jest możliwe: {reason}.",
   "restart.cannotAsk": "Nie można zapytać serwera o ponowne uruchomienie: {error}",
   "reboot.button": "Uruchom ponownie",
@@ -375,6 +376,7 @@
   "maint.badge.pending.few": "{n} zmiany czekają na ponowne uruchomienie",
   "maint.badge.pending.many": "{n} zmian czeka na ponowne uruchomienie",
   "maint.badge.pending.other": "{n} zmian czeka na ponowne uruchomienie",
+  "maint.badge.refused": "następne uruchomienie się nie powiedzie",
 
   "help.button": "pomoc: {label}",
   "help.title": "Do czego to służy?",

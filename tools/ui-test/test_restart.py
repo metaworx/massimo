@@ -216,6 +216,135 @@ def test_reload_shows_what_the_next_start_refuses(page):
         page.unroute("**/api/v1/restart")
 
 
+def settings_read(page, level, summary):
+    """A settings_read event at level ("" for info), as the stream brings it."""
+    page.evaluate("""([level, s]) => state.events.dispatchEvent(new MessageEvent('settings_read', { data: JSON.stringify({
+      kind: 'settings_read', source: 'system', time: new Date().toISOString(), summary: s,
+      ...(level ? { level, error: 'the next start refuses: ' + level } : {}) }) }))""", [level, summary])
+
+
+# A settings file that does not parse: the next start refuses the file
+# alone, without a setting, and nothing waits for it.
+UNPARSED = {"error": "/etc/massimo/env:3: expected KEY=VALUE"}
+
+
+def test_the_card_says_the_next_start_fails(page):
+    """While the next start refuses the settings file, the card's head
+    says so in a badge of its own, a warning, beside the count of what
+    waits where something does and alone where nothing does, open and
+    folded; and the restart's question and the reboot's, at a delay and
+    at once, end with the sentence that the server does not come back
+    until the file is fixed (AP StartConfiguration, D9-A, D10-C). Without
+    a refusal, before Reload now finds one and after a settings_read
+    event at info says the start refuses nothing, the head has the count
+    alone and neither question the sentence; the warning goes also where
+    the count stays as it was. GET /api/v1/restart, GET
+    /api/v1/reboot and POST /api/v1/reload are stubbed, the reload
+    answering what the GET then answers, and every question is taken
+    back."""
+    good = {"available": True, "by": "systemd", "pending": ["MASSIMO_TLS"], "file": "/etc/massimo/env",
+            "read_at": "2026-11-08T19:52:00Z"}
+    refusing = dict(good, pending=["MASSIMO_TLS", "MASSIMO_TRUSTED_PROXIES"], refused=REFUSED[:1], read_at="2026-11-08T20:00:00Z")
+    answer = {"body": good}
+
+    def restart(route):
+        route.fulfill(status=200, content_type="application/json", body=json.dumps(answer["body"]))
+
+    def reboot(route):
+        route.fulfill(status=200, content_type="application/json", body='{"available": true, "by": "systemd"}')
+
+    def reload(route):
+        """The file read again: the proxy changed, which the next start refuses, as the GET then answers."""
+        answer["body"] = refusing
+        route.fulfill(status=200, content_type="application/json", body=json.dumps({
+            "changed": ["MASSIMO_TRUSTED_PROXIES"], "pending": refusing["pending"], "refused": refusing["refused"],
+            "read_at": refusing["read_at"]}))
+
+    def badges():
+        """The card head's badges: each one's text, and whether it is a warning."""
+        return page.evaluate("""() => [...document.querySelectorAll('#sys-maint .section-badges .flag')]
+          .map((b) => [b.textContent, b.classList.contains('warn')])""")
+
+    def shows(want, what):
+        """The head's badges come to want, and are shown."""
+        texts = json.dumps([w[0] for w in want])
+        expr = f"JSON.stringify([...document.querySelectorAll('#sys-maint .section-badges .flag')].map((b) => b.textContent)) === JSON.stringify({texts})"
+        assert wait_until(page, expr, 5), f"{what} ({badges()})"
+        assert badges() == want, f"{what}: each a warning ({badges()})"
+        assert all(page.locator("#sys-maint .section-badges .flag").nth(i).is_visible() for i in range(len(want))), f"{what}: shown"
+
+    def asked(row, delay="60"):
+        """The question of the row's button at the delay typed, taken back."""
+        if row == "reboot":
+            page.locator("#reboot-delay").fill(delay)
+        page.locator(f"#{row}-btn").click()
+        box = page.locator(f".{row} .confirm-box")
+        text = box.locator(".confirm-text").text_content()
+        box.locator(".confirm-no").click()
+        assert page.locator(f".{row} .confirm-box").count() == 0, f"the {row}'s question taken back"
+        return text
+
+    def fold(folded):
+        """Folds the card from its head, or opens it."""
+        page.locator("#sys-maint .section-fold").click()
+        state = "" if folded else "!"
+        assert wait_until(page, f"{state}document.getElementById('sys-maint').classList.contains('folded')", 5), \
+            "the card folded" if folded else "the card open"
+        assert page.locator("#sys-maint-body").is_hidden() == folded, "its body hidden" if folded else "its body shown"
+
+    page.route("**/api/v1/restart", restart)
+    page.route("**/api/v1/reboot", reboot)
+    page.route("**/api/v1/reload", reload)
+    try:
+        show_view(page, "maint")
+        page.locator("#restart-btn").wait_for(state="visible")
+        page.locator("#reboot-btn").wait_for(state="visible")
+        one, two = page.evaluate("[tn('maint.badge.pending', 1), tn('maint.badge.pending', 2)]")
+        fails = page.evaluate("t('maint.badge.refused')")
+        sentence = page.evaluate("t('restart.confirmRefused')")
+        restart_q, reboot_q, now_q = page.evaluate("[t('restart.confirm'), tn('reboot.confirm', 60), t('reboot.confirmNow')]")
+        shows([[one, True]], "the count alone, open")
+        assert asked("restart") == restart_q, "the restart's question without the sentence"
+        assert asked("reboot") == reboot_q, "the reboot's without it"
+
+        page.locator("#settings-reload").click()
+        shows([[two, True], [fails, True]], "Reload now finds a refusal: a warning beside the count, open")
+        assert asked("restart") == restart_q + " " + sentence, "the restart's question with the sentence"
+        assert asked("reboot") == reboot_q + " " + sentence, "the reboot's at a delay with it"
+        assert asked("reboot", "0") == now_q + " " + sentence, "and at once"
+
+        fold(True)
+        shows([[two, True], [fails, True]], "both badges, folded")
+
+        # the proxy set to a good one, which still waits: the warning goes, the count stays
+        answer["body"] = dict(refusing, refused=[])
+        settings_read(page, "", {"why": "the settings file changed", "changed": ["MASSIMO_TRUSTED_PROXIES"],
+                                 "at_next_start": refusing["pending"]})
+        shows([[two, True]], "the start refuses nothing, the count as it was: the warning goes, folded")
+
+        # the file no longer parses: the next start refuses the file alone, and nothing waits
+        answer["body"] = dict(good, pending=[], refused=[UNPARSED])
+        settings_read(page, "warn", {"why": "the settings file changed", "changed": [], "at_next_start": []})
+        shows([[fails, True]], "the warning alone, folded")
+        fold(False)
+        shows([[fails, True]], "the warning alone, open")
+        assert asked("restart") == restart_q + " " + sentence, "the restart's question with the sentence, nothing waiting"
+
+        answer["body"] = good
+        settings_read(page, "", {"why": "the settings file changed", "changed": [], "at_next_start": ["MASSIMO_TLS"]})
+        shows([[one, True]], "the start refuses nothing: the warning goes, open")
+        assert asked("restart") == restart_q, "the sentence gone with the refusal"
+        assert asked("reboot", "60") == reboot_q, "from the reboot's too"
+        fold(True)
+        shows([[one, True]], "the count alone, folded")
+        fold(False)
+    finally:
+        page.evaluate("localStorage.removeItem('massimo.fold.sys-maint')")
+        page.unroute("**/api/v1/reload")
+        page.unroute("**/api/v1/reboot")
+        page.unroute("**/api/v1/restart")
+
+
 def test_sign_in_offers_the_key_after_a_server_without_a_store(page):
     """The sign-in dialog chooses its API key's form once the page has
     seen a server without a store ask for no key, since the only way in

@@ -14,8 +14,9 @@
  * start refuses, which blocks nothing (with restart); the computer's
  * reboot with its delay, which asks naming it, and Take the reboot back
  * (with reboot). A load that comes in leaves the delay typed, a question and
- * the focus where they are; the card's badge counts what waits for the
- * next start.
+ * the focus where they are; the card's head counts what waits for the
+ * next start and says that start fails while it refuses the settings
+ * file, which the restart's and the reboot's questions then say too.
  */
 
 import { Fragment, type Ref } from "preact";
@@ -28,7 +29,7 @@ import { BusyButton, busyProps, Question, useAsk, useSetAtOnce } from "../shared
 import {
   cancelReboot, INTERVALS, type Interval, intervalWaits, announceWaits, parseGoDuration, reboot, REBOOT_DELAY_MAX, rebootAsk, rebootDelay, refreshNow, reloadSettings, restart, restartAsk, runReboot, runRefreshNow, runRestart, saveInterval, setAnnounce, settings, waiting,
 } from "./store";
-import { cardBadges } from "../shared/card";
+import { type BadgeSpec, cardBadges } from "../shared/card";
 import { useLook } from "../shared/look";
 
 /** intervalLabel is seconds in the language's short units ("10 s", "6 h", "1 min, 30 s"), Off for 0. */
@@ -131,11 +132,21 @@ function RefreshNow() {
 }
 
 /**
+ * downUntilFixed is the restart's or the reboot's question, with the
+ * sentence that the server stays down until the settings file is fixed
+ * while the next start refuses it (AP StartConfiguration, D10-C): both
+ * questions promise a server back otherwise.
+ */
+function downUntilFixed(question: string): string {
+  return restart.refused.length ? question + " " + t("restart.confirmRefused") : question;
+}
+
+/**
  * Restart is the restart's row: what it does or why it is not offered,
  * its button, which asks in its place; then what waits for it, and what
  * the next start refuses, a line each, the server's text as text: the
  * owner reads it where the restart is asked for, and the button stays
- * (AP ReloadChecks, D8-B).
+ * (AP ReloadChecks, D8-B), its question saying the server stays down.
  */
 function Restart() {
   useLook();
@@ -156,7 +167,7 @@ function Restart() {
           </button>
         </div>
         {asking.asking && (
-          <Question text={t("restart.confirm")} yes={t("restart.button")} no={t("action.cancel")} onNo={() => asking.done()} boxRef={asking.box}
+          <Question text={downUntilFixed(t("restart.confirm"))} yes={t("restart.button")} no={t("action.cancel")} onNo={() => asking.done()} boxRef={asking.box}
             onYes={() => {
               asking.done(false);
               return runRestart();
@@ -176,7 +187,8 @@ function Restart() {
 /**
  * Reboot is the reboot's row: what it does, why it is not offered, when
  * a reboot that waits comes or how the following goes; the delay, which
- * the question names, Reboot, which asks in its place, and Take the
+ * the question names, Reboot, which asks in its place, saying the server
+ * stays down while the next start refuses the settings file, and Take the
  * reboot back.
  */
 function Reboot() {
@@ -214,7 +226,7 @@ function Reboot() {
         <BusyButton id="reboot-cancel" cls={reboot.cancel ? "" : "hidden"} label={t("reboot.cancel")} run={cancelReboot} />
       </div>
       {asking.asking && (
-        <Question text={delay === 0 ? t("reboot.confirmNow") : tn("reboot.confirm", delay)} yes={t("reboot.button")} no={t("action.cancel")}
+        <Question text={downUntilFixed(delay === 0 ? t("reboot.confirmNow") : tn("reboot.confirm", delay))} yes={t("reboot.button")} no={t("action.cancel")}
           onNo={() => asking.done()} boxRef={asking.box}
           onYes={() => {
             asking.done(false);
@@ -225,15 +237,19 @@ function Reboot() {
   );
 }
 
-/** Maintenance is the card's body, with its head's badge. */
+/** Maintenance is the card's body, with its head's badges. */
 export function Maintenance() {
   useLook();
   const n = waiting();
   const badge = n ? tn("maint.badge.pending", n) : "";
-  // the card's head counts what waits for the next start
+  const fails = restart.refused.length ? t("maint.badge.refused") : "";
+  // the card's head counts what waits for the next start, and says that start fails while it refuses the settings file (D9-A)
   useLayoutEffect(() => {
-    cardBadges("sys-maint", badge ? [{ text: badge, kind: "warn" }] : []);
-  }, [badge]);
+    const list: BadgeSpec[] = [];
+    if (badge) list.push({ text: badge, kind: "warn" });
+    if (fails) list.push({ text: fails, kind: "warn" });
+    cardBadges("sys-maint", list);
+  }, [badge, fails]);
   const file = restart.file;
   return (
     <>
