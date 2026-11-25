@@ -1347,6 +1347,12 @@ report the commit only with `go run -buildvcs=true`.
 ## Legal
 
 Licensed under the [GNU Affero General Public License v3.0 or later](LICENSE).
+What the binary includes besides Massimo's own code, Go, the Go modules it
+links and what [third_party/](third_party) and the web UI's vendor directory hold,
+is listed in the web UI under ☰ → System info → **Credits and licences**,
+each with its licence's text;
+`make credits` writes the list into `internal/credits/`, and `go test` fails
+while it has fallen behind ([tools/credits/README.md](tools/credits/README.md)).
 The privacy policy of the software, the apps and the project's site is
 <https://massimo.metaworx.ch/privacy.html>.
 

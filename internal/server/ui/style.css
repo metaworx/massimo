@@ -573,6 +573,15 @@ body.scrolled #pending { display: none !important; }
 .sys-sub > summary { gap: 2px 10px; align-items: baseline; }
 .sys-sub > summary > .muted { font-size: 0.85rem; }
 .sys-sub[open] > summary { margin-bottom: 6px; }
+/* the credits: an entry a fold as the store's (sys-sub), indented under
+   its head, its licence's texts each in a box that scrolls */
+.credit { padding: 4px 0; }
+.sys-sub.credit > summary { gap: 2px 8px; flex-wrap: nowrap; align-items: baseline; }
+.credit-head { flex: 1 1 auto; min-width: 0; overflow-wrap: anywhere; }
+.credit-id { white-space: nowrap; }
+.credit-origin, .credit-includes { margin: 2px 0 2px 18px; overflow-wrap: anywhere; }
+.credit-file { margin: 6px 0 0 18px; }
+.credit-text { margin: 2px 0 0; max-height: 16em; overflow: auto; padding: 6px 8px; border: 1px solid var(--line); border-radius: 4px; font-size: 0.8rem; white-space: pre-wrap; overflow-wrap: anywhere; }
 /* a list of facts (components.js kvList) and of counts (countList) */
 .kv { display: grid; grid-template-columns: max-content minmax(0, 1fr); gap: 2px 14px; margin: 4px 0; font-size: 0.9rem; }
 .kv dt { color: var(--muted); }

@@ -13,14 +13,19 @@
  * page is shown, a resync of the stream, the settings file read again
  * and a Cube changed read them again (serverEvent). The state is live, so that the part draws a new answer in place; an answer after a
  * sign-out is dropped (shared/session.ts), and a sign-out ends the
- * readings and the clock.
+ * readings and the clock. The credits and licences of what the server
+ * includes (/ui/credits.json, internal/credits) are fetched as their fold
+ * is first opened, and kept: not fetched again while the page holds
+ * them; an answer after a sign-out, or after the page has left System
+ * info, is dropped, and a fold open when System info is shown again
+ * fetches them then.
  */
 
 import { signal } from "@preact/signals";
 import type { ConfigView, StoreInfo, SystemInfo } from "../api";
 import type { ServerEvent } from "../model/event";
 import { burstReader } from "../shared/burst";
-import { live } from "../shared/live";
+import { live, liveMap } from "../shared/live";
 import { session, stillSession } from "../shared/session";
 import { isShown } from "../shared/pages";
 import { can } from "../shared/me";
@@ -41,8 +46,60 @@ export const data = live({
   skew: 0,
 });
 
-/** Whether the store's and the settings' folds are open, as the user left them. */
-export const folds = live({ store: false, config: false });
+/** Whether the store's, the settings' and the credits' folds are open, as the user left them. */
+export const folds = live({ store: false, config: false, credits: false });
+
+/** A licence's file in the credits: its name, the SPDX identifier its text is known by (none where it is not), whether it is a notice, and its text. */
+export interface CreditFile {
+  name: string;
+  licence?: string;
+  notice?: boolean;
+  text: string;
+}
+
+/** An entry of the credits, as internal/credits writes it: what it is, where from, its licence (none where its text is known by none), whether its files are under others too, its licence's files. */
+export interface CreditEntry {
+  name: string;
+  version?: string;
+  licence?: string;
+  mixed?: boolean;
+  kind: "self" | "go" | "module" | "vendored";
+  path?: string;
+  includes?: string;
+  files: CreditFile[];
+}
+
+/** The credits and licences of what the server includes, read from /ui/credits.json. */
+export interface Credits {
+  entries: CreditEntry[];
+}
+
+/** The credits: the list once read, why the last fetch failed ("" where none did), and a fetch under way. */
+export const credits = live({ list: null as Credits | null, error: "", loading: false });
+
+/** Whether an entry's fold of the credits is open, by its name, as the user left it. */
+export const creditFolds = liveMap(() => ({ open: false }));
+
+/**
+ * loadCredits fetches the credits, once: not while a fetch is under way
+ * or once they are held. The answer of a session that has ended, or one
+ * that comes after the page has left System info, is dropped, and the
+ * fetch settles all the same; a failure says why in the fold, which can
+ * try again, the reason shown until the next answer.
+ */
+export async function loadCredits(): Promise<void> {
+  if (credits.list || credits.loading) return;
+  const n = session();
+  credits.loading = true;
+  try {
+    const list = await apiRequest<Credits>("GET", "ui/credits.json", undefined, { auth: false });
+    if (stillSession(n) && isShown("info")) Object.assign(credits, { list, error: "" });
+  } catch (e) {
+    if (stillSession(n) && isShown("info")) credits.error = (e as Error).message;
+  } finally {
+    if (stillSession(n)) credits.loading = false;
+  }
+}
 
 /** The clock's tick, raised every second while System info is shown. */
 export const tick = signal(0);
@@ -168,9 +225,10 @@ export function serverEvent(ev: ServerEvent): void {
   else if (ev.kind === "change" && CUBE_CHANGES.includes(String((ev.summary || {}).action))) reader("facts");
 }
 
-/** shown reads everything System info shows, as the page is shown; the certificate's readings start again. */
+/** shown reads everything System info shows, as the page is shown; the certificate's readings start again, and the credits are fetched where their fold is open without them. */
 export function shown(): void {
   loadServerInfo();
+  if (folds.credits) loadCredits();
   cert.tries = 0;
   cert.last = null;
   data.unread = false;
@@ -180,7 +238,8 @@ export function shown(): void {
 /**
  * forgetSysinfo forgets what the page kept of the user who was signed
  * in (MassimoParts.signedOut): the facts, the store and the settings in
- * effect, the readings of a certificate and the clock with their timers.
+ * effect, the readings of a certificate and the clock with their timers,
+ * and the credits, which the next user's page fetches again.
  */
 export function forgetSysinfo(): void {
   if (cert.timer) clearTimeout(cert.timer);
@@ -191,4 +250,5 @@ export function forgetSysinfo(): void {
   cert.tries = 0;
   cert.last = null;
   Object.assign(data, { sys: null, store: null, config: null, error: "", unread: false, skew: 0 });
+  Object.assign(credits, { list: null, error: "", loading: false });
 }

@@ -1,0 +1,327 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
+// Copyright (C) 2026 The Massimo Authors
+
+package credits
+
+import (
+	"bufio"
+	"bytes"
+	"os"
+	"os/exec"
+	"path/filepath"
+	"reflect"
+	"regexp"
+	"runtime"
+	"slices"
+	"strings"
+	"sync"
+	"testing"
+)
+
+// root is the repository's top, from this package's directory.
+const root = "../.."
+
+// TestEmbeddedList checks the list the binary embeds: it reads, its
+// names differ without regard to case, Massimo comes first under its
+// licence and Go second, and every entry has the texts of its licence.
+func TestEmbeddedList(t *testing.T) {
+	l, err := Load()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(l.Entries) < 2 {
+		t.Fatalf("%d entries, want Massimo, Go and what the binary links", len(l.Entries))
+	}
+	if e := l.Entries[0]; e.Name != "Massimo" || e.Kind != KindSelf || e.Licence != "AGPL-3.0-or-later" {
+		t.Errorf("first entry %s (%s, %s), want Massimo (self, AGPL-3.0-or-later)", e.Name, e.Kind, e.Licence)
+	}
+	if e := l.Entries[1]; e.Name != "Go" || e.Kind != KindGo {
+		t.Errorf("second entry %s (%s), want Go", e.Name, e.Kind)
+	}
+	names := map[string]bool{}
+	for _, e := range l.Entries {
+		k := strings.ToLower(e.Name)
+		if names[k] {
+			t.Errorf("%s: a second entry of that name", e.Name)
+		}
+		names[k] = true
+		for _, f := range e.Files {
+			if strings.TrimSpace(f.Text) == "" {
+				t.Errorf("%s: %s is empty", e.Name, f.Name)
+			}
+		}
+		if !slices.Contains([]string{KindSelf, KindGo, KindModule, KindVendored}, e.Kind) {
+			t.Errorf("%s: kind %q", e.Name, e.Kind)
+		}
+	}
+	if e, ok := l.Find("PREACT"); !ok || e.Kind != KindVendored {
+		t.Errorf("Find(PREACT) = %v, %v: want Preact's entry, found without regard to case", e.Name, ok)
+	}
+	if _, ok := l.Find("nope"); ok {
+		t.Error("Find(nope) found an entry")
+	}
+}
+
+// TestParseRefuses checks that an entry without a name or a licence's
+// file, and a field the list does not have, are refused.
+func TestParseRefuses(t *testing.T) {
+	for _, in := range []string{
+		`{"entries": [{"name": "", "licence": "MIT", "kind": "module", "files": [{"name": "LICENSE", "text": "x"}]}]}`,
+		`{"entries": [{"name": "a", "licence": "MIT", "kind": "module", "files": []}]}`,
+		`{"entries": [], "other": 1}`,
+	} {
+		if _, err := Parse([]byte(in)); err == nil {
+			t.Errorf("Parse(%s) took it", in)
+		}
+	}
+}
+
+// crossLine is a target of the Makefile's cross builds: GOOS, GOARCH,
+// GOARM and then $(CROSS).
+var crossLine = regexp.MustCompile(`^\s*GOOS=(\S+) GOARCH=(\S+)(?: GOARM=(\S+))? \$\(CROSS\)`)
+
+// crossTargets are the platforms the Makefile's cross builds, as
+// GOOS, GOARCH and GOARM, read from the Makefile; a line with $(CROSS)
+// in another form fails the test.
+func crossTargets(t *testing.T) [][3]string {
+	t.Helper()
+	b, err := os.ReadFile(filepath.Join(root, "Makefile"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	var out [][3]string
+	for sc := bufio.NewScanner(bytes.NewReader(b)); sc.Scan(); {
+		if m := crossLine.FindStringSubmatch(sc.Text()); m != nil {
+			out = append(out, [3]string{m[1], m[2], m[3]})
+		} else if strings.Contains(sc.Text(), "$(CROSS)") {
+			t.Fatalf("a line of the Makefile builds with $(CROSS) in a form this test does not read: %q", sc.Text())
+		}
+	}
+	if len(out) == 0 {
+		t.Fatal("no cross target found in the Makefile")
+	}
+	return out
+}
+
+// linked are the modules ./cmd/massimo links on every platform of the
+// Makefile's cross, as "path version", from go list -deps, which reads
+// the modules from the module cache and downloads one missing there
+// where GOPROXY allows; with GOPROXY=off, go mod download fills it.
+func linked(t *testing.T) map[string]bool {
+	t.Helper()
+	targets := crossTargets(t)
+	outs := make([][]byte, len(targets))
+	errs := make([]error, len(targets))
+	var wg sync.WaitGroup
+	for i, tg := range targets {
+		wg.Go(func() {
+			cmd := exec.Command("go", "list", "-deps", "-f", "{{with .Module}}{{if not .Main}}{{.Path}} {{.Version}}{{end}}{{end}}", "./cmd/massimo")
+			cmd.Dir = root
+			cmd.Env = append(os.Environ(), "GOOS="+tg[0], "GOARCH="+tg[1], "GOARM="+tg[2], "CGO_ENABLED=0")
+			var stderr bytes.Buffer
+			cmd.Stderr = &stderr
+			outs[i], errs[i] = cmd.Output()
+			if errs[i] != nil {
+				errs[i] = &listError{tg, errs[i], stderr.String()}
+			}
+		})
+	}
+	wg.Wait()
+	mods := map[string]bool{}
+	for i := range targets {
+		if errs[i] != nil {
+			t.Fatal(errs[i])
+		}
+		for line := range strings.Lines(string(outs[i])) {
+			if line = strings.TrimSpace(line); line != "" {
+				mods[line] = true
+			}
+		}
+	}
+	return mods
+}
+
+// listError is go list's failure on a platform.
+type listError struct {
+	target [3]string
+	err    error
+	stderr string
+}
+
+func (e *listError) Error() string {
+	return "go list for " + strings.Join(e.target[:], "/") + ": " + e.err.Error() + "\n" + e.stderr +
+		"(a module missing from the module cache with GOPROXY=off: go mod download)"
+}
+
+// moduleProblems are the modules the binary links without an entry of
+// that version, and the modules' entries the binary does not link.
+func moduleProblems(l List, mods map[string]bool) []string {
+	var out []string
+	listed := map[string]bool{}
+	for _, e := range l.Entries {
+		if e.Kind != KindModule {
+			continue
+		}
+		k := e.Name + " " + e.Version
+		listed[k] = true
+		if !mods[k] {
+			out = append(out, "module "+k+" has an entry, but the binary does not link it")
+		}
+	}
+	for k := range mods {
+		if !listed[k] {
+			out = append(out, "module "+k+" is linked, but has no entry")
+		}
+	}
+	slices.Sort(out)
+	return out
+}
+
+// licenceExt is the end of a licence file's name beside a vendored
+// file, after its stem's dot (opaque.LICENSE).
+var licenceExt = regexp.MustCompile(`(?i)^(licen[cs]e|copying|notice|patents)`)
+
+// vendoredProblems are the directories of third_party/ and the files of
+// the UI's vendor/ under dir without an entry: a directory needs one at
+// it or below it (a module's copy, Preact's three packages), a file of
+// vendor/ but its README.md and the licence files beside the others one
+// at it.
+func vendoredProblems(l List, dir string) []string {
+	var out []string
+	has := func(p string, below bool) bool {
+		return slices.ContainsFunc(l.Entries, func(e Entry) bool {
+			return e.Path == p || (below && strings.HasPrefix(e.Path, p+"/"))
+		})
+	}
+	dirs, _ := os.ReadDir(filepath.Join(dir, "third_party"))
+	for _, d := range dirs {
+		if p := "third_party/" + d.Name(); d.IsDir() && !has(p, true) {
+			out = append(out, p+" has no entry")
+		}
+	}
+	files, _ := os.ReadDir(filepath.Join(dir, "internal", "server", "ui", "vendor"))
+	for _, f := range files {
+		name := f.Name()
+		_, ext, _ := strings.Cut(name, ".")
+		licence := licenceExt.MatchString(ext)
+		if p := "internal/server/ui/vendor/" + name; !f.IsDir() && name != "README.md" && !licence && !has(p, false) {
+			out = append(out, p+" has no entry")
+		}
+	}
+	return out
+}
+
+// TestEverythingIncludedHasAnEntry checks the list against what the
+// binary includes: every module it links on every platform of the
+// Makefile's cross at its version, every directory of third_party/ and
+// every file of the UI's vendor/; a module listed that it does not link
+// fails too. tools/credits' TestGeneratedFileCurrent checks the texts.
+func TestEverythingIncludedHasAnEntry(t *testing.T) {
+	l, err := Load()
+	if err != nil {
+		t.Fatal(err)
+	}
+	problems := append(moduleProblems(l, linked(t)), vendoredProblems(l, root)...)
+	for _, p := range problems {
+		t.Error(p)
+	}
+	if len(problems) > 0 {
+		t.Log("internal/credits/credits.json has fallen behind: run make credits (go run ./tools/credits) from the repository's top")
+	}
+}
+
+// TestFallenBehindFails checks that the checks above fail where the
+// list has fallen behind: a module of another version, one not linked,
+// and in a copy of the places, a new directory of third_party/ and a
+// new file of vendor/.
+func TestFallenBehindFails(t *testing.T) {
+	l := List{Entries: []Entry{
+		{Name: "example.org/a", Version: "v1.0.0", Kind: KindModule},
+		{Name: "example.org/gone", Version: "v1.0.0", Kind: KindModule},
+		{Name: "kept", Kind: KindVendored, Path: "third_party/kept/inner"},
+		{Name: "a.js", Kind: KindVendored, Path: "internal/server/ui/vendor/a.js"},
+	}}
+	got := moduleProblems(l, map[string]bool{"example.org/a v1.1.0": true})
+	want := []string{
+		"module example.org/a v1.0.0 has an entry, but the binary does not link it",
+		"module example.org/a v1.1.0 is linked, but has no entry",
+		"module example.org/gone v1.0.0 has an entry, but the binary does not link it",
+	}
+	if !slices.Equal(got, want) {
+		t.Errorf("module problems:\n%q\nwant\n%q", got, want)
+	}
+	dir := t.TempDir()
+	for _, p := range []string{"third_party/kept/inner/LICENSE", "internal/server/ui/vendor/README.md", "internal/server/ui/vendor/a.js", "internal/server/ui/vendor/a.LICENSE"} {
+		write(t, filepath.Join(dir, p), "x")
+	}
+	if got := vendoredProblems(l, dir); len(got) != 0 {
+		t.Fatalf("problems before the new files: %q", got)
+	}
+	write(t, filepath.Join(dir, "third_party/made-up/LICENSE"), "x")
+	write(t, filepath.Join(dir, "internal/server/ui/vendor/b.js"), "x")
+	got = vendoredProblems(l, dir)
+	want = []string{"third_party/made-up has no entry", "internal/server/ui/vendor/b.js has no entry"}
+	if !slices.Equal(got, want) {
+		t.Errorf("vendored problems:\n%q\nwant\n%q", got, want)
+	}
+}
+
+// write writes text to path, making its directories.
+func write(t *testing.T, path, text string) {
+	t.Helper()
+	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(path, []byte(text), 0o644); err != nil {
+		t.Fatal(err)
+	}
+}
+
+// TestGoVersionIsTheBinarys checks that Go's entry, which the committed
+// file leaves without a version, carries the running binary's, without
+// its "go" in front, in what
+// the server serves and the command prints, and that nothing else of
+// the file changes.
+func TestGoVersionIsTheBinarys(t *testing.T) {
+	file, err := Parse(embedded)
+	if err != nil {
+		t.Fatal(err)
+	}
+	l, err := Load()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(l.Entries) != len(file.Entries) {
+		t.Fatalf("%d entries served, %d in the file", len(l.Entries), len(file.Entries))
+	}
+	for i, e := range l.Entries {
+		want := file.Entries[i]
+		if want.Kind == KindGo {
+			if want.Version != "" {
+				t.Errorf("Go's version in the file: %q, want none", want.Version)
+			}
+			want.Version = GoVersion()
+		}
+		if !reflect.DeepEqual(e, want) {
+			t.Errorf("entry %s served as %+v", want.Name, e)
+		}
+	}
+	if g, _ := l.Find("Go"); g.Version != strings.TrimPrefix(runtime.Version(), "go") {
+		t.Errorf("Go's version %q, want %q without its go", g.Version, runtime.Version())
+	}
+}
+
+// TestGoVersionOf checks Go's version without the "go" in front of its
+// digits, a development toolchain's as it is.
+func TestGoVersionOf(t *testing.T) {
+	for in, want := range map[string]string{
+		"go1.26.8":  "1.26.8",
+		"go1.27rc1": "1.27rc1",
+		"devel go1.27-0123456789ab Tue Nov 24 10:00:00 2026 +0000": "devel go1.27-0123456789ab Tue Nov 24 10:00:00 2026 +0000",
+		"gopher": "gopher",
+	} {
+		if got := goVersionOf(in); got != want {
+			t.Errorf("goVersionOf(%q) = %q, want %q", in, got, want)
+		}
+	}
+}
