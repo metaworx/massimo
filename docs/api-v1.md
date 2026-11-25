@@ -2197,6 +2197,8 @@ each with its `room_uid` and the devices the view (`devices=`, see
     "thermostat": "0a0102",
     "comfort_temp": 21,
     "eco_temp": 17,
+    "min_setpoint": 4.5,
+    "max_setpoint": 30.5,
     "devices": [
       {
         "rf_address": "0a0102",
@@ -2249,6 +2251,10 @@ the dead passed over, whichever thermostat `thermostat` names.
 as `GET …/rooms/{id}/config` gives them:
 what more than half of its thermostats store, else the first of that order's;
 the web UI marks the room's setpoint by them, and each device's by its own.
+`min_setpoint` and `max_setpoint` on a room are the room's lowest and highest setpoint,
+from the same configuration, absent for a room without a thermostat:
+a client offers the room's setpoints within them,
+4.5 being OFF and 30.5 ON there as in any setpoint.
 `confirmation`, on a device and on a room, is present while a write to it is
 not confirmed yet (see "Writes confirmed by the devices"):
 its `state` (`pending`, `unconfirmed`), `since` the Cube took the oldest write
