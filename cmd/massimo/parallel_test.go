@@ -43,6 +43,7 @@ var serialTests = map[string]string{
 	"TestUserCommands":                      "sets MASSIMO_DATA, swaps stdin and stdout (runUserWith)",
 	"TestUserCommandsLog":                   "sets MASSIMO_DATA, swaps stdin and stdout (runUserWith)",
 	"TestUserListChain":                     "sets MASSIMO_DATA, swaps stdin and stdout (runUserWith)",
+	"TestUserPasswordRule":                  "sets MASSIMO_DATA, swaps stdin and stdout (runUserWith)",
 	"TestUserRename":                        "sets MASSIMO_DATA, swaps stdin and stdout (runUserWith)",
 	"TestUserTokens":                        "sets MASSIMO_DATA, swaps stdin and stdout (runUserWith)",
 	"TestStoreDowngradeCommand":             "sets MASSIMO_DATA, swaps serviceStateDir (raisedStore)",

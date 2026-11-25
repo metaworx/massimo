@@ -1478,6 +1478,8 @@ who cannot sign in once it is off until a password is set for them.
 `user token <name> -label <text>` (prints a new API key once),
 `user tokens <name>` (the sessions and keys with their ids),
 `user revoke <name> [<token id>]`.
+A new password has 8 to 64 characters (`internal/password`);
+one set before stays valid, but a rename asks for one again.
 These are the only commands that open the store;
 they take `-data` like `serve` and run as the service user,
 which reads the service's settings and store from any directory

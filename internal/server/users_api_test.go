@@ -32,7 +32,7 @@ func TestUsersRoutes(t *testing.T) {
 	ctx := t.Context()
 	owner := "secret"
 	users := "/api/v1/users"
-	code, text := callAPI(t, ts, "POST", users, owner, `{"name":"Anna","display_name":"Anna","role":"operator","password":"pw"}`)
+	code, text := callAPI(t, ts, "POST", users, owner, `{"name":"Anna","display_name":"Anna","role":"operator","password":"anna-pass-1"}`)
 	anna := decodeUserView(text)
 	if code != 201 || anna.Name != "anna" || anna.Role != store.RoleOperator || !anna.HasPassword || anna.InvitedBy != store.BootstrapUser {
 		t.Fatalf("create: %d %s", code, text)
@@ -41,12 +41,12 @@ func TestUsersRoutes(t *testing.T) {
 		body string
 		want int
 	}{
-		{`{"name":"anna","password":"x"}`, 409},
+		{`{"name":"anna","password":"anna-pass-3"}`, 409},
 		{`{"name":"x y"}`, 400},
 		{`{"name":"bob","role":"nope"}`, 400},
 		{`{"name":"bob","expires_at":"soon"}`, 400},
 		{`{"name":"bob","unknown":1}`, 400},
-		{`{"name":"guest1","role":"guest","expires_at":"2026-12-24T18:00:00Z","password":"g"}`, 201},
+		{`{"name":"guest1","role":"guest","expires_at":"2026-12-24T18:00:00Z","password":"guest-pass-1"}`, 201},
 	} {
 		if code, text := callAPI(t, ts, "POST", users, owner, c.body); code != c.want {
 			t.Errorf("create %s: %d %s, want %d", c.body, code, text, c.want)
@@ -78,7 +78,7 @@ func TestUsersRoutes(t *testing.T) {
 	}
 
 	// A password set by someone else ends the user's sessions.
-	code, text = callAPI(t, ts, "POST", "/api/v1/login", "", `{"user":"anna","password":"pw"}`)
+	code, text = callAPI(t, ts, "POST", "/api/v1/login", "", `{"user":"anna","password":"anna-pass-1"}`)
 	var sess struct {
 		Token string `json:"token"`
 	}
@@ -86,13 +86,13 @@ func TestUsersRoutes(t *testing.T) {
 	if code != 200 || sess.Token == "" {
 		t.Fatalf("login: %d %s", code, text)
 	}
-	if code, _ := callAPI(t, ts, "PUT", users+"/anna", owner, `{"password":"new"}`); code != 200 {
+	if code, _ := callAPI(t, ts, "PUT", users+"/anna", owner, `{"password":"anna-pass-2"}`); code != 200 {
 		t.Fatalf("password by the owner: %d", code)
 	}
 	if code, _ := callAPI(t, ts, "GET", "/api/v1/cubes", sess.Token, ""); code != 401 {
 		t.Fatalf("session after a password reset: %d", code)
 	}
-	if code, _ := callAPI(t, ts, "POST", "/api/v1/login", "", `{"user":"anna","password":"new"}`); code != 200 {
+	if code, _ := callAPI(t, ts, "POST", "/api/v1/login", "", `{"user":"anna","password":"anna-pass-2"}`); code != 200 {
 		t.Fatalf("login with the new password: %d", code)
 	}
 
@@ -116,13 +116,13 @@ func TestUsersRoutes(t *testing.T) {
 			t.Errorf("own %s: %d", body, code)
 		}
 	}
-	if code, text := callAPI(t, ts, "PUT", users+"/anna", annaKey, `{"password":"x","current_password":"wrong"}`); code != 403 || !strings.Contains(text, "current_password") {
+	if code, text := callAPI(t, ts, "PUT", users+"/anna", annaKey, `{"password":"anna-pass-3","current_password":"wrong"}`); code != 403 || !strings.Contains(text, "current_password") {
 		t.Fatalf("own password with the wrong current one: %d %s", code, text)
 	}
-	if code, _ := callAPI(t, ts, "PUT", users+"/anna", annaKey, `{"password":"x","current_password":"new"}`); code != 200 {
+	if code, _ := callAPI(t, ts, "PUT", users+"/anna", annaKey, `{"password":"anna-pass-3","current_password":"anna-pass-2"}`); code != 200 {
 		t.Fatalf("own password: %d", code)
 	}
-	if code, _ := callAPI(t, ts, "POST", "/api/v1/login", "", `{"user":"anna","password":"x"}`); code != 200 {
+	if code, _ := callAPI(t, ts, "POST", "/api/v1/login", "", `{"user":"anna","password":"anna-pass-3"}`); code != 200 {
 		t.Fatalf("login with the own new password: %d", code)
 	}
 
@@ -147,7 +147,7 @@ func TestUsersRoutes(t *testing.T) {
 	if code, text := callAPI(t, ts, "PUT", users+"/owner", annaKey, `{"password":"taken-over"}`); code != 403 || errorOf(text) != "only an owner changes an owner" {
 		t.Fatalf("a manager sets the owner's password: %d %s", code, text)
 	}
-	if code, _ := callAPI(t, ts, "POST", users, annaKey, `{"name":"g2","role":"guest","password":"p"}`); code != 201 {
+	if code, _ := callAPI(t, ts, "POST", users, annaKey, `{"name":"g2","role":"guest","password":"guest-pass-2"}`); code != 201 {
 		t.Fatalf("a manager creates a guest: %d", code)
 	}
 	if code, _ := callAPI(t, ts, "POST", users, annaKey, `{"name":"v","role":"viewer"}`); code != 403 {
@@ -228,7 +228,7 @@ func TestUsersRoutes(t *testing.T) {
 	if code, _ := callAPI(t, ts, "GET", users+"/anna", owner, ""); code != 404 {
 		t.Fatalf("removed user: %d", code)
 	}
-	if code, _ := callAPI(t, ts, "POST", "/api/v1/login", "", `{"user":"anna","password":"x"}`); code != 401 {
+	if code, _ := callAPI(t, ts, "POST", "/api/v1/login", "", `{"user":"anna","password":"anna-pass-3"}`); code != 401 {
 		t.Fatalf("login of a removed user: %d", code)
 	}
 }
@@ -375,9 +375,9 @@ func TestFirstOwner(t *testing.T) {
 		body string
 		want int
 	}{
-		{`{"name":"root","role":"viewer","password":"p"}`, 400},
+		{`{"name":"root","role":"viewer","password":"root-pass-1"}`, 400},
 		{`{"name":"root"}`, 400},
-		{`{"name":"root","password":"p","display_name":"Root"}`, 201},
+		{`{"name":"root","password":"root-pass-1","display_name":"Root"}`, 201},
 	} {
 		if code, text := callAPI(t, ts, "POST", users, "", c.body); code != c.want {
 			t.Fatalf("%s: %d %s, want %d", c.body, code, text, c.want)
@@ -389,10 +389,10 @@ func TestFirstOwner(t *testing.T) {
 	if s.AuthMode() != "users" {
 		t.Fatalf("mode %s", s.AuthMode())
 	}
-	if code, _ := callAPI(t, ts, "POST", users, "", `{"name":"x","password":"p"}`); code != 401 {
+	if code, _ := callAPI(t, ts, "POST", users, "", `{"name":"x","password":"root-pass-1"}`); code != 401 {
 		t.Fatalf("a second user without a token: %d", code)
 	}
-	if code, _ := callAPI(t, ts, "POST", "/api/v1/login", "", `{"user":"root","password":"p"}`); code != 200 {
+	if code, _ := callAPI(t, ts, "POST", "/api/v1/login", "", `{"user":"root","password":"root-pass-1"}`); code != 200 {
 		t.Fatalf("the owner's login: %d", code)
 	}
 	for addr, want := range map[string]bool{"127.0.0.1": true, "::1": true, "10.1.2.3": true, "192.168.1.20": true, "172.16.0.1": true, "169.254.1.1": true, "fd00::1": true, "fe80::1": true,
@@ -549,7 +549,7 @@ func TestUsersRefusalsWithoutStorePrefix(t *testing.T) {
 		want               string
 	}{
 		{"POST", "/api/v1/users", `{"name":"test manager"}`, 400, `bad user name: "test manager"`},
-		{"POST", "/api/v1/users", `{"name":"anna","password":"pw"}`, 201, ""},
+		{"POST", "/api/v1/users", `{"name":"anna","password":"anna-pass-1"}`, 201, ""},
 		{"POST", "/api/v1/users", `{"name":"Anna"}`, 409, "user exists: anna"},
 		{"PUT", "/api/v1/users/nobody", `{"display_name":"x"}`, 404, `no user "nobody"`},
 		{"DELETE", "/api/v1/roles/owner", "", 403, "the role cannot be changed"},
@@ -719,5 +719,107 @@ func TestRemovedUserKeepsItsHistory(t *testing.T) {
 	}
 	if rows := auditRows(t, ts, "secret", "?limit=50"); !strings.Contains(fmt.Sprint(rows), "user.remove") {
 		t.Fatalf("no user.remove in the audit")
+	}
+}
+
+// A plain password that a request sets has 8 to 64 characters, counted
+// in code points (AP PasswordRules, D7-A, D11-A): POST and PUT answer
+// 400 with the rule's words before anything of the request is written,
+// and one's own change keeps its proof for the next try. A record, the
+// empty password that removes one, and a sign-in with a password set
+// before are not held to it.
+func TestUsersPasswordRule(t *testing.T) {
+	t.Parallel()
+	r := startServer(t, withOptions(storeOptions(t, t.TempDir(), "secret")))
+	ts, st := r.ts, r.s.opts.Store
+	ctx := t.Context()
+	users := "/api/v1/users"
+	short, long := "seven-7", strings.Repeat("x", 65)
+	refused := func(what string, code int, text, want string) {
+		t.Helper()
+		if code != 400 || errorOf(text) != want {
+			t.Errorf("%s: %d %s, want 400 %q", what, code, text, want)
+		}
+	}
+	code, text := callAPI(t, ts, "POST", users, "secret", `{"name":"anna","password":"`+short+`"}`)
+	refused("POST, 7", code, text, "password: at least 8 characters")
+	code, text = callAPI(t, ts, "POST", users, "secret", `{"name":"anna","password":"`+long+`"}`)
+	refused("POST, 65", code, text, "password: at most 64 characters")
+	// Seven characters beyond the basic plane are 14 UTF-16 units and
+	// 28 bytes: still seven.
+	code, text = callAPI(t, ts, "POST", users, "secret", `{"name":"anna","password":"`+strings.Repeat("😀", 7)+`"}`)
+	refused("POST, 7 beyond the basic plane", code, text, "password: at least 8 characters")
+	if _, ok, _ := st.User(ctx, "anna"); ok {
+		t.Fatal("a refused POST added the user")
+	}
+	if code, text := callAPI(t, ts, "POST", users, "secret", `{"name":"anna","display_name":"Anna","password":"`+strings.Repeat("😀", 64)+`"}`); code != 201 {
+		t.Fatalf("POST, 64 beyond the basic plane: %d %s", code, text)
+	}
+	if code, text := callAPI(t, ts, "PUT", users+"/anna", "secret", `{"password":"äöüäöüäö"}`); code != 200 {
+		t.Fatalf("PUT, äöü counted as three: %d %s", code, text)
+	}
+
+	// A PUT that fails the rule writes nothing of the request.
+	code, text = callAPI(t, ts, "PUT", users+"/anna", "secret", `{"display_name":"Changed","password":"`+short+`"}`)
+	refused("PUT, 7", code, text, "password: at least 8 characters")
+	code, text = callAPI(t, ts, "PUT", users+"/anna", "secret", `{"display_name":"Changed","password":"`+long+`"}`)
+	refused("PUT, 65", code, text, "password: at most 64 characters")
+	if u, _, _ := st.User(ctx, "anna"); u.DisplayName != "Anna" {
+		t.Errorf("a refused PUT changed the display name: %q", u.DisplayName)
+	}
+	if err := st.CheckPassword(ctx, "anna", "äöüäöüäö"); err != nil {
+		t.Errorf("a refused PUT changed the password: %v", err)
+	}
+
+	// One's own change: refused before the proof is used, which then
+	// still sets a record of any length.
+	if code, text := callAPI(t, ts, "PUT", users+"/anna", "secret", `{"record":"`+opaqueRecord(t, ts, "secret", "anna", "pw")+`","ksf":"`+store.OpaqueKSF+`"}`); code != 200 {
+		t.Fatalf("PUT, a record of a short password: %d %s", code, text)
+	}
+	_, code, body := opaqueSignIn(t, ts, "anna", "pw", "")
+	var sess struct{ Token string }
+	if json.Unmarshal([]byte(body), &sess); code != 200 || sess.Token == "" {
+		t.Fatalf("a sign-in with the record of a short password: %d %s", code, body)
+	}
+	_, code, body = opaqueSignIn(t, ts, "anna", "pw", purposeProof)
+	var proof struct{ Proof string }
+	if json.Unmarshal([]byte(body), &proof); code != 200 || proof.Proof == "" {
+		t.Fatalf("a proof: %d %s", code, body)
+	}
+	code, text = callAPI(t, ts, "PUT", users+"/anna", sess.Token, `{"password":"`+short+`","proof":"`+proof.Proof+`"}`)
+	refused("one's own, 7", code, text, "password: at least 8 characters")
+	if code, text := callAPI(t, ts, "PUT", users+"/anna", sess.Token, `{"record":"`+opaqueRecord(t, ts, sess.Token, "anna", "p2")+`","ksf":"`+store.OpaqueKSF+`","proof":"`+proof.Proof+`"}`); code != 200 {
+		t.Fatalf("one's own record with the proof the refusal left: %d %s", code, text)
+	}
+
+	// The empty password removes one, whatever the rule says.
+	code, text = callAPI(t, ts, "PUT", users+"/anna", "secret", `{"password":""}`)
+	if u := decodeUserView(text); code != 200 || u.HasPassword {
+		t.Fatalf("PUT, the empty password: %d %s", code, text)
+	}
+	// A record of a short password, POST, as the page sends one.
+	if code, text := callAPI(t, ts, "POST", users, "secret", `{"name":"carl","record":"`+opaqueRecord(t, ts, "secret", "carl", "c")+`","ksf":"`+store.OpaqueKSF+`"}`); code != 201 {
+		t.Fatalf("POST, a record of a short password: %d %s", code, text)
+	}
+	// A password set before the rule signs in as it is.
+	if _, err := st.AddUser(ctx, store.User{Name: "dora", Role: store.RoleViewer}, "d1", 0); err != nil {
+		t.Fatal(err)
+	}
+	if code, text := callAPI(t, ts, "POST", "/api/v1/login", "", `{"user":"dora","password":"d1"}`); code != 200 {
+		t.Fatalf("a sign-in with a password of two characters set before: %d %s", code, text)
+	}
+}
+
+// The first owner's plain password is held to the rule too, on an open
+// server, before the owner is written.
+func TestFirstOwnerPasswordRule(t *testing.T) {
+	t.Parallel()
+	r := startServer(t, withOptions(storeOptions(t, t.TempDir(), "")))
+	code, text := callAPI(t, r.ts, "POST", "/api/v1/users", "", `{"name":"root","password":"seven-7"}`)
+	if code != 400 || errorOf(text) != "password: at least 8 characters" {
+		t.Fatalf("the first owner, 7: %d %s", code, text)
+	}
+	if n, _ := r.s.opts.Store.CountUsers(t.Context()); n != 0 || r.s.AuthMode() != "open" {
+		t.Fatalf("a refused first owner: %d users, mode %s", n, r.s.AuthMode())
 	}
 }

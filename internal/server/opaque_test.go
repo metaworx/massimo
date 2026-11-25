@@ -259,8 +259,8 @@ func TestOpaqueOneAtATime(t *testing.T) {
 func TestOpaqueOwnPassword(t *testing.T) {
 	t.Parallel()
 	ts := startServer(t, withOptions(storeOptions(t, t.TempDir(), "secret"))).ts
-	callAPI(t, ts, "POST", "/api/v1/users", "secret", `{"name":"anna","role":"operator","password":"old"}`)
-	_, body := callAPI(t, ts, "POST", "/api/v1/login", "", `{"user":"anna","password":"old"}`)
+	callAPI(t, ts, "POST", "/api/v1/users", "secret", `{"name":"anna","role":"operator","password":"anna-old-pass"}`)
+	_, body := callAPI(t, ts, "POST", "/api/v1/login", "", `{"user":"anna","password":"anna-old-pass"}`)
 	var sess struct{ Token string }
 	json.Unmarshal([]byte(body), &sess)
 	rec := opaqueRecord(t, ts, sess.Token, "anna", "new")
@@ -275,7 +275,7 @@ func TestOpaqueOwnPassword(t *testing.T) {
 	}
 	// Version 1 to 2 with the current password, version 2 to 2 with a
 	// proof from a sign-in by OPAQUE.
-	if code, body := put(`,"current_password":"old"`); code != 200 {
+	if code, body := put(`,"current_password":"anna-old-pass"`); code != 200 {
 		t.Fatalf("with the current password: %d %s", code, body)
 	}
 	_, code, body := opaqueSignIn(t, ts, "anna", "new", purposeProof)
@@ -372,14 +372,17 @@ func must[T any](v T, err error) T {
 // start by OPAQUE that the fake record cannot finish: the password
 // sign-in takes the start over, so the attempt counts once, lifts a
 // lockout its start set, and answers a proof to upgrade with, good once,
-// with which the user's own record replaces the hash.
+// with which the user's own record replaces the hash. The password is
+// one of two characters, set before the rule of internal/password: the
+// sign-in and the upgrade take it as it is (AP PasswordRules, D7-A).
 func TestOpaqueUpgrade(t *testing.T) {
 	t.Parallel()
 	opts := storeOptions(t, t.TempDir(), "secret")
 	opts.AuthFailures = 2
-	ts := startServer(t, withOptions(opts)).ts
-	if code, body := callAPI(t, ts, "POST", "/api/v1/users", "secret", `{"name":"anna","role":"operator","password":"pw"}`); code != 201 {
-		t.Fatalf("add: %d %s", code, body)
+	r := startServer(t, withOptions(opts))
+	ts := r.ts
+	if _, err := r.s.opts.Store.AddUser(t.Context(), store.User{Name: "anna", Role: store.RoleOperator}, "pw", 0); err != nil {
+		t.Fatalf("add: %v", err)
 	}
 	start := func(password string) string {
 		t.Helper()
@@ -446,7 +449,7 @@ func TestPasswordLoginOff(t *testing.T) {
 	r := startServer(t, withOptions(storeOptions(t, t.TempDir(), "secret")))
 	ts, s := r.ts, r.s
 	key := userToken(t, s.opts.Store, "vera", store.RoleViewer)
-	callAPI(t, ts, "POST", "/api/v1/users", "secret", `{"name":"bert","password":"pw"}`)
+	callAPI(t, ts, "POST", "/api/v1/users", "secret", `{"name":"bert","password":"bert-pass-1"}`)
 	rec := opaqueRecord(t, ts, "secret", "anna", "pw")
 	callAPI(t, ts, "POST", "/api/v1/users", "secret", `{"name":"anna","record":"`+rec+`","ksf":"`+store.OpaqueKSF+`"}`)
 	setting := func() settingView {
@@ -467,21 +470,21 @@ func TestPasswordLoginOff(t *testing.T) {
 	if code, body := callAPI(t, ts, "PUT", "/api/v1/settings", "secret", `{"`+store.PasswordLoginKey+`":false}`); code != 200 || setting().Value != "false" {
 		t.Fatalf("off: %d %s", code, body)
 	}
-	if code, _ := callAPI(t, ts, "POST", "/api/v1/login", "", `{"user":"bert","password":"pw"}`); code != 403 {
+	if code, _ := callAPI(t, ts, "POST", "/api/v1/login", "", `{"user":"bert","password":"bert-pass-1"}`); code != 403 {
 		t.Errorf("a password sign-in with the setting off: %d", code)
 	}
 	started, code, _ := opaqueSignIn(t, ts, "anna", "pw", "")
 	if code != 200 || started.V1 {
 		t.Errorf("by OPAQUE with the setting off: %d, v1 %v", code, started.V1)
 	}
-	if code, _ := callAPI(t, ts, "POST", "/api/v1/login", "", `{"user":"bert","password":"pw","login":"x"}`); code != 403 {
+	if code, _ := callAPI(t, ts, "POST", "/api/v1/login", "", `{"user":"bert","password":"bert-pass-1","login":"x"}`); code != 403 {
 		t.Errorf("a fallback with the setting off: %d", code)
 	}
 	if code, _ := callAPI(t, ts, "GET", "/api/v1/me", key, ""); code != 200 {
 		t.Errorf("an API key with the setting off: %d", code)
 	}
 	callAPI(t, ts, "PUT", "/api/v1/settings", "secret", `{"`+store.PasswordLoginKey+`":null}`)
-	if code, _ := callAPI(t, ts, "POST", "/api/v1/login", "", `{"user":"bert","password":"pw"}`); code != 200 || setting().Set {
+	if code, _ := callAPI(t, ts, "POST", "/api/v1/login", "", `{"user":"bert","password":"bert-pass-1"}`); code != 200 || setting().Set {
 		t.Errorf("back to the default: %d", code)
 	}
 }

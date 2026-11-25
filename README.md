@@ -1139,6 +1139,11 @@ which asks for the password again since it goes with the name
 `user token <name> -label Loxone` prints a new API key once,
 `user tokens <name>` lists the user's sessions and keys with their ids,
 and `user revoke <name> [<token id>]` revokes one token or every one.
+A new password has 8 to 64 characters; 15 or a few words are better.
+A password set before stays valid,
+but `user rename` asks for one again:
+where the old one is shorter, give a new one there,
+or `-no-password`, which leaves the user with its keys only.
 A password set with `user add` or `user passwd` is of `auth_version` 2:
 the command registers it by OPAQUE in its own process,
 with the browser's key stretching, so the web UI signs in with it and the

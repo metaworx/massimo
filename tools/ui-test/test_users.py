@@ -474,7 +474,7 @@ def test_a_double_click_on_yes_removes_once(page, case):
     makes the user."""
     name = f"rm-{case.width}-{case.lang}"
     remove_user(name)
-    api_call("POST", "api/v1/users", {"name": name, "role": "viewer", "password": "rm-pass"})
+    api_call("POST", "api/v1/users", {"name": name, "role": "viewer", "password": "rm-password"})
     deletes = []
     page.on("request", lambda r: deletes.append(r.url) if r.method == "DELETE" and r.url.endswith("/users/" + name) else None)
     try:

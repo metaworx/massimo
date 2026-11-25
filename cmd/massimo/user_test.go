@@ -68,7 +68,7 @@ func TestUserCommands(t *testing.T) {
 	dir := t.TempDir()
 	t.Setenv(env.DataVar, dir)
 	ctx := context.Background()
-	if out, err := runUserWith(t, "pw\n", "add", "Anna", "-role", "operator", "-display-name", "Anna", "-password-stdin"); err != nil || !strings.Contains(out, "user anna added with the role operator") {
+	if out, err := runUserWith(t, "anna-pass-1\n", "add", "Anna", "-role", "operator", "-display-name", "Anna", "-password-stdin"); err != nil || !strings.Contains(out, "user anna added with the role operator") {
 		t.Fatalf("add: %q %v", out, err)
 	}
 	if _, err := runUserWith(t, "", "add", "anna", "-no-password"); err == nil || !strings.Contains(err.Error(), "exists") {
@@ -94,7 +94,7 @@ func TestUserCommands(t *testing.T) {
 	if !ok || anna.Role != store.RoleOperator || !anna.HasPassword || anna.DisplayName != "Anna" {
 		t.Fatalf("anna %+v", anna)
 	}
-	if !signsIn(t, st, "anna", "pw") || anna.AuthVersion != 2 {
+	if !signsIn(t, st, "anna", "anna-pass-1") || anna.AuthVersion != 2 {
 		t.Fatalf("anna does not sign in by OPAQUE: auth_version %d", anna.AuthVersion)
 	}
 	g, _, _ := st.User(ctx, "guest1")
@@ -107,7 +107,7 @@ func TestUserCommands(t *testing.T) {
 	if err != nil || !strings.Contains(out, "anna") || !strings.Contains(out, "operator") || !strings.Contains(out, "until 2026-12-24") || !strings.Contains(out, "NAME") {
 		t.Fatalf("list: %q %v", out, err)
 	}
-	if _, err := runUserWith(t, "new\n", "passwd", "anna", "-password-stdin"); err != nil {
+	if _, err := runUserWith(t, "anna-pass-2\n", "passwd", "anna", "-password-stdin"); err != nil {
 		t.Fatalf("passwd: %v", err)
 	}
 	if _, err := runUserWith(t, "x\n", "passwd", "nobody", "-password-stdin"); err == nil {
@@ -133,7 +133,7 @@ func TestUserCommands(t *testing.T) {
 	if !ok || tok.Label != "Loxone" || tok.Kind != store.TokenAPI {
 		t.Fatalf("key %+v %v", tok, ok)
 	}
-	if !signsIn(t, st, "anna", "new") || signsIn(t, st, "anna", "pw") {
+	if !signsIn(t, st, "anna", "anna-pass-2") || signsIn(t, st, "anna", "anna-pass-1") {
 		t.Fatal("password not set")
 	}
 	st.Close()
@@ -345,7 +345,7 @@ func TestUserStoreDir(t *testing.T) {
 		}
 	}
 
-	_, err := runUserWith(t, "pw\n", "add", "anna", "-password-stdin")
+	_, err := runUserWith(t, "anna-pass-1\n", "add", "anna", "-password-stdin")
 	if err == nil || !strings.Contains(err.Error(), "user add: no massimo.db in the current directory") ||
 		!strings.Contains(err.Error(), stateDir) || !strings.Contains(err.Error(), "sudo -u _massimo") {
 		t.Fatalf("add with the service installed: %v", err)
@@ -368,7 +368,7 @@ func TestUserStoreDir(t *testing.T) {
 
 	other := t.TempDir()
 	t.Setenv(env.DataVar, other)
-	out, err := runUserWith(t, "pw\n", "add", "anna", "-password-stdin")
+	out, err := runUserWith(t, "anna-pass-1\n", "add", "anna", "-password-stdin")
 	if want := "(store " + filepath.Join(other, store.FileName) + ")"; err != nil || !strings.Contains(out, want) {
 		t.Fatalf("add with MASSIMO_DATA: %q %v, want %q", out, err, want)
 	}
@@ -405,7 +405,7 @@ func TestUserRename(t *testing.T) {
 	dir := t.TempDir()
 	t.Setenv(env.DataVar, dir)
 	ctx := context.Background()
-	if _, err := runUserWith(t, "pw\n", "add", "anna", "-password-stdin"); err != nil {
+	if _, err := runUserWith(t, "anna-pass-1\n", "add", "anna", "-password-stdin"); err != nil {
 		t.Fatal(err)
 	}
 	runUserWith(t, "", "add", "bob", "-no-password")
@@ -416,7 +416,7 @@ func TestUserRename(t *testing.T) {
 		{"", "rename anna carl", "no terminal"},
 		{"", "rename anna carl -no-password -password-stdin", "exclude each other"},
 		{"", "rename anna", "give the name and the new name"},
-		{"x\n", "rename anna bad! -password-stdin", "bad user name"},
+		{"anna-pass-3\n", "rename anna bad! -password-stdin", "bad user name"},
 	} {
 		if _, err := runUserWith(t, c.in, strings.Fields(c.args)...); err == nil || !strings.Contains(err.Error(), c.want) {
 			t.Errorf("%s: %v, want %q", c.args, err, c.want)
@@ -426,7 +426,7 @@ func TestUserRename(t *testing.T) {
 	anna, _, _ := st.User(ctx, "anna")
 	st.AddToken(ctx, anna.ID, store.TokenSession, "browser", time.Now().Add(time.Hour))
 	st.Close()
-	out, err := runUserWith(t, "new-pw\n", "rename", "anna", "Annabel", "-password-stdin")
+	out, err := runUserWith(t, "anna-pass-3\n", "rename", "anna", "Annabel", "-password-stdin")
 	if err != nil || !strings.Contains(out, "user anna renamed to annabel; its sessions are ended, its API keys kept (store ") {
 		t.Fatalf("rename: %q %v", out, err)
 	}
@@ -436,7 +436,7 @@ func TestUserRename(t *testing.T) {
 	}
 	defer st.Close()
 	got, ok, _ := st.User(ctx, "annabel")
-	if !ok || got.ID != anna.ID || !signsIn(t, st, "annabel", "new-pw") || signsIn(t, st, "anna", "pw") {
+	if !ok || got.ID != anna.ID || !signsIn(t, st, "annabel", "anna-pass-3") || signsIn(t, st, "anna", "anna-pass-1") {
 		t.Fatalf("annabel %+v %v", got, ok)
 	}
 	toks, _ := st.Tokens(ctx, anna.ID)
@@ -453,6 +453,70 @@ func TestUserRename(t *testing.T) {
 	}
 	if !found {
 		t.Fatalf("no audit row of the rename: %+v", rows)
+	}
+}
+
+// massimo user add, passwd and rename hold a new password to the rule of
+// internal/password, 8 to 64 characters (AP PasswordRules, D4-A,
+// D7-A): seven are refused with the rule's words and change nothing,
+// eight are taken. A rename of a user whose password of two characters
+// was set before asks for a new one, or -no-password (D54-A).
+func TestUserPasswordRule(t *testing.T) {
+	clearCubeEnv(t)
+	dir := t.TempDir()
+	t.Setenv(env.DataVar, dir)
+	ctx := context.Background()
+	short, eight := "seven-7\n", "eight-88\n"
+	refused := func(what string, err error, want string) {
+		t.Helper()
+		if err == nil || !strings.Contains(err.Error(), want) {
+			t.Errorf("%s: %v, want %q", what, err, want)
+		}
+	}
+	_, err := runUserWith(t, short, "add", "anna", "-password-stdin")
+	refused("add, 7", err, "user add: password: at least 8 characters")
+	_, err = runUserWith(t, strings.Repeat("ü", 65)+"\n", "add", "anna", "-password-stdin")
+	refused("add, 65", err, "user add: password: at most 64 characters")
+	if _, err := runUserWith(t, strings.Repeat("ü", 64)+"\n", "add", "anna", "-password-stdin"); err != nil {
+		t.Fatalf("add, 64 of two bytes each: %v", err)
+	}
+	_, err = runUserWith(t, short, "passwd", "anna", "-password-stdin")
+	refused("passwd, 7", err, "user passwd: password: at least 8 characters")
+	st, err := store.Open(dir, store.Options{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !signsIn(t, st, "anna", strings.Repeat("ü", 64)) {
+		t.Fatal("a refused passwd changed the password")
+	}
+	// Two users with a password of two characters, set before the rule.
+	for _, name := range []string{"bob", "carl"} {
+		if _, err := st.AddUserOpaque(ctx, store.User{Name: name, Role: store.RoleViewer}, "pw", 0); err != nil {
+			t.Fatal(err)
+		}
+	}
+	st.Close()
+	if _, err := runUserWith(t, eight, "passwd", "anna", "-password-stdin"); err != nil {
+		t.Fatalf("passwd, 8: %v", err)
+	}
+	_, err = runUserWith(t, "pw\n", "rename", "bob", "robert", "-password-stdin")
+	refused("rename with the old short password", err, "user rename: password: at least 8 characters; a rename sets the password again, under the new name: give a new one, or -no-password, which leaves the user with its keys only")
+	if _, err := runUserWith(t, eight, "rename", "bob", "robert", "-password-stdin"); err != nil {
+		t.Fatalf("rename, 8: %v", err)
+	}
+	if _, err := runUserWith(t, "", "rename", "carl", "charles", "-no-password"); err != nil {
+		t.Fatalf("rename -no-password: %v", err)
+	}
+	st, err = store.OpenReadOnly(dir, store.Options{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer st.Close()
+	if !signsIn(t, st, "anna", "eight-88") || !signsIn(t, st, "robert", "eight-88") {
+		t.Fatal("a password of 8 characters does not sign in")
+	}
+	if c, ok, _ := st.User(ctx, "charles"); !ok || c.HasPassword {
+		t.Fatalf("charles after a rename with -no-password: %+v", c)
 	}
 }
 

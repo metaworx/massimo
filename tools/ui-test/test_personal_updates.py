@@ -15,7 +15,7 @@ import os
 import pytest
 
 from conftest import TOKEN, URL, api_call
-from helpers import frames, hold, mark, open_main_menu, owner_page, pause_clock, replaced, show_view, undo, wait_held, wait_until
+from helpers import OPERATOR_PASSWORD, frames, hold, mark, open_main_menu, owner_page, pause_clock, replaced, show_view, undo, wait_held, wait_until
 from test_admin_updates import menu_mark, out
 from test_login import sign_in
 from test_notifications import FAKE_PUSH, reload_with
@@ -125,7 +125,7 @@ def across(page, how):
         out(page)
     else:
         expire(page)
-    sign_in(page, "operator", "op-pass")
+    sign_in(page, "operator", OPERATOR_PASSWORD)
     assert page.evaluate("state.me.user.name") == "operator", "the operator is in"
 
 
@@ -213,7 +213,7 @@ def test_a_current_password_alone_is_no_change(new_context, case, watch, guard):
     page.set_default_timeout(5000)
     page.on("pageerror", lambda e: watch.problems.append(f"page error: {e}"))
     page.goto(URL)
-    sign_in(page, "operator", "op-pass")
+    sign_in(page, "operator", OPERATOR_PASSWORD)
     profile_shown(page, "operator")
     open_password(page)
     current = page.locator("#me-current")
@@ -558,7 +558,7 @@ def test_a_rule_changed_just_before_sign_out_is_sent_first(new_context, case, wa
         assert len(puts) == 1 and puts[0][0] == "Bearer " + TOKEN, f"one PUT, under the owner's token: {[p[0][:12] for p in puts]}"
         assert puts[0][1]["device_stale"]["on"] is True, f"the change itself: {puts[0][1]}"
         page.clock.resume()
-        sign_in(page, "operator", "op-pass")  # waits a second after the stream opens: a save left waiting would have gone by then
+        sign_in(page, "operator", OPERATOR_PASSWORD)  # waits a second after the stream opens: a save left waiting would have gone by then
         assert len(puts) == 1, f"no PUT for the operator: {len(puts)}"
     finally:
         forget_rules()
@@ -577,7 +577,7 @@ def test_a_rule_changed_before_another_users_sign_in_is_dropped(new_context, cas
         flip_stale(page)
         expire(page)  # the sign-in open: holdPushes has taken the rule's save
         page.clock.resume()
-        sign_in(page, "operator", "op-pass")
+        sign_in(page, "operator", OPERATOR_PASSWORD)
         with page.expect_response(lambda r: r.request.method == "GET" and r.url.endswith("/api/v1/me/preferences")) as prefs:
             notify_shown(page)
         held = ((prefs.value.json() or {}).get("notify") or {}).get("device_stale", {}).get("on", False)

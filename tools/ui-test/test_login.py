@@ -1,12 +1,12 @@
 # SPDX-License-Identifier: AGPL-3.0-or-later
 # Copyright (C) 2026 The Massimo Authors
 """Signing in, in a browser context of its own without the stored
-token, as the operator run.sh creates (password op-pass). A page error
+token, as the operator run.sh creates (password op-password). A page error
 fails the test (the guard); the console is not watched, since the
 page's first requests without a token are refused on purpose."""
 from conftest import TOKEN, URL, api_call
-from helpers import (ApiReads, assert_login_card_centred, assert_login_row, frames, named_buttons, open_personal_page, scroll_settled,
-                     show_view, sign_out, wait_held, wait_until)
+from helpers import (OPERATOR_PASSWORD, ApiReads, assert_login_card_centred, assert_login_row, frames, named_buttons,
+                     open_personal_page, scroll_settled, show_view, sign_out, wait_held, wait_until)
 
 
 def test_sign_in_and_out(new_context, case, watch, guard):
@@ -49,7 +49,7 @@ def test_sign_in_and_out(new_context, case, watch, guard):
     # A wrong password: a start by OPAQUE that it does not open, then the
     # password sign-in, while the server takes that.
     assert len(logins) == 2, f"two submits send one sign-in, not {logins}"
-    page.locator("#login-password").fill("op-pass")
+    page.locator("#login-password").fill(OPERATOR_PASSWORD)
     page.locator("#login-form button[type=submit]").click()
     page.wait_for_selector(".room", timeout=10000)
     assert page.evaluate("state.me && state.me.user && state.me.user.name") == "operator", "signed in as the operator"
@@ -85,7 +85,7 @@ def test_sign_in_and_out(new_context, case, watch, guard):
     for sel in ("#cube-menu", ".top-line > .nav", ".pile", "main"):
         assert not page.locator(sel).first.is_visible(), f"{sel} is hidden while signed out"
     page.locator("#login-user").fill("operator")
-    page.locator("#login-password").fill("op-pass")
+    page.locator("#login-password").fill(OPERATOR_PASSWORD)
     page.locator("#login-form button[type=submit]").click()
     page.wait_for_selector(".room", timeout=10000)
     assert page.locator("#cube-menu").is_visible() and page.locator(".top-line > .nav").is_visible(), "signed in, the header is back"
@@ -119,10 +119,10 @@ def test_sign_in_starts_the_page_once(new_context, case, watch, guard):
     page.on("request", lambda r: tickets.append(r.url) if r.method == "POST" and r.url.endswith("/events/ticket") else None)
     page.on("response", lambda r: mes.append(r.url) if r.request.method == "GET" and r.url.endswith("/api/v1/me") and r.ok else None)
     page.goto(URL)
-    sign_in(page, "operator", "op-pass")
+    sign_in(page, "operator", OPERATOR_PASSWORD)
     assert (len(tickets), len(mes)) == (1, 1), f"one start after the sign-in at the page's start: {len(tickets)} ticket(s), {len(mes)} /me"
     sign_out(page)
-    sign_in(page, "operator", "op-pass")
+    sign_in(page, "operator", OPERATOR_PASSWORD)
     assert (len(tickets), len(mes)) == (2, 2), f"one start after the sign-in after Log out: {len(tickets)} ticket(s), {len(mes)} /me"
     sign_out(page)
     assert wait_until(page, "document.getElementById('login-dialog').open", 5), "signed out at the end"
@@ -194,7 +194,7 @@ def test_a_dead_session_is_dropped(new_context, case, watch, guard):
     page.set_default_timeout(5000)
     page.on("pageerror", lambda e: watch.problems.append(f"page error: {e}"))
     page.goto(URL)
-    sign_in(page, "operator", "op-pass")
+    sign_in(page, "operator", OPERATOR_PASSWORD)
     tid = page.evaluate("state.me.token.id")
     open_personal_page(page)
     row = page.locator("#profile-tokens .user-tokens li.token-current")
@@ -230,12 +230,12 @@ def test_a_replaced_session_ends(new_context, case, watch, guard):
     page.set_default_timeout(5000)
     page.on("pageerror", lambda e: watch.problems.append(f"page error: {e}"))
     page.goto(URL)
-    sign_in(page, "operator", "op-pass")
+    sign_in(page, "operator", OPERATOR_PASSWORD)
     first, old = page.evaluate("[state.me.token.id, state.token]")
     logouts = []
     page.on("request", lambda r: logouts.append(r.headers.get("authorization")) if r.method == "POST" and r.url.endswith("/api/v1/logout") else None)
     page.evaluate("() => { askLogin(); }")
-    sign_in(page, "operator", "op-pass")
+    sign_in(page, "operator", OPERATOR_PASSWORD)
     second = page.evaluate("state.me.token.id")
     assert second != first, "a new session"
     for _ in range(25):
@@ -254,7 +254,7 @@ def test_a_replaced_session_ends(new_context, case, watch, guard):
     page.wait_for_selector(".room", timeout=10000)
     assert page.evaluate("state.me.token.kind") == "api", "in with the key"
     page.evaluate("() => { askLogin(); }")
-    sign_in(page, "operator", "op-pass")
+    sign_in(page, "operator", OPERATOR_PASSWORD)
     assert page.evaluate("state.me.user.name") == "operator", "signed in over the key"
     assert logouts == [], f"a key replaced is not signed out: {len(logouts)} logout(s)"
     sign_out(page)
@@ -273,7 +273,7 @@ def test_a_dead_session_leaves_another_tabs_token(new_context, case, watch, guar
     first.set_default_timeout(5000)
     first.on("pageerror", lambda e: watch.problems.append(f"page error: {e}"))
     first.goto(URL)
-    sign_in(first, "operator", "op-pass")
+    sign_in(first, "operator", OPERATOR_PASSWORD)
     old, old_id = first.evaluate("[state.token, state.me.token.id]")
     second = ctx.new_page()
     second.set_default_timeout(5000)
@@ -282,7 +282,7 @@ def test_a_dead_session_leaves_another_tabs_token(new_context, case, watch, guar
     second.wait_for_selector(".room", timeout=10000)
     assert second.evaluate("state.token") == old, "the second tab starts with the stored session"
     second.evaluate("() => { askLogin(); }")
-    sign_in(second, "operator", "op-pass")
+    sign_in(second, "operator", OPERATOR_PASSWORD)
     new = second.evaluate("state.token")
     assert new != old and first.evaluate("localStorage.getItem('massimo.token')") == new, "the new session stored"
     for _ in range(25):  # the second tab's logout of the replaced session, not awaited
@@ -318,7 +318,7 @@ def test_sign_in_is_busy_until_answered(new_context, case, watch, guard):
     page.goto(URL)
     assert wait_until(page, "document.getElementById('login-dialog').open", 5), "the sign-in dialog opens"
     page.locator("#login-user").fill("operator")
-    page.locator("#login-password").fill("op-pass")
+    page.locator("#login-password").fill(OPERATOR_PASSWORD)
     page.locator("#login-form button[type=submit]").click()
     assert wait_until(page, "document.querySelector('#login-form button[type=submit]').classList.contains('busy')", 5), "Sign in turns"
     state = page.evaluate("(() => { const b = document.querySelector('#login-form button[type=submit]'); "
@@ -378,7 +378,7 @@ def test_a_keys_second_enter_signs_in_once(new_context, case, watch, guard):
     page.set_default_timeout(5000)
     page.on("pageerror", lambda e: watch.problems.append(f"page error: {e}"))
     page.goto(URL)
-    sign_in(page, "operator", "op-pass")
+    sign_in(page, "operator", OPERATOR_PASSWORD)
     page.evaluate("() => { askLogin(); }")
     assert wait_until(page, DIALOG_OPEN, 5), "the sign-in opens on the running page"
     page.locator("#login-ways .login-way[data-way='key']").click()
@@ -462,13 +462,13 @@ def test_the_card_empties_its_secrets_after_a_sign_in(new_context, case, watch, 
     eye.wait_for(state="visible")
     eye.click()
     assert page.locator("#login-password").get_attribute("type") == "text", "the password shown"
-    page.locator("#login-password").fill("op-pass")
+    page.locator("#login-password").fill(OPERATOR_PASSWORD)
     stage["hold"] = True
     page.locator("#login-form button[type=submit]").click()
     assert wait_until(page, f"!({DIALOG_OPEN})", 10), "signed in, the card closed"
     assert wait_held(page, held), "the page's first read after the sign-in, held"
     frames(page)
-    assert page.locator("#login-password").input_value() == "op-pass" and page.locator("#login-token").input_value() == "typed-key", \
+    assert page.locator("#login-password").input_value() == OPERATOR_PASSWORD and page.locator("#login-token").input_value() == "typed-key", \
         "kept while the read after the sign-in has not settled"
     held.pop().continue_()
     assert wait_until(page, "document.getElementById('login-password').value === '' && document.getElementById('login-token').value === ''", 10), \
@@ -481,7 +481,7 @@ def test_the_card_empties_its_secrets_after_a_sign_in(new_context, case, watch, 
     sign_out(page)
     assert wait_until(page, DIALOG_OPEN, 5), "the card after Sign out"
     page.locator("#login-user").fill("operator")
-    page.locator("#login-password").fill("op-pass")
+    page.locator("#login-password").fill(OPERATOR_PASSWORD)
     stage["hold"] = True
     page.locator("#login-form button[type=submit]").click()
     assert wait_until(page, f"!({DIALOG_OPEN})", 10), "signed in again"
@@ -557,7 +557,7 @@ def test_profile_marks_a_key(new_context, case, watch, guard):
     page.set_default_timeout(5000)
     page.on("pageerror", lambda e: watch.problems.append(f"page error: {e}"))
     page.goto(URL)
-    sign_in(page, "operator", "op-pass")
+    sign_in(page, "operator", OPERATOR_PASSWORD)
     ids = []
     try:
         for i in range(24):
