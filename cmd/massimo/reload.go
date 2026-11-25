@@ -237,15 +237,19 @@ func (r *settingsReloader) reload(ctx context.Context, why string) (changed, pen
 
 // apiReload is POST /api/v1/reload's read of the file (Server.SetReloader):
 // reload, then after, what else the API's read does (serve.go: the log
-// file's rotation, the store's checkpoint); its answer is what reload
-// found, every list [] rather than null for none.
+// file's rotation, the store's checkpoint), whatever the read found, as
+// SIGHUP's does: on Windows, which has no SIGHUP, the API's read is the
+// only one that rotates the log file and checkpoints the store (AP
+// StartConfiguration, D8-A). Its answer is what reload
+// found, every list [] rather than null for none, or the read's error,
+// which the server answers 500.
 func (r *settingsReloader) apiReload(after func(context.Context)) func(context.Context) (server.ReloadResult, error) {
 	return func(ctx context.Context) (server.ReloadResult, error) {
 		changed, pending, refused, err := r.reload(ctx, "the API")
+		after(ctx)
 		if err != nil {
 			return server.ReloadResult{}, err
 		}
-		after(ctx)
 		return server.ReloadResult{Changed: nonNil(changed), Pending: nonNil(pending), Refused: refused, ReadAt: time.Now()}, nil
 	}
 }

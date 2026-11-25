@@ -504,7 +504,8 @@ func TestReloadWarnsOfARefusedSetting(t *testing.T) {
 // parses settles it and clears that, though it changed nothing; a
 // missing file is the reloader's warning alone. What the API's read does
 // after the read (serve's rotation and checkpoint, apiReload) runs once
-// for a good read, and not for one that failed.
+// for each read, before its answer, the one that failed included, as
+// SIGHUP's does (AP StartConfiguration, D8-A).
 func TestReloadWarnsOfAnUnreadableFile(t *testing.T) {
 	unsetForTest(t, tokenVar, env.HSTS)
 	p := filepath.Join(t.TempDir(), "env")
@@ -599,7 +600,7 @@ func TestReloadWarnsOfAnUnreadableFile(t *testing.T) {
 	if _, err := env.LoadFile(p); err == nil || err.Error() != parseErr {
 		t.Fatalf("the start's own error: %v, want %s", err, parseErr)
 	}
-	if code != 500 || answer.Error != "reading the settings file: "+parseErr || afters != 0 {
+	if code != 500 || answer.Error != "reading the settings file: "+parseErr || afters != 1 {
 		t.Fatalf("POST /api/v1/reload: %d %q, what runs after it %d times", code, answer.Error, afters)
 	}
 	want := "the next start refuses: " + parseErr
@@ -647,9 +648,9 @@ func TestReloadWarnsOfAnUnreadableFile(t *testing.T) {
 	m = w.Mark()
 	r.reload(t.Context(), "the settings file changed")
 	w.HasNot(t, m, "a settings_read of an unchanged file", settingsRead)
-	// The API's good read, and what runs after it, once.
+	// The API's good read, and what runs after it, once more.
 	var res server.ReloadResult
-	if code := api("POST", "/api/v1/reload", &res); code != 200 || afters != 1 {
+	if code := api("POST", "/api/v1/reload", &res); code != 200 || afters != 2 {
 		t.Fatalf("the API's good read: %d %+v, what runs after it %d times", code, res, afters)
 	}
 
@@ -1018,11 +1019,13 @@ func TestServeAppliesTheTokenOnSIGHUP(t *testing.T) {
 	os.WriteFile(settingsFile, []byte(tokenVar+"=placeholder-token-1\n"+env.TrustedProxies+"=127.0.0.1\n"), 0o600)
 	m := s.log.Mark()
 	s.cmd.Process.Signal(syscall.SIGHUP)
-	if !testkit.Within(5*time.Second, func() bool {
-		code, _ := get(t, base+"/api/v1/cubes", "")
-		return code == 401
-	}) {
-		t.Fatal("the server does not ask for the token after the SIGHUP") // serve's log follows
+	// The reload's end, its own line, which it writes once it has set
+	// what waits for the next start: it sets the token first, so a 401
+	// alone may come before the pending settings.
+	s.log.Await(t, m, "the settings file read again for the SIGHUP, with what changed",
+		testkit.Contains(`msg="settings file read again"`, "source=system", "why=SIGHUP", "changed="), serveWait)
+	if code, text := get(t, base+"/api/v1/cubes", ""); code != 401 {
+		t.Fatalf("the server does not ask for the token after the SIGHUP: %d %s", code, text) // serve's log follows
 	}
 	if code, text := get(t, base+"/api/v1/cubes", "placeholder-token-1"); code != 200 {
 		t.Fatalf("with the token: %d %s", code, text)
@@ -1030,14 +1033,67 @@ func TestServeAppliesTheTokenOnSIGHUP(t *testing.T) {
 	if code, text := get(t, base+"/api/v1/restart", "placeholder-token-1"); code != 200 || !strings.Contains(text, `"pending": [`) || !strings.Contains(text, env.TrustedProxies) {
 		t.Fatalf("GET /api/v1/restart: %d %s", code, text)
 	}
+	// The SIGHUP's last step, the store's checkpoint, comes after the
+	// reload: awaited before the stop, which would cancel it.
+	s.log.Await(t, m, "the store checkpointed", testkit.Msg("store checkpointed"), serveWait)
 	// Once serve ended, its log is read whole; the token first, which no
 	// line shows.
 	s.stop(t)
 	s.log.HasNot(t, 0, "the token in the log", testkit.Contains("placeholder-token-1"))
-	s.log.Has(t, m, "the settings file read again for the SIGHUP, with what changed",
-		testkit.Contains(`msg="settings file read again"`, "source=system", "why=SIGHUP", "changed="))
 	s.log.Has(t, m, "the token applied, its owner created", testkit.Msg("api token applied", "source", "server", "owner_created", "true"))
-	s.log.Has(t, m, "the store checkpointed", testkit.Msg("store checkpointed"))
+}
+
+// POST /api/v1/reload does what SIGHUP does whatever the read finds: a
+// settings file that does not parse, and one that is there but cannot be
+// read, rotate serve's log file and checkpoint its store, and are then
+// answered 500 with the read's error; a good read is answered 200 after
+// the same. Windows has no SIGHUP, so the API's read is its only one that
+// rotates the log file and checkpoints the store (AP StartConfiguration,
+// D8-A).
+func TestServeReloadFromTheAPIRotatesAndCheckpoints(t *testing.T) {
+	t.Parallel()
+	skipBuilt(t)
+	dir := t.TempDir()
+	settingsFile := filepath.Join(dir, "env")
+	os.WriteFile(settingsFile, []byte("# nothing yet\n"), 0o600)
+	s := startServe(t, settingsFile, t.TempDir(), "-log", filepath.Join(dir, "serve.log"))
+	// reload asks for the read and answers its status and body, once
+	// serve's log has said the read's rotation and checkpoint.
+	reload := func(what string) (int, []byte) {
+		t.Helper()
+		m := s.log.Mark()
+		resp, err := http.Post("http://"+s.addr+"/api/v1/reload", "application/json", strings.NewReader("{}"))
+		if err != nil {
+			t.Fatal(err)
+		}
+		body, _ := io.ReadAll(resp.Body)
+		resp.Body.Close()
+		s.log.Await(t, m, what+": the log file rotated", testkit.MsgAt(slog.LevelInfo, "log rotated", "reason", "reload"), serveWait)
+		s.log.Await(t, m, what+": the store checkpointed", testkit.Msg("store checkpointed"), serveWait)
+		return resp.StatusCode, body
+	}
+	failed := func(what, want string) {
+		t.Helper()
+		var answer struct{ Error string }
+		if code, body := reload(what); code != 500 || json.Unmarshal(body, &answer) != nil || answer.Error != "reading the settings file: "+want {
+			t.Fatalf("%s: %d %s, want 500 with %q", what, code, body, want)
+		}
+	}
+
+	os.WriteFile(settingsFile, []byte(env.HSTS+"=60\nwrapped\n"), 0o600)
+	failed("a file that does not parse", settingsFile+":2: expected KEY=VALUE")
+	os.Remove(settingsFile)
+	if err := os.Mkdir(settingsFile, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	failed("a file that cannot be read", settingsFile+":1: read "+settingsFile+": is a directory")
+	os.Remove(settingsFile)
+	os.WriteFile(settingsFile, []byte(env.HSTS+"=60\n"), 0o600)
+	var res server.ReloadResult
+	if code, body := reload("a good read"); code != 200 || json.Unmarshal(body, &res) != nil || strings.Join(res.Pending, ",") != env.HSTS {
+		t.Fatalf("a good read: %d %s", code, body)
+	}
+	s.stop(t)
 }
 
 // With -sighup stop, a SIGHUP stops serve as SIGTERM does: exit 0 and

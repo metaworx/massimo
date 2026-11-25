@@ -4479,8 +4479,9 @@ Reads the settings file again at once, as SIGHUP does on Unix:
 `MASSIMO_API_TOKEN` applies at once unless `-token` was given,
 and so does the reboot's switch, `MASSIMO_REBOOT`,
 unless `-allow-reboot` was given;
-every other setting that changed applies at the next start,
-and the store is checkpointed.
+every other setting that changed applies at the next start;
+the log file is rotated, where `serve` writes one (`-log`),
+and the store is checkpointed, whatever the read finds.
 `serve` also reads the file by itself within seconds of a change,
 so this is for not waiting, and for systems without SIGHUP.
 Needs the capability `restart`, and answers what it found:
@@ -4504,7 +4505,8 @@ after the refusals where both stand.
 It sends nothing to a Cube, and is an audit row (`server.reload`) but no
 command, so a retry is harmless.
 `409` when the server reads no settings file,
-`500` when the file could not be read, with the error:
+`500` when the file could not be read, with the error,
+after the rotation and the checkpoint:
 nothing is applied, and what waits for the next start stays as it was,
 and the log's `settings_read` is at `warn`
 with the start's own error after "the next start refuses: "

@@ -3757,12 +3757,13 @@ paths:
       x-capability: restart
       description: |
         Reads the settings file again and applies MASSIMO_API_TOKEN at once, as
-        SIGHUP does, and checkpoints the store; every other setting that
-        changed applies at the next start. The server also reads the file by
-        itself within seconds of a change. A setting the next start would
-        refuse is not refused here: refused says it, as GET /api/v1/restart
-        does until a read finds nothing refused. Sends nothing to a Cube, so
-        a retry is harmless.
+        SIGHUP does, and rotates the log file and checkpoints the store,
+        whatever the read finds; every other setting that changed applies at
+        the next start. The server also reads the file by itself within
+        seconds of a change. A setting the next start would refuse is not
+        refused here: refused says it, as GET /api/v1/restart does until a
+        read finds nothing refused. Sends nothing to a Cube, so a retry is
+        harmless.
       responses:
         "200":
           description: What reading the file again found
@@ -3779,7 +3780,8 @@ paths:
               schema: {$ref: "#/components/schemas/Error"}
         "500":
           description: >-
-            The settings file could not be read, and nothing changed; the log's
+            The settings file could not be read, and no setting changed, though
+            the log file was rotated and the store checkpointed; the log's
             settings_read is a warning where it does not parse, or is there but
             cannot be read
           content:

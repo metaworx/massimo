@@ -766,6 +766,8 @@ and on Unix also on SIGHUP (`systemctl reload massimo`),
 which checkpoints the store too;
 `POST /api/v1/reload` does what SIGHUP does, on every system
 (System settings → Maintenance → **Reload now** in the web UI).
+Both rotate the log file and checkpoint the store whatever the read finds,
+a file that does not parse or cannot be read included.
 `MASSIMO_API_TOKEN` applies at once, as at a start, unless `-token` was given;
 every other setting that changed is listed by `GET /api/v1/restart`
 as applying at the next restart.
