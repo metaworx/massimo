@@ -840,6 +840,7 @@ func New(opts Options) *Server {
 			s.log.Error("store: bootstrap failed", "error", err)
 		}
 		s.DropKeepOpen(context.Background())
+		s.warnIntegrationUsersOnly(context.Background())
 		if n, err := opts.Store.DropUnfinished(context.Background(), "server restarted"); err != nil {
 			s.log.Error("store: unfinished commands not dropped", "error", err)
 		} else if n > 0 {

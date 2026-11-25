@@ -331,6 +331,40 @@ func TestSettingsFileKey(t *testing.T) {
 	}
 }
 
+// The user that holds the settings file's key (MASSIMO_API_TOKEN) is not
+// removed, 409 to another owner, its key left live: the removal would
+// revoke the key with the user's tokens, and the next start could not add
+// it back, its hash being taken (AP MobileApp v1.4, D89-A). Another owner
+// is removed as before, and so is the holder once the file has no token.
+func TestSettingsFileKeyHolder(t *testing.T) {
+	t.Parallel()
+	r := startServer(t, withOptions(storeOptions(t, t.TempDir(), "secret")))
+	ts, s := r.ts, r.s
+	ctx := t.Context()
+	olga := userToken(t, s.opts.Store, "olga", store.RoleOwner)
+	userToken(t, s.opts.Store, "otto", store.RoleOwner)
+	if code, text := callAPI(t, ts, "DELETE", "/api/v1/users/"+store.BootstrapUser, olga, ""); code != 409 || !strings.Contains(text, "settings file") {
+		t.Fatalf("the key's holder removed by another owner: %d %s, want 409", code, text)
+	}
+	if code, text := callAPI(t, ts, "GET", "/api/v1/me", "secret", ""); code != 200 {
+		t.Fatalf("the settings file's key after the refusal: %d %s", code, text)
+	}
+	if _, err := s.opts.Store.Bootstrap(ctx, "secret"); err != nil {
+		t.Fatalf("the next start with the file's token: %v", err)
+	}
+	if code, text := callAPI(t, ts, "DELETE", "/api/v1/users/otto", olga, ""); code != 200 {
+		t.Fatalf("another owner: %d %s", code, text)
+	}
+
+	// Without a token in the file the holder is removed as any user is.
+	if err := s.SetToken(ctx, ""); err != nil {
+		t.Fatal(err)
+	}
+	if code, text := callAPI(t, ts, "DELETE", "/api/v1/users/"+store.BootstrapUser, olga, ""); code != 200 {
+		t.Fatalf("the former holder, the file without a token: %d %s", code, text)
+	}
+}
+
 // The first owner is created on an open server from the local network.
 func TestFirstOwner(t *testing.T) {
 	t.Parallel()

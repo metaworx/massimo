@@ -342,15 +342,21 @@ func (s *Server) registerOpaque(w http.ResponseWriter, r *http.Request) error {
 // the local network on an open server among them.
 func (s *Server) mayRegister(r *http.Request, st *store.Store, name string) error {
 	p := principalOf(r)
+	u, ok, err := st.User(r.Context(), name)
+	if err != nil {
+		return userFail(err)
+	}
+	if ok {
+		// An integration's user, in every mode, an open server's included.
+		if err := noWayIn(u); err != nil {
+			return err
+		}
+	}
 	if p.mode == modeOpen {
 		if !localPeer(s.clientIP(r)) {
 			return fail(http.StatusForbidden, "the first owner is created from the local network, or on the box with massimo user add")
 		}
 		return nil
-	}
-	u, ok, err := st.User(r.Context(), name)
-	if err != nil {
-		return userFail(err)
 	}
 	a := s.accessOf(r.Context(), p, name)
 	switch {

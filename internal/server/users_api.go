@@ -112,10 +112,21 @@ func userFail(err error) error {
 		return fail(http.StatusBadRequest, "%s", text)
 	case errors.Is(err, store.ErrNoOpaque):
 		return fail(http.StatusServiceUnavailable, "%s", text)
-	case errors.Is(err, store.ErrImmutable):
+	case errors.Is(err, store.ErrImmutable), errors.Is(err, store.ErrIntegrationUser):
 		return fail(http.StatusForbidden, "%s", text)
 	}
 	return fail(http.StatusInternalServerError, "%s", text)
+}
+
+// noWayIn refuses a key, a password or a provider's identity for an
+// integration's user: it acts through its integration alone, whose own
+// key is the one way in, so that nobody, on an open server anybody on
+// the local network, gives such a user a sign-in of its own.
+func noWayIn(u store.User) error {
+	if u.IntegrationID != 0 {
+		return fail(http.StatusForbidden, "the user %s is an integration's: it acts through its integration alone, with no key, password or sign-in of its own", u.Name)
+	}
+	return nil
 }
 
 // busyRetry is the Retry-After, in seconds, of a password check or
@@ -499,6 +510,12 @@ func (s *Server) putUser(w http.ResponseWriter, r *http.Request) error {
 		return a.assignFail(*req.Role)
 	}
 	setsPassword := req.Password != nil || req.Record != nil
+	if req.Password != nil && *req.Password != "" || req.Record != nil {
+		// Before any other change of the request is written.
+		if err := noWayIn(u); err != nil {
+			return err
+		}
+	}
 	if setsPassword && !a.self && !a.maySetPassword(u) {
 		return a.rankFail(u.Role, "passwords")
 	}
@@ -593,7 +610,9 @@ func tokenSubject(tok store.Token, u store.User) map[string]any {
 }
 
 // deleteUser handles DELETE /api/v1/users/{name}: the user is removed
-// and its tokens revoked; the last enabled owner stays.
+// and its tokens revoked; the last enabled owner stays, and so does the
+// user that holds the settings file's key, 409 (settingsKey). Where the
+// removal of a regular user turns the server open, the log warns.
 func (s *Server) deleteUser(w http.ResponseWriter, r *http.Request) error {
 	st, err := s.userStore()
 	if err != nil {
@@ -603,14 +622,30 @@ func (s *Server) deleteUser(w http.ResponseWriter, r *http.Request) error {
 	if err != nil {
 		return err
 	}
+	if file, ok, err := s.settingsKey(r.Context()); err != nil {
+		return userFail(err)
+	} else if ok && file.UserID == u.ID {
+		return fail(http.StatusConflict, settingsKeyHeld, u.Name)
+	}
 	var by int64
-	if p := principalOf(r); p.named() {
+	p := principalOf(r)
+	if p.named() {
 		by = p.user.ID
 	}
+	wasUsers := s.authMode(r.Context()) == modeUsers
 	if err := st.DeleteUser(r.Context(), u.Name, by); err != nil {
 		return userFail(err)
 	}
 	s.log.Info("user removed", "user", s.logUserName(r.Context(), u), "remote", s.clientIP(r))
+	if wasUsers && u.IntegrationID == 0 && s.authMode(r.Context()) == modeOpen {
+		// The last regular user gone, an owner with an end date removing
+		// itself among the ways (AP LooseEnds, D1): the server is open.
+		who := "nobody"
+		if p.named() {
+			who = s.logUserName(r.Context(), p.user)
+		}
+		s.log.Warn("the server is open: its last regular user was removed; create the owner", "user", s.logUserName(r.Context(), u), "by", who, "remote", s.clientIP(r))
+	}
 	auditSubject(r, userSubject(u)) // as the user was
 	writeJSON(w, http.StatusOK, map[string]any{"ok": true, "name": u.Name})
 	return nil
@@ -631,14 +666,14 @@ func (s *Server) listTokens(w http.ResponseWriter, r *http.Request) error {
 	if err != nil {
 		return userFail(err)
 	}
-	file, err := s.settingsKeyID(r.Context())
+	file, held, err := s.settingsKey(r.Context())
 	if err != nil {
 		return userFail(err)
 	}
 	out := []tokenView{}
 	for _, t := range tokens {
 		v := viewToken(t)
-		v.FromSettings = file != 0 && t.ID == file
+		v.FromSettings = held && t.ID == file.ID
 		out = append(out, v)
 	}
 	writeJSON(w, http.StatusOK, out)
@@ -666,6 +701,9 @@ func (s *Server) postToken(w http.ResponseWriter, r *http.Request) error {
 	if req.Label == "" || len(req.Label) > maxLabel {
 		return fail(http.StatusBadRequest, "label: 1 to %d bytes", maxLabel)
 	}
+	if err := noWayIn(u); err != nil {
+		return err
+	}
 	tok, secret, err := st.AddToken(r.Context(), u.ID, store.TokenAPI, req.Label, time.Time{})
 	if err != nil {
 		return userFail(err)
@@ -680,7 +718,7 @@ func (s *Server) postToken(w http.ResponseWriter, r *http.Request) error {
 
 // deleteToken handles DELETE /api/v1/users/{name}/tokens/{id}: the
 // session or key is revoked. The settings file's key is 409, as
-// DELETE /api/v1/me/token answers it (settingsKeyID).
+// DELETE /api/v1/me/token answers it (settingsKey).
 func (s *Server) deleteToken(w http.ResponseWriter, r *http.Request) error {
 	st, err := s.userStore()
 	if err != nil {
@@ -701,11 +739,11 @@ func (s *Server) deleteToken(w http.ResponseWriter, r *http.Request) error {
 	if !ok || tok.UserID != u.ID || !tok.DeletedAt.IsZero() {
 		return fail(http.StatusNotFound, "user %s has no token %d", u.Name, id)
 	}
-	file, err := s.settingsKeyID(r.Context())
+	file, held, err := s.settingsKey(r.Context())
 	if err != nil {
 		return userFail(err)
 	}
-	if file != 0 && id == file {
+	if held && id == file.ID {
 		return fail(http.StatusConflict, settingsKeyKept)
 	}
 	if err := st.RevokeToken(r.Context(), id); err != nil {

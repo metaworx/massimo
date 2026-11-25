@@ -94,9 +94,10 @@ function TokenRow({ u, tk, labels, run, marked, deviceKey }: {
  * end (My profile's); marked, where given, is the id of the API key
  * whose row is tinted, a session of that id marking nothing; drawn, where
  * given, is told each time the list a read gave is drawn, with the row
- * marked or null (My profile's).
+ * marked or null (My profile's); listOnly lists them, each with its
+ * Revoke, and offers no new key (an integration's user's).
  */
-export function Tokens({ u, off, open, reads, run, say, labelId, help, marked, drawn }: {
+export function Tokens({ u, off, open, reads, run, say, labelId, help, marked, drawn, listOnly }: {
   u: User;
   off: boolean;
   open: boolean;
@@ -107,6 +108,7 @@ export function Tokens({ u, off, open, reads, run, say, labelId, help, marked, d
   help?: string;
   marked?: number | null;
   drawn?: (row: HTMLElement | null) => void;
+  listOnly?: boolean;
 }) {
   useLang();
   const deviceKey = appKeyId(app.value); // the key the phone keeps for this server, in the app
@@ -164,18 +166,22 @@ export function Tokens({ u, off, open, reads, run, say, labelId, help, marked, d
           <TokenRow key={tk.id} u={u} tk={tk} labels={labels} run={run} marked={tk.kind === "api" && tk.id === marked} deviceKey={deviceKey} />
         ))}
       </ul>
-      <div class={"user-key-box" + hid(!shown)}>
-        <p class="small">{t("users.keyShown")}</p>
-        <p class="mono user-key">{shown}</p>
-      </div>
-      <TextField label={t("users.newKey")} id={labelId} name="label" maxLength={64} placeholder={t("users.keyLabel")} value={label} set={setLabel} />
-      <div class="actions">
-        <span class="actions-right">
-          <BusyButton cls="create-key" label={t("users.createKey")} run={make} />
-          {help && helps.button}
-        </span>
-      </div>
-      {help && helps.text}
+      {!listOnly && (
+        <>
+          <div class={"user-key-box" + hid(!shown)}>
+            <p class="small">{t("users.keyShown")}</p>
+            <p class="mono user-key">{shown}</p>
+          </div>
+          <TextField label={t("users.newKey")} id={labelId} name="label" maxLength={64} placeholder={t("users.keyLabel")} value={label} set={setLabel} />
+          <div class="actions">
+            <span class="actions-right">
+              <BusyButton cls="create-key" label={t("users.createKey")} run={make} />
+              {help && helps.button}
+            </span>
+          </div>
+          {help && helps.text}
+        </>
+      )}
     </div>
   );
 }

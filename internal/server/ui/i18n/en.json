@@ -1557,6 +1557,8 @@
   "users.currentPassword": "Current password",
   "users.keysOnly": "keys only",
   "users.integrationUser": "integration user",
+  "users.integrationNoSignIn": "Acts through its integration alone: no new password or key, and no sign-in of its own.",
+  "users.removePassword": "Remove the password",
   "users.integrationOwn": "integration",
   "users.linkedTo": "acts as {name}",
   "users.linksList": "Acted for through integrations by: {users}",

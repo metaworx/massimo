@@ -623,10 +623,14 @@ func TestLogOfEveryCubeWithoutStore(t *testing.T) {
 	t.Parallel()
 	r := startServer(t, alsoCube(secondCube))
 	ts, s := r.ts, r.s
-	// The fake Cube's burst, which the start has through the pump.
-	if _, own := logOf(t, ts, "?kind=state"); len(own) < 6 {
-		t.Fatalf("the fake Cube's burst in its ring: %d state lines", len(own))
-	}
+	// The fake Cube's burst, and the line the second Cube's runtime logs
+	// once its dial has failed, which can come after the start.
+	testkit.Eventually(t, "the fake Cube's six state lines and the second Cube's disconnected", func() bool {
+		var gone []event
+		getJSON(t, ts, "", "/api/v1/cubes/KEQ0000200/log?kind=disconnected", &gone)
+		_, own := logOf(t, ts, "?kind=state")
+		return len(own) >= 6 && len(gone) > 0
+	})
 	late := systemEvent("settings_read", 0, nil)
 	late.Time = late.Time.Add(-time.Hour)
 	s.logServer(late)

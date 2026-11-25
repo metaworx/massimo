@@ -972,6 +972,9 @@ func (s *Server) oidcStartLink(w http.ResponseWriter, r *http.Request) error {
 		return err
 	}
 	auditTarget(r, "user:"+u.Name)
+	if err := noWayIn(u); err != nil {
+		return err
+	}
 	if !a.self {
 		return fail(http.StatusForbidden, "a user links only its own accounts")
 	}

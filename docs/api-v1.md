@@ -146,9 +146,12 @@ The page and its files are public, the API behind them is not.
 
 ## Authentication
 
-The server authenticates in one of three ways, by what it has:
+The server authenticates in one of three ways, by what it has.
+In this document a server's users are its regular users,
+those that are not an integration's, disabled ones included:
+"a server without users" is one whose only users, if any, are an integration's.
 
-- **Users**, a store with at least one user: every `/api` request carries
+- **Users**, a store with at least one regular user: every `/api` request carries
   `Authorization: Bearer <token>`, a session from `POST /api/v1/login`
   (or made from a key by `POST /api/v1/login/key`) or
   an API key from `POST /api/v1/users/{name}/tokens`; otherwise `401`.
@@ -157,15 +160,31 @@ The server authenticates in one of three ways, by what it has:
   a request without it is `403` with the message `capability "pair" required`.
   A disabled user, a guest past its end date or a disabled role is `403` too,
   with the reason.
-- **Open**, a store without users, the state before the first owner:
+- **Open**, a store without regular users, the state before the first owner:
   every request from the local network may do everything,
   as the original software can on the LAN.
+  A regular user is every user that is not an integration's,
+  a disabled one included;
+  an integration's users do not count, so a server with an integration
+  approved and no owner stays open.
+  Its calls are then anyone's from the local network, as every other:
+  not attributed to its users,
+  `X-MassimoHA-On-Behalf-Of` not read, its maximum not applied,
+  and `GET /api/v1/me` with its key says `"mode": "open"`;
+  an installation beyond the local network is refused.
+  Its chain of rights begins with the first owner.
+  The start of a server whose only users are an integration's warns
+  `the server is open: its only users are an integration's; create the owner`,
+  unless it is kept open on purpose (`auth.keep_open`);
+  the removal of the last regular user warns
+  `the server is open: its last regular user was removed; create the owner`,
+  naming whom and by whom.
   `POST /api/v1/users` from an address on the local network creates the first
   owner (see that route), and `massimo user add` does the same on the box.
   The setting `auth.keep_open` says the server is kept open on purpose,
   so that the web UI does not ask for the first owner;
   it changes nothing about who is let in,
-  and goes with the first user (GET and PUT /api/v1/settings).
+  and goes with the first regular user (GET and PUT /api/v1/settings).
 - **Token**, no store (`serve -addr`):
   `MASSIMO_API_TOKEN` (or `-token`) is the one token, as before the store;
   without it the API is open as in open mode.
@@ -206,6 +225,9 @@ At every later start, and whenever the server reads the file again while it runs
 (it looks every five seconds, and on SIGHUP; see README.md, "Server"),
 a token in the file that the store does not know is added to an enabled owner's keys,
 and a key with that label whose secret is not the file's any more is revoked.
+The file's key that an older start gave to an integration's user, live or revoked since,
+moves to that owner, or to the user `owner` the start makes where there is no other,
+since an integration's user holds no key of its own.
 The file stays the way to recover an owner who lost the password:
 put a token into it, log in with it, set a password; no restart is needed.
 
@@ -495,7 +517,8 @@ the role's minus the disabled capabilities, every one for `owner`,
 none for a disabled role) and `token`, the one presented;
 outside users mode `user` and `role` are null and `capabilities` is every one.
 `setup` is true on an open server for a caller on the local network,
-the one that may create the first owner.
+the one that may create the first owner,
+an integration's users beside it or not.
 `kept_open` is true on an open server while the setting `auth.keep_open` is on,
 and absent otherwise: the web UI then does not ask for the first owner.
 `auth_version` 1 says the server hashes the password;
@@ -676,13 +699,14 @@ The name of a removed user can be used again,
 for a new user in a row of its own,
 which starts without the old one's preferences or history.
 
-On a server without users, `POST /api/v1/users` creates the first owner:
+On a server without regular users (an integration's do not count),
+`POST /api/v1/users` creates the first owner:
 open to a caller on the local network (loopback, a private range, link-local),
 `role` `owner` (absent, or that) and a password or a record required,
 `403` from anywhere else; `massimo user add` on the box is the other way.
 The first owner is created once:
 where two requests come at the same moment,
-the server counts the users again as it writes the owner,
+the server counts the regular users again as it writes the owner,
 and the second is `409` with `the first owner exists already: sign in`;
 its registration (below) kept nothing, so nothing is left of it.
 From then on the server is in users mode (Authentication).
@@ -716,7 +740,8 @@ a `password` set later makes it version 1 again.
 A record that does not decode, or a `ksf` below the cost of
 `m=19456,t=2,p=1` or above 256 MiB, 16 passes or 16 lanes, is `400`.
 The last enabled owner without an end date cannot be disabled, demoted
-or given an end date (`409`): an owner with one does not count.
+or given an end date (`409`): an owner with one does not count,
+nor does an integration's user, whatever its role.
 
 `DELETE /api/v1/users/{name}` removes a user: its sessions and keys are revoked,
 its preferences removed,
@@ -725,6 +750,12 @@ of the removal in UTC (`-<id>` added where that is taken),
 which frees the name; `{"ok": true, "name": "anna"}`.
 The last enabled owner without an end date stays (`409`);
 a user cannot remove itself.
+The user that holds the settings file's key, `MASSIMO_API_TOKEN`,
+stays too (`409`), as the key's revoke is refused (below, "Tokens"):
+the removal would revoke the key with the user's tokens,
+and the next start would not add it back, its hash being taken;
+the key is changed or removed in the settings file first
+(AP MobileApp v1.4, D89-A).
 
 ### Tokens: /api/v1/users/{name}/tokens
 
@@ -738,7 +769,8 @@ the key that is the settings file's `MASSIMO_API_TOKEN` carries `"from_settings"
 found by the hash of the file's token, not by its label
 (AP MobileApp v1.4, D86-A).
 `POST` with `{"label": "Loxone"}` creates an API key, which never expires,
-and answers `201` with the key once:
+and answers `201` with the key once;
+an integration's user gets none (`403`, "Acting for an integration's users"):
 
 ```json
 {"token": "…", "id": 4, "kind": "api", "label": "Loxone", "created_at": "…"}
@@ -866,6 +898,13 @@ An integration, Home Assistant first, is a program that acts for users of
 its own: each of its calls can name the user it acts for and the level
 the user has for that call, and Massimo allows only what every link of
 that chain allows ("Acting for an integration's users", below).
+On an open server, one without regular users (Authentication),
+the key is not looked at:
+every request from the local network is anyone's,
+`GET /api/v1/me` says `"mode": "open"` without `integration`,
+nothing is attributed to the integration or its users,
+and a request from beyond the local network is `403`;
+the integration's chain begins with the first owner (AP LooseEnds, D40-A).
 An integration is registered by the owner, without a key typed anywhere:
 
 1. The integration asks: `POST /api/v1/integrations/requests`, without a key,
@@ -964,7 +1003,9 @@ A registered integration's key with the header
 X-MassimoHA-On-Behalf-Of: id=<the user's id, 32 hex>; level=control; name*=UTF-8''J%C3%BCrg; instance=<installation id, 32 hex>
 ```
 
-acts for one of the integration's users.
+acts for one of the integration's users,
+on a server with regular users: on an open server the header is not read
+("Integrations", above).
 
 - **The header's parameters:**
   - `id` is the user's id at the integration (Home Assistant's `user.id`),
@@ -996,7 +1037,24 @@ acts for one of the integration's users.
   5. the level: `view` reads, `control` also sets, locks and configures,
      and `admin` adds nothing of its own.
 - **Without the header** the key acts as the integration itself:
-  its role and its maximum (an integration's own polls and stream).
+  its role and its maximum (an integration's own polls and stream),
+  within the role `integration` as every call through it.
+- **No way in of its own:** an integration's user acts through its integration
+  alone, whatever role the owner gives it.
+  The users' routes refuse it a key (`POST /api/v1/users/{name}/tokens`),
+  a password, plain or by a record (`PUT /api/v1/users/{name}`,
+  `POST /api/v1/users/{name}/register`),
+  and an identity at a provider (`POST` and `PUT /api/v1/users/{name}/identities`,
+  the link's start), with `403`, before any other change of the request;
+  no sign-in makes it a session, the integration's key at
+  `POST /api/v1/login/key` included.
+  An empty `password` that removes one is taken.
+  A key it was given before this version keeps working
+  while its integration is active (else `403` with `integration_disabled`),
+  within the role `integration` and the integration's maximum,
+  as every call of such a user, whatever its role;
+  `GET /api/v1/me` with it says what is left.
+  A password or a provider's identity it holds signs in nowhere.
 - **The audit and the log** name the user the call acted as,
   `effective_user`, and the integration's user, `real_user`
   (GET /api/v1/audit, "Who did it");
@@ -1875,21 +1933,22 @@ until someone with `users` sets a password for it.
 `integrations.requests`, true by default, says whether integrations may
 ask to be registered (`POST /api/v1/integrations/requests`), and applies
 at once; the announcement's `reg` says it on the LAN.
-`auth.keep_open`, false by default, says that a server without users is kept
-open on purpose, and applies at once:
+`auth.keep_open`, false by default, says that a server without regular users
+is kept open on purpose, and applies at once:
 `GET /api/v1/me` then says `kept_open`, and the web UI does not ask for the
 first owner.
 The web UI sets it from the sign-in card once the page's own address is entered,
 and System settings → Users turns it off again (docs/ui.md).
 It changes nothing about who is let in:
 the local network alone, as on any open server (Authentication).
-It counts only while the server has no users:
-the first user removes it, however it is made
-(the API, `massimo user add`, `MASSIMO_API_TOKEN`, an integration approved),
+It counts only while the server has no regular users:
+the first regular user removes it, however it is made
+(the API, `massimo user add`, `MASSIMO_API_TOKEN`, a sign-in through a provider),
 and so do the server's start and a reload of the settings file
-where they find users beside it;
+where they find regular users beside it;
 the log says `keep-open setting removed`.
-With users, `in_effect` is `false`, and `true` is `409`;
+An integration approved and its users leave it as it is.
+With regular users, `in_effect` is `false`, and `true` is `409`;
 `false` and `null` are taken.
 `auth.password_reveal`, true by default, says whether the web UI's password
 fields offer their eye, a button at a field's end that shows the password as
