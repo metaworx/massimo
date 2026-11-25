@@ -152,7 +152,7 @@ func runServe(args []string) error {
 	if *logPath != "" {
 		logFile, narrowErr, err = logfile.Open(logfile.Options{Path: *logPath, Format: logfile.Format(fileFormat), Size: rotateSize, Keep: keep, KeepMin: keepMin})
 		if err != nil {
-			return fmt.Errorf("serve: %w", err)
+			return fmt.Errorf("serve: -log or MASSIMO_LOG: %w", err)
 		}
 		defer logFile.Close()
 		fileOut = logFile
