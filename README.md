@@ -1059,6 +1059,13 @@ directory (`KEY=VALUE` lines,
 `-env <file>` or `MASSIMO_ENV_FILE` for another file,
 `-no-env` for none;
 the environment wins over the file).
+A name given twice takes its first line, at a start as at a reload,
+and `massimo config` names its lines.
+A UTF-8 byte order mark at the file's start is skipped,
+and UTF-16 text, as PowerShell 5.1's `>` or `>>` writes it, is refused:
+save it as UTF-8.
+A line without a name is ignored, and so is a `MASSIMO_ENV_FILE` line:
+name the file with `-env`.
 On Linux and macOS the service user, the owner of `/etc/massimo/env`,
 reads that file alone and keeps its data in `/var/lib/massimo`,
 from any directory, as `sudo sshd` reads sshd's own configuration;

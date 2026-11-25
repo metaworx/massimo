@@ -445,7 +445,7 @@ func TestReloadWarnsOfARefusedSetting(t *testing.T) {
 	startWith := func(text string, flags map[string]string) *settingsReloader {
 		t.Helper()
 		os.WriteFile(p, []byte(text), 0o600)
-		if _, err := env.ReloadFile(p); err != nil {
+		if _, _, err := env.ReloadFile(p); err != nil {
 			t.Fatal(err)
 		}
 		return newSettingsReloader(p, sysLog, srv, settings(), fixedSettings(flags))
@@ -595,7 +595,7 @@ func TestReloadWarnsOfAnUnreadableFile(t *testing.T) {
 	}
 	// The start's own error, which every command stops with.
 	parseErr := p + ":3: expected KEY=VALUE"
-	if err := env.LoadFile(p); err == nil || err.Error() != parseErr {
+	if _, err := env.LoadFile(p); err == nil || err.Error() != parseErr {
 		t.Fatalf("the start's own error: %v, want %s", err, parseErr)
 	}
 	if code != 500 || answer.Error != "reading the settings file: "+parseErr || afters != 0 {

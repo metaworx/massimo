@@ -159,7 +159,7 @@ func TestReloadListsTheLogLevel(t *testing.T) {
 	free := newSettingsReloader(p, quietLog(), nil, start, nil)
 	fixed := newSettingsReloader(p, quietLog(), nil, start, fixedSettings(map[string]string{"log-level": "info"}))
 	os.WriteFile(p, []byte(env.LogLevel+"=debug\n"), 0o600)
-	if _, err := env.ReloadFile(p); err != nil {
+	if _, _, err := env.ReloadFile(p); err != nil {
 		t.Fatal(err)
 	}
 	if got := strings.Join(free.pending(), ","); got != env.LogLevel {

@@ -23,7 +23,7 @@ func main() {
 		os.Exit(2)
 	}
 	useServiceDefaults()
-	if err := env.LoadFile(env.File()); err != nil {
+	if _, err := env.LoadFile(env.File()); err != nil {
 		fmt.Fprintln(os.Stderr, "error:", err)
 		os.Exit(1)
 	}

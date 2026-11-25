@@ -169,7 +169,7 @@ func (r *settingsReloader) isFixed(k string) bool {
 func (r *settingsReloader) reload(ctx context.Context, why string) (changed, pending []string, refused []server.Refusal, err error) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
-	changed, err = env.ReloadFile(r.path)
+	changed, _, err = env.ReloadFile(r.path)
 	if err != nil {
 		r.unreadable(ctx, why, err)
 		return nil, nil, nil, err
