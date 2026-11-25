@@ -2068,7 +2068,9 @@ settings forms and have none of it.
   a user changes only users whose role has no capability its own lacks,
   so nobody but an owner changes an owner, whose panel says so,
   and with `passwords` alone (a manager's) a panel offers the password alone;
-  the role choice offers no owner but to an owner.
+  a user's role choice offers the roles the server says may be given to it
+  (`may.roles`, AP AccessEnds, D3), so no owner but to an owner,
+  and a new user's no `integration`, which no new user is given.
   Every user in a panel whose head shows the display name, the login apart
   from it and, at the right edge, the badges: **you** first, the role,
   the state and **keys only**;
@@ -2124,10 +2126,18 @@ settings forms and have none of it.
   and this page's fields lose theirs at once, the others' at their next look
   at the server.
   On a server without users (FirstOwner D14),
-  an integration's beside it or not (AP LooseEnds, D42),
-  the section says so instead,
+  an integration's beside it or not
+  (AP LooseEnds, D42; its list taken back by AP LooseEnds, D46),
+  the head says **No owner yet** in place of the count (AP AccessEnds, D8)
+  and the section says so instead, once its users are read or their read failed,
   with **Create the owner…**, which opens the sign-in card with its form,
-  and no password sign-in, no list and no Add a user;
+  and no password sign-in, no panels and no Add a user;
+  an integration's users are listed there,
+  each a row with the name it is shown by and its badges,
+  nothing to open or press,
+  since anyone on the local network may change them (D7);
+  the line above them says that they act through their integration alone,
+  and **Open Integrations** under them shows the card that manages them (D9);
   while the server is kept open (Keep it open… of the sign-in card),
   **Keep this server open without an owner** follows, on:
   turned off, it is saved at once and stays in sight, off, for that showing,
@@ -2172,6 +2182,13 @@ settings forms and have none of it.
   in the first minute, then every 15 s, until it has: then it says so;
   once that time has passed, **approval expired** as a badge, why, and
   **Register**.
+  After every change here Users is read again where it may be managed,
+  so that it lists an integration's users as approved, named and linked,
+  with the roles its maximum leaves them, without System settings shown again
+  (AP AccessEnds, D10);
+  the change's outcome does not wait for that read,
+  a sign-out before it starts leaves it unsent,
+  and of reads that overlap, the newest asked for is the one shown.
   Every integration in a panel, its name, **disabled**,
   **new installation** and **approval expired** as badges:
   its **Name** with **Save the name**, off while the name is as stored, and **Reset**,
@@ -2224,6 +2241,12 @@ settings forms and have none of it.
   and **Remove the password** where it holds one from before;
   its role, disabled, its display name and Remove stay,
   and a key it holds from before is listed with Revoke.
+  Its role choice offers the roles within its integration's maximum
+  and **integration**, which it is given back (AP AccessEnds, D3, D5);
+  a role stored beyond the maximum stays chosen and offered,
+  with the line under it that the user acts within that maximum all the same,
+  until another is saved, and so does a role chosen and not yet saved
+  where the list read again no longer offers it (D4).
   My profile of one, in with such a key, says the same line in place of the
   password, and offers no new key and no Link.
   The log's lines, a command's detail and its audit row name who
@@ -3313,7 +3336,8 @@ a provider's role the roles.
 `index.tsx` draws each into its card's body, `#sys-users-body`, `#sys-roles-body`,
 `#sys-caps-body` and `#sys-providers-body`, reads it each time System settings is shown,
 and registers `users` (`load`),
-of which My profile calls `users.load` after a change made there;
+of which My profile calls `users.load` after a change made there,
+and Integrations after each of its changes (AP AccessEnds, D10);
 `store.ts` holds the lists as the last load that went through gave
 them, each panel's `open` by its item's key, each new item's form shown, the message
 lines' outcomes and `reads`, the users' change counter, at which an open user's panel
@@ -3322,7 +3346,9 @@ reads its sessions, keys and identities again, as every redraw of the plain list
 line for line as the plain scripts did, through an `actionRunner` per list;
 `Users.tsx`, `Roles.tsx` and `Providers.tsx` the parts,
 on a server without users the Users card a section of its own (`OpenServer` of `Users.tsx`):
-the line, Create the owner… (`askOwner` of `shared/owner.ts`, the focus given back to it),
+the line, an integration's users as rows with nothing to press (`OpenUsers`),
+with Open Integrations (`showCard`),
+Create the owner… (`askOwner` of `shared/owner.ts`, the focus given back to it),
 and while the server is kept open its switch,
 saved at once (`keepOpenOff` of `sendUsers.ts`),
 which stays in sight, off, for that showing (`keptOff` of `store.ts`),

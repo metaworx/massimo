@@ -2353,3 +2353,17 @@ massimo-week-program { display: contents; }
 .users-open { display: flex; flex-direction: column; gap: 8px; }
 .users-open > p { margin: 0; }
 .users-kept-open { padding-top: 8px; border-top: 1px solid var(--line); }
+/* an integration's users there, a row each with nothing to open: the
+   name and the badges as a panel's head shows them, wrapping on a phone */
+.users-open-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 8px; }
+.users-open-user {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 10px;
+  padding: 8px 12px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: var(--card);
+  overflow-wrap: anywhere;
+}

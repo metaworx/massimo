@@ -12,9 +12,10 @@ import json
 
 import pytest
 
-from conftest import TOKEN
-from helpers import OPERATOR_PASSWORD, ApiReads, frames, scroll_width, show_view, wait_held, wait_until
+from conftest import TOKEN, api_call
+from helpers import OPERATOR_PASSWORD, ApiReads, frames, named_buttons, reads_of, safe_route, scroll_width, show_view, wait_held, wait_until
 from test_first_owner import DIALOG_OPEN, OPEN, owner_card, sent, start_page, turned
+from test_users import INTEGRATION_USERS
 
 KEPT = dict(OPEN, kept_open=True)
 NONE = {"mode": "none", "user": None, "role": None, "capabilities": []}
@@ -329,7 +330,8 @@ def test_create_from_users_shows_the_owner(new_context, case, watch, guard):
     again and lists them. Fails on the page before: no button there."""
     page, stage = page_kept(new_context, guard, watch)
     show_view(page, "system")
-    assert page.locator("#users-no-owner").is_visible() and page.locator("#users-create-owner").is_visible(), "the line and the button"
+    page.locator("#users-no-owner").wait_for(state="visible")  # drawn once the users are read
+    assert page.locator("#users-create-owner").is_visible(), "the line and the button"
     assert page.locator("#keep-open-switch").is_visible(), "the switch, kept open"
     assert page.locator("#password-login").count() == 0 and page.locator("#users-list").count() == 0 and page.locator("#user-add").count() == 0, \
         "no password sign-in, list or Add a user"
@@ -340,6 +342,83 @@ def test_create_from_users_shows_the_owner(new_context, case, watch, guard):
     assert wait_until(page, "!!document.querySelector('#users-list .user-panel, #users-list details')", 10), "the users listed"
     assert page.evaluate("MassimoParts.pages.shown()") == "system", "System settings shown again"
     assert page.locator("#users-open").count() == 0, "the open server's section gone"
+
+
+USERS_HEAD = "#sys-users .section-badges .flag"
+
+
+def test_users_on_an_open_server_list_an_integrations_users(new_context, case, watch, guard):
+    """System settings → Users on an open server, the users' read
+    answered with an integration's two: the head says No owner yet, as
+    a warning, in place of the count; the two are listed by their chains
+    with their badges and nothing to open or press, under the line that
+    says they act through their integration alone; Open Integrations
+    shows that card, the focus on its head; Create the owner… stays, and
+    no panel is drawn. With no users the head says the same, and the
+    section is as before: No users yet, no list (AP AccessEnds, D7 to
+    D9). Once the owner exists, the head counts the users again. Fails on
+    the page before: the head counted the users, and none was listed."""
+    page, stage = page_kept(new_context, guard, watch)
+    reads = reads_of(page)
+    reads.change("**/api/v1/users", lambda body: INTEGRATION_USERS)
+    show_view(page, "system")
+    assert wait_until(page, "document.querySelectorAll('#users-open-list > li').length === 2", 5), "the integration's two users listed"
+    head = page.locator(USERS_HEAD)
+    no_owner = page.evaluate("t('users.noOwnerYet')")
+    assert head.count() == 1 and head.inner_text() == no_owner and "warn" in (head.get_attribute("class") or ""), \
+        f"the head says No owner yet: {head.all_inner_texts()}"
+    rows = page.locator("#users-open-list > li")
+    names = rows.locator(".panel-name").all_inner_texts()
+    assert names == ["Home", "Home › Anna's phone, as operator"], f"by their chains: {names}"
+    own, user, linked = page.evaluate("[t('users.integrationOwn'), t('users.integrationUser'), t('users.linkedTo', {name: 'operator'})]")
+    assert own in rows.nth(0).inner_text() and user in rows.nth(1).inner_text() and linked in rows.nth(1).inner_text(), \
+        f"with their badges: {rows.all_inner_texts()}"
+    held = page.evaluate("document.querySelectorAll('#users-open-list :is(a, button, input, select, textarea, details, summary, [tabindex])').length")
+    assert held == 0, f"nothing to open or press in the list: {held}"
+    assert page.locator("#users-no-owner").inner_text() == page.evaluate("t('users.noOwnerWithIntegrations')"), "the line says how they act"
+    assert page.locator("#users-create-owner").is_visible(), "Create the owner… stays"
+    assert page.locator("#users-list").count() == 0 and page.locator(".user-panel").count() == 0, "no panel"
+    named_buttons(page, "System settings → Users on an open server with an integration's users")
+    assert scroll_width(page) <= case.width, "no horizontal scroll"
+    page.locator("#users-open-integrations").click()
+    assert wait_until(page, "document.activeElement === document.querySelector('#sys-integrations .section-fold')", 5), \
+        "Open Integrations shows the card, the focus on its head"
+    reads.clear("**/api/v1/users")
+    reads.change("**/api/v1/users", lambda body: [])
+    show_view(page, "tiles")
+    show_view(page, "system")
+    assert wait_until(page, "!document.getElementById('users-open-list')", 5), "no list without users"
+    assert head.inner_text() == no_owner, "the head says the same"
+    assert page.locator("#users-no-owner").inner_text() == page.evaluate("t('users.noOwner')"), "the line as before"
+    assert page.locator("#users-open-integrations").count() == 0, "nor Open Integrations"
+    reads.clear("**/api/v1/users")
+    stage["me"] = None  # who is in the server's own from now on: the owner's key, the server open no more
+    page.evaluate("() => loadMe()")
+    show_view(page, "tiles")
+    show_view(page, "system")
+    n = len(api_call("GET", "api/v1/users"))
+    assert wait_until(page, f"document.querySelector('{USERS_HEAD}').textContent === tn('roles.users', {n})", 5), \
+        f"the head counts the users again: {head.all_inner_texts()}"
+
+
+def test_users_on_an_open_server_whose_read_fails(new_context, case, watch, guard):
+    """System settings → Users on an open server whose users' read fails
+    (answered 500): the head says No owner yet, and the line No users
+    yet… shows beside the error and Create the owner…, as it did before
+    the read (AP AccessEnds, D8). Fails where the line waited for a read
+    that went through: it never came."""
+    page, _ = page_kept(new_context, guard, watch)
+    watch.expected.append(("/api/v1/users", 500))
+    safe_route(page, "**/api/v1/users", lambda route: route.fulfill(status=500, content_type="application/json", body='{"error": "refused by the test"}')
+               if route.request.method == "GET" else route.fallback())
+    show_view(page, "system")
+    assert wait_until(page, "document.getElementById('users-msg').textContent.includes('refused by the test')", 5), "the error said"
+    line = page.locator("#users-no-owner")
+    line.wait_for(state="visible")
+    assert line.inner_text() == page.evaluate("t('users.noOwner')"), f"the line: {line.inner_text()!r}"
+    assert page.locator(USERS_HEAD).inner_text() == page.evaluate("t('users.noOwnerYet')"), "the head"
+    assert page.locator("#users-create-owner").is_visible(), "Create the owner…"
+    assert page.locator("#users-open-list").count() == 0, "no list"
 
 
 def test_a_setpoint_under_way_lands(new_context, case, watch, guard):

@@ -585,11 +585,21 @@ export interface User {
   /**
    * In the users routes' answers: what the caller may do with the user, change
    * it beyond its own name and password (manage) or set its password
-   * (password); absent elsewhere
+   * (password), and the roles it may give it (roles); absent elsewhere
    */
   may?: {
     manage: boolean;
     password: boolean;
+    /**
+     * The keys of the roles the caller may give the user, in the roles' order,
+     * empty where it may give none; of those, for an integration's user only
+     * the roles within the role integration and its integration's maximum, and
+     * integration itself, never owner. A holder of users without roles or
+     * integrations learns from it the keys of the roles it outranks and, for
+     * each integration's user, which of them lie within that integration's
+     * maximum
+     */
+    roles: string[];
   };
   /**
    * An integration's user, with its integration's uuid; in GET /api/v1/users
