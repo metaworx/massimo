@@ -176,29 +176,38 @@ function LinkButtons({ u, list, help }: { u: User; list: { provider: string; bou
   );
 }
 
-/** Mine is My profile of the user signed in, who: the display name once read, the password, the sessions and keys with the one marked, the linked accounts. */
+/**
+ * Mine is My profile of the user signed in, who: the display name once
+ * read, the password, the sessions and keys with the one marked, the
+ * linked accounts. An integration's user, in with a key it holds from
+ * before it could have none, gets a line in place of the password, its
+ * keys listed to be revoked, no new one and no Link (AP LooseEnds, D1).
+ */
 function Mine({ who }: { who: User }) {
   useLang();
   const u = profile.user && profile.user.name === who.name ? profile.user : null;
   const c = profile.confirm;
   const linked = useHelp("profileLinked", t("profile.linked"));
+  const ofIntegration = !!who.integration;
   return (
     <>
       <div id="profile-name">{u && <NameForm u={u} />}</div>
-      <PasswordForm who={who} />
+      {ofIntegration ? <p id="me-no-sign-in" class="muted small user-no-sign-in">{t("users.integrationNoSignIn")}</p> : <PasswordForm who={who} />}
       <div id="profile-tokens">
         {u && <Tokens u={u} off={false} open reads={profile.reads} run={run} say={profileMsg} labelId={"profile-key-label-" + u.name} help="profileTokens"
-          marked={profile.marked} drawn={keysDrawn} />}
+          marked={profile.marked} drawn={keysDrawn} listOnly={ofIntegration} />}
       </div>
       <div id="profile-identities">
-        {u && c && <LinkConfirm key={c.code} u={u} c={c} />}
+        {u && c && !ofIntegration && <LinkConfirm key={c.code} u={u} c={c} />}
         {u && (
           <Identities u={u} off={false} open reads={profile.reads} providers={profile.providers} run={run} say={profileMsg} title={t("profile.linked")}
-            none={t("profile.linkedNone")} cls="profile-identities" quiet offer={!appBridge() && profile.providers.length > 0} after={(list) => (
-              <>
-                <LinkButtons u={u} list={list} help={linked.button} />
-                {linked.text}
-              </>
+            none={t("profile.linkedNone")} cls="profile-identities" quiet offer={!ofIntegration && !appBridge() && profile.providers.length > 0} after={(list) => (
+              ofIntegration ? null : (
+                <>
+                  <LinkButtons u={u} list={list} help={linked.button} />
+                  {linked.text}
+                </>
+              )
             )} />
         )}
       </div>

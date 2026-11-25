@@ -638,7 +638,10 @@ export interface Me {
    */
   kept_open?: boolean;
   token?: Token;
-  /** The registered integration whose key it is; null for any other key */
+  /**
+   * The registered integration whose key it is; null for any other key, and on
+   * an open server, which does not look at the key (mode open)
+   */
   integration?: {
     uuid?: string;
     /** Its name as the owner gives it, its own user's display name */
@@ -650,7 +653,8 @@ export interface Me {
   } | null;
   /**
    * With X-MassimoHA-On-Behalf-Of: the integration's user the call acts for;
-   * capabilities is then what the chain leaves
+   * capabilities is then what the chain leaves. On an open server the header is
+   * not read and nothing is attributed
    */
   acts_for?: {
     id?: string;

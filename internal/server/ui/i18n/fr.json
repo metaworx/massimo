@@ -1558,6 +1558,8 @@
   "users.currentPassword": "Mot de passe actuel",
   "users.keysOnly": "clés seulement",
   "users.integrationUser": "utilisateur d'une intégration",
+  "users.integrationNoSignIn": "Agit uniquement par son intégration : ni nouveau mot de passe, ni nouvelle clé, ni connexion propre.",
+  "users.removePassword": "Supprimer le mot de passe",
   "users.integrationOwn": "intégration",
   "users.linkedTo": "agit comme {name}",
   "users.linksList": "Représenté par des intégrations via : {users}",

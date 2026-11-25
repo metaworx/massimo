@@ -357,8 +357,10 @@ When a test needs it:
 What it does not cover:
 
 - **a change the client makes outside the Cube's lines** -
-  a lost connection, a held connection that resumes, a pairing -
-  which the test waits for by its event,
+  a lost connection, a first dial that fails
+  (the `disconnected` of a Cube that never answers, `secondCube`),
+  a held connection that resumes, a pairing -
+  which the test waits for by its event or its line,
   or by the call that made it, as a device forgotten by the removal;
 - **what the pump starts and does not wait for**:
   a command it queues (its line on the fake Cube, through `cubewatch`),
@@ -602,6 +604,9 @@ such as another package's tests under `make race`.
   `ports.taken(t)` is one the proxy gets only once the test frees it:
   until then its listens fail as at a port another program holds,
   since the test holds it.
+  `ports.listens(addr)` counts the listens at an address:
+  `TestProxyRetryStops` holds a port it never gives,
+  and checks that a stopped slot tries it no more.
 - **The announcer** takes its two sockets through `options.listen`
   (`heldSockets` in `internal/announce`).
 - **The Cube goes and comes back** with `fc.Pause()` and `fc.Resume()`,
@@ -645,4 +650,3 @@ and the free-port helper stays there, its comment saying why:
   is a listener opened and closed: `deadAddr` in `internal/env`,
   `dead` in `cmd/massimo`'s `options_test.go`,
   `closed` in `internal/server`'s `proxied_test.go`.
-  So is the address `TestProxyRetryStops` frees to see that no proxy takes it.

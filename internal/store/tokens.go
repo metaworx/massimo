@@ -90,24 +90,42 @@ func scanToken(row scanner) (Token, error) {
 
 // AddToken creates a token of a kind for a user, with a label and an
 // end (zero: never), and returns it with the secret, which is shown
-// once and never stored.
+// once and never stored. An integration's user is ErrIntegrationUser:
+// its integration's key is CollectIntegrationKey's.
 func (s *Store) AddToken(ctx context.Context, userID int64, kind, label string, expires time.Time) (Token, string, error) {
+	return s.addToken(ctx, userID, kind, label, expires, false)
+}
+
+// addToken is AddToken; ofIntegration lets an integration's user have
+// it, for the integration's own key.
+func (s *Store) addToken(ctx context.Context, userID int64, kind, label string, expires time.Time, ofIntegration bool) (Token, string, error) {
 	secret, err := NewSecret()
 	if err != nil {
 		return Token{}, "", err
 	}
-	t, err := s.AddTokenHash(ctx, userID, kind, label, HashToken(secret), expires)
+	t, err := s.addTokenHash(ctx, userID, kind, label, HashToken(secret), expires, ofIntegration)
 	return t, secret, err
 }
 
 // AddTokenHash creates a token whose secret the caller holds, as the
-// bootstrap does with MASSIMO_API_TOKEN.
+// bootstrap does with MASSIMO_API_TOKEN; an integration's user is
+// ErrIntegrationUser, as with AddToken.
 func (s *Store) AddTokenHash(ctx context.Context, userID int64, kind, label, hash string, expires time.Time) (Token, error) {
+	return s.addTokenHash(ctx, userID, kind, label, hash, expires, false)
+}
+
+// addTokenHash is AddTokenHash, with addToken's ofIntegration.
+func (s *Store) addTokenHash(ctx context.Context, userID int64, kind, label, hash string, expires time.Time, ofIntegration bool) (Token, error) {
 	if err := s.writable(); err != nil {
 		return Token{}, err
 	}
 	if kind != TokenSession && kind != TokenAPI {
 		return Token{}, fmt.Errorf("store: token kind %q", kind)
+	}
+	if !ofIntegration {
+		if err := noWayIn(ctx, s.db, "id = ?", userID); err != nil {
+			return Token{}, err
+		}
 	}
 	res, err := s.db.ExecContext(ctx, `INSERT INTO tokens (uuid, user_id, kind, hash, label, created_at, expires_at, origin) VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
 		newUUID(), userID, kind, hash, label, s.nowText(), nullTime(expires), s.nodeID)
@@ -233,7 +251,8 @@ func revokeSessionsOf(ctx context.Context, tx execer, keyID int64, now, node str
 // label and an end, and returns it with the secret, shown once: the
 // session names the key, and the key's earlier sessions are revoked,
 // so that a key has one live session at a time. ErrNoToken where the key
-// is not a live API key.
+// is not a live API key; ErrIntegrationUser where its user is an
+// integration's, which makes no session.
 func (s *Store) AddKeySession(ctx context.Context, keyID int64, label string, expires time.Time) (Token, string, error) {
 	if err := s.writable(); err != nil {
 		return Token{}, "", err
@@ -254,6 +273,9 @@ func (s *Store) AddKeySession(ctx context.Context, keyID int64, label string, ex
 	}
 	if err != nil {
 		return Token{}, "", fmt.Errorf("store: session of key %d: %w", keyID, err)
+	}
+	if err := noWayIn(ctx, tx, "id = ?", userID); err != nil {
+		return Token{}, "", err
 	}
 	now := s.nowText()
 	if err := revokeSessionsOf(ctx, tx, keyID, now, s.nodeID); err != nil {

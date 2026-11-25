@@ -1556,6 +1556,8 @@
   "users.currentPassword": "Aktuelles Passwort",
   "users.keysOnly": "nur Schlüssel",
   "users.integrationUser": "Benutzer einer Integration",
+  "users.integrationNoSignIn": "Handelt nur über seine Integration: kein neues Passwort, kein neuer Schlüssel und keine eigene Anmeldung.",
+  "users.removePassword": "Passwort entfernen",
   "users.integrationOwn": "Integration",
   "users.linkedTo": "handelt als {name}",
   "users.linksList": "Über Integrationen vertreten durch: {users}",
