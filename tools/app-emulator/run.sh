@@ -12,13 +12,15 @@
 #
 # In order: the SDK's adb, emulator and image (sdk.sh check) and KVM,
 # which the emulator needs, each said where it is missing before anything
-# starts; the AVD massimo-test, made at each run in the run's work
-# directory, its settings written from the pins; the emulator, without a
-# window, audio or snapshots, its data wiped, so that every run starts as
-# a new phone, the device's log kept from the moment adb sees it; while
-# it boots, the servers and the app's two APKs built; once it has booted,
-# its animations and autofill off, the screen kept on and the PIN set,
-# which a fingerprint needs, the lock screen away before and after it;
+# starts; the checkout's lock and the run's slot, which gives it its
+# ports (below); the AVD massimo-test, made at each run in the run's
+# work directory, its settings written from the pins; the emulator,
+# without a window, audio or snapshots, its data wiped, so that every
+# run starts as a new phone, the device's log kept from the moment adb
+# sees it; while it boots, the servers and the app's two APKs built; once
+# it has booted, its animations and autofill off, the screen kept on and
+# the PIN set, which a fingerprint needs, the lock screen away before and
+# after it;
 # adb reverse for both servers' ports, the owner's key written to a file
 # on the emulator, the helper started; a guard that keeps the lock
 # screen away while Gradle runs (keyguard.log); the finger enrolled by
@@ -48,6 +50,28 @@
 # Every adb command names the emulator by its serial, emulator-<port>:
 # no command goes to another device, and a phone adb knows is left alone.
 #
+# The run holds a slot, the first of eight, 0 to 7, whose lock it can
+# take, whose emulator adb does not list and none of whose ports listens
+# (slots.sh; AP EmulatorRuns, D2-A): slot k gives the console port
+# 5584 - 2k, counting down because adb finds an emulator by itself, after
+# its server restarts, on 5554 to 5584 alone; the servers' 9443 + 2k and
+# 9444 + 2k, their fake Cubes' 62941 + 2k and 62942 + 2k and the fake
+# Cubes' discovery ports 23941 + 2k and 23942 + 2k, so that runs of two
+# checkouts at once need no setting. A run also locks this directory, so
+# that a second run of the same checkout, whose results/ and
+# app/android's build would be this one's, stops at once. The locks are
+# taken after adb devices has started adb's server and handed to one
+# holder outside the run's children, which ignores INT, TERM, HUP and
+# QUIT and keeps them until the run has ended and been reaped, however
+# it ends, a signal to its whole process group and its cleanup included,
+# and lets them go within about a second: nothing else the run starts
+# holds them. Two runs at once share the host: on a 16-core host they
+# booted in about 165 s each at a load average near 2 and 335 s near 20,
+# against 80 to 111 s for one alone, and on a host that busy the
+# enrollment can fail under a lock screen that comes back (README.md,
+# "The ports"): APP_EMU_BOOT_TIMEOUT can be tight there, and a busy
+# host is best avoided.
+#
 # The AVD, the servers' stores and the binaries are in the run's work
 # directory, massimo-app-emulator.XXXXXX under TMPDIR (default /tmp),
 # made, swept and kept by tools/workdir/workdir.sh, which the UI suite
@@ -61,18 +85,21 @@
 # Environment: ANDROID_HOME (the SDK; adb from its platform-tools);
 # APP_EMU_SDK (the SDK holding the emulator and the image, default
 # ANDROID_HOME); APP_EMU_PORT (the emulator's console port, even, 5554
-# to 5682, default 5584); APP_EMU_BOOT_TIMEOUT (seconds the boot may take
-# once the builds are done, default 300); APP_EMU_STRICT (1: a test
-# skipped or not run fails the run, as under CI=true; 0 or empty: it is
-# said only); APP_EMU_CLASS (a test class, or a class#method, as the
-# instrumentation's -e class takes it); APP_EMU_API_PORT_A and _B (the
-# servers' ports, 9443 and 9444), APP_EMU_CUBE_PORT_A and _B (their fake
-# Cubes', 62941 and 62942) and APP_EMU_DISCOVERY_PORT_A and _B (23941 and
-# 23942); KEEP (1 keeps the work directory, the AVD in it, about 1.2 GB
-# after a run, with a file kept in it from the start, which a later run
-# leaves alone, and prints its path; AP CleanRuns, D4-A, and the file
-# kept, AP EmulatorRuns, D3-B). JAVA_HOME as Gradle wants it
-# (app/README.md).
+# to 5682, default the slot's, 5584 - 2k); APP_EMU_BOOT_TIMEOUT (seconds
+# the boot may take once the builds are done, default 300);
+# APP_EMU_STRICT (1: a test skipped or not run fails the run, as under
+# CI=true; 0 or empty: it is said only); APP_EMU_CLASS (a test class, or
+# a class#method, as the instrumentation's -e class takes it);
+# APP_EMU_API_PORT_A and _B (the servers' ports, default the slot's,
+# 9443 + 2k and 9444 + 2k), APP_EMU_CUBE_PORT_A and _B (their fake
+# Cubes', 62941 + 2k and 62942 + 2k) and APP_EMU_DISCOVERY_PORT_A and _B
+# (23941 + 2k and 23942 + 2k), each given replacing that port alone;
+# APP_EMU_LOCK_DIR (the slots' lock files, default /tmp, not TMPDIR, so
+# that runs with other TMPDIRs see them); KEEP (1 keeps the work
+# directory, the AVD in it, about 1.2 GB after a run, with a file kept in
+# it from the start, which a later run leaves alone, and prints its path;
+# AP CleanRuns, D4-A, and the file kept, AP EmulatorRuns, D3-B).
+# JAVA_HOME as Gradle wants it (app/README.md).
 set -euo pipefail
 
 here=$(cd "$(dirname "$0")" && pwd)
@@ -81,6 +108,8 @@ root=$(cd "$here/../.." && pwd)
 . "$here/pins.sh"
 # shellcheck source=servers.sh
 . "$here/servers.sh"
+# shellcheck source=slots.sh
+. "$here/slots.sh"
 # shellcheck source=../workdir/workdir.sh
 . "$here/../workdir/workdir.sh"
 
@@ -95,15 +124,8 @@ if [ $# -ne 0 ]; then
 fi
 
 out="$here/results"
-port=${APP_EMU_PORT:-5584}
+# The ports, serial among them, come from the slot (slot_take, below).
 boot_s=${APP_EMU_BOOT_TIMEOUT:-300}
-api_a=${APP_EMU_API_PORT_A:-9443}
-api_b=${APP_EMU_API_PORT_B:-9444}
-# The fake Cubes' ports, which servers.sh reads by their names.
-# shellcheck disable=SC2034
-cube_a=${APP_EMU_CUBE_PORT_A:-62941} cube_b=${APP_EMU_CUBE_PORT_B:-62942}
-# shellcheck disable=SC2034
-disc_a=${APP_EMU_DISCOVERY_PORT_A:-23941} disc_b=${APP_EMU_DISCOVERY_PORT_B:-23942}
 avd=massimo-test
 user=tester
 # not the user's name in it, which a new password may not hold
@@ -121,8 +143,10 @@ build="$root/app/android/app/build"
 app_re='ch\.metaworx\.massimo'
 timer_re='Destroy timeout of remove-task, attempt to kill Task\{[^}]* A=[0-9]+:ch\.metaworx\.massimo\}'
 
-if ! [[ $port =~ ^[0-9]+$ ]] || [ "$port" -lt 5554 ] || [ "$port" -gt 5682 ] || [ $((port % 2)) -ne 0 ]; then
-	die "APP_EMU_PORT is an emulator's console port, even, from 5554 to 5682, not '$port'"
+if [ -n "${APP_EMU_PORT:-}" ]; then
+	if ! [[ $APP_EMU_PORT =~ ^[0-9]+$ ]] || [ "$APP_EMU_PORT" -lt 5554 ] || [ "$APP_EMU_PORT" -gt 5682 ] || [ $((APP_EMU_PORT % 2)) -ne 0 ]; then
+		die "APP_EMU_PORT is an emulator's console port, even, from 5554 to 5682, not '$APP_EMU_PORT'"
+	fi
 fi
 if ! [[ $boot_s =~ ^[0-9]+$ ]]; then
 	die "APP_EMU_BOOT_TIMEOUT is a number of seconds, not '$boot_s'"
@@ -133,7 +157,6 @@ case "${APP_EMU_STRICT:-}" in
 "") strict=0; [ "${CI:-}" != true ] || strict=1 ;;
 *) die "APP_EMU_STRICT is 1 or 0, not '$APP_EMU_STRICT'" ;;
 esac
-serial="emulator-$port"
 
 # --- what the run needs, said before anything starts ---------------------
 
@@ -155,10 +178,24 @@ fi
 for c in go curl openssl; do
 	command -v "$c" >/dev/null || die "$c is not on the PATH"
 done
+command -v flock >/dev/null || die "flock is not on the PATH (util-linux), which takes the run's locks"
+command -v ss >/dev/null || die "ss is not on the PATH (iproute2), which finds the ports in use"
+tail --pid=1 -n 0 /dev/null >/dev/null 2>&1 || die "tail takes no --pid, which GNU coreutils' does: it holds the run's locks"
+# adb's server started here, before any lock, which it would otherwise
+# hold as long as it runs
 devices=$("$adb" devices </dev/null 2>/dev/null) || devices=""
-if grep -q "^${serial}[[:space:]]" <<<"$devices"; then
-	die "$serial runs already, another run's emulator or one on its port: APP_EMU_PORT takes another"
+# the checkout's lock first: a second run of it would take this one's
+# results/ and app/android's build
+slot_checkout "$here" || exit 1
+if [ -n "${APP_EMU_PORT:-}" ] && grep -q "^emulator-${APP_EMU_PORT}[[:space:]]" <<<"$devices"; then
+	die "emulator-$APP_EMU_PORT runs already, another run's emulator or one on its port: APP_EMU_PORT takes another, or left out, the slot's"
 fi
+slot_take || die "the run took none of the eight slots (above); nothing was started"
+# both locks to the holder: nothing the run starts from here on holds
+# them, the emulator, an adb server started again or a loop that a
+# kill -9 of the run leaves running among it
+slot_hold
+echo "app-emulator: slot $slot: console port $port; server a on $api_a, its fake Cube on $cube_a and $disc_a; server b on $api_b, $cube_b and $disc_b"
 
 # --- the run ------------------------------------------------------------------
 

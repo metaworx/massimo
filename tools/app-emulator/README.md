@@ -57,11 +57,14 @@ the first one on a machine also fetches the test libraries.
   where `/tmp` is a tmpfs, that is memory, and `TMPDIR` names another place.
 - **The host's tools**: Go, `curl` and `openssl` for the servers;
   `unzip` and `sha1sum` for `sdk.sh fetch`;
-  GNU coreutils' `timeout` and `env -C` for the run.
+  GNU coreutils' `timeout`, `env -C` and `tail --pid` for the run;
+  `flock` (util-linux), which takes the run's locks,
+  and `ss` (iproute2), which finds the ports in use (below, "The ports").
 
 ## What it does
 
-1. The checks above, then the AVD `massimo-test`,
+1. The checks above, then the checkout's lock and the run's slot,
+   which gives it its ports (below, "The ports"), then the AVD `massimo-test`,
    made at each run in the run's work directory (below, "The results"),
    its settings written from the pins:
    the run's own, which no other checkout's run starts or rewrites,
@@ -70,7 +73,8 @@ the first one on a machine also fetches the test libraries.
 2. The emulator, without a window, audio or snapshots
    (`-no-window -no-audio -no-snapshot`), its data wiped (`-wipe-data`),
    so that every run starts from a phone just set up,
-   on its own console port, 5584 (`APP_EMU_PORT`), the serial `emulator-5584`;
+   on the slot's console port, 5584 in slot 0 (`APP_EMU_PORT`),
+   the serial `emulator-5584`;
    the kernel's messages in its log (`-show-kernel`),
    and the device's log kept from the moment `adb` sees it,
    so that a boot that stalls leaves both.
@@ -119,8 +123,9 @@ so that every test starts from the app installed anew.
 ## The servers
 
 `servers.sh` builds `massimo` from the checkout, the page's parts first,
-and starts two servers, `a` on `127.0.0.1:9443` and `b` on `127.0.0.1:9444`
-(`APP_EMU_API_PORT_A`, `_B`),
+and starts two servers on the slot's ports,
+in slot 0 `a` on `127.0.0.1:9443` and `b` on `127.0.0.1:9444`
+(`APP_EMU_API_PORT_A`, `_B`; below, "The ports"),
 each in a temporary directory of its own with its store,
 `MASSIMO_ENV_FILE=/dev/null`, so that nothing of the checkout's `.env`
 is read,
@@ -135,6 +140,78 @@ checked against the one it answers with, and handed to the tests,
 which compare it with the app's fingerprint sheet and pin it to read the
 audit.
 The directories go at the end of the run.
+
+## The ports
+
+A run holds a slot, which gives it seven ports of its own,
+so that runs from two checkouts at once need no setting
+(`slots.sh`; AP EmulatorRuns, D2-A).
+Slot `k`, from 0 to 7, gives the console port of slot 0 - 2k,
+and each other port of slot 0 + 2k:
+
+| Port | Slot 0 | Slot `k` | Setting |
+|---|---|---|---|
+| the emulator's console, its serial `emulator-<port>` | 5584 | 5584 - 2k | `APP_EMU_PORT` |
+| server `a`, server `b` | 9443, 9444 | 9443 + 2k, 9444 + 2k | `APP_EMU_API_PORT_A`, `_B` |
+| their fake Cubes | 62941, 62942 | 62941 + 2k, 62942 + 2k | `APP_EMU_CUBE_PORT_A`, `_B` |
+| the fake Cubes' discovery | 23941, 23942 | 23941 + 2k, 23942 + 2k | `APP_EMU_DISCOVERY_PORT_A`, `_B` |
+
+The console ports count down, from 5584 to 5570,
+because `adb` finds an emulator by itself, after its server restarts,
+on the console ports 5554 to 5584 alone (it looks at 5555 to 5585).
+A setting given replaces that port alone, in every slot.
+The run takes the first slot whose lock it can take,
+whose emulator `adb` does not list (one left by a killed run, which holds no lock)
+and none of whose ports listens, the console's pair (its port + 1, adb's) among them;
+`ss -Hltun` reads the listening sockets without connecting to them,
+since a connection to another program's server would put an error in its log.
+It says each slot it passed over and why,
+then the slot and its ports;
+where none of the eight is free, it stops before it starts anything.
+
+A slot's lock is a `flock` of the file `massimo-app-emulator-slot.<k>.lock`
+in `APP_EMU_LOCK_DIR`, `/tmp` where it is not set,
+not `TMPDIR`, so that runs with other `TMPDIR`s see one another's;
+the file is made where missing, readable by everyone,
+opened for reading, so that one another user made serves too,
+and it stays;
+a lock path that is a link or no regular file, a FIFO among them, is passed over.
+A run also locks this directory, `tools/app-emulator/`:
+a second run of the same checkout would take the first one's `results/`
+and the build and the reports in `app/android/`,
+so it stops at once and says that a run of this checkout is going;
+it waits for that, or runs from another checkout.
+
+The locks are taken after `adb devices`, which starts `adb`'s server,
+then handed to one holder, `tail --pid` of the run,
+which a subshell starts and leaves, so that it is none of the run's children,
+and which ignores `INT`, `TERM`, `HUP` and `QUIT`:
+it keeps them until `run.sh` has ended and been reaped, however it ends,
+a signal to its whole process group (Ctrl-C, `timeout`) and a `kill -9` among it,
+so also while the cleanup still writes `results/`,
+and lets them go within about a second.
+Nothing else the run starts holds them,
+neither an `adb` server that a later `adb` call starts again
+nor a loop of the run's that a `kill -9` leaves running.
+
+Two runs at once share the host.
+On a 16-core host, two runs started together booted their emulators
+in about 165 s each at a light load (a load average of about 2)
+and in about 335 s each with the host's load near 20,
+against 80 to 111 s for one alone.
+A busy host also makes the enrollment fail.
+In every run the lock screen comes back a while after the PIN is set,
+as the emulator's first setup ends, and the run takes it away;
+where SystemUI has stopped answering by then and is left running behind
+its "isn't responding" dialog,
+no PIN typed reaches the lock screen,
+and Settings' enrollment ends under it.
+Of eight runs, four failed so, three of them started two at once,
+each while other programs' tests kept the load average at 10 or more;
+the same code passed on the same ports at a lower load.
+So `APP_EMU_BOOT_TIMEOUT`, 300 s from the builds' end,
+can be tight on a busy host,
+and two runs at once want a host with cores to spare.
 
 ## The fingerprint
 
@@ -334,8 +411,9 @@ Its result counts with Android app's in the Tested record's `app=`.
 |---|---|
 | `run.sh` | the run, as above; its work directory from `../workdir/workdir.sh`, which it sources, the UI suite's helper too (`tools/workdir/README.md`) |
 | `servers.sh` | the two servers, sourced by `run.sh` |
+| `slots.sh` | the checkout's lock, the slot and its ports, and the holder of both locks, sourced by `run.sh` |
 | `fingers.sh` | the helper that answers each touch a test asks for |
 | `sdk.sh` | `check` and `fetch` of the pinned emulator and image |
 | `pins.sh` | the pins |
 | `tally/` | the command that says what a Gradle run ran, against the tests the sources declare, with its Go tests |
-| `scripts_test.go`, `doc.go` | the Go tests of the helper, of `sdk.sh` and of the pins, a part of `go test ./...` |
+| `scripts_test.go`, `doc.go` | the Go tests of the helper, of the slots, of `sdk.sh` and of the pins, a part of `go test ./...` |
