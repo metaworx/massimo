@@ -162,7 +162,7 @@ func TestServeSingleCubeWithoutSerial(t *testing.T) {
 	proxyAddr := freeAddr(t)
 	envFile := filepath.Join(t.TempDir(), "x.env")
 	os.WriteFile(envFile, []byte("MASSIMO_CUBE_ADDRESS="+cubeAddr+"\nMASSIMO_CUBE_PROXY="+proxyAddr+"\n"), 0o600)
-	if err := env.LoadFile(envFile); err != nil {
+	if _, err := env.LoadFile(envFile); err != nil {
 		t.Fatal(err)
 	}
 	dir := t.TempDir()
@@ -463,7 +463,7 @@ func TestServePlainSeedCutShort(t *testing.T) {
 			cubeAddr := startFakeCube(t)
 			envFile := filepath.Join(t.TempDir(), "x.env")
 			os.WriteFile(envFile, []byte("MASSIMO_CUBE_ADDRESS="+cubeAddr+"\nMASSIMO_CUBE_PROXY="+freeAddr(t)+"\n"), 0o600)
-			if err := env.LoadFile(envFile); err != nil {
+			if _, err := env.LoadFile(envFile); err != nil {
 				t.Fatal(err)
 			}
 			st := testStore(t, "")

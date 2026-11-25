@@ -13,7 +13,7 @@ import json
 import pytest
 
 from conftest import TOKEN, URL
-from helpers import NAME_BAD, ApiReads, assert_login_card_centred, frames, scroll_width, wait_held, wait_until
+from helpers import NAME_BAD, OPERATOR_PASSWORD, ApiReads, assert_login_card_centred, frames, pause_clock, scroll_width, wait_held, wait_until
 from test_connect import FAKE_BRIDGE
 
 OPEN = {"mode": "open", "user": None, "role": None, "capabilities": [], "setup": True}
@@ -130,6 +130,67 @@ def test_the_card_asks_at_the_start(new_context, case, watch, guard):
     owner_card(page)
 
 
+def is_read(method, end):
+    """A test of a request: of method, its path ending with end."""
+    return lambda r: r.method == method and r.url.split("?")[0].endswith(end)
+
+
+def test_no_poll_behind_the_owner_card(new_context, case, watch, guard):
+    """The page's poll waits for the start's card: with the first owner's
+    card open past two poll intervals, under the paused clock, the page
+    reads neither the Cubes nor the log's alerts; once Skip for now has
+    closed it, the page's start reads each once, and the poll reads the
+    Cubes again at its interval (AP LooseEnds, Block 3). Fails on the page
+    before: the start started the poll before the card, which read both at
+    each interval behind it."""
+    page = start_page(new_context, guard, watch, OPEN, clock=True)
+    owner_card(page)
+    pause_clock(page)
+    try:
+        every = page.evaluate("state.settings.poll") * 1000
+        page.clock.run_for(2 * every + 1000)
+        page.locator("#setup-skip").click()
+        assert wait_until(page, f"!({DIALOG_OPEN})", 5), "Skip for now closes the card"
+        page.wait_for_selector(".room", timeout=10000)
+        assert wait_until(page, "state.eventsOpen", 10), "the page started"
+        counts = (len(sent(page, "GET", "/api/v1/cubes")), len(sent(page, "GET", "/api/v1/log/alerts")))
+        assert counts == (1, 1), f"the Cubes and the alerts read once, by the start, none behind the card: {counts}"
+        with page.expect_request(is_read("GET", "/api/v1/cubes"), timeout=5000):
+            page.clock.run_for(every)
+        assert len(sent(page, "GET", "/api/v1/cubes")) == 2, "the poll reads the Cubes once the card has closed"
+    finally:
+        page.clock.resume()
+
+
+def test_a_setting_applied_behind_the_card_starts_no_poll(new_context, case, watch, guard):
+    """A running page that the first owner's card opened by the banner
+    stands still behind it: a new poll interval applied meanwhile, under
+    the paused clock, starts no poll, and past two intervals of it the
+    page reads no Cube; Back to the page starts the poll at the new pace
+    (AP LooseEnds, Block 3). Fails on the page before: applying the
+    settings started the poll behind the card."""
+    page = start_page(new_context, guard, watch, OPEN, clock=True)
+    owner_card(page)
+    page.locator("#setup-skip").click()
+    page.wait_for_selector(".room", timeout=10000)
+    assert wait_until(page, "state.eventsOpen", 10), "the page started"
+    page.locator("#open-banner-create").click()
+    owner_card(page)
+    pause_clock(page)
+    try:
+        before = len(sent(page, "GET", "/api/v1/cubes"))
+        page.evaluate("() => { setSetting('poll', 5); applySettings(); }")
+        page.clock.run_for(11000)
+        page.locator("#setup-skip").click()
+        assert wait_until(page, f"!({DIALOG_OPEN})", 5), "Back to the page closes the card"
+        assert len(sent(page, "GET", "/api/v1/cubes")) == before, "no read of the Cubes behind the card"
+        with page.expect_request(is_read("GET", "/api/v1/cubes"), timeout=5000):
+            page.clock.run_for(5100)
+        assert len(sent(page, "GET", "/api/v1/cubes")) == before + 1, "the poll at the new pace once the card is left"
+    finally:
+        page.clock.resume()
+
+
 @pytest.mark.parametrize("me", ["kept", "none", "users"])
 def test_no_card_where_not_asked(new_context, case, watch, guard, me):
     """No card on a server kept open (auth.keep_open: kept_open), on a
@@ -196,8 +257,8 @@ def test_create_the_owner_from_the_card(new_context, case, watch, guard):
     owner_card(page)
     stub_creation(page, made)
     page.locator("#setup-user").fill(f"owner-{case.width}-{case.lang}")
-    page.locator("#setup-password").fill("pw")
-    page.locator("#setup-again").fill("pw")
+    page.locator("#setup-password").fill("own-secret-1")
+    page.locator("#setup-again").fill("own-secret-1")
     before = len(mes)
     stage["me"] = "hold"
     submit = page.locator("#setup-form button[type=submit]")
@@ -241,8 +302,8 @@ def test_a_refusal_turns_the_card_to_the_sign_in(new_context, case, watch, guard
         page.route("**/api/v1/users", lambda route: route.fulfill(
             status=409, content_type="application/json", body='{"error":"the first owner exists already: sign in"}'))
     page.locator("#setup-user").fill("owner")
-    page.locator("#setup-password").fill("pw")
-    page.locator("#setup-again").fill("pw")
+    page.locator("#setup-password").fill("own-secret-1")
+    page.locator("#setup-again").fill("own-secret-1")
     page.locator("#setup-form button[type=submit]").click()
     turned(page)
     assert wait_until(page, "document.activeElement && document.activeElement.id === 'login-user'", 3), "the name in focus"
@@ -251,7 +312,7 @@ def test_a_refusal_turns_the_card_to_the_sign_in(new_context, case, watch, guard
     frames(page)
     assert len(sent(page, "GET", "/api/v1/login/providers")) == 1, "the providers read once"
     page.locator("#login-user").fill("operator")
-    page.locator("#login-password").fill("op-pass")
+    page.locator("#login-password").fill(OPERATOR_PASSWORD)
     page.locator("#login-form button[type=submit]").click()
     page.wait_for_selector(".room", timeout=10000)
     assert wait_until(page, f"!({DIALOG_OPEN}) && state.eventsOpen", 10), "signed in, the page started"
@@ -303,7 +364,7 @@ def test_a_page_left_open_learns_of_the_owner(new_context, case, watch, guard, w
     page.unroute("**/events/ticket")
     page.unroute("**/api/v1/me")
     page.locator("#login-user").fill("operator")
-    page.locator("#login-password").fill("op-pass")
+    page.locator("#login-password").fill(OPERATOR_PASSWORD)
     page.locator("#login-form button[type=submit]").click()
     page.wait_for_selector(".room", timeout=10000)
     assert wait_until(page, f"!({DIALOG_OPEN}) && state.eventsOpen", 10), "signed in, the stream open again"
@@ -366,7 +427,7 @@ def held_creation(page, keep=None):
     }""", [TOKEN, keep])
 
 
-def fill_owner(page, name="owner", password="pw", again="pw"):
+def fill_owner(page, name="owner", password="own-secret-1", again="own-secret-1"):
     page.locator("#setup-user").fill(name)
     page.locator("#setup-password").fill(password)
     page.locator("#setup-again").fill(again)
@@ -428,7 +489,7 @@ def test_a_late_creation_leaves_a_later_sign_in_open(new_context, case, watch, g
     page.unroute("**/api/v1/me")
     page.evaluate("() => { signIn = window.__signIn; }")  # the sign-in by OPAQUE again, for the operator
     page.locator("#login-user").fill("operator")
-    page.locator("#login-password").fill("op-pass")
+    page.locator("#login-password").fill(OPERATOR_PASSWORD)
     page.locator("#login-form button[type=submit]").click()
     assert wait_until(page, f"!({DIALOG_OPEN}) && window.__answered === true && state.eventsOpen", 10), \
         page.evaluate("({open: document.getElementById('login-dialog').open, answered: window.__answered, events: state.eventsOpen, "
@@ -442,12 +503,90 @@ def test_the_passwords_are_checked_before_anything_is_sent(new_context, case, wa
     its tile."""
     page = start_page(new_context, guard, watch, OPEN)
     owner_card(page)
-    for password, again in (("pw", "other"), ("", "pw")):
+    for password, again in (("own-secret-1", "other"), ("", "own-secret-1")):
         fill_owner(page, password=password, again=again)
         page.locator("#setup-form button[type=submit]").click()
         assert wait_until(page, "document.getElementById('setup-msg').textContent === t('setup.mismatch')", 3), \
             f"the passwords differ: {password!r}, {again!r}"
     assert not sent(page, "POST", "/register") and not sent(page, "POST", "/api/v1/users"), "nothing sent"
+
+
+def test_the_form_says_only_what_is_wrong_now(new_context, case, watch, guard):
+    """Each Create the owner says what is wrong at that submit alone and
+    puts the focus on the field to change, in its handler: a mismatch says
+    so with the focus on Again; Again fixed and a bad name, the name's rule
+    alone, the mismatch's line gone, the focus on the name. No password at
+    all the browser refuses itself (the fields are required), Password
+    invalid and in focus. Nothing is sent. Fails on the page before: the
+    mismatch's line stayed beside the name's rule, and the focus stayed on
+    Create the owner (the walk-through of AP LooseEnds, finding 3)."""
+    page = start_page(new_context, guard, watch, OPEN)
+    owner_card(page)
+    submit = page.locator("#setup-form button[type=submit]")
+    fill_owner(page, password="own-secret-1", again="other")
+    submit.click()
+    assert wait_until(page, "document.getElementById('setup-msg').textContent === t('setup.mismatch')", 3), "the passwords differ"
+    assert page.evaluate("document.activeElement.id") == "setup-again", "the focus on Again"
+    fill_owner(page, name="bad name", password="own-secret-1", again="own-secret-1")
+    submit.click()
+    assert wait_until(page, "!document.getElementById('setup-name-msg').classList.contains('hidden')", 3), "the name's rule"
+    assert page.locator("#setup-name-msg").inner_text() == NAME_BAD[case.lang], "the store's rule"
+    assert page.locator("#setup-msg").is_hidden(), "and no line of the earlier attempt"
+    assert page.evaluate("document.activeElement.id") == "setup-user", "the focus on the name"
+    fill_owner(page, password="", again="")
+    submit.click()
+    assert wait_until(page, "document.activeElement && document.activeElement.id === 'setup-password'", 3), "the browser's focus on Password"
+    assert page.evaluate("document.getElementById('setup-password').matches(':invalid')"), "Password refused by the browser"
+    assert not sent(page, "POST", "/register") and not sent(page, "POST", "/api/v1/users"), "nothing sent"
+
+
+def test_the_owner_card_empties_its_passwords_after_the_owner(new_context, case, watch, guard):
+    """A mismatch and Keep it open… and Back keep both passwords. Once the
+    owner is made and the card has closed, the two stay while the page's
+    read of the owner's settings, its first after the close, is held, and
+    go once it has settled: both empty and hidden, the name kept (AP
+    LooseEnds, D13, D41-A). Fails on the page before: they kept the
+    passwords until the next opening (FirstOwner D43)."""
+    stage = {"me": OPEN}
+    page = start_page(new_context, guard, watch, lambda: stage["me"])
+    owner_card(page)
+    stub_creation(page, [])
+    held, once = [], {"held": False}
+
+    def prefs(route):
+        if route.request.method == "GET" and not once["held"]:
+            once["held"] = True
+            held.append(route)
+            return
+        route.continue_()
+
+    page.route("**/api/v1/me/preferences", prefs)
+    fill_owner(page, password="own-secret-1", again="other")
+    page.locator("#setup-form button[type=submit]").click()
+    assert wait_until(page, "document.getElementById('setup-msg').textContent === t('setup.mismatch')", 3), "the passwords differ"
+    page.locator("#setup-keep-open").click()
+    page.locator("#keep-open-back").click()
+    frames(page)
+    assert [page.locator(f).input_value() for f in ("#setup-password", "#setup-again")] == ["own-secret-1", "other"], \
+        "a refusal and Back keep both"
+    page.locator("#setup-again").fill("own-secret-1")
+    eye = page.locator("#setup-step .pw-eye").last
+    eye.wait_for(state="visible")
+    eye.click()
+    assert page.locator("#setup-again").get_attribute("type") == "text", "Again shown"
+    stage["me"] = None
+    page.locator("#setup-form button[type=submit]").click()
+    assert wait_until(page, f"!({DIALOG_OPEN})", 10), "the owner made, the card closed"
+    assert wait_held(page, held), "the owner's settings read, held"
+    frames(page)
+    assert [page.locator(f).input_value() for f in ("#setup-password", "#setup-again")] == ["own-secret-1", "own-secret-1"], \
+        "kept while the read after the close has not settled"
+    held.pop().continue_()
+    assert wait_until(page, "document.getElementById('setup-password').value === '' && document.getElementById('setup-again').value === ''", 10), \
+        "both emptied once it has"
+    for f in ("#setup-password", "#setup-again"):
+        assert page.locator(f).get_attribute("type") == "password", f"{f} hidden"
+    assert page.locator("#setup-user").input_value() == "owner", "the name kept"
 
 
 def test_the_name_is_checked_as_it_is_typed(new_context, case, watch, guard):
@@ -457,7 +596,7 @@ def test_the_name_is_checked_as_it_is_typed(new_context, case, watch, guard):
     forward guard: the tile checked it so."""
     page = start_page(new_context, guard, watch, OPEN, clock=True)
     owner_card(page)
-    page.clock.pause_at(page.evaluate("Date.now()") + 1000)
+    pause_clock(page)
     name = page.locator("#setup-user")
     name.fill("bad name")
     page.clock.run_for(1500)

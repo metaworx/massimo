@@ -710,7 +710,8 @@ Maintenance is checked with the restart asking in its row and a delay typed for 
 (`RESTART_STUB`, `REBOOT_STUB`), around Maintenance shown again as well;
 it passed on the page before the move too: `maintenance.js` lost the focus of a setting
 while it saved, which `test_maint_updates.py` shows.
-System info is checked with its folds open around the page shown again as well,
+System info is checked with its folds open, the credits' and Preact's licence among them,
+around the page shown again as well,
 which failed on the page before the move:
 `system-info.js` made the version's and the proxies' copy icons and the proxy's link anew
 at each read.

@@ -8,7 +8,7 @@ import json
 import pytest
 
 from conftest import TOKEN, api_call
-from helpers import show_view, wait_held, wait_until
+from helpers import pause_clock, show_view, wait_held, wait_until
 
 AVAILABLE = '{"available": true, "by": "systemd"}'
 BLOCKED = '{"available": false, "blocked": "no service manager would start this server again"}'
@@ -109,7 +109,7 @@ def test_restart_lists_what_waits(page):
         else:
             held.append(route)
     page.route("**/api/v1/restart", restart)
-    page.clock.pause_at(page.evaluate("Date.now()") + 1000)
+    pause_clock(page)
     try:
         show_view(page, "maint")
         assert wait_held(page, held), "Maintenance reads the restart"
@@ -250,16 +250,17 @@ def test_sign_in_offers_the_key_after_a_server_without_a_store(page):
 
 
 def test_store_and_settings_in_effect(page):
-    """System Info, for a holder of settings, at its end: the store with
-    its schema and rows per table, and the settings in effect, the API
-    token listed as set without its value; neither in Maintenance."""
+    """System Info, for a holder of settings, at its end, before the
+    credits, which every role has: the store with its schema and rows per
+    table, and the settings in effect, the API token listed as set without
+    its value; neither in Maintenance."""
     show_view(page, "info")
     assert page.locator("#sys-info #store-info").count() == 1 and page.locator("#sys-info #config-info").count() == 1, \
         "both in System Info"
     assert page.locator("#sys-maint #store-info, #sys-maint #config-info").count() == 0, "not in Maintenance"
     assert page.locator("#system #sys-info").count() == 0, "nor System Info in System settings"
-    last = page.evaluate("[...document.querySelectorAll('#sys-info-body > *')].slice(-2).map((e) => e.id)")
-    assert last == ["store-info", "config-info"], f"at the end of System Info ({last})"
+    last = page.evaluate("[...document.querySelectorAll('#sys-info-body > *')].slice(-3).map((e) => e.id)")
+    assert last == ["store-info", "config-info", "credits-info"], f"at the end of System Info, before the credits ({last})"
     assert wait_until(page, "document.getElementById('store-info-sum').textContent.includes('massimo.db')", 5), \
         "the store's file in the head of its part"
     page.locator("#store-info summary").click()

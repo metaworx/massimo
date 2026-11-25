@@ -716,6 +716,9 @@ def info(page):
     show_view(page, "info")
     page.locator("#store-info-sum").click()
     page.locator("#config-info-sum").click()
+    page.locator("#credits-info > summary").click()
+    page.locator("#credits-info .credit[data-name='preact'] > summary").click()
+    page.locator("#credits-info .credit[data-name='preact'] pre").wait_for()
     settle(page, 500)
 
 
@@ -984,7 +987,7 @@ REGIONS = (
         View("Maintenance", maint),
         View("the restart asking, a delay typed for the reboot", maint_question),
     ), sources=("the page shown again: maint", "the stream's events: resync change reboot reboot_cancelled settings_read")),
-    Region("system-info", ("#sys-info-body",), (View("System info, its folds open", info),), sources=("the page shown again: info", "the stream's events: resync settings_read change.cube")),
+    Region("system-info", ("#sys-info-body",), (View("System info, its folds open, a licence among them", info),), sources=("the page shown again: info", "the stream's events: resync settings_read change.cube")),
     # the settings applied again, as when the user's arrive from the server at a sign-in, are one of SOURCES
     Region("my-settings", ("#prefs-rows", "#prefs-sec > p"), (View("My settings", personal("prefs")),)),
     Region("appearance", ("#prefs-sec .appearance",), (

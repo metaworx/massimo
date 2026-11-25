@@ -203,8 +203,9 @@ func runServe(args []string) error {
 
 	// SIGINT from a terminal, SIGTERM from systemd, launchd and kill, and
 	// the Windows service manager's stop: each stops the server, which
-	// writes the log's pending events, before the store is closed; so does
-	// a SIGHUP that -sighup makes a stop (sighup.go).
+	// takes the backups of the changes pending and writes the log's
+	// pending events, before the store is closed; so does a SIGHUP that
+	// -sighup makes a stop (sighup.go).
 	stopOn := []os.Signal{os.Interrupt, syscall.SIGTERM}
 	if hup == sighupStop {
 		stopOn = append(stopOn, syscall.SIGHUP)
@@ -243,7 +244,7 @@ func runServe(args []string) error {
 		}
 	}
 
-	cfg := serve.Config{Listen: *listen, Addr: *addr, DataDir: dataDir(), Version: versionString(), SettingsFile: env.File(), Serial: selectedSN, SerialGiven: snExplicit,
+	cfg := serve.Config{Listen: *listen, Addr: *addr, DataDir: dataDir(), Version: versionString(), SettingsFile: env.File(), SettingsNotes: noteTexts(startNotes), Serial: selectedSN, SerialGiven: snExplicit,
 		Proxies: proxies, ProxySerial: *proxySerial, ShowHidden: showAll || showHidden, Token: *token, DiscoveryTargets: discoverTargets, DiscoveryListen: *discoverListen,
 		TLS: tlsCfg, HSTSDays: hsts, TrustedProxies: trusted, Update: upd, Reboot: reboot, Install: installKind(pkg, packaged, currentProcess()),
 		Restart: server.RestartOptions{By: restartFor, Blocked: restartBlocked, Restart: rs.restart}, LogAttrs: []any{"sighup", hup}, Logger: root,
@@ -270,8 +271,8 @@ func runServe(args []string) error {
 	// The settings file while the server runs (reload.go): looked at every
 	// few seconds, and read again on SIGHUP where that is a reload, which
 	// also checkpoints the store.
-	reloader := newSettingsReloader(env.File(), logger, srv, startSettings, fixed)
-	go watchSettings(ctx, env.File(), settingsWatchEvery, func() { reloader.reload(ctx, "the settings file changed") })
+	reloader := newSettingsReloader(env.File(), logger, srv, startSettings, fixed, cfg.SettingsNotes)
+	go watchSettings(ctx, env.File(), startStamp, settingsWatchEvery, func() { reloader.reload(ctx, "the settings file changed") })
 	// POST /api/v1/reload: what SIGHUP does, from System settings →
 	// Maintenance; the file counts as read at the start.
 	srv.SetReloader(env.File(), reloader.apiReload(func(rctx context.Context) {

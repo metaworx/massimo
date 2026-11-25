@@ -14,7 +14,7 @@ import json
 from datetime import datetime, timedelta, timezone
 
 from conftest import TOKEN, URL
-from helpers import focus_in_turn, frames, hold, mark, owner_page, reads_of, replaced, show_view, sign_out, wait_held, wait_until
+from helpers import OPERATOR_PASSWORD, focus_in_turn, frames, hold, mark, owner_page, reads_of, replaced, show_view, sign_out, wait_held, wait_until
 from test_login import sign_in
 from test_unsaved import expire
 
@@ -152,7 +152,7 @@ def forgotten_after(new_context, guard, watch, leave):
     try:
         # the sign-in by the dialog, the rooms' load held: sign_in waits for the tiles
         page.locator("#login-user").fill("operator")
-        page.locator("#login-password").fill("op-pass")
+        page.locator("#login-password").fill(OPERATOR_PASSWORD)
         page.locator("#login-form button[type=submit]").click()
         assert wait_until(page, "state.me && state.me.user && state.me.user.name === 'operator'", 10), "another user"
         assert wait_held(page, held), "the next user's rooms asked for, held"

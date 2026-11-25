@@ -195,10 +195,16 @@ func (in *installer) setSettings(env string, chown bool, vars [][2]string) error
 	return nil
 }
 
-// setEnvLines sets KEY=VALUE lines in a settings file, replacing the
-// line of a variable that is there (an "export " prefix too) and
-// appending the others, removes the lines of the variables in drop, and
-// writes the file atomically with its mode.
+// utf8BOM is the UTF-8 byte order mark, which Windows' editors and
+// PowerShell write at the start of a file, and serve skips there.
+const utf8BOM = "\xEF\xBB\xBF"
+
+// setEnvLines sets KEY=VALUE lines in a settings file, replacing every
+// line of a variable that is there (an "export " prefix too), so the
+// first, which serve takes, and appending the others, removes the lines
+// of the variables in drop, and writes the file atomically with its
+// mode. A UTF-8 byte order mark at the file's start is skipped, as serve
+// skips it, so that the first line's name is matched, and kept.
 func setEnvLines(path string, vars [][2]string, drop []string) error {
 	mode := os.FileMode(0o600)
 	b, err := os.ReadFile(path)
@@ -208,8 +214,9 @@ func setEnvLines(path string, vars [][2]string, drop []string) error {
 	if fi, err := os.Stat(path); err == nil {
 		mode = fi.Mode().Perm()
 	}
-	lines := strings.Split(strings.TrimRight(string(b), "\n"), "\n")
-	if len(b) == 0 {
+	text, bom := strings.CutPrefix(string(b), utf8BOM)
+	lines := strings.Split(strings.TrimRight(text, "\n"), "\n")
+	if text == "" {
 		lines = nil
 	}
 	if len(drop) > 0 {
@@ -236,10 +243,14 @@ func setEnvLines(path string, vars [][2]string, drop []string) error {
 			lines = append(lines, v[0]+"="+v[1])
 		}
 	}
-	return writeAtomic(path, []byte(strings.Join(lines, "\n")+"\n"), mode)
+	text = strings.Join(lines, "\n") + "\n"
+	if bom {
+		text = utf8BOM + text
+	}
+	return writeAtomic(path, []byte(text), mode)
 }
 
-// tlsOn says whether settings read with readEnv make serve serve TLS.
+// tlsOn says whether settings read with readSettings make serve serve TLS.
 func tlsOn(vars map[string]string) bool {
 	switch vars[tlsVar] {
 	case "files", "self-signed", "acme":
@@ -251,15 +262,14 @@ func tlsOn(vars map[string]string) bool {
 }
 
 // settingsVars reads the settings file env (a path under Root), or the
-// one being copied in a dry run; nothing when there is neither.
+// one being copied in a dry run (checkedFile); nothing when there is
+// neither.
 func (in *installer) settingsVars(env string) map[string]string {
-	if _, err := os.Stat(env); err != nil {
-		env = in.Settings
-	}
+	env = in.checkedFile(env)
 	if env == "" {
 		return nil
 	}
-	vars, err := readEnv(env)
+	vars, err := in.readSettings(env)
 	if err != nil {
 		return nil
 	}

@@ -169,6 +169,8 @@ The process answers the service manager itself (cmd/massimo/service_windows.go):
 on `Stop` or `Shutdown` the handler reports stop pending with a wait hint of 20 s,
 ends `serve`'s context and waits for `serve` to return,
 which shuts the HTTP server down,
+takes the automatic backup of each Cube with a change pending
+(docs/store.md section 9 (e)),
 writes the log's pending events and closes the store,
 then returns, and the goroutine calls `os.Exit(0)`.
 A `serve` that has not returned after 20 s is ended all the same.

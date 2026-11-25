@@ -15,10 +15,12 @@ import (
 	"encoding/json"
 	"errors"
 	"net/http"
+	"os"
 	"strconv"
 	"strings"
 	"time"
 
+	"go.metaworx.ch/massimo/internal/password"
 	"go.metaworx.ch/massimo/internal/store"
 )
 
@@ -112,10 +114,52 @@ func userFail(err error) error {
 		return fail(http.StatusBadRequest, "%s", text)
 	case errors.Is(err, store.ErrNoOpaque):
 		return fail(http.StatusServiceUnavailable, "%s", text)
-	case errors.Is(err, store.ErrImmutable):
+	case errors.Is(err, store.ErrImmutable), errors.Is(err, store.ErrIntegrationUser):
 		return fail(http.StatusForbidden, "%s", text)
 	}
 	return fail(http.StatusInternalServerError, "%s", text)
+}
+
+// noWayIn refuses a key, a password or a provider's identity for an
+// integration's user: it acts through its integration alone, whose own
+// key is the one way in, so that nobody, on an open server anybody on
+// the local network, gives such a user a sign-in of its own.
+func noWayIn(u store.User) error {
+	if u.IntegrationID != 0 {
+		return fail(http.StatusForbidden, "the user %s is an integration's: it acts through its integration alone, with no key, password or sign-in of its own", u.Name)
+	}
+	return nil
+}
+
+// newPassword holds a plain password that a request sets to the rule of
+// internal/password, with the user's names and the server's as its
+// context: 400 with the rule's words where it fails, which name no word
+// of the context. A record registered by OPAQUE is never seen and so
+// never checked, and the callers leave out an empty password, which
+// means none (AP PasswordRules, D11-A, D50-A).
+func (s *Server) newPassword(r *http.Request, pw string, names ...string) error {
+	if err := password.Check(pw, append(names[:len(names):len(names)], s.serverNames(r)...)...); err != nil {
+		return fail(http.StatusBadRequest, "%v", err)
+	}
+	return nil
+}
+
+// hostName is the host's name, the server's name by default; the tests
+// give the server a fixed one, so that none reads the machine's.
+var hostName = os.Hostname
+
+// serverNames are the server's names a new password must not contain:
+// Options.ServerName, or the first label of the host's name, and the
+// first label of the request's Host. A Host a reverse proxy or a client
+// sets otherwise only adds a word or takes one away from the request's
+// own check of a new password: it lets nobody in.
+func (s *Server) serverNames(r *http.Request) []string {
+	name := s.opts.ServerName
+	if name == "" {
+		h, _ := hostName()
+		name = password.HostWord(h)
+	}
+	return []string{name, password.HostWord(r.Host)}
 }
 
 // busyRetry is the Retry-After, in seconds, of a password check or
@@ -379,6 +423,11 @@ func (s *Server) postUser(w http.ResponseWriter, r *http.Request) error {
 		}
 	}
 	auditTarget(r, "user:"+store.NormalName(u.Name))
+	if password != "" {
+		if err := s.newPassword(r, password, u.Name, u.DisplayName); err != nil {
+			return err
+		}
+	}
 	var created store.User
 	var rec []byte
 	if req.Record != nil {
@@ -499,8 +548,24 @@ func (s *Server) putUser(w http.ResponseWriter, r *http.Request) error {
 		return a.assignFail(*req.Role)
 	}
 	setsPassword := req.Password != nil || req.Record != nil
+	if req.Password != nil && *req.Password != "" || req.Record != nil {
+		// Before any other change of the request is written.
+		if err := noWayIn(u); err != nil {
+			return err
+		}
+	}
 	if setsPassword && !a.self && !a.maySetPassword(u) {
 		return a.rankFail(u.Role, "passwords")
+	}
+	if req.Password != nil && *req.Password != "" {
+		// Before the current password is checked or a proof used up.
+		names := []string{u.Name, u.DisplayName}
+		if req.DisplayName != nil {
+			names = append(names, *req.DisplayName)
+		}
+		if err := s.newPassword(r, *req.Password, names...); err != nil {
+			return err
+		}
 	}
 	if setsPassword && a.self && !a.all && u.HasPassword {
 		// One's own password: the current one proves the caller is the
@@ -593,7 +658,9 @@ func tokenSubject(tok store.Token, u store.User) map[string]any {
 }
 
 // deleteUser handles DELETE /api/v1/users/{name}: the user is removed
-// and its tokens revoked; the last enabled owner stays.
+// and its tokens revoked; the last enabled owner stays, and so does the
+// user that holds the settings file's key, 409 (settingsKey). Where the
+// removal of a regular user turns the server open, the log warns.
 func (s *Server) deleteUser(w http.ResponseWriter, r *http.Request) error {
 	st, err := s.userStore()
 	if err != nil {
@@ -603,21 +670,37 @@ func (s *Server) deleteUser(w http.ResponseWriter, r *http.Request) error {
 	if err != nil {
 		return err
 	}
+	if file, ok, err := s.settingsKey(r.Context()); err != nil {
+		return userFail(err)
+	} else if ok && file.UserID == u.ID {
+		return fail(http.StatusConflict, settingsKeyHeld, u.Name)
+	}
 	var by int64
-	if p := principalOf(r); p.named() {
+	p := principalOf(r)
+	if p.named() {
 		by = p.user.ID
 	}
+	wasUsers := s.authMode(r.Context()) == modeUsers
 	if err := st.DeleteUser(r.Context(), u.Name, by); err != nil {
 		return userFail(err)
 	}
 	s.log.Info("user removed", "user", s.logUserName(r.Context(), u), "remote", s.clientIP(r))
+	if wasUsers && u.IntegrationID == 0 && s.authMode(r.Context()) == modeOpen {
+		// The last regular user gone, an owner with an end date removing
+		// itself among the ways (AP LooseEnds, D1): the server is open.
+		who := "nobody"
+		if p.named() {
+			who = s.logUserName(r.Context(), p.user)
+		}
+		s.log.Warn("the server is open: its last regular user was removed; create the owner", "user", s.logUserName(r.Context(), u), "by", who, "remote", s.clientIP(r))
+	}
 	auditSubject(r, userSubject(u)) // as the user was
 	writeJSON(w, http.StatusOK, map[string]any{"ok": true, "name": u.Name})
 	return nil
 }
 
 // listTokens handles GET /api/v1/users/{name}/tokens: the live sessions
-// and keys of the user.
+// and keys of the user, the settings file's key marked from_settings.
 func (s *Server) listTokens(w http.ResponseWriter, r *http.Request) error {
 	st, err := s.userStore()
 	if err != nil {
@@ -631,9 +714,15 @@ func (s *Server) listTokens(w http.ResponseWriter, r *http.Request) error {
 	if err != nil {
 		return userFail(err)
 	}
+	file, held, err := s.settingsKey(r.Context())
+	if err != nil {
+		return userFail(err)
+	}
 	out := []tokenView{}
 	for _, t := range tokens {
-		out = append(out, viewToken(t))
+		v := viewToken(t)
+		v.FromSettings = held && t.ID == file.ID
+		out = append(out, v)
 	}
 	writeJSON(w, http.StatusOK, out)
 	return nil
@@ -660,6 +749,9 @@ func (s *Server) postToken(w http.ResponseWriter, r *http.Request) error {
 	if req.Label == "" || len(req.Label) > maxLabel {
 		return fail(http.StatusBadRequest, "label: 1 to %d bytes", maxLabel)
 	}
+	if err := noWayIn(u); err != nil {
+		return err
+	}
 	tok, secret, err := st.AddToken(r.Context(), u.ID, store.TokenAPI, req.Label, time.Time{})
 	if err != nil {
 		return userFail(err)
@@ -673,7 +765,8 @@ func (s *Server) postToken(w http.ResponseWriter, r *http.Request) error {
 }
 
 // deleteToken handles DELETE /api/v1/users/{name}/tokens/{id}: the
-// session or key is revoked.
+// session or key is revoked. The settings file's key is 409, as
+// DELETE /api/v1/me/token answers it (settingsKey).
 func (s *Server) deleteToken(w http.ResponseWriter, r *http.Request) error {
 	st, err := s.userStore()
 	if err != nil {
@@ -693,6 +786,13 @@ func (s *Server) deleteToken(w http.ResponseWriter, r *http.Request) error {
 	}
 	if !ok || tok.UserID != u.ID || !tok.DeletedAt.IsZero() {
 		return fail(http.StatusNotFound, "user %s has no token %d", u.Name, id)
+	}
+	file, held, err := s.settingsKey(r.Context())
+	if err != nil {
+		return userFail(err)
+	}
+	if held && id == file.ID {
+		return fail(http.StatusConflict, settingsKeyKept)
 	}
 	if err := st.RevokeToken(r.Context(), id); err != nil {
 		return userFail(err)

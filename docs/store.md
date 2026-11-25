@@ -540,6 +540,14 @@ CREATE TABLE backup_data (                      -- migration 0024 (D5-B), backup
     data BLOB    NOT NULL                       -- the backup file, gzip; a tombstone has no row
 );
 
+CREATE TABLE backup_pending (                   -- migration 0026: the windows of a change's backup
+    cube_id      INTEGER PRIMARY KEY REFERENCES cubes (id) ON DELETE CASCADE,
+    ref          TEXT    NOT NULL,  -- backup.ConfigHash of the reference they count against
+    hash         TEXT    NOT NULL,  -- backup.ConfigHash at the last look
+    first_change TEXT    NOT NULL,  -- backups.auto_max counts from it
+    last_change  TEXT    NOT NULL   -- backups.auto_min counts from it
+);
+
 CREATE TABLE auth_failures (
     key          TEXT    PRIMARY KEY,            -- 'addr:<ip>' or 'user:<name>'
     window_start TEXT    NOT NULL,
@@ -771,6 +779,16 @@ Notes on the tables:
   The prune deletes the rows, so the id is `AUTOINCREMENT` (migration 0013):
   SQLite never gives a deleted backup's id to a later one,
   and an id the API named before a prune names no other backup.
+- `backup_pending` (migration 0026) is the server's watch of a Cube whose
+  configuration differs from its reference, kept so that the automatic backup's
+  windows hold across a start (section 9 (e)):
+  a row while the Cube is dirty, none while it is clean.
+  It is a table of its own, not columns of `cubes`,
+  so that a Cube row's `version` and `updated_at` keep meaning a change of its
+  configuration in the store.
+  A row has no `uuid`, `version`, `deleted_at` or `origin`:
+  the watch is this server's, is not replicated,
+  and is deleted rather than marked.
 - `auth_failures` is the `authLimiter` of #7 keyed by address,
   plus a key per user name so that password guessing from many addresses behind
   a reverse proxy locks the name rather than the proxy.
@@ -1009,6 +1027,17 @@ which a binary since 0025 refuses, a session counting only while its key does.
 The column has no foreign key, so that its down part,
 `0025_token_parent.down.sql`, can drop it and the index;
 it loses which key made a session, and only that.
+`0026_backup_pending.sql` adds `backup_pending` (AP BackupWatch v1.0, Block 1),
+additively, keeping `min_reader` 24:
+a dirty Cube's windows of its automatic backup,
+kept across a start (section 9 (e)).
+A binary for 24 or 25 leaves the table alone and keeps its watch in memory,
+as before;
+a row it leaves behind, its backup taken without deleting it,
+names another reference in `ref`, and this binary's next start deletes it.
+Its down part, `0026_backup_pending.down.sql`, drops the table;
+it loses the windows of a pending backup, and only that,
+which the binary of 25 begins again at its first look.
 On a store of 500 000 log rows (149 MB, a tenth with a user) a desktop took
 2.0 s for the raise, its copy `massimo.db.before-24` included, and 2.2 s for the
 down part, its copy included (`TestRaiseTimes` with
@@ -1137,7 +1166,8 @@ The default roles and their sets are seeded at the first start and can be
 changed afterwards by whoever holds the `roles` capability, with one exception:
 `owner` always has every capability and cannot be edited, disabled or deleted,
 and the store refuses to disable, delete, demote or give an end date to the
-last enabled owner user without one.
+last enabled owner user without one,
+an integration's user with the role `owner` not counting.
 The default roles keep their keys (`owner`, `manager`, `operator`, `guest`,
 `viewer`, `integration`), so that the code,
 the documentation and the translations can refer to them;
@@ -1275,8 +1305,17 @@ the roles and their sets are rows (section 5), seeded by the first migration.
 
 ### Bootstrap and compatibility
 
+- A regular user is a user that is not removed and is not an integration's
+  (`users.integration_id IS NULL`), a disabled one included;
+  "users" below means regular users (AP LooseEnds, D1).
+  A server whose only users are an integration's is open,
+  as one without users, and warns so at its start
+  (`the server is open: its only users are an integration's; create the owner`)
+  unless it is kept open on purpose;
+  a version before counted them, so such a server was closed and becomes open
+  at the upgrade (D2).
 - With `MASSIMO_API_TOKEN` set and no user in the store (the first start after
-  the update),
+  the update, or a store with an integration's users alone),
   the server creates the user `owner` with the role `owner` and no password,
   and a token of kind `api` with the hash of `MASSIMO_API_TOKEN`,
   label `MASSIMO_API_TOKEN`.
@@ -1290,6 +1329,18 @@ the roles and their sets are rows (section 5), seeded by the first migration.
   and one that was removed from the file is revoked.
   The file stays the way to recover an owner who lost the password:
   put a token into the file, log in with it, set a password.
+  The API does not revoke the file's key,
+  nor remove the user that holds it (`409`; docs/api-v1.md,
+  "Users: /api/v1/users and /api/v1/users/{name}"
+  and "Tokens: /api/v1/users/{name}/tokens"):
+  a revoked row keeps its hash, unique, so the next start could not add it back.
+  The file's key that an older start gave to an integration's user with the
+  role `owner`, live or revoked since (a revoke of the integration revokes it),
+  moves, at the start, to the first enabled regular owner,
+  or to the user `owner` made where there is none, in one transaction with it,
+  live again and its sessions ended, and the log says from whom
+  (`the settings file's key moved from an integration's user`;
+  AP LooseEnds, D1): such a user holds no key of its own.
   Whoever can edit the file is root or the service user,
   who can edit the database anyway.
 - Without `MASSIMO_API_TOKEN` and without users,
@@ -1308,8 +1359,9 @@ the roles and their sets are rows (section 5), seeded by the first migration.
   (AP FirstOwner, D11), and nothing changes about who is let in.
   It counts only while there are no users:
   every transaction of the store that makes a user removes it,
-  the API's first owner, `massimo user add`, the owner of `MASSIMO_API_TOKEN`,
-  a provider's user and an integration's among them,
+  the API's first owner, `massimo user add`, the owner of `MASSIMO_API_TOKEN`
+  and a provider's user among them;
+  an integration approved and its users leave it as it is,
   and the server removes it at its start and at each reload of the settings
   file where it finds users beside it,
   which a process of an older version can leave;
@@ -1455,6 +1507,9 @@ who cannot sign in once it is off until a password is set for them.
 `user token <name> -label <text>` (prints a new API key once),
 `user tokens <name>` (the sessions and keys with their ids),
 `user revoke <name> [<token id>]`.
+A new password has 8 to 64 characters and contains no name of the user's or the box's,
+nor `massimo` or `maxcube` (`internal/password`);
+one set before stays valid, but a rename asks for one again.
 These are the only commands that open the store;
 they take `-data` like `serve` and run as the service user,
 which reads the service's settings and store from any directory
@@ -1596,6 +1651,16 @@ before: a name the owner gave stays.
 The names of an integration's users follow
 `^<uuid>:([a-z0-9]{1,64}|system)?$`; only the store makes them, and the
 rule of every other name has no colon.
+An integration's user acts through its integration alone:
+the store gives it no key but the integration's own (`CollectIntegrationKey`),
+no session, no password of either version and no identity at a provider
+(`ErrIntegrationUser`), whatever its role,
+so that no route can give it a way in of its own;
+what it held before stays, a key acting while its integration is active and
+within the role `integration` and the integration's maximum,
+a password or an identity signing in nowhere.
+They are not regular users: they neither close an open server nor block its
+first owner ("Bootstrap and compatibility").
 A request approved as an earlier integration (`merged_into`) reuses that
 one's row, users and links, as after a key lost or revoked;
 a revoke ends the key and keeps the rest.
@@ -1901,8 +1966,9 @@ Implemented on 2026-11-06 (AP StoreLog v1.0), with its review's fixes (v1.1).
 Implemented on 2026-11-07 (AP StoreBackups v1.0).
 
 - Files: `internal/store/backups.go` (add, list, read,
-  delete as a tombstone without the file, the prune),
-  migrations 0005 (the four reasons) and 0013 (an id never given out twice);
+  delete as a tombstone without the file, the prune, the windows kept),
+  migrations 0005 (the four reasons), 0013 (an id never given out twice)
+  and 0026 (the windows kept across a start);
   `internal/server/backups.go` (the automatic backup) and `backups_api.go` (the
   routes); `backup.ConfigHash` and `cubelan.SnapshotOf` (the comparison);
   `backup.js` with its partials (the Settings panel).
@@ -1920,6 +1986,36 @@ Implemented on 2026-11-07 (AP StoreBackups v1.0).
   or pruned, which `backups.keep_newest` 0 allows.
   A restore takes `before_restore` first and is refused when it cannot,
   and keeps the file of its body as `upload`.
+- The windows across a start (AP BackupWatch v1.0, Block 1, D1-C):
+  a dirty Cube's first and last change are kept in `backup_pending`,
+  with the hash of the configuration and of the reference they count against.
+  The look that finds the Cube dirty, or changed again while dirty,
+  writes them, so at most once a minute;
+  a backup stored, the Cube clean again, and a delete, a prune or a restore that
+  resets the reference delete them, and a clean Cube costs the store no write.
+  The Cube's runtime reads them when it is made,
+  so that the list's `changed` and `due` are right from the first request after a start.
+  The first look then keeps them while the configuration is the one kept,
+  and counts another as a change at that look, the first change kept;
+  a change made while no server ran is so a change at the first look.
+  Windows kept against another reference than the newest backup are left over,
+  by a binary before 0026 that took the backup, and go.
+  Before that, every start began both windows again:
+  a change got its backup at `auto_min` after the last start,
+  not after the change,
+  and starts closer together than `auto_min` never let it come.
+- The backup at a stop: a clean stop (SIGINT, SIGTERM, a SIGHUP that `-sighup`
+  makes a stop, the Windows service manager's stop, the restart from the API,
+  the update's restart of the service) takes the `auto` backup of each connected
+  Cube with a change pending, after a last look, before the Cubes' runtimes end
+  and so before serve closes the store;
+  the Cubes at once, within 5 s in all,
+  inside serve's 10 s for the server's stop.
+  A Cube not connected, under a restore, or whose backup fails, is logged
+  (a failure as a `backup` line with `at: stop`,
+  a warning for what the Cube did not give, an error for what failed here)
+  and keeps its windows for the next start.
+  A Cube without any backup gets its first at the first look after the next start.
 - API: `GET`/`POST …/backups` (the list newest first,
   with `changed` and `due` while one is pending; one by hand with a note),
   `GET …/backups/{id}` (as stored, or `?format=`),
@@ -1929,10 +2025,26 @@ Implemented on 2026-11-07 (AP StoreBackups v1.0).
   `backups.auto_max` (never below `auto_min`), `backups.keep_days_auto`,
   `backups.keep_days_manual`, `backups.keep_newest`.
   A Cube without a row in the store has none of it (503).
+- A Cube no longer served (AP BackupWatch v1.0, Block 3, D4-B, D5-A, D6-A):
+  a row of the store that no runtime serves,
+  taken out of the configuration or only found,
+  keeps its backups, the newest `backups.keep_newest` whatever their age.
+  Its list (without `changed` and `due`), the file, the diff and the delete
+  find it by its row;
+  `POST …/backups` and the restore answer 409,
+  as it takes no backup and no restore.
+  `GET /api/v1/cubes` gives each Cube's count kept, `backups`,
+  and `GET /api/v1/backups/unserved` lists the rows not served that keep backups,
+  with the count and the newest's time,
+  both from one grouped query by serial (`KeptBackups`).
 - UI: Settings → Backup and restore: the download as YAML or JSON,
   a backup by hand, the list with download, the comparison with the one before,
   restore and delete, a restore from a file; a restore shows its plan first,
   then each step as the Cube took it.
+  After the served Cubes,
+  a fold for each Cube that route lists, also one no longer on the network,
+  marked not served: download, comparison and delete, no backup and no restore;
+  one of them goes onto another Cube by that Cube's restore from a file.
 - Tests: the store's round trip,
   the prune by reason and age and the migration's copy;
   no id given out again after a prune or a purged tombstone,
@@ -1942,10 +2054,25 @@ Implemented on 2026-11-07 (AP StoreBackups v1.0).
   the change against the one before after deleting the newest,
   and one at once, with an id of its own,
   after deleting all or pruning the only one;
+  the windows across a start,
+  `auto_min` after the change and `auto_max` after the first,
+  the first request after the start naming both;
+  a change while stopped counted at the first look;
+  the stop's backup, before the store closes (`internal/serve`),
+  of a change pending and of one only the stop's look saw;
+  no write of the windows while a Cube is clean; windows left over dropped;
+  the table's round trip, 0026 read by a binary for 25, and its down part;
   the routes and the settings' check;
   a restore keeping `before_restore` and `upload`, by id, and clean after;
   the diff of a backup against itself and an edited copy;
-  the pytest suite's panel.
+  a found Cube's backups listed, given out in both formats,
+  compared and deleted,
+  409 for its backup and its restore, and the counts by serial;
+  the list of the rows not served,
+  without the served Cube, a row without backups, a tombstone or a removed row,
+  and its capability;
+  the pytest suite's panel,
+  with the fold of a Cube not served that discovery does not hear.
 - Decisions, the owner's of 2026-11-07: the whole panel in this stage (D1);
   backups after a change with a quiet window and a latest (D2,
   D3 folded into it); the five settings (D4); deleting needs `restore` (D5);
@@ -2100,3 +2227,20 @@ On its own it costs a rebuild of `log` at the upgrade,
 and a down part under the store's downgrade rule (section 5, "Migrations"),
 which is why it waits for a rebuild that is needed anyway.
 Migration 0013 did the same for `backups` (section 5, "Migrations").
+
+**`AUTOINCREMENT` for `audit.id`**,
+with the next migration that makes `audit` again anyway,
+should anything come to key on the audit's ids.
+`audit.id` has none either, and nothing keeps the audit's newest row:
+once a prune by `audit.keep_days` has emptied the table,
+the next row is given id 1 again.
+Nothing depends on the ids today:
+`before` on `GET /api/v1/audit` is a time, not an id,
+no foreign key points at them,
+the web UI reads only a command's row,
+by its command (`GET /api/v1/commands/{id}`),
+a backup of the store copies the rows as they are,
+and `massimo store info` only counts them.
+The one reader is the app's instrumented tests
+(`app/android/app/src/androidTest/kotlin/ch/metaworx/massimo/Host.kt`),
+within one test on a fresh server.

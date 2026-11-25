@@ -220,9 +220,12 @@ func (s *Store) checkRecord(record []byte, ksf string) error {
 // SetOpaqueRecord sets a user's password of version 2: the record and
 // its key stretching written, the hash of version 1 emptied. Its
 // sessions are the caller's to revoke (RevokeSessions), as with
-// SetPassword.
+// SetPassword. An integration's user gets none (ErrIntegrationUser).
 func (s *Store) SetOpaqueRecord(ctx context.Context, name string, record []byte, ksf string, by int64) error {
 	if err := s.writable(); err != nil {
+		return err
+	}
+	if err := noWayIn(ctx, s.db, "name = ?", NormalName(name)); err != nil {
 		return err
 	}
 	if err := s.checkRecord(record, ksf); err != nil {

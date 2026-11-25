@@ -644,8 +644,9 @@ function pendingOf(ev: ServerEvent): void {
  * interval set (change); a reboot asked for, begun, failed or taken back
  * (reboot, reboot_cancelled); a settings_read event at info says itself
  * what waits for the next start, and that the start refuses nothing; one
- * at warn or above, a read that found the next start refuses something,
- * reads the restart's row, which names what and of which setting. A restart or a
+ * at warn or above, a read that found the next start refuses something
+ * or a note on the file, reads the restart's row, which names what the
+ * next start refuses and of which setting, never a note. A restart or a
  * reboot this page follows reads by its own pace (loadRestart and
  * loadReboot read nothing meanwhile), and a reboot's wait keeps its
  * timer.

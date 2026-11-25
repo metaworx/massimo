@@ -24,10 +24,13 @@ the first one on a machine also fetches the test libraries.
   the image is x86_64, which the emulator runs with hardware acceleration
   alone (`-accel on`), never in software.
   WSL 2 has `/dev/kvm` through Windows 11's nested virtualisation.
-  Where it is `root:kvm` and mode `660`, the user joins the group `kvm`,
+  Where it is `root:kvm` and mode `660`, the user joins the group `kvm`
+  (`sudo usermod -aG kvm "$USER"`),
   then logs in again:
   the machine owner's step, which the target does not take;
   it says that KVM is not accessible, and stops.
+  Until that new login, `sg kvm -c 'make app-emulator-test'`
+  runs the target with the group, from a shell that predates it.
   CI's runners give the runner's user the device with a udev rule
   (below, "In CI").
 - **The SDK** at `ANDROID_HOME`, as `app/README.md` sets it up
@@ -70,20 +73,28 @@ the first one on a machine also fetches the test libraries.
    counted from the builds' end, so that a slow first build takes none of it):
    its animations and autofill off, the screen kept on,
    the PIN `1111` set (`adb shell locksettings set-pin`),
-   which a fingerprint needs;
+   which a fingerprint needs,
+   the lock screen taken away before it and, with the PIN, after it;
    `adb reverse` for both servers' ports,
    the owner's key written to a file on the emulator,
    the helper started (below).
-5. The finger enrolled by `EnrollTest` alone (below, "The fingerprint");
+5. A guard started that keeps the lock screen away while Gradle runs,
+   looking every five seconds, the PIN typed where it shows:
+   on a busy host the boot can show it again minutes after the PIN was set,
+   and the enrollment then runs under it, finding nothing of Settings;
+   `keyguard.log` says each change it saw.
+   It reads the window manager's policy and the activities' keyguard state alone,
+   since `dumpsys window`'s whole dump opens with the last ANR's copy of the state.
+6. The finger enrolled by `EnrollTest` alone (below, "The fingerprint");
    where that fails, the run stops there.
-6. `:app:connectedFossDebugAndroidTest` on that emulator alone
+7. `:app:connectedFossDebugAndroidTest` on that emulator alone
    (`ANDROID_SERIAL`), given the servers' addresses and fingerprints,
    the user, the PIN and the name of the key's file
    as the instrumentation's arguments;
    `APP_EMU_CLASS` runs one class, or one `class#method`.
    After it, and after the enrollment's run,
    what the run ran (below, "The results").
-7. Everything stopped, the emulator by its console,
+8. Everything stopped, the emulator by its console,
    and what the run leaves in `results/`,
    also where a signal (`INT`, `TERM`) stops it:
    Gradle runs in the background and is waited for,
@@ -193,7 +204,7 @@ or Android 8 to 10, whose prompt takes no PIN.
 `emulator.log` with the kernel's messages,
 the device's `logcat.txt` from the boot on (the suite's steps under
 `MassimoEmu`, and for a failed test the window's hierarchy and the page's
-text), `fingers.log`, each server's and fake Cube's log,
+text), `fingers.log`, `keyguard.log`, each server's and fake Cube's log,
 `shots/` with the screen of each failed test,
 Gradle's `report/` and `test-results/` (its JUnit results, `TEST-*.xml`),
 and `enroll/`, the enrollment's report and results where it passed.

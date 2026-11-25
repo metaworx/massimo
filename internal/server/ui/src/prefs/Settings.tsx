@@ -43,7 +43,7 @@ export function Settings() {
     const v = validSetting("poll", typed) || 10;
     poll.set(String(v));
     setSetting("poll", v);
-    startPolling();
+    restartPolling();
   };
   return (
     <>

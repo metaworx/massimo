@@ -244,12 +244,20 @@ def users_section(page):
     frames(page)
 
 
+SWITCH = {"en": "Keep this server open without an owner", "de": "Diesen Server ohne Eigentümer offen halten"}
+SWITCH_LABEL = "document.getElementById('keep-open-switch').closest('label').querySelector('.switch-label').textContent"
+
+
 def test_the_switch_undoes_keep_open(new_context, case, watch, guard):
     """System settings → Users on a server kept open shows the switch,
     on; turned off it sends auth.keep_open false once, then shows off and
     no longer to be turned, with the line that the page asks again at its
     next load, the focus on that line; no card opens. Shown again, the
-    section has no such row. Fails on the page before: no switch."""
+    section has no such row. The switch's label holds on and off: "Keep
+    this server open without an owner" (AP LooseEnds, Block 2), which
+    failed on the page before, its label "This server is kept open without
+    an owner" while off too (the walk-through, finding 7). Fails on the
+    page before that: no switch."""
     stage = {"me": KEPT}
     page = start_page(new_context, guard, watch, lambda: stage["me"])
     page.wait_for_selector(".room", timeout=10000)
@@ -262,11 +270,13 @@ def test_the_switch_undoes_keep_open(new_context, case, watch, guard):
     users_section(page)
     switch = page.locator("#keep-open-switch")
     assert switch.is_checked(), "on while the server is kept open"
+    assert page.evaluate(SWITCH_LABEL) == SWITCH[case.lang], f"its label, on: {page.evaluate(SWITCH_LABEL)!r}"
     assert page.locator("#keep-open-switch-hint").inner_text() == page.evaluate("t('users.keptOpenHint')"), "what it means"
     switch.focus()
     page.keyboard.press("Space")
     assert wait_until(page, "document.getElementById('keep-open-switch').disabled", 5), "off and no longer to be turned"
     assert not switch.is_checked(), "off"
+    assert page.evaluate(SWITCH_LABEL) == SWITCH[case.lang], f"its label, off: {page.evaluate(SWITCH_LABEL)!r}"
     assert page.locator("#keep-open-switch-hint").inner_text() == page.evaluate("t('users.keptOpenOff')"), "the next load asks"
     assert page.evaluate("document.activeElement.id") == "keep-open-switch-hint", "the focus on the line"
     assert bodies == [{"auth.keep_open": False}], f"turned off once: {bodies}"

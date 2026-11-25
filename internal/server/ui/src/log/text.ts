@@ -306,6 +306,8 @@ function logSummaryText(kind: string, s: Loose, serial: string): string {
     case "server_stopping":
       return t("log.sum.stopping", { why: logWord("log.why.", s.why) });
     case "settings_read": {
+      // the start's notes on the file, after its server_started (AP StartConfiguration, D33-A)
+      if (s.why === "start") return t("log.sum.readStart");
       const why = logWord("log.readWhy.", ({ "the settings file changed": "file", SIGHUP: "sighup", "the API": "api" } as Record<string, string>)[s.why] || s.why);
       const changed = (s.changed || []).join(", ");
       const pending = (s.at_next_start || []).join(", ");

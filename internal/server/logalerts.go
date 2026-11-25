@@ -93,8 +93,9 @@ var settleRules = map[string]settleRule{
 	// not rotated, a failed sign-in, an address locked out, a restart, a
 	// reboot or an update not started; a settings file read again whose
 	// value the next start refuses, or that does not parse or is there
-	// but cannot be read: the file read again without one, a change or
-	// none, or a start, which took the values
+	// but cannot be read, or with a note on its lines: the file read
+	// again without one, a change or none, or a start, which took the
+	// values, and writes its own notes after it (systemlog.go)
 	"update_result": {by: []string{"update_result"}},
 	"log_rotated":   {by: []string{"log_rotated"}},
 	"settings_read": {by: []string{"settings_read", "server_started"}},

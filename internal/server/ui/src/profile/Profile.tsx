@@ -84,7 +84,10 @@ function NameForm({ u }: { u: User }) {
  * and with a line saying what a password adds; the new one twice. What is
  * typed is this part's own and goes with it, kept by no key; the form's
  * marks know only that a new password is typed (UnsavedMarks D28), the
- * current one alone, as a password manager fills it in, being none.
+ * current one alone, as a password manager fills it in, being none. The
+ * new one is held to the rule, which its line says while it is typed; a
+ * Save it refuses sends nothing, says so in that line alone and puts the
+ * focus in it (AP PasswordRules, Block 2).
  */
 function PasswordForm({ who }: { who: User }) {
   useLang();
@@ -94,6 +97,8 @@ function PasswordForm({ who }: { who: User }) {
   const [current, setCurrent] = useState("");
   const [password, setPassword] = useState("");
   const [again, setAgain] = useState("");
+  const newRef = useRef<HTMLInputElement>(null);
+  const [refused, setRefused] = useState(0);
   // the new password's two fields alone: a current one a password manager fills in is no change
   const changed = password !== "" || again !== "";
   const forget = { take: () => { setCurrent(""); setPassword(""); setAgain(""); } };
@@ -106,8 +111,17 @@ function PasswordForm({ who }: { who: User }) {
   const submit = (ev: Event) => {
     ev.preventDefault();
     if (form.look === "saving") return;
-    const problem = newPasswordProblem(password, again);
-    if (problem) return passwordMsg(problem, false);
+    const problem = newPasswordProblem(password, again, [who.name, who.display_name || ""]);
+    if (problem) {
+      // the rule's refusal is said by the new password's line alone, the focus in it, in the submit's handler; the form's
+      // line, of an earlier attempt, cleared, so that nothing contradicts the line once the password can be set
+      if (problem.rule) {
+        said.password = null;
+        setRefused((r) => r + 1);
+        newRef.current?.focus();
+      } else passwordMsg(problem.text, false);
+      return;
+    }
     form.save(() => changePassword(who, current, password));
   };
   return (
@@ -117,7 +131,8 @@ function PasswordForm({ who }: { who: User }) {
         <PasswordField label={t("users.currentPassword")} id="me-current" name="current_password" autocomplete="current-password"
           cls={"me-current-field" + hid(!hasPw)} reset={profile.passwordOpen} value={current} set={typed(setCurrent)} />
         <NewPassword ids={["me-new", "me-again"]} names={["password", "again"]} label={t("users.password")} reset={profile.passwordOpen}
-          value={password} set={typed(setPassword)} again={again} setAgain={typed(setAgain)} />
+          value={password} set={typed(setPassword)} again={again} setAgain={typed(setAgain)} inputRef={newRef} context={() => [who.name, who.display_name || ""]}
+          refused={refused} />
         <FormFooter submit={t("action.save")} look={form.look} reset={form.reset} after={help.button} />
         <ResultLine id="me-password-msg" cls="small cubes-msg" role="status" res={said.password} />
         {help.text}
@@ -176,29 +191,38 @@ function LinkButtons({ u, list, help }: { u: User; list: { provider: string; bou
   );
 }
 
-/** Mine is My profile of the user signed in, who: the display name once read, the password, the sessions and keys with the one marked, the linked accounts. */
+/**
+ * Mine is My profile of the user signed in, who: the display name once
+ * read, the password, the sessions and keys with the one marked, the
+ * linked accounts. An integration's user, in with a key it holds from
+ * before it could have none, gets a line in place of the password, its
+ * keys listed to be revoked, no new one and no Link (AP LooseEnds, D1).
+ */
 function Mine({ who }: { who: User }) {
   useLang();
   const u = profile.user && profile.user.name === who.name ? profile.user : null;
   const c = profile.confirm;
   const linked = useHelp("profileLinked", t("profile.linked"));
+  const ofIntegration = !!who.integration;
   return (
     <>
       <div id="profile-name">{u && <NameForm u={u} />}</div>
-      <PasswordForm who={who} />
+      {ofIntegration ? <p id="me-no-sign-in" class="muted small user-no-sign-in">{t("users.integrationNoSignIn")}</p> : <PasswordForm who={who} />}
       <div id="profile-tokens">
         {u && <Tokens u={u} off={false} open reads={profile.reads} run={run} say={profileMsg} labelId={"profile-key-label-" + u.name} help="profileTokens"
-          marked={profile.marked} drawn={keysDrawn} />}
+          marked={profile.marked} drawn={keysDrawn} listOnly={ofIntegration} />}
       </div>
       <div id="profile-identities">
-        {u && c && <LinkConfirm key={c.code} u={u} c={c} />}
+        {u && c && !ofIntegration && <LinkConfirm key={c.code} u={u} c={c} />}
         {u && (
           <Identities u={u} off={false} open reads={profile.reads} providers={profile.providers} run={run} say={profileMsg} title={t("profile.linked")}
-            none={t("profile.linkedNone")} cls="profile-identities" quiet offer={!appBridge() && profile.providers.length > 0} after={(list) => (
-              <>
-                <LinkButtons u={u} list={list} help={linked.button} />
-                {linked.text}
-              </>
+            none={t("profile.linkedNone")} cls="profile-identities" quiet offer={!ofIntegration && !appBridge() && profile.providers.length > 0} after={(list) => (
+              ofIntegration ? null : (
+                <>
+                  <LinkButtons u={u} list={list} help={linked.button} />
+                  {linked.text}
+                </>
+              )
             )} />
         )}
       </div>

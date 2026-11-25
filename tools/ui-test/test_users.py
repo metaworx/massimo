@@ -4,10 +4,13 @@
 owner's): the operator run.sh creates is listed with the owner, the
 roles with the six default ones."""
 
+import json
+import re
+
 import pytest
 
 from conftest import URL, api_call
-from helpers import NAME_BAD, NAME_TAKEN, assert_busy, frames, hold, named_buttons, scroll_width, show_view, sign_out, undo, wait_held, wait_until
+from helpers import NAME_BAD, NAME_TAKEN, assert_busy, frames, hold, named_buttons, safe_route, scroll_width, show_view, sign_out, undo, wait_held, wait_until
 
 
 def test_users_and_roles(page, case):
@@ -100,6 +103,120 @@ def test_integration_users_by_their_chain(page, case, reads):
         assert scroll_width(page) <= case.width, "no horizontal scroll with an integration's users"
     finally:
         reads.clear("**/api/v1/users")
+    show_view(page, "tiles")
+
+
+PROVIDERS = [{"key": "cloud", "name": "Cloud"}]
+
+
+def test_an_integrations_user_has_no_way_in(page, case, reads):
+    """An integration's users (the list stubbed, a provider enabled) are
+    offered no password, no new key and no identity to assign, and the
+    line says why; one that holds a password and a key from before is
+    offered the password's removal, which sends an empty one, and the
+    key's Revoke; a regular user's panel offers all three as before (AP
+    LooseEnds, D1)."""
+    held = [dict(u, has_password=u["name"] == PHONE) for u in INTEGRATION_USERS]
+    reads.change("**/api/v1/users", lambda body: body + held)
+    reads.change("**/api/v1/login/providers", lambda body: PROVIDERS)
+    held_key = {"id": 901, "kind": "api", "label": "from before", "created_at": "2026-11-16T10:00:00Z"}
+
+    def keys_and_identities(route):
+        # the stubbed users' identities none, the phone's user one key
+        mine = "/tokens" in route.request.url and route.request.url.split("/tokens")[0].endswith("a" * 32)
+        route.fulfill(status=200, content_type="application/json", body=json.dumps([held_key] if mine else []))
+
+    sent = []
+
+    def put_phone(route):
+        if route.request.method != "PUT":
+            route.fallback()
+            return
+        sent.append(route.request.post_data_json)
+        route.fulfill(status=200, content_type="application/json", body=json.dumps(dict(held[1], has_password=False)))
+
+    stubbed = f"**/api/v1/users/{INTEGRATION}*/**"
+    routed = safe_route(page, stubbed, keys_and_identities)
+    phone_path = re.compile(r"/api/v1/users/" + INTEGRATION + r"(%3A|:)" + "a" * 32 + r"$")
+    put_routed = safe_route(page, phone_path, put_phone)
+    try:
+        show_view(page, "system")
+        line = page.evaluate("t('users.integrationNoSignIn')")
+        for name in (INTEGRATION + ":", PHONE, "operator"):
+            panel = page.locator(f".user-panel[data-name='{name}']")
+            panel.wait_for()
+            panel.locator("> summary").click()
+            regular = name == "operator"
+            assert panel.locator("input[name='password']").count() == (1 if regular else 0), f"{name}: a password offered"
+            assert panel.locator(".create-key").count() == (1 if regular else 0), f"{name}: a new key offered"
+            assert panel.locator(f"[id='user-identity-provider-{name}']").count() == (1 if regular else 0), f"{name}: an identity to assign offered"
+            said = panel.locator(".user-no-sign-in")
+            assert said.count() == (0 if regular else 1), f"{name}: the line"
+            if not regular:
+                assert said.inner_text() == line, f"{name}: the line's words"
+            assert panel.locator(".remove-password").count() == (1 if name == PHONE else 0), f"{name}: the held password's removal"
+            if name == PHONE:
+                row = panel.locator(f".user-tokens li[data-id='{held_key['id']}']")
+                row.wait_for()
+                assert row.locator(".revoke-token").count() == 1, "the held key's Revoke"
+                with page.expect_request(lambda r: r.method == "PUT" and phone_path.search(r.url)):
+                    panel.locator(".remove-password").click()
+                assert sent == [{"password": ""}], f"the removal sends an empty password: {sent}"
+            assert panel.locator(".remove-user").count() == 1, f"{name}: still removable"
+            panel.locator("> summary").click()
+        named_buttons(page, "System settings → Users, an integration's users without a way in")
+        assert scroll_width(page) <= case.width, "no horizontal scroll"
+    finally:
+        page.unroute(phone_path, put_routed)
+        page.unroute(stubbed, routed)
+        reads.clear("**/api/v1/users")
+        reads.clear("**/api/v1/login/providers")
+    show_view(page, "tiles")
+
+
+def test_profile_of_an_integrations_user(page, case, reads):
+    """My profile of an integration's user, in with a key it holds from
+    before (/me stubbed), says it has no sign-in of its own in place of
+    the password, lists its keys with Revoke and without a new one, and
+    offers no Link; the regular owner first shows what is looked for
+    (AP LooseEnds, D1)."""
+    def as_integration(body):
+        if body.get("user"):
+            body["user"]["integration"] = {"key": INTEGRATION, "uuid": INTEGRATION, "id": "b" * 32, "name": "Anna"}
+        return body
+
+    reads.change("**/api/v1/login/providers", lambda body: PROVIDERS)
+    # a key of the owner's beside the suite's, which is the settings
+    # file's and has no Revoke (test_settings_file_key_has_no_revoke)
+    other = api_call("POST", "api/v1/users/owner/tokens", {"label": f"ui-test-integration-profile-{case.width}-{case.lang}"})
+    try:
+        page.evaluate("history.replaceState(null, '', location.pathname)")
+        page.reload()
+        page.wait_for_selector(".room", timeout=10000)
+        show_view(page, "profile")
+        page.locator("#profile-identities button[data-provider]").first.wait_for()
+        assert page.locator("#me-password").count() == 1, "the regular owner: the password offered"
+        assert page.locator("#profile-tokens .create-key").count() == 1, "the regular owner: a new key offered"
+        reads.change("**/api/v1/me", as_integration)
+        page.evaluate("history.replaceState(null, '', location.pathname)")
+        page.reload()
+        page.wait_for_selector(".room", timeout=10000)
+        show_view(page, "profile")
+        said = page.locator("#me-no-sign-in")
+        said.wait_for()
+        assert said.inner_text() == page.evaluate("t('users.integrationNoSignIn')"), "the line"
+        assert page.locator("#me-password").count() == 0, "no password offered"
+        page.locator(f"#profile-tokens .user-tokens li[data-id='{other['id']}']").wait_for()
+        assert page.locator(f"#profile-tokens .user-tokens li[data-id='{other['id']}'] .revoke-token").count() == 1, "its keys with Revoke"
+        assert page.locator("#profile-tokens .create-key").count() == 0, "no new key offered"
+        assert page.locator("#profile-identities button[data-provider]").count() == 0, "no Link offered"
+    finally:
+        api_call("DELETE", "api/v1/users/owner/tokens/%d" % other["id"])
+        reads.clear("**/api/v1/me")
+        reads.clear("**/api/v1/login/providers")
+        page.evaluate("history.replaceState(null, '', location.pathname)")
+        page.reload()
+        page.wait_for_selector(".room", timeout=10000)
     show_view(page, "tiles")
 
 
@@ -217,6 +334,44 @@ def test_token_rows_show_their_ids(page, case):
     show_view(page, "tiles")
 
 
+FROM_SETTINGS = {"en": "from the settings file: change or remove it there",
+                 "de": "aus der Einstellungsdatei: dort ändern oder entfernen"}
+
+
+def test_settings_file_key_has_no_revoke(page, case):
+    """The settings file's key, the suite's token, says in its row that it
+    comes from the settings file and offers no Revoke, in the owner's
+    panel of System settings → Users as in My profile, where it is this
+    device; another key of the owner's offers Revoke. The list's answer
+    marks it (AP MobileApp v1.4, D86-A); the server's refusal of its
+    revoke is TestSettingsFileKey's, so that a regression there does not
+    revoke the suite's token."""
+    prefix = f"ui-test-file-key-{case.width}-{case.lang}-"
+    file_key = api_call("GET", "api/v1/me")["token"]["id"]
+    other = api_call("POST", "api/v1/users/owner/tokens", {"label": prefix + "other"})
+    try:
+        marked = [tk["id"] for tk in api_call("GET", "api/v1/users/owner/tokens") or [] if tk.get("from_settings")]
+        assert marked == [file_key], f"the list marks the settings file's key {file_key} alone: {marked}"
+        show_view(page, "system")
+        panel = page.locator(".user-panel[data-name='owner']")
+        panel.wait_for()
+        panel.locator("summary").click()
+        for where, rows in (("System settings → Users", ".user-panel[data-name='owner'] .user-tokens"), ("My profile", "#profile-tokens .user-tokens")):
+            if where == "My profile":
+                show_view(page, "profile")
+            row = page.locator(f"{rows} li[data-id='{file_key}']")
+            row.wait_for(timeout=5000)
+            page.locator(f"{rows} li[data-id='{other['id']}']").wait_for(timeout=5000)
+            assert row.locator(".revoke-token").count() == 0, f"{where}: no Revoke on the settings file's key"
+            assert row.locator(".token-settings").inner_text() == FROM_SETTINGS[case.lang], f"{where}: it says where it comes from"
+            assert page.locator(f"{rows} li[data-id='{other['id']}'] .revoke-token").count() == 1, f"{where}: another key offers Revoke"
+            assert page.locator(f"{rows} .token-settings").count() == 1, f"{where}: that row alone says so"
+        assert scroll_width(page) <= case.width, "no horizontal scroll"
+    finally:
+        api_call("DELETE", "api/v1/users/owner/tokens/%d" % other["id"])
+    show_view(page, "tiles")
+
+
 NO_ANSWER = {"en": "no answer from the server; it may have been done all the same",
              "de": "keine Antwort vom Server; es wurde vielleicht trotzdem ausgeführt"}
 
@@ -319,7 +474,7 @@ def test_a_double_click_on_yes_removes_once(page, case):
     makes the user."""
     name = f"rm-{case.width}-{case.lang}"
     remove_user(name)
-    api_call("POST", "api/v1/users", {"name": name, "role": "viewer", "password": "rm-pass"})
+    api_call("POST", "api/v1/users", {"name": name, "role": "viewer", "password": "rm-password"})
     deletes = []
     page.on("request", lambda r: deletes.append(r.url) if r.method == "DELETE" and r.url.endswith("/users/" + name) else None)
     try:
@@ -345,6 +500,52 @@ def test_a_double_click_on_yes_removes_once(page, case):
     show_view(page, "tiles")
 
 
+def test_a_refused_removal_says_the_servers_words(page, case, watch):
+    """A removal the server refuses (409) says the server's words in the
+    users' line, as a failure, and the user's panel stays, Remove in place
+    of the question again: here the words for the user that holds the
+    settings file's key (AP MobileApp v1.4, D89-A). The test makes the
+    user and answers its DELETE itself, so that nothing is removed and the
+    suite's own owner, which holds that key, is never asked for; the
+    server's refusal is TestSettingsFileKeyHolder's."""
+    name = f"held-{case.width}-{case.lang}"
+    remove_user(name)
+    api_call("POST", "api/v1/users", {"name": name, "role": "viewer", "password": "kept-pass"})
+    words = f"user {name} holds the settings file's MASSIMO_API_TOKEN: change or remove it in the settings file first"
+    path = "**/api/v1/users/" + name
+    deletes = []
+
+    def refuse(route):
+        if route.request.method == "DELETE":
+            deletes.append(route.request.url)
+            route.fulfill(status=409, content_type="application/json", body=json.dumps({"error": words}))
+        else:
+            route.continue_()
+
+    watch.expected.append(("/api/v1/users/" + name, 409))
+    page.route(path, refuse)
+    try:
+        show_view(page, "system")
+        panel = page.locator(".user-panel[data-name='%s']" % name)
+        panel.wait_for()
+        panel.locator("summary").click()
+        panel.locator(".remove-user").click()
+        panel.locator(".confirm-box .confirm-yes").click()
+        line = page.locator("#users-msg")
+        assert wait_until(page, "document.getElementById('users-msg').textContent.includes(%r)" % words, 5), \
+            f"the users' line says the server's words: {line.text_content()}"
+        assert line.text_content() == f"{name}: {words}", f"after the user's name, as the page's other failures: {line.text_content()}"
+        assert "bad" in line.get_attribute("class").split(), "as a failure"
+        assert len(deletes) == 1, f"one DELETE: {deletes}"
+        assert panel.count() == 1 and panel.locator(".confirm-box").count() == 0 and panel.locator(".remove-user").is_visible(), \
+            "the user's panel stays, with Remove in place of the question"
+        assert scroll_width(page) <= case.width, "no horizontal scroll with the long words"
+    finally:
+        page.unroute(path)
+        remove_user(name)
+    show_view(page, "tiles")
+
+
 def test_create_is_busy_until_answered(page, case):
     """Create is off with a spinner from its click until the server
     answers, so that a second click or Enter sends nothing: on the Pi 1
@@ -359,7 +560,7 @@ def test_create_is_busy_until_answered(page, case):
         page.locator("#user-add").click()
         form = page.locator("#user-new form")
         form.locator("input[name=name]").fill(name)
-        form.locator("input[name=password]").fill("busy-pass")
+        form.locator("input[name=password]").fill("slow-pass-1")
         form.locator("button[type=submit]").click()
         assert wait_held(page, held), "the POST is sent"
         assert_busy(page, "#user-new button[type=submit]", "Create")
@@ -431,7 +632,7 @@ def test_new_user_name_checked_while_typed(page, case, watch):
     name.press("Tab")
     assert name_msg(page, msg) == NAME_TAKEN[case.lang].format(name="operator"), "a listed name is in use, in lower case"
     name.fill("bad name")
-    page.locator("#user-new input[name=password]").fill("pw")
+    page.locator("#user-new input[name=password]").fill("own-secret-1")
     page.locator("#user-new button[type=submit]").click()
     page.wait_for_timeout(300)
     assert name_msg(page, msg) == NAME_BAD[case.lang] and not posts, f"Create with a bad name sends nothing: {posts}"
@@ -469,8 +670,8 @@ def test_first_owner_name_checked(page, case):
         name.fill("test manager")
         name.press("Tab")
         assert name_msg(page, "#setup-name-msg") == NAME_BAD[case.lang], "leaving the field checks it"
-        page.locator("#setup-password").fill("pw")
-        page.locator("#setup-again").fill("pw")
+        page.locator("#setup-password").fill("own-secret-1")
+        page.locator("#setup-again").fill("own-secret-1")
         page.locator("#setup-form button[type=submit]").click()
         page.wait_for_timeout(300)
         assert not posts, f"Create the owner with a bad name sends nothing: {posts}"

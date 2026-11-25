@@ -31,7 +31,7 @@ from datetime import datetime, timedelta, timezone
 import pytest
 
 from conftest import TOKEN, URL
-from helpers import choose_cube, frames, hold, owner_page, reads_of, show_view, sign_out, wait_held, wait_until
+from helpers import OPERATOR_PASSWORD, choose_cube, frames, hold, owner_page, reads_of, show_view, sign_out, wait_held, wait_until
 from test_login import sign_in
 from test_unsaved import at, cfg_room, cfg_tab, expire
 
@@ -50,7 +50,7 @@ def end_session(page, way):
             go.click()  # a form still saving: the dialog asks first, and Sign out goes on
     else:
         expire(page)
-    sign_in(page, "operator", "op-pass")
+    sign_in(page, "operator", OPERATOR_PASSWORD)
     assert page.evaluate("state.me.user.name") == "operator", "the next user is in"
 
 

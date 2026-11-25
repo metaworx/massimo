@@ -12,7 +12,7 @@ nothing is run (test_repair.py has the runs)."""
 import json
 
 from conftest import TOKEN, URL
-from helpers import RepairStub, frames, mark, owner_page, replaced, show_view, sign_out, state_events, wait_until
+from helpers import OPERATOR_PASSWORD, RepairStub, frames, mark, owner_page, replaced, show_view, sign_out, state_events, wait_until
 from test_login import sign_in
 from test_unsaved import expire
 
@@ -142,7 +142,7 @@ def test_sign_out_forgets_the_boxes(new_context, case, watch, guard):
     try:
         device_question(page)
         sign_out(page)
-        sign_in(page, "operator", "op-pass")
+        sign_in(page, "operator", OPERATOR_PASSWORD)
         no_repairs_left(page)
         assert not repairs.runs, f"nothing run: {repairs.runs}"
     finally:
@@ -157,7 +157,7 @@ def test_another_user_after_a_401_finds_no_box(new_context, case, watch, guard):
     try:
         device_question(page)
         expire(page)
-        sign_in(page, "operator", "op-pass")
+        sign_in(page, "operator", OPERATOR_PASSWORD)
         no_repairs_left(page)
         assert not repairs.runs, f"nothing run: {repairs.runs}"
     finally:

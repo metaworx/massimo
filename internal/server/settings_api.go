@@ -87,9 +87,10 @@ var boolSettings = []boolSetting{
 	// Integrations may ask to be registered (integrations_api.go); the
 	// announcement's reg says it on the LAN.
 	{key: store.IntegrationRequestsKey, def: true},
-	// A server without users kept open on purpose (AP FirstOwner, D11):
-	// the web UI does not ask for the first owner. It counts only while
-	// the server has no users, and goes with the first one (D12).
+	// A server without regular users kept open on purpose (AP FirstOwner,
+	// D11): the web UI does not ask for the first owner. It counts only
+	// while the server has no regular user, and goes with the first one
+	// (D12); an integration's users leave it (AP LooseEnds, D1).
 	{key: store.KeepOpenKey, def: false},
 	// The web UI's password fields offer their eye (AP MobileApp, D84-A);
 	// GET /healthz says it, for the sign-in before anyone is in.
@@ -210,7 +211,7 @@ func (s *Server) settingsView(r *http.Request) (map[string]settingView, error) {
 		}
 		inEffect := v
 		if d.key == store.KeepOpenKey && v && s.authMode(r.Context()) != modeOpen {
-			inEffect = false // it counts only while the server has no users
+			inEffect = false // it counts only while the server has no regular users
 		}
 		out[d.key] = settingView{Value: strconv.FormatBool(v), Default: strconv.FormatBool(d.def), Set: ok, InEffect: strconv.FormatBool(inEffect), Applies: "now"}
 	}

@@ -154,9 +154,9 @@ func (s *Store) Audit(ctx context.Context, e AuditEntry) (int64, error) {
 	return id, nil
 }
 
-// AuditList returns the newest rows first: those before a time (zero:
-// from the newest), at most limit (at most 1000), and those of one
-// user's name when given.
+// AuditList returns the newest rows first, by time, then id (auditPage):
+// those before a time (zero: from the newest), at most limit (at most
+// 1000), and those of one user's name when given.
 func (s *Store) AuditList(ctx context.Context, before time.Time, limit int, user string) ([]AuditEntry, error) {
 	if limit <= 0 || limit > 1000 {
 		limit = 1000
@@ -167,7 +167,7 @@ func (s *Store) AuditList(ctx context.Context, before time.Time, limit int, user
 	}
 	user = NormalName(user)
 	if user == "" {
-		return s.auditRows(ctx, `(? = '' OR a.time < ?)`, bound, bound, limit)
+		return s.auditRows(ctx, auditBefore, auditPage, bound, bound, limit)
 	}
 	// By the user's id, which the indexes audit_user and audit_real_user
 	// serve; a join on
@@ -180,8 +180,12 @@ func (s *Store) AuditList(ctx context.Context, before time.Time, limit int, user
 	if !ok {
 		return []AuditEntry{}, nil
 	}
-	return s.auditRows(ctx, auditByUser, id, id, bound, bound, limit)
+	return s.auditRows(ctx, auditByUser, auditPage, id, id, bound, bound, limit)
 }
+
+// auditBefore is the WHERE of the rows before a time, the empty text:
+// from the newest. Its arguments are the time twice.
+const auditBefore = `(? = '' OR a.time < ?)`
 
 // auditByUser is the WHERE of one user's rows before a time (the empty
 // text: from the newest): the rows made with its rights or by it, as an
@@ -189,10 +193,22 @@ func (s *Store) AuditList(ctx context.Context, before time.Time, limit int, user
 // arguments are the user's id twice and the time twice.
 const auditByUser = `(a.effective_user_id = ? OR a.real_user_id = ?) AND (? = '' OR a.time < ?)`
 
+// auditPage is the order of AuditList's pages: by time, then id, both
+// descending, as the before cut is by time. The server writes a row when
+// its request is answered with the time it came, and a row of refused
+// requests at its minute's end with the time of the minute's first (the
+// server's audit.go): after rows of requests that came later. In id
+// order a page ending on such a row would put those rows behind the next
+// page's cut, on no page. Rows of one millisecond that a page's end
+// divides stay so: the next page, before that time, has none of them.
+// audit_time, whose entries end with the id, gives the order unsorted.
+const auditPage = `a.time DESC, a.id DESC`
+
 // AuditOfCommand returns the audit's row of a command, the request that
-// is the command; false for none (a proxy client's, or one pruned).
+// is the command; false for none (a proxy client's, or one pruned). It
+// is one row, which audit_command finds without a sort, in id order.
 func (s *Store) AuditOfCommand(ctx context.Context, commandID int64) (AuditEntry, bool, error) {
-	rows, err := s.auditRows(ctx, `a.command_id = ?`, commandID, 1)
+	rows, err := s.auditRows(ctx, `a.command_id = ?`, `a.id DESC`, commandID, 1)
 	if err != nil || len(rows) == 0 {
 		return AuditEntry{}, false, err
 	}
@@ -205,11 +221,17 @@ const auditSelect = `SELECT a.id, a.uuid, a.time, a.effective_user_id, a.real_us
 		coalesce(c.serial, ''), a.target, a.detail, a.result, a.command_id
 		FROM audit a LEFT JOIN users u ON u.id = a.effective_user_id LEFT JOIN cubes c ON c.id = a.cube_id`
 
-// auditRows reads the audit's rows of a WHERE, with the user's name and
-// the Cube's serial joined in, newest first; args end with the limit.
-func (s *Store) auditRows(ctx context.Context, where string, args ...any) ([]AuditEntry, error) {
-	// where is the callers' own text, never input.
-	rows, err := s.db.QueryContext(ctx, auditSelect+` WHERE `+where+` ORDER BY a.id DESC LIMIT ?`, args...)
+// auditQuery is auditRows' statement: the rows of a WHERE in an order,
+// at most a limit, its last argument.
+func auditQuery(where, order string) string {
+	return auditSelect + ` WHERE ` + where + ` ORDER BY ` + order + ` LIMIT ?`
+}
+
+// auditRows reads the audit's rows of a WHERE in an order, with the
+// user's name and the Cube's serial joined in; args end with the limit.
+func (s *Store) auditRows(ctx context.Context, where, order string, args ...any) ([]AuditEntry, error) {
+	// where and order are the callers' own text, never input.
+	rows, err := s.db.QueryContext(ctx, auditQuery(where, order), args...)
 	if err != nil {
 		return nil, fmt.Errorf("store: audit: %w", err)
 	}

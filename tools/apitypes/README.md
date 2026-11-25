@@ -33,8 +33,8 @@ The mapping covers what the OpenAPI file uses, and nothing more:
 | `nullable: true` | `T \| null` |
 | `description`, `format` | a JSDoc comment, the format as `@format` |
 
-`example`, `minimum`, `maximum`, `multipleOf`, `maxLength`, `maxItems`
-and `pattern` constrain a value without changing its shape and are left out;
+`example`, `minimum`, `maximum`, `multipleOf`, `minLength`, `maxLength`,
+`maxItems` and `pattern` constrain a value without changing its shape and are left out;
 an example stays out of the output.
 Any other keyword stops the program with an error naming the schema and the keyword,
 and the file is left as it was;

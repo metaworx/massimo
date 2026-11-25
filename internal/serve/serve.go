@@ -38,8 +38,10 @@ import (
 	"go.metaworx.ch/massimo/internal/store"
 )
 
-// stopGrace is how long Run waits for the server to stop, writing the
-// log's pending events, before the store closes under it.
+// stopGrace is how long Run waits for the server to stop, taking the
+// backups of the changes pending (5 s at most, server's backupsAtStop)
+// and writing the log's pending events, before the store closes under
+// it.
 const stopGrace = 10 * time.Second
 
 // Config is what a server is started with.
@@ -59,6 +61,10 @@ type Config struct {
 	// from, for the log; the Cubes of the file are read from the
 	// environment (FileCubes).
 	SettingsFile string
+	// SettingsNotes are the notes on the settings file the start read,
+	// their texts, which the log's settings_read says after the start's
+	// server_started (server.Options.SettingsNotes).
+	SettingsNotes []string
 	// Serial is the Cube chosen with -sn or MASSIMO_CUBE_SN, which the
 	// per-Cube variables are read for; SerialGiven says it came from
 	// -sn, and then that Cube alone is served.
@@ -325,7 +331,7 @@ func open(ctx context.Context, cfg Config, root *slog.Logger, src certs.Source, 
 		find = findIntegrations
 	}
 	srv := server.New(server.Options{Cubes: su.cubes, Token: cfg.Token, PollInterval: poll, CubeHold: cfg.CubeHold, RefreshInterval: refresh, DiscoverInterval: discover, DiscoveryTargets: cfg.DiscoveryTargets, DiscoveryAddr: cfg.DiscoveryListen, DiscoveryWait: cfg.discoveryWait, Logger: root, Version: cfg.Version, Proxy: su.listeners, ShowHidden: cfg.ShowHidden,
-		Store: st, Queue: queue, FileCubes: su.fileCubes, SettingsFile: cfg.SettingsFile, StaleAfter: staleAfter, StaleAfterWall: staleAfterWall, SettingsFixedBy: fixedBy, ProxyFixed: len(cfg.Proxies) > 0, Update: cfg.Update, TLS: src, HSTSDays: cfg.HSTSDays, TrustedProxies: cfg.TrustedProxies,
+		Store: st, Queue: queue, FileCubes: su.fileCubes, SettingsFile: cfg.SettingsFile, SettingsNotes: cfg.SettingsNotes, StaleAfter: staleAfter, StaleAfterWall: staleAfterWall, SettingsFixedBy: fixedBy, ProxyFixed: len(cfg.Proxies) > 0, Update: cfg.Update, TLS: src, HSTSDays: cfg.HSTSDays, TrustedProxies: cfg.TrustedProxies,
 		Restart: cfg.Restart, Reboot: cfg.Reboot, Install: cfg.Install, Deliverers: cfg.Deliverers, FindIntegrations: find, BrowseServers: browseServers,
 		Announce: server.AnnounceState{On: cfg.Announce.On && st != nil, FixedBy: cfg.Announce.FixedBy, Loopback: LoopbackListen(cfg.Listen)}})
 	ln, err := net.Listen("tcp", cfg.Listen)
@@ -348,8 +354,9 @@ func (i *Instance) Server() *server.Server { return i.srv }
 func (i *Instance) Store() *store.Store { return i.st }
 
 // Run serves the API and every Cube until ctx ends, then closes the
-// store: once the server has stopped and written the log's pending
-// events, or after a grace of ten seconds. An instance runs once.
+// store: once the server has stopped, taken the automatic backup of
+// each Cube with a change pending and written the log's pending events,
+// or after a grace of ten seconds. An instance runs once.
 func (i *Instance) Run(ctx context.Context) error {
 	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()

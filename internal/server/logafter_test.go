@@ -119,7 +119,10 @@ func TestLogAfterReadsABurstOnce(t *testing.T) {
 			ts, s := r.ts, r.s
 			second := runtimeOf(t, s, "KEQ0000200")
 			oneAt, allAt := newestOf(t, ts, cubeLogPath), newestOf(t, ts, allLogPath)
-			const n, window = 3000, 100
+			// n lines a writer: 3000 in the fake Cube's log and 4000 in
+			// every Cube's, fifteen pages and more of each, and forty
+			// batches of the store's writer.
+			const n, window = 1000, 100
 			writers := []struct {
 				name  string
 				write func(event)
@@ -182,7 +185,9 @@ func TestLogAfterReadsABurstOnce(t *testing.T) {
 				}
 				return len(evs) == 0
 			}
-			testkit.Eventually(t, "the burst's end", func() bool {
+			// round reads one page of each log, and reports whether the
+			// burst is over and read to its end.
+			round := func() bool {
 				over := false
 				select {
 				case <-done:
@@ -202,7 +207,19 @@ func TestLogAfterReadsABurstOnce(t *testing.T) {
 				mu.Unlock()
 				oneEmpty, allEmpty := page(cubeLogPath, &oneAt, one, oneOf), page(allLogPath, &allAt, all, allOf)
 				return over && oneEmpty && allEmpty
-			}, testkit.For(4*testkit.Wait), testkit.Every(time.Millisecond))
+			}
+			// The reader goes on while its pages read new lines of the
+			// burst, however long the burst takes on a slow runner, and
+			// fails where none comes for a wait: a reader that stopped.
+			// go test's -timeout bounds the whole.
+			got := func() int { return len(one) + len(all) }
+			for over := false; !over; {
+				before := got()
+				if !testkit.Within(testkit.Wait, func() bool { over = round(); return over || got() > before }, testkit.Every(time.Millisecond)) {
+					t.Fatalf("no new line of the burst read for %v: %d of %d in the fake Cube's log, %d of %d in every Cube's, by writer %v and %v",
+						testkit.Scale(testkit.Wait), len(one), 3*n, len(all), 4*n, oneOf, allOf)
+				}
+			}
 			for _, w := range writers {
 				want := 0
 				if w.own {

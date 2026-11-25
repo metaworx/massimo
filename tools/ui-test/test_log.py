@@ -662,29 +662,38 @@ def test_log_says_what_changed(page, case, reads):
     show_view(page, "tiles")
 
 
+NOTE = "the settings file: MASSIMO_HSTS is given on lines 3 and 4; the first wins"
 SERVER_SAYS = {
-    "en": {"started": "started, version v9.9.9, before v9.9.8", "backup": "backup 12 taken (by hand), by Anna"},
-    "de": {"started": "gestartet, Version v9.9.9, vorher v9.9.8", "backup": "Backup 12 erstellt (von Hand), durch Anna"},
+    "en": {"started": "started, version v9.9.9, before v9.9.8", "backup": "backup 12 taken (by hand), by Anna",
+           "notes": "settings file read at the start: " + NOTE},
+    "de": {"started": "gestartet, Version v9.9.9, vorher v9.9.8", "backup": "Backup 12 erstellt (von Hand), durch Anna",
+           "notes": "Einstellungsdatei beim Start gelesen: " + NOTE},
 }
 
 
 def test_log_server_lines(page, case, reads):
-    """The server's own lines say what they are, and who asked for one."""
+    """The server's own lines say what they are, and who asked for one;
+    the start's notes on the settings file say they are the start's
+    (AP StartConfiguration, D33-A)."""
     show_view(page, "log")
     isolate_log(page, reads)
     wait_log_live(page)
-    page.evaluate("""() => {
+    page.evaluate("""(note) => {
       const now = () => new Date().toISOString();
       const send = (kind, ev) => state.events.dispatchEvent(new MessageEvent(kind, { data: JSON.stringify(ev) }));
       send("server_started", { kind: "server_started", source: "system", level: "info", time: now(), summary: { version: "v9.9.9", before: "v9.9.8" } });
+      send("settings_read", { kind: "settings_read", source: "system", level: "warn", error: note, time: now(),
+        summary: { why: "start", changed: [], at_next_start: [] } });
       send("backup", { kind: "backup", source: "system", level: "info", time: now(), summary: { reason: "manual", id: 12, bytes: 2048 },
         by: { name: "anna", display_name: "Anna" } });
-    }""")
+    }""", NOTE)
     says = SERVER_SAYS[case.lang]
     assert wait_until(page, "document.querySelectorAll('#log-lines .log-line.kind-backup').length > 0", 5), "the backup's line"
     started = page.locator("#log-lines .log-line.kind-server_started").first.locator(".log-text").inner_text()
+    notes = page.locator("#log-lines .log-line.kind-settings_read").first.locator(".log-text").inner_text()
     backup = page.locator("#log-lines .log-line.kind-backup").first.locator(".log-text").inner_text()
     assert started == says["started"], f"the start: {started}"
+    assert notes == says["notes"], f"the start's notes: {notes}"
     assert backup == says["backup"], f"the backup: {backup}"
     show_view(page, "tiles")
 

@@ -96,6 +96,10 @@ type tokenView struct {
 	// KeyID is the key a session was made from (POST /api/v1/login/key),
 	// absent for a session of a sign-in and for a key.
 	KeyID int64 `json:"key_id,omitempty"`
+	// FromSettings marks, in a user's token list, the key that is the
+	// settings file's MASSIMO_API_TOKEN: it is changed or removed in the
+	// file, and the API does not revoke it (settingsKey).
+	FromSettings bool `json:"from_settings,omitempty"`
 }
 
 // meView is the answer of GET /api/v1/me.
@@ -112,9 +116,9 @@ type meView struct {
 	// Setup says the first owner can be created from here: the server is
 	// open and the caller is on the local network.
 	Setup bool `json:"setup,omitempty"`
-	// KeptOpen says the server without users is kept open on purpose,
-	// the setting auth.keep_open: the web UI does not ask for the first
-	// owner (AP FirstOwner, D11). Only on an open server.
+	// KeptOpen says the server without regular users is kept open on
+	// purpose, the setting auth.keep_open: the web UI does not ask for the
+	// first owner (AP FirstOwner, D11). Only on an open server.
 	KeptOpen bool `json:"kept_open,omitempty"`
 	// Token is the one the caller presented.
 	Token *tokenView `json:"token,omitempty"`
@@ -305,7 +309,8 @@ func (s *Server) login(w http.ResponseWriter, r *http.Request) error {
 
 // openSession answers a sign-in whose password matched: a user that may
 // sign in gets a session, with the extra fields, and the counters of the
-// keys are cleared.
+// keys are cleared. An integration's user gets none, by whatever it
+// signed in (noWayIn).
 func (s *Server) openSession(w http.ResponseWriter, r *http.Request, u store.User, label string, extra map[string]any, keys ...string) error {
 	return s.openSessionFrom(w, r, u, 0, label, extra, keys...)
 }
@@ -319,6 +324,8 @@ func (s *Server) openSessionFrom(w http.ResponseWriter, r *http.Request, u store
 	ip := s.clientIP(r)
 	now := time.Now()
 	switch {
+	case u.IntegrationID != 0:
+		return noWayIn(u)
 	case u.Disabled:
 		return fail(http.StatusForbidden, "user %s is disabled", u.Name)
 	case u.Expired(now):
@@ -425,6 +432,34 @@ func (s *Server) logout(w http.ResponseWriter, r *http.Request) error {
 	return nil
 }
 
+// settingsKeyKept is the refusal of a revoke of the settings file's key.
+const settingsKeyKept = "the token is the settings file's MASSIMO_API_TOKEN: change or remove it in the settings file"
+
+// settingsKeyHeld is the refusal of the removal of the user that holds
+// the settings file's key, a format with the user's name.
+const settingsKeyHeld = "user %s holds the settings file's MASSIMO_API_TOKEN: change or remove it in the settings file first"
+
+// settingsKey is the live API key that is the settings file's
+// MASSIMO_API_TOKEN, with its user's id, ok false where the file has none
+// or the store holds no live key of it. The store keeps each token's
+// hash, unique, so the hash of the token the server holds from the file
+// (legacyToken, which SetToken follows) finds that one row; its label is
+// no mark, any key may carry it. The API ends that key neither by a
+// revoke (AP MobileApp v1.4, D86-A) nor with its user's removal (D89-A):
+// the next start would not add it back, its hash being taken
+// (store.Bootstrap), so it is changed or removed in the file.
+func (s *Server) settingsKey(ctx context.Context) (store.Token, bool, error) {
+	file := s.legacyToken()
+	if file == "" || s.opts.Store == nil {
+		return store.Token{}, false, nil
+	}
+	tok, ok, err := s.opts.Store.TokenByHash(ctx, store.HashToken(file))
+	if err != nil || !ok || tok.Kind != store.TokenAPI {
+		return store.Token{}, false, err
+	}
+	return tok, true, nil
+}
+
 // deleteMyToken handles DELETE /api/v1/me/token: the token that makes the
 // call is revoked, a session or an API key, a key's sessions with it (AP
 // MobileApp, D80-B), so that a client revokes what it holds without its
@@ -445,7 +480,7 @@ func (s *Server) deleteMyToken(w http.ResponseWriter, r *http.Request) error {
 		return fail(http.StatusBadRequest, "a call on a user's behalf revokes nothing: revoke the integration's key without the %s header", OnBehalfHeader)
 	}
 	if file := s.legacyToken(); file != "" && tokenMatches(file, strings.TrimPrefix(r.Header.Get("Authorization"), "Bearer ")) {
-		return fail(http.StatusConflict, "the token is the settings file's MASSIMO_API_TOKEN: change or remove it in the settings file")
+		return fail(http.StatusConflict, settingsKeyKept)
 	}
 	auditTarget(r, "token:"+strconv.FormatInt(p.token.ID, 10))
 	auditSubject(r, tokenSubject(p.token, p.user))
@@ -499,12 +534,16 @@ func (s *Server) meOf(r *http.Request, p *principal) (meView, error) {
 	u.Display, u.Integration = userDisplay(ctx, st.Namer(), p.user)
 	tok := viewToken(p.token)
 	me.User, me.Role, me.Capabilities, me.Token = &u, &roleRef{Key: role.Key, Name: role.Name, Disabled: role.Disabled}, caps, &tok
-	if i := p.integration; i != nil {
-		me.Integration = &meIntegration{UUID: i.UUID, Key: i.UUID, Name: store.IntegrationName(*i), ReportedName: i.Name, State: i.State, InstanceID: i.InstanceID}
+	if p.integration != nil || p.user.IntegrationID != 0 {
+		// What the chain leaves, or for an integration's user's own key
+		// the role integration and the maximum (principalFor).
 		me.Capabilities = integrationCaps(p)
 		if me.Capabilities == nil {
 			me.Capabilities = []string{}
 		}
+	}
+	if i := p.integration; i != nil {
+		me.Integration = &meIntegration{UUID: i.UUID, Key: i.UUID, Name: store.IntegrationName(*i), ReportedName: i.Name, State: i.State, InstanceID: i.InstanceID}
 		if f := p.actsFor; f != nil {
 			me.ActsFor = &meActsFor{ID: f.Subject, Name: f.Name, Level: f.LastLevel, Linked: f.Linked(), SystemGenerated: f.SystemGenerated}
 		}

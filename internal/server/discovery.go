@@ -119,9 +119,14 @@ type foundCube struct {
 	// Removed are, on the copies of a Cube that is not configured, the
 	// removed rows of its serial in the store, newest first: what adding
 	// it can restore (D11-A); absent where there are none.
-	Removed  []removedCube `json:"removed,omitempty"`
-	FoundAt  time.Time     `json:"found_at"`
-	LastSeen time.Time     `json:"last_seen"`
+	Removed []removedCube `json:"removed,omitempty"`
+	// Backups counts, on the copies GET /api/v1/cubes lists, the backups
+	// the store keeps of the serial's row, which its routes still reach
+	// while no runtime serves it (backups_api.go); absent elsewhere, as
+	// in the answer of a discovery.
+	Backups  *int      `json:"backups,omitempty"`
+	FoundAt  time.Time `json:"found_at"`
+	LastSeen time.Time `json:"last_seen"`
 	// state is the entry's: kept on the map's entry, and in a copy only
 	// as it was when copied.
 	state foundState

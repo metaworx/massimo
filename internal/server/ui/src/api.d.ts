@@ -26,6 +26,23 @@ export interface StoredBackup {
   note?: string;
 }
 
+/**
+ * A Cube row of the store that no runtime serves and that keeps backups, as GET
+ * /api/v1/backups/unserved lists it
+ */
+export interface UnservedCube {
+  serial: string;
+  /** The row's name; absent where it has none */
+  name?: string;
+  /** The backups kept */
+  backups: number;
+  /**
+   * When the newest backup was taken
+   * @format date-time
+   */
+  newest: string;
+}
+
 export interface BackupList {
   backups: StoredBackup[];
   /**
@@ -181,7 +198,11 @@ export interface UserCreate {
   display_name?: string;
   /** A role's key; viewer when absent, owner for the first owner */
   role?: string;
-  /** Absent for a user with keys only; this or record for the first owner */
+  /**
+   * 8 to 64 characters, Unicode code points as sent, without the user's or the
+   * server's name. Absent for a user with keys only, and an empty one counts as
+   * absent; this or record for the first owner
+   */
   password?: string;
   /**
    * A password of auth_version 2 in place of password: the registration record,
@@ -210,7 +231,10 @@ export interface UserChange {
    * @format date-time
    */
   expires_at?: string | null;
-  /** Empty removes the password */
+  /**
+   * Empty removes the password; any other has 8 to 64 characters, Unicode code
+   * points as sent, without the user's or the server's name
+   */
   password?: string;
   /** Required when a user sets its own password, unless proof is given */
   current_password?: string;
@@ -615,6 +639,12 @@ export interface Token {
    * session of a sign-in and for a key
    */
   key_id?: number;
+  /**
+   * In a user's token list, true on the key that is the settings file's
+   * MASSIMO_API_TOKEN, which is changed or removed there and not revoked
+   * through the API; absent on any other
+   */
+  from_settings?: boolean;
 }
 
 export interface Me {
@@ -632,7 +662,10 @@ export interface Me {
    */
   kept_open?: boolean;
   token?: Token;
-  /** The registered integration whose key it is; null for any other key */
+  /**
+   * The registered integration whose key it is; null for any other key, and on
+   * an open server, which does not look at the key (mode open)
+   */
   integration?: {
     uuid?: string;
     /** Its name as the owner gives it, its own user's display name */
@@ -644,7 +677,8 @@ export interface Me {
   } | null;
   /**
    * With X-MassimoHA-On-Behalf-Of: the integration's user the call acts for;
-   * capabilities is then what the chain leaves
+   * capabilities is then what the chain leaves. On an open server the header is
+   * not read and nothing is attributed
    */
   acts_for?: {
     id?: string;
@@ -1341,6 +1375,12 @@ export interface FoundCube {
     removed_at: string;
   }[];
   /**
+   * In GET /api/v1/cubes: the backups the store keeps of the serial's row,
+   * which GET …/backups lists while no runtime serves it; 0 without a row;
+   * absent in the answer of a discovery
+   */
+  backups?: number;
+  /**
    * When the server first saw it
    * @format date-time
    */
@@ -1398,6 +1438,11 @@ export interface Cube {
    * store's, which wins
    */
   file_differs?: FileDifference[];
+  /**
+   * The backups the store keeps of the Cube (GET …/backups); 0 for a Cube
+   * without a row in the store, and without a store
+   */
+  backups: number;
   /**
    * The stored address; empty: from discovery (address is where it connects
    * now)

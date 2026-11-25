@@ -11,7 +11,7 @@ gone where that button is."""
 import json
 
 from conftest import URL
-from helpers import VIEWER, css_hidden, open_main_menu, show_view, wait_until
+from helpers import OPERATOR_PASSWORD, VIEWER, css_hidden, open_main_menu, show_view, wait_until
 from test_login import sign_in
 
 ORDER = ["#menu-log", "hr", "#menu-cube", "#menu-system", "#menu-maint", "#menu-info", "hr", "#menu-me", "#menu-servers", "#menu-server-settings",
@@ -135,7 +135,7 @@ def test_sign_out_from_the_menu(new_context, case, watch, guard):
     page.set_default_timeout(5000)
     page.on("pageerror", lambda e: watch.problems.append(f"page error: {e}"))
     page.goto(URL)
-    sign_in(page, "operator", "op-pass")
+    sign_in(page, "operator", OPERATOR_PASSWORD)
     open_main_menu(page)
     assert page.locator("#menu-logout-label").inner_text() == page.evaluate("t('me.signOut')"), "Sign out for a session"
     page.locator("#menu-logout").click()
