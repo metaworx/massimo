@@ -473,3 +473,73 @@ func TestEnvFileLineIgnored(t *testing.T) {
 	_, notes, err = ReloadFile(File())
 	check("a reload with -env", notes, err, p)
 }
+
+// ReadFile takes the lines a start takes, and returns them with the
+// start's notes, setting nothing: what massimo install reads. A missing
+// file is os.ErrNotExist, UTF-16 text ErrUTF16 with a start's text.
+func TestReadFile(t *testing.T) {
+	const r = "MASSIMO_TEST_R"
+	clean(t, r, FileVar)
+	p := settingsFile(t, "\xEF\xBB\xBF# head\n"+r+"=\"first\"\n"+r+"=second\n=x\n"+FileVar+"=/elsewhere.env\n")
+	vars, notes, err := ReadFile(p)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, n := range []string{r, FileVar} {
+		if _, set := os.LookupEnv(n); set {
+			t.Errorf("%s set", n)
+		}
+	}
+	if Source(r) != "environment" {
+		t.Errorf("a source recorded: %q", Source(r))
+	}
+	if want := map[string]string{r: "first"}; !maps.Equal(vars, want) {
+		t.Errorf("%q, want %q", vars, want)
+	}
+	startNotes, err := LoadFile(p)
+	if err != nil || !slices.EqualFunc(notes, startNotes, sameNote) || len(notes) != 3 {
+		t.Errorf("notes %v, the start's %v, %v", notes, startNotes, err)
+	}
+
+	if _, _, err := ReadFile(filepath.Join(t.TempDir(), "none.env")); !errors.Is(err, os.ErrNotExist) {
+		t.Errorf("a missing file: %v", err)
+	}
+	u16 := settingsFile(t, "\xFF\xFE"+string([]byte{'R', 0, '=', 0, '1', 0}))
+	if _, _, err := ReadFile(u16); !errors.Is(err, ErrUTF16) || err.Error() != u16+": UTF-16 text, save it as UTF-8" {
+		t.Errorf("UTF-16: %v", err)
+	}
+}
+
+// ReadFileLenient skips a line that is not KEY=VALUE with a note, where
+// a start and ReadFile stop, and reads the rest as they do; UTF-16 after
+// it is refused still, and a line too long to read stops it as it stops
+// a start.
+func TestReadFileLenient(t *testing.T) {
+	const l = "MASSIMO_TEST_L"
+	clean(t, l)
+	p := settingsFile(t, "\xEF\xBB\xBF"+l+"=first\nplaceholder-secret\n"+l+"=second\n")
+	if _, _, err := ReadFile(p); err == nil || err.Error() != p+":2: expected KEY=VALUE" {
+		t.Errorf("ReadFile: %v", err)
+	}
+	vars, notes, err := ReadFileLenient(p)
+	want := []Note{
+		{Lines: []int{1, 3}, Name: l, Text: l + " is given on lines 1 and 3; the first wins"},
+		{Lines: []int{2}, Text: "line 2 is not KEY=VALUE: serve refuses the file until it is fixed"},
+	}
+	if err != nil || vars[l] != "first" || len(vars) != 1 || !slices.EqualFunc(notes, want, sameNote) {
+		t.Errorf("%q, notes %v, %v; want %v", vars, notes, err, want)
+	}
+	quotesNone(t, notes)
+	if _, set := os.LookupEnv(l); set {
+		t.Errorf("%s set", l)
+	}
+
+	u16 := settingsFile(t, "not a setting\n"+string([]byte{'R', 0, '=', 0, '1', 0, '\n', 0}))
+	if _, _, err := ReadFileLenient(u16); !errors.Is(err, ErrUTF16) || err.Error() != u16+":2: UTF-16 text, save it as UTF-8" {
+		t.Errorf("UTF-16 after a line that is not KEY=VALUE: %v", err)
+	}
+	long := settingsFile(t, l+"=1\n"+strings.Repeat("x", bufio.MaxScanTokenSize+1)+"\n")
+	if _, _, err := ReadFileLenient(long); !errors.Is(err, bufio.ErrTooLong) || !strings.HasPrefix(err.Error(), long+":2: ") {
+		t.Errorf("a line too long: %v", err)
+	}
+}

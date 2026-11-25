@@ -7,6 +7,7 @@ import (
 	"bufio"
 	"bytes"
 	"cmp"
+	"errors"
 	"fmt"
 	"io"
 	"os"
@@ -66,9 +67,10 @@ func File() string {
 
 // A Note is a line of the settings file that a read set aside, which
 // sets nothing: a later line of a name the file gives again, a line
-// without a name, a MASSIMO_ENV_FILE line. Its Text names the lines by
-// their numbers and never quotes a value, which may be a secret; it
-// reads after "the settings file: ".
+// without a name, a MASSIMO_ENV_FILE line, and for ReadFileLenient a
+// line that is not KEY=VALUE. Its Text names the lines by their numbers
+// and never quotes a value, which may be a secret; it reads after "the
+// settings file: ".
 type Note struct {
 	// Lines are the numbers of the lines it is about, in the file's
 	// order: for a name given more than once every line of it, the
@@ -82,7 +84,8 @@ type Note struct {
 	// lines 3 and 4; the first wins", "lines 3 and 4 give the same name;
 	// the first wins" for a name that is no variable's, "line 7 has no
 	// name before its =, ignored", "line 2 sets MASSIMO_ENV_FILE,
-	// ignored: name the file with -env".
+	// ignored: name the file with -env", "line 5 is not KEY=VALUE: serve
+	// refuses the file until it is fixed".
 	Text string
 }
 
@@ -133,6 +136,12 @@ func varName(k string) bool {
 // bufio's default buffer.
 const headSize = 4096
 
+// ErrUTF16 is the error of a settings file in UTF-16 text, which a start
+// refuses: "<file>: UTF-16 text, save it as UTF-8", or "<file>:<n>: …"
+// for lines of it after UTF-8 ones (readFile). massimo install refuses
+// such a -settings file before it writes anything (internal/install).
+var ErrUTF16 = errors.New("UTF-16 text, save it as UTF-8")
+
 // utf8BOM is the UTF-8 byte order mark, which Windows' editors and
 // PowerShell write at the start of a file.
 var utf8BOM = []byte{0xEF, 0xBB, 0xBF}
@@ -153,17 +162,19 @@ func utf16Text(head []byte) bool {
 	return bytes.IndexByte(head, 0) >= 0
 }
 
-// readFile parses path whole, for LoadFile and ReloadFile alike, so that
-// a start and a reload take the same lines: the line of each name that
-// wins, in the file's order, and the notes of the lines it set aside,
-// in the order of their first lines (Note). A missing file is
-// os.ErrNotExist. A UTF-8 byte order mark at the start is skipped;
-// UTF-16 text is refused, a file of it (utf16Text) as a line holding a
-// NUL byte, which is named by its number. A line that does not parse, or
-// that the read stops at (one too long for the scanner, a read error),
-// is named by the file and its number, never quoted: it may hold a
-// secret, a value wrapped onto a line of its own, and the error is shown
-// at the start and in serve's log.
+// readFile parses path whole, for LoadFile, ReloadFile, ReadFile and
+// ReadFileLenient alike, so that a start, a reload and an install take
+// the same lines: the line of each name that wins, in the file's order,
+// and the notes of the lines it set aside, in the order of their first
+// lines (Note). A missing file is os.ErrNotExist. A UTF-8 byte order
+// mark at the start is skipped; UTF-16 text is refused as ErrUTF16, a
+// file of it (utf16Text) as a line holding a NUL byte, which is named by
+// its number. A line that does not parse, or that the read stops at (one
+// too long for the scanner, a read error), is named by the file and its
+// number, never quoted: it may hold a secret, a value wrapped onto a
+// line of its own, and the error is shown at the start and in serve's
+// log. A lenient read skips a line that is not KEY=VALUE, with a note,
+// where the others stop; the rest it refuses as they do.
 //
 // The first line of a name wins, an empty one too; its note quotes the
 // name only where it is a variable's (varName). A line without a name
@@ -171,7 +182,7 @@ func utf16Text(head []byte) bool {
 // Windows takes the name: the file File names stays the one the start
 // read, where a reload of another file would take its token as the
 // owner's key.
-func readFile(path string) ([]pair, []Note, error) {
+func readFile(path string, lenient bool) ([]pair, []Note, error) {
 	f, err := os.Open(path)
 	if err != nil {
 		return nil, nil, err
@@ -183,7 +194,7 @@ func readFile(path string) ([]pair, []Note, error) {
 		return nil, nil, fmt.Errorf("%s:1: %w", path, err)
 	}
 	if utf16Text(head) {
-		return nil, nil, fmt.Errorf("%s: UTF-16 text, save it as UTF-8", path)
+		return nil, nil, fmt.Errorf("%s: %w", path, ErrUTF16)
 	}
 	if bytes.HasPrefix(head, utf8BOM) {
 		r.Discard(len(utf8BOM))
@@ -197,7 +208,7 @@ func readFile(path string) ([]pair, []Note, error) {
 	n := 1 // the line read, or the one the read stopped at
 	for ; sc.Scan(); n++ {
 		if bytes.IndexByte(sc.Bytes(), 0) >= 0 {
-			return nil, nil, fmt.Errorf("%s:%d: UTF-16 text, save it as UTF-8", path, n)
+			return nil, nil, fmt.Errorf("%s:%d: %w", path, n, ErrUTF16)
 		}
 		line := strings.TrimSpace(sc.Text())
 		if line == "" || strings.HasPrefix(line, "#") {
@@ -205,7 +216,11 @@ func readFile(path string) ([]pair, []Note, error) {
 		}
 		line = strings.TrimPrefix(line, "export ")
 		k, v, ok := strings.Cut(line, "=")
-		if !ok {
+		switch {
+		case !ok && lenient:
+			notes = append(notes, Note{Lines: []int{n}, Text: fmt.Sprintf("line %d is not KEY=VALUE: serve refuses the file until it is fixed", n)})
+			continue
+		case !ok:
 			return nil, nil, fmt.Errorf("%s:%d: expected KEY=VALUE", path, n)
 		}
 		k, v = strings.TrimSpace(k), strings.TrimSpace(v)
@@ -241,6 +256,39 @@ func readFile(path string) ([]pair, []Note, error) {
 	return pairs, notes, nil
 }
 
+// ReadFile reads the settings file at path as LoadFile and ReloadFile
+// do, and sets nothing: the value of each name, its first line's, and
+// the notes on the lines the read set aside (readFile). A missing file
+// is os.ErrNotExist, UTF-16 text ErrUTF16, any other error LoadFile's.
+// It is what serve reads, for a check of it, as the install tests make.
+func ReadFile(path string) (map[string]string, []Note, error) {
+	return values(readFile(path, false))
+}
+
+// ReadFileLenient reads the settings file at path as ReadFile does, but
+// skips a line that is not KEY=VALUE, where a start stops, with a note:
+// "line 3 is not KEY=VALUE: serve refuses the file until it is fixed".
+// UTF-16 text is ErrUTF16 still, and a line too long to read, or a read
+// error, the error ReadFile returns. massimo install checks the settings
+// with it (internal/install), so that it sees what serve sees, and the
+// settings of a file serve refuses for one line.
+func ReadFileLenient(path string) (map[string]string, []Note, error) {
+	return values(readFile(path, true))
+}
+
+// values is the value of each name of pairs, for ReadFile and
+// ReadFileLenient.
+func values(pairs []pair, notes []Note, err error) (map[string]string, []Note, error) {
+	if err != nil {
+		return nil, nil, err
+	}
+	vars := make(map[string]string, len(pairs))
+	for _, p := range pairs {
+		vars[p.k] = p.v
+	}
+	return vars, notes, nil
+}
+
 // LoadFile reads KEY=VALUE lines from path and sets them in the process
 // environment unless the variable is already set. It exists so that secrets
 // such as the Cube key never have to be typed on a command line, where they
@@ -251,7 +299,7 @@ func readFile(path string) ([]pair, []Note, error) {
 // returned as notes (readFile). A missing file is neither an error nor a
 // note.
 func LoadFile(path string) ([]Note, error) {
-	pairs, notes, err := readFile(path)
+	pairs, notes, err := readFile(path, false)
 	if err != nil {
 		if os.IsNotExist(err) {
 			return nil, nil
@@ -282,7 +330,7 @@ func LoadFile(path string) ([]Note, error) {
 // lines LoadFile takes, the first of a name, and returns the names whose
 // value changed, sorted, and the notes LoadFile returns.
 func ReloadFile(path string) (changed []string, notes []Note, err error) {
-	pairs, notes, err := readFile(path)
+	pairs, notes, err := readFile(path, false)
 	if err != nil {
 		return nil, nil, err
 	}

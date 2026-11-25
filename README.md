@@ -1067,7 +1067,8 @@ the environment wins over the file).
 A name given twice takes its first line, at a start as at a reload,
 and `massimo config` names its lines.
 A UTF-8 byte order mark at the file's start is skipped,
-and UTF-16 text, as PowerShell 5.1's `>` or `>>` writes it, is refused:
+and UTF-16 text, as PowerShell 5.1's `>` or `>>` writes it, is refused,
+by `install -settings` too, before it installs anything:
 save it as UTF-8.
 A line without a name is ignored, and so is a `MASSIMO_ENV_FILE` line:
 name the file with `-env`.
@@ -1075,7 +1076,11 @@ Every command but `version` and `help` warns of a line set aside
 on stderr at its start, by its number and never its value
 (`warning: /etc/massimo/env: MASSIMO_HSTS is given on lines 3 and 4; the first wins`),
 `massimo config` lists them after the settings,
-and `serve` says them in its log too.
+`serve` says them in its log too,
+and `install` on Linux and macOS among its warnings
+those of the settings file it installs, unless the command's start read it;
+its checks read the file as `serve` does,
+but skip a line that is not `KEY=VALUE`, which `serve` refuses, with a warning.
 On Linux and macOS the service user, the owner of `/etc/massimo/env`,
 reads that file alone and keeps its data in `/var/lib/massimo`,
 from any directory, as `sudo sshd` reads sshd's own configuration;
