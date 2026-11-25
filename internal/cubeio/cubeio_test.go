@@ -83,6 +83,30 @@ func TestDoRereadsConfig(t *testing.T) {
 	}
 }
 
+// One re-read is one config event of the device: the client's Send
+// applies the C reply, and Reread does not apply it again (AP
+// RereadOnce v1.0, Block 1).
+func TestRereadIsOneConfigEvent(t *testing.T) {
+	_, w, ctx := connect(t)
+	evs := testkit.ChanWatch(t, w.Client.Events(), func(e cubelan.Event) string { return e.Kind.String() + " " + e.Device.String() })
+	const rf cube.RFAddress = 0x0a010a
+	_, before := w.Client.EventCounts()
+	w.Reread(ctx, rf)
+	if c := w.Client.Snapshot().Config(rf); c == nil {
+		t.Fatalf("no configuration of %s after the re-read", rf)
+	}
+	// Reread has returned: every event of it is out, up to the client's
+	// last, which the watch is to hold before it is counted.
+	_, sent := w.Client.EventCounts()
+	evs.Await(t, 0, "the client's last event", func(e cubelan.Event) bool { return e.Seq() >= sent })
+	got := evs.Since(0, func(e cubelan.Event) bool {
+		return e.Seq() > before && e.Kind == cubelan.EventConfig && e.Device == rf
+	})
+	if len(got) != 1 {
+		t.Fatalf("one re-read gave %d config events of %s, want 1", len(got), rf)
+	}
+}
+
 func TestKeepHidden(t *testing.T) {
 	cur := &cube.Metadata{
 		Rooms:   []cube.RoomMeta{{ID: 1, Name: "a"}, {ID: cube.HiddenRoom, Name: "parked"}},

@@ -27,7 +27,7 @@ val appVersion: Pair<String, Int> =
 
 android {
     namespace = "ch.metaworx.massimo"
-    compileSdk = 36
+    compileSdk = 37
     buildToolsVersion = "36.0.0"
 
     defaultConfig {

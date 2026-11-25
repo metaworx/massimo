@@ -98,9 +98,9 @@ type Options struct {
 	Root string
 	// Binary is the file installed as BinPath; "" is the running one.
 	Binary string
-	// Settings, when set, is copied as EnvPath if there is none yet;
-	// UTF-16 text is refused before anything is written
-	// (checkSettingsFile).
+	// Settings, when set, is copied as EnvPath if there is none yet; a
+	// file serve's start cannot read is refused before anything is
+	// written (checkSettingsFile).
 	Settings string
 	// NoUpdateHelper leaves out massimo-update.path and .service.
 	NoUpdateHelper bool
@@ -756,17 +756,23 @@ func localAddrs() ([]net.IP, error) {
 	return ips, nil
 }
 
-// checkSettingsFile refuses a -settings file in UTF-16 text, as
-// PowerShell 5.1's > writes it, with the parser's error (env.ErrUTF16),
-// before an install writes anything: the service could not start on its
-// copy. It refuses it also where a settings file is kept and it would
-// not be copied.
+// checkSettingsFile refuses a -settings file that serve's start cannot
+// read, read as the start reads it (env.ReadFile), with the parser's
+// error and its line, before an install writes anything: the service
+// could not start on its copy. That is a line that is not KEY=VALUE, a
+// line too long to read, UTF-16 text, as PowerShell 5.1's > writes it
+// (env.ErrUTF16), and a file that cannot be read, such as a directory.
+// It refuses it also where a settings file is kept and it would not be
+// copied. Only the parser's refusals: a value the start's checks refuse
+// (cmd/massimo, startchecks.go) is copied. A file that is not there is
+// no refusal of the start, which reads no file then, and is left to the
+// copy, as before (settingsCopy).
 func (o Options) checkSettingsFile() error {
 	if o.Settings == "" {
 		return nil
 	}
-	if _, _, err := env.ReadFileLenient(o.Settings); errors.Is(err, env.ErrUTF16) {
-		return err
+	if _, _, err := env.ReadFile(o.Settings); err != nil && !errors.Is(err, os.ErrNotExist) {
+		return fmt.Errorf("-settings: %w; nothing was written", err)
 	}
 	return nil
 }
@@ -789,13 +795,15 @@ func (in *installer) checkedFile(file string) string {
 // serve reads it, leniently (env.ReadFileLenient): the first line of a
 // name, a UTF-8 byte order mark skipped, a MASSIMO_ENV_FILE line and
 // one without a name ignored, and a line that is not KEY=VALUE, where
-// serve refuses the file, skipped, so that a re-install keeps what the
-// other lines set; UTF-16 text is refused. The run's first read says the
-// parser's notes on the file as each command says those on its own
-// settings at its start (cmd/massimo), "warning: <file>: <note>", once:
-// install reads one file a run, EnvPath, or in a dry run the -settings
-// file it would copy; and not where the command's start read that file,
-// or the copy's source, and said them already (readByStart,
+// serve refuses the file, skipped with a note, so that a re-install over
+// a settings file it keeps does not fail on it and keeps what the other
+// lines set; a -settings file with such a line was refused before
+// (checkSettingsFile). UTF-16 text is refused. The run's first read
+// says the parser's notes on the file as each command says those on its
+// own settings at its start (cmd/massimo), "warning: <file>: <note>",
+// once: install reads one file a run, EnvPath, or in a dry run the
+// -settings file it would copy; and not where the command's start read
+// that file, or the copy's source, and said them already (readByStart,
 // settingsCopy).
 func (in *installer) readSettings(path string) (map[string]string, error) {
 	vars, notes, err := env.ReadFileLenient(path)

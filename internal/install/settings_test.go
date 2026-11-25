@@ -4,6 +4,7 @@
 package install
 
 import (
+	"bufio"
 	"bytes"
 	"encoding/binary"
 	"errors"
@@ -28,10 +29,11 @@ func readEnv(path string) (map[string]string, error) {
 	return vars, err
 }
 
-// utf16File writes text as UTF-16LE after the UTF-8 lines head, with
-// the byte order mark where bom is set: as PowerShell 5.1's > writes a
-// file, or its >> appends to a UTF-8 one. It returns the file's path.
-func utf16File(t *testing.T, head, text string, bom bool) string {
+// utf16File writes text as UTF-16 in the byte order order after the
+// UTF-8 lines head, with the byte order mark where bom is set: as
+// PowerShell 5.1's > writes a file (UTF-16LE), or its >> appends to a
+// UTF-8 one. It returns the file's path.
+func utf16File(t *testing.T, order binary.AppendByteOrder, head, text string, bom bool) string {
 	t.Helper()
 	units := utf16.Encode([]rune(text))
 	if bom {
@@ -39,13 +41,69 @@ func utf16File(t *testing.T, head, text string, bom bool) string {
 	}
 	b := []byte(head)
 	for _, u := range units {
-		b = binary.LittleEndian.AppendUint16(b, u)
+		b = order.AppendUint16(b, u)
 	}
 	p := filepath.Join(t.TempDir(), "settings.env")
 	if err := os.WriteFile(p, b, 0o600); err != nil {
 		t.Fatal(err)
 	}
 	return p
+}
+
+// A refusedFile is a settings file serve's start cannot read, with the
+// parser's error for it: the file's path, at the line where one is
+// named (at, ":2"), then text.
+type refusedFile struct {
+	what, path, at, text string
+	is                   error // what the error wraps, nil for nothing
+}
+
+// refusal is the error install -settings refuses f with.
+func (f refusedFile) refusal() string {
+	return "-settings: " + f.path + f.at + ": " + f.text + "; nothing was written"
+}
+
+// refusedFiles writes a settings file of each kind serve's start
+// cannot read (env.ReadFile): a line that is not KEY=VALUE, a line too
+// long to read, UTF-16 text in both byte orders, whole as PowerShell
+// 5.1's > writes it, with a byte order mark or without one, or appended
+// to UTF-8 lines as its >> does, and a directory, which opens but does
+// not read: its error is the system's (*fs.PathError), which only a
+// missing file's may pass.
+func refusedFiles(t *testing.T) []refusedFile {
+	t.Helper()
+	dir := t.TempDir()
+	d, err := os.Open(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, dirErr := d.Read(make([]byte, 1)) // "read <dir>: is a directory", on Windows "…: Incorrect function."
+	d.Close()
+	if dirErr == nil {
+		t.Fatal("a directory read")
+	}
+	write := func(text string) string {
+		p := filepath.Join(t.TempDir(), "settings.env")
+		if err := os.WriteFile(p, []byte(text), 0o600); err != nil {
+			t.Fatal(err)
+		}
+		return p
+	}
+	const utf16Text, utf16Err = "# Settings\r\nMASSIMO_API_TOKEN=t\r\n", "UTF-16 text, save it as UTF-8"
+	return []refusedFile{
+		{"a line that is not KEY=VALUE", write("MASSIMO_API_TOKEN=t\nnot a setting\n"), ":2", "expected KEY=VALUE", nil},
+		{"a line too long to read", write("MASSIMO_API_TOKEN=t\nMASSIMO_X=" + strings.Repeat("x", bufio.MaxScanTokenSize) + "\n"), ":2", "bufio.Scanner: token too long", bufio.ErrTooLong},
+		{"UTF-16LE", utf16File(t, binary.LittleEndian, "", utf16Text, true), "", utf16Err, env.ErrUTF16},
+		{"UTF-16BE", utf16File(t, binary.BigEndian, "", utf16Text, true), "", utf16Err, env.ErrUTF16},
+		{"UTF-16BE without a byte order mark", utf16File(t, binary.BigEndian, "", utf16Text, false), "", utf16Err, env.ErrUTF16},
+		{"UTF-16LE after UTF-8 lines", utf16File(t, binary.LittleEndian, "# head\r\nMASSIMO_API_TOKEN=t\r\n", "MASSIMO_LISTEN=:80\r\n", false), ":3", utf16Err, env.ErrUTF16},
+		{"a directory", dir, ":1", dirErr.Error(), nil},
+	}
+}
+
+// refusedAs reports whether err is install's refusal of f.
+func refusedAs(err error, f refusedFile) bool {
+	return err != nil && err.Error() == f.refusal() && (f.is == nil || errors.Is(err, f.is))
 }
 
 // An install reads the settings file as serve reads it (env.ReadFile):
@@ -163,20 +221,20 @@ func tree(t *testing.T, root string) map[string]string {
 	return m
 }
 
-// A -settings file in UTF-16 text, as PowerShell 5.1's > writes it or
-// its >> appends to a UTF-8 file, is refused with the parser's text
-// before the install writes, runs or says anything, in a dry run too, by
-// a hand install, by one on a packaged box and by one on macOS, also
-// where the settings file there is kept and it would not be copied: no
-// binary, no user, no directory, no settings file.
-func TestInstallRefusesUTF16Settings(t *testing.T) {
-	whole := utf16File(t, "", "# Settings\r\nMASSIMO_API_TOKEN=t\r\n", true)
-	appended := utf16File(t, "# head\r\nnot a setting\r\n", "MASSIMO_LISTEN=:80\r\n", false)
+// A -settings file serve's start cannot read, for a line that is not
+// KEY=VALUE, a line too long to read, UTF-16 text in either byte order,
+// or as a directory, is refused with the parser's error, its file and
+// line, and the word that nothing was written, before the install
+// writes, runs or says anything: in a dry run too, by a hand install, by
+// one on a packaged box and by one on macOS, also where the settings
+// file there is kept and it would not be copied. No binary, no user, no
+// directory, no unit, no copy.
+func TestInstallRefusesSettingsServeCannotRead(t *testing.T) {
 	for _, k := range []struct {
 		what             string
 		packaged, darwin bool
 	}{{"a hand install", false, false}, {"a packaged box", true, false}, {"macOS", false, true}} {
-		for _, f := range []struct{ path, at string }{{whole, ""}, {appended, ":3"}} {
+		for _, f := range refusedFiles(t) {
 			for _, c := range []struct {
 				dry, kept bool
 			}{{false, false}, {true, false}, {false, true}} {
@@ -197,9 +255,9 @@ func TestInstallRefusesUTF16Settings(t *testing.T) {
 				}
 				o.Settings, o.DryRun = f.path, c.dry
 				err := install(o)
-				what := fmt.Sprintf("%s, %s%s, dry run %v, kept %v", k.what, f.path, f.at, c.dry, c.kept)
-				if want := f.path + f.at + ": UTF-16 text, save it as UTF-8"; !errors.Is(err, env.ErrUTF16) || err.Error() != want {
-					t.Errorf("%s: %v, want %s", what, err, want)
+				what := fmt.Sprintf("%s, %s, dry run %v, kept %v", k.what, f.what, c.dry, c.kept)
+				if !refusedAs(err, f) {
+					t.Errorf("%s: %v, want %s", what, err, f.refusal())
 				}
 				if after := tree(t, root); !maps.Equal(after, before) {
 					t.Errorf("%s: written before the refusal: %q, before %q", what, after, before)
@@ -302,41 +360,84 @@ func TestInstallNotesOnceWithTheCommandsFile(t *testing.T) {
 	}
 }
 
-// A settings file serve refuses for one line that is not KEY=VALUE is
-// read leniently by install's checks (env.ReadFileLenient): the line is
-// a note, the others' settings count as readEnv's did, so that the
-// health drop-in, the capability for MASSIMO_TLS_HTTP's port and the
-// macOS helper's health URL are as before, not plain http.
-func TestInstallReadsAFileServeRefuses(t *testing.T) {
-	text := "MASSIMO_API_TOKEN=t\nMASSIMO_TLS=acme\nMASSIMO_TLS_NAMES=massimo.example.net\nnot a setting\nMASSIMO_TLS_HTTP=:80\n"
-	settings := filepath.Join(t.TempDir(), ".env")
-	os.WriteFile(settings, []byte(text), 0o600)
-	const note = ": line 4 is not KEY=VALUE: serve refuses the file until it is fixed\n"
-
+// A -settings file that is not there is no refusal of serve's start,
+// and install takes it as before: refused at the copy, os.ErrNotExist,
+// where there is no settings file yet, and not copied where one is kept.
+func TestInstallSettingsNotThere(t *testing.T) {
+	none := filepath.Join(t.TempDir(), "none.env")
 	root, bin := setup(t)
-	var out bytes.Buffer
-	if err := Install(Options{Root: root, Binary: bin, Settings: settings, Out: &out, Run: (&recorder{}).run}); err != nil {
-		t.Fatal(err)
+	if err := Install(Options{Root: root, Binary: bin, Settings: none, Out: &bytes.Buffer{}, Run: (&recorder{}).run}); !errors.Is(err, os.ErrNotExist) || strings.Contains(err.Error(), "nothing was written") {
+		t.Errorf("no settings file yet: %v", err)
 	}
-	if n := strings.Count(out.String(), "warning: "+EnvPath+note); n != 1 || strings.Contains(out.String(), "cannot check") || strings.Contains(out.String(), "no MASSIMO_API_TOKEN") {
-		t.Errorf("the note said %d times, or the file not read:\n%s", n, out.String())
-	}
-	if b, _ := os.ReadFile(filepath.Join(root, HealthDropIn)); !strings.Contains(string(b), "MASSIMO_HEALTH=https://") {
-		t.Errorf("health drop-in: %q", b)
-	}
-	if b, _ := os.ReadFile(filepath.Join(root, ListenDropIn)); !strings.Contains(string(b), "AmbientCapabilities=CAP_NET_BIND_SERVICE") {
-		t.Errorf("listen drop-in: %q", b)
-	}
-
 	root, bin = setup(t)
-	out.Reset()
-	o := darwinOpts(root, bin, &recorder{}, &out)
-	o.Settings = settings
-	if err := InstallDarwin(o); err != nil {
-		t.Fatal(err)
+	os.MkdirAll(filepath.Join(root, EnvDir), 0o750)
+	os.WriteFile(filepath.Join(root, EnvPath), []byte("MASSIMO_API_TOKEN=mine\n"), 0o600)
+	var out bytes.Buffer
+	if err := Install(Options{Root: root, Binary: bin, Settings: none, Out: &out, Run: (&recorder{}).run}); err != nil || !strings.Contains(out.String(), EnvPath+" exists; kept it and did not copy "+none+"\n") {
+		t.Errorf("a kept settings file: %v\n%s", err, out.String())
 	}
-	if !strings.Contains(read(t, filepath.Join(root, PlistPath(HelperLabel))), "<string>https://127.0.0.1:8099/healthz</string>") || !strings.Contains(out.String(), "warning: "+EnvPath+note) {
-		t.Errorf("macOS: the helper's health URL not https, or no note:\n%s", out.String())
+}
+
+// A settings file a re-install keeps, which serve refuses for one line
+// that is not KEY=VALUE, is read leniently by install's checks
+// (env.ReadFileLenient), so that an upgrade does not fail on it: the
+// install goes through and starts the service, the line is a warning,
+// and the other lines' settings count, so that the health drop-in, the
+// capability for MASSIMO_TLS_HTTP's port and the macOS helper's health
+// URL are https, not plain http. So without -settings, and with one
+// that is not copied over the kept file, by a hand install, by one on a
+// packaged box and by one on macOS.
+func TestInstallKeepsAFileServeRefuses(t *testing.T) {
+	text := "MASSIMO_API_TOKEN=t\nMASSIMO_TLS=acme\nMASSIMO_TLS_NAMES=massimo.example.net\nnot a setting\nMASSIMO_TLS_HTTP=:80\n"
+	good := filepath.Join(t.TempDir(), ".env")
+	os.WriteFile(good, []byte("MASSIMO_API_TOKEN=u\n"), 0o600)
+	const note = "warning: " + EnvPath + ": line 4 is not KEY=VALUE: serve refuses the file until it is fixed\n"
+	for _, k := range []struct {
+		what             string
+		packaged, darwin bool
+	}{{"a hand install", false, false}, {"a packaged box", true, false}, {"macOS", false, true}} {
+		for _, settings := range []string{"", good} {
+			root, bin := setup(t)
+			if k.packaged {
+				root = packagedRoot(t)
+			}
+			os.MkdirAll(filepath.Join(root, EnvDir), 0o750)
+			os.WriteFile(filepath.Join(root, EnvPath), []byte(text), 0o600)
+			var out bytes.Buffer
+			rec := &recorder{}
+			o, install := Options{Root: root, Binary: bin, Out: &out, Run: rec.run}, Install
+			if k.darwin {
+				o, install = darwinOpts(root, bin, rec, &out), InstallDarwin
+			}
+			o.Settings = settings
+			what := fmt.Sprintf("%s, -settings %q", k.what, settings)
+			if err := install(o); err != nil {
+				t.Errorf("%s: %v", what, err)
+				continue
+			}
+			s := out.String()
+			if n := strings.Count(s, note); n != 1 || strings.Contains(s, "cannot check") || strings.Contains(s, "no MASSIMO_API_TOKEN") {
+				t.Errorf("%s: the warning said %d times, or the file not read:\n%s", what, n, s)
+			}
+			if read(t, filepath.Join(root, EnvPath)) != text {
+				t.Errorf("%s: the kept file changed", what)
+			}
+			if k.darwin {
+				if !strings.Contains(read(t, filepath.Join(root, PlistPath(HelperLabel))), "<string>https://127.0.0.1:8099/healthz</string>") || !strings.Contains(s, "start "+Label) {
+					t.Errorf("%s: the helper's health URL not https, or not started:\n%s", what, s)
+				}
+				continue
+			}
+			if !rec.has("systemctl restart massimo.service") {
+				t.Errorf("%s: not started: %q", what, rec.cmds)
+			}
+			if b, _ := os.ReadFile(filepath.Join(root, HealthDropIn)); !strings.Contains(string(b), "MASSIMO_HEALTH=https://") {
+				t.Errorf("%s: health drop-in: %q", what, b)
+			}
+			if b, _ := os.ReadFile(filepath.Join(root, ListenDropIn)); !strings.Contains(string(b), "AmbientCapabilities=CAP_NET_BIND_SERVICE") {
+				t.Errorf("%s: listen drop-in: %q", what, b)
+			}
+		}
 	}
 }
 

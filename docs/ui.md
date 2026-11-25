@@ -420,6 +420,8 @@ whose tooltip names the chosen Cube and which opens the same list;
 then the pile goes to a row of its own under them, at the left.
 The M stays at every width.
 The row is measured as if ↑ were there, so that scrolling never changes how it folds.
+What sticks out of the row while it is measured is cut off,
+so that the page never becomes wider than the screen for that moment.
 
 The logo lies over the word "Massimo", which a screen reader reads:
 the word shows until the drawing has come (`ui/brand/brand.svg`,
@@ -643,6 +645,14 @@ For a role with `cubes` its button opens System settings → Cubes.
 
 Every room has a tile:
 
+- **The setpoint row** under the room's name holds IS, SET and the chevrons:
+  IS at the tile's left edge, the chevrons at its right edge, SET between them.
+  Each temperature has its icon with its label under it, then its value;
+  the values are as large as the tile's width allows,
+  smaller in a narrow tile, such as one of three columns,
+  so that the row fits its tile in every language;
+  where a label is too long for the space, it is cut, its icon kept.
+  Nothing of the row leaves the tile or lies over another part of it.
 - **IS** is the room's temperature, its virtual wall thermostat's
   (docs/api-v1.md, "The virtual wall thermostat"), which every client shows:
   the wall thermostat's, else the median of the radiator thermostats',
@@ -742,18 +752,16 @@ Every room has a tile:
   the log adds the temperature, "OFF (4.5 °C)".
   The fields that take a temperature keep 4.5:
   the holiday form, the House tile's, the programme's switch points, the configuration.
-  At the top right of the value, in the accent colour of SET's icon,
+  Right after the value, a small superscript in the accent colour of SET's icon,
   a mark says where it is one of the room's presets, as a display does:
   a crescent moon at its eco temperature, a sun with rays at its comfort temperature,
   the two side by side where comfort and eco are the same;
   its tooltip names it in the configuration's words ("Eco temperature"),
   and so does a screen reader.
-  The mark stands out of the row's flow, in the room above the value,
-  and the value is as wide as "30.5°" whatever it shows,
-  so that the mark costs no width, neither the value nor the chevrons move
-  as a step passes a preset, and the tiles line up;
-  on a phone the row's gaps are narrower and its numbers a little smaller,
-  so that Italian's labels, the longest, fit a 390 px screen.
+  The value's box keeps the mark's room and is as wide as "30.5°" with it,
+  whatever it shows,
+  so that neither the value nor the chevrons move as a step passes a preset,
+  and the tiles line up.
   The presets are the room's, its entry's `eco_temp` and `comfort_temp`,
   what most of its thermostats store, else the first of its order's,
   as the room's configuration shows them:
@@ -767,7 +775,8 @@ Every room has a tile:
   one read runs at a time and one more waits behind it for every call meanwhile,
   so that a burst, as a reconnect brings one per thermostat,
   reads the rooms twice at most, the last time after the last event.
-  The up and down chevrons next to it change it in steps of 0.5 °C,
+  The up and down chevrons at the tile's right edge, under its ⋯,
+  change it in steps of 0.5 °C,
   the value stepped marked as it goes;
   the value is sent 2 seconds after the last click, or at once with **Save**;
   **Cancel** drops it.
@@ -808,6 +817,9 @@ Every room has a tile:
     a temperature kept until a date and time, then back to Auto.
   A room on holiday has MORE pressed, saying until when:
   "Holiday until 24.12., 18:00", the year added where it is not this one.
+  The tile's **i** and cog stand at the right end of the modes' row, at its top:
+  where MORE wraps under AUTO and MANU, as a holiday's does in a narrow tile,
+  they stay level with AUTO.
 - With the room's thermostats in different modes, for example after another
   program set one of them, the modes in use are outlined,
   and the head's crossed arrows list each thermostat's mode.
@@ -818,8 +830,9 @@ Every room has a tile:
   and with **Repair…** opens the room's repairs under the tile (Repairs, below).
 - The room name or the **i** button opens the device list:
   every device with its type's icon before its name (a radiator, a wall
-  thermostat, a window, a leaf for the eco button), its values (valve, set
-  and measured temperature, offset), its problems as icons that list them,
+  thermostat, a window, a leaf for the eco button), its values (valve and
+  offset on the left, set and measured temperature on the right,
+  ending at the row's right edge), its problems as icons that list them,
   the set temperature OFF at 4.5 °C, without a unit, and with the moon, the sun
   or both in the place of its gauge where it is the device's own eco or comfort
   temperature, so that the values stay where they are,

@@ -82,13 +82,9 @@ GUIDELINES/wip/HANDOVER.md is the context a session needs to work here.
     before the Update button works;
     `install` warning that the API is open to the LAN
     while the server signs users in (AuthWarning);
-    a re-read's `C` reply applied twice, by `Send` and again by
-    `cubeio.Writer.Reread` (the proxy's `c:` too), so that one re-read gives
-    two config events: a plan of its own;
-    a helper of tools/ui-test/ for a test that tells a device's data through
-    `reads`, reading the rooms again after the device's own `state` and
-    `config` events, which take back what it told
-    (`test_new_batteries_sent` lost its button so).
+    a UI test's plain `page.route` handler that answers a request failing
+    with "Route is already handled!" where the page's last route goes while
+    a request is in it, as the reboot stub did before `safe_route`.
 13. **Housekeeping**:
     the `.env` copies and the release key in the Linux test box's session scratchpad,
     its SSH key on the Pi; the M7 reservations for the house Cube and the Pi;

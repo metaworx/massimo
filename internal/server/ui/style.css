@@ -120,7 +120,12 @@ body:not(.expert) .expert-only { display: none !important; }
    ui/src/header/fold.ts measures it (data-fold): "logo" the M in the
    logo's place, "cube" the Cube choice a cube button, "pile" the pile on
    the next row, at the left; "measure" the items at their whole widths,
-   for the measure alone. */
+   for the measure alone. The measure is clipped to the row's width: at
+   its whole width the row is wider than a phone's page, which would
+   become as wide for that layout, and the browser would zoom out to show
+   it and cut the scroll of a page near its end, which would move up at
+   every poll. Only the measure is clipped, so that no open list or
+   focus ring of the row ever is. */
 .top-line {
   display: flex;
   align-items: flex-end;
@@ -134,6 +139,7 @@ body:not(.expert) .expert-only { display: none !important; }
    are from each other (4 px, .nav's gap): the row's 16 px less 12;
    fold.ts measures the distance as it is */
 .top-line > .cube { margin-right: -12px; }
+.top-line[data-fold="measure"] { overflow-x: clip; }
 .top-line[data-fold="measure"] > .brand, .top-line[data-fold="measure"] > .cube { flex: none; }
 .top-line[data-fold~="logo"] .brand-name { min-width: calc(var(--brand-h) * var(--brand-mark-ratio, 1.09)); }
 .top-line[data-fold~="logo"] .brand-name .brand-logo { display: none; }
@@ -1103,34 +1109,57 @@ button.subtle { color: var(--muted); }
 .home-notice .home-notice-title { font-weight: 600; }
 .home-notice button { margin-top: 4px; }
 
+/* The setpoint row (Tile.tsx): a grid of IS, SET and the chevrons, IS
+   at the tile's left edge under the room's name, the chevrons at its
+   right edge under the ⋯, SET between them, the space left over shared
+   out beside it. The chevrons keep their width; where IS and SET are
+   wider than the rest, both give way alike, so that nothing leaves the
+   tile or lies over its neighbour. */
 .setpoint-row {
-  display: flex;
+  container-type: inline-size;
+  display: grid;
+  grid-template-columns: minmax(0, auto) minmax(0, auto) auto;
+  justify-content: space-between;
   align-items: center;
-  justify-content: center;
-  gap: 8px 14px;
-  padding: 16px 12px 6px;
-  min-width: 0;
+  column-gap: 6px;
+  padding: 16px 14px 6px;
 }
+/* Without the chevrons, for a user who may not set a temperature
+   (.no-setpoint, login.js), the row has no third column, so that SET
+   stands at the tile's right edge. */
+.no-setpoint .setpoint-row { grid-template-columns: minmax(0, auto) minmax(0, auto); }
 /* A temperature: a small column with the icon above the label, then the
-   number. */
+   number. A label too long for the space is cut, its icon kept, rather
+   than the row made wider. */
 .temp-block {
   display: flex;
   flex-direction: row;
   align-items: center;
-  gap: 6px;
+  gap: 4px;
+  min-width: 0;
 }
 .temp-tag {
   display: flex;
   flex-direction: column;
   align-items: center;
   gap: 1px;
-  flex: none;
+  flex: 0 1 auto;
+  min-width: 1.25rem; /* the icon's */
 }
+/* The numbers' size follows the row's width, 100cqi inside its padding
+   (the row is their size container): 2.3rem where there is room, else
+   the largest at which the row holds both values' boxes (4.3ch each and
+   SET's mark's 0.51em: 5.43em, 5.6em with room for a wider font) beside
+   the chevrons, the gaps and two tags (120 px together); 23 px in the
+   narrowest tile (280 px, .tiles). The tags' share leaves room for
+   labels of up to five letters (the short labels of AP RoomsPage,
+   Block 4); a longer label is cut. A browser without container units
+   keeps the first size. */
+.temp-val, .set-val { flex: none; font-size: 2.1rem; font-size: clamp(1.25rem, (100cqi - 120px) / 5.6, 2.3rem); }
 .temp-big {
-  font-size: 2.3rem;
   line-height: 1;
   font-variant-numeric: tabular-nums;
-  min-width: 4.2ch;
+  min-width: 4.3ch;
   text-align: left;
   display: inline-block;
 }
@@ -1144,37 +1173,30 @@ button.subtle { color: var(--muted); }
   stroke-linecap: round;
   stroke-linejoin: round;
 }
-@media (max-width: 359px) {
-  .temp-tag { display: none; }
-}
-/* On a phone the row's sides and gaps are narrower and its numbers a
-   little smaller, so that the longest labels of IS and SET (Italian's)
-   and the widest value fit a 390 px screen's tile with room to spare. */
-@media (max-width: 420px) {
-  .setpoint-row { gap: 8px; padding-left: 4px; padding-right: 4px; }
-  .temp-block { gap: 4px; }
-  .temp-big { font-size: 2.1rem; }
-}
 .temp-label {
   font-size: 0.66rem;
   letter-spacing: 0.1em;
   color: var(--muted);
   line-height: 1;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 .setpoint-big.pending { color: var(--accent); }
 /* A setpoint at a thermostat's eco or comfort temperature carries the
    device's own mark (shared/setpoint.tsx PresetMark), in the accent
-   colour of the icons beside it, costing no width: in the tile a badge
-   at the top right of SET's value, out of the flow, in the room the row
-   leaves above it; in a device row in the place of Set's gauge (.di).
-   The value is as wide as "30.5°" whatever it shows, so that neither it
-   nor the chevrons move as a step passes eco or comfort, and the tiles
-   line up. */
+   colour of the icons beside it: in the tile a small superscript right
+   after SET's value, in its box; in a device row in the place of Set's
+   gauge (.di). SET's box is as wide as "30.5°" and the mark whatever it
+   shows, so that neither the value nor the chevrons move as a step
+   passes eco or comfort, and the tiles line up; the value's own box ends
+   at its last sign, the °, which the mark follows. */
 .preset-mark { display: inline-flex; flex: none; align-self: center; line-height: 0; }
-.set-val { position: relative; display: inline-block; }
-.setpoint-big { min-width: 4.3ch; }
-.set-val > .preset-mark { position: absolute; right: -2px; bottom: 100%; margin-bottom: 1px; }
-.set-val > .preset-mark .ti { width: 1rem; height: 1rem; }
+.set-val { position: relative; display: inline-flex; align-items: flex-start; min-width: calc(4.3ch + 0.51em); }
+.setpoint-big { min-width: 0; }
+.set-val > .preset-mark { align-self: flex-start; margin: 0.12em 0 0 0.06em; }
+.set-val > .preset-mark .ti { width: 0.45em; height: 0.45em; }
 /* The room's thermostats while their setpoints differ, under the
    setpoint row (Tile.tsx Members): each by name, setpoint and mark, " · "
    between them, a member on a line of its own where the tile is too
@@ -1295,6 +1317,9 @@ html.blink-first .server-icon.state-new use.mark, html.blink-first .server-icon.
    one line, so that the two columns fit a phone and each age stands
    under its own value. */
 .device-vals .cell.aged { display: grid; grid-template-columns: auto auto auto auto; justify-content: start; align-items: baseline; column-gap: 8px; }
+/* In the right column (.end) the name's track takes the room its value
+   does not need, as a plain cell's name does (.device-vals, below). */
+.device-vals > .cell.aged.end { grid-template-columns: 1fr auto auto auto; }
 .device-vals .cell.aged .age { display: contents; }
 .device-vals .cell.aged .age-text { grid-column: 1; grid-row: 2; line-height: 1.2; }
 .device-vals .cell.aged .age-exact { grid-column: 2 / -1; grid-row: 2; line-height: 1.2; white-space: nowrap; }
@@ -1304,7 +1329,6 @@ html.blink-first .server-icon.state-new use.mark, html.blink-first .server-icon.
   display: flex;
   flex-direction: column;
   gap: 4px;
-  margin-left: -6px;
 }
 .step {
   width: 34px;
@@ -1334,9 +1358,11 @@ html.blink-first .server-icon.state-new use.mark, html.blink-first .server-icon.
 }
 .pending-row button { padding: 4px 12px; font-size: 0.9rem; }
 
+/* The modes' row: its items at its top, so that the tools stand level
+   with AUTO where the modes wrap onto a second line (.mode-group). */
 .mode-row {
   display: flex;
-  align-items: center;
+  align-items: flex-start;
   flex-wrap: wrap;
   gap: 8px;
   padding: 8px 14px 14px;
@@ -1351,7 +1377,7 @@ html.blink-first .server-icon.state-new use.mark, html.blink-first .server-icon.
 .mode-row .mode-group > button { padding: 6px 10px; font-size: 0.85rem; }
 /* The modes take the row beside the tools, and wrap there: More saying
    until when a holiday lasts goes under AUTO and MANU, the tools beside
-   both rather than on a line of their own. */
+   both rather than on a line of their own, at the row's top (.mode-row). */
 .mode-group { display: inline-flex; flex-wrap: wrap; gap: 8px; flex: 1 1 0; }
 .mode-row .mode-group > button.active { background: var(--accent); color: var(--accent-fg); border-color: var(--accent); }
 /* More (ui/src/rooms/Tile.tsx More): a mode button whose menu drops down, Eco,
@@ -1432,17 +1458,25 @@ html.blink-first .server-icon.state-new use.mark, html.blink-first .server-icon.
 .device-ids > span { white-space: pre-wrap; }
 .hidden-device { display: inline-flex; flex-wrap: wrap; align-items: baseline; gap: 2px 8px; min-width: 0; }
 .hidden-device > .device-ids { color: var(--muted); font-size: 0.85rem; }
+/* A device row's values (ui/src/rooms/Devices.tsx Values): the left
+   column at the row's left, the right one at its right edge, at least
+   16 px between them, as narrow as a phone's at any width, since a tile
+   of three columns at 1100 px is narrower than a phone's. In the right
+   column, Set and Actual, whose cells carry the class end (Values), a
+   value's name takes the room its value does not need, so that each
+   value ends at the edge whatever the length of its name. */
 .device-vals {
   display: grid;
   grid-template-columns: auto auto;
-  justify-content: start;
-  gap: 2px 28px;
+  justify-content: space-between;
+  gap: 2px 16px;
   margin-top: 6px;
   font-variant-numeric: tabular-nums;
 }
+.device-vals > .cell.end > .k { margin-right: auto; }
 .device-vals .cell { display: flex; align-items: baseline; gap: 8px; white-space: nowrap; min-width: 0; align-self: start; }
 .device-vals .cell.wide { grid-column: 1 / -1; white-space: normal; }
-.device-vals .k { color: var(--muted); min-width: 3.6em; }
+.device-vals .k { color: var(--muted); min-width: 3.2em; }
 .device-vals .num { display: inline-block; min-width: 4.4ch; text-align: right; }
 .device-vals .num.temp { font-weight: 700; }
 .device-vals .u { color: var(--muted); font-size: 0.85em; min-width: 1.6em; }
@@ -1625,8 +1659,6 @@ dialog .actions { display: flex; justify-content: flex-end; gap: 8px; margin-top
 .dialog-form > span { min-width: 0; overflow-wrap: anywhere; }
 
 @media (max-width: 480px) {
-  .device-vals { gap: 2px 16px; }
-  .device-vals .k { min-width: 3.2em; }
   .panel-row > .muted { min-width: 0; width: 100%; }
   .house .panel, .room .panel { margin-left: 8px; margin-right: 8px; padding: 10px; }
 }
