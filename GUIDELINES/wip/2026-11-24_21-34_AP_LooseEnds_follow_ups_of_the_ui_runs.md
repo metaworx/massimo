@@ -1,11 +1,11 @@
-# AP LooseEnds v1.1: Follow-ups of the UI runs
+# AP LooseEnds v1.2: Follow-ups of the UI runs
 
 ## TL;DR
 
 What AP UiParts and AP FirstOwner left,
 and what a walk on a real open server found
 (`wip/2026-11-24_14-31_ANALYSIS_LooseEnds_first_owner_walk.md`), in five blocks,
-a pull request each.
+and a sixth from the second walk on main, a pull request each.
 
 - open → no regular user; an integration's users count no more (D1, D2):
   an approval leaves the server open, the owner can still be made
@@ -17,6 +17,7 @@ a pull request each.
 - clock → `pause_at` in seconds, through one helper
 - server tests → four races fixed at the source
   (`wip/2026-11-20_20-32_ANALYSIS_LooseEnds_armv6_two_server_tests.md`)
+- key → a refused API key is said in the card, on the key's way (D43)
 
 A Cube's rooms after a change of Cube: fixed on main by AP RoomMajority.
 
@@ -27,6 +28,7 @@ A Cube's rooms after a change of Cube: fixed on main by AP RoomMajority.
 3. Page: the poll before the start's card; the Integrations card's two reads
 4. Clock: `pause_at` in seconds through a helper, and a guard
 5. ServerTests: four tests of `internal/server` fixed at the source
+6. Key: the sign-in card says that an API key was refused
 
 ## Discussion
 
@@ -132,6 +134,18 @@ each the owner's to change, and the completion gate lists them.
     and Users lists none of an integration's while the server is open.
   - **B.**
     "No owner yet" in both, in six languages.
+
+### Decided after the fifth block
+
+The owner, 2026-11-25, on the second walk along the first owner's path,
+on main with Blocks 1, 2, 4 and 5:
+
+- **D43-A.
+  A refused API key is said.**
+  Asked whether the silent refusal of a wrong API key should be fixed as a
+  small extra block of this plan, the owner wrote: "Yes, fix the refusal."
+  It is Block 6.
+  Not chosen: listing it at the completion gate.
 
 ### What stays as it is
 
@@ -336,6 +350,30 @@ and each still shows what it means with the clock 50 ms on.
   `changelog.sh check` passes, `[Unreleased]` not being empty.
   Block 5 does the same, and changes no file the binary is built from:
   the fake Cube is `massimo fakecube`, so it is not touched.
+
+### For Block 6: a refused API key
+
+Seen on main on 2026-11-25, with Blocks 1, 2, 4 and 5 merged,
+in the second walk along the first owner's path.
+
+- **What a user meets:**
+  the sign-in card's API key way, a key the server does not know,
+  Sign in: the server answers 401, the card is on the Password way again,
+  the key's field is empty, and nothing says that the key was refused.
+  The page has no text for it.
+- **Older than this plan's blocks:**
+  the first walk did not try a wrong key, and Block 2 changed the key's way only
+  for a right key (one sign-in for each Enter).
+- **In the code** (`src/signin/Card.tsx`, `submitKey`):
+  the key becomes the page's token (`setToken`),
+  in the app kept by the bridge before the reads go out with it,
+  and the sign-in is finished as a password's is (`finishSignIn`).
+  The block finds where the refusal of the first read is lost and the card
+  opened anew, and what is left of the refused key: the page's token,
+  the bridge's.
+- **The password's way says its refusal** in the card's message line,
+  in the page's language, with the focus in the field (Block 2):
+  the model for the key's.
 
 ## Implementation Plan
 
@@ -646,6 +684,43 @@ since it is the page's start and `app.js`'s.
   `MASSIMO_ENV_FILE=/dev/null MASSIMO_TEST_SCALE=2 go test -race -count=20 -timeout 30m -run …` of `./internal/server` over the four tests' names, once alone and once while `make race` runs beside it; `MASSIMO_ENV_FILE=/dev/null go test ./internal/server`; the four under armv6 emulation, `-count=5` with `MASSIMO_TEST_SCALE=4` (the Docker image `massimo-armv6-test`, or `make test-armv6` where QEMU is installed); `gofmt`, `go vet` for three platforms, `GUIDELINES/shared/tools/check`.
   CI's job "Test (armv6, QEMU)" on the pull request.
 
+### Block 6: Key
+
+- **Goal:**
+  a key the server refuses is said in the sign-in card, on the key's way.
+- **Changes:**
+  1. `src/signin/` and `login.js`, where the key's sign-in ends:
+     a refusal of the key's first read is the key's refusal.
+     The card stays on the API key's way and says so in its message line,
+     in the page's language; the focus is in the key's field,
+     given in the submit's handler or in the drawing that shows it;
+     the field is empty, a refused key being a secret still.
+  2. A refused key is no longer the page's token,
+     and in the app the bridge keeps none.
+  3. Any other answer says what it is, as the password's way does:
+     the server not reached, a lockout.
+  4. `ui/i18n/*.json`:
+     the text in six languages, FR, IT, NL and PL machine-translated and marked.
+- **Tests:**
+  `tools/ui-test/test_login.py`:
+  a wrong key is said, on the key's way, the field empty and focused,
+  no session and no token left; the right key then signs in once;
+  in German; in the app's variant, the bridge keeps no refused key.
+  Seen failing before the change.
+- **Documents:**
+  `docs/ui.md` (the sign-in, the API key's way).
+- **CHANGELOG:**
+  `CHANGELOG.d/Fixed/claude-looseends-key-refused.md`:
+  "- The sign-in card says when an API key is refused,
+  where it turned back to the password without a word."
+- **Commit:**
+  `fix(ui): The sign-in card says that an API key was refused`
+- **Verification:**
+  `make ui-check` exit 0; `make ui-test` with `test_login.py`, `test_ways.py`,
+  `test_first_owner.py`, `test_keep_open.py`, `test_sign_in_updates.py`,
+  `test_sign_in_resend.py` and `test_parts_guard.py` in all four cases exit 0;
+  the whole UI suite in one case exit 0.
+
 ## Proposed commit message
 
 The plan: `chore(aps): +LooseEnds v1.0`
@@ -692,3 +767,7 @@ Assisted-by: claude-code:claude-opus-5-5
   since the plans' check takes every heading "Block <n>" for a block of the
   Implementation Plan; nothing else changed, and D40-A, D41-A and D42-A stand
   as taken with PLAN++.
+- v1.2 (2026-11-25): Block 6, Key, added at the owner's word (D43-A):
+  the sign-in card says that an API key was refused,
+  the first new finding of the second walk on main.
+  Blocks 1 to 5 are built and merged, and stand as they are.
