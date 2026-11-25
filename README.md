@@ -1121,10 +1121,11 @@ on stderr at its start, by its number and never its value
 `serve` says them in its log too,
 and `install` on Linux and macOS among its warnings
 those of the settings file it installs, unless the command's start read it.
-`install -settings` refuses a file `serve` cannot read,
-with the error `serve` gives, before it installs anything,
-also where a settings file is kept and the file would not be copied:
+`install -settings` refuses a path that is not there, with the system's error,
+and a file `serve` cannot read, with the error `serve` gives:
 UTF-16 text, a line that is not `KEY=VALUE`, a line too long to read.
+It refuses them before it installs anything,
+also where a settings file is kept and the file would not be copied.
 On Linux and macOS its checks of a settings file a re-install keeps
 read it as `serve` does, but skip a line that is not `KEY=VALUE` with a warning,
 so that an upgrade does not fail on it;

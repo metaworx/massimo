@@ -151,7 +151,8 @@ could not listen there and would restart every ten seconds;
 install adds no addresses) and when `MASSIMO_API_TOKEN` is missing.
 On every system it refuses a `-settings` file that `serve` cannot read
 (a line that is not `KEY=VALUE`, a line too long to read, UTF-16 text)
-with the error `serve` gives, before it writes anything,
+with the error `serve` gives, and a `-settings` path that is not there,
+before it writes anything, on Windows before it stops the service,
 also where a settings file is kept and the file would not be copied.
 On Linux and macOS it warns of a line that is not `KEY=VALUE` in a settings file it keeps
 instead, so that a re-install does not fail on it;

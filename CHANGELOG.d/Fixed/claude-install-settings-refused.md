@@ -1,3 +1,3 @@
-- `massimo install -settings` refuses a file `serve` cannot read, a line
-  that is not `KEY=VALUE` or one too long, naming the line, before it
-  writes anything, where it installed a service that did not start.
+- `massimo install -settings` refuses before any write a path not there,
+  also over a kept settings file, and a file `serve` cannot read, naming
+  the line, where it went on, failed late or its service did not start.

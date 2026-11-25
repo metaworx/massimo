@@ -99,8 +99,8 @@ type Options struct {
 	// Binary is the file installed as BinPath; "" is the running one.
 	Binary string
 	// Settings, when set, is copied as EnvPath if there is none yet; a
-	// file serve's start cannot read is refused before anything is
-	// written (checkSettingsFile).
+	// file serve's start cannot read, or a path that is not there, is
+	// refused before anything is written (checkSettingsFile).
 	Settings string
 	// NoUpdateHelper leaves out massimo-update.path and .service.
 	NoUpdateHelper bool
@@ -756,22 +756,22 @@ func localAddrs() ([]net.IP, error) {
 	return ips, nil
 }
 
-// checkSettingsFile refuses a -settings file that serve's start cannot
-// read, read as the start reads it (env.ReadFile), with the parser's
-// error and its line, before an install writes anything: the service
-// could not start on its copy. That is a line that is not KEY=VALUE, a
-// line too long to read, UTF-16 text, as PowerShell 5.1's > writes it
-// (env.ErrUTF16), and a file that cannot be read, such as a directory.
-// It refuses it also where a settings file is kept and it would not be
-// copied. Only the parser's refusals: a value the start's checks refuse
-// (cmd/massimo, startchecks.go) is copied. A file that is not there is
-// no refusal of the start, which reads no file then, and is left to the
-// copy, as before (settingsCopy).
+// checkSettingsFile refuses a -settings path that is not there, and a
+// file serve's start cannot read, read as the start reads it
+// (env.ReadFile), before an install writes anything: the path with the
+// system's error (os.ErrNotExist), the file with the parser's error and
+// its line, as the service could not start on its copy. That is a line
+// that is not KEY=VALUE, a line too long to read, UTF-16 text, as
+// PowerShell 5.1's > writes it (env.ErrUTF16), and a file that cannot be
+// read, such as a directory. It refuses them also where a settings file
+// is kept and the file would not be copied: a wrong path is a mistake
+// either way. Only the parser's refusals: a value the start's checks
+// refuse (cmd/massimo, startchecks.go) is copied.
 func (o Options) checkSettingsFile() error {
 	if o.Settings == "" {
 		return nil
 	}
-	if _, _, err := env.ReadFile(o.Settings); err != nil && !errors.Is(err, os.ErrNotExist) {
+	if _, _, err := env.ReadFile(o.Settings); err != nil {
 		return fmt.Errorf("-settings: %w; nothing was written", err)
 	}
 	return nil

@@ -152,7 +152,7 @@ const headSize = 4096
 // refuses: "<file>: UTF-16 text, save it as UTF-8", or "<file>:<n>: …"
 // for lines of it after UTF-8 ones (readFile). massimo install refuses
 // such a -settings file before it writes anything, as it refuses every
-// file ReadFile does not read but a missing one (internal/install).
+// file ReadFile does not read, a missing one too (internal/install).
 var ErrUTF16 = errors.New("UTF-16 text, save it as UTF-8")
 
 // utf8BOM is the UTF-8 byte order mark, which Windows' editors and
@@ -276,7 +276,7 @@ func readFile(path string, lenient bool) ([]pair, []Note, error) {
 // the notes on the lines the read set aside (readFile). A missing file
 // is os.ErrNotExist, UTF-16 text ErrUTF16, any other error LoadFile's.
 // It is what serve reads, for a check of it: massimo install refuses a
-// -settings file it returns an error for, but os.ErrNotExist
+// -settings file it returns an error for, os.ErrNotExist too
 // (internal/install).
 func ReadFile(path string) (map[string]string, []Note, error) {
 	return values(readFile(path, false))

@@ -17,13 +17,13 @@ import (
 )
 
 // On Windows, where PowerShell 5.1's > writes UTF-16, a -settings file
-// serve's start cannot read (refusedFiles) is refused with the parser's
-// error before the install does anything, before it reaches the service
-// manager: it writes, says and runs nothing, which is what the test can
-// see where no massimo service is installed, as on CI; also where the
-// settings file is kept and it would not be copied. A dry run, which
-// stops no service whatever it reaches, with ProgramFiles and
-// ProgramData in a temp dir.
+// serve's start cannot read, or a path that is not there (refusedFiles),
+// is refused with its error before the install does anything, before it
+// reaches the service manager: it writes, says and runs nothing, which
+// is what the test can see where no massimo service is installed, as on
+// CI; also where the settings file is kept and it would not be copied. A
+// dry run, which stops no service whatever it reaches, with ProgramFiles
+// and ProgramData in a temp dir.
 func TestInstallWindowsRefusesSettingsFirst(t *testing.T) {
 	for _, f := range refusedFiles(t) {
 		for _, kept := range []bool{false, true} {

@@ -52,14 +52,19 @@ func utf16File(t *testing.T, order binary.AppendByteOrder, head, text string, bo
 
 // A refusedFile is a settings file serve's start cannot read, with the
 // parser's error for it: the file's path, at the line where one is
-// named (at, ":2"), then text.
+// named (at, ":2"), then text; or, bare, the system's error alone,
+// text, which names the file itself.
 type refusedFile struct {
 	what, path, at, text string
 	is                   error // what the error wraps, nil for nothing
+	bare                 bool
 }
 
 // refusal is the error install -settings refuses f with.
 func (f refusedFile) refusal() string {
+	if f.bare {
+		return "-settings: " + f.text + "; nothing was written"
+	}
 	return "-settings: " + f.path + f.at + ": " + f.text + "; nothing was written"
 }
 
@@ -68,8 +73,8 @@ func (f refusedFile) refusal() string {
 // long to read, UTF-16 text in both byte orders, whole as PowerShell
 // 5.1's > writes it, with a byte order mark or without one, or appended
 // to UTF-8 lines as its >> does, and a directory, which opens but does
-// not read: its error is the system's (*fs.PathError), which only a
-// missing file's may pass.
+// not read: its error is the system's (*fs.PathError). And a path that
+// is not there, refused with the system's error too, os.ErrNotExist.
 func refusedFiles(t *testing.T) []refusedFile {
 	t.Helper()
 	dir := t.TempDir()
@@ -82,6 +87,11 @@ func refusedFiles(t *testing.T) []refusedFile {
 	if dirErr == nil {
 		t.Fatal("a directory read")
 	}
+	none := filepath.Join(t.TempDir(), "none.env")
+	_, noneErr := os.Open(none) // "open <none>: no such file or directory", on Windows "…: The system cannot find the file specified."
+	if !errors.Is(noneErr, os.ErrNotExist) {
+		t.Fatalf("a path that is not there: %v", noneErr)
+	}
 	write := func(text string) string {
 		p := filepath.Join(t.TempDir(), "settings.env")
 		if err := os.WriteFile(p, []byte(text), 0o600); err != nil {
@@ -91,13 +101,14 @@ func refusedFiles(t *testing.T) []refusedFile {
 	}
 	const utf16Text, utf16Err = "# Settings\r\nMASSIMO_API_TOKEN=t\r\n", "UTF-16 text, save it as UTF-8"
 	return []refusedFile{
-		{"a line that is not KEY=VALUE", write("MASSIMO_API_TOKEN=t\nnot a setting\n"), ":2", "expected KEY=VALUE", nil},
-		{"a line too long to read", write("MASSIMO_API_TOKEN=t\nMASSIMO_X=" + strings.Repeat("x", bufio.MaxScanTokenSize) + "\n"), ":2", "bufio.Scanner: token too long", bufio.ErrTooLong},
-		{"UTF-16LE", utf16File(t, binary.LittleEndian, "", utf16Text, true), "", utf16Err, env.ErrUTF16},
-		{"UTF-16BE", utf16File(t, binary.BigEndian, "", utf16Text, true), "", utf16Err, env.ErrUTF16},
-		{"UTF-16BE without a byte order mark", utf16File(t, binary.BigEndian, "", utf16Text, false), "", utf16Err, env.ErrUTF16},
-		{"UTF-16LE after UTF-8 lines", utf16File(t, binary.LittleEndian, "# head\r\nMASSIMO_API_TOKEN=t\r\n", "MASSIMO_LISTEN=:80\r\n", false), ":3", utf16Err, env.ErrUTF16},
-		{"a directory", dir, ":1", dirErr.Error(), nil},
+		{"a line that is not KEY=VALUE", write("MASSIMO_API_TOKEN=t\nnot a setting\n"), ":2", "expected KEY=VALUE", nil, false},
+		{"a line too long to read", write("MASSIMO_API_TOKEN=t\nMASSIMO_X=" + strings.Repeat("x", bufio.MaxScanTokenSize) + "\n"), ":2", "bufio.Scanner: token too long", bufio.ErrTooLong, false},
+		{"UTF-16LE", utf16File(t, binary.LittleEndian, "", utf16Text, true), "", utf16Err, env.ErrUTF16, false},
+		{"UTF-16BE", utf16File(t, binary.BigEndian, "", utf16Text, true), "", utf16Err, env.ErrUTF16, false},
+		{"UTF-16BE without a byte order mark", utf16File(t, binary.BigEndian, "", utf16Text, false), "", utf16Err, env.ErrUTF16, false},
+		{"UTF-16LE after UTF-8 lines", utf16File(t, binary.LittleEndian, "# head\r\nMASSIMO_API_TOKEN=t\r\n", "MASSIMO_LISTEN=:80\r\n", false), ":3", utf16Err, env.ErrUTF16, false},
+		{"a directory", dir, ":1", dirErr.Error(), nil, false},
+		{"a path that is not there", none, "", noneErr.Error(), os.ErrNotExist, true},
 	}
 }
 
@@ -225,9 +236,10 @@ func tree(t *testing.T, root string) map[string]string {
 // KEY=VALUE, a line too long to read, UTF-16 text in either byte order,
 // or as a directory, is refused with the parser's error, its file and
 // line, and the word that nothing was written, before the install
-// writes, runs or says anything: in a dry run too, by a hand install, by
-// one on a packaged box and by one on macOS, also where the settings
-// file there is kept and it would not be copied. No binary, no user, no
+// writes, runs or says anything; and so is a path that is not there,
+// with the system's error. In a dry run too, by a hand install, by one
+// on a packaged box and by one on macOS, also where the settings file
+// there is kept and it would not be copied. No binary, no user, no
 // directory, no unit, no copy.
 func TestInstallRefusesSettingsServeCannotRead(t *testing.T) {
 	for _, k := range []struct {
@@ -360,24 +372,6 @@ func TestInstallNotesOnceWithTheCommandsFile(t *testing.T) {
 	}
 }
 
-// A -settings file that is not there is no refusal of serve's start,
-// and install takes it as before: refused at the copy, os.ErrNotExist,
-// where there is no settings file yet, and not copied where one is kept.
-func TestInstallSettingsNotThere(t *testing.T) {
-	none := filepath.Join(t.TempDir(), "none.env")
-	root, bin := setup(t)
-	if err := Install(Options{Root: root, Binary: bin, Settings: none, Out: &bytes.Buffer{}, Run: (&recorder{}).run}); !errors.Is(err, os.ErrNotExist) || strings.Contains(err.Error(), "nothing was written") {
-		t.Errorf("no settings file yet: %v", err)
-	}
-	root, bin = setup(t)
-	os.MkdirAll(filepath.Join(root, EnvDir), 0o750)
-	os.WriteFile(filepath.Join(root, EnvPath), []byte("MASSIMO_API_TOKEN=mine\n"), 0o600)
-	var out bytes.Buffer
-	if err := Install(Options{Root: root, Binary: bin, Settings: none, Out: &out, Run: (&recorder{}).run}); err != nil || !strings.Contains(out.String(), EnvPath+" exists; kept it and did not copy "+none+"\n") {
-		t.Errorf("a kept settings file: %v\n%s", err, out.String())
-	}
-}
-
 // A settings file a re-install keeps, which serve refuses for one line
 // that is not KEY=VALUE, is read leniently by install's checks
 // (env.ReadFileLenient), so that an upgrade does not fail on it: the
@@ -385,8 +379,8 @@ func TestInstallSettingsNotThere(t *testing.T) {
 // and the other lines' settings count, so that the health drop-in, the
 // capability for MASSIMO_TLS_HTTP's port and the macOS helper's health
 // URL are https, not plain http. So without -settings, and with one
-// that is not copied over the kept file, by a hand install, by one on a
-// packaged box and by one on macOS.
+// that is not copied over the kept file, which the install says, by a
+// hand install, by one on a packaged box and by one on macOS.
 func TestInstallKeepsAFileServeRefuses(t *testing.T) {
 	text := "MASSIMO_API_TOKEN=t\nMASSIMO_TLS=acme\nMASSIMO_TLS_NAMES=massimo.example.net\nnot a setting\nMASSIMO_TLS_HTTP=:80\n"
 	good := filepath.Join(t.TempDir(), ".env")
@@ -418,6 +412,9 @@ func TestInstallKeepsAFileServeRefuses(t *testing.T) {
 			s := out.String()
 			if n := strings.Count(s, note); n != 1 || strings.Contains(s, "cannot check") || strings.Contains(s, "no MASSIMO_API_TOKEN") {
 				t.Errorf("%s: the warning said %d times, or the file not read:\n%s", what, n, s)
+			}
+			if kept := EnvPath + " exists; kept it and did not copy " + good + "\n"; settings != "" && !strings.Contains(s, kept) {
+				t.Errorf("%s: not said that -settings was not copied:\n%s", what, s)
 			}
 			if read(t, filepath.Join(root, EnvPath)) != text {
 				t.Errorf("%s: the kept file changed", what)
