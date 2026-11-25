@@ -399,7 +399,9 @@ func (p *Proxy) passthrough(ctx context.Context, m cube.Message, remote string) 
 	wctx, cancel := context.WithTimeout(ctx, p.opts.ReplyTimeout)
 	defer cancel()
 	// A metadata write is mirrored into the snapshot, which the Cube
-	// does not echo it to.
+	// does not echo it to. The C line of a c: is in the snapshot when Do
+	// returns, a device the server did not know yet, such as one just
+	// paired, included: the Cube client's Send applied it.
 	w := cubeio.Writer{Client: p.opts.Client, Queue: p.opts.Queue}
 	cmd := engine.Command{Priority: engine.PriorityNormal, Passthrough: true, Lines: lines}
 	if m.Type == 's' {
@@ -436,14 +438,6 @@ func (p *Proxy) passthrough(ctx context.Context, m cube.Message, remote string) 
 			}
 			p.note(Event{Kind: EventDeleted, Level: slog.LevelInfo, Remote: remote, Summary: map[string]any{"devices": rfList(addrs)}},
 				"proxy: devices deleted by a client", "remote", remote, "devices", len(addrs))
-		}
-	}
-	if m.Type == 'c' {
-		// A device the server did not know yet, such as one just paired.
-		for _, r := range res.Replies {
-			if r.Type == 'C' {
-				p.opts.Client.ApplyLocal(r)
-			}
 		}
 	}
 	if m.Type == 't' && len(res.Replies) > 0 && res.Replies[0].Type == 'A' {
