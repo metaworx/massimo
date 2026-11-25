@@ -7,7 +7,7 @@ import json
 from datetime import datetime, timedelta, timezone
 
 from conftest import api_call
-from helpers import css_hidden, show_view, wait_until
+from helpers import css_hidden, safe_route, show_view, wait_until
 
 AVAILABLE = {"available": True, "by": "systemd"}
 MISSING = "no reboot helper installed: sudo massimo install -reboot-helper"
@@ -22,11 +22,16 @@ def iso(seconds):
 class RebootStub:
     """GET answers self.answer; a POST or a DELETE is kept with its body
     and moves the answer on: a POST to a reboot that waits (or has begun,
-    with no delay), a DELETE back to available."""
+    with no delay), a DELETE back to available. Its route is safe_route's
+    (AP ServerTraffic, D5-A): a page that follows a reboot reads it every
+    two seconds, and where close takes the page's last route away while
+    such a read is in the handler, Playwright has sent the read on to the
+    server by the time the handler answers it, whose answer then fails
+    with "Route is already handled!"; safe_route lets it go."""
 
     def __init__(self, page, answer):
         self.page, self.answer, self.requests = page, dict(answer), []
-        page.route(ROUTE, self.handle)
+        safe_route(page, ROUTE, self.handle)
 
     def handle(self, route):
         req = route.request

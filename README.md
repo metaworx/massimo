@@ -274,7 +274,9 @@ a server without users answers every device on the local network (see "Server"),
 so the first start is the owner's,
 after `sudo -u _massimo /usr/local/bin/massimo user add <name> -role owner`
 or followed by the first-owner form of the web UI.
-It warns when `MASSIMO_API_TOKEN` is missing.
+It warns when `MASSIMO_API_TOKEN` is missing,
+and refuses a `.env` that `serve` cannot read before it writes anything
+([Cube variables](#cube-variables)).
 `-listen :80` moves the API and web UI to another address (kept by later installs),
 `-no-update-helper` leaves the helper out,
 and removes it where an earlier install put it,
@@ -966,6 +968,11 @@ which `serve -discover-target 127.0.0.1:23273` finds.
 `-pair 0a010d,0abcde,TEQ0000001` adds a device that joins pairing mode two seconds
 after `n:`, a copy of the greeting's 0a010d as 0abcde in no room,
 and joins again after it was removed (a fourth field sets the delay).
+`-free-slots 50` makes the S replies and the greeting's H line say 50 free memory slots,
+a Cube that holds no radiogram;
+without it the S replies say `0x31`, one radiogram pending,
+for which a `serve` with its periodic refresh on reconnects to read the
+budget two minutes after a write, and the H line says the greeting's own.
 
 The fake carries out the radio commands it acknowledges, as the devices do:
 a setpoint or mode (to every thermostat of the room for a room command),
@@ -1088,8 +1095,7 @@ and `massimo config` names its lines;
 on Windows a name in two cases is given twice,
 as `MASSIMO_X` and `massimo_x` are one variable there.
 A UTF-8 byte order mark at the file's start is skipped,
-and UTF-16 text, as PowerShell 5.1's `>` or `>>` writes it, is refused,
-by `install -settings` too, before it installs anything:
+and UTF-16 text, as PowerShell 5.1's `>` or `>>` writes it, is refused:
 save it as UTF-8.
 A line without a name is ignored, and so is a `MASSIMO_ENV_FILE` line:
 name the file with `-env`.
@@ -1099,9 +1105,15 @@ on stderr at its start, by its number and never its value
 `massimo config` lists them after the settings,
 `serve` says them in its log too,
 and `install` on Linux and macOS among its warnings
-those of the settings file it installs, unless the command's start read it;
-its checks read the file as `serve` does,
-but skip a line that is not `KEY=VALUE`, which `serve` refuses, with a warning.
+those of the settings file it installs, unless the command's start read it.
+`install -settings` refuses a file `serve` cannot read,
+with the error `serve` gives, before it installs anything,
+also where a settings file is kept and the file would not be copied:
+UTF-16 text, a line that is not `KEY=VALUE`, a line too long to read.
+On Linux and macOS its checks of a settings file a re-install keeps
+read it as `serve` does, but skip a line that is not `KEY=VALUE` with a warning,
+so that an upgrade does not fail on it;
+on Windows it does not read that file.
 On Linux and macOS the service user, the owner of `/etc/massimo/env`,
 reads that file alone and keeps its data in `/var/lib/massimo`,
 from any directory, as `sudo sshd` reads sshd's own configuration;

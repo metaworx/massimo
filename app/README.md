@@ -14,8 +14,11 @@ tested and put on a phone.
 
 ## The Android app
 
-Kotlin, the Android Gradle Plugin, `compileSdk` and `targetSdk` 36,
+Kotlin, the Android Gradle Plugin, `compileSdk` 37, `targetSdk` 36,
 `minSdk` 26 (Android 8.0).
+The app is compiled against Android 17's interfaces,
+which the AndroidX libraries ask for,
+and behaves as an app made for Android 16.
 Three flavours: `foss`, the F-Droid build, and `play`, the Google Play build,
 the same app until Block 8 gives `play` Google's push distributor,
 both with the application id `ch.metaworx.massimo`;
@@ -167,7 +170,7 @@ All of it lives in WSL (D10-A of the plan); nothing needs Windows.
 - The Android command-line tools in `~/Android/Sdk`, with `ANDROID_HOME`
   pointing there and its `cmdline-tools/latest/bin` and `platform-tools`
   on the `PATH` (in `~/.profile`); then
-  `sdkmanager "platforms;android-36" "build-tools;36.0.0" platform-tools`.
+  `sdkmanager "platforms;android-37.0" "build-tools;36.0.0" platform-tools`.
   The NDK comes with Block 1's `make app-core-android`, not before.
 - Gradle comes through the wrapper, `android/gradlew`, pinned by its
   SHA-256 in `gradle/wrapper/gradle-wrapper.properties`;

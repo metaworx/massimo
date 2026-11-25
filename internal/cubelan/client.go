@@ -567,8 +567,9 @@ func (c *Client) readDeadline() time.Duration {
 	return 24 * time.Hour
 }
 
-// handle routes an incoming message: replies go to the waiting Send,
-// everything else updates the snapshot.
+// handle routes a line the Cube sent: an N line to the pairing, a reply
+// to the waiting Send, and every other line into the snapshot (fold),
+// an L or C reply before it goes to its Send.
 func (c *Client) handle(m cube.Message) {
 	if m.Type == 'N' {
 		// Inclusion mode reports devices whenever they join, long after
@@ -599,6 +600,16 @@ func (c *Client) handle(m cube.Message) {
 	// A C line of the greeting may answer a re-read sent while the
 	// greeting still comes, and the device it describes must not drop
 	// out of the snapshot at the greeting's end.
+	c.fold(m)
+	if reply != nil {
+		reply.ch <- m // buffered for the one reply: never blocks
+	}
+}
+
+// fold puts a line into the snapshot and emits its events: a line of the
+// Cube's that answers no command, an L or C reply before handle hands it
+// to its Send, and a line ApplyLocal is given. It answers no Send.
+func (c *Client) fold(m cube.Message) {
 	if c.beforeApply != nil {
 		c.beforeApply(m)
 	}
@@ -623,9 +634,6 @@ func (c *Client) handle(m cube.Message) {
 			c.logGreeting(e)
 		}
 		c.emit(e) // never blocks: it drops the oldest event
-	}
-	if reply != nil {
-		reply.ch <- m // buffered for the one reply: never blocks
 	}
 }
 
@@ -863,13 +871,15 @@ func (c *Client) logGreeting(e Event) {
 	}
 }
 
-// ApplyLocal folds a message into the snapshot as if the Cube had sent
-// it. The LAN proxy uses it after a metadata write (m:) went through,
-// because the Cube does not echo the new M lines.
+// ApplyLocal folds a line into the snapshot as if the Cube had sent it,
+// and emits its events. Its caller is the mirror of a metadata write
+// (ApplyMetadataWrite), whose new M lines the Cube does not echo. It
+// answers no Send: a line it is given while a command waits for its
+// reply is not taken for that reply, which only the Cube sends.
 func (c *Client) ApplyLocal(m cube.Message) {
 	c.handling.Add(1) // a line as the Cube's (EventCounts)
 	defer c.handling.Add(-1)
-	c.handle(m)
+	c.fold(m)
 }
 
 // ForgetDevice drops a device the Cube deleted with t: from the

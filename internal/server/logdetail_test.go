@@ -11,6 +11,7 @@ package server
 import (
 	"context"
 	"encoding/base64"
+	"fmt"
 	"net/http/httptest"
 	"reflect"
 	"strings"
@@ -279,10 +280,10 @@ func TestSameConfigAtDebug(t *testing.T) {
 	}
 	raw[0x12] = 44 // comfort 22.0
 	fc.SetConfig(cube.Message{Type: 'C', Data: rf + "," + base64.StdEncoding.EncodeToString(raw)})
-	// A re-read's C line reaches the snapshot twice, as Send's reply and
-	// as Reread's own apply: the wait above took the first one's line.
-	// The pump writes the second's after it, at debug, and a mark taken
-	// before then would take that line for the change's.
+	// The mark below is to follow every line of the first re-read: after
+	// pumpSync the pump has written them all, as docs/testing.md, "The
+	// pump", asks of a test that saw a change and goes on to read the
+	// log, whether a re-read gives one line or more.
 	pumpSync(t, s)
 	m = logMark(t, ts)
 	rt.writer().Reread(ctx, 0x0a010d)
@@ -292,5 +293,28 @@ func TestSameConfigAtDebug(t *testing.T) {
 	}
 	if more := logLines(t, next, logLine("config", "0a010d")); len(more) != 0 {
 		t.Fatalf("the change at info again: %+v", more)
+	}
+}
+
+// One re-read is one config line in the log, at any level: the client's
+// Send applies the C reply, and Reread does not apply it again (AP
+// RereadOnce v1.0, Block 1).
+func TestRereadIsOneConfigLine(t *testing.T) {
+	t.Parallel()
+	r := startServer(t, stored())
+	ts, s := r.ts, r.s
+	rt := s.cubes["keq0000100"]
+	firstConnected(t, ts)
+	pumpSync(t, s)
+	m := logMark(t, ts)
+	rt.writer().Reread(context.Background(), 0x0a010d)
+	pumpSync(t, s)
+	got := logLines(t, m, func(e event) bool { return e.Kind == "config" && e.Device == "0a010d" })
+	if len(got) != 1 {
+		var seen []string
+		for _, e := range got {
+			seen = append(seen, fmt.Sprintf("%d at %s", e.ID, e.Level))
+		}
+		t.Fatalf("one re-read gave %d config lines of 0a010d, want 1: %s", len(got), strings.Join(seen, ", "))
 	}
 }

@@ -1,4 +1,4 @@
-# Testing the web UI (v1.24.0)
+# Testing the web UI (v1.27.0)
 
 An evaluation of a Cypress suite for the web UI, against the alternatives:
 what the Playwright smoke test covers today and what it cannot do well,
@@ -818,9 +818,30 @@ The suite's helpers for it are in `tools/ui-test/helpers.py`
   taken on the page before the data became signals (AP UiParts, Block 15):
   a part's effect that read again at each write of the data it follows fails it.
   What each showing of a page reads is `test_shell_updates.py`'s.
-- **What the reads do not keep yet:**
-  a device's state applied in the page (`updateDevice`, a dispatched `state` event)
-  lasts until the rooms are loaded again.
+- **What the reads keep** (`reads.keep(rf)`, AP ServerTraffic, D3-A):
+  a device's data told through the rooms' read lasts until the server's next
+  `state` or `config` event of the device, which brings it as the server has it
+  and starts no read;
+  the server sends them by itself, at its poll after an earlier test's write
+  and at a follow-up's re-read of a C line, when no test can time them.
+  With `keep`, the page reads its rooms again after each such event of the server's,
+  once its own listeners have drawn it,
+  so that what the test told is drawn again.
+  Until that read is answered the server's data stay drawn,
+  so a check of what was told waits for it (`wait_until`, `wait_for`)
+  and does not look once (`test_new_batteries.py`, `Device.shows`).
+  `PAGE_KIT` does it on every stream of the page, a reopened one too;
+  an event a test dispatches is not the server's and starts no read,
+  so a test that counts the rooms' reads after its own events still can
+  (`test_room_marks.py`).
+  It holds within one document, as a mark does,
+  and `reads.clear` of the rooms' read forgets it.
+  A test takes it where it tells a device through the rooms' read
+  and then checks what it told while the server may speak:
+  `test_confirm.py`, `test_room_marks.py`, `test_new_batteries.py`.
+  Nothing keeps a device's state applied in the page alone,
+  by `updateDevice` or a dispatched `state` event:
+  it lasts until the rooms are loaded again.
   The poll does not load them while the stream is open,
   but the events that start a load do (`connected`, `metadata`, `unconfirmed` and others),
   among them those the server sends by itself.
@@ -883,6 +904,17 @@ the server's and the test's, in order,
   the four cases' among them (`test_log.py`).
 - **The server sets** keep the server's 10 s poll of the fake Cube,
   which brings no line of its own (the fake Cube's states do not change).
+  Their fake Cube has every memory slot free (`-free-slots 50`,
+  AP ServerTraffic, D1-A):
+  with the fake's default of one radiogram pending,
+  the server reconnected to read its budget two minutes after every write,
+  and the reconnect's burst,
+  `metadata`, a `config` event per device and `connected`,
+  took back what a test had told and read the page's data again,
+  in whichever test ran then.
+  A test that wants a reconnect plants one (`POST …/cubes/<serial>/refresh`);
+  the structure checks' reconnect, twelve minutes after a change,
+  and the refresh every six hours stay, and fall outside one test's time.
   What changes is their age:
   the window contact's window, open from the start (`greeting.txt`),
   counts as open long five minutes after its set started,

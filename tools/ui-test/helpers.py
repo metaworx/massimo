@@ -274,9 +274,13 @@ def held_poll(page):
 # once the page's scripts are in,
 # its MassimoParts.log.event, which isolate_log can have keep the server's lines
 # out and wait_log_live probes. The page itself is not changed: app.js
-# calls the log's event through window.MassimoParts at each event.
+# calls the log's event through window.MassimoParts at each event. Every
+# stream also reads the rooms again after the server's state and config
+# events of a device in window.__uiTest.keep (Reads.keep), once the page's
+# own listeners have drawn the event; kept counts those reads.
 PAGE_KIT = """(() => {
-  const k = window.__uiTest = { events: [], streams: 0, fromServer: false, isolated: false, probes: 0, probed: 0, appends: 0 };
+  const k = window.__uiTest = { events: [], streams: 0, fromServer: false, isolated: false, probes: 0, probed: 0, appends: 0,
+    keep: new Set(), kept: 0 };
   const Real = window.EventSource;
   if (!Real) return;
   const add = EventTarget.prototype.addEventListener;
@@ -294,11 +298,24 @@ PAGE_KIT = """(() => {
     }
     r.logged += logged;
   };
+  const readKept = (ev) => {
+    if (!ev.isTrusted || !k.keep.size || typeof loadRooms !== "function") return;
+    let device;
+    try {
+      device = JSON.parse(ev.data).device;
+    } catch {
+      return;
+    }
+    if (!k.keep.has(device)) return;
+    k.kept++;
+    setTimeout(() => loadRooms().catch(() => {}), 0);
+  };
   class Watched extends Real {
     constructor(url, opts) {
       super(url, opts);
       this.__uiStream = ++k.streams;
       for (const kind of ["open", "error"]) add.call(this, kind, (ev) => record(this, ev, 0));
+      for (const kind of ["state", "config"]) add.call(this, kind, readKept);
     }
     addEventListener(type, fn, opts) {
       if (typeof fn !== "function") return add.call(this, type, fn, opts);
@@ -396,6 +413,19 @@ def safe_route(page, pattern, handler):
 
 
 CUBES = "**/api/v1/cubes"
+# A read of the chosen Cube's rooms, as fetchRooms of app.js sends it: a
+# pattern of Reads.clear that matches it forgets the devices kept.
+ROOMS_READ = "http://127.0.0.1/api/v1/cubes/KEQ0000100/rooms?devices=all"
+
+
+def route_matches(pattern, url):
+    """Whether a route's pattern matches url: a compiled regex where it
+    finds it, a glob where it matches the whole of it, * within a path's
+    segment and ** across them."""
+    if isinstance(pattern, re.Pattern):
+        return pattern.search(url) is not None
+    parts = re.split(r"(\*\*|\*)", pattern)
+    return re.fullmatch("".join(".*" if p == "**" else "[^/]*" if p == "*" else re.escape(p) for p in parts), url) is not None
 
 
 def configured_only(cubes):
@@ -430,6 +460,7 @@ class Reads:
         self.routed = {}  # pattern: the handler as routed
         self.cubes = {}  # serial: the fields told for the Cube
         self.found_cubes = {}  # serial: a found Cube's whole entry
+        self.kept = set()  # the devices kept (keep), by radio address
 
     @property
     def page(self):
@@ -466,7 +497,8 @@ class Reads:
 
     def clear(self, pattern=CUBES):
         """The reads of pattern answered by the server alone again, what
-        was told for them forgotten."""
+        was told for them forgotten; a pattern that the rooms' read
+        matches forgets the devices kept (keep) as well."""
         if pattern == CUBES:
             self.cubes.clear()
             self.found_cubes.clear()
@@ -475,6 +507,25 @@ class Reads:
         page = self.page
         if routed is not None and page is not None and not page.is_closed():
             page.unroute(pattern, routed)
+        if self.kept and route_matches(pattern, ROOMS_READ):
+            self.kept.clear()
+            if page is not None and not page.is_closed():
+                page.evaluate("() => window.__uiTest.keep.clear()")
+
+    def keep(self, rf):
+        """The device rf kept as the test told it to the rooms' read: from
+        now on, after each state or config event of rf that the server
+        sends, which brings the device as the server has it, the page
+        reads its rooms again, so that what was told is drawn again. The
+        server sends them by itself, at its poll after an earlier write
+        and at a follow-up's re-read of a C line, and a test cannot time
+        them. Every stream of the page does it, a reopened one too
+        (PAGE_KIT), once the page's own listeners have drawn the event;
+        an event a test dispatches starts no read. It holds within one
+        document, as a Stream's mark: a reload forgets it, and the test
+        keeps again after it; clear of the rooms' read forgets it."""
+        self.kept.add(rf)
+        self.page.evaluate("(rf) => { window.__uiTest.keep.add(rf); }", rf)
 
     def cube(self, serial, **fields):
         """The server's entry of the Cube serial in GET /api/v1/cubes with
