@@ -12,6 +12,7 @@ import (
 	"reflect"
 	"regexp"
 	"runtime"
+	"runtime/debug"
 	"slices"
 	"strings"
 	"sync"
@@ -104,9 +105,9 @@ func crossTargets(t *testing.T) [][3]string {
 }
 
 // linked are the modules ./cmd/massimo links on every platform of the
-// Makefile's cross, as "path version", from go list -deps, which reads
-// the modules from the module cache and downloads one missing there
-// where GOPROXY allows; with GOPROXY=off, go mod download fills it.
+// Makefile's cross, by path, from go list -deps, which reads the modules
+// from the module cache and downloads one missing there where GOPROXY
+// allows; with GOPROXY=off, go mod download fills it.
 func linked(t *testing.T) map[string]bool {
 	t.Helper()
 	targets := crossTargets(t)
@@ -115,7 +116,7 @@ func linked(t *testing.T) map[string]bool {
 	var wg sync.WaitGroup
 	for i, tg := range targets {
 		wg.Go(func() {
-			cmd := exec.Command("go", "list", "-deps", "-f", "{{with .Module}}{{if not .Main}}{{.Path}} {{.Version}}{{end}}{{end}}", "./cmd/massimo")
+			cmd := exec.Command("go", "list", "-deps", "-f", "{{with .Module}}{{if not .Main}}{{.Path}}{{end}}{{end}}", "./cmd/massimo")
 			cmd.Dir = root
 			cmd.Env = append(os.Environ(), "GOOS="+tg[0], "GOARCH="+tg[1], "GOARM="+tg[2], "CGO_ENABLED=0")
 			var stderr bytes.Buffer
@@ -153,8 +154,9 @@ func (e *listError) Error() string {
 		"(a module missing from the module cache with GOPROXY=off: go mod download)"
 }
 
-// moduleProblems are the modules the binary links without an entry of
-// that version, and the modules' entries the binary does not link.
+// moduleProblems are the modules the binary links without an entry,
+// and the modules' entries the binary does not link, by path: the
+// version is the binary's own (built), which the file leaves out.
 func moduleProblems(l List, mods map[string]bool) []string {
 	var out []string
 	listed := map[string]bool{}
@@ -162,10 +164,9 @@ func moduleProblems(l List, mods map[string]bool) []string {
 		if e.Kind != KindModule {
 			continue
 		}
-		k := e.Name + " " + e.Version
-		listed[k] = true
-		if !mods[k] {
-			out = append(out, "module "+k+" has an entry, but the binary does not link it")
+		listed[e.Name] = true
+		if !mods[e.Name] {
+			out = append(out, "module "+e.Name+" has an entry, but the binary does not link it")
 		}
 	}
 	for k := range mods {
@@ -213,9 +214,10 @@ func vendoredProblems(l List, dir string) []string {
 
 // TestEverythingIncludedHasAnEntry checks the list against what the
 // binary includes: every module it links on every platform of the
-// Makefile's cross at its version, every directory of third_party/ and
-// every file of the UI's vendor/; a module listed that it does not link
-// fails too. tools/credits' TestGeneratedFileCurrent checks the texts.
+// Makefile's cross, whatever its version, every directory of
+// third_party/ and every file of the UI's vendor/; a module listed that
+// it does not link fails too. tools/credits' TestGeneratedFileCurrent
+// checks the texts.
 func TestEverythingIncludedHasAnEntry(t *testing.T) {
 	l, err := Load()
 	if err != nil {
@@ -231,21 +233,21 @@ func TestEverythingIncludedHasAnEntry(t *testing.T) {
 }
 
 // TestFallenBehindFails checks that the checks above fail where the
-// list has fallen behind: a module of another version, one not linked,
-// and in a copy of the places, a new directory of third_party/ and a
-// new file of vendor/.
+// list has fallen behind: a module linked without an entry, one listed
+// and not linked, and in a copy of the places, a new directory of
+// third_party/ and a new file of vendor/; a module listed and linked
+// passes, as the file names no version.
 func TestFallenBehindFails(t *testing.T) {
 	l := List{Entries: []Entry{
-		{Name: "example.org/a", Version: "v1.0.0", Kind: KindModule},
-		{Name: "example.org/gone", Version: "v1.0.0", Kind: KindModule},
+		{Name: "example.org/a", Kind: KindModule},
+		{Name: "example.org/gone", Kind: KindModule},
 		{Name: "kept", Kind: KindVendored, Path: "third_party/kept/inner"},
 		{Name: "a.js", Kind: KindVendored, Path: "internal/server/ui/vendor/a.js"},
 	}}
-	got := moduleProblems(l, map[string]bool{"example.org/a v1.1.0": true})
+	got := moduleProblems(l, map[string]bool{"example.org/a": true, "example.org/new": true})
 	want := []string{
-		"module example.org/a v1.0.0 has an entry, but the binary does not link it",
-		"module example.org/a v1.1.0 is linked, but has no entry",
-		"module example.org/gone v1.0.0 has an entry, but the binary does not link it",
+		"module example.org/gone has an entry, but the binary does not link it",
+		"module example.org/new is linked, but has no entry",
 	}
 	if !slices.Equal(got, want) {
 		t.Errorf("module problems:\n%q\nwant\n%q", got, want)
@@ -277,12 +279,13 @@ func write(t *testing.T, path, text string) {
 	}
 }
 
-// TestGoVersionIsTheBinarys checks that Go's entry, which the committed
-// file leaves without a version, carries the running binary's, without
-// its "go" in front, in what
-// the server serves and the command prints, and that nothing else of
-// the file changes.
-func TestGoVersionIsTheBinarys(t *testing.T) {
+// TestVersionsAreTheBinarys checks that Go's entry and the modules',
+// which the committed file leaves without a version, carry the running
+// binary's in what the server serves and the command prints: Go's
+// without its "go" in front, a module's the one its build information
+// names, none where it names none (this package's test binary links no
+// module); and that nothing else of the file changes.
+func TestVersionsAreTheBinarys(t *testing.T) {
 	file, err := Parse(embedded)
 	if err != nil {
 		t.Fatal(err)
@@ -294,20 +297,79 @@ func TestGoVersionIsTheBinarys(t *testing.T) {
 	if len(l.Entries) != len(file.Entries) {
 		t.Fatalf("%d entries served, %d in the file", len(l.Entries), len(file.Entries))
 	}
+	deps := map[string]string{}
+	if info, ok := debug.ReadBuildInfo(); ok {
+		for _, d := range info.Deps {
+			deps[d.Path] = d.Version
+		}
+	}
 	for i, e := range l.Entries {
 		want := file.Entries[i]
-		if want.Kind == KindGo {
+		switch want.Kind {
+		case KindGo:
 			if want.Version != "" {
 				t.Errorf("Go's version in the file: %q, want none", want.Version)
 			}
-			want.Version = GoVersion()
+			want.Version = goVersionOf(runtime.Version())
+		case KindModule:
+			if want.Version != "" {
+				t.Errorf("%s's version in the file: %q, want none", want.Name, want.Version)
+			}
+			want.Version = deps[want.Name]
 		}
-		if !reflect.DeepEqual(e, want) {
-			t.Errorf("entry %s served as %+v", want.Name, e)
+		if e.Version != want.Version {
+			t.Errorf("%s: version %q served, want %q", want.Name, e.Version, want.Version)
+		} else if !reflect.DeepEqual(e, want) {
+			t.Errorf("%s: served otherwise than the file holds it: %+v", want.Name, e)
 		}
 	}
 	if g, _ := l.Find("Go"); g.Version != strings.TrimPrefix(runtime.Version(), "go") {
 		t.Errorf("Go's version %q, want %q without its go", g.Version, runtime.Version())
+	}
+}
+
+// TestBuilt checks the versions a binary fills in from its build
+// information: Go's without its "go"; a module's its own, a module
+// replaced by another's the replacement's, one replaced by a directory
+// the version go.mod requires; none for a module the information does
+// not name, even where the file had one, and none for any module
+// without information; Massimo's and a vendored entry's as the file has
+// them.
+func TestBuilt(t *testing.T) {
+	file := func() List {
+		return List{Entries: []Entry{
+			{Name: "Massimo", Kind: KindSelf},
+			{Name: "Go", Kind: KindGo},
+			{Name: "example.org/a", Kind: KindModule},
+			{Name: "example.org/fork", Kind: KindModule},
+			{Name: "example.org/copy", Kind: KindModule, Path: "third_party/copy"},
+			{Name: "example.org/elsewhere", Kind: KindModule, Version: "v9.9.9"},
+			{Name: "preact", Kind: KindVendored, Version: "10.29.0"},
+		}}
+	}
+	info := &debug.BuildInfo{Deps: []*debug.Module{
+		{Path: "example.org/a", Version: "v1.2.0"},
+		{Path: "example.org/fork", Version: "v1.0.0", Replace: &debug.Module{Path: "example.org/other", Version: "v1.0.1-patched"}},
+		{Path: "example.org/copy", Version: "v0.5.0", Replace: &debug.Module{Path: "./third_party/copy", Version: "(devel)"}},
+		{Path: "example.org/unlisted", Version: "v3.0.0"},
+	}}
+	versions := func(l List) []string {
+		var out []string
+		for _, e := range l.Entries {
+			out = append(out, e.Name+" "+e.Version)
+		}
+		return out
+	}
+	got := versions(built(file(), "go1.26.8", info))
+	want := []string{"Massimo ", "Go 1.26.8", "example.org/a v1.2.0", "example.org/fork v1.0.1-patched", "example.org/copy v0.5.0",
+		"example.org/elsewhere ", "preact 10.29.0"}
+	if !slices.Equal(got, want) {
+		t.Errorf("versions\n%q\nwant\n%q", got, want)
+	}
+	got = versions(built(file(), "go1.26.8", nil))
+	want = []string{"Massimo ", "Go 1.26.8", "example.org/a ", "example.org/fork ", "example.org/copy ", "example.org/elsewhere ", "preact 10.29.0"}
+	if !slices.Equal(got, want) {
+		t.Errorf("versions without build information\n%q\nwant\n%q", got, want)
 	}
 }
 

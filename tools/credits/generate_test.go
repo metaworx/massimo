@@ -54,8 +54,10 @@ func TestTargetsAreTheMakefiles(t *testing.T) {
 }
 
 // TestGeneratedFileCurrent checks that internal/credits/credits.json is
-// what make credits writes for this checkout, texts included, and that
-// two runs write the same bytes.
+// what make credits writes for this checkout, texts included, that two
+// runs write the same bytes, and that it names no module's version: a
+// module of another version, as an update that keeps its licence's
+// texts, writes the same file, a module more another.
 func TestGeneratedFileCurrent(t *testing.T) {
 	root, err := filepath.Abs("../..")
 	if err != nil {
@@ -87,6 +89,29 @@ func TestGeneratedFileCurrent(t *testing.T) {
 	}
 	if !bytes.Equal(have, want) {
 		t.Fatalf("%s is not current: run make credits (go run ./tools/credits) from the repository's top", outPath)
+	}
+	l, err := credits.Parse(want)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, e := range l.Entries {
+		if (e.Kind == credits.KindModule || e.Kind == credits.KindGo) && e.Version != "" {
+			t.Errorf("%s: version %s in the file, which the binary fills in", e.Name, e.Version)
+		}
+	}
+	if len(mods) == 0 {
+		t.Fatal("no module linked")
+	}
+	bumped := slices.Clone(mods)
+	bumped[0].version += "-bumped"
+	s.modules = func() ([]module, error) { return bumped, nil }
+	if got, _, err := generate(s); err != nil || !bytes.Equal(got, have) {
+		t.Errorf("%s at %s: another file (%v), want the same", bumped[0].path, bumped[0].version, err)
+	}
+	added := append(slices.Clone(mods), module{path: "example.org/added", version: "v1.0.0", dir: mods[0].dir})
+	s.modules = func() ([]module, error) { return added, nil }
+	if got, _, err := generate(s); err != nil || bytes.Equal(got, have) {
+		t.Errorf("a module more: the same file (%v), want another", err)
 	}
 }
 
@@ -157,10 +182,10 @@ func (tr *tree) list(t *testing.T) credits.List {
 }
 
 // TestMadeUpTree checks the list of a made-up repository: the entries in
-// their order, named, versioned, with their licences, Go's without a
-// version, a module with a file under no licence known mixed, the
-// licences' files each with its own, line ends as LF; then -check
-// passes.
+// their order, named, versioned, with their licences, Go's and the
+// module's without a version, which the binary fills in, a module with a
+// file under no licence known mixed, the licences' files each with its
+// own, line ends as LF; then -check passes.
 func TestMadeUpTree(t *testing.T) {
 	tr := newTree(t)
 	if err := run(tr.root, false, tr.source(), io.Discard); err != nil {
@@ -182,7 +207,7 @@ func TestMadeUpTree(t *testing.T) {
 	want := []string{
 		"Massimo||AGPL-3.0-or-later|false|self||LICENSE:AGPL-3.0",
 		"Go||BSD-3-Clause|false|go||LICENSE:BSD-3-Clause,PATENTS:notice",
-		"example.org/a|v1.0.0|MIT|true|module||LICENSE:MIT,LICENSE-3RD-PARTY.md:",
+		"example.org/a||MIT|true|module||LICENSE:MIT,LICENSE-3RD-PARTY.md:",
 		"kept||MIT|false|vendored|third_party/kept|LICENSE:MIT",
 		"@x/x|2.0.0|MIT|false|vendored|internal/server/ui/vendor/x.js|x.LICENSE:MIT",
 	}
@@ -224,23 +249,33 @@ func TestNewDirectoryTakenUp(t *testing.T) {
 }
 
 // TestChangedModulesFailCheck checks that -check fails where the modules
-// the binary links have changed: another version, one more, one less.
+// the binary links have changed, one more or one less, and passes where
+// one has another version whose licence's texts are the same: the
+// binary fills in its version. Another text fails it.
 func TestChangedModulesFailCheck(t *testing.T) {
 	tr := newTree(t)
 	if err := run(tr.root, false, tr.source(), io.Discard); err != nil {
 		t.Fatal(err)
 	}
 	base := tr.mods
+	tr.mods = []module{{path: base[0].path, version: "v1.0.1", dir: base[0].dir}}
+	if err := run(tr.root, true, tr.source(), io.Discard); err != nil {
+		t.Errorf("another version: -check gave %v, want current", err)
+	}
 	b := module{path: "example.org/b", version: "v0.1.0", dir: base[0].dir}
 	for name, mods := range map[string][]module{
-		"another version": {{path: base[0].path, version: "v1.0.1", dir: base[0].dir}},
-		"one more":        {base[0], b},
-		"one less":        {},
+		"one more": {base[0], b},
+		"one less": {},
 	} {
 		tr.mods = mods
 		if err := run(tr.root, true, tr.source(), io.Discard); err == nil || !strings.Contains(err.Error(), "not current") {
 			t.Errorf("%s: -check gave %v, want not current", name, err)
 		}
+	}
+	tr.mods = base
+	tr.write(t, "../cache/example.org/a@v1.0.0/LICENSE", mitText+"\nA sentence more.\n")
+	if err := run(tr.root, true, tr.source(), io.Discard); err == nil || !strings.Contains(err.Error(), "not current") {
+		t.Errorf("another licence text: -check gave %v, want not current", err)
 	}
 }
 

@@ -277,7 +277,10 @@ def test_system_info_cube_proxies(page, case):
 
 CREDITS = "**/ui/credits.json"
 CREDITS_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "..", "internal", "credits", "credits.json")
+GO_MOD = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "..", "go.mod")
 FAILED = {"en": "The credits could not be loaded: broken", "de": "Die Mitwirkenden konnten nicht geladen werden: broken"}
+MODULE = {"en": "Go module", "de": "Go-Modul"}
+ELSEWHERE = {"en": "Go module, in another platform's build", "de": "Go-Modul, im Build einer anderen Plattform"}
 AMONG = {"en": " and the crates they are built with; their licence texts, collected for Massimo from the crates' archives, are among its files.",
          "de": " und die Crates, mit denen diese gebaut sind; deren Lizenztexte, für Massimo aus den Archiven der Crates gesammelt, stehen unter seinen Dateien."}
 
@@ -316,12 +319,21 @@ def listed(name):
         return next(e for e in json.load(f)["entries"] if e["name"] == name)
 
 
+def required(module):
+    """The version go.mod requires of a module, the one the server is
+    built with."""
+    with open(GO_MOD, encoding="utf-8") as f:
+        return next(line.split()[1] for line in f if line.split()[:1] == [module])
+
+
 def test_credits_fetched_once(page, case):
     """System info's fold Credits and licences: nothing fetched before it
     opens; at its first opening the list, Massimo first, Preact with its
     version and licence as credits.json has them, its text in a fold of
     its own, as text, in a box that scrolls and that its file's name
-    labels; an entry whose files are under other licences too says so;
+    labels; a Go module, golang.org/x/net, at the version go.mod requires,
+    which credits.json leaves out and the server fills in as it was built
+    with; an entry whose files are under other licences too says so;
     the OPAQUE client, MIT and others, says what it includes, the crates
     those are built with, and that their licence texts, collected for
     Massimo, are among its files, in the page's language,
@@ -329,7 +341,8 @@ def test_credits_fetched_once(page, case):
     scroll in their box; closed and opened again, and System info left
     and shown again, nothing fetched again. Fails on the page before
     the crates' texts: the OPAQUE client is MIT alone, its one file
-    opaque.LICENSE, and their texts not reproduced."""
+    opaque.LICENSE, and their texts not reproduced; and on a server that
+    fills in no module's version: golang.org/x/net without one."""
     seen = credit_requests(page)
     show_view(page, "info")
     page.locator("#credits-info > summary").wait_for()
@@ -354,6 +367,9 @@ def test_credits_fetched_once(page, case):
     want = listed("preact")
     head = preact.locator("summary").inner_text().split()
     assert head == ["preact", want["version"], want["licence"]], f"Preact's name, version and licence ({head})"
+    net = entry(page, "golang.org/x/net").locator("summary").inner_text().split()
+    assert net == ["golang.org/x/net", required("golang.org/x/net"), listed("golang.org/x/net")["licence"]], \
+        f"a module at the version the server was built with ({net})"
     assert preact.locator("pre").count() == 0, "its text not drawn while its fold is closed"
     preact.locator("summary").click()
     text = preact.locator("pre.credit-text")
@@ -399,6 +415,33 @@ def test_credits_fetched_once(page, case):
     assert entry(page, "preact").locator("pre").first.is_visible(), "the fold and Preact's still open"
     frames(page)
     assert len(seen) == 1, f"fetched once: {seen}"
+    show_view(page, "tiles")
+
+
+def test_credits_module_of_another_build(page, case, reads):
+    """A Go module the served list gives no version, as a server built
+    for linux gives the modules only the windows and darwin builds link:
+    its head without a version, its fold opened says where it comes from,
+    a module in another platform's build; a module with its version stays
+    a Go module. Fails on the page before: it read "Go module" alone."""
+    def unversioned(body):
+        for e in body["entries"]:
+            if e["name"] == "golang.org/x/net":
+                e.pop("version", None)
+        return body
+    reads.change(CREDITS, unversioned)
+    show_view(page, "info")
+    toggle_credits(page)
+    net = entry(page, "golang.org/x/net")
+    net.wait_for()
+    head = net.locator("summary").inner_text().split()
+    assert head == ["golang.org/x/net", listed("golang.org/x/net")["licence"]], f"no version in its head ({head})"
+    for name in ("golang.org/x/net", "golang.org/x/crypto"):
+        entry(page, name).locator("summary").click()
+        entry(page, name).locator("pre.credit-text").first.wait_for()
+    assert net.locator(".credit-origin").inner_text() == ELSEWHERE[case.lang], "a module of another platform's build"
+    assert entry(page, "golang.org/x/crypto").locator(".credit-origin").inner_text() == MODULE[case.lang], \
+        "a module with its version: a Go module"
     show_view(page, "tiles")
 
 

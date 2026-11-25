@@ -7,10 +7,14 @@
 // standard library, the Go modules that go list -deps finds for
 // ./cmd/massimo on every platform the Makefile's cross builds, each
 // directory of third_party/ and each file of internal/server/ui/vendor/,
-// each with every licence file it has. go list reads the modules from
-// the module cache and downloads one missing there where GOPROXY allows;
-// with GOPROXY=off, go mod download fills the cache first. It runs from
-// the repository's top, as make credits runs it:
+// each with every licence file it has. Go's entry and the modules' carry
+// no version: the binary fills in those it was built with, so that a
+// module's update needs no new list unless it adds or removes a module,
+// a module it requires in turn too, or changes a licence's text. go list
+// reads the modules from the module cache and downloads one missing
+// there where GOPROXY allows; with GOPROXY=off, go mod download fills
+// the cache first. It runs from the repository's top, as make credits
+// runs it:
 //
 //	go run ./tools/credits          # writes the file
 //	go run ./tools/credits -check   # exits 1 where the file is not current

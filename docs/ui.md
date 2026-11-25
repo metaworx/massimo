@@ -1773,7 +1773,9 @@ Massimo itself, Go's runtime and standard library, the Go modules it links,
 and what the repository vendors (Preact and its signals, Tabler's icons,
 the OPAQUE client), its head the number of entries;
 each entry a fold of its own, its head the name, the version and the licence,
-Go's the version the server was built with,
+Go's and each Go module's the version the server was built with,
+none for a module that only another platform's build links,
+whose body says it is in another platform's build,
 "licence in its text" where the text is known by no name,
 and "other licences among its files" where not all its files are under that one;
 its body where it comes from, what else it includes where its note names it
@@ -1789,8 +1791,11 @@ and `opaque.LICENSE-3RD-PARTY`, the texts of its crates,
 which no one licence names,
 so that its head says "MIT, other licences among its files".
 The list is `/ui/credits.json`, the file `make credits` writes into `internal/credits/`
-and the server embeds, Go's version set to the binary's,
-served as the page's other files are (revalidated, an ETag);
+and the server embeds,
+with the versions of Go and of each module the binary was built with,
+which the file leaves out (`tools/credits/README.md`),
+served as the page's other files are,
+revalidated, with an ETag that holds the list's digest;
 the data hold names and identifiers, every sentence around them is the page's;
 the page fetches the list as the fold is first opened, and not again while it holds it;
 a fetch that fails says why in the fold, with **Try again**;

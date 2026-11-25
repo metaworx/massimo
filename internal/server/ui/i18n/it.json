@@ -236,6 +236,7 @@
   "credits.kind.go": "runtime e libreria standard di Go",
   "credits.kind.module": "modulo Go",
   "credits.kind.moduleCopy": "modulo Go, la sua copia in {path}",
+  "credits.kind.moduleElsewhere": "modulo Go, nella build per un'altra piattaforma",
   "credits.kind.vendored": "in {path}",
   "credits.includes": "Include {what} e i crate con cui sono costruiti; i loro testi di licenza, raccolti per Massimo dagli archivi dei crate, sono tra i suoi file.",
   "credits.seeText": "licenza nel suo testo",
