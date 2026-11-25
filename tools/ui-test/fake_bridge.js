@@ -43,8 +43,12 @@
 //            version 2): {status: {can, user, ask, plain, key_id, server}, keep: [answers
 //            of login.keep in turn, true, false or "error:<message>"],
 //            fingerprint: the token login.fingerprint resolves to, null,
-//            or "error:<message>"}; a keep that resolves true keeps the
-//            user given as keepAs; without it the page has no login
+//            or "error:<message>", a token it resolves to kept as
+//            setToken keeps one}; a keep that resolves true keeps the
+//            user given as keepAs; without it the page has no login.
+//            setToken, and login.fingerprint's token, end at the server
+//            the session they replace, as the app does (POST
+//            /api/v1/logout, a key the server refusing it with 400)
 //   openLogin for kind "connect", what the prompt of open does at a
 //            server with a kept login, a tap's (open(id, url), the rule
 //            of contract version 5, its prompt simplified to every tap
@@ -98,6 +102,19 @@
   const later = (v, ms) => new Promise((resolve) => setTimeout(() => resolve(copy(v)), ms || 0));
   // answerOf resolves an answer, or rejects one of "error:<message>".
   const answerOf = (v, ms) => (typeof v === "string" && v.startsWith("error:") ? new Promise((_, reject) => setTimeout(() => reject(new Error(v.slice(6))), ms || 0)) : later(v, ms));
+  // hold keeps the token t as the server's page's, returning the one it replaces.
+  const hold = (t) => {
+    const old = rec.token;
+    rec.token = t;
+    return old;
+  };
+  // replaced ends at the server a session the new token t replaces, as the
+  // app does (POST /api/v1/logout with it, not awaited): a key the page
+  // held is not ended, which the server refuses there with 400; nothing
+  // for null, which forgets alone.
+  const replaced = (old, t) => {
+    if (t && old && old !== t) fetch("api/v1/logout", { method: "POST", headers: { Authorization: "Bearer " + old } }).catch(() => {});
+  };
 
   if (cfg.kind === "server") {
     const api = {
@@ -108,7 +125,7 @@
       },
       async setToken(t) {
         call("setToken", t);
-        rec.token = t;
+        const old = hold(t);
         if (!t) return later(null);
         // as the app's check before its answer: what is left there revoked with the new token (D67-A)
         const left = cfg.revokeAtSignIn || { user: "", ids: [] };
@@ -116,7 +133,9 @@
         for (const id of left.ids || []) {
           await fetch("api/v1/users/" + encodeURIComponent(left.user) + "/tokens/" + id, { method: "DELETE", headers: { Authorization: "Bearer " + t } });
         }
-        return later({ revoked: left.ids || [] });
+        const answer = later({ revoked: left.ids || [] });
+        answer.then(() => replaced(old, t)); // after the answer, as the app ends it (D68-A)
+        return answer;
       },
     };
     if (cfg.login) {
@@ -135,7 +154,11 @@
         },
         fingerprint() {
           call("login.fingerprint");
-          return answerOf(cfg.login.fingerprint === undefined ? null : cfg.login.fingerprint, 30);
+          // the session it resolves to kept as setToken would keep it, the one it replaces ended (docs/app.md)
+          return answerOf(cfg.login.fingerprint === undefined ? null : cfg.login.fingerprint, 30).then((t) => {
+            if (t) replaced(hold(t), t);
+            return t;
+          });
         },
       };
       api.connect = () => {

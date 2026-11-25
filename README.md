@@ -569,6 +569,10 @@ The other targets:
 build one more release binary each;
 `make build-release` adds the build record, `SHA256SUMS` and the release manifest;
 `make vet`, `make test` and `make clean` do what they say;
+`make clean-tests` removes what the test suites leave in the checkout,
+their results and caches,
+and `make distclean` both and what make installed into it,
+never `.env`, a store or a cache that every checkout shares;
 `make race` runs the race detector on the packages whose goroutines meet,
 and `make fuzz` each fuzz target for `FUZZTIME` (10 s).
 A build from `main`, or any other branch, is of the flavour `devel`
@@ -967,7 +971,13 @@ Cube (`-discovery-serial`),
 which `serve -discover-target 127.0.0.1:23273` finds.
 `-pair 0a010d,0abcde,TEQ0000001` adds a device that joins pairing mode two seconds
 after `n:`, a copy of the greeting's 0a010d as 0abcde in no room,
-and joins again after it was removed (a fourth field sets the delay).
+and joins again after it was removed (a fourth field sets the delay);
+once it joined, a new connection's greeting lists it too,
+its C line and its entry in the device list, until a `t:` deletes it.
+Put into a room, its C line keeps room 0, since the fake does not apply
+the set group radiogram (0x22); the room comes from the room and device list.
+An `m:` the fake can read, its blocks since `00`,
+is the room and device list of every greeting after it, as a Cube keeps it.
 `-free-slots 50` makes the S replies and the greeting's H line say 50 free memory slots,
 a Cube that holds no radiogram;
 without it the S replies say `0x31`, one radiogram pending,
@@ -1075,8 +1085,9 @@ massimo credits preact
 `credits` lists everything the binary includes, a line each with its name,
 version (Go's the one the binary was built with), licence and where it comes from,
 "and others" where its files are under other licences too,
-then what an entry includes whose own licence texts are not reproduced
-(the Rust crates in the web UI's OPAQUE client),
+then what an entry includes and the crates those are built with,
+whose licence texts, collected for Massimo, are among its files
+(the Rust crates in the web UI's OPAQUE client, `opaque.LICENSE-3RD-PARTY`),
 as System info's **Credits and licences** does from the same embedded list;
 `credits <name>`, the name as the list prints it, prints that entry's licence,
 the text of each of its files with the licence it is known by.

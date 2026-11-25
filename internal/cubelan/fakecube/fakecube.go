@@ -15,6 +15,7 @@ import (
 	"net"
 	"net/http"
 	"os"
+	"slices"
 	"strconv"
 	"strings"
 	"sync"
@@ -32,7 +33,8 @@ type Server struct {
 	// DiscardIf, when set, makes the S reply to each s: or r: line it
 	// reports report the command as discarded.
 	DiscardIf func(cube.Message) bool
-	// Pair, when set, is a device that joins during inclusion mode.
+	// Pair, when set, is a device that joins during inclusion mode and
+	// is one of the fake's devices from then on, until a t: deletes it.
 	Pair *Pairing
 	// Keep names devices that t: does not delete, as the Cube keeps a
 	// device that never answers.
@@ -66,7 +68,9 @@ type Server struct {
 	received []cube.Message
 	conns    int
 	open     map[net.Conn]bool
-	joined   bool                    // the Pair device has joined
+	joined   bool                    // the Pair device has joined, see join
+	meta     []cube.Message          // the M lines an m: wrote, see writeMetadata; nil: the greeting's
+	blocks   []string                // the blocks of the m: write under way
 	configs  map[string]cube.Message // C lines set with SetConfig, by address
 	list     *cube.Message           // the L line set with SetDeviceList
 	deleted  map[cube.RFAddress]bool // deleted with t:
@@ -162,25 +166,123 @@ func (s *Server) audibleOr(gone <-chan struct{}) bool {
 	}
 }
 
-// paired returns the Pair device once it has joined.
-func (s *Server) paired() *Pairing {
+// join makes the Pair device one of the fake's devices, as a Cube keeps
+// a device that joined: c:, l: and a new connection's greeting carry its
+// C line and its L entry from now on, added where the fake reads its
+// lines while it is joined (withJoinedLocked, configRawLocked,
+// liveGreetingLocked). A device that joins while it is one already
+// keeps what changed in its lines; one a t: deleted starts again from
+// the Pairing's. No other line changes: a greeting SetGreeting gives is
+// sent as it is, the joined device's lines added.
+func (s *Server) join(p *Pairing) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	if s.joined {
+	rf := p.Device.RFAddress
+	if s.deleted[rf] && s.list != nil {
+		// The L line the fake changed still holds the entry of before.
+		if raw, err := base64.StdEncoding.DecodeString(s.list.Data); err == nil {
+			var list []byte
+			for _, e := range entries(raw) {
+				if cube.RFAddressFromBytes(e[1:4]) != rf {
+					list = append(list, e...)
+				}
+			}
+			s.list = &cube.Message{Type: 'L', Data: base64.StdEncoding.EncodeToString(list)}
+		}
+	}
+	s.joined = true
+	delete(s.deleted, rf)
+}
+
+// joinedLocked returns the Pair device while it is one of the fake's.
+func (s *Server) joinedLocked() *Pairing {
+	if s.joined && s.Pair != nil && !s.deleted[s.Pair.Device.RFAddress] {
 		return s.Pair
 	}
 	return nil
 }
 
+// paired returns the Pair device while it is one of the fake's.
+func (s *Server) paired() *Pairing {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.joinedLocked()
+}
+
+// withJoinedEntryLocked is an L payload with the joined Pair device's
+// entry after the others where it has none.
+func (s *Server) withJoinedEntryLocked(raw []byte) []byte {
+	p := s.joinedLocked()
+	if p == nil || len(p.Entry) == 0 {
+		return raw
+	}
+	for _, e := range entries(raw) {
+		if cube.RFAddressFromBytes(e[1:4]) == p.Device.RFAddress {
+			return raw
+		}
+	}
+	return slices.Concat(raw, p.Entry)
+}
+
+// withJoinedLocked is an L line with the joined Pair device's entry
+// (withJoinedEntryLocked); a line that does not decode stays as it is.
+func (s *Server) withJoinedLocked(l cube.Message) cube.Message {
+	raw, err := base64.StdEncoding.DecodeString(l.Data)
+	if err != nil {
+		return l
+	}
+	if with := s.withJoinedEntryLocked(raw); len(with) != len(raw) {
+		return cube.Message{Type: 'L', Data: base64.StdEncoding.EncodeToString(with)}
+	}
+	return l
+}
+
+// writeMetadata takes an m: line, one block of the room and device list
+// numbered from 00 in decimal, as the original software writes them:
+// once the blocks since the last 00 are a list the fake can read, they
+// are a new connection's M lines, as the Cube's next M line showed an
+// m: on hardware (docs/cube-protocol.md). A block out of order drops
+// the write. The blocks are the fake's, not a connection's: two clients
+// writing m: at once would mix them, where a Cube takes one client.
+func (s *Server) writeMetadata(data string) {
+	idx, block, ok := strings.Cut(strings.TrimSpace(data), ",")
+	i, err := strconv.Atoi(idx)
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if !ok || err != nil || i != 0 && i != len(s.blocks) {
+		s.blocks = nil
+		return
+	}
+	if i == 0 {
+		s.blocks = nil
+	}
+	s.blocks = append(s.blocks, block)
+	parts := make([]cube.MetadataPart, len(s.blocks))
+	for j, b := range s.blocks {
+		parts[j] = cube.MetadataPart{Index: j, Count: len(s.blocks), Data: b}
+	}
+	if _, err := cube.ParseMetadata(parts); err != nil {
+		return
+	}
+	s.meta = make([]cube.Message, len(parts))
+	for j, b := range s.blocks {
+		s.meta[j] = cube.Message{Type: 'M', Data: fmt.Sprintf("%02x,%02x,%s", j, len(parts), b)}
+	}
+}
+
 // Pairing describes the device that joins after n:. Delay after the n:
-// the fake sends its N line and from then on answers c: for it with
-// Config; the inclusion ends with an empty N line when the n: timeout is
-// over or on x:. A real Cube sends that line when the time is up (seen
-// on hardware, 2026-11-14); the N line of a device that joins and the
-// end by x: are how it is expected to behave, still to be confirmed.
+// the fake sends its N line, and from then on the device is one of the
+// fake's (join): c: answers for it with Config, and l: and a new
+// connection's greeting carry Config and Entry, as a Cube lists a paired
+// device that is in no room, until a t: deletes it. The inclusion ends
+// with an empty N line when the n: timeout is over or on x:. A real Cube
+// sends that line when the time is up (seen on hardware, 2026-11-14);
+// the N line of a device that joins and the end by x: are how it is
+// expected to behave, still to be confirmed.
 type Pairing struct {
 	Device cube.NewDevice
 	Config cube.Message // the device's C line
+	Entry  []byte       // the device's entry in the L line, with its length byte; nil for none
 	Delay  time.Duration
 }
 
@@ -206,11 +308,13 @@ func (s *Server) SetConfig(line cube.Message) {
 
 // SetGreeting replaces the lines a new connection is greeted with, as
 // the Cube's rooms, names and configurations change while no client is
-// connected (another app, a button at a device).
+// connected (another app, a button at a device): its M lines replace
+// those an m: wrote too.
 func (s *Server) SetGreeting(lines []cube.Message) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	s.Greeting = append([]cube.Message(nil), lines...)
+	s.meta, s.blocks = nil, nil
 }
 
 // greeting returns the lines a new connection is greeted with, with the
@@ -239,14 +343,16 @@ func (s *Server) SetDeviceList(line cube.Message) {
 	s.list = &line
 }
 
-// deviceList returns the L line set with SetDeviceList.
-func (s *Server) deviceList() (cube.Message, bool) {
+// deviceList is the L line l: answers: the one set with SetDeviceList or
+// changed by the fake, else last, the connection's greeting's; with the
+// joined Pair device's entry.
+func (s *Server) deviceList(last cube.Message) cube.Message {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	if s.list == nil {
-		return cube.Message{}, false
+	if s.list != nil {
+		last = *s.list
 	}
-	return *s.list, true
+	return s.withJoinedLocked(last)
 }
 
 // config returns the C line set for rf with SetConfig.
@@ -671,11 +777,7 @@ func (s *Server) serve(conn net.Conn) {
 		case 'q':
 			return
 		case 'l':
-			l := last
-			if set, ok := s.deviceList(); ok {
-				l = set
-			}
-			l, _ = s.visible(l)
+			l, _ := s.visible(s.deviceList(last))
 			reply = l.Wire()
 		case 'c':
 			reply = "A:\r\n"
@@ -727,6 +829,9 @@ func (s *Server) serve(conn net.Conn) {
 			}
 		case 'e', 'd':
 			reply = fmt.Sprintf("%c:%s\r\n", m.Type-32, m.Data)
+		case 'm':
+			s.writeMetadata(m.Data)
+			reply = "A:\r\n"
 		case 'n':
 			// No immediate reply: N lines come when devices join. The
 			// time is the low byte, as a real Cube reads it (n:012c
@@ -744,10 +849,7 @@ func (s *Server) serve(conn net.Conn) {
 			}
 			if p := s.Pair; p != nil {
 				join = time.AfterFunc(p.Delay, func() {
-					s.mu.Lock()
-					s.joined = true
-					delete(s.deleted, p.Device.RFAddress)
-					s.mu.Unlock()
+					s.join(p)
 					write(NewDeviceLine(p.Device).Wire())
 				})
 			}
@@ -774,8 +876,27 @@ func (s *Server) serve(conn net.Conn) {
 
 // PairingFrom builds a Pairing for a new device that is a copy of the
 // device template in greeting with another address and serial, in no
-// room, joining delay after n:.
+// room, joining delay after n:: its C line, and its L entry where the
+// greeting's L line has one of template; an L line that does not decode
+// gives none, as the fake reads none from it.
 func PairingFrom(greeting []cube.Message, template, rf cube.RFAddress, serial string, delay time.Duration) (*Pairing, error) {
+	var entry []byte
+	for _, g := range greeting {
+		if g.Type != 'L' {
+			continue
+		}
+		entry = nil
+		raw, err := base64.StdEncoding.DecodeString(g.Data)
+		if err != nil {
+			continue
+		}
+		for _, e := range entries(raw) {
+			if cube.RFAddressFromBytes(e[1:4]) == template {
+				b := rf.Bytes()
+				entry = append(append([]byte{e[0]}, b[:]...), e[4:]...)
+			}
+		}
+	}
 	for _, g := range greeting {
 		if g.Type != 'C' || !strings.HasPrefix(strings.ToLower(g.Data), template.String()+",") {
 			continue
@@ -795,6 +916,7 @@ func PairingFrom(greeting []cube.Message, template, rf cube.RFAddress, serial st
 		return &Pairing{
 			Device: cube.NewDevice{Type: c.Type, RFAddress: rf, Serial: c.Serial},
 			Config: cube.Message{Type: 'C', Data: rf.String() + "," + base64.StdEncoding.EncodeToString(raw)},
+			Entry:  entry,
 			Delay:  delay,
 		}, nil
 	}

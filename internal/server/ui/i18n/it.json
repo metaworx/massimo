@@ -237,7 +237,7 @@
   "credits.kind.module": "modulo Go",
   "credits.kind.moduleCopy": "modulo Go, la sua copia in {path}",
   "credits.kind.vendored": "in {path}",
-  "credits.includes": "Include {what}; i loro testi di licenza non sono riprodotti qui.",
+  "credits.includes": "Include {what} e i crate con cui sono costruiti; i loro testi di licenza, raccolti per Massimo dagli archivi dei crate, sono tra i suoi file.",
   "credits.seeText": "licenza nel suo testo",
   "credits.mixed": "{licence}, altre licenze tra i suoi file",
   "credits.notice": "avviso",

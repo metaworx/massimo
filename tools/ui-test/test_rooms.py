@@ -4,15 +4,23 @@
 configuration; the problems in a tile's head and in a device's; the ages
 of the values, a stale device, and what expert mode adds.
 
-The window comes from state events applied in the page (updateDevice);
-the staleness, a room not ready and the Cube's findings from the page's
-own reads of the rooms, answered by the fixture reads (ROOMS), since the
-fake Cube does not change its states.
+The window, the faults and the levels come from state events applied
+in the page (updateDevice) and are told to the page's own reads of the
+rooms as well (Reads.device), the devices kept; the staleness, a room
+not ready and the Cube's findings from those reads alone, answered by
+the fixture reads (ROOMS), since the fake Cube does not change its
+states. The server's own state events of a device kept, which an
+earlier test's write brings, draw the server's data until keep's read
+draws the told ones again, so a check of them waits, and a problem list
+is opened again where a redraw closed it (open_list; AP ToldData,
+Block 4).
 """
 import json
 import re
 
-from helpers import ECO_BUTTON, OPEN, STALE, named_buttons, scroll_width, wait_until
+from helpers import ECO_BUTTON, OPEN, STALE, named_buttons, scroll_width, settled, wait_until
+from test_new_batteries import Device
+from test_room_more import open_list
 
 # The page's read of the chosen Cube's rooms (fetchRooms of app.js), which
 # the fixture reads answers with what a test puts in.
@@ -64,8 +72,21 @@ def head_icons(room):
     return sign_icons(room.locator(".tile-head .problems-sum"))
 
 
+def head_shows(room, want, what, tone=None):
+    """Waits until a tile head's problems show the icons want, the first
+    in tone where given (settled)."""
+    def look():
+        icons = head_icons(room)
+        first = room.locator(".tile-head .problems-sum svg").first.get_attribute("class", timeout=1000) or "" if tone else ""
+        return icons, first
+    ok, got = settled(room.page, look, lambda g: (g[0] == want if not callable(want) else want(g[0])) and (tone is None or tone in g[1]))
+    assert ok, f"{what}: {got}"
+    return got[0]
+
+
 # Gives the open window contact the times of a window open for `ago`
-# minutes, by the server's limits of 5 and 10 minutes.
+# minutes, by the server's limits of 5 and 10 minutes; returns its radio
+# address and its window.
 WINDOW_TIMES = """(ago) => {
   const r = state.rooms.find((r) => r.devices.some((d) => d.type === "shutter_contact"));
   const d = JSON.parse(JSON.stringify(r.devices.find((d) => d.type === "shutter_contact")));
@@ -74,68 +95,93 @@ WINDOW_TIMES = """(ago) => {
   d.state.window_open = true;
   d.window = { open_since: iso(0), warn_at: iso(5), alert_at: iso(10) };
   updateDevice(d);
+  return { rf: d.rf_address, window: d.window };
 }"""
+
+
+def window_times(page, reads, ago):
+    """WINDOW_TIMES in the page and told to the rooms' read, the contact
+    kept (Reads.device)."""
+    w = page.evaluate(WINDOW_TIMES, ago)
+    reads.device(w["rf"], state={"window_open": True}, window=w["window"])
 
 
 def window_badge(room):
     """The class and the leading mark of the open window's badge in the
-    room's list."""
-    room.locator(".tile-head .problems-sum").click()
-    flag = room.locator(".tile-head .problem-entry .flag").first
-    out = flag.get_attribute("class"), [u.get_attribute("href") for u in flag.locator("svg.mark-sign use").all()]
-    room.page.keyboard.press("Escape")
-    return out
+    room's list, in one look with the list open, None without; the list
+    closed again."""
+    details = room.locator(".tile-head details.problems")
+    try:
+        if not details.evaluate("(d) => d.open", timeout=1000):
+            details.locator(":scope > summary").click(timeout=1000)
+        got = details.evaluate("""(d) => { const f = d.open && d.querySelector('.problem-entry .flag');
+          return f ? [f.getAttribute('class'), [...f.querySelectorAll('svg.mark-sign use')].map((u) => u.getAttribute('href'))] : null; }""",
+                               timeout=1000)
+    finally:
+        room.page.keyboard.press("Escape")
+    return tuple(got) if got else None
 
 
-def test_open_window(page, case):
+def badge_shows(room, want, what):
+    """Waits until the open window's badge in the room's list is want
+    (window_badge, settled)."""
+    ok, got = settled(room.page, lambda: window_badge(room), lambda g: g == want)
+    assert ok, f"{what}: {got}"
+
+
+def test_open_window(page, case, reads):
     """The room with the open window contact shows the open window in its
     tile's head, which lists the contact, open, with its age: blue and
     plain for its first five minutes, amber with a triangle up to ten,
     red with a cross after; the icon goes when a state event closes the
-    contact; the measured temperature shows its age."""
+    contact; the measured temperature shows its age. The window's times
+    are told to the rooms' read as well, the contact kept."""
     room = page.locator(".room", has=page.locator(".room-name", has_text="Kind 1"))
-    page.evaluate(WINDOW_TIMES, 1)
-    assert head_icons(room) == ["#icon-window-sash-open"], "open briefly: the open window, plain"
-    assert "tone-open" in room.locator(".tile-head .problems-sum svg").first.get_attribute("class"), "in blue"
-    assert window_badge(room) == ("flag fill-open", []), "its badge filled blue, no mark"
-    page.evaluate(WINDOW_TIMES, 6)
-    assert head_icons(room) == ["#icon-window-sash-open+#mark-sash-warn"], "open long: amber, a triangle"
-    assert window_badge(room) == ("flag warn", ["#mark-warn"]), "its badge an amber outline led by a triangle"
-    page.evaluate(WINDOW_TIMES, 11)
-    assert head_icons(room) == ["#icon-window-sash-open+#mark-sash-x"], "open too long: red, a cross"
-    assert window_badge(room) == ("flag fill-bad", ["#mark-x"]), "its badge filled red, led by a cross"
-    page.evaluate("""() => {
+    window_times(page, reads, 1)
+    head_shows(room, ["#icon-window-sash-open"], "open briefly: the open window, plain, in blue", tone="tone-open")
+    badge_shows(room, ("flag fill-open", []), "its badge filled blue, no mark")
+    window_times(page, reads, 6)
+    head_shows(room, ["#icon-window-sash-open+#mark-sash-warn"], "open long: amber, a triangle")
+    badge_shows(room, ("flag warn", ["#mark-warn"]), "its badge an amber outline led by a triangle")
+    window_times(page, reads, 11)
+    head_shows(room, ["#icon-window-sash-open+#mark-sash-x"], "open too long: red, a cross")
+    badge_shows(room, ("flag fill-bad", ["#mark-x"]), "its badge filled red, led by a cross")
+    w = page.evaluate("""() => {
       const r = state.rooms.find((r) => r.devices.some((d) => d.type === "shutter_contact"));
       const d = JSON.parse(JSON.stringify(r.devices.find((d) => d.type === "shutter_contact")));
       d.window = { open_since: new Date(Date.now() - 299500).toISOString(), warn_at: new Date(Date.now() + 500).toISOString(),
         alert_at: new Date(Date.now() + 300500).toISOString() };
       updateDevice(d);
+      return { rf: d.rf_address, window: d.window };
     }""")
+    reads.device(w["rf"], window=w["window"])
     assert head_icons(room) == ["#icon-window-sash-open"], "half a second before the warning"
     assert wait_until(page, "document.querySelector('.room .tile-head .problems-sum use[href=\"#mark-sash-warn\"]') !== null", 3), \
         "the tile turns amber by the clock alone"
     summary = room.locator(".tile-head .problems-sum")
     assert OPEN[case.lang] in (summary.get_attribute("aria-label") or "").lower(), "named to a screen reader"
     assert page.locator(".room").first.locator(".problems").count() == 0, "nothing in the head of a room with closed windows"
-    summary.click()
-    entry = room.locator(".tile-head .problem-entry")
-    assert entry.count() == 1 and entry.locator(".flag").inner_text().startswith(OPEN[case.lang]), "the contact, open"
-    assert entry.locator(".flag .age").count() == 1, "with the opening's age"
+    open_list(room, """(d) => { const e = d.querySelectorAll('.problem-entry');
+      return e.length === 1 && e[0].querySelector('.flag').innerText.startsWith(%s) && e[0].querySelectorAll('.flag .age').length === 1; }"""
+              % json.dumps(OPEN[case.lang]), "the contact, open, with the opening's age")
     page.keyboard.press("Escape")
     assert room.locator(".tile-head details.problems").get_attribute("open") is None, "Escape closes the list"
     assert page.locator(".room .temp-age .age").count() > 0, "age next to the measured temperature"
-    page.evaluate("""() => {
+    rf = page.evaluate("""() => {
       const r = state.rooms.find((r) => r.devices.some((d) => d.type === "shutter_contact"));
       const d = JSON.parse(JSON.stringify(r.devices.find((d) => d.type === "shutter_contact")));
       d.state.window_open = false;
       updateDevice(d);
+      return d.rf_address;
     }""")
-    assert head_icons(room) == [], "the icon goes when the window closes"
+    reads.device(rf, state={"window_open": False})
+    head_shows(room, [], "the icon goes when the window closes")
 
 
 # Gives the first reported thermostat a communication error, as the
 # server's state events would: with the radiogram that failed (failed,
-# an API object, or null for none) and, where link, a link error too.
+# an API object, or null for none) and, where link, a link error too;
+# returns its room's name, its name and its radio address.
 RADIO_FAULTS = """([failed, link]) => {
   const r = state.rooms.find((r) => r.devices.some((d) => isThermostat(d) && d.reported));
   if (!r) return null;
@@ -143,18 +189,45 @@ RADIO_FAULTS = """([failed, link]) => {
   Object.assign(d.state, { error: true, link_error: link, failed_radiogram: failed });
   if (!failed) delete d.state.failed_radiogram;
   updateDevice(d);
-  return { room: r.name, name: deviceName(d) };
+  return { room: r.name, name: deviceName(d), rf: d.rf_address };
+}"""
+
+# The badges of a problem list (its details) in one look, text: title, of
+# its first entry whose name has name, or of its first entry; null while
+# it is closed or has none.
+FLAGS = """(d, name) => {
+  const e = d.open && [...d.querySelectorAll('.problem-entry')].find((x) => !name || (x.querySelector('.problem-name')?.textContent || '').includes(name));
+  if (!e) return null;
+  return Object.fromEntries([...e.querySelectorAll('.problem-flags .flag')].map((f) => [f.innerText.trim(), f.getAttribute('title')]));
 }"""
 
 
-def test_radio_fault_badges(page, case):
+def flags_of(details, name=None):
+    """A problem list's badges (FLAGS), opened by its summary where it is
+    closed."""
+    if not details.evaluate("(d) => d.open", timeout=1000):
+        details.locator(":scope > summary").click(timeout=1000)
+    return details.evaluate(FLAGS, name, timeout=1000)
+
+
+def radio_faults(page, reads, failed, link):
+    """RADIO_FAULTS in the page and told to the rooms' read, the device
+    kept (Reads.device)."""
+    faults = page.evaluate(RADIO_FAULTS, [failed, link])
+    if faults:
+        reads.device(faults["rf"], state={"error": True, "link_error": link, "failed_radiogram": failed})
+    return faults
+
+
+def test_radio_fault_badges(page, case, reads):
     """A communication error's badge says so and its title the radiogram
     that failed, by its technical name and code, or by its code alone
     where the original's list lacks it; without a radiogram the title
     explains the error alone. A link error's badge says link error, its
     title the original's sentence. The sentences are the page's language,
     the radiogram's name is not translated; the device list's badge has
-    the same title."""
+    the same title. The faults are told to the rooms' read as well, the
+    device kept, and each list opened again until it shows them."""
     comm, link = page.evaluate("[t('badge.communicationError'), t('badge.linkError')]")
     explain, sentence = page.evaluate("[t('badge.communicationErrorTitle'), t('badge.linkErrorTitle')]")
     if case.lang == "en":
@@ -166,19 +239,18 @@ def test_radio_fault_badges(page, case):
     def failed(text):
         return explain + "\n" + page.evaluate("(r) => t('badge.failedRadiogram', { radiogram: r })", text)
 
-    def badges(faults):
-        """The badges of the device in its room's list, text: title."""
+    def badges(faults, ok):
+        """The badges of the device in its room's list, text: title, once
+        ok holds of them, the list opened again where a redraw closed it."""
         room = page.locator(".room", has=page.locator(".room-name", has_text=faults["room"])).first
-        room.locator(".tile-head .problems-sum").click()
-        entry = room.locator(".tile-head .problem-entry", has=page.locator(".problem-name", has_text=faults["name"])).first
-        out = {f.inner_text().strip(): f.get_attribute("title") for f in entry.locator(".problem-flags .flag").all()}
+        _, out = settled(page, lambda: flags_of(room.locator(".tile-head details.problems"), faults["name"]), lambda g: g is not None and ok(g))
         assert scroll_width(page) <= case.width, "no horizontal scroll with the list open"
         page.keyboard.press("Escape")
-        return out
+        return out if isinstance(out, dict) else {}
 
-    faults = page.evaluate(RADIO_FAULTS, [{"code": 3, "name": "TimeInformation"}, False])
+    faults = radio_faults(page, reads, {"code": 3, "name": "TimeInformation"}, False)
     assert faults, "a reported thermostat"
-    got = badges(faults)
+    got = badges(faults, lambda g: g.get(comm) == failed("TimeInformation (0x03)"))
     assert got.get(comm) == failed("TimeInformation (0x03)"), f"the radiogram by its name and code ({got})"
     assert case.lang == "en" or "Last radiogram" not in got[comm], "the sentence translated, the name not"
 
@@ -187,23 +259,23 @@ def test_radio_fault_badges(page, case):
     room.locator(".room-name-btn").click()
     page.wait_for_selector(".room .device", timeout=5000)
     dev = room.locator(".device:not(.virtual)", has=page.locator(".device-name", has_text=faults["name"])).first
-    dev.locator(".problems-sum").click()
-    flag = dev.locator(".problem-flags .flag", has_text=comm).first
-    assert flag.get_attribute("title") == failed("TimeInformation (0x03)"), "the device's badge, its title"
+    ok, got = settled(page, lambda: flags_of(dev.locator(".device-badges details.problems")),
+                      lambda g: g is not None and g.get(comm) == failed("TimeInformation (0x03)"))
+    assert ok, f"the device's badge, its title ({got})"
     page.keyboard.press("Escape")
     room.locator(".room-name-btn").click()
 
     # No radiogram, and a link error.
-    got = badges(page.evaluate(RADIO_FAULTS, [None, True]))
+    got = badges(radio_faults(page, reads, None, True), lambda g: g.get(comm) == explain and g.get(link) == sentence)
     assert got.get(comm) == explain, f"no radiogram: the explanation alone ({got})"
     assert got.get(link) == sentence, f"the link error with the original's sentence ({got})"
 
     # A code the original's list lacks, by its code.
-    got = badges(page.evaluate(RADIO_FAULTS, [{"code": 246}, False]))
+    got = badges(radio_faults(page, reads, {"code": 246}, False), lambda g: g.get(comm) == failed("0xf6"))
     assert got.get(comm) == failed("0xf6"), f"a code the list lacks, by its code ({got})"
 
 
-def test_problems_in_the_heads(page, case):
+def test_problems_in_the_heads(page, case, reads):
     """A radiator thermostat with a transmit error and a weak battery, and
     two thermostats in different modes: the room's head shows radio,
     battery and the mixed modes, radio in red with a cross; the list names the devices,
@@ -211,8 +283,10 @@ def test_problems_in_the_heads(page, case):
     place of its kind's icon, a warning by its triangle; the device's head shows its problems as
     icons, its mode a word, and every device its type's icon; the room's
     virtual thermostat, whose flags copy the wall thermostat's, is not
-    listed."""
-    page.evaluate("""() => {
+    listed. The states are told to the rooms' read as well, the devices
+    kept: the head's icons waited for, the list opened again until it
+    shows them."""
+    told = page.evaluate("""() => {
       const r = state.rooms.find((r) => r.devices.filter((d) => isThermostat(d)).length >= 2) || state.rooms[0];
       window.__room = r.name;
       const [a, b] = r.devices.filter((d) => isThermostat(d));
@@ -225,17 +299,18 @@ def test_problems_in_the_heads(page, case):
         db.state.mode = "auto";
         updateDevice(db);
       }
+      return { a: a.rf_address, b: b ? b.rf_address : null, vwt: r.vwt ? r.vwt.rf_address : null };
     }""")
+    reads.device(told["a"], state={"error": True, "battery_low": True, "mode": "manual"}, battery="weak")
+    if told["b"]:
+        reads.device(told["b"], state={"mode": "auto"})
     name = page.evaluate("window.__room")
     room = page.locator(".room", has=page.locator(".room-name", has_text=name)).first
-    icons = head_icons(room)
-    assert icons[:2] == ["#icon-radio-small+#mark-corner-x", "#icon-battery"], f"radio with its cross, then battery ({icons})"
     two = page.evaluate("state.rooms.find((r) => r.name === window.__room).devices.filter((d) => isThermostat(d)).length >= 2")
-    if two:
-        assert "#icon-shuffle" in icons, f"the mixed modes ({icons})"
-    radio = room.locator(".tile-head .problems-sum svg").first
-    assert "tone-bad" in (radio.get_attribute("class") or ""), "radio in red"
-    room.locator(".tile-head .problems-sum").click()
+    icons = head_shows(room, lambda i: i[:2] == ["#icon-radio-small+#mark-corner-x", "#icon-battery"] and (not two or "#icon-shuffle" in i),
+                       "radio with its cross, then battery, and the mixed modes where two differ, radio in red", tone="tone-bad")
+    open_list(room, """(d) => { const e = d.querySelector('.problem-entry'); return !!e && e.innerText.includes(t('badge.communicationError'))
+      && e.innerText.includes(t('badge.batteryWeak')); }""", "the device with its badges")
     entries = room.locator(".tile-head .problem-entry")
     first = entries.first.inner_text()
     assert page.evaluate("t('badge.communicationError')") in first and page.evaluate("t('badge.batteryWeak')") in first, \
@@ -255,8 +330,8 @@ def test_problems_in_the_heads(page, case):
     for dev in room.locator(".device:not(.virtual)").all():
         assert dev.locator(".device-type-icon[aria-label] svg use").count() == 1, "every device its type's icon"
     sick = room.locator(".device:not(.virtual)", has=page.locator(".problems-sum")).first
-    assert sign_icons(sick.locator(".problems-sum")) == ["#icon-radio-small+#mark-corner-x", "#icon-battery"], \
-        "the device's problems as icons"
+    ok, got = settled(page, lambda: sign_icons(sick.locator(".problems-sum")), lambda g: g == ["#icon-radio-small+#mark-corner-x", "#icon-battery"])
+    assert ok, f"the device's problems as icons: {got}"
     assert sick.locator(".device-badges > .flag").count() >= 1, "its mode a word"
     # the virtual thermostat with the wall thermostat's flags: not listed
     page.evaluate("""() => {
@@ -266,8 +341,9 @@ def test_problems_in_the_heads(page, case):
       Object.assign(v.state, { error: true });
       updateDevice(v);
     }""")
-    room.locator(".tile-head .problems-sum").click()
-    assert room.locator(".tile-head .problem-entry").count() == listed, "the virtual thermostat not listed"
+    if told["vwt"]:
+        reads.device(told["vwt"], state={"error": True})
+    open_list(room, "(d) => d.querySelectorAll('.problem-entry').length === %d" % listed, "the virtual thermostat not listed")
     page.keyboard.press("Escape")
     room.locator(".room-name-btn").click()
 
@@ -292,14 +368,16 @@ def test_stale_and_expert(page, case, reads):
                 d["received"][k] = iso
 
     reads.change(ROOMS, change_room(page.evaluate("state.rooms[0].id"), stale))
+    # its devices and its virtual wall thermostat kept: the server's own
+    # events of them bring them fresh
+    for rf in page.evaluate("(() => { const r = state.rooms[0]; return r.devices.map((d) => d.rf_address).concat(r.vwt ? [r.vwt.rf_address] : []); })()"):
+        reads.keep(rf)
     page.evaluate("loadRooms()")
     tile = page.locator(".room").first
     tile.locator(".room-problems .problems-sum use[href='#icon-set-dial']").wait_for(state="attached", timeout=5000)
     assert tile.locator(".tile-notices").is_hidden(), "no line on the tile: the room's commands are not refused"
-    tile.locator(".room-problems .problems-sum").click()
-    listed = tile.locator(".room-problems .problems-list")
-    listed.wait_for(state="visible")
-    assert STALE[case.lang] in listed.inner_text(), "the pill lists the devices not seen for long"
+    open_list(tile, "(d) => d.querySelector('.problems-list').innerText.includes(%s)" % json.dumps(STALE[case.lang]),
+              "the pill lists the devices not seen for long")
     page.keyboard.press("Escape")
     assert tile.locator(".temp-val.stale").count() == 1, "stale measured temperature greyed"
     assert "30" in tile.locator(".temp-age").inner_text(), "the measured temperature is 30 hours old"
@@ -452,48 +530,43 @@ def test_virtual_wall_thermostat(page, case):
     page.evaluate("() => { state.settings.expert = false; applySettings(); }")
 
 
-def test_battery_levels(page, case):
+def test_battery_levels(page, case, reads):
     """The battery's level, the server's (AP LegacyLogs v1.0, Block 11):
     weak in amber with its word, low in red with its own; the flag alone
-    of a device that has a level shows nothing."""
-    page.evaluate("""() => {
-      const r = state.rooms.find((r) => r.devices.some((d) => isThermostat(d))) || state.rooms[0];
-      window.__room = r.name;
-      window.__dev = JSON.parse(JSON.stringify(r.devices.find((d) => isThermostat(d))));
-    }""")
-    name = page.evaluate("window.__room")
-    room = page.locator(".room", has=page.locator(".room-name", has_text=name)).first
+    of a device that has a level shows nothing. Told to the rooms' read
+    and kept (test_new_batteries.py's Device), the tile's icon waited for
+    and its list opened again until it says the level."""
+    dev = Device(page, reads)
+    room = dev.tile
 
-    def battery_tone(level, flag):
-        page.evaluate("""([level, flag]) => {
-          const d = JSON.parse(JSON.stringify(window.__dev));
-          d.reported = true;
-          d.state = Object.assign({}, d.state, { error: false, link_error: false, battery_low: flag });
-          d.battery = level;
-          updateDevice(d);
-        }""", [level, flag])
-        icons = room.locator(".tile-head .problems-sum svg", has=page.locator("use[href='#icon-battery']"))
-        if icons.count() == 0:
-            return None
-        return icons.first.get_attribute("class") or ""
+    def battery_tone(level, flag, want):
+        """The level and the flag told, and the tile head's battery icon
+        waited for: its tone want, or none where want is None."""
+        dev.told(level, flag)
 
-    assert "tone-warn" in (battery_tone("weak", False) or ""), "weak in amber"
-    room.locator(".tile-head .problems-sum").click()
-    assert page.evaluate("t('badge.batteryWeak')") in room.locator(".tile-head .problem-entry").first.inner_text(), "weak's word"
+        def look():
+            icons = room.locator(".tile-head .problems-sum svg", has=page.locator("use[href='#icon-battery']"))
+            return icons.first.get_attribute("class", timeout=1000) or "" if icons.count() else None
+        ok, got = settled(page, look, lambda g: g is None if want is None else g is not None and want in g)
+        assert ok, f"{level}, flag {flag}: the battery's icon {want}: {got}"
+
+    battery_tone("weak", False, "tone-warn")
+    open_list(room, "(d) => !!d.querySelector('.problem-entry') && d.querySelector('.problem-entry').innerText.includes(t('badge.batteryWeak'))",
+              "weak's word")
     page.keyboard.press("Escape")
-    assert "tone-bad" in (battery_tone("low", True) or ""), "low in red"
-    room.locator(".tile-head .problems-sum").click()
-    assert page.evaluate("t('badge.batteryLow')") in room.locator(".tile-head .problem-entry").first.inner_text(), "low's word"
+    battery_tone("low", True, "tone-bad")
+    open_list(room, "(d) => !!d.querySelector('.problem-entry') && d.querySelector('.problem-entry').innerText.includes(t('badge.batteryLow'))",
+              "low's word")
     page.keyboard.press("Escape")
-    assert battery_tone("ok", True) is None, "the flag alone, at ok, shows nothing"
-    page.evaluate("() => updateDevice(window.__dev)")
+    battery_tone("ok", True, None)
 
 
-def test_out_of_date_device(page, case):
+def test_out_of_date_device(page, case, reads):
     """A device the Cube no longer hears keeps the values of its last
     report on its tile, greyed, with the badge out of date in place of
-    not reported (AP LegacyLogs v1.0, Block 13)."""
-    page.evaluate("""() => {
+    not reported (AP LegacyLogs v1.0, Block 13). Told to the rooms' read
+    as well, the device kept, and its row waited for in one look."""
+    told = page.evaluate("""() => {
       const r = state.rooms.find((r) => r.devices.some((d) => isThermostat(d) && !d.virtual && d.reported));
       window.__room = r.name;
       const d = JSON.parse(JSON.stringify(r.devices.find((d) => isThermostat(d) && !d.virtual && d.reported)));
@@ -505,18 +578,19 @@ def test_out_of_date_device(page, case):
       delete d.state;
       delete d.battery;
       updateDevice(d);
+      return { rf: d.rf_address, last_known: d.last_known };
     }""")
+    reads.device(told["rf"], reported=False, out_of_date=True, last_known=told["last_known"], state=None, battery=None)
     name = page.evaluate("window.__room")
     room = page.locator(".room", has=page.locator(".room-name", has_text=name)).first
     room.locator(".room-name-btn").click()
     page.wait_for_selector(".room .device", timeout=5000)
     dev = room.locator(".device:not(.virtual)", has=page.locator(".device-name", has_text=page.evaluate("window.__name"))).first
-    badges = dev.locator(".device-badges").inner_text()
-    assert page.evaluate("t('badge.outOfDate')") in badges, f"the badge out of date ({badges!r})"
-    assert page.evaluate("t('badge.notReported')") not in badges, "not 'not reported'"
-    grid = dev.locator(".device-vals")
-    assert "out-of-date" in (grid.get_attribute("class") or ""), "the values greyed"
-    assert "18" in grid.inner_text(), f"the last report's setpoint ({grid.inner_text()!r})"
+    out_of_date, not_reported = page.evaluate("[t('badge.outOfDate'), t('badge.notReported')]")
+    ok, got = settled(page, lambda: dev.evaluate("""(r) => ({ badges: r.querySelector('.device-badges').innerText,
+      cls: r.querySelector('.device-vals').getAttribute('class') || '', vals: r.querySelector('.device-vals').innerText })""", timeout=1000),
+                      lambda g: out_of_date in g["badges"] and not_reported not in g["badges"] and "out-of-date" in g["cls"] and "18" in g["vals"])
+    assert ok, f"the badge out of date, not 'not reported'; the values greyed, the last report's setpoint: {got}"
     page.evaluate("() => updateDevice(window.__dev)")
 
 
@@ -544,6 +618,7 @@ def test_not_ready_line(page, case, reads):
                     d["last_seen"] = names["seen"]
 
     reads.change(ROOMS, change_room(names["id"], unreported))
+    reads.keep(names["rf"])  # the server's own events of it say it reported, and the room ready
     page.evaluate("loadRooms()")
     tile = page.locator(".room", has=page.locator(".room-name", has_text=names["room"])).first
     line = tile.locator(".tile-notices")
@@ -553,10 +628,9 @@ def test_not_ready_line(page, case, reads):
     line.locator(".tile-notices-show").click()
     listed = tile.locator(".room-problems .problems-list")
     listed.wait_for(state="visible")
-    text = listed.inner_text()
-    assert not_ready in text, "the room's own notice in the pill"
-    assert page.evaluate("t('badge.notReported')") in text, f"the device not reported: {text!r}"
-    assert tile.locator(".room-problems .problems-sum use[href='#icon-paused']").count() == 1, "the pause sign among the pill's icons"
+    open_list(tile, """(d) => { const text = d.querySelector('.problems-list').innerText; return text.includes(%s) && text.includes(t('badge.notReported'))
+      && d.querySelectorAll(":scope > summary use[href='#icon-paused']").length === 1; }""" % json.dumps(not_ready),
+              "the room's own notice and the device not reported in the pill, the pause sign among its icons")
     page.keyboard.press("Escape")
     told["out_of_date"] = True
     page.evaluate("loadRooms()")
@@ -605,6 +679,7 @@ def test_mismatch_marks(page, case, reads):
                 d["mismatches"] = names["findings"]
 
     reads.change(ROOMS, change_room(names["id"], found))
+    reads.keep(names["rf"])  # the server's own events of it bring it without its findings
     page.evaluate("loadRooms()")
     tile = page.locator(".room", has=page.locator(".room-name", has_text=names["room"])).first
     sliders = tile.locator(".room-problems .problems-sum use[href='#icon-sliders']")

@@ -58,8 +58,10 @@
 # or a class#method, as the instrumentation's -e class takes it);
 # APP_EMU_API_PORT_A and _B (the servers' ports, 9443 and 9444),
 # APP_EMU_CUBE_PORT_A and _B (their fake Cubes', 62941 and 62942) and
-# APP_EMU_DISCOVERY_PORT_A and _B (23941 and 23942). JAVA_HOME as Gradle
-# wants it (app/README.md).
+# APP_EMU_DISCOVERY_PORT_A and _B (23941 and 23942); KEEP (1 keeps the
+# work directory, massimo-app-emulator.XXXXXX under TMPDIR, with the
+# servers' stores and the binaries, and prints its path; AP CleanRuns,
+# D4-A). JAVA_HOME as Gradle wants it (app/README.md).
 set -euo pipefail
 
 here=$(cd "$(dirname "$0")" && pwd)
@@ -152,7 +154,7 @@ rm -rf "$out"
 mkdir -p "$out"
 # an earlier run's report is not this one's
 rm -rf "$build/reports/androidTests/connected" "$build/outputs/androidTest-results/connected"
-work=$(mktemp -d)
+work=$(mktemp -d "${TMPDIR:-/tmp}/massimo-app-emulator.XXXXXX")
 key=$(od -An -N16 -tx1 /dev/urandom | tr -d ' \n')
 pids=()
 emu_pid=""
@@ -192,7 +194,11 @@ cleanup() {
 	# they are waited for
 	for p in "$emu_pid" "$step_pid" "${pids[@]}"; do [ -z "$p" ] || kill -9 "$p" 2>/dev/null; done
 	wait 2>/dev/null
-	rm -rf "$work"
+	if [ "${KEEP:-}" = 1 ]; then
+		echo "app-emulator: KEEP=1, the work directory is kept: $work" >&2
+	else
+		rm -rf "$work"
+	fi
 }
 trap cleanup EXIT
 trap 'exit 130' INT

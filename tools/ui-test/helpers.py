@@ -11,13 +11,16 @@ global scope but not on window; page.evaluate reaches it there.
 
 What the page reads and what its stream brings (docs/ui-testing.md,
 section 9): Reads answers the page's own reads with the server's data
-and what a test put in; Stream watches the page's event stream from a
-mark; isolate_log keeps a log of the test's own lines; wait_log_live
-waits until the log takes the stream's state events; safe_route is the
-one route handler that lets go a request the page no longer waits for;
-undo is a cleanup that says what it could not undo; held_poll holds the
-page's poll while a test measures what the page does by itself;
-pause_clock pauses Playwright's clock at the page's now.
+and what a test put in, a device's or a room's in the rooms' read among
+it (Reads.device, Reads.room), kept through the server's own events of
+them; Stream watches the page's event stream from a mark; isolate_log
+keeps a log of the test's own lines; wait_log_live waits until the log
+takes the stream's state events; safe_route is the one route handler
+that lets go a request the page no longer waits for; undo is a cleanup
+that says what it could not undo; held_poll holds the page's poll while
+a test measures what the page does by itself; pause_clock pauses
+Playwright's clock at the page's now. open_fold, close_fold and
+toggle_fold take a fold's toggle event before a test acts inside it.
 """
 import contextlib
 import json
@@ -66,6 +69,27 @@ def wait_until(page, expr, seconds):
             return True
         page.wait_for_timeout(200)
     return False
+
+
+def settled(page, look, ok, seconds=5):
+    """Looks (look(), from here) until ok holds of what it saw, for
+    seconds at most, and returns whether it held and the last look: for
+    a check of what a test told the page's reads (Reads.device), which a
+    server's own event of the device draws over until keep's read brings
+    it back, and which takes several of Playwright's calls to look at; a
+    Playwright error of a look, an element drawn anew meanwhile, is a
+    look that does not hold."""
+    end = time.time() + seconds
+    while True:
+        try:
+            got = look()
+        except Error as e:
+            got = e
+        if not isinstance(got, Error) and ok(got):
+            return True, got
+        if time.time() >= end:
+            return False, got
+        page.wait_for_timeout(100)
 
 
 def pause_clock(page, ahead_ms=50):
@@ -413,8 +437,12 @@ def safe_route(page, pattern, handler):
 
 
 CUBES = "**/api/v1/cubes"
+# The page's read of the chosen Cube's rooms (fetchRooms of app.js), the
+# pattern Reads.device and Reads.room tell it by.
+ROOMS = "**/api/v1/cubes/*/rooms?devices=all"
 # A read of the chosen Cube's rooms, as fetchRooms of app.js sends it: a
-# pattern of Reads.clear that matches it forgets the devices kept.
+# pattern of Reads.clear that matches it forgets the devices kept and
+# the devices and rooms told.
 ROOMS_READ = "http://127.0.0.1/api/v1/cubes/KEQ0000100/rooms?devices=all"
 
 
@@ -439,6 +467,36 @@ def found_only(cubes):
     return [c for c in cubes if c.get("configured") is False]
 
 
+def _told_merged(told, fields):
+    """fields told after those in told: each in place of its value told
+    before, a state's or sources' fields beside those told before."""
+    for k, v in fields.items():
+        v = json.loads(json.dumps(v))  # a copy: the test may change its own afterwards
+        if k in ("state", "sources") and isinstance(v, dict) and isinstance(told.get(k), dict):
+            told[k] = dict(told[k], **v)
+        else:
+            told[k] = v
+
+
+def _told_into(entry, fields):
+    """The fields told put into an entry of the rooms' read: a state's
+    fields into its state, any other in place of the entry's own; None
+    takes a field out (state None the state)."""
+    for k, v in fields.items():
+        if k == "state" and isinstance(v, dict):
+            st = dict(entry.get("state") or {})
+            for sk, sv in v.items():
+                if sv is None:
+                    st.pop(sk, None)
+                else:
+                    st[sk] = json.loads(json.dumps(sv))
+            entry["state"] = st
+        elif v is None:
+            entry.pop(k, None)
+        else:
+            entry[k] = json.loads(json.dumps(v))
+
+
 class Reads:
     """The page's own reads answered with the server's data and what the
     test put in (D13-A of AP TestInfrastructure). The page takes its data
@@ -461,6 +519,8 @@ class Reads:
         self.cubes = {}  # serial: the fields told for the Cube
         self.found_cubes = {}  # serial: a found Cube's whole entry
         self.kept = set()  # the devices kept (keep), by radio address
+        self.devices = {}  # radio address: {"like": a copy's source, "fields": told} (device)
+        self.rooms = {}  # room id: the fields told for its entry (room)
 
     @property
     def page(self):
@@ -471,7 +531,10 @@ class Reads:
         """Every GET of pattern from now on answered with fn(the answer
         so far), the server's JSON with the changes told before; fn may
         change it in place and returns it. The same function told again
-        for the pattern is applied once (a new lambda is another)."""
+        for the pattern is applied once (a new lambda is another). A read
+        that the patterns of several changes match takes each of them, by
+        the order their patterns were first told: of two routes that match
+        a request, Playwright runs the later one alone, which answers it."""
         if pattern not in self.changes:
             self.changes[pattern] = []
             self.routed[pattern] = safe_route(self.page, pattern, lambda route: self._answer(pattern, route))
@@ -488,8 +551,12 @@ class Reads:
             return
         text = answer.text()
         body = json.loads(text) if text else None
-        for fn in list(self.changes.get(pattern, ())):
-            body = fn(body)
+        url = route.request.url
+        for p, fns in list(self.changes.items()):
+            if p != pattern and not route_matches(p, url):
+                continue
+            for fn in list(fns):
+                body = fn(body)
         # the server's own headers, its Date among them, which the page
         # takes the server's clock from; the length is the new body's
         headers = {k: v for k, v in answer.headers.items() if k.lower() != "content-length"}
@@ -498,7 +565,8 @@ class Reads:
     def clear(self, pattern=CUBES):
         """The reads of pattern answered by the server alone again, what
         was told for them forgotten; a pattern that the rooms' read
-        matches forgets the devices kept (keep) as well."""
+        matches forgets the devices kept (keep) and the devices and rooms
+        told (device, room) as well."""
         if pattern == CUBES:
             self.cubes.clear()
             self.found_cubes.clear()
@@ -507,6 +575,9 @@ class Reads:
         page = self.page
         if routed is not None and page is not None and not page.is_closed():
             page.unroute(pattern, routed)
+        if route_matches(pattern, ROOMS_READ):
+            self.devices.clear()
+            self.rooms.clear()
         if self.kept and route_matches(pattern, ROOMS_READ):
             self.kept.clear()
             if page is not None and not page.is_closed():
@@ -526,6 +597,76 @@ class Reads:
         keeps again after it; clear of the rooms' read forgets it."""
         self.kept.add(rf)
         self.page.evaluate("(rf) => { window.__uiTest.keep.add(rf); }", rf)
+
+    def device(self, rf, like=None, **fields):
+        """The device rf's entry in the rooms' read (ROOMS) with fields in
+        it from now on, beside those told for it before, each in place of
+        its value told before: state's fields into the device's state, any
+        other in place of the entry's own, a None taking a field out (state
+        None the state, until None a holiday's end); the device kept
+        (keep), so that what is told comes back after the server's own
+        state and config events of it, which bring it as the server has
+        it, and after any read of the page's own. With like, a device the
+        server does not list: a copy of the server's entry of like, at the
+        end of the devices of its room, or of the room room_id among fields
+        names. The page shows it at its next read of the rooms: the test
+        reads them (loadRooms()) or puts the same into the page itself (the
+        state event under test, say). A check after it waits (wait_until),
+        since keep's read brings it back a moment after such an event has
+        drawn the server's."""
+        told = self.devices.setdefault(rf, {"like": None, "fields": {}})
+        if like is not None:
+            told["like"] = like
+        _told_merged(told["fields"], fields)
+        self.change(ROOMS, self._rooms_told)
+        self.keep(rf)
+
+    def room(self, rid, **fields):
+        """The room rid's entry in the rooms' read (ROOMS) with fields in it
+        from now on, beside those told before, each in place of its value
+        told before, a None taking a field out: its presets (eco_temp,
+        comfort_temp), its thermostat, and sources, those of its virtual
+        wall thermostat (setpoint: the thermostats whose setpoint it shows,
+        None for none), beside the sources told before. The room's
+        thermostats and its virtual wall thermostat, as the page has them,
+        kept (keep), so that what is told of them stays drawn after the
+        server's own events of them: without fields, room keeps them
+        alone. The page shows it at its next read, as device says."""
+        if fields:
+            _told_merged(self.rooms.setdefault(rid, {}), fields)
+            self.change(ROOMS, self._rooms_told)
+        for rf in self.page.evaluate("""(rid) => { const r = state.rooms.find((x) => x.id === rid);
+          return !r ? [] : r.devices.filter(isThermostat).map((d) => d.rf_address).concat(r.vwt ? [r.vwt.rf_address] : []); }""", rid):
+            self.keep(rf)
+
+    def _rooms_told(self, rooms):
+        rooms = rooms if isinstance(rooms, list) else []
+        listed = {d.get("rf_address"): d for r in rooms for d in r.get("devices") or []}
+        # the copies first, each of the server's entry of its source
+        for rf, told in self.devices.items():
+            src = listed.get(told["like"])
+            if rf in listed or src is None:
+                continue
+            copy = json.loads(json.dumps(src))
+            copy["rf_address"] = rf
+            rid = told["fields"].get("room_id", src.get("room_id"))
+            room = next((r for r in rooms if r.get("id") == rid), None)
+            if room is not None:
+                room["devices"] = (room.get("devices") or []) + [copy]
+        for r in rooms:
+            for d in r.get("devices") or []:
+                told = self.devices.get(d.get("rf_address"))
+                if told:
+                    _told_into(d, told["fields"])
+            fields = dict(self.rooms.get(r.get("id")) or {})
+            sources = fields.pop("sources", None)
+            _told_into(r, fields)
+            if sources:
+                for v in r.get("devices") or []:
+                    if v.get("virtual"):
+                        v["sources"] = dict(v.get("sources") or {})
+                        _told_into(v["sources"], sources)
+        return rooms
 
     def cube(self, serial, **fields):
         """The server's entry of the Cube serial in GET /api/v1/cubes with
@@ -875,6 +1016,57 @@ def focus_in_turn(page, click, focused):
 def frames(page):
     """Two frames and a task: a part drawn again after a change has been drawn."""
     page.evaluate("() => new Promise((done) => requestAnimationFrame(() => requestAnimationFrame(() => setTimeout(done, 0))))")
+
+
+# --- a fold ---------------------------------------------------------------
+
+# A fold's summary clicked, and the fold's toggle event taken, in ms
+# milliseconds at most: the event, which tells the page's part the fold's
+# new state (Fold's onToggle), comes in a task of its own after the
+# click, and a part that starts anew at it (#me-password and .user-panel
+# start their password fields anew) drops what the test did inside the
+# fold before it. A click that toggles nothing fails once ms have passed,
+# not at the test's end. Resolves to whether the fold is open.
+FOLD_TOGGLE = """([sel, ms]) => new Promise((done, fail) => {
+  const d = document.querySelector(sel);
+  if (!d) {
+    fail(new Error("no fold " + sel));
+    return;
+  }
+  const took = () => {
+    clearTimeout(timer);
+    setTimeout(() => done(d.open), 0);
+  };
+  const timer = setTimeout(() => {
+    d.removeEventListener("toggle", took);
+    fail(new Error("no toggle event of " + sel + " within " + ms + " ms"));
+  }, ms);
+  d.addEventListener("toggle", took, { once: true });
+  d.querySelector(":scope > summary").click();
+})"""
+
+
+def toggle_fold(page, sel, seconds=3):
+    """The fold sel, a <details>, opened or closed by its summary, its
+    toggle event taken within seconds and the part drawn again (frames);
+    returns whether it is open."""
+    is_open = page.evaluate(FOLD_TOGGLE, [sel, int(seconds * 1000)])
+    frames(page)
+    return is_open
+
+
+def open_fold(page, sel, seconds=3):
+    """The fold sel open, its toggle event taken (toggle_fold) where it
+    was closed."""
+    if not page.evaluate("(sel) => document.querySelector(sel).open", sel):
+        assert toggle_fold(page, sel, seconds), f"the fold {sel} opens"
+
+
+def close_fold(page, sel, seconds=3):
+    """The fold sel closed, its toggle event taken (toggle_fold) where it
+    was open."""
+    if page.evaluate("(sel) => document.querySelector(sel).open", sel):
+        assert not toggle_fold(page, sel, seconds), f"the fold {sel} closes"
 
 
 # --- a page of its own ------------------------------------------------------

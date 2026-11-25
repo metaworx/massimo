@@ -785,6 +785,10 @@ The suite's helpers for it are in `tools/ui-test/helpers.py`
   A test does not set `state.cubes`, `state.found` or `state.version` in the page:
   the next poll takes them back,
   and a version other than the server's makes the page reload.
+  A test that holds the poll and writes a field of a Cube
+  writes `state.cubes` whole, as the page's loads do,
+  never the field in place, which the page may not draw again
+  (`test_header.py`'s `SET_READ`).
 - **The poll held** (`with held_poll(page):`):
   a test that measures what the page does by itself,
   a count of its drawings or times that stand still,
@@ -845,6 +849,38 @@ The suite's helpers for it are in `tools/ui-test/helpers.py`
   The poll does not load them while the stream is open,
   but the events that start a load do (`connected`, `metadata`, `unconfirmed` and others),
   among them those the server sends by itself.
+- **What a test tells of a device or a room**
+  (`reads.device(rf, **fields)`, `reads.room(rid, **fields)`, AP ToldData, D2-A):
+  a device's fields, those of its `state` among them,
+  or a room entry's, its presets, its `thermostat`
+  and its virtual wall thermostat's `sources`,
+  are in the rooms' read (`ROOMS`) from then on,
+  each in place of its value told before, and a `None` takes a field out.
+  `reads.device(rf, like=…)` tells of a device the server does not list,
+  a twin or a wall thermostat:
+  a copy of the server's entry of `like`, at the end of its room's devices
+  or of those of the room `room_id` names.
+  Both keep what they tell (`keep`):
+  the device, or the room's thermostats and its virtual wall thermostat,
+  so that it comes back after the server's own events of them
+  and after any read of the page's own.
+  The page shows it at its next read:
+  the test reads the rooms (`loadRooms()`),
+  or puts the same into the page itself where that is the event under test,
+  and a check after it waits:
+  `wait_until`, or `settled(page, look, ok)` where a look takes several calls
+  (`test_room_marks.py`'s `Told`, `test_rooms.py`).
+  A read that the patterns of several changes match takes each of them,
+  so a test's own change under another spelling of the pattern goes with them
+  (Playwright runs the later of two routes alone).
+- **A fold opened** (`open_fold`, `close_fold`, `toggle_fold` of `helpers.py`):
+  a `<details>` fold's `toggle` event comes in a task of its own after the click,
+  and a part that starts anew at it drops what the test did inside the fold before it:
+  `#me-password` and `.user-panel` start their password fields anew.
+  The helpers click the fold's summary and take that event,
+  and the part's drawing after it, before the test acts inside the fold;
+  a click that toggles nothing fails within seconds (`FOLD_TOGGLE`),
+  not at the test's end.
 - **The stream watched** (`Stream`, the fixture `stream`):
   every page of the page fixture has `PAGE_KIT` before its own scripts,
   which records each event the page's listeners take,

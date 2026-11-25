@@ -278,6 +278,8 @@ def test_system_info_cube_proxies(page, case):
 CREDITS = "**/ui/credits.json"
 CREDITS_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "..", "internal", "credits", "credits.json")
 FAILED = {"en": "The credits could not be loaded: broken", "de": "Die Mitwirkenden konnten nicht geladen werden: broken"}
+AMONG = {"en": " and the crates they are built with; their licence texts, collected for Massimo from the crates' archives, are among its files.",
+         "de": " und die Crates, mit denen diese gebaut sind; deren Lizenztexte, für Massimo aus den Archiven der Crates gesammelt, stehen unter seinen Dateien."}
 
 
 def credit_requests(page):
@@ -319,11 +321,15 @@ def test_credits_fetched_once(page, case):
     opens; at its first opening the list, Massimo first, Preact with its
     version and licence as credits.json has them, its text in a fold of
     its own, as text, in a box that scrolls and that its file's name
-    labels; an entry whose files are under other licences too says so,
-    and one that includes what it has no texts for says that, in the
-    page's language; closed and opened again, and System info left and
-    shown again, nothing fetched again. Fails on the page before: there
-    is no such fold."""
+    labels; an entry whose files are under other licences too says so;
+    the OPAQUE client, MIT and others, says what it includes, the crates
+    those are built with, and that their licence texts, collected for
+    Massimo, are among its files, in the page's language,
+    and its files are its own licence and its crates' texts, which
+    scroll in their box; closed and opened again, and System info left
+    and shown again, nothing fetched again. Fails on the page before
+    the crates' texts: the OPAQUE client is MIT alone, its one file
+    opaque.LICENSE, and their texts not reproduced."""
     seen = credit_requests(page)
     show_view(page, "info")
     page.locator("#credits-info > summary").wait_for()
@@ -364,7 +370,20 @@ def test_credits_fetched_once(page, case):
     opaque = entry(page, "@serenity-kit/opaque")
     includes = opaque.locator(".credit-includes").text_content()
     assert includes == page.evaluate("(what) => t('credits.includes', { what })", listed("@serenity-kit/opaque")["includes"]) \
-        and "opaque-ke 4.0.1" in includes, f"what it includes, whose texts are not here, in the page's words ({includes!r})"
+        and "opaque-ke 4.0.1" in includes and includes.endswith(AMONG[case.lang]), \
+        f"what it includes, whose texts are among its files, in the page's words ({includes!r})"
+    assert opaque.locator(".credit-licence").inner_text() == page.evaluate("t('credits.mixed', { licence: 'MIT' })"), \
+        "the OPAQUE client: MIT, its crates' texts under other licences"
+    opaque.locator("summary").click()
+    opaque.locator(".credit-file-name").nth(1).wait_for()
+    files = opaque.locator(".credit-file-name").evaluate_all("(es) => es.map((e) => e.textContent)")
+    assert files == ["opaque.LICENSE · MIT", "opaque.LICENSE-3RD-PARTY · " + page.evaluate("t('credits.seeText')")], \
+        f"its own licence, then its crates' texts, known by no one licence ({files})"
+    crates = opaque.locator("pre.credit-text").nth(1)
+    assert "\n==> opaque-ke 4.0.1 (Apache-2.0 OR MIT) <==\n" in crates.text_content(), "the crates' licence texts, opaque-ke's among them"
+    assert crates.evaluate("(e) => e.scrollHeight > e.clientHeight && getComputedStyle(e).overflowY === 'auto'"), \
+        "the crates' texts scroll inside their box"
+    assert crates.evaluate("(e) => e.scrollWidth <= e.clientWidth"), "their lines wrap inside the box"
     massimo = entry(page, "Massimo")
     massimo.locator("summary").click()
     box = massimo.locator("pre.credit-text")

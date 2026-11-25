@@ -20,7 +20,7 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 import pytest
 
 from conftest import URL, api_call
-from helpers import cleanup, named_buttons, show_view, undo, wait_until
+from helpers import OPERATOR_PASSWORD, cleanup, frames, named_buttons, show_view, undo, wait_held, wait_until
 
 CLIENT_ID = "massimo-ui-test"
 SECRET = "ui-test-secret"
@@ -236,6 +236,138 @@ def test_a_refused_account(new_context, case, guard, provider):
         assert page.locator("#login-error").is_hidden(), "the password form's line stays empty"
         assert "#oidc" not in page.url, "the reason is gone from the address"
         ctx.close()
+    finally:
+        api_call("DELETE", f"api/v1/providers/{key}")
+
+
+DIALOG_OPEN = "document.getElementById('login-dialog').open"
+# every navigation the page starts, as the Navigation API tells it at once, also one to another origin
+WATCH_NAVIGATION = "() => { window.__navigated = []; navigation.addEventListener('navigate', (e) => window.__navigated.push(e.destination.url)); }"
+
+
+def test_a_late_provider_start_stays_on_the_page(new_context, case, guard, watch, provider):
+    """A provider's start held while the password signs in: let go then,
+    it leaves the page signed in where it is and starts no navigation to
+    the provider; on the running page a start held while the card is
+    closed and opened anew, its button ready there meanwhile, starts none
+    either, and a refusal so held is said nowhere in the new opening; and
+    a start held while the page signs out behind the card starts none
+    (AP AccessEnds, Block 1). Fails on the page before: the late start
+    left the signed-in page for the provider's."""
+    key = f"late-{case.width}-{case.lang}"
+    api_call("POST", "api/v1/providers", {"key": key, "name": "Late", "issuer": provider.issuer, "client_id": CLIENT_ID, "client_secret": SECRET})
+    start = f"**/api/v1/login/oidc/{key}"
+    try:
+        page = new_context().new_page()
+        guard.page = page
+        page.set_default_timeout(5000)
+        page.on("pageerror", lambda e: watch.problems.append(f"page error: {e}"))
+        held = []
+        # a navigation to the provider answered with no content, so that the page stays for the test's end
+        page.route(provider.issuer + "/**", lambda route: route.fulfill(status=204))
+        page.route(start, lambda route: held.append(route))
+        page.goto(URL)
+        page.evaluate(WATCH_NAVIGATION)
+        assert wait_until(page, DIALOG_OPEN, 5), "the sign-in card"
+        button = page.locator(f"#login-providers button[data-provider='{key}']")
+        button.wait_for(state="visible")
+        busy = f"document.querySelector(\"#login-providers button[data-provider='{key}']\").classList.contains('busy')"
+        answered = lambda r: r.request.method == "POST" and r.url.split("?")[0].endswith(f"/api/v1/login/oidc/{key}")  # noqa: E731
+
+        # signed in by the password meanwhile: the card closed on the same opening, the button turning still
+        button.click()
+        assert wait_held(page, held), "the provider's start, held"
+        page.locator("#login-user").fill("operator")
+        page.locator("#login-password").fill(OPERATOR_PASSWORD)
+        page.locator("#login-form button[type=submit]").click()
+        page.wait_for_selector(".room", timeout=10000)
+        assert wait_until(page, "state.eventsOpen", 10), "signed in with the password, the page started"
+        with page.expect_response(answered):
+            held.pop().continue_()
+        assert wait_until(page, f"!({busy})", 5), "the start answered"
+        assert page.evaluate("window.__navigated") == [], "no navigation to the provider"
+        assert page.evaluate("state.me && state.me.user && state.me.user.name") == "operator", "the page stays, signed in"
+
+        # the card closed and opened anew: an answer and a refusal of the old opening's start
+        for answer in ("start", "refusal"):
+            page.evaluate("() => { askLogin(); }")
+            assert wait_until(page, DIALOG_OPEN, 5), f"{answer}: the sign-in opens on the running page"
+            button.wait_for(state="visible")
+            button.click()
+            assert wait_held(page, held), f"{answer}: a start held"
+            page.evaluate("() => { document.getElementById('login-dialog').close(); }")
+            # the dialog's close event, which ends its opening, comes in a task of its own
+            assert wait_until(page, f"!({DIALOG_OPEN}) && loginPromise === null", 5), f"{answer}: the card left, its opening ended"
+            page.evaluate("() => { askLogin(); }")
+            assert wait_until(page, DIALOG_OPEN, 5), f"{answer}: the card opened anew"
+            frames(page)
+            assert button.evaluate("(b) => !b.disabled && !b.classList.contains('busy')"), f"{answer}: the button ready in the new opening"
+            with page.expect_response(answered):
+                if answer == "start":
+                    held.pop().continue_()
+                else:
+                    held.pop().fulfill(status=502, content_type="application/json", body=json.dumps({"error": "the provider did not answer"}))
+            frames(page)
+            assert page.evaluate("window.__navigated") == [], f"{answer}: no navigation to the provider"
+            assert page.locator("#login-providers-error").is_hidden(), f"{answer}: nothing said in the new opening"
+            page.evaluate("() => { document.getElementById('login-dialog').close(); }")
+            assert wait_until(page, f"!({DIALOG_OPEN}) && loginPromise === null", 5), f"{answer}: the card left"
+
+        # signed out behind the card, the same opening open
+        page.evaluate("() => { askLogin(); }")
+        assert wait_until(page, DIALOG_OPEN, 5), "the sign-in opens on the running page"
+        button.wait_for(state="visible")
+        button.click()
+        assert wait_held(page, held), "a start held"
+        page.evaluate("() => { logout(); }")  # not awaited: its start waits for the card
+        assert wait_until(page, "state.token === null && state.me === null", 5), "signed out behind the card"
+        with page.expect_response(answered):
+            held.pop().continue_()
+        assert wait_until(page, f"!({busy})", 5), "the start answered"
+        assert page.evaluate("window.__navigated") == [], "no navigation to the provider after the sign-out"
+        page.unroute(start)
+    finally:
+        api_call("DELETE", f"api/v1/providers/{key}")
+
+
+def test_a_provider_page_that_keeps_the_page_leaves_the_card_open(new_context, case, guard, watch, provider):
+    """A provider's start whose navigation is stopped, as Stop or Esc stops
+    it while the provider is slow, leaving this page standing: the card
+    stays the same opening, and the password then signs in there. Fails
+    where the provider's start took the opening: the password's session
+    was ended unseen, no token, no line."""
+    key = f"stays-{case.width}-{case.lang}"
+    api_call("POST", "api/v1/providers", {"key": key, "name": "Stays", "issuer": provider.issuer, "client_id": CLIENT_ID, "client_secret": SECRET})
+    try:
+        page = new_context().new_page()
+        guard.page = page
+        page.set_default_timeout(5000)
+        page.on("pageerror", lambda e: watch.problems.append(f"page error: {e}"))
+        stopped = []
+
+        def stop(route):
+            stopped.append(route.request.url)
+            route.abort("aborted")  # the navigation stopped, the page left standing
+
+        page.route(provider.issuer + "/**", stop)
+        page.goto(URL)
+        page.evaluate(WATCH_NAVIGATION)
+        assert wait_until(page, DIALOG_OPEN, 5), "the sign-in card"
+        button = page.locator(f"#login-providers button[data-provider='{key}']")
+        button.wait_for(state="visible")
+        button.click()
+        assert wait_held(page, stopped, 10), "the provider's page asked for, and stopped"
+        assert page.evaluate("window.__navigated.length") == 1, "one navigation"
+        assert wait_until(page, f"!document.querySelector(\"#login-providers button[data-provider='{key}']\").classList.contains('busy')", 5), \
+            "the start ended"
+        frames(page)
+        assert page.evaluate(DIALOG_OPEN), "the page stays, the card open"
+        page.locator("#login-user").fill("operator")
+        page.locator("#login-password").fill(OPERATOR_PASSWORD)
+        page.locator("#login-form button[type=submit]").click()
+        assert wait_until(page, "!!state.me && !!state.me.user && state.me.user.name === 'operator'", 10), "the password signs in"
+        assert page.evaluate("state.token") == page.evaluate("localStorage.getItem('massimo.token')") and page.evaluate("state.me.token.kind") == "session", \
+            "with its session the page's token"
     finally:
         api_call("DELETE", f"api/v1/providers/{key}")
 

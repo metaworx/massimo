@@ -326,6 +326,13 @@ def answered(page):
     frames(page)
 
 
+def settings_change(**want):
+    """A match of Stream.wait: the change event of a PUT /api/v1/settings
+    that set exactly want, as the server sends it for a write of the
+    test's own (None for a setting set back to its default)."""
+    return lambda d: (d.get("summary") or {}).get("action") == "settings.update" and (d.get("summary") or {}).get("set") == want
+
+
 def test_software_reads_again_at_a_resync_while_shown_only(page, case):
     """Rooms shown, a resync of the stream (how the page learns of a
     restart or an update ended elsewhere) reads no versions; with
@@ -792,7 +799,7 @@ def test_maintenance_follows_a_setting_set_elsewhere_while_shown_only(page, case
         show_view(page, "tiles")
         mark0 = stream.mark()
         api_call("PUT", "api/v1/settings", {"poll_interval": "20s"})
-        stream.wait("the change", "change", match=lambda d: (d.get("summary") or {}).get("action") == "settings.update", mark=mark0, server=True)
+        stream.wait("the change", "change", match=settings_change(poll_interval="20s"), mark=mark0, server=True)
         answered(page)
         assert reads == [], f"no read for a page not shown ({reads})"
         api_call("PUT", "api/v1/settings", {"poll_interval": None})
@@ -1031,11 +1038,15 @@ def test_a_resync_while_this_page_follows_its_restart_reads_no_row(page, case):
         page.unroute("**/api/v1/restart")
 
 
-def test_an_intervals_own_change_event_reads_nothing_behind_its_back(page, case):
+def test_an_intervals_own_change_event_reads_nothing_behind_its_back(page, case, stream):
     """The poll's interval chosen, its PUT held; the change event of a PUT
     comes meanwhile: it reads the settings not at all while the page's
-    own request is under way, and 30 s stays chosen throughout."""
+    own request is under way, and 30 s stays chosen throughout. The
+    server's own change event of the reset is waited for before the
+    reads are counted, so that it adds none."""
+    m = stream.mark()
     api_call("PUT", "api/v1/settings", {"poll_interval": None})
+    stream.wait("the reset's change", "change", match=settings_change(poll_interval=None), mark=m, server=True)
     held = []
     try:
         show_view(page, "maint")
@@ -1062,11 +1073,18 @@ def test_an_intervals_own_change_event_reads_nothing_behind_its_back(page, case)
         api_call("PUT", "api/v1/settings", {"poll_interval": None})
 
 
-def test_another_setting_changed_during_the_own_put_is_read_after_it(page, case):
+def test_another_setting_changed_during_the_own_put_is_read_after_it(page, case, stream):
     """The poll's interval chosen, its PUT held; another browser sets the
     announcement meanwhile (its change event): nothing is read while the
-    PUT runs, one read follows it, and the announcement shows On."""
+    PUT runs, one read follows it, and the announcement shows On. The
+    server's own change event of each write is waited for, the page's
+    own PUT's before the page has its answer, so that every one of them
+    has come while the PUT runs and the reads are counted after them: an
+    event that came later would read once more, as the page does for a
+    change it learns of after its own request."""
+    m = stream.mark()
     api_call("PUT", "api/v1/settings", {"poll_interval": None, "announce": None})
+    stream.wait("the reset's change", "change", match=settings_change(poll_interval=None, announce=None), mark=m, server=True)
     held = []
     try:
         show_view(page, "maint")
@@ -1076,12 +1094,16 @@ def test_another_setting_changed_during_the_own_put_is_read_after_it(page, case)
         page.route("**/api/v1/settings", lambda route: held.append(route) if route.request.method == "PUT" else route.fallback())
         page.locator("#interval-poll").select_option("30")
         assert wait_held(page, held), "the PUT sent"
+        m = stream.mark()
         api_call("PUT", "api/v1/settings", {"announce": "on"})  # the other browser
-        send(page, "change", {"action": "settings.update", "set": {"announce": "on"}})
+        stream.wait("the other browser's change", "change", match=settings_change(announce="on"), mark=m, server=True)
         answered(page)
         assert reads == [], f"nothing read while the PUT runs ({reads})"
-        for r in held:
-            r.fallback()
+        m = stream.mark()
+        answers = [r.fetch() for r in held]  # at the server, the page still without its answer
+        stream.wait("the page's own change", "change", match=settings_change(poll_interval="30s"), mark=m, server=True)
+        for r, a in zip(held, answers):
+            r.fulfill(response=a)
         assert wait_until(page, "document.getElementById('announce-mode').value === 'on'", 5), "the announcement read after the PUT"
         answered(page)
         assert len(reads) == 1, f"one read after it ({len(reads)})"

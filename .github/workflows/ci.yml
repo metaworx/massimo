@@ -456,8 +456,10 @@ jobs:
       - name: Benchmarks, once
         run: go test -run '^$' -bench . -benchtime 1x -short ./internal/store
 
+      # Every platform built and none kept (make cross-check, AP
+      # CleanRuns, D2-A): nothing in this job reads dist/.
       - name: Cross build
-        run: make cross
+        run: make cross-check
 
       # Once every step passed: a week's key is saved once, and a run
       # that stopped early would leave the week a cache of what it got to.
@@ -558,7 +560,7 @@ jobs:
   # Every package's tests on 32-bit ARM (make test-armv6,
   # GUIDELINES/project/CI.md, section 2): the armv6 binary the armhf
   # package ships, run with -short by Ubuntu's qemu-user as the Raspberry
-  # Pi 1's core, beside Vet and test; make cross only builds it. The
+  # Pi 1's core, beside Vet and test; make cross-check only builds it. The
   # tests' -json for the summary of the skipped and the slowest tests, as
   # in Vet and test.
   armv6:

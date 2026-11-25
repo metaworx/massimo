@@ -84,7 +84,10 @@ GUIDELINES/wip/HANDOVER.md is the context a session needs to work here.
     while the server signs users in (AuthWarning);
     a UI test's plain `page.route` handler that answers a request failing
     with "Route is already handled!" where the page's last route goes while
-    a request is in it, as the reboot stub did before `safe_route`.
+    a request is in it, as the reboot stub did before `safe_route`;
+    the fake Cube applying a set group (0x22) and a remove group (0x23)
+    to a device's room in its C line, so that a device the UI suite puts
+    into a room shows no room mismatch across reconnects.
 13. **Housekeeping**:
     the `.env` copies and the release key in the Linux test box's session scratchpad,
     its SSH key on the Pi; the M7 reservations for the house Cube and the Pi;

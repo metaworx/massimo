@@ -1,10 +1,10 @@
-# AP AccessEnds v1.0: Follow-ups of two gates
+# AP AccessEnds v1.1: Follow-ups of two gates
 
 ## TL;DR
 
 The decisions the completion gate of AP LooseEnds and AP PasswordRules listed,
-each as its option A, D47-A with a log entry:
-seven blocks, a pull request and a NOTE each.
+each as its option A, D47-A with a log entry,
+and the credits' versions (D40): eight blocks, a pull request and a NOTE each.
 
 - late sign-in answer → does nothing, its session ended (LooseEnds.D44)
 - integration's user's roles → within its maximum, `integration` again (D45)
@@ -17,6 +17,8 @@ seven blocks, a pull request and a NOTE each.
 - common passwords → Openwall's list, if D29 lets it (D55)
 - OPAQUE's crates → their licence texts in the credits (D56)
 - test files → not shipped, no bullet owed (D48)
+- Go modules' versions → read from the binary, not the list:
+  a bump fails no test (D40)
 
 ### Blocks
 
@@ -28,6 +30,7 @@ seven blocks, a pull request and a NOTE each.
 5. Common: Openwall's list of common passwords, if D29 lets it
 6. Crates: the licence texts of the OPAQUE client's Rust crates
 7. Changelog: the shipped paths leave out the test files
+8. Versions: the credits take each Go module's version from the binary
 
 ## Discussion
 
@@ -459,6 +462,25 @@ For Block 7, Changelog:
   - **B.**
     Left out too.
 
+### Decided after the first blocks
+
+The owner, 2026-11-25, while Blocks 1, 2, 4 and 6 were built:
+
+- **D40-A.
+  The credits take each Go module's version from the binary.**
+  `internal/credits/credits.json` records every Go module's version,
+  and `tools/credits`' `TestGeneratedFileCurrent` compares the file byte for
+  byte with a fresh run,
+  so every bump in `go.mod` fails CI until `make credits` runs:
+  seen on a Dependabot pull request (`golang.org/x/net` 0.62.0 to 0.63.0),
+  in the jobs Vet and test and Test (armv6, QEMU).
+  The fault is PasswordRules' Block 5's.
+  Reported by the session "Fix flaky tests" on the owner's word there.
+  It is Block 8, built on Block 6, both in `tools/credits`.
+  Not chosen: CI making the list again on Dependabot's pull requests
+  (the workflow scope and a second commit on each);
+  `make credits` by hand at each bump.
+
 ### Open: the owner's
 
 - **D29, on PasswordRules.D55: the wordlists collection's licence.**
@@ -482,6 +504,39 @@ For Block 7, Changelog:
     the collection's terms beside it (Block 5 as written).
   - **C.**
     The owner asks Openwall first; Block 5 waits for the answer.
+
+- **D41, who manages an integration's user stored as guest.**
+  Today any `guests` holder may disable, rename and remove such a user:
+  a role of the owner's such as the seeded manager,
+  and another integration's call, whose ceiling holds `guests` (`auth.go`,
+  `integrationCeiling`); run on main and on Block 2's tree,
+  200 each (`users_api.go`, `mayManage`).
+  Disabling it stops its calls even where it is linked to a Massimo user:
+  the chain checks the integration's user before the linked one (`onbehalf.go`).
+  Block 2's Role list steers an owner who narrows such a user to guest.
+  Older than this plan.
+  - **With a link,** the owner's question: there are two users.
+    The linked Massimo user is a regular user and managed as any,
+    under every option below (a `guests` holder,
+    an integration's call with `guests` among them,
+    manages it where it is a guest).
+    The integration's user behind the link is the one this decision is about.
+    A call through an integration acting for a linked user is capped by its
+    chain (the key, the ceiling, the integration's user's role,
+    the linked user's role, the maximum);
+    under A it manages its own integration's users and regular guests within
+    that, never another integration's users.
+  - **A (recommended).**
+    An integration's user is managed by a holder of `users`, by rank,
+    and by its own integration's calls;
+    a `guests` holder of no integration,
+    and another integration's call, no longer manage it.
+    Regular guests stay as they are.
+  - **A2.**
+    As A, and a call through an integration manages no regular user either;
+    the ceiling's `guests` then serves its own users alone.
+  - **B.**
+    As it is, said in the documents and beside the Role list.
 
 ### What stays as it is
 
@@ -872,13 +927,33 @@ a fresh store, or measured in an exported copy with the suite's Chromium.
   its version rises with a `File-revision-v1` trailer,
   without which `check-versions` fails (tried).
 
+### For Block 8: the credits' versions
+
+- **Today:**
+  `tools/credits` writes each Go module's version into
+  `internal/credits/credits.json` (24 modules),
+  which the binary embeds and `/ui/credits.json` and `massimo credits` serve;
+  Go's own entry takes its version at run time already (`internal/credits`,
+  `GoVersion`, from `runtime.Version()`, PasswordRules' Block 5).
+  `TestGeneratedFileCurrent` compares the committed file with a fresh run,
+  so a version bump in `go.mod` alone fails it.
+- **What the binary knows:**
+  `runtime/debug.ReadBuildInfo` lists the modules it was built with,
+  each with its version and, for a replaced one, its replacement.
+- **What still fails, as it should:**
+  a module added or removed, and a licence text that changes with a bump.
+- **The vendored entries** (the page's libraries, the OPAQUE client,
+  the word list) take their versions from their notes, as now:
+  their bump is a change of the file anyway.
+
 ## Implementation Plan
 
 Each block moves its documents with its code and is a pull request of its own,
 its run recorded in a NOTE (AGENTS.md §5.4);
 the completion gate (`GUIDELINES/shared/GATE_WORKFLOW.md` §7.7) lists D1 to D39
 and puts D59 again (D23).
-The builders may run several blocks at once; Block 5 waits for D29.
+The builders may run several blocks at once; Block 5 waits for D29,
+and nothing of D41 is built before the owner's answer.
 
 **Files more than one block touches,** which the coordinator merges in turn,
 each later pull request merging `origin/main` first:
@@ -902,6 +977,8 @@ each later pull request merging `origin/main` first:
   a conflict in `internal/credits/` is settled by `make credits` again.
 - `src/signin/`:
   Block 1 (`Card.tsx`, `store.ts`) and Block 3 (`Owner.tsx`), different files.
+- `tools/credits/`, `internal/credits/` and `cmd/massimo/credits.go`:
+  Blocks 6 and 8; Block 8 is built on Block 6's commit.
 - Block 7 shares none.
 
 Block 4 is best merged before Block 5:
@@ -1524,6 +1601,50 @@ D24 to D28 go with it.
   `config.ini` is not `[ci] untested`,
   so CI runs the whole suite on the pull request.
 
+### Block 8: Versions
+
+- **Goal:**
+  a bump of a Go module in `go.mod` fails no test;
+  the credits show the version the binary was built with (D40-A).
+- **Changes:**
+  1. `tools/credits`:
+     a Go module's entry carries no version in `internal/credits/credits.json`;
+     a vendored entry keeps its note's.
+  2. `internal/credits`:
+     each Go module's version is filled when the list is read,
+     from `debug.ReadBuildInfo` (a replaced module: its replacement's version),
+     as Go's own version is from `runtime.Version()`;
+     a module the build information lacks shows no version.
+  3. `/ui/credits.json`, System info and `massimo credits` show the versions as
+     before.
+  4. `make credits` again.
+- **Tests:**
+  `internal/credits`: the versions filled are the build information's,
+  a replaced module's too;
+  `tools/credits`: the generated file holds no Go module's version,
+  and `TestGeneratedFileCurrent` passes with a module's version changed in its
+  list of modules (the test's own stub) and fails with a module added;
+  `cmd/massimo`: `massimo credits` shows a module's version.
+  Each seen failing before the change.
+- **Documents:**
+  `tools/credits/README.md` (what the file holds, what a bump needs),
+  `docs/ui.md` (the credits), `README.md` where it names the versions.
+- **CHANGELOG:**
+  `CHANGELOG.d/Fixed/claude-accessends-credits-versions.md`:
+  "- The credits take each Go module's version from the binary,
+  so a dependency's update no longer needs the list made again."
+- **Commit:**
+  `fix(server): The credits take each Go module's version from the binary`
+- **Verification,** each by its exit code:
+  `go test -count=1` of `internal/credits`, `tools/credits`,
+  `cmd/massimo` and `internal/server`; `make credits` twice, the same bytes;
+  `go run ./tools/credits -check`; in a scratch copy,
+  the bump of that Dependabot pull request (`golang.org/x/net` 0.62.0 to 0.63.0,
+  from the Go module proxy),
+  then `go test ./tools/credits/...` passes and `massimo credits` shows 0.63.0;
+  `make ui-test` with `test_system_info.py` and `test_parts_guard.py` in all
+  four cases; `make cross`.
+
 ## Proposed commit message
 
 The plan: `chore(aps): +AccessEnds v1.0`
@@ -1550,7 +1671,7 @@ Key changes:
 Assisted-by: claude-code:claude-opus-5-5
 ```
 
-Blocks 2 to 7: the summaries of their blocks above.
+Blocks 2 to 8: the summaries of their blocks above.
 
 ## Change History
 
@@ -1558,3 +1679,8 @@ Blocks 2 to 7: the summaries of their blocks above.
   gate of AP LooseEnds and AP PasswordRules: LooseEnds.D44-A to D48-A,
   D47-A with a log entry, and PasswordRules.D55-A to D59-A, under PLAN++;
   D1 to D39 taken with PLAN++, but D29, the owner's, on which Block 5 waits.
+- v1.1 (2026-11-25): Block 8, Versions, at the owner's word (D40-A):
+  the credits take each Go module's version from the binary,
+  since every bump in `go.mod` failed CI until the list was made again;
+  D41 open, the owner's, with what a link to a Massimo user changes.
+  Block 7 is merged; Blocks 1 to 6 stand as they are.

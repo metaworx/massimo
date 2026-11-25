@@ -69,7 +69,7 @@ func creditsCommand(args []string, w io.Writer) error {
 
 // printCredits writes the list, a line an entry: its name, version,
 // licence and where it comes from; then, for each entry that includes
-// what it has no licence texts for, a line that says so.
+// more, a line that says what.
 func printCredits(w io.Writer, l credits.List) error {
 	tw := tabwriter.NewWriter(w, 0, 0, 2, ' ', 0)
 	fmt.Fprintln(tw, "NAME\tVERSION\tLICENCE\tFROM")
@@ -121,10 +121,10 @@ func fileLicence(f credits.File) string {
 	return f.Licence
 }
 
-// includesLine says what else an entry includes, whose own licence
-// texts the list does not hold.
+// includesLine says what else an entry includes, and the crates those
+// are built with, whose licence texts are among the entry's files.
 func includesLine(e credits.Entry) string {
-	return e.Name + " includes " + e.Includes + "; their own licence texts are not reproduced here."
+	return e.Name + " includes " + e.Includes + " and the crates they are built with; their licence texts, collected for Massimo from the crates' archives, are among its files."
 }
 
 // creditOrigin says where an entry comes from, as System info does.

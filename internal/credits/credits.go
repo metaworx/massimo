@@ -64,8 +64,8 @@ type Entry struct {
 	// slashes; "" for a module taken as published, Go and Massimo.
 	Path string `json:"path,omitempty"`
 	// Includes names what else it holds, as its note names it (the Rust
-	// crates inside the OPAQUE client's WebAssembly), whose own licence
-	// texts are not in Files.
+	// crates inside the OPAQUE client's WebAssembly), whose licence texts
+	// are among Files (opaque.LICENSE-3RD-PARTY).
 	Includes string `json:"includes,omitempty"`
 	// Files are its licence's files: every LICENSE, LICENCE, COPYING,
 	// NOTICE and PATENTS file it has, by name.

@@ -34,8 +34,18 @@ which refuses the session's own requests too until it ends (AP LooseEnds, D43).
 At the start's card the key's try is one read of who is in more,
 the start's own read that waited for the card following it;
 on a running page the sign-in takes the try's answer and reads none more for it.
-An answer to the key's try that comes after another way has signed in,
-or after the card was closed or opened anew, does nothing.
+An answer of any way of the card, the password's, the key's,
+the fingerprint's in the app or a provider's start (below),
+that comes after another way has signed in,
+or after the card was closed or opened anew, does nothing (AP LooseEnds, D44):
+it says nothing, takes no focus and sets no token,
+a session it made is ended at the server (AP AccessEnds, D2),
+and no provider's page opens.
+**Sign in** and a provider's button turn for a sign-in of their own opening:
+in a card opened anew they are ready again.
+The first owner's form needs no such check:
+while **Create the owner** turns, every way out of the card is off,
+and another request's refusal does not turn the card (AP AccessEnds, D1).
 The password form holds the one password field, its fields named,
 so that a password manager such as KeePassXC fills it.
 Every password field of the page, the sign-in's, the first owner's two,
@@ -195,7 +205,12 @@ the same switch on the card's form that creates the first owner;
 the fingerprint first in the row where a login is kept,
 named with the user's name, which signs in at once with a new session from
 the key, the password staying the form chosen,
-its spinner in the icon's place while it runs;
+its spinner in the icon's place while it runs,
+the other ways' **Sign in**, Cancel and **Select server…** off meanwhile,
+as while the first owner is created (AP AccessEnds, D1):
+the app ends the session it held as it keeps the fingerprint's,
+so that no other way's session is made beside it,
+and it does not start while the password's or the key's sign-in runs;
 a line instead of both where the page is open over plain HTTP outside the
 home network, where the app sends no key;
 **Select server…**, back to the app's servers, last in the card's ☰;
@@ -1800,11 +1815,17 @@ Go's the version the server was built with,
 "licence in its text" where the text is known by no name,
 and "other licences among its files" where not all its files are under that one;
 its body where it comes from, what else it includes where its note names it
-(the Rust crates in the OPAQUE client), with the words that their own licence
-texts are not reproduced here,
+(the Rust crates in the OPAQUE client), with the words that it includes
+the crates those are built with too,
+and that their licence texts, collected for Massimo from the crates' archives,
+are among its files,
 and each file of its licence (`LICENSE`, `NOTICE`, `PATENTS` and the like)
 with the licence it is known by, its text as text in a box that scrolls,
-which the file's name labels.
+which the file's name labels:
+the OPAQUE client's are its own `opaque.LICENSE`, MIT,
+and `opaque.LICENSE-3RD-PARTY`, the texts of its crates,
+which no one licence names,
+so that its head says "MIT, other licences among its files".
 The list is `/ui/credits.json`, the file `make credits` writes into `internal/credits/`
 and the server embeds, Go's version set to the binary's,
 served as the page's other files are (revalidated, an ETag);
@@ -3005,9 +3026,9 @@ a value's age it takes from `received` of `rooms.js`, as the rooms do.
 | `FormsDialog` | `dialog.tsx` | a modal `<dialog>` that lists forms with changes, each a button that closes it and opens its form, with a button that stays (Escape too, and any close without a button of its own) and one that goes on, of the classes `dialog-stay` and `dialog-go` in every use; the focus on the one that stays, given back where it was when it closes | `shown`, `title`, `text`, `forms` (items, as `changedItems` gives them), `stay` (its label), `onStay`, `go` (`{ label, onGo }`, none without) |
 | `Question` | `question.tsx` | a question in the page, No and Yes, Escape for No, the focus on No as it is drawn (`confirmBox`) | `text`, `yes`, `no`, `onYes` (its request's promise), `onNo`, `boxRef` (`useAsk`'s `box`) |
 | `useAsk` | `question.tsx` | a row that asks in its own place, the focus back on its button in the drawing's own turn, as `confirmInPlace` gave it at once (a layout effect); with `held`, whether it asks is a store's live state, which the store takes back where what it asked about changed and at a sign-out (a part drawn once for the page's life: Software update, Maintenance); a question the store takes back while the focus is in its box (`box`, handed to the `Question`'s `boxRef`, judged as the drawing that takes it away begins) gives it back to the button, or to the row where the button cannot take it, in the same turn; `done(false)` gives it to nothing, as before | `held` (`{ asking }`); gives `asking`, `ask`, `done`, `ref`, `row` (the row of the caller's, which holds the focus with `tabindex` -1 until it leaves, where the button cannot), `box` |
-| `useBusy`, `busyProps` | `question.tsx` | a button's request under way: busy, off, `aria-busy` (`whileBusy`, `setBusy`) | `run(fn)`; `busyProps(cls, busy, off)` |
+| `useBusy`, `busyProps` | `question.tsx` | a button's request under way: busy, off, `aria-busy` (`whileBusy`, `setBusy`); with an epoch, a request belongs to the epoch it ran in, the button ready again in a later one (the sign-in card's opening) | `useBusy(epoch)`, `run(fn)`; `busyProps(cls, busy, off)` |
 | `useSetAtOnce` | `question.tsx` | a setting saved at once, a switch without a Save: the user's choice shown while its request runs, the control on so that the focus stays on it, a change meanwhile sending nothing and drawn back, then what is stored, the old value where it was refused (the password sign-in, a capability for every role, whether integrations may ask, an integration's Enabled) | `stored`; gives `value`, `busy`, `set(v, fn)` |
-| `BusyButton` | `question.tsx` | a button that sends a request and turns until its answer (`useBusy`, `busyProps`), a click meanwhile sending nothing | `id`, `cls`, `label`, `run`, `aria` (its name where the text is not enough), `off` (kept off: a request that may not be sent now), `data` (its `data-` attributes: a Link button's provider) |
+| `BusyButton` | `question.tsx` | a button that sends a request and turns until its answer (`useBusy`, `busyProps`), a click meanwhile sending nothing | `id`, `cls`, `label`, `run`, `aria` (its name where the text is not enough), `off` (kept off: a request that may not be sent now), `data` (its `data-` attributes: a Link button's provider), `epoch` (`useBusy`'s: the sign-in card's opening) |
 | `burstReader` | `burst.ts` | one read for a burst of the stream's events: a read in flight and at most one more after it, which reads what the events meanwhile asked for, none asked for in the session before (the parts that follow the server while shown) | `read(what)`, the reads by name; gives `ask(...what)` |
 | `session`, `stillSession`, `newSession` | `session.ts` | the session's number, raised by `MassimoParts.signedOut` before anything is forgotten: a store takes it before an await and drops the answer, its message and its next timer where it changed; `actionRunner`'s `bound` does so for a runner, and a plain load takes it as `MassimoParts.session()` | –; `n`; – |
 | `me`, `own` | `me.ts` | who the page is signed in as, `state.me` underneath (`shared/data.ts`), which `applyCaps` of `login.js` writes at every read of it, null from a sign-out on; the token it is signed in with, by which a user's sessions say "this device" and "its key" | — |
@@ -3559,6 +3580,30 @@ and gives the focus in the drawing that follows,
 and each way, the password, a key or the fingerprint, sets the token
 and goes on to `finishSignIn`, which settles the sign-in, closes the dialog
 and starts the page as the plain handlers did.
+Each way, and a provider's button,
+takes the card's opening and the session's number as it is used
+(`opening` of `signin/store.ts`),
+and after each answer acts only while both hold (AP LooseEnds, D44):
+the same session, the same opening still the card's, open,
+and not taken by a way that has set its token in it (`still`, `take`;
+a provider's start takes none: it sets no token,
+and a navigation it starts that leaves the page standing
+leaves the opening to the other ways).
+An answer that comes later writes no line, asks for no focus and sets no token;
+a session it made is ended (AP AccessEnds, D2),
+by `POST /api/v1/logout` with it (`endSession` of `login.js`),
+and the app's bridge, which keeps the fingerprint's as `setToken` would,
+is left with none where the page holds no token, as after a sign-out
+(where it still holds a session, which only a script's close of the card leaves,
+the app has ended that session already and keeps the fingerprint's, ended);
+and a provider's address, which `startProvider` answers, is not opened.
+The password's and the key's Sign in and the providers' buttons turn for a request
+of their opening alone (`useBusy`'s epoch, the card's `opened`).
+The login by fingerprint keeps the card working (`card.working`)
+from its press until the card has closed,
+and starts only while no other way's request of the opening runs:
+the app ends the session it held as it keeps the fingerprint's,
+so that a session another way made meanwhile would be ended under the page.
 Its fields are not controlled (UiParts D210):
 no draw sets what a name, a password or a key field holds,
 so that a password manager's fill stays; they are read at the submit
@@ -3615,6 +3660,10 @@ and Keep it open (`KeepOpen.tsx`) are bound to the card's ask instead,
 which is ended once and does nothing for an ask closed already (`done`, `finishSignIn`),
 and they run on an open server, where no sign-out ends a session
 and another user signs in only through this card, which they themselves end in.
+Create the owner needs no check of its opening either (AP AccessEnds, D1):
+while it turns, `card.working` keeps every way out of the card off,
+and `card.creating` keeps another request's 401 from turning the card,
+so that only a script's close of the dialog could end its opening before its `setToken`.
 Who is in (`shared/me.ts`) draws the open server's warning into `#open-banner-slot`.
 The first owner's form is the sign-in card's other state (`Owner.tsx`),
 which `loadMe` opens through `askLogin("owner")` (AP FirstOwner),
@@ -3684,7 +3733,9 @@ it (`uiPageScripts` in `ui_test.go`) and its texts as the page's.
 One file is not the project's: `ui/vendor/opaque.js`,
 `@serenity-kit/opaque` as published, the OPAQUE client in WebAssembly,
 which the sign-in needs and which the browser does not offer
-(`ui/vendor/README.md` says which version, its licence and how to update it).
+(`ui/vendor/README.md` says which version, its licence and how to update it;
+`ui/vendor/opaque.LICENSE-3RD-PARTY` the licence texts of the Rust crates in it,
+which the credits carry and the page does not serve).
 `login.js` imports it when a sign-in first needs it, not with the page,
 and the page's `Content-Security-Policy` allows WebAssembly to compile
 (`'wasm-unsafe-eval'`) for it;

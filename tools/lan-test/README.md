@@ -49,9 +49,11 @@ bridge has both.
   which is how an outage of its network is staged.
 
 `run.sh` builds a static `massimo` into a temporary directory,
-the page's parts first (`make ui`),
+`massimo-lan-test.XXXXXX` under `TMPDIR`, the page's parts first (`make ui`),
 which every host mounts at `/m`,
 and brings up the Cube, the searcher and the client.
+The directory goes with the hosts at the end;
+`KEEP=1 make lan-test` keeps it and prints its path (AP CleanRuns, D4-A).
 With no proxy on the LAN, it checks:
 
 1. a search lists `KEQ0000100` at the Cube's address, with its MAC,
