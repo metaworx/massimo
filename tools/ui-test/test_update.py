@@ -2,11 +2,14 @@
 # Copyright (C) 2026 The Massimo Authors
 """System settings → Software: the update channel, the buttons while the
 update helper works, and Update asking in the page. GET /api/v1/update is
-stubbed, and the setting update.channel where the channel is chosen;
+stubbed, and the setting update.channel where the channel is chosen, and
+GET /api/v1/restart where the next start refuses the settings file;
 nothing is installed."""
 import json
 
-from helpers import VIEWER, frames, show_view, update_json, wait_until
+import pytest
+
+from helpers import VIEWER, frames, show_view, update_json, wait_held, wait_until
 
 
 def test_busy_while_the_helper_installs(page):
@@ -40,6 +43,7 @@ def test_update_asks_in_the_page(page):
     btn.wait_for(state="visible")
     btn.click()
     box = page.locator(".update .confirm-box")
+    box.wait_for()  # once Update has read whether the next start refuses the settings file
     assert box.is_visible() and "v0.0.1-test" in box.inner_text() and btn.is_hidden(), "Update asks in the page"
     box.locator(".confirm-no").click()
     assert page.locator(".update .confirm-box").count() == 0 and btn.is_visible() and not posts, "Cancel takes it back, nothing sent"
@@ -61,6 +65,7 @@ def test_update_through_apt(page):
     plain = page.evaluate("t('update.confirm', {version: 'v0.0.1-test'})")
     btn.click()
     box = page.locator(".update .confirm-box")
+    box.wait_for()
     assert box.is_visible() and "apt" in box.inner_text() and plain not in box.inner_text(), \
         "Update asks about apt, not with the hand install's rollback"
     box.locator(".confirm-no").click()
@@ -479,3 +484,215 @@ def test_update_question_not_for_viewer(page):
     assert not page.locator("#update-ask").is_visible(), "no banner for a viewer"
     unroute_ask(page)
     page.unroute("**/api/v1/me")
+
+
+# What the next start refuses of the settings file, as GET /api/v1/restart
+# gives it to a holder of update without restart: the restart not
+# available, its refusals as a holder of restart sees them (AP
+# StartConfiguration, D34-A).
+REFUSAL = [{"settings": ["MASSIMO_TRUSTED_PROXIES"],
+            "error": '-trusted-proxies or MASSIMO_TRUSTED_PROXIES: "10.0.0.300" is neither an address nor a CIDR'}]
+
+
+def restart_route(page, answer, held=None):
+    """Stubs GET /api/v1/restart, which serves Maintenance's own read too:
+    answer["refused"] the next start's refusals, a list, or the status
+    the read fails with, read at each request; with held, a read is held
+    there once answer["hold"] is set, until the test lets it go
+    (restart_answer)."""
+
+    def handle(route):
+        if held is not None and answer.get("hold"):
+            held.append(route)
+            return
+        restart_answer(route, answer["refused"])
+
+    page.route("**/api/v1/restart", handle)
+
+
+def restart_answer(route, refused):
+    """Answers a read of GET /api/v1/restart with refused, a list of the
+    next start's refusals, or the status it fails with."""
+    if isinstance(refused, int):
+        route.fulfill(status=refused, content_type="application/json", body='{"error": "the settings file could not be checked"}')
+        return
+    route.fulfill(status=200, content_type="application/json", body=json.dumps({
+        "available": False, "blocked": 'capability "restart" required', "file": "/etc/massimo/env",
+        "read_at": "2026-11-25T10:00:00Z", "refused": refused}))
+
+
+def maint_read(page):
+    """Maintenance shown, with its own read of GET /api/v1/restart answered:
+    the settings file it names is in its line, or the restart's line says
+    why it could not ask."""
+    show_view(page, "maint")
+    assert wait_until(page, "document.getElementById('settings-file-text').textContent.includes('/etc/massimo/env')"
+                      " || document.getElementById('restart-text').textContent.includes('could not be checked')", 5), \
+        "Maintenance's read answered"
+
+
+def update_question(page):
+    """Update pressed, its question's text once it shows, taken back by Cancel."""
+    page.locator("#update-btn").click()
+    box = page.locator(".update .confirm-box")
+    box.wait_for()
+    text = box.locator(".confirm-text").text_content()
+    box.locator(".confirm-no").click()
+    assert page.locator(".update .confirm-box").count() == 0, "the question taken back"
+    return text
+
+
+def test_update_question_says_the_server_stays_down(page, watch):
+    """While the server's next start refuses the settings file, Update
+    reads it at the press, turning while it reads, once, and its question
+    ends with the sentence that the server does not come back until the
+    file is fixed (AP AutoUpdate, D12-A, D13-A), though the restart is not
+    available to this caller: the answer's refused decides. Without a
+    refusal Update asks as before, and after a failed read too."""
+    watch.expected.append(("/api/v1/restart", 500))  # the failed read is the test's
+    answer = {"refused": REFUSAL}
+    held = []
+    restart_route(page, answer, held)
+    page.route("**/api/v1/update*", lambda route: route.fulfill(
+        status=200, content_type="application/json", body=update_json("up-to-date", "v0.0.1-test", True)))
+    try:
+        maint_read(page)
+        btn = page.locator("#update-btn")
+        btn.wait_for(state="visible")
+        plain, sentence = page.evaluate("[t('update.confirm', {version: 'v0.0.1-test'}), t('restart.confirmRefused')]")
+
+        answer["hold"] = True
+        btn.click()
+        assert wait_held(page, held), "Update reads GET /api/v1/restart"
+        frames(page)
+        assert page.evaluate("document.getElementById('update-btn').classList.contains('busy') && document.getElementById('update-btn').disabled"), \
+            "Update turns, off, while it reads"
+        assert page.locator(".update .confirm-box").count() == 0, "no question before the answer"
+        answer["hold"] = False
+        restart_answer(held[0], REFUSAL)
+        box = page.locator(".update .confirm-box")
+        box.wait_for()
+        assert box.locator(".confirm-text").text_content() == plain + " " + sentence, \
+            "the question with the sentence: %r" % box.locator(".confirm-text").text_content()
+        assert len(held) == 1, "one read (%d)" % len(held)
+        assert not btn.evaluate("b => b.classList.contains('busy')"), "Update turns no more"
+        box.locator(".confirm-no").click()
+
+        answer["refused"] = []
+        assert update_question(page) == plain, "without a refusal the question as before"
+        answer["refused"] = 500
+        assert update_question(page) == plain, "after a failed read the question as before"
+    finally:
+        page.unroute("**/api/v1/update*")
+        page.unroute("**/api/v1/restart")
+
+
+def test_update_question_through_apt_says_the_server_stays_down(page):
+    """On a box apt updates, Update's question names apt and how to go
+    back, and the sentence after it while the next start refuses the
+    settings file: apt puts nothing back, and the old version would not
+    start either."""
+    restart_route(page, {"refused": REFUSAL})
+    page.route("**/api/v1/update*", lambda route: route.fulfill(
+        status=200, content_type="application/json", body=update_json("up-to-date", "v0.0.1-test", True, "apt")))
+    try:
+        maint_read(page)
+        page.locator("#update-btn").wait_for(state="visible")
+        want = page.evaluate("t('update.confirmManaged', {version: 'v0.0.1-test', manager: 'apt'}) + ' ' + t('restart.confirmRefused')")
+        got = update_question(page)
+        assert got == want, "apt's question with the sentence: %r" % got
+    finally:
+        page.unroute("**/api/v1/update*")
+        page.unroute("**/api/v1/restart")
+
+
+def install_now_asks(page, place, puts):
+    """Install now pressed in place, the banner (update-ask) or the card's
+    copy (update-card-ask), while the next start refuses the settings
+    file: it asks there in place of the three answers, the focus on
+    Cancel, with the update's question and the sentence; Cancel gives the
+    three back, the focus on Install now, with nothing sent."""
+    now = page.locator(f"#{place}-now")
+    now.click()
+    box = page.locator(f"#{place} .confirm-box")
+    box.wait_for()
+    want = page.evaluate("t('update.confirm', {version: 'v0.0.2-test'}) + ' ' + t('restart.confirmRefused')")
+    assert box.locator(".confirm-text").text_content() == want, "the question with the sentence: %r" % box.text_content()
+    assert box.locator(".confirm-yes").text_content() == page.evaluate("t('update.ask.now')"), "Yes is Install now"
+    assert box.locator(".confirm-no").text_content() == page.evaluate("t('action.cancel')"), "No is Cancel"
+    assert wait_until(page, f"document.activeElement === document.querySelector('#{place} .confirm-no')", 5), "the focus on Cancel"
+    assert all(page.locator(f"#{place}-{a}").is_hidden() for a in ("now", "tonight", "skip")), "in place of the three answers"
+    box.locator(".confirm-no").click()
+    assert page.locator(f"#{place} .confirm-box").count() == 0, "Cancel takes it back"
+    assert all(page.locator(f"#{place}-{a}").is_visible() for a in ("now", "tonight", "skip")), "the three answers back"
+    assert wait_until(page, f"document.activeElement.id === '{place}-now'", 5), "the focus back on Install now"
+    frames(page)
+    assert puts == [], "nothing sent: %r" % puts
+
+
+def test_install_now_asks_in_the_banner_while_refused(page):
+    """While the next start refuses the settings file, Install now under
+    the header asks first (AP AutoUpdate, D14-A): Cancel sends nothing,
+    and the question's Install now answers now; the banner goes."""
+    restart_route(page, {"refused": REFUSAL})
+    puts = ask_routes(page)
+    try:
+        page.evaluate("state.updateAt = 0; updateDue()")
+        page.locator("#update-ask").wait_for(state="visible")
+        install_now_asks(page, "update-ask", puts)
+        page.locator("#update-ask-now").click()
+        page.locator("#update-ask .confirm-yes").click()
+        assert held_true(page, lambda: puts == [{"version": "v0.0.2-test", "answer": "now"}]), "Install now answered: %r" % puts
+        page.locator("#update-ask").wait_for(state="hidden", timeout=10000)  # at the following's first read, 3 s on
+    finally:
+        unroute_ask(page)
+        page.unroute("**/api/v1/restart")
+
+
+def test_install_now_asks_in_the_card_while_refused(page):
+    """Install now in Software update asks first as well, in the card's
+    copy alone, the banner keeping its three answers; the question's
+    Install now answers now, which the card then says."""
+    restart_route(page, {"refused": REFUSAL})
+    puts = ask_routes(page)
+    try:
+        maint_read(page)
+        page.locator("#update-check").click()
+        page.locator("#update-card-ask").wait_for(state="visible")
+        install_now_asks(page, "update-card-ask", puts)
+        page.locator("#update-card-ask-now").click()
+        page.locator("#update-card-ask .confirm-box").wait_for()
+        assert page.locator("#update-ask .confirm-box").count() == 0 and page.locator("#update-ask-now").is_visible(), \
+            "the banner keeps its three answers"
+        page.locator("#update-card-ask .confirm-yes").click()
+        requested = page.evaluate("t('update.requested', {version: 'v0.0.2-test'})")
+        assert wait_until(page, "document.getElementById('update-helper').textContent === %s" % json.dumps(requested), 5), \
+            "the card says the update was requested: %r" % page.locator("#update-helper").text_content()
+        assert puts == [{"version": "v0.0.2-test", "answer": "now"}], "Install now answered: %r" % puts
+    finally:
+        unroute_ask(page)
+        page.unroute("**/api/v1/restart")
+
+
+@pytest.mark.parametrize("place", ["update-ask", "update-card-ask"])
+@pytest.mark.parametrize("refused", ["none", "failed"])
+def test_install_now_at_once(page, watch, place, refused):
+    """Without a refusal, and after a failed read, Install now answers now
+    at once, under the header and in the card, asking nothing."""
+    if refused == "failed":
+        watch.expected.append(("/api/v1/restart", 500))  # the failed read is the test's
+    restart_route(page, {"refused": [] if refused == "none" else 500})
+    puts = ask_routes(page)
+    try:
+        if place == "update-ask":
+            page.evaluate("state.updateAt = 0; updateDue()")
+        else:
+            maint_read(page)
+            page.locator("#update-check").click()
+        page.locator(f"#{place}").wait_for(state="visible")
+        page.locator(f"#{place}-now").click()
+        assert held_true(page, lambda: puts == [{"version": "v0.0.2-test", "answer": "now"}]), "Install now answered at once: %r" % puts
+        assert page.locator(".update-ask .confirm-box, .update-card-ask .confirm-box").count() == 0, "asked nothing"
+    finally:
+        unroute_ask(page)
+        page.unroute("**/api/v1/restart")
