@@ -216,7 +216,7 @@ func (s *Server) postCube(w http.ResponseWriter, r *http.Request) error {
 		return fail(http.StatusConflict, "%v", err)
 	}
 	s.log.Info("cube added", "serial", serial, "address", row.Address, "follow_discovery", row.FollowDiscovery, "restored", req.Restore, "remote", s.clientIP(r))
-	writeJSON(w, http.StatusCreated, s.summary(rt))
+	writeJSON(w, http.StatusCreated, s.summary(rt, s.backupCounts(r.Context())))
 	return nil
 }
 
@@ -322,7 +322,7 @@ func (s *Server) putCube(w http.ResponseWriter, r *http.Request) error {
 		return fail(http.StatusInternalServerError, "%v", err)
 	}
 	s.log.Info("cube changed", "serial", rt.cubeSerial(), "remote", s.clientIP(r))
-	writeJSON(w, http.StatusOK, s.summary(rt))
+	writeJSON(w, http.StatusOK, s.summary(rt, s.backupCounts(r.Context())))
 	return nil
 }
 

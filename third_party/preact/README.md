@@ -70,5 +70,7 @@ An update, in an empty directory outside the checkout:
    and one it no longer needs removed;
 3. the versions and both lists above, and the list in `TestVendoredPreact`,
    changed;
-4. `make ui`, `make ui-check`, `MASSIMO_ENV_FILE=/dev/null go test ./...`
+4. `make credits`, which takes each directory's name and version for
+   System info's credits from the first table above;
+5. `make ui`, `make ui-check`, `MASSIMO_ENV_FILE=/dev/null go test ./...`
    and `make ui-test` run.

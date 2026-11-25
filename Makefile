@@ -50,7 +50,7 @@ export SOURCE_DATE_EPOCH ?= $(shell git log -1 --format=%ct 2>/dev/null || date 
 # The container the package test runs in (make deb-test).
 DEB_IMAGE ?= debian:trixie-slim
 
-.PHONY: all ui ui-check api-types build test vet race test-armv6 fuzz store-bench ui-test ui-screenshots ui-brand lan-test app-emulator-test actionlint windows linux linux-arm64 linux-armv7 linux-armv6 darwin darwin-amd64 darwin-arm64 cross deb-unit packages debver version deb-test deb-systemd-test apt-test site build-release release release-files clean release-alpha release-beta release-rc release-stable
+.PHONY: all ui ui-check api-types credits build test vet race test-armv6 fuzz store-bench ui-test ui-screenshots ui-brand lan-test app-emulator-test actionlint windows linux linux-arm64 linux-armv7 linux-armv6 darwin darwin-amd64 darwin-arm64 cross deb-unit packages debver version deb-test deb-systemd-test apt-test site build-release release release-files clean release-alpha release-beta release-rc release-stable
 
 # Development happens on main; a release is a tag on main, whose label is
 # the release's flavour (internal/update): -alpha.N is alpha, -beta.N beta,
@@ -210,6 +210,18 @@ ui-check:
 # go run ./tools/apitypes -check says so without writing.
 api-types:
 	GOOS= GOARCH= GOARM= go run ./tools/apitypes
+
+# The credits and licences of everything the binary includes, which
+# System info shows: tools/credits writes internal/credits/credits.json
+# from the modules go list finds for every platform of cross, Go's own
+# LICENSE, third_party/ and the web UI's vendor/, run again after a
+# module, Go's go line or a vendored file changed. git keeps the file
+# and the binary embeds it; go test (internal/credits, tools/credits)
+# fails while it is not current, and go run ./tools/credits -check says
+# so without writing. go list needs the bundle (ui), which the server
+# embeds. massimo credits prints the list too.
+credits: ui
+	GOOS= GOARCH= GOARM= go run ./tools/credits
 
 build: ui
 	go build -ldflags "$(LDFLAGS)" -o massimo $(PKG)

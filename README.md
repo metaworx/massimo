@@ -1060,6 +1060,22 @@ the server's count), so it warns and asks first (`-yes` skips that).
 On the box of a running `serve` the Cube answers `serve`'s port:
 give the serial with `-sn` there, and the answer to `R` goes to `serve`.
 
+```bash
+massimo credits
+massimo credits preact
+```
+
+`credits` lists everything the binary includes, a line each with its name,
+version (Go's the one the binary was built with), licence and where it comes from,
+"and others" where its files are under other licences too,
+then what an entry includes whose own licence texts are not reproduced
+(the Rust crates in the web UI's OPAQUE client),
+as System info's **Credits and licences** does from the same embedded list;
+`credits <name>`, the name as the list prints it, prints that entry's licence,
+the text of each of its files with the licence it is known by.
+It needs no store, no settings file and no running server;
+a name the list does not hold is an error that names `massimo credits`.
+
 ### Cube variables
 
 The Cubes are configured in the environment or in `.env` in the current
@@ -1163,6 +1179,15 @@ which asks for the password again since it goes with the name
 `user token <name> -label Loxone` prints a new API key once,
 `user tokens <name>` lists the user's sessions and keys with their ids,
 and `user revoke <name> [<token id>]` revokes one token or every one.
+A new password has 8 to 64 characters; 15 or a few words are better.
+It contains no name of the user's or the box's, whatever the case:
+not the login name, the display name or a word of either,
+not the first label of the box's host name, not `massimo` or `maxcube`,
+each a word where it has 4 letters or more.
+A password set before stays valid,
+but `user rename` asks for one again:
+where the old one is shorter or holds the new name, give a new one there,
+or `-no-password`, which leaves the user with its keys only.
 A password set with `user add` or `user passwd` is of `auth_version` 2:
 the command registers it by OPAQUE in its own process,
 with the browser's key stretching, so the web UI signs in with it and the
@@ -1366,6 +1391,12 @@ report the commit only with `go run -buildvcs=true`.
 ## Legal
 
 Licensed under the [GNU Affero General Public License v3.0 or later](LICENSE).
+What the binary includes besides Massimo's own code, Go, the Go modules it
+links and what [third_party/](third_party) and the web UI's vendor directory hold,
+is listed in the web UI under ☰ → System info → **Credits and licences**,
+each with its licence's text, and by `massimo credits` on the command line;
+`make credits` writes the list into `internal/credits/`, and `go test` fails
+while it has fallen behind ([tools/credits/README.md](tools/credits/README.md)).
 The privacy policy of the software, the apps and the project's site is
 <https://massimo.metaworx.ch/privacy.html>.
 

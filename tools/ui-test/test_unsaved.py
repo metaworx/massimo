@@ -38,7 +38,7 @@ import time
 import pytest
 
 from conftest import URL, api_call
-from helpers import open_personal_page, focus_in_turn, CUBES, choose_cube, describe_event, found_only, held_poll, hold, show_view, sign_out, wait_held, wait_until
+from helpers import CUBES, OPERATOR_PASSWORD, choose_cube, describe_event, focus_in_turn, found_only, held_poll, hold, open_personal_page, show_view, sign_out, wait_held, wait_until
 from test_login import sign_in
 
 pytestmark = pytest.mark.clock
@@ -1376,14 +1376,14 @@ def test_sign_in_after_a_401_keeps_drafts_for_the_same_user(new_context, case, w
     page.set_default_timeout(5000)
     page.on("pageerror", lambda e: watch.problems.append(f"page error: {e}"))
     page.goto(URL)
-    sign_in(page, "operator", "op-pass")
+    sign_in(page, "operator", OPERATOR_PASSWORD)
     room = vwt_room(page)
     unsaved(page, room)
     expire(page)
-    sign_in(page, "operator", "op-pass")
+    sign_in(page, "operator", OPERATOR_PASSWORD)
     assert page.evaluate("MassimoParts.leaving.changes()"), "the same user: the drafts kept"
     expire(page)
-    sign_in(page, "guest1", "guest-pass")
+    sign_in(page, "guest1", "visit-pass")
     assert page.evaluate("state.me.user.name") == "guest1", "another user"
     assert not page.evaluate("MassimoParts.leaving.changes()"), "the first user's drafts forgotten"
 
@@ -1403,7 +1403,7 @@ def test_sign_out_asks_first(new_context, case, watch, guard):
     page.on("pageerror", lambda e: watch.problems.append(f"page error: {e}"))
     seen = prompts(page)
     page.goto(URL)
-    sign_in(page, "operator", "op-pass")
+    sign_in(page, "operator", OPERATOR_PASSWORD)
     room = vwt_room(page)
     form, stored = unsaved(page, room)
     want = VWT_UNSAVED[case.lang].format(room=room["name"])
@@ -1430,7 +1430,7 @@ def test_sign_out_asks_first(new_context, case, watch, guard):
     assert not dialog_open(page), "the dialog gone"
     assert not page.evaluate("MassimoParts.leaving.changes()"), "the draft dropped"
 
-    sign_in(page, "operator", "op-pass")
+    sign_in(page, "operator", OPERATOR_PASSWORD)
     expert(page)
     open_vwt(page, room)
     loaded(page)
@@ -1441,7 +1441,7 @@ def test_sign_out_asks_first(new_context, case, watch, guard):
 
     # a save that goes through while the question is open: nothing is lost
     # any more, and the sign-out goes on
-    sign_in(page, "operator", "op-pass")
+    sign_in(page, "operator", OPERATOR_PASSWORD)
     form, _ = unsaved(page, room)
     held, sent = [], []
     hold(page, room["path"] + "/config", "PUT", held, sent)

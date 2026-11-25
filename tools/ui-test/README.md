@@ -474,7 +474,7 @@ hence `failed_checks_forgotten`.
   it compares with the one before when there is one, and it is deleted again.
 - `test_users.py`, System settings → Users and Roles as the owner:
   the owner and the operator the runner creates (`massimo user add operator`,
-  password `op-pass`) are listed with the operator's tokens,
+  password `op-password`) are listed with the operator's tokens,
   and the six default roles with the operator's seven capabilities;
   in the operator's open panel, Create key shows the new key,
   loads the tokens once and lists each once, and sends one POST per click,
@@ -591,7 +591,7 @@ hence `failed_checks_forgotten`.
   browser with the same token,
   the mode kept "only on this device" stays in its browser and the user's
   applies again when the switch is off; the guest the runner creates (`guest1`,
-  password `guest-pass`) has no switches,
+  password `visit-pass`) has no switches,
   and its poll stays in the browser, none sent;
   the operator's poll and scheme, changed just before Sign out,
   reach the operator's account and leave the browser,

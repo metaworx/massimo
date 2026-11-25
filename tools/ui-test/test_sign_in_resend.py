@@ -23,7 +23,7 @@ import json
 import pytest
 
 from conftest import TOKEN, URL, api_call, clear_preferences
-from helpers import frames, open_personal_page, show_view, sign_out, wait_held, wait_until
+from helpers import OPERATOR_PASSWORD, frames, open_personal_page, show_view, sign_out, wait_held, wait_until
 from test_login import sign_in
 
 NOT_SENT = {"en": "not sent, since you were signed out: do it again once signed in",
@@ -132,7 +132,7 @@ def test_write_not_sent_again(new_context, case, watch, guard):
     not sent either."""
     page = own_page(new_context, guard, watch)
     page.goto(URL)
-    sign_in(page, "operator", "op-pass")
+    sign_in(page, "operator", OPERATOR_PASSWORD)
     seen = tickets(page)
     writes = Refusal(page, "**/api/v1/cubes/*/rooms/*/setpoint", "PUT")
     reads = Refusal(page, "**/api/v1/me?again=1", "GET")
@@ -145,7 +145,7 @@ def test_write_not_sent_again(new_context, case, watch, guard):
     page.evaluate("() => { window.readAgain = null; api('GET', 'api/v1/me?again=1').then((m) => { window.readAgain = m.user.name; }); }")
     wait_count(page, reads.sent, 1, "the read meets the 401")
     before = len(seen)
-    sign_in(page, "operator", "op-pass")
+    sign_in(page, "operator", OPERATOR_PASSWORD)
     back(page, seen, before)
     assert wait_until(page, "window.readAgain === 'operator'", 5), "the read is sent again and answered"
     assert len(reads.sent) == 2, f"the read is sent once more: {len(reads.sent)}"
@@ -156,7 +156,7 @@ def test_write_not_sent_again(new_context, case, watch, guard):
     tile.locator(".mode-auto").click()
     assert wait_until(page, DIALOG_OPEN, 5), "the sign-in opens again"
     before = len(seen)
-    sign_in(page, "guest1", "guest-pass")
+    sign_in(page, "guest1", "visit-pass")
     back(page, seen, before)
     assert page.evaluate("state.me.user.name") == "guest1", "another user"
     assert len(writes.sent) == 2, f"the setpoint is not sent again by another user: {len(writes.sent)}"
@@ -287,12 +287,12 @@ def test_stepped_setpoint_dropped_at_the_sign_in(new_context, case, watch, guard
     left that could send it: what the tiles hold is read."""
     page = own_page(new_context, guard, watch)
     page.goto(URL)
-    sign_in(page, "operator", "op-pass")
+    sign_in(page, "operator", OPERATOR_PASSWORD)
     seen = tickets(page)
     writes = Refusal(page, "**/api/v1/cubes/*/rooms/*/setpoint", "PUT", armed=0, answer=ok)
     reads = Refusal(page, "**/api/v1/me?again=1", "GET", armed=0)
     tile = page.locator(THERMOSTAT_ROOM).first
-    for user, password in (("operator", "op-pass"), ("guest1", "guest-pass")):
+    for user, password in (("operator", OPERATOR_PASSWORD), ("guest1", "visit-pass")):
         reads.armed = 1  # the read sent again after the sign-in is answered
         tile.locator(".step-plus").click()
         assert not nothing_waits(page), "the stepped value waits for its time"
@@ -317,7 +317,7 @@ def test_another_user_gets_nothing_of_the_first(new_context, case, watch, guard)
     clear_preferences()
     page = own_page(new_context, guard, watch)
     page.goto(URL)
-    sign_in(page, "operator", "op-pass")
+    sign_in(page, "operator", OPERATOR_PASSWORD)
     assert wait_until(page, "!document.body.classList.contains('no-sync')", 5), "the operator's settings follow it"
     seen = tickets(page)
     Refusal(page, "**/api/v1/cubes/*/rooms/*/setpoint", "PUT", answer=ok)
@@ -331,13 +331,13 @@ def test_another_user_gets_nothing_of_the_first(new_context, case, watch, guard)
     assert wait_until(page, DIALOG_OPEN, 5), "the setpoint's 401 opens the sign-in"
     page.evaluate("setSetting('poll', 37)")
     wait_count(page, prefs.sent, 1, "the settings push meets the 401")
-    page.evaluate("""() => {
-      for (const [id, v] of [["me-current", "op-pass"], ["me-new", "not-set-1"], ["me-again", "not-set-1"]]) {
+    page.evaluate("""(current) => {
+      for (const [id, v] of [["me-current", current], ["me-new", "not-set-1"], ["me-again", "not-set-1"]]) {
         const el = document.getElementById(id);
         el.value = v;
         el.dispatchEvent(new Event("input", { bubbles: true })); // typed, as a key does: the form's part takes it
       }
-    }""")
+    }""", OPERATOR_PASSWORD)
     frames(page)  # the form drawn with what is typed, as before a click
     page.evaluate("() => { document.getElementById('me-password-form').requestSubmit(); }")
     said = "(id) => document.getElementById(id).textContent.includes(%s)" % json.dumps(NOT_SENT[case.lang])
@@ -458,7 +458,7 @@ def test_late_refusal_of_an_earlier_sign_in(new_context, case, watch, guard):
     assert wait_held(page, held), "the read is sent while the card is open"
     assert sent == [""], f"without a token: {sent}"
     page.locator("#login-user").fill("operator")
-    page.locator("#login-password").fill("op-pass")
+    page.locator("#login-password").fill(OPERATOR_PASSWORD)
     page.locator("#login-form button[type=submit]").click()
     assert wait_until(page, f"!({DIALOG_OPEN}) && !!state.token", 10), "signed in, the card closed"
     page.wait_for_selector(".room", timeout=10000)
@@ -505,7 +505,7 @@ def test_late_refusal_of_a_write(new_context, case, watch, guard):
         page.wait_for_timeout(200)
     assert len(held) == 2, f"both writes are sent while the card is open: {sent}"
     page.locator("#login-user").fill("operator")
-    page.locator("#login-password").fill("op-pass")
+    page.locator("#login-password").fill(OPERATOR_PASSWORD)
     page.locator("#login-form button[type=submit]").click()
     assert wait_until(page, f"!({DIALOG_OPEN}) && !!state.token", 10), "signed in, the card closed"
     page.wait_for_selector(".room", timeout=10000)

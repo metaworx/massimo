@@ -29,7 +29,7 @@ import os
 from axe_playwright_python.sync_playwright import Axe
 
 from conftest import TOKEN, URL, api_call, clear_preferences
-from helpers import assert_login_card_centred, assert_login_row, cleanup, named_buttons, open_personal_page, undo, wait_until
+from helpers import OPERATOR_PASSWORD, assert_login_card_centred, assert_login_row, cleanup, named_buttons, open_personal_page, undo, wait_until
 
 CONNECT = URL + "ui/connect.html"
 FAKE_BRIDGE = os.path.join(os.path.dirname(os.path.abspath(__file__)), "fake_bridge.js")
@@ -519,7 +519,7 @@ def test_server_page_token_from_bridge(new_context, case, watch, guard):
     assert calls(page, "setToken") == [["setToken", None]], "and the app forgets the key"
 
     page.locator("#login-user").fill("operator")
-    page.locator("#login-password").fill("op-pass")
+    page.locator("#login-password").fill(OPERATOR_PASSWORD)
     page.locator("#login-form button[type=submit]").click()
     # The rooms are still drawn behind the dialog: the session is waited for.
     assert wait_until(page, "window.__fakeBridge.calls.filter((c) => c[0] === 'setToken').length >= 2", 10), "the sign-in hands the app its session"
@@ -1159,7 +1159,7 @@ def test_server_page_keeps_the_login(new_context, case, watch, guard):
     page.locator("#login-ways .login-way[data-way='password']").click()
 
     page.locator("#login-user").fill("operator")
-    page.locator("#login-password").fill("op-pass")
+    page.locator("#login-password").fill(OPERATOR_PASSWORD)
     page.locator("#login-keep-row .slider").click()
     page.locator("#login-form button[type=submit]").click()
     page.locator("#login-keep-failed").wait_for(state="visible")
@@ -1504,7 +1504,7 @@ def test_server_page_this_devices_key(new_context, case, watch, guard):
         page.on("request", lambda r: order.append(r.method + " " + r.url.split("/api/v1/")[-1]) if "/users/operator/tokens" in r.url else None)
         page.locator("#login-dialog[open]").wait_for()
         page.locator("#login-user").fill("operator")
-        page.locator("#login-password").fill("op-pass")
+        page.locator("#login-password").fill(OPERATOR_PASSWORD)
         page.locator("#login-form button[type=submit]").click()
         row = page.locator(f"#profile-tokens li[data-id='{key['id']}']")
         row.wait_for(timeout=10000)

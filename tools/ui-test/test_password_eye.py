@@ -18,7 +18,7 @@ first requests are refused on purpose, as in test_login.py."""
 import json
 
 from conftest import URL
-from helpers import frames, named_buttons, show_view, wait_until
+from helpers import OPERATOR_PASSWORD, frames, named_buttons, show_view, wait_until
 from test_connect import server_page
 from test_first_owner import OPEN, owner_card, start_page
 from test_login import sign_in
@@ -140,7 +140,7 @@ def test_the_sign_in_password_eye(new_context, case, watch, guard):
     at the submit, a refused one staying in the card, and at the card's
     next opening."""
     page = fresh_page(new_context, guard, watch)
-    check_eye(page, case, "login-password", "op-pass")
+    check_eye(page, case, "login-password", OPERATOR_PASSWORD)
     named_buttons(page, "the sign-in with the eye")
     assert page.evaluate("document.querySelectorAll('#login-form input[type=password]').length") == 1, "one password field in the form"
     assert page.locator("#login-token").evaluate("(el) => !el.closest('.pw-box')"), "an API key's field has no eye"
@@ -160,7 +160,7 @@ def test_the_sign_in_password_eye(new_context, case, watch, guard):
     hidden(state(page, "login-password"), case, "at the next opening")
     # the sign-in still goes through, the password as typed
     page.locator("#login-user").fill("operator")
-    page.locator("#login-password").fill("op-pass")
+    page.locator("#login-password").fill(OPERATOR_PASSWORD)
     eye.click()
     page.locator("#login-form button[type=submit]").click()
     page.wait_for_selector(".room", timeout=10000)
@@ -190,7 +190,7 @@ def test_my_profiles_password_eyes(new_context, case, watch, guard):
     event, as a loaded page meets them; hidden in the very task that
     opens the fold, before a paint or a read can come between (the CI's)."""
     page = fresh_page(new_context, guard, watch)
-    sign_in(page, "operator", "op-pass")
+    sign_in(page, "operator", OPERATOR_PASSWORD)
     show_view(page, "profile")
     fold = page.locator("#me-password")
     if fold.get_attribute("open") is None:
@@ -363,7 +363,7 @@ def test_the_eye_in_the_app(new_context, case, watch, guard):
     hidden again at the next opening."""
     page = server_page(new_context, guard, watch, {"status": {"can": True, "user": "", "ask": "start", "plain": False}})
     page.locator("#login-dialog[open]").wait_for()
-    check_eye(page, case, "login-password", "op-pass")
+    check_eye(page, case, "login-password", OPERATOR_PASSWORD)
     eye_of(page, "login-password").click()
     reopen(page)
     hidden(state(page, "login-password"), case, "at the next opening in the app")

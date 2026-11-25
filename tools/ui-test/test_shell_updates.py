@@ -17,7 +17,7 @@ from collections import Counter
 import pytest
 
 from conftest import URL, api_call
-from helpers import frames, hold, held_poll, open_personal_page, scroll_settled, show_view, wait_held, wait_until
+from helpers import OPERATOR_PASSWORD, frames, held_poll, hold, open_personal_page, scroll_settled, show_view, wait_held, wait_until
 from test_login import sign_in
 from test_preferences import clear_user, operator_key
 
@@ -31,15 +31,17 @@ WALK = ("system", "maint", "info", "me", "cube", "tiles") * 2
 # and in each of three walks of a page but for the Cube's devices, read
 # at the first showing of Cube settings alone; since UiParts D216 Cube
 # settings' pairing takes the chosen Cube's rooms from the page's own,
-# state.rooms, where it read them again at each showing.
+# state.rooms, where it read them again at each showing; since AP
+# BackupWatch D6-A System settings also reads the Cubes not served
+# that keep backups, backups/unserved, at each showing.
 READS = (
-    ("system", {"cubes/KEQ0000100/backups": 1, "integrations": 1, "integrations/found": 1, "login/providers": 1, "providers": 1, "roles": 1, "settings": 2, "users": 2}),
+    ("system", {"backups/unserved": 1, "cubes/KEQ0000100/backups": 1, "integrations": 1, "integrations/found": 1, "login/providers": 1, "providers": 1, "roles": 1, "settings": 2, "users": 2}),
     ("maint", {"reboot": 1, "restart": 1, "settings": 2, "update": 1}),
     ("info", {"config": 1, "store": 1, "system": 1}),
     ("me", {"login/providers": 1, "me/preferences": 1, "me/push": 1, "users/owner": 1, "users/owner/identities": 1, "users/owner/tokens": 1}),
     ("cube", {"cubes/KEQ0000100/backups": 1, "cubes/KEQ0000100/devices": 1, "cubes/KEQ0000100/pairing": 1}),
     ("tiles", {}),
-    ("system", {"cubes/KEQ0000100/backups": 1, "integrations": 1, "integrations/found": 1, "login/providers": 1, "providers": 1, "roles": 1, "settings": 2, "users": 2}),
+    ("system", {"backups/unserved": 1, "cubes/KEQ0000100/backups": 1, "integrations": 1, "integrations/found": 1, "login/providers": 1, "providers": 1, "roles": 1, "settings": 2, "users": 2}),
     ("maint", {"reboot": 1, "restart": 1, "settings": 2, "update": 1}),
     ("info", {"config": 1, "store": 1, "system": 1}),
     ("me", {"login/providers": 1, "me/preferences": 1, "me/push": 1, "users/owner": 1, "users/owner/identities": 1, "users/owner/tokens": 1}),
@@ -169,7 +171,7 @@ def test_no_read_of_my_profile_while_signing_out(new_context, case, watch, guard
         page.set_default_timeout(5000)
         page.on("pageerror", lambda e: watch.problems.append(f"page error: {e}"))
         page.goto(URL)
-        sign_in(page, "operator", "op-pass")
+        sign_in(page, "operator", OPERATOR_PASSWORD)
         page.evaluate("setSetting('lang', 'fr')")
         page.reload()  # the operator's French alone loaded, German not
         page.wait_for_selector(".room", timeout=10000)
@@ -272,7 +274,7 @@ def test_a_sign_out_forgets_before_the_language(new_context, case, watch, guard)
         page.set_default_timeout(5000)
         page.on("pageerror", lambda e: watch.problems.append(f"page error: {e}"))
         page.goto(URL)
-        sign_in(page, "operator", "op-pass")
+        sign_in(page, "operator", OPERATOR_PASSWORD)
         page.evaluate("setSetting('lang', 'fr')")
         page.reload()  # the operator's French alone loaded, German not
         page.wait_for_selector(".room", timeout=10000)

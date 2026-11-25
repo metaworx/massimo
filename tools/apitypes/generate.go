@@ -34,7 +34,7 @@ const refPrefix = "#/components/schemas/"
 
 // ignored are the keywords that constrain a value without changing its
 // TypeScript shape, and the examples, which stay out of the output.
-var ignored = []string{"example", "maxItems", "maxLength", "maximum", "minimum", "multipleOf", "pattern"}
+var ignored = []string{"example", "maxItems", "maxLength", "maximum", "minLength", "minimum", "multipleOf", "pattern"}
 
 // The keywords each kind of schema may carry besides the ignored ones;
 // any other stops the generator.

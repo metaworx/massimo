@@ -13,7 +13,7 @@ import json
 import pytest
 
 from conftest import TOKEN
-from helpers import ApiReads, frames, scroll_width, show_view, wait_held, wait_until
+from helpers import OPERATOR_PASSWORD, ApiReads, frames, scroll_width, show_view, wait_held, wait_until
 from test_first_owner import DIALOG_OPEN, OPEN, owner_card, sent, start_page, turned
 
 KEPT = dict(OPEN, kept_open=True)
@@ -66,8 +66,8 @@ def stub_creation(page, stage):
 
 def create(page, name="owner"):
     page.locator("#setup-user").fill(name)
-    page.locator("#setup-password").fill("pw")
-    page.locator("#setup-again").fill("pw")
+    page.locator("#setup-password").fill("own-secret-1")
+    page.locator("#setup-again").fill("own-secret-1")
     page.locator("#setup-form button[type=submit]").click()
 
 
@@ -192,22 +192,22 @@ def test_skip_back_and_escape_empty_nothing(new_context, case, watch, guard):
     before."""
     page = start_page(new_context, guard, watch, OPEN)
     owner_card(page)
-    typed(page, "skipped")
+    typed(page, "skipped-pass")
     page.locator("#setup-skip").click()
-    kept(page, "skipped", "Skip for now")
+    kept(page, "skipped-pass", "Skip for now")
     page.wait_for_selector(".room", timeout=10000)
     assert wait_until(page, "state.eventsOpen", 10), "the page started"
     open_by(page, "banner")
     emptied_at_the_opening(page, "Skip for now")
-    typed(page, "back")
+    typed(page, "back-to-page")
     page.locator("#setup-skip").click()
-    kept(page, "back", "Back to the page")
+    kept(page, "back-to-page", "Back to the page")
     open_by(page, "menu")
     emptied_at_the_opening(page, "Back to the page")
-    typed(page, "escaped")
+    typed(page, "escaped-pass")
     page.keyboard.press("Escape")
     assert wait_until(page, f"!({DIALOG_OPEN})", 5), "Escape closes the card"
-    kept(page, "escaped", "Escape")
+    kept(page, "escaped-pass", "Escape")
     open_by(page, "users")
     emptied_at_the_opening(page, "Escape")
 
@@ -428,7 +428,7 @@ def test_the_turn_on_a_running_page_forgets_the_open_page(new_context, case, wat
     stage["me"] = None
     page.evaluate("() => { signIn = window.__signIn || signIn; }")
     page.locator("#login-user").fill("operator")
-    page.locator("#login-password").fill("op-pass")
+    page.locator("#login-password").fill(OPERATOR_PASSWORD)
     page.locator("#login-form button[type=submit]").click()
     assert wait_until(page, f"!({DIALOG_OPEN}) && state.eventsOpen", 10), "signed in, the page started"
     assert page.evaluate("state.me.user.name") == "operator", "as the operator"
@@ -480,7 +480,7 @@ def test_a_refusal_during_a_failed_create_turns_the_card(new_context, case, watc
     turned(page)
     stage["me"] = None
     page.locator("#login-user").fill("operator")
-    page.locator("#login-password").fill("op-pass")
+    page.locator("#login-password").fill(OPERATOR_PASSWORD)
     page.locator("#login-form button[type=submit]").click()
     assert wait_until(page, f"!({DIALOG_OPEN}) && window.__read === 'operator'", 10), "signed in, the read answered"
 

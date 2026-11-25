@@ -10,6 +10,9 @@ internal/update/release-key.pem text eol=lf
 # The vendored Preact, checked by its SHA-256 and bundled into the web
 # UI's parts.js, which is then the same on every checkout.
 third_party/preact/**         text eol=lf
+# The credits, embedded into the binary and compared byte for byte with
+# what make credits writes, which ends its lines with LF everywhere.
+internal/credits/credits.json text eol=lf
 
 # Read by Unix tools, which take a CR as part of the line.
 *.service                     text eol=lf
