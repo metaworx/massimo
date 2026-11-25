@@ -20,6 +20,22 @@ A wrong name or password is said in the page's language,
 any other refusal, too many attempts for example, in the server's words.
 **Sign in** turns while it signs in, by the password or by a key,
 and a second Enter meanwhile sends nothing.
+An API key is tried before the page takes it:
+a key the server does not know is said under its field, in the page's language,
+the card staying on the API key's way with the field emptied and in focus;
+a key refused for a reason (a user or an integration disabled, for example)
+is said in the server's words and goes from its field too;
+too many attempts, a server error or a server out of reach are said in the
+server's or the browser's words, the key kept for the retry.
+A refused key is not kept, neither by the page nor in the app,
+and on a running page the session signed in goes on
+while the address is not locked out: a wrong key counts against the lockout,
+which refuses the session's own requests too until it ends (AP LooseEnds, D43).
+At the start's card the key's try is one read of who is in more,
+the start's own read that waited for the card following it;
+on a running page the sign-in takes the try's answer and reads none more for it.
+An answer to the key's try that comes after another way has signed in,
+or after the card was closed or opened anew, does nothing.
 The password form holds the one password field, its fields named,
 so that a password manager such as KeePassXC fills it.
 Every password field of the page, the sign-in's, the first owner's two,
@@ -36,7 +52,8 @@ have settled,
 its password fields and the API key's are emptied (AP LooseEnds, D13, D41-A):
 not at the close itself, since a password manager takes a sign-in for done
 at the first request that completes after the form is hidden;
-a refused sign-in keeps what was typed for the retry.
+a refused password keeps what was typed for the retry,
+where a refused API key goes from its field (below).
 A password shown is hidden again when its fold opens again
 (My profile's Change password, a user's panel),
 and when the eye is switched off, staying hidden when it comes back;

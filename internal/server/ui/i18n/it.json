@@ -1488,6 +1488,7 @@
   "login.missing": "Servono nome e password.",
   "login.failed": "Accesso non riuscito: {error}",
   "login.wrong": "Nome o password errati.",
+  "login.keyRefused": "Il server non conosce questa chiave API.",
   "login.ways": "Accedi con",
   "setup.notKept": "L'accesso con impronta digitale non è stato conservato; attivalo al prossimo accesso.",
   "login.fingerprint": "Accesso con impronta digitale",
