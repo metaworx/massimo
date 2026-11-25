@@ -104,6 +104,10 @@ func TestUIServed(t *testing.T) {
 	if code, ct, body := get("/ui/credits.json"); code != 200 || !strings.HasPrefix(ct, "application/json") || body != string(credits.JSON()) {
 		t.Fatalf("GET /ui/credits.json: %d %s, %d bytes, want the %d of internal/credits", code, ct, len(body), len(credits.JSON()))
 	}
+	// The word list a suggested password draws from, a file as the others.
+	if code, ct, body := get("/ui/words-en.txt"); code != 200 || !strings.HasPrefix(ct, "text/plain") || !strings.HasPrefix(body, "abacus\nabdomen\n") {
+		t.Fatalf("GET /ui/words-en.txt: %d %s %q", code, ct, body[:min(40, len(body))])
+	}
 	// The service worker and the manifest beside the page, so that the
 	// worker's scope and the manifest's addresses are the page's; the
 	// icons the manifest names.
@@ -488,6 +492,61 @@ func TestVendoredOpaque(t *testing.T) {
 	readme, _ := os.ReadFile("ui/vendor/README.md")
 	if !strings.Contains(string(readme), want) {
 		t.Error("ui/vendor/README.md does not name the file's SHA-256")
+	}
+}
+
+// TestWordList checks the word list a suggested password draws from
+// (ui/words-en.txt, third_party/eff-wordlist/): the bytes of EFF's long
+// list with its dice numbers dropped, held to their SHA-256, which the
+// directory's note names, and 7,776 words, each once, of a-z and "-"
+// alone, as the page's suggestion (ui/src/shared/suggest.ts) counts on;
+// and the directory's LICENSE, CC BY 4.0's legal code, to its SHA-256.
+func TestWordList(t *testing.T) {
+	t.Parallel()
+	b, err := uiFiles.ReadFile("ui/words-en.txt")
+	if err != nil {
+		t.Fatal(err)
+	}
+	const want = "6d557f0693958fb5e650b68b5bee585eb82cf4da32965505c789e924743bc522"
+	if got := fmt.Sprintf("%x", sha256.Sum256(b)); got != want {
+		t.Errorf("ui/words-en.txt: SHA-256 %s, want %s", got, want)
+	}
+	note, err := os.ReadFile("../../third_party/eff-wordlist/MASSIMO.md")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(note), want) {
+		t.Error("third_party/eff-wordlist/MASSIMO.md does not name the file's SHA-256")
+	}
+	// The licence's text is Creative Commons' legal code as fetched, which
+	// the note names by its SHA-256 too.
+	legal, err := os.ReadFile("../../third_party/eff-wordlist/LICENSE")
+	if err != nil {
+		t.Fatal(err)
+	}
+	const code = "9ba9550ad48438d0836ddab3da480b3b69ffa0aac7b7878b5a0039e7ab429411"
+	if got := fmt.Sprintf("%x", sha256.Sum256(legal)); got != code {
+		t.Errorf("third_party/eff-wordlist/LICENSE: SHA-256 %s, want %s, CC BY 4.0's legal code", got, code)
+	}
+	if !strings.Contains(string(note), code) {
+		t.Error("third_party/eff-wordlist/MASSIMO.md does not name the legal code's SHA-256")
+	}
+	if !bytes.HasSuffix(b, []byte("\n")) {
+		t.Error("ui/words-en.txt does not end with a newline")
+	}
+	word := regexp.MustCompile(`^[a-z]+(-[a-z]+)*$`)
+	seen := map[string]bool{}
+	for i, w := range strings.Split(strings.TrimSuffix(string(b), "\n"), "\n") {
+		if !word.MatchString(w) {
+			t.Errorf("ui/words-en.txt line %d: %q is no word of a-z and -", i+1, w)
+		}
+		if seen[w] {
+			t.Errorf("ui/words-en.txt line %d: %q again", i+1, w)
+		}
+		seen[w] = true
+	}
+	if len(seen) != 7776 {
+		t.Errorf("ui/words-en.txt: %d words, want 7776", len(seen))
 	}
 }
 

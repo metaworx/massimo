@@ -26,18 +26,25 @@
  * user's names and the server's (D50-A; passwordRefusal, which gives it
  * the server's, serverNames); and the line under the field of a new
  * password, PasswordRule, says what the rule finds while it is typed
- * (D6-A). The sign-in, and the upgrade of a version-1 user at its sign-in
- * (login.js upgradePassword), hold no rule: they take the password a user
- * has.
+ * (D6-A). The first new password of each form that sets one has a dice
+ * beside its eye that suggests one (D14-A to D19-A; shared/suggest.ts),
+ * fills the form with it and shows it, and from then on offers Words or
+ * Characters and Copy under the field. The sign-in, and the upgrade of a
+ * version-1 user at its sign-in (login.js upgradePassword), hold no rule:
+ * they take the password a user has.
  */
 
 import { signal } from "@preact/signals";
 import type { Ref } from "preact";
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "preact/hooks";
 import { app, serverOf } from "./app";
+import { Choices } from "./choices";
+import { Copy } from "./copy";
 import { Field } from "./field";
 import { Icon } from "./icon";
 import { useLang } from "./lang";
+import { session, stillSession } from "./session";
+import { chooseKind, ListError, type SuggestKind, suggestKind, suggestPassword } from "./suggest";
 
 /** Whether the password fields offer their eye: the server's setting auth.password_reveal, as /healthz says it; null until it has, when none shows one. */
 export const reveal = signal<boolean | null>(null);
@@ -170,8 +177,18 @@ export function newPasswordProblem(password: string, again: string, context: rea
   return null;
 }
 
-/** The rule's line's texts beside the refusals': the hint while the field is empty, and a password the rule takes. */
-const RULE_TEXTS = [() => t("password.hint"), ...Object.values(SAID).flatMap((w) => [w.now, w.refused]), () => t("password.fine")];
+/** What the line says of a suggestion (PasswordField's suggest): one shown, unchanged since; the list not loaded; none the rule takes found. */
+export type SuggestNote = "" | "suggested" | "nolist" | "none";
+
+/** The words of each note of a suggestion but the empty one. */
+const NOTES: Record<Exclude<SuggestNote, "">, () => string> = {
+  suggested: () => t("password.suggested"),
+  nolist: () => t("password.noList"),
+  none: () => t("password.noSuggestion"),
+};
+
+/** The rule's line's texts beside the refusals': the hint while the field is empty, a password the rule takes, and the notes of a suggestion. */
+const RULE_TEXTS = [() => t("password.hint"), ...Object.values(SAID).flatMap((w) => [w.now, w.refused]), () => t("password.fine"), ...Object.values(NOTES)];
 
 /**
  * PasswordRule is the line under a new password's field that says what
@@ -181,21 +198,53 @@ const RULE_TEXTS = [() => t("password.hint"), ...Object.values(SAID).flatMap((w)
  * and never a colour alone; refused, that a submit was refused for it,
  * until the next key. id is the line's, which the field names as its
  * description; value is what the field holds, context the rule's words,
- * read at each drawing. A status region whose text is written
+ * read at each drawing. note is what it says of a suggestion: one shown
+ * and unchanged ("suggested") in place of the words of a password taken,
+ * which a rule's refusal still comes before; the word list not loaded or
+ * no suggestion found ("nolist", "none") with a warning's sign, in place
+ * of all else, until the next key or press; fresh, a count raised at each
+ * suggestion filled, writes it anew, emptied and then written, so that a
+ * screen reader hears it again. It never holds the password.
+ * A status region whose text is written
  * only when what it says changes (Preact writes no text it already
  * holds), so that a screen reader hears each change once. Its place is
  * as tall as the tallest of its texts, each drawn hidden in the same
  * cell, so that the rows under it stay where they are as it changes.
  */
-export function PasswordRule({ id, value, context, refused }: { id: string; value: string; context: () => readonly string[]; refused: boolean }) {
+export function PasswordRule({ id, value, context, refused, note = "", fresh = 0 }: {
+  id: string;
+  value: string;
+  context: () => readonly string[];
+  refused: boolean;
+  note?: SuggestNote;
+  fresh?: number;
+}) {
   useLang();
+  const lineRef = useRef<HTMLParagraphElement>(null);
+  const latest = useRef("");
   const answer = value ? passwordRefusal(value, context()) : "";
-  const look = !value ? "" : answer ? (refused ? " bad refused" : " bad") : " ok";
-  const text = !value ? t("password.hint") : answer ? passwordSaid(answer, refused) : t("password.fine");
-  const sign = !value ? "icon-info" : answer ? "mark-warn" : "icon-check";
+  const failed = note === "nolist" || note === "none";
+  const look = failed ? " bad" : !value ? "" : answer ? (refused ? " bad refused" : " bad") : " ok";
+  const text = failed ? NOTES[note]() : !value ? t("password.hint") : answer ? passwordSaid(answer, refused) : note ? NOTES[note]() : t("password.fine");
+  const sign = failed ? "mark-warn" : !value ? "icon-info" : answer ? "mark-warn" : "icon-check";
+  latest.current = text;
+  // written anew at each change of fresh, as copied() of components.js writes its status: emptied, then the words, so
+  // that a screen reader hears a text it holds already; the words as they are by then
+  useLayoutEffect(() => {
+    const words = lineRef.current?.lastChild;
+    if (!fresh || !(words instanceof Text)) return;
+    words.data = "";
+    const timer = setTimeout(() => {
+      words.data = latest.current;
+    }, 50);
+    return () => {
+      clearTimeout(timer);
+      words.data = latest.current;
+    };
+  }, [fresh]);
   return (
     <div class="pw-rule small">
-      <p id={id} class={"pw-rule-line" + look} role="status">
+      <p ref={lineRef} id={id} class={"pw-rule-line" + look} role="status">
         <Icon key={sign} symbol={sign} cls="ni pw-rule-sign" />
         {text}
       </p>
@@ -251,6 +300,10 @@ type One = { value: string; set: (v: string) => void; inputRef?: Ref<HTMLInputEl
  * comes back. The type never turns while the field is in a closed fold (a
  * details): Chrome draws nothing of an input whose type turned there once
  * the fold opens, so it is turned as the fold opens, before it is painted.
+ * suggest, given, draws the dice before the eye, labelled Suggest a
+ * password, which calls its press; while its shown is true the password
+ * shows as text, eye or none (a suggestion, D19-A), and the eye, pressed
+ * then, hides it (its hide) and the eye's own state is as it was.
  */
 export function PasswordInput(props: One & {
   id: string;
@@ -265,9 +318,10 @@ export function PasswordInput(props: One & {
   describedBy?: string;
   invalid?: boolean;
   typed?: (v: string) => void;
+  suggest?: { shown: boolean; press: () => void; hide: () => void };
 }) {
   useLang();
-  const { id, name, autocomplete, required, disabled, placeholder, inputCls, cls, reset, inputRef, describedBy, invalid, typed } = props;
+  const { id, name, autocomplete, required, disabled, placeholder, inputCls, cls, reset, inputRef, describedBy, invalid, typed, suggest } = props;
   const on = reveal.value === true;
   const [shown, setShown] = useState(false);
   const own = useRef<HTMLInputElement | null>(null);
@@ -343,7 +397,8 @@ export function PasswordInput(props: One & {
     form.addEventListener("submit", hide, true);
     return () => form.removeEventListener("submit", hide, true);
   }, []);
-  const visible = on && shown;
+  const forced = !!suggest?.shown;
+  const visible = forced || (on && shown);
   // the type as it is while the field is in a closed fold, turned as it opens (the folds' observer)
   const held = own.current?.closest("details:not([open])") ? own.current.type : "";
   const type = held === "text" || held === "password" ? held : visible ? "text" : "password";
@@ -352,11 +407,13 @@ export function PasswordInput(props: One & {
     if (el && document.activeElement === el && el.selectionStart !== null && el.selectionEnd !== null) {
       caret.current = [el.selectionStart, el.selectionEnd, el.selectionDirection || "none"];
     }
+    if (forced) suggest?.hide();
     setShown(!visible);
   };
   const label = t(visible ? "password.hide" : "password.show");
+  const dice = t("password.suggest");
   return (
-    <span class={"pw-box" + (on ? " has-eye" : "") + (cls ? " " + cls : "")}>
+    <span class={"pw-box" + (on ? " has-eye" : "") + (suggest ? " has-dice" : "") + (cls ? " " + cls : "")}>
       <input ref={bind} id={id} type={type as "text"} name={name} class={inputCls} autocomplete={autocomplete} autocapitalize="none"
         spellcheck={false} required={required} disabled={disabled} placeholder={placeholder} value={props.set ? props.value : undefined}
         aria-describedby={describedBy} aria-invalid={invalid ? "true" : undefined} onInput={props.set || typed ? (ev) => {
@@ -364,6 +421,13 @@ export function PasswordInput(props: One & {
           props.set?.(v);
           typed?.(v);
         } : undefined} onChange={typed ? (ev) => typed(ev.currentTarget.value) : undefined} />
+      {suggest && (
+        // the focus on the dice, in the press's handler, where a browser gives a click on a button none (Safari)
+        <button type="button" class="pw-dice" aria-label={dice} title={dice} aria-controls={id} disabled={disabled}
+          onClick={(ev) => { ev.currentTarget.focus(); suggest.press(); }}>
+          <Icon symbol="icon-dice" cls="ni" />
+        </button>
+      )}
       {on && (
         <button type="button" class="pw-eye" aria-label={label} title={label} aria-pressed={visible ? "true" : "false"} aria-controls={id}
           disabled={disabled} onMouseDown={(ev) => ev.preventDefault()} onClick={toggle}>
@@ -392,6 +456,28 @@ export function PasswordInput(props: One & {
  * rule refuses, the line says that it was refused and the field is
  * marked invalid; the form's own message line says nothing of it, so
  * that nothing contradicts the line once the password can be set.
+ *
+ * suggest, given with rule, offers the dice (PasswordInput's suggest): a
+ * press draws a suggestion of the kind chosen (shared/suggest.ts), drawn
+ * again where the rule refuses it, fills the field with it, a controlled
+ * one by its set, one not controlled by its element and an input event,
+ * so that the line and the caller's state follow, fills also (the form's
+ * other field, which also.get reads), and shows it as text, eye or none,
+ * while the field holds it: edited, emptied or changed by its form
+ * (Reset, a save), or submitted, or at a new start (reset), it is a
+ * password's field again. The line says that a password was suggested,
+ * never which, written anew at each fill. From the first press on a row
+ * under the line offers Words or Characters, which suggests one of that
+ * kind and is kept in this browser, and while the field holds the
+ * suggestion Copy, which copies it; a key never takes the row away, so
+ * that nothing under the field moves while one types: it goes with a
+ * value changed from outside (Reset, a save) and at a new start. It is
+ * not there before, so that a form keeps its height until the dice is
+ * used. A suggestion drawn while another press, a key in the field, a
+ * submit, a change from outside, a new start or a sign-out came, or
+ * after either field changed, fills nothing. The word list not had says
+ * so in the line ("nolist"); any other failure, that no suggestion could
+ * be made.
  */
 export function PasswordField(props: One & {
   label: string;
@@ -405,9 +491,23 @@ export function PasswordField(props: One & {
   reset?: unknown;
   rule?: () => readonly string[];
   refused?: number;
+  suggest?: boolean;
+  also?: { set: (v: string) => void; get: () => string };
 }) {
-  const { label, id, hint, cls, rule, refused = 0, ...input } = props;
+  const { label, id, hint, cls, rule, refused = 0, suggest, also, ...input } = props;
   const [typed, setTyped] = useState("");
+  // the suggestion: the row offered from the first press, the value filled (a suggestion while the field still holds
+  // it), what the line says of one, and the count of the line's fills. turn rises at every press, every key in the
+  // field, every submit and every new start: a suggestion drawn while it rose fills nothing
+  const [offered, setOffered] = useState(false);
+  const [filled, setFilled] = useState("");
+  const [note, setNote] = useState<SuggestNote>("");
+  const [fills, setFills] = useState(0);
+  const turn = useRef(0);
+  const filling = useRef(false);
+  // the value as the field's keys and fills last left it: one that differs came from outside (Reset, a save)
+  const known = useRef<string | undefined>(undefined);
+  const kind = suggestKind.value;
   // the refusal the line said last until a key: the count of refusals at the last key, or at the last new start
   const [keyed, setKeyed] = useState(refused);
   const el = useRef<HTMLInputElement | null>(null);
@@ -421,7 +521,24 @@ export function PasswordField(props: One & {
   useLayoutEffect(() => {
     setTyped("");
     setKeyed(refused);
+    turn.current++;
+    known.current = undefined;
+    setOffered(false);
+    setFilled("");
+    setNote("");
   }, [props.reset]);
+  // a suggestion shown is hidden at the submit, in the capture before the form's own handler, as the eye's password,
+  // and one still drawn fills nothing after it
+  useEffect(() => {
+    const form = el.current?.form;
+    if (!form || !suggest) return;
+    const hide = () => {
+      turn.current++;
+      setFilled("");
+    };
+    form.addEventListener("submit", hide, true);
+    return () => form.removeEventListener("submit", hide, true);
+  }, [suggest]);
   // at each submit a field not controlled is read as it is, in the capture before the form's own handler, so that the
   // line says what the submit reads, also of a fill that sent no event
   const controlled = !!props.set;
@@ -436,18 +553,84 @@ export function PasswordField(props: One & {
   }, [controlled]);
   const own = rule && !props.set;
   const value = props.set ? props.value : typed;
+  // a suggestion while the field holds what was filled: emptied or changed, by a key or by its form (Reset, a save's
+  // success), it is a password's field again, the eye as it was, and Copy is not offered
+  const suggested = filled !== "" && value === filled;
   // refused only while the value shown is still one the rule refuses: a field emptied or changed by its form (Reset, a
   // draft taken away, a save's success) is no longer
   const said = !!rule && refused !== keyed && !!value && !!passwordRefusal(value, rule());
+  // a value changed from outside, not by a key or a fill (the form's Reset, a save's success): the suggestion and its row
+  // end, and one still drawn fills nothing
+  useLayoutEffect(() => {
+    if (known.current === undefined || value === known.current) return;
+    known.current = undefined;
+    turn.current++;
+    setOffered(false);
+    setFilled("");
+    setNote("");
+  }, [value]);
   const key = (v: string) => {
+    known.current = v;
     if (own) setTyped(v);
     setKeyed(refused);
+    if (filling.current) return;
+    turn.current++; // a key: a suggestion still drawn does not replace what is typed
+    setFilled("");
+    setNote("");
   };
+  // the field filled with a suggestion, and the form's other field (also); the line and the caller's state follow, and
+  // the line is written anew, so that a screen reader hears that another password was suggested
+  const fill = (v: string) => {
+    known.current = v;
+    filling.current = true;
+    try {
+      if (props.set) props.set(v);
+      else if (el.current) {
+        el.current.value = v;
+        el.current.dispatchEvent(new Event("input", { bubbles: true }));
+      }
+    } finally {
+      filling.current = false;
+    }
+    also?.set(v);
+    setFilled(v);
+    setNote("");
+    setFills((f) => f + 1);
+  };
+  const press = async (k: SuggestKind) => {
+    const n = session();
+    const mine = ++turn.current;
+    // what the two fields hold at the press: a suggestion that comes after either changed fills nothing
+    const held = [el.current?.value ?? "", also?.get() ?? ""];
+    setOffered(true);
+    let v: string | null;
+    try {
+      v = await suggestPassword(k, (p) => !!passwordRefusal(p, rule ? rule() : []));
+    } catch (e) {
+      if (stillSession(n) && mine === turn.current) setNote(e instanceof ListError ? "nolist" : "none");
+      return;
+    }
+    if (!stillSession(n) || mine !== turn.current || (el.current?.value ?? "") !== held[0] || (also?.get() ?? "") !== held[1]) return;
+    if (v === null) setNote("none");
+    else fill(v);
+  };
+  const dice = suggest && rule ? { shown: suggested, press: () => press(kind), hide: () => setFilled("") } : undefined;
   return (
     <Field label={label} id={id} wide hint={hint} cls={cls}>
       <PasswordInput {...input} inputRef={bind} id={id} cls="field-control" describedBy={rule ? id + "-rule" : undefined} invalid={said}
-        typed={rule ? key : undefined} />
-      {rule && <PasswordRule id={id + "-rule"} value={value} context={rule} refused={said} />}
+        typed={rule ? key : undefined} suggest={dice} />
+      {rule && <PasswordRule id={id + "-rule"} value={value} context={rule} refused={said} note={note || (suggested ? "suggested" : "")} fresh={fills} />}
+      {dice && offered && (
+        <div class="pw-suggest small">
+          <Choices look="one" id={id + "-kind"} label={t("password.suggestKind")} options={[["words", t("password.words")], ["chars", t("password.chars")]]}
+            chosen={[kind]} set={(c) => {
+              const k = c[0] === "chars" ? "chars" : "words";
+              chooseKind(k);
+              press(k);
+            }} />
+          {suggested && <Copy text={t("password.copy")} value={filled} name={t("password.copyName")} cls="pw-copy" />}
+        </div>
+      )}
     </Field>
   );
 }
@@ -469,7 +652,10 @@ type Pair =
  * reset hides both again at each of its changes (the card's openings, My
  * profile's fold); context are the rule's words, and the rule's line is
  * the first field's (PasswordField's rule), refused its count of the
- * submits the rule refused.
+ * submits the rule refused; suggest gives the first field its dice
+ * (PasswordField's suggest), whose suggestion fills the second too: by
+ * setAgain, or the field not controlled, by its element and an input
+ * event.
  */
 export function NewPassword(props: Pair & {
   ids: [string, string];
@@ -479,14 +665,34 @@ export function NewPassword(props: Pair & {
   reset?: unknown;
   context: () => readonly string[];
   refused: number;
+  suggest?: boolean;
 }) {
-  const { ids, names, label, required, reset, context, refused } = props;
+  const { ids, names, label, required, reset, context, refused, suggest } = props;
+  // the second field's element, for a suggestion where it is not controlled; the caller's ref told too
+  const againEl = useRef<HTMLInputElement | null>(null);
+  const againRef = props.inputRefs?.[1];
+  const bindAgain = useCallback((v: HTMLInputElement | null) => {
+    againEl.current = v;
+    setRef(againRef, v);
+  }, [againRef]);
   const [first, second]: [One, One] = props.inputRefs
-    ? [{ inputRef: props.inputRefs[0] }, { inputRef: props.inputRefs[1] }]
-    : [{ value: props.value, set: props.set, inputRef: props.inputRef }, { value: props.again, set: props.setAgain }];
+    ? [{ inputRef: props.inputRefs[0] }, { inputRef: bindAgain }]
+    : [{ value: props.value, set: props.set, inputRef: props.inputRef }, { value: props.again, set: props.setAgain, inputRef: bindAgain }];
+  const setAgain = props.setAgain;
+  const also = {
+    set: (v: string) => {
+      if (setAgain) setAgain(v);
+      else if (againEl.current) {
+        againEl.current.value = v;
+        againEl.current.dispatchEvent(new Event("input", { bubbles: true }));
+      }
+    },
+    get: () => againEl.current?.value ?? "",
+  };
   return (
     <>
-      <PasswordField label={label} id={ids[0]} name={names?.[0]} autocomplete="new-password" required={required} reset={reset} rule={context} refused={refused} {...first} />
+      <PasswordField label={label} id={ids[0]} name={names?.[0]} autocomplete="new-password" required={required} reset={reset} rule={context} refused={refused}
+        suggest={suggest} also={also} {...first} />
       <PasswordField label={t("setup.again")} id={ids[1]} name={names?.[1]} autocomplete="new-password" required={required} reset={reset} {...second} />
     </>
   );

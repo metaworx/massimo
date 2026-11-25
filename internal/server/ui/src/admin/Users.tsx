@@ -105,7 +105,8 @@ const trim = (v: string) => v.trim();
  * before, its manager removes with Remove the password. A new password is
  * typed once (AP PasswordRules, D51-A) and held to the rule, its line
  * under it; a Save the rule refuses sends nothing and puts the focus in
- * it; left empty, the password stays as it is and is not checked.
+ * it; left empty, the password stays as it is and is not checked. The
+ * dice beside it suggests one (Block 4).
  */
 function UserForm({ u, off, open }: { u: User; off: boolean; open: boolean }) {
   useLook();
@@ -173,7 +174,7 @@ function UserForm({ u, off, open }: { u: User; off: boolean; open: boolean }) {
       ) : (
         <>
           <PasswordField label={t("users.password")} id={id("password")} name="password" autocomplete="new-password" placeholder={t("users.passwordHint")}
-            reset={open} value={password} inputRef={passRef} rule={words} refused={refused} set={(v) => {
+            reset={open} value={password} inputRef={passRef} rule={words} refused={refused} suggest set={(v) => {
               setPassword(v);
               form.place("password").changed();
             }} />
@@ -236,6 +237,7 @@ function UserPanel({ u }: { u: User }) {
  * password is typed once (AP PasswordRules, D51-A) and held to the rule,
  * its line under it; Create sends nothing while the rule refuses it and
  * puts the focus in it; left empty, the user has keys only, not checked.
+ * The dice beside it suggests one (Block 4).
  */
 function NewUser() {
   useLook();
@@ -282,7 +284,7 @@ function NewUser() {
       <TextField label={t("users.displayName")} id="user-new-display_name" name="display_name" maxLength={64} value={display} set={setDisplay} />
       <Select label={t("users.role")} id="user-new-role" name="role" wide options={roleOptions()} value={role} onChange={setRole} />
       <PasswordField label={t("login.password")} id="user-new-password" name="password" autocomplete="new-password" placeholder={t("users.noPasswordHint")}
-        value={password} set={setPassword} inputRef={passRef} rule={words} refused={refused} />
+        value={password} set={setPassword} inputRef={passRef} rule={words} refused={refused} suggest />
       <Field label={t("users.expires")} id="user-new-expires" wide>
         <DateTime id="user-new-expires" cls="field-control" step={60} value={expires} set={setExpires} />
       </Field>

@@ -87,7 +87,8 @@ function NameForm({ u }: { u: User }) {
  * current one alone, as a password manager fills it in, being none. The
  * new one is held to the rule, which its line says while it is typed; a
  * Save it refuses sends nothing, says so in that line alone and puts the
- * focus in it (AP PasswordRules, Block 2).
+ * focus in it (AP PasswordRules, Block 2); the dice beside it suggests
+ * one and fills both fields (Block 4).
  */
 function PasswordForm({ who }: { who: User }) {
   useLang();
@@ -132,7 +133,7 @@ function PasswordForm({ who }: { who: User }) {
           cls={"me-current-field" + hid(!hasPw)} reset={profile.passwordOpen} value={current} set={typed(setCurrent)} />
         <NewPassword ids={["me-new", "me-again"]} names={["password", "again"]} label={t("users.password")} reset={profile.passwordOpen}
           value={password} set={typed(setPassword)} again={again} setAgain={typed(setAgain)} inputRef={newRef} context={() => [who.name, who.display_name || ""]}
-          refused={refused} />
+          refused={refused} suggest />
         <FormFooter submit={t("action.save")} look={form.look} reset={form.reset} after={help.button} />
         <ResultLine id="me-password-msg" cls="small cubes-msg" role="status" res={said.password} />
         {help.text}

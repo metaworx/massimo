@@ -1578,6 +1578,21 @@ button.pw-eye { position: absolute; top: 2px; right: 2px; bottom: 2px; display: 
 button.pw-eye:hover, button.pw-eye:focus-visible { color: var(--accent); }
 button.pw-eye:focus-visible { outline-offset: -2px; }
 button.pw-eye .ni { width: 20px; height: 20px; }
+/* a new password's dice (AP PasswordRules, D19-A): beside the eye, before
+   it, or at the field's end where there is no eye; the text kept clear of
+   both, two buttons at 390 px leaving the field room for its words; and the
+   row under the rule's line that comes with the first press, Words or
+   Characters and Copy */
+.pw-box.has-dice > input { padding-right: 42px; }
+.pw-box.has-dice.has-eye > input { padding-right: 80px; }
+button.pw-dice { position: absolute; top: 2px; right: 2px; bottom: 2px; display: inline-flex; align-items: center; justify-content: center; width: 38px; padding: 0; border: 0; border-radius: 6px; background: none; color: var(--muted); }
+.pw-box.has-eye > button.pw-dice { right: 40px; }
+button.pw-dice:hover, button.pw-dice:focus-visible { color: var(--accent); }
+button.pw-dice:focus-visible { outline-offset: -2px; }
+button.pw-dice .ni { width: 20px; height: 20px; }
+.pw-suggest { display: flex; flex-basis: 100%; flex-wrap: wrap; align-items: center; gap: 4px 16px; margin-top: 4px; }
+.pw-suggest .checks.one label { flex-direction: row; margin: 0; font-weight: inherit; }
+.pw-suggest .pw-copy { margin-left: auto; color: var(--accent); }
 /* the rule's line under a new password (PasswordRule, AP PasswordRules,
    D6-A): the line and, hidden in the same cell, each of its texts, so
    that its place is the tallest one's and the rows under it stay where
