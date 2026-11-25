@@ -17,8 +17,11 @@
  * that keeps the server open (AP FirstOwner, Block 3), its line,
  * whether a request of the card is under way, which keeps every control
  * that ends the card off, and whether the card is open, for Escape, which
- * leaves a card the user opened (AP LooseEnds, D3), and the successes
- * whose secrets are to go. No name, password or key typed is kept here:
+ * leaves a card the user opened (AP LooseEnds, D3), the successes whose
+ * secrets are to go, and the opening a way's submit takes, which its
+ * answer is checked against after each await, and which the first way
+ * to set its token takes (opening, AP LooseEnds, D44). No name,
+ * password or key typed is kept here:
  * the card's fields are not controlled (UiParts D210), read at the
  * submit, emptied at each opening, and their secrets, the passwords and
  * the key, emptied too once the card has closed on a sign-in or a new
@@ -31,6 +34,7 @@ import { live } from "../shared/live";
 import type { Outcome } from "../shared/action";
 import { firstOwnerOf, me } from "../shared/me";
 import { keptOpen, takeAsker } from "../shared/owner";
+import { session, stillSession } from "../shared/session";
 
 /** A way to sign in, by the button's data-way: the name and the password, or an API key. */
 export type Way = "password" | "key";
@@ -301,6 +305,39 @@ export function settled(): void {
 /** ask is the sign-in the card answers now, taken at a submit's start; null while none is open. */
 export function ask(): SignInAsk | null {
   return asking;
+}
+
+/** An opening of the card as a way's submit took it: the sign-in it answers, null for none; still, whether an answer after an await may act on it; take, the opening taken by the way that sets its token now. */
+export interface Opening {
+  a: SignInAsk | null;
+  still: () => boolean;
+  take: () => void;
+}
+
+/** taken is the opening a way has set its token in, which no other way's answer acts on any more; null for none. */
+let taken: SignInAsk | null = null;
+
+/**
+ * opening takes the card's opening and the session's number at a way's
+ * submit, its button's press for a provider; still says whether an answer
+ * that comes after an await may still act on them: the same session, the
+ * same opening still the card's, open, and not taken by a way that has
+ * set its token in it, whose sign-in goes on to close it (take, called
+ * in the turn still answered true). An answer after another way signed
+ * in, after the card was closed or opened anew, or after a sign-out
+ * writes no line, asks for no focus and sets no token (AP LooseEnds,
+ * D44).
+ */
+export function opening(): Opening {
+  const a = asking;
+  const n = session();
+  return {
+    a,
+    still: () => stillSession(n) && !!a && asking === a && !a.closed && taken !== a,
+    take: () => {
+      taken = a;
+    },
+  };
 }
 
 /** chooseWay shows a way's form and asks for the focus in its first field. */
