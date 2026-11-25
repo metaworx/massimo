@@ -1383,7 +1383,7 @@ def test_sign_in_after_a_401_keeps_drafts_for_the_same_user(new_context, case, w
     sign_in(page, "operator", OPERATOR_PASSWORD)
     assert page.evaluate("MassimoParts.leaving.changes()"), "the same user: the drafts kept"
     expire(page)
-    sign_in(page, "guest1", "guest-pass")
+    sign_in(page, "guest1", "visit-pass")
     assert page.evaluate("state.me.user.name") == "guest1", "another user"
     assert not page.evaluate("MassimoParts.leaving.changes()"), "the first user's drafts forgotten"
 

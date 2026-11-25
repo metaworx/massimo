@@ -1497,6 +1497,8 @@
   "password.tooLong": "Trop long : 64 caractères au plus.",
   "password.refusedShort": "Refusé : trop court, au moins 8 caractères.",
   "password.refusedLong": "Refusé : trop long, 64 caractères au plus.",
+  "password.context": "Avec le nom de l'utilisateur ou du serveur.",
+  "password.refusedContext": "Refusé : nom de l'utilisateur ou du serveur.",
   "password.fine": "Ce mot de passe peut être défini.",
   "login.fingerprintPlain": "Non chiffré ici : la connexion par empreinte digitale ne sert qu'en HTTPS ou sur le réseau domestique. Connectez-vous avec votre mot de passe.",
   "login.fingerprintFailed": "Pas de connexion par empreinte digitale : {error}",

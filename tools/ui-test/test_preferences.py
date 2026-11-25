@@ -4,7 +4,7 @@
 token's user, the owner, keeps them on the server, and a fresh browser
 signed in with the same token takes them; a setting kept for this device
 only stays in its browser; a guest (run.sh creates guest1, password
-guest-pass) has no switches and keeps its settings in the browser. The
+visit-pass) has no switches and keeps its settings in the browser. The
 page fixture removes the owner's preferences before every page."""
 import json
 import urllib.request
@@ -93,7 +93,7 @@ def test_guest_keeps_settings_in_the_browser(new_context, case, watch, guard):
     page.goto(URL)
     assert wait_until(page, "document.getElementById('login-dialog').open", 5), "the sign-in dialog"
     page.locator("#login-user").fill("guest1")
-    page.locator("#login-password").fill("guest-pass")
+    page.locator("#login-password").fill("visit-pass")
     page.locator("#login-form button[type=submit]").click()
     page.wait_for_selector(".room", timeout=10000)
     assert page.evaluate("document.body.classList.contains('no-sync')"), "a guest's settings do not follow it"

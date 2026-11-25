@@ -695,6 +695,22 @@ A new `password` has 8 to 64 characters, counted in Unicode code points as sent,
 not normalised;
 outside that it is `400` with `password: at least 8 characters`
 or `password: at most 64 characters`, and nothing is written.
+Nor does it contain a name, whatever the case of either:
+the user's login name and display name (in `PUT` the new one too),
+each and each run of letters in them,
+the server's name (the first label of its host's name),
+the first label of the request's `Host` where it is no IP address and not `localhost`,
+`massimo` and `maxcube`;
+a name or a run of fewer than 4 letters is none.
+Such a password is `400` with `password: contains the user's or the server's name`,
+which names none of them, and nothing is written.
+A `Host` that a reverse proxy rewrites, or a client sets,
+only adds a word to the request's own check or takes one away:
+it decides nothing else.
+`massimo user` checks against the user's names and the host's name;
+the web UI, which sends a `record`,
+checks against the host it was opened by and, in the app,
+the name the app gives the server, not the host's own name (docs/ui.md).
 A `record` is not checked: the server never sees the password in it,
 so a client that registers by OPAQUE holds its users to the rule itself.
 A password set before the rule signs in as it is.

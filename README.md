@@ -1156,9 +1156,13 @@ which asks for the password again since it goes with the name
 `user tokens <name>` lists the user's sessions and keys with their ids,
 and `user revoke <name> [<token id>]` revokes one token or every one.
 A new password has 8 to 64 characters; 15 or a few words are better.
+It contains no name of the user's or the box's, whatever the case:
+not the login name, the display name or a word of either,
+not the first label of the box's host name, not `massimo` or `maxcube`,
+each a word where it has 4 letters or more.
 A password set before stays valid,
 but `user rename` asks for one again:
-where the old one is shorter, give a new one there,
+where the old one is shorter or holds the new name, give a new one there,
 or `-no-password`, which leaves the user with its keys only.
 A password set with `user add` or `user passwd` is of `auth_version` 2:
 the command registers it by OPAQUE in its own process,

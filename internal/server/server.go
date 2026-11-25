@@ -221,6 +221,13 @@ type Options struct {
 	// "brew"), else what runs it (InstallWindowsService, InstallSystemd,
 	// InstallLaunchd); empty is InstallOther.
 	Install string
+	// ServerName is the server's name, which a new password set through
+	// the users' API must not contain, beside the first label of the
+	// request's host (AP PasswordRules, D50-A; password.Check), given as
+	// a name: each run of letters in it is a word. Empty, as massimo
+	// serve leaves it, takes the first label of the host's name
+	// (password.HostWord of os.Hostname).
+	ServerName string
 	// DiscoverInterval is how often the server looks for Cubes on the LAN
 	// (discovery.go), with a first run at the start; 0 runs it only on
 	// request, and while a Cube configured by serial has no address or a

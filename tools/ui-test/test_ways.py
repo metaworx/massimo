@@ -66,8 +66,8 @@ def stub_creation(page, stage):
 
 def create(page, name="owner"):
     page.locator("#setup-user").fill(name)
-    page.locator("#setup-password").fill("owner-pass")
-    page.locator("#setup-again").fill("owner-pass")
+    page.locator("#setup-password").fill("own-secret-1")
+    page.locator("#setup-again").fill("own-secret-1")
     page.locator("#setup-form button[type=submit]").click()
 
 

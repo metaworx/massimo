@@ -1236,10 +1236,16 @@ func TestUITranslations(t *testing.T) {
 	}
 	// The string literals of t("…") and tn("…") in the scripts, a key
 	// that is not put together ("help." + key); tn's have their plural
-	// forms, .one and .other at least.
+	// forms, .one and .other at least. Not in parts.js, the bundle, whose
+	// parts are read from their sources below: its minifier may name any
+	// function of theirs $t or tn, whose first argument is then taken for
+	// a text's key.
 	call := regexp.MustCompile(`\b(tn?)\("([^"]+)"\s*[,)]`)
 	scripts, _ := fs.Glob(uiFiles, "ui/*.js")
 	for _, f := range scripts {
+		if f == "ui/parts.js" {
+			continue
+		}
 		b, err := uiFiles.ReadFile(f)
 		if err != nil {
 			t.Fatal(err)

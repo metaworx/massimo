@@ -1497,6 +1497,8 @@
   "password.tooLong": "Troppo lunga: al massimo 64 caratteri.",
   "password.refusedShort": "Rifiutata: troppo corta, almeno 8 caratteri.",
   "password.refusedLong": "Rifiutata: troppo lunga, max 64 caratteri.",
+  "password.context": "Contiene il nome dell'utente o del server.",
+  "password.refusedContext": "Rifiutata: nome dell'utente o del server.",
   "password.fine": "Questa password può essere impostata.",
   "login.fingerprintPlain": "Qui non è cifrato: l'accesso con impronta digitale vale solo in HTTPS o nella rete di casa. Accedi con la tua password.",
   "login.fingerprintFailed": "Accesso con impronta digitale non riuscito: {error}",

@@ -257,8 +257,8 @@ def test_create_the_owner_from_the_card(new_context, case, watch, guard):
     owner_card(page)
     stub_creation(page, made)
     page.locator("#setup-user").fill(f"owner-{case.width}-{case.lang}")
-    page.locator("#setup-password").fill("owner-pass")
-    page.locator("#setup-again").fill("owner-pass")
+    page.locator("#setup-password").fill("own-secret-1")
+    page.locator("#setup-again").fill("own-secret-1")
     before = len(mes)
     stage["me"] = "hold"
     submit = page.locator("#setup-form button[type=submit]")
@@ -302,8 +302,8 @@ def test_a_refusal_turns_the_card_to_the_sign_in(new_context, case, watch, guard
         page.route("**/api/v1/users", lambda route: route.fulfill(
             status=409, content_type="application/json", body='{"error":"the first owner exists already: sign in"}'))
     page.locator("#setup-user").fill("owner")
-    page.locator("#setup-password").fill("owner-pass")
-    page.locator("#setup-again").fill("owner-pass")
+    page.locator("#setup-password").fill("own-secret-1")
+    page.locator("#setup-again").fill("own-secret-1")
     page.locator("#setup-form button[type=submit]").click()
     turned(page)
     assert wait_until(page, "document.activeElement && document.activeElement.id === 'login-user'", 3), "the name in focus"
@@ -427,7 +427,7 @@ def held_creation(page, keep=None):
     }""", [TOKEN, keep])
 
 
-def fill_owner(page, name="owner", password="owner-pass", again="owner-pass"):
+def fill_owner(page, name="owner", password="own-secret-1", again="own-secret-1"):
     page.locator("#setup-user").fill(name)
     page.locator("#setup-password").fill(password)
     page.locator("#setup-again").fill(again)
@@ -503,7 +503,7 @@ def test_the_passwords_are_checked_before_anything_is_sent(new_context, case, wa
     its tile."""
     page = start_page(new_context, guard, watch, OPEN)
     owner_card(page)
-    for password, again in (("owner-pass", "other"), ("", "owner-pass")):
+    for password, again in (("own-secret-1", "other"), ("", "own-secret-1")):
         fill_owner(page, password=password, again=again)
         page.locator("#setup-form button[type=submit]").click()
         assert wait_until(page, "document.getElementById('setup-msg').textContent === t('setup.mismatch')", 3), \
@@ -523,11 +523,11 @@ def test_the_form_says_only_what_is_wrong_now(new_context, case, watch, guard):
     page = start_page(new_context, guard, watch, OPEN)
     owner_card(page)
     submit = page.locator("#setup-form button[type=submit]")
-    fill_owner(page, password="owner-pass", again="other")
+    fill_owner(page, password="own-secret-1", again="other")
     submit.click()
     assert wait_until(page, "document.getElementById('setup-msg').textContent === t('setup.mismatch')", 3), "the passwords differ"
     assert page.evaluate("document.activeElement.id") == "setup-again", "the focus on Again"
-    fill_owner(page, name="bad name", password="owner-pass", again="owner-pass")
+    fill_owner(page, name="bad name", password="own-secret-1", again="own-secret-1")
     submit.click()
     assert wait_until(page, "!document.getElementById('setup-name-msg').classList.contains('hidden')", 3), "the name's rule"
     assert page.locator("#setup-name-msg").inner_text() == NAME_BAD[case.lang], "the store's rule"
@@ -561,15 +561,15 @@ def test_the_owner_card_empties_its_passwords_after_the_owner(new_context, case,
         route.continue_()
 
     page.route("**/api/v1/me/preferences", prefs)
-    fill_owner(page, password="owner-pass", again="other")
+    fill_owner(page, password="own-secret-1", again="other")
     page.locator("#setup-form button[type=submit]").click()
     assert wait_until(page, "document.getElementById('setup-msg').textContent === t('setup.mismatch')", 3), "the passwords differ"
     page.locator("#setup-keep-open").click()
     page.locator("#keep-open-back").click()
     frames(page)
-    assert [page.locator(f).input_value() for f in ("#setup-password", "#setup-again")] == ["owner-pass", "other"], \
+    assert [page.locator(f).input_value() for f in ("#setup-password", "#setup-again")] == ["own-secret-1", "other"], \
         "a refusal and Back keep both"
-    page.locator("#setup-again").fill("owner-pass")
+    page.locator("#setup-again").fill("own-secret-1")
     eye = page.locator("#setup-step .pw-eye").last
     eye.wait_for(state="visible")
     eye.click()
@@ -579,7 +579,7 @@ def test_the_owner_card_empties_its_passwords_after_the_owner(new_context, case,
     assert wait_until(page, f"!({DIALOG_OPEN})", 10), "the owner made, the card closed"
     assert wait_held(page, held), "the owner's settings read, held"
     frames(page)
-    assert [page.locator(f).input_value() for f in ("#setup-password", "#setup-again")] == ["owner-pass", "owner-pass"], \
+    assert [page.locator(f).input_value() for f in ("#setup-password", "#setup-again")] == ["own-secret-1", "own-secret-1"], \
         "kept while the read after the close has not settled"
     held.pop().continue_()
     assert wait_until(page, "document.getElementById('setup-password').value === '' && document.getElementById('setup-again').value === ''", 10), \
