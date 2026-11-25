@@ -18,22 +18,29 @@ import { useId, useLayoutEffect, useRef, useState } from "preact/hooks";
 /**
  * useBusy is a request under way, for the button that sends it: busy
  * from run's start until the promise fn returns has settled; a second
- * run meanwhile does nothing and returns undefined (whileBusy).
+ * run meanwhile does nothing and returns undefined (whileBusy). With
+ * epoch, a number its caller raises where a request under way no longer
+ * concerns the button (the sign-in card's opening), the request belongs
+ * to the epoch it ran in: in a later one the button is not busy and runs
+ * again, and the earlier request's end leaves the later's busy as it is.
  */
-export function useBusy(): { busy: boolean; run<T>(fn: () => Promise<T>): Promise<T | undefined> } {
-  const [busy, setBusy] = useState(false);
-  const on = useRef(false);
+export function useBusy(epoch = 0): { busy: boolean; run<T>(fn: () => Promise<T>): Promise<T | undefined> } {
+  const [at, setAt] = useState<number | null>(null);
+  const on = useRef<number | null>(null);
   return {
-    busy,
+    busy: at === epoch,
     async run(fn) {
-      if (on.current) return undefined;
-      on.current = true;
-      setBusy(true);
+      if (on.current === epoch) return undefined;
+      const mine = epoch;
+      on.current = mine;
+      setAt(mine);
       try {
         return await fn();
       } finally {
-        on.current = false;
-        setBusy(false);
+        if (on.current === mine) {
+          on.current = null;
+          setAt(null);
+        }
       }
     },
   };
@@ -73,10 +80,10 @@ export function useSetAtOnce<T>(stored: T): { value: T; busy: boolean; set(v: T,
  * id its element's (a button the page names); aria-label names it for a
  * screen reader where its text does not say enough; off keeps it off (a
  * request that may not be sent now); data are its data- attributes (a
- * Link button's provider in My profile); a click while it turns sends
- * nothing.
+ * Link button's provider in My profile); epoch is useBusy's (the sign-in
+ * card's opening); a click while it turns sends nothing.
  */
-export function BusyButton({ id, cls, label, run, aria, off, data }: {
+export function BusyButton({ id, cls, label, run, aria, off, data, epoch }: {
   id?: string;
   cls?: string;
   label: string;
@@ -84,8 +91,9 @@ export function BusyButton({ id, cls, label, run, aria, off, data }: {
   aria?: string;
   off?: boolean;
   data?: Record<string, string>;
+  epoch?: number;
 }) {
-  const b = useBusy();
+  const b = useBusy(epoch);
   const attrs: Record<string, string> = {};
   for (const [k, v] of Object.entries(data || {})) attrs["data-" + k] = v;
   return <button type="button" id={id} {...busyProps(cls || "", b.busy, off)} aria-label={aria} {...attrs} onClick={() => b.run(run)}>{label}</button>;

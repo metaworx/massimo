@@ -426,7 +426,13 @@ hence `failed_checks_forgotten`.
   language and who is in read again; the fields are emptied at an opening
   alone, never at the closing; the fingerprint's button keeps the user's
   name at a change of language, and stays the same element, turning, while
-  the system's prompt is open and the status and the language change.
+  the system's prompt is open and the status and the language change; the
+  fingerprint's button is off while the password signs in, and from its
+  press until its answer the card is working, both ways' Sign in, both
+  Cancels and Select server off; a fingerprint's session that comes once
+  the page signed out behind the card is ended at the server and kept by
+  nobody, and a late refusal says nothing in a later opening, the app's
+  status read again (AP AccessEnds, Block 1).
 - `test_sign_out_late.py`, an answer that comes after a sign-out (AP
   UiParts, Block 14, D212): the search for Cubes, the House's writes to
   every room and in Eco, a pairing's Start, Cube settings' Save, a device
@@ -512,6 +518,12 @@ hence `failed_checks_forgotten`.
   session out at the server with its own token, and a key replaced is not
   (`test_a_replaced_session_ends`); a tab whose session another tab's
   sign-in replaced leaves that tab's stored token alone at its 401;
+  an answer of the password's way or of the API key's that comes once
+  another way has signed in or set its token, once the card was closed and
+  opened anew, or once the page signed out behind the card, makes no
+  token, says nothing and takes no focus, a late password's session
+  signed out at the server, and Sign in is ready in a card opened anew
+  (AP AccessEnds, Block 1);
   My profile opened at `#profile?key=<id>` (`test_profile_marks_a_key`)
   marks that key and scrolls a row below the first screen into view,
   marks nothing for an id that is not one of the user's keys,

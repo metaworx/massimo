@@ -546,7 +546,10 @@ the Cube choice's "Select server…",
 and the self-signed notice left out there (`test_tls.py`).
 On a server's page, its `login.status()` answers the test's `key_id` and `server`,
 and its `setToken` revokes the test's `revokeAtSignIn` at the server with the
-new token before it answers `{revoked}`, as the app's check does.
+new token before it answers `{revoked}`, as the app's check does;
+its `setToken` and its `login.fingerprint()` keep the token
+and end at the server the session it replaces, as the app does,
+a key the server refusing to end.
 Its version 3 records the sessions' calls and the settings' as it does the
 others, and answers them from the test's configuration;
 its version 4 keeps a server's `unrevoked` and turns a kept login off as

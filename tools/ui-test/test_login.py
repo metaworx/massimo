@@ -5,8 +5,10 @@ token, as the operator run.sh creates (password op-password). A page error
 fails the test (the guard); the console is not watched, since the
 page's first requests without a token are refused on purpose."""
 import json
+import urllib.error
 
 import pytest
+from playwright.sync_api import TimeoutError as PlaywrightTimeoutError
 
 from conftest import TOKEN, URL, api_call
 from helpers import (OPERATOR_PASSWORD, ApiReads, assert_login_card_centred, assert_login_row, frames, named_buttons,
@@ -646,8 +648,10 @@ def test_a_late_key_answer_makes_no_token(new_context, case, watch, guard):
     """The key's read held while the password's way signs in: the key's
     answer, let go after that sign-in, makes the key no token; the page
     keeps the password's session, in the page and in the browser's
-    storage. Fails on the page before: the late answer made the key the
-    page's token over the session."""
+    storage. Fails where submitKey's answer is not checked by still(): the
+    late answer made the key the page's token over the session. On a page
+    where the key is not read with first (before AP LooseEnds, D43) it
+    fails sooner, at the hold: the key sends no read of its own."""
     page = new_page(new_context, guard, watch)
     held = []
     page.route("**/api/v1/me", lambda route: held.append(route) if route.request.headers.get("authorization") == "Bearer " + TOKEN and not held
@@ -672,10 +676,12 @@ def test_a_late_key_answer_makes_no_token(new_context, case, watch, guard):
 
 def test_a_late_key_refusal_writes_nothing(new_context, case, watch, guard):
     """A wrong key's read held, the card closed and opened anew, a key
-    typed there and the focus on the name: the refusal, let go then,
+    typed there on the key's way and the focus on its way's button, a
+    control the key's field is shown beside: the refusal, let go then,
     writes nothing into the new opening, neither its line, nor the key's
     field, nor the focus. Fails on the page before: the late refusal said
-    itself in the new opening, emptied its field and took the focus."""
+    itself in the new opening, emptied its field and took the focus into
+    it."""
     page = new_page(new_context, guard, watch)
     page.goto(URL)
     sign_in(page, "operator", OPERATOR_PASSWORD)
@@ -691,19 +697,208 @@ def test_a_late_key_refusal_writes_nothing(new_context, case, watch, guard):
     assert wait_until(page, f"!({DIALOG_OPEN}) && loginPromise === null", 5), "the card left, its opening ended"
     page.evaluate("() => { askLogin(); }")
     assert wait_until(page, DIALOG_OPEN, 5), "the card opened anew"
-    page.locator("#login-ways .login-way[data-way='key']").click()
+    way = page.locator("#login-ways .login-way[data-way='key']")
+    way.click()
     page.locator("#login-token").fill("typed-in-the-new-opening")
-    page.locator("#login-ways .login-way[data-way='password']").click()
-    page.locator("#login-user").focus()
+    way.focus()
     with page.expect_response(read_with(WRONG_KEY)):
         held.pop().continue_()
     frames(page)
     assert not page.evaluate(KEY_ERROR), "no refusal said in the new opening"
     assert page.locator("#login-token").input_value() == "typed-in-the-new-opening", "its key's field as typed"
-    assert page.evaluate("document.activeElement && document.activeElement.id") == "login-user", "the focus where the user put it"
-    assert page.locator("#login-ways .login-way[data-way='password']").get_attribute("aria-pressed") == "true", "on the way the user chose"
+    assert page.locator("#login-token").is_visible(), "the key's field shown, which a focus asked for would take"
+    assert page.evaluate("document.activeElement && document.activeElement.dataset.way") == "key", "the focus where the user put it"
+    assert way.get_attribute("aria-pressed") == "true", "on the way the user chose"
     page.unroute("**/api/v1/me")
     page.evaluate("() => { document.getElementById('login-dialog').close(); }")
+    sign_out(page)
+    assert wait_until(page, DIALOG_OPEN, 5), "signed out at the end"
+
+
+def status_with(token):
+    """The status the server answers GET /api/v1/me with, token its bearer."""
+    try:
+        api_call("GET", "api/v1/me", token=token)
+    except urllib.error.HTTPError as e:
+        return e.code
+    return 200
+
+
+def test_a_late_password_answer_makes_no_token(new_context, case, watch, guard):
+    """The password's sign-in held at its finish while the API key signs
+    in: the password's session, let go once the key is in, makes no token
+    and is ended at the server (POST /api/v1/logout with it, AP AccessEnds,
+    D2), so that a request with it answers 401; the page keeps the key, in
+    the page and in the browser's storage, who is in is the key's, and the
+    operator's live sessions are those before the test. Fails on the page
+    before: the late session became the page's token over the key, and
+    stayed live at the server."""
+    page = new_page(new_context, guard, watch)
+    before = sessions_of("operator")
+    held = []
+    page.route("**/api/v1/login/finish", lambda route: held.append(route) if route.request.method == "POST" and not held else route.continue_())
+    page.goto(URL)
+    assert wait_until(page, DIALOG_OPEN, 5), "the sign-in dialog opens"
+    page.locator("#login-user").fill("operator")
+    page.locator("#login-password").fill(OPERATOR_PASSWORD)
+    page.locator("#login-form button[type=submit]").click()
+    assert wait_held(page, held, 10), "the password's finish, held"
+    send_key(page, TOKEN)
+    page.wait_for_selector(".room", timeout=10000)
+    assert page.evaluate("state.me.token.kind") == "api", "in with the key"
+    logout = None
+    try:
+        with page.expect_response(lambda r: r.request.method == "POST" and r.url.endswith("/api/v1/logout")) as ended:
+            with page.expect_response(lambda r: r.request.method == "POST" and r.url.endswith("/api/v1/login/finish")) as finished:
+                held.pop().continue_()
+        logout = ended.value
+    except PlaywrightTimeoutError:
+        pass  # said below
+    late = finished.value.json()["token"]
+    frames(page)
+    assert page.evaluate("[state.token, localStorage.getItem('massimo.token')]") == [TOKEN, TOKEN], "the key stays the page's token"
+    assert page.evaluate("state.me.token.kind") == "api", "and who is in"
+    assert logout is not None and logout.request.headers.get("authorization") == "Bearer " + late, "the late session signed out, with its own token"
+    assert status_with(late) == 401, "a request with the late session's token answers 401"
+    assert sessions_of("operator") == before, f"the operator's live sessions those before the test: {sessions_of('operator')} vs {before}"
+    page.unroute("**/api/v1/login/finish")
+    sign_out(page)
+    assert wait_until(page, DIALOG_OPEN, 5), "signed out at the end"
+
+
+SUBMIT = "#login-form button[type=submit]"
+READY = f"(() => {{ const b = document.querySelector({SUBMIT!r}); return !b.disabled && !b.classList.contains('busy'); }})()"
+
+
+def test_a_late_password_refusal_writes_nothing(new_context, case, watch, guard):
+    """A wrong password's sign-in held at its start on a running page, the
+    card closed and opened anew, a name typed there and the focus on it:
+    Sign in is ready again in the new opening, and the refusal, let go
+    then, writes nothing into it, neither its line nor the focus, which
+    stays in the name (AP AccessEnds, Block 1). Fails on the page before:
+    Sign in turned on in the new opening until the old answer came, and
+    the late refusal said the wrong password there and took the focus into
+    Password."""
+    page = new_page(new_context, guard, watch)
+    page.goto(URL)
+    sign_in(page, "operator", OPERATOR_PASSWORD)
+    held = []
+    page.route("**/api/v1/login/start", lambda route: held.append(route) if not held else route.continue_())
+    page.evaluate("() => { askLogin(); }")
+    assert wait_until(page, DIALOG_OPEN, 5), "the sign-in opens on the running page"
+    page.locator("#login-user").fill("operator")
+    page.locator("#login-password").fill("wrong")
+    page.locator(SUBMIT).click()
+    assert wait_held(page, held), "the wrong password's start, held"
+    page.evaluate("() => { document.getElementById('login-dialog').close(); }")
+    # the dialog's close event, which ends its opening, comes in a task of its own
+    assert wait_until(page, f"!({DIALOG_OPEN}) && loginPromise === null", 5), "the card left, its opening ended"
+    page.evaluate("() => { askLogin(); }")
+    assert wait_until(page, DIALOG_OPEN, 5), "the card opened anew"
+    frames(page)
+    assert page.evaluate(READY), "Sign in ready in the new opening, the old sign-in's answer still out"
+    page.locator("#login-user").fill("typed-in-the-new-opening")
+    page.locator("#login-user").focus()
+    # the start answered, then the password's refusal, after argon2id has turned in the page
+    with page.expect_response(lambda r: r.request.method == "POST" and r.url.endswith(("/api/v1/login", "/api/v1/login/finish")), timeout=10000):
+        held.pop().continue_()
+    frames(page)
+    assert page.locator("#login-error").is_hidden(), "no refusal said in the new opening"
+    assert page.evaluate("document.activeElement && document.activeElement.id") == "login-user", "the focus where the user put it"
+    assert page.locator("#login-user").input_value() == "typed-in-the-new-opening", "the name as typed"
+    page.unroute("**/api/v1/login/start")
+    page.evaluate("() => { document.getElementById('login-dialog').close(); }")
+    sign_out(page)
+    assert wait_until(page, DIALOG_OPEN, 5), "signed out at the end"
+
+
+def test_a_password_answer_after_a_sign_out_does_nothing(new_context, case, watch, guard):
+    """The card opened on a running page, the password's sign-in held at
+    its finish and the page signed out meanwhile (logout, which leaves the
+    card open on the same opening): the session, let go then, is no token
+    of the page's and is ended at the server, the card stays open and
+    says nothing, and nobody is in (AP AccessEnds, D2). Fails where still()
+    does not ask the session's number: the late session signed the page
+    in again after the sign-out."""
+    page = new_page(new_context, guard, watch)
+    page.goto(URL)
+    sign_in(page, "operator", OPERATOR_PASSWORD)
+    held = []
+    page.route("**/api/v1/login/finish", lambda route: held.append(route) if route.request.method == "POST" and not held else route.continue_())
+    page.evaluate("() => { askLogin(); }")
+    assert wait_until(page, DIALOG_OPEN, 5), "the sign-in opens on the running page"
+    page.locator("#login-user").fill("operator")
+    page.locator("#login-password").fill(OPERATOR_PASSWORD)
+    page.locator(SUBMIT).click()
+    assert wait_held(page, held, 10), "the password's finish, held"
+    page.evaluate("() => { logout(); }")  # not awaited: its start waits for the card
+    assert wait_until(page, "state.token === null && state.me === null", 5), "signed out behind the card"
+    logout = None
+    try:
+        with page.expect_response(lambda r: r.request.method == "POST" and r.url.endswith("/api/v1/logout")) as ended:
+            with page.expect_response(lambda r: r.request.method == "POST" and r.url.endswith("/api/v1/login/finish")) as finished:
+                held.pop().continue_()
+        logout = ended.value
+    except PlaywrightTimeoutError:
+        pass  # said below
+    late = finished.value.json()["token"]
+    frames(page)
+    assert page.evaluate("[state.token, localStorage.getItem('massimo.token')]") == [None, None], "the late session is no token of the page's"
+    assert page.evaluate(DIALOG_OPEN) and page.locator("#login-error").is_hidden(), "the card stays open, saying nothing"
+    assert logout is not None and logout.request.headers.get("authorization") == "Bearer " + late, "the late session signed out, with its own token"
+    assert status_with(late) == 401, "a request with the late session's token answers 401"
+    page.unroute("**/api/v1/login/finish")
+
+
+def test_an_answer_after_another_way_set_its_token_makes_none(new_context, case, watch, guard):
+    """On a running page the card opened, the API key's read held and the
+    password signed in, its check of who signed in held too: the key's
+    answer, let go while the password's sign-in has its token but has not
+    closed the card, makes no token, and the page goes on with the
+    password's session, which stays live (AP LooseEnds, D44). Fails where
+    a way's token leaves the opening to the others: the key's answer set
+    its token over the session, which was left live and unheld."""
+    page = new_page(new_context, guard, watch)
+    page.goto(URL)
+    sign_in(page, "operator", OPERATOR_PASSWORD)
+    first = page.evaluate("state.token")
+    stage = {"settle": False}
+    keys, settles = [], []
+
+    def me(route):
+        bearer = route.request.headers.get("authorization", "")
+        if route.request.method == "GET" and bearer == "Bearer " + TOKEN and not keys:
+            keys.append(route)
+            return
+        if route.request.method == "GET" and stage["settle"] and bearer not in ("Bearer " + TOKEN, "Bearer " + first):
+            stage["settle"] = False
+            settles.append(route)
+            return
+        route.continue_()
+
+    page.route("**/api/v1/me", me)
+    page.evaluate("() => { askLogin(); }")
+    assert wait_until(page, DIALOG_OPEN, 5), "the sign-in opens on the running page"
+    send_key(page, TOKEN)
+    assert wait_held(page, keys), "the key's read, held"
+    page.locator("#login-ways .login-way[data-way='password']").click()
+    page.locator("#login-user").fill("operator")
+    page.locator("#login-password").fill(OPERATOR_PASSWORD)
+    stage["settle"] = True
+    page.locator(SUBMIT).click()
+    assert wait_held(page, settles, 10), "the password's sign-in has its token, its check of who signed in held"
+    session = page.evaluate("state.token")
+    assert session not in (first, TOKEN), "the password's session is the page's token"
+    with page.expect_response(read_with(TOKEN)):
+        keys.pop().continue_()
+    frames(page)
+    assert page.evaluate("state.token") == session, "the key's answer sets no token over the session"
+    settles.pop().continue_()
+    assert wait_until(page, f"!({DIALOG_OPEN})", 10), "the password's sign-in closes the card"
+    page.unroute("**/api/v1/me")
+    assert wait_until(page, "!!state.me && !!state.me.user && state.me.user.name === 'operator'", 5), "the operator is in"
+    assert page.evaluate("[state.token, localStorage.getItem('massimo.token')]") == [session, session], "with the password's session"
+    assert status_with(session) == 200, "which is live at the server"
     sign_out(page)
     assert wait_until(page, DIALOG_OPEN, 5), "signed out at the end"
 

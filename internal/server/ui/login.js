@@ -93,8 +93,8 @@ function tokenAnswer() {
 // (appBridge, app.js). A token the app could not keep still serves this
 // page, and the app asks for a sign-in at its next start. A session that
 // a new token replaces is ended at the server once (AP MobileApp, D68-A):
-// in a browser here, POST /api/v1/logout with it, not awaited and a
-// refusal ignored, where who is in was read with it and it is a session
+// in a browser here, POST /api/v1/logout with it (endSession), not awaited
+// and a refusal ignored, where who is in was read with it and it is a session
 // (a key answers 400 there, and one not read yet is left as it is); in
 // the app by the bridge's setToken, which holds it. It returns the
 // bridge's answer, null in a browser and where the bridge failed, so that
@@ -107,13 +107,28 @@ function setToken(token) {
   if (!b) {
     store("massimo.token", token);
     if (token && old && old !== token && old === meToken && state.me && state.me.token && state.me.token.kind === "session") {
-      apiRequest("POST", "api/v1/logout", undefined, { token: old }).catch(() => {});
+      endSession(old);
     }
     return Promise.resolve(null);
   }
   const answer = Promise.resolve(b.setToken(token)).catch(() => null);
   if (token) tokenAnswered = answer;
   return answer;
+}
+
+// endSession ends a session at the server that the page does not keep:
+// POST /api/v1/logout with it, not awaited and a refusal ignored; nothing
+// for no token, which would send the page's own. For a session setToken
+// replaces, and for a sign-in's that answered once its opening of the
+// sign-in's card had ended (ui/src/signin/Card.tsx; AP AccessEnds, D2),
+// so that no live session is left that nobody holds. kept says that the
+// app's bridge keeps it, as login.fingerprint keeps its session: where
+// the page holds no token, the session having been forgotten meanwhile
+// by a sign-out, the bridge is left with none too.
+function endSession(token, kept) {
+  if (!token) return;
+  apiRequest("POST", "api/v1/logout", undefined, { token }).catch(() => {});
+  if (kept && !state.token) setToken(null);
 }
 
 // sawOpen is set once the page has seen a server without a store ask for
@@ -230,11 +245,14 @@ async function renderLoginProviders() {
   MassimoParts.signIn.providers(list);
 }
 
-// startProvider starts a sign-in through a provider and opens its page;
-// its refusal is thrown, for the card to say under the providers' buttons.
+// startProvider starts a sign-in through a provider and answers the
+// provider's page to go to, which the sign-in's card opens only while the
+// opening its button was pressed in is still the card's (AP AccessEnds,
+// Block 1); its refusal is thrown, for the card to say under the
+// providers' buttons.
 async function startProvider(key) {
   const started = await apiRequest("POST", "api/v1/login/oidc/" + encodeURIComponent(key), { redirect: pageBase() }, { auth: false });
-  location.assign(started.url);
+  return started.url;
 }
 
 // --- the sign-in dialog -----------------------------------------------
