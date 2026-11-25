@@ -1081,8 +1081,9 @@ massimo credits preact
 `credits` lists everything the binary includes, a line each with its name,
 version (Go's the one the binary was built with), licence and where it comes from,
 "and others" where its files are under other licences too,
-then what an entry includes whose own licence texts are not reproduced
-(the Rust crates in the web UI's OPAQUE client),
+then what an entry includes and the crates those are built with,
+whose licence texts, collected for Massimo, are among its files
+(the Rust crates in the web UI's OPAQUE client, `opaque.LICENSE-3RD-PARTY`),
 as System info's **Credits and licences** does from the same embedded list;
 `credits <name>`, the name as the list prints it, prints that entry's licence,
 the text of each of its files with the licence it is known by.

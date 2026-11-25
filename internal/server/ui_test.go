@@ -148,7 +148,7 @@ func TestUIServed(t *testing.T) {
 			t.Fatalf("GET %s: %d %s", p, code, ct)
 		}
 	}
-	for _, p := range []string{"/ui/", "/ui/index.html", "/ui/nope.js", "/ui/i18n", "/ui/i18n/", "/ui/i18n/xx.json", "/ui/i18n/en.js", "/ui/i18n/EN.json", "/ui/partials/cubes.html", "/ui/partials/", "/ui/vendor/", "/ui/vendor/README.md", "/ui/vendor/nope.js", "/ui/icons/icon-192.png", "/ui/brand/", "/ui/brand/nope.png", "/ui/brand/.make_brand", "/other"} {
+	for _, p := range []string{"/ui/", "/ui/index.html", "/ui/nope.js", "/ui/i18n", "/ui/i18n/", "/ui/i18n/xx.json", "/ui/i18n/en.js", "/ui/i18n/EN.json", "/ui/partials/cubes.html", "/ui/partials/", "/ui/vendor/", "/ui/vendor/README.md", "/ui/vendor/opaque.LICENSE-3RD-PARTY", "/ui/vendor/nope.js", "/ui/icons/icon-192.png", "/ui/brand/", "/ui/brand/nope.png", "/ui/brand/.make_brand", "/other"} {
 		if code, _, _ := get(p); code != 404 {
 			t.Fatalf("GET %s: %d, want 404", p, code)
 		}
@@ -551,13 +551,39 @@ func TestWordList(t *testing.T) {
 }
 
 // opaqueCrate is the path of a Rust crate's sources that the
-// WebAssembly of opaque.js keeps: <crate>-<version>/src/.
-var opaqueCrate = regexp.MustCompile(`/([A-Za-z0-9_-]+?)-([0-9]+\.[0-9]+\.[0-9]+[0-9A-Za-z.+-]*)/src/`)
+// WebAssembly of opaque.js keeps: <crate>-<version>/src/; opaqueRustc
+// is the path of Rust's own libraries there, /rustc/<commit>/.
+var (
+	opaqueCrate = regexp.MustCompile(`/([A-Za-z0-9_-]+?)-([0-9]+\.[0-9]+\.[0-9]+[0-9A-Za-z.+-]*)/src/`)
+	opaqueRustc = regexp.MustCompile(`/rustc/([0-9a-f]{40})/`)
+)
+
+// How the versions of opaque.LICENSE-3RD-PARTY were had, which its head
+// names: the commit of @serenity-kit/opaque 1.1.0's sources that npm's
+// provenance names, and the time npm published the package. And the
+// file's SHA-256: go run ./tools/opaquecrates writes the file from its
+// head's list and the crates' archives, and with -check confirms it
+// online; a change of the file, of its head or of a text, changes the
+// SHA-256 here with it, on purpose.
+const (
+	opaqueSources   = "ca1cb22f03b9e456159ce367e2975124f87f5ad8"
+	opaquePublished = "2026-02-01 14:40:35 UTC"
+	opaqueCratesSum = "c4fa50c0c58ac639dfee9a018d156155cb97257ca10467db55378d2dccfde25d"
+)
 
 // TestVendoredOpaqueCrates checks that the opaque.js row of
 // ui/vendor/README.md names, in Includes, the Rust crates the file's
 // WebAssembly names, each with its version, and no other, so that an
-// update of the file cannot leave the list behind.
+// update of the file cannot leave the list behind; and that
+// ui/vendor/opaque.LICENSE-3RD-PARTY, their licence texts
+// (tools/opaquecrates), has a crate's line for every crate of its
+// head's list, in its order, those the WebAssembly names among them at
+// the same version; a file under every crate, or the line that its
+// archive has none; a text named as one above only where that one
+// stands above; a head that names the commit of the package's sources,
+// the time npm published it and the Rust compiler's commit the
+// WebAssembly names; and the SHA-256 the file has. It reads the
+// committed files alone, offline.
 func TestVendoredOpaqueCrates(t *testing.T) {
 	t.Parallel()
 	js, err := uiFiles.ReadFile("ui/vendor/opaque.js")
@@ -610,6 +636,72 @@ func TestVendoredOpaqueCrates(t *testing.T) {
 	for c := range listed {
 		if !named[c] {
 			t.Errorf("ui/vendor/README.md's Includes lists %s, which opaque.js does not name", c)
+		}
+	}
+
+	b, err := os.ReadFile("ui/vendor/opaque.LICENSE-3RD-PARTY")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := fmt.Sprintf("%x", sha256.Sum256(b)); got != opaqueCratesSum {
+		t.Errorf("ui/vendor/opaque.LICENSE-3RD-PARTY: SHA-256 %s, want %s: a change of the file is one on purpose (go run ./tools/opaquecrates -check)", got, opaqueCratesSum)
+	}
+	top, body, ok := strings.Cut(string(b), "\n==> ")
+	if !ok {
+		t.Fatal("ui/vendor/opaque.LICENSE-3RD-PARTY has no crate's line (==> )")
+	}
+	listLine := regexp.MustCompile(`^(\S+) (\S+) [0-9a-f]{64}$`)
+	var list []string
+	for line := range strings.Lines(top) {
+		if m := listLine.FindStringSubmatch(strings.TrimSuffix(line, "\n")); m != nil {
+			list = append(list, m[1]+" "+m[2])
+		}
+	}
+	for c := range named {
+		if !slices.Contains(list, c) {
+			t.Errorf("opaque.js names the crate %s, which the list of ui/vendor/opaque.LICENSE-3RD-PARTY does not hold", c)
+		}
+	}
+	crateLine := regexp.MustCompile(`^==> (\S+) (\S+) \(.+\) <==$`)
+	fileLine := regexp.MustCompile(`^--- (\S+)(?:: the same text as (\S+ \S+ \S+) above)?$`)
+	var crates []string
+	written := map[string]bool{}
+	files := 0
+	ended := func() {
+		if len(crates) > 0 && files == 0 {
+			t.Errorf("ui/vendor/opaque.LICENSE-3RD-PARTY: %s has no file, nor the line that its archive has none", crates[len(crates)-1])
+		}
+	}
+	for line := range strings.Lines("==> " + body) {
+		l := strings.TrimSuffix(line, "\n")
+		if m := crateLine.FindStringSubmatch(l); m != nil {
+			ended()
+			crates, files = append(crates, m[1]+" "+m[2]), 0
+		} else if strings.HasPrefix(l, "No licence file in its archive; declared ") {
+			files++
+		} else if m := fileLine.FindStringSubmatch(l); m != nil {
+			files++
+			if m[2] == "" {
+				written[crates[len(crates)-1]+" "+m[1]] = true
+			} else if !written[m[2]] {
+				t.Errorf("ui/vendor/opaque.LICENSE-3RD-PARTY: %s's %s is named the same text as %s, which does not stand above it", crates[len(crates)-1], m[1], m[2])
+			}
+		}
+	}
+	ended()
+	if len(list) == 0 || !slices.Equal(crates, list) {
+		t.Errorf("ui/vendor/opaque.LICENSE-3RD-PARTY: the crates %q, its list %q", crates, list)
+	}
+	rustc := map[string]bool{}
+	for _, m := range opaqueRustc.FindAllSubmatch(wasm, -1) {
+		rustc[string(m[1])] = true
+	}
+	if len(rustc) == 0 {
+		t.Error("opaque.js names no commit of the Rust compiler (/rustc/<commit>/)")
+	}
+	for _, want := range append(slices.Sorted(maps.Keys(rustc)), opaqueSources, opaquePublished) {
+		if !strings.Contains(top, want) {
+			t.Errorf("the head of ui/vendor/opaque.LICENSE-3RD-PARTY does not name %s", want)
 		}
 	}
 }

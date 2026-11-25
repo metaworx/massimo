@@ -235,7 +235,7 @@
   "credits.kind.module": "Go-Modul",
   "credits.kind.moduleCopy": "Go-Modul, seine Kopie in {path}",
   "credits.kind.vendored": "abgelegt in {path}",
-  "credits.includes": "Enthält {what}; deren eigene Lizenztexte sind hier nicht wiedergegeben.",
+  "credits.includes": "Enthält {what} und die Crates, mit denen diese gebaut sind; deren Lizenztexte, für Massimo aus den Archiven der Crates gesammelt, stehen unter seinen Dateien.",
   "credits.seeText": "Lizenz im Text",
   "credits.mixed": "{licence}, weitere Lizenzen unter seinen Dateien",
   "credits.notice": "Hinweis",
