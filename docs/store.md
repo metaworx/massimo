@@ -300,8 +300,14 @@ does today and compares it with the store:
    The server sets it when the plain Cube first reports its serial,
    and the start when a configured row's address is the plain address
    (the same host whatever its case, the same port,
-   `62910` where one gives none):
-   two runtimes would dial one Cube, which serves one client.
+   `62910` where one gives none),
+   or, where no row's is as written, when a row at the same port has a host
+   with an IP address of the plain host's: a host name and an IP of one Cube.
+   Where several rows have one, none is tied, and the log names them.
+   The start looks each name up once, all of them within 2 s,
+   and a lookup that fails or does not answer in time ties nothing;
+   `massimo config` shows the tie the same way.
+   Two runtimes would dial one Cube, which serves one client.
    The log then says that the plain lines are that Cube's.
 3. Keys and IVs came from `.env` by serial in every case,
    for the portal commands, which are gone since AP PortalDrop.

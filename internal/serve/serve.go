@@ -109,6 +109,11 @@ type Config struct {
 	// (server.Options.DiscoveryWait), for the tests, whose fake Cubes
 	// answer at once; 0 is server.DefaultDiscoveryWait.
 	discoveryWait time.Duration
+	// lookupHost looks up the hosts of the plain MASSIMO_CUBE_ADDRESS
+	// and of the store's Cubes where they are not the same as written
+	// (PlainRow), for the tests, which answer without the network; nil
+	// is the system's resolver.
+	lookupHost HostLookup
 	// TLS is the certificate source of the listener; the zero value
 	// serves plain HTTP.
 	TLS TLS
