@@ -10,10 +10,11 @@
  * whether a newer release is out, the automatic update's question
  * (Ask.tsx), the release's
  * notes, the helper's last state, the last three updates, Check for
- * updates and Update, which asks in place of the buttons. A load that
- * comes in leaves the channel's choice, its focus and the question where
- * they are; the card's badge says up to date or what is out, also while
- * the card is folded.
+ * updates and Update, which asks in place of the buttons, saying that the
+ * server stays down until the settings file is fixed while its next
+ * start refuses it. A load that comes in leaves the channel's choice,
+ * its focus and the question where they are; the card's badge says up to
+ * date or what is out, also while the card is folded.
  */
 
 import type { Ref } from "preact";
@@ -25,7 +26,7 @@ import { BusyButton, busyProps, Question, useAsk, useSetAtOnce } from "../shared
 import { fmtServerClock } from "../shared/time";
 import { update } from "../shared/update";
 import { ask, data, loadUpdate, question, runUpdate, setAuto, setChannel, setWindow, UPDATE_FLAVOURS } from "./store";
-import { asked, AskButtons, askText } from "./Ask";
+import { asked, AskButtons, askText, updateQuestion } from "./Ask";
 import { cardBadges } from "../shared/card";
 import { can } from "../shared/me";
 import { useLook } from "../shared/look";
@@ -257,9 +258,9 @@ export function Software() {
         <p id="update-text">{failed ? failed() : u ? versionLine(u) : "–"}</p>
         {askedVersion && (
           // the automatic update's question, as the banner under the header asks it (Ask.tsx)
-          <p id="update-card-ask" class="update-card-ask">
+          <div id="update-card-ask" class="update-card-ask">
             <span>{askText(askedVersion)}</span> <AskButtons prefix="update-card-ask" version={askedVersion} />
-          </p>
+          </div>
         )}
         <p>
           <a id="update-link" class={u && u.release_url ? undefined : "hidden"} href={(u && u.release_url) || undefined} target="_blank" rel="noopener noreferrer">
@@ -273,11 +274,10 @@ export function Software() {
         </div>
         <div class={"actions" + hid(asking.asking)}>
           <BusyButton id="update-check" label={t("update.check")} off={busy} run={() => loadUpdate(true)} />
-          <button ref={asking.ref} type="button" id="update-btn" {...busyProps("primary needs-update" + hid(!u || !u.can_update), busy)} onClick={ask}>{u ? t("update.to", { version: u.latest || "" }) : t("update.button")}</button>
+          <button ref={asking.ref} type="button" id="update-btn" {...busyProps("primary needs-update" + hid(!u || !u.can_update), busy || question.reading)} onClick={ask}>{u ? t("update.to", { version: u.latest || "" }) : t("update.button")}</button>
         </div>
         {asking.asking && (
-          // apt puts nothing back: the helper says how to go back instead
-          <Question text={u && u.manager ? t("update.confirmManaged", { version, manager: u.manager }) : t("update.confirm", { version })}
+          <Question text={updateQuestion(u, version, question.refused)}
             yes={t("update.to", { version })} no={t("action.cancel")} onNo={() => asking.done()} boxRef={asking.box}
             onYes={() => {
               asking.done(false);

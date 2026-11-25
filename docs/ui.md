@@ -301,6 +301,14 @@ and **Install now**, **Tonight** and **Skip this version**.
 The answer is the box's (`PUT /api/v1/update/answer`):
 Install now starts the update, Tonight leaves it to the night,
 Skip this version keeps the night from installing it until a newer release is out.
+While the server's next start refuses the settings file,
+Install now asks first, where it was pressed, in place of the three answers:
+the update's question, as Update asks it in Software update,
+with the sentence that the server does not come back until the file is fixed;
+its Install now starts the update, and Cancel gives the three answers back,
+the focus on Install now, with nothing sent.
+Install now reads that at the press (`GET /api/v1/restart`), turning meanwhile;
+without a refusal, or where the read fails, it starts the update at once.
 The question goes in every other browser at the answer's line in the log,
 and a refused answer says why under the buttons.
 Everyone else sees nothing new.
@@ -2213,10 +2221,19 @@ The server's sign, when it says an update is out, opens it at Software update.
   "GET /api/v1/update?refresh=1").
   Where updates cannot be started from here, the choice is off, with the reason.
   Under the version lines the automatic update's question, as under the header,
-  with the same three answers.
+  with the same three answers, Install now asking first there too
+  while the next start refuses the settings file.
   On a box with the update helper installed (packaging/README.md, "Updating"),
   **Update** (with `update`) installs it and restarts the server.
   If the new version does not come up, the old one is put back.
+  While the server's next start refuses the settings file,
+  Update's question ends with the sentence that the server stays down
+  until the file is fixed, as the restart's and the reboot's do:
+  the old version would not start either.
+  Update reads that at the press, turning meanwhile,
+  and asks once the answer is in (`GET /api/v1/restart`,
+  which a holder of `update` reads without `restart`);
+  a failed read asks as before.
   On a box the Debian package installed it says "Installed by apt",
   the channel is the suite of the apt source,
   and **Update** has the package's helper run apt;

@@ -10,15 +10,20 @@
  * version, in a banner under the header on every page (#update-ask-slot)
  * and in Software update. The answer is the box's (PUT
  * /api/v1/update/answer): it ends the question in every browser, which
- * reads the versions again at its change event. Everyone else sees
- * nothing new.
+ * reads the versions again at its change event. While the server's next
+ * start refuses the settings file, Install now asks first, where it was
+ * pressed, with the update's question and the sentence that the server
+ * stays down until the file is fixed (D14-A). Everyone else sees nothing
+ * new.
  */
 
+import type { UpdateInfo } from "../api";
 import { hid } from "../shared/cls";
 import { useLang } from "../shared/lang";
 import { can } from "../shared/me";
+import { busyProps, Question, useAsk } from "../shared/question";
 import { update } from "../shared/update";
-import { answerUpdate, data } from "./store";
+import { answerUpdate, type AskPlace, data, installNow, nowAsks } from "./store";
 
 /** asked is the version the question asks about, "" where the page asks nothing: no update due, no night, an answer kept, or a user without update. */
 export function asked(): string {
@@ -27,18 +32,54 @@ export function asked(): string {
   return u.latest;
 }
 
-/** AskButtons are the question's three answers, their ids prefix-now, prefix-tonight and prefix-skip, off while an answer is on its way; under them why the last one was refused. */
-export function AskButtons({ prefix, version }: { prefix: string; version: string }) {
+/**
+ * updateQuestion is the update's question about version: on a box a
+ * package manager updates, that the last update says how to go back,
+ * since it puts nothing back; elsewhere that the old version is put back
+ * where the new one does not come up; and where refused, the server's
+ * next start refusing the settings file, after it the sentence that the
+ * server does not come back until the file is fixed, as downUntilFixed
+ * (maintenance/) joins it to the restart's (D13-A): the old version
+ * would not start either.
+ */
+export function updateQuestion(u: UpdateInfo | null, version: string, refused: boolean): string {
+  // apt puts nothing back: the helper says how to go back instead
+  const q = u && u.manager ? t("update.confirmManaged", { version, manager: u.manager }) : t("update.confirm", { version });
+  return refused ? q + " " + t("restart.confirmRefused") : q;
+}
+
+/**
+ * AskButtons are the question's three answers, their ids prefix-now,
+ * prefix-tonight and prefix-skip, off while an answer is on its way or
+ * Install now reads; under them why the last one was refused. Install
+ * now reads first whether the server's next start refuses the settings
+ * file (installNow), turning meanwhile: where it does, it asks in place
+ * of the three, Yes answering now and Cancel giving them back with
+ * nothing sent; where it does not, or the read failed, it answers now at
+ * once.
+ */
+export function AskButtons({ prefix, version }: { prefix: AskPlace; version: string }) {
   useLang();
-  const off = data.answering;
+  const held = nowAsks[prefix];
+  const asking = useAsk<HTMLButtonElement>(held);
+  const reading = held.reading;
+  const off = data.answering || reading;
   const said = data.answerSaid;
+  const askedAbout = held.version;
   return (
     <>
-      <span class="update-ask-actions">
-        <button type="button" id={prefix + "-now"} class="primary" disabled={off} onClick={() => answerUpdate(version, "now")}>{t("update.ask.now")}</button>
+      <span class={"update-ask-actions" + hid(asking.asking)}>
+        <button ref={asking.ref} type="button" id={prefix + "-now"} {...busyProps("primary", reading, data.answering)} onClick={() => installNow(prefix, version)}>{t("update.ask.now")}</button>
         <button type="button" id={prefix + "-tonight"} disabled={off} onClick={() => answerUpdate(version, "tonight")}>{t("update.ask.tonight")}</button>
         <button type="button" id={prefix + "-skip"} disabled={off} onClick={() => answerUpdate(version, "skip")}>{t("update.ask.skip")}</button>
       </span>
+      {asking.asking && (
+        <Question text={updateQuestion(update.value, askedAbout, true)} yes={t("update.ask.now")} no={t("action.cancel")} onNo={() => asking.done()} boxRef={asking.box}
+          onYes={() => {
+            asking.done(false);
+            return answerUpdate(askedAbout, "now");
+          }} />
+      )}
       {said && <span id={prefix + "-said"} class="small warn-text" role="status">{said()}</span>}
     </>
   );
@@ -55,9 +96,9 @@ export function Ask() {
   useLang();
   const version = asked();
   return (
-    <p id="update-ask" class={"update-ask" + hid(!version)} role="note">
+    <div id="update-ask" class={"update-ask" + hid(!version)} role="note">
       <span id="update-ask-text">{version ? askText(version) : ""}</span>
       {version && <AskButtons prefix="update-ask" version={version} />}
-    </p>
+    </div>
   );
 }
