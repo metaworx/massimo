@@ -16,9 +16,14 @@ dpkg-maintscript-helper rm_conffile /etc/logrotate.d/massimo 0.14.0~alpha.2~ -- 
 
 # settings prints the lines of a settings file that set something, without
 # the comments and blank lines: a release that changes the template's
-# comments does not make an untouched file look filled in.
+# comments does not make an untouched file look filled in. A UTF-8 byte
+# order mark at the start of the first line goes first, as serve skips it:
+# kept, it makes the first comment a setting, and the template saved by an
+# editor that writes one would start a box that has no owner yet. Both
+# sides of the comparison are read here, so both lose it.
 settings() {
-	sed -e 's/^[[:space:]]*//' -e 's/[[:space:]]*$//' "$1" | grep -v -e '^#' -e '^$' || true
+	bom=$(printf '\357\273\277')
+	sed -e "1s/^$bom//" -e 's/^[[:space:]]*//' -e 's/[[:space:]]*$//' "$1" | grep -v -e '^#' -e '^$' || true
 }
 
 case "$1" in
