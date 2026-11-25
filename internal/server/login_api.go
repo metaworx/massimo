@@ -98,7 +98,7 @@ type tokenView struct {
 	KeyID int64 `json:"key_id,omitempty"`
 	// FromSettings marks, in a user's token list, the key that is the
 	// settings file's MASSIMO_API_TOKEN: it is changed or removed in the
-	// file, and the API does not revoke it (settingsKeyID).
+	// file, and the API does not revoke it (settingsKey).
 	FromSettings bool `json:"from_settings,omitempty"`
 }
 
@@ -435,24 +435,29 @@ func (s *Server) logout(w http.ResponseWriter, r *http.Request) error {
 // settingsKeyKept is the refusal of a revoke of the settings file's key.
 const settingsKeyKept = "the token is the settings file's MASSIMO_API_TOKEN: change or remove it in the settings file"
 
-// settingsKeyID is the id of the live API key that is the settings
-// file's MASSIMO_API_TOKEN, 0 where the file has none or the store holds
-// no live key of it. The store keeps each token's hash, unique, so the
-// hash of the token the server holds from the file (legacyToken, which
-// SetToken follows) finds that one row; its label is no mark, any key
-// may carry it. The API does not revoke that key (AP MobileApp v1.4,
-// D86-A): the next start would not add it back, its hash being taken
+// settingsKeyHeld is the refusal of the removal of the user that holds
+// the settings file's key, a format with the user's name.
+const settingsKeyHeld = "user %s holds the settings file's MASSIMO_API_TOKEN: change or remove it in the settings file first"
+
+// settingsKey is the live API key that is the settings file's
+// MASSIMO_API_TOKEN, with its user's id, ok false where the file has none
+// or the store holds no live key of it. The store keeps each token's
+// hash, unique, so the hash of the token the server holds from the file
+// (legacyToken, which SetToken follows) finds that one row; its label is
+// no mark, any key may carry it. The API ends that key neither by a
+// revoke (AP MobileApp v1.4, D86-A) nor with its user's removal (D89-A):
+// the next start would not add it back, its hash being taken
 // (store.Bootstrap), so it is changed or removed in the file.
-func (s *Server) settingsKeyID(ctx context.Context) (int64, error) {
+func (s *Server) settingsKey(ctx context.Context) (store.Token, bool, error) {
 	file := s.legacyToken()
 	if file == "" || s.opts.Store == nil {
-		return 0, nil
+		return store.Token{}, false, nil
 	}
 	tok, ok, err := s.opts.Store.TokenByHash(ctx, store.HashToken(file))
 	if err != nil || !ok || tok.Kind != store.TokenAPI {
-		return 0, err
+		return store.Token{}, false, err
 	}
-	return tok.ID, nil
+	return tok, true, nil
 }
 
 // deleteMyToken handles DELETE /api/v1/me/token: the token that makes the

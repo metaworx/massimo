@@ -747,6 +747,12 @@ of the removal in UTC (`-<id>` added where that is taken),
 which frees the name; `{"ok": true, "name": "anna"}`.
 The last enabled owner without an end date stays (`409`);
 a user cannot remove itself.
+The user that holds the settings file's key, `MASSIMO_API_TOKEN`,
+stays too (`409`), as the key's revoke is refused (below, "Tokens"):
+the removal would revoke the key with the user's tokens,
+and the next start would not add it back, its hash being taken;
+the key is changed or removed in the settings file first
+(AP MobileApp v1.4, D89-A).
 
 ### Tokens: /api/v1/users/{name}/tokens
 

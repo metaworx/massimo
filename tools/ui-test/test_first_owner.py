@@ -450,6 +450,84 @@ def test_the_passwords_are_checked_before_anything_is_sent(new_context, case, wa
     assert not sent(page, "POST", "/register") and not sent(page, "POST", "/api/v1/users"), "nothing sent"
 
 
+def test_the_form_says_only_what_is_wrong_now(new_context, case, watch, guard):
+    """Each Create the owner says what is wrong at that submit alone and
+    puts the focus on the field to change, in its handler: a mismatch says
+    so with the focus on Again; Again fixed and a bad name, the name's rule
+    alone, the mismatch's line gone, the focus on the name. No password at
+    all the browser refuses itself (the fields are required), Password
+    invalid and in focus. Nothing is sent. Fails on the page before: the
+    mismatch's line stayed beside the name's rule, and the focus stayed on
+    Create the owner (the walk-through of AP LooseEnds, finding 3)."""
+    page = start_page(new_context, guard, watch, OPEN)
+    owner_card(page)
+    submit = page.locator("#setup-form button[type=submit]")
+    fill_owner(page, password="pw", again="other")
+    submit.click()
+    assert wait_until(page, "document.getElementById('setup-msg').textContent === t('setup.mismatch')", 3), "the passwords differ"
+    assert page.evaluate("document.activeElement.id") == "setup-again", "the focus on Again"
+    fill_owner(page, name="bad name", password="pw", again="pw")
+    submit.click()
+    assert wait_until(page, "!document.getElementById('setup-name-msg').classList.contains('hidden')", 3), "the name's rule"
+    assert page.locator("#setup-name-msg").inner_text() == NAME_BAD[case.lang], "the store's rule"
+    assert page.locator("#setup-msg").is_hidden(), "and no line of the earlier attempt"
+    assert page.evaluate("document.activeElement.id") == "setup-user", "the focus on the name"
+    fill_owner(page, password="", again="")
+    submit.click()
+    assert wait_until(page, "document.activeElement && document.activeElement.id === 'setup-password'", 3), "the browser's focus on Password"
+    assert page.evaluate("document.getElementById('setup-password').matches(':invalid')"), "Password refused by the browser"
+    assert not sent(page, "POST", "/register") and not sent(page, "POST", "/api/v1/users"), "nothing sent"
+
+
+def test_the_owner_card_empties_its_passwords_after_the_owner(new_context, case, watch, guard):
+    """A mismatch and Keep it open… and Back keep both passwords. Once the
+    owner is made and the card has closed, the two stay while the page's
+    read of the owner's settings, its first after the close, is held, and
+    go once it has settled: both empty and hidden, the name kept (AP
+    LooseEnds, D13, D41-A). Fails on the page before: they kept the
+    passwords until the next opening (FirstOwner D43)."""
+    stage = {"me": OPEN}
+    page = start_page(new_context, guard, watch, lambda: stage["me"])
+    owner_card(page)
+    stub_creation(page, [])
+    held, once = [], {"held": False}
+
+    def prefs(route):
+        if route.request.method == "GET" and not once["held"]:
+            once["held"] = True
+            held.append(route)
+            return
+        route.continue_()
+
+    page.route("**/api/v1/me/preferences", prefs)
+    fill_owner(page, password="pw", again="other")
+    page.locator("#setup-form button[type=submit]").click()
+    assert wait_until(page, "document.getElementById('setup-msg').textContent === t('setup.mismatch')", 3), "the passwords differ"
+    page.locator("#setup-keep-open").click()
+    page.locator("#keep-open-back").click()
+    frames(page)
+    assert [page.locator(f).input_value() for f in ("#setup-password", "#setup-again")] == ["pw", "other"], \
+        "a refusal and Back keep both"
+    page.locator("#setup-again").fill("pw")
+    eye = page.locator("#setup-step .pw-eye").last
+    eye.wait_for(state="visible")
+    eye.click()
+    assert page.locator("#setup-again").get_attribute("type") == "text", "Again shown"
+    stage["me"] = None
+    page.locator("#setup-form button[type=submit]").click()
+    assert wait_until(page, f"!({DIALOG_OPEN})", 10), "the owner made, the card closed"
+    assert wait_held(page, held), "the owner's settings read, held"
+    frames(page)
+    assert [page.locator(f).input_value() for f in ("#setup-password", "#setup-again")] == ["pw", "pw"], \
+        "kept while the read after the close has not settled"
+    held.pop().continue_()
+    assert wait_until(page, "document.getElementById('setup-password').value === '' && document.getElementById('setup-again').value === ''", 10), \
+        "both emptied once it has"
+    for f in ("#setup-password", "#setup-again"):
+        assert page.locator(f).get_attribute("type") == "password", f"{f} hidden"
+    assert page.locator("#setup-user").input_value() == "owner", "the name kept"
+
+
 def test_the_name_is_checked_as_it_is_typed(new_context, case, watch, guard):
     """The owner's name, read through the field alone, is checked 2 s
     after the last keystroke, under the paused clock: nothing said before,

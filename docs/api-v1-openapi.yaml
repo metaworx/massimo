@@ -783,7 +783,10 @@ paths:
     delete:
       summary: Remove a user
       x-capability: users
-      description: The user's tokens are revoked; its row stays for the audit. The last enabled owner without an end date stays (409).
+      description: >-
+        The user's tokens are revoked; its row stays for the audit. The last enabled owner without an end date stays
+        (409), and so does the user that holds the settings file's MASSIMO_API_TOKEN (409), whose key the next start
+        would not add back: it is changed or removed in the settings file first.
       parameters: [{$ref: "#/components/parameters/name"}, {$ref: "#/components/parameters/idempotencyKey"}]
       responses:
         "200":
@@ -799,7 +802,7 @@ paths:
         "403": {$ref: "#/components/responses/Forbidden"}
         "404": {$ref: "#/components/responses/NoUser"}
         "409":
-          description: The last enabled owner without an end date
+          description: The last enabled owner without an end date, or the user that holds the settings file's MASSIMO_API_TOKEN
           content:
             application/json:
               schema: {$ref: "#/components/schemas/Error"}
