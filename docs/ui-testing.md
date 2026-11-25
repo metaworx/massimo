@@ -1,4 +1,4 @@
-# Testing the web UI (v1.24.0)
+# Testing the web UI (v1.25.0)
 
 An evaluation of a Cypress suite for the web UI, against the alternatives:
 what the Playwright smoke test covers today and what it cannot do well,
@@ -883,6 +883,17 @@ the server's and the test's, in order,
   the four cases' among them (`test_log.py`).
 - **The server sets** keep the server's 10 s poll of the fake Cube,
   which brings no line of its own (the fake Cube's states do not change).
+  Their fake Cube has every memory slot free (`-free-slots 50`,
+  AP ServerTraffic, D1-A):
+  with the fake's default of one radiogram pending,
+  the server reconnected to read its budget two minutes after every write,
+  and the reconnect's burst,
+  `metadata`, a `config` event per device and `connected`,
+  took back what a test had told and read the page's data again,
+  in whichever test ran then.
+  A test that wants a reconnect plants one (`POST …/cubes/<serial>/refresh`);
+  the structure checks' reconnect, twelve minutes after a change,
+  and the refresh every six hours stay, and fall outside one test's time.
   What changes is their age:
   the window contact's window, open from the start (`greeting.txt`),
   counts as open long five minutes after its set started,

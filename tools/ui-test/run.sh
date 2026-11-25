@@ -48,6 +48,12 @@
 # The fake Cube has a device that joins pairing mode two seconds after
 # n:, a copy of the radiator thermostat 0a010d as 0abcde (TEQ0000001),
 # and joins again after a t: deleted it, so that every case can pair it.
+# It has every memory slot free (-free-slots 50), so that its S replies
+# say no radiogram pending: by default they say one, and the server then
+# reconnects to read its budget two minutes after every write, whose
+# burst of events and reads would fall into whichever test runs then
+# (AP ServerTraffic, D1-A). A test that wants a reconnect plants one
+# (POST …/refresh).
 #
 # The fake Cube also answers UDP discovery, as a Cube that is not
 # configured (KEQ0000000), on a loopback port the server asks instead of
@@ -132,7 +138,7 @@ start_set() {
 	mkdir -p "$d/down"
 	cd "$d"
 	env -i PATH="$PATH" HOME="$HOME" "$work/massimo" fakecube -greeting "$here/greeting.txt" \
-		-listen "$cube" -discovery "$disc" \
+		-listen "$cube" -discovery "$disc" -free-slots 50 \
 		-pair 0a010d,0abcde,TEQ0000001 > fakecube.log 2>&1 &
 	pids="$pids $!"
 	env -i PATH="$PATH" HOME="$HOME" MASSIMO_API_TOKEN="$token" \
