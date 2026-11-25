@@ -34,7 +34,7 @@ refer to linked documents for extended guidance.
   6. Commit Policy (STRICT)
   7. Additional References
   8. Document Governance
-- Massimo — Project Contract (v1.19.0)
+- Massimo — Project Contract (v1.20.0)
   1. Project Facts
   2. Primary References
   3. Project-Specific Conventions
@@ -431,7 +431,7 @@ Their values come from `GUIDELINES/config.ini`.
 ---
 
 
-# Massimo — Project Contract (v1.19.0)
+# Massimo — Project Contract (v1.20.0)
 
 What binds work in this project, for everyone working on it.
 Inlined into `/AGENTS.md` for agents and into `GUIDELINES/README.md` for people,
@@ -489,6 +489,15 @@ not this block:
 - `:!packaging/site/docs.js`
 - `:!packaging/site/site.css`
 - `:!packaging/site/privacy.html`
+- `:!*_test.go`
+- `:!**/testdata/**`
+- `:!packaging/apt/test.sh`
+- `:!packaging/deb/test.sh`
+- `:!packaging/deb/systemd-test.sh`
+- `:!packaging/deb/systemd-cases.sh`
+- `:!packaging/launchd/template-test.sh`
+- `:!app/android/app/src/test/**`
+- `:!app/android/app/src/androidTest/**`
 <!-- END GENERATED SHIPPED-PATHS -->
 
 A change touching only the paths listed below may skip the test suite:
