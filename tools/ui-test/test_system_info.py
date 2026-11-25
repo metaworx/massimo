@@ -5,14 +5,21 @@
 start and clock, the certificate (or a proxy's), how it was installed,
 the computer, its full name and the interfaces it listens on, and the
 address the server sees this browser at; first as the test server
-answers, in a terminal without TLS on the loopback, then stubbed boxes."""
+answers, in a terminal without TLS on the loopback, then stubbed boxes;
+and the fold Credits and licences, fetched once from /ui/credits.json
+(internal/credits), an answer after the page was left or after a
+sign-out changing nothing."""
 import json
+import os
 import re
 import time
 
 import pytest
 
-from helpers import scroll_width, show_view, wait_until
+from conftest import TOKEN, URL
+from helpers import OPERATOR_PASSWORD, frames, hold, owner_page, safe_route, scroll_width, show_view, sign_out, wait_held, wait_until
+from test_login import sign_in
+from test_sign_out_late import nothing_waits
 
 OTHER = {"en": "Other: by hand, a container or another supervisor",
          "de": "Andere: von Hand, ein Container oder ein anderer Supervisor"}
@@ -265,4 +272,205 @@ def test_system_info_cube_proxies(page, case):
     show_view(page, "info")
     assert wait_until(page, "document.getElementById('info-proxies').textContent === '–'", 5), "none listed: a dash"
     assert page.locator("#info-page .section-badges .flag").count() == 0, "no badge"
+    show_view(page, "tiles")
+
+
+CREDITS = "**/ui/credits.json"
+CREDITS_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "..", "internal", "credits", "credits.json")
+FAILED = {"en": "The credits could not be loaded: broken", "de": "Die Mitwirkenden konnten nicht geladen werden: broken"}
+
+
+def credit_requests(page):
+    """The page's requests of the credits, from now on."""
+    seen = []
+    page.on("request", lambda r: seen.append(r.url) if r.url.split("?")[0].endswith("/ui/credits.json") else None)
+    return seen
+
+
+def toggle_credits(page):
+    """Opens or closes the fold Credits and licences, as a user does."""
+    page.locator("#credits-info > summary").click()
+
+
+def entry(page, name):
+    """An entry's fold in the credits, by its name."""
+    return page.locator(f"#credits-info .credit[data-name='{name}']")
+
+
+def held_first(page, held):
+    """Holds the first request of the credits until the test lets it go,
+    and lets every later one through to the server."""
+    def handle(route):
+        if held:
+            route.continue_()
+        else:
+            held.append(route)
+    safe_route(page, CREDITS, handle)
+
+
+def listed(name):
+    """An entry of the committed credits.json, by its name."""
+    with open(CREDITS_FILE, encoding="utf-8") as f:
+        return next(e for e in json.load(f)["entries"] if e["name"] == name)
+
+
+def test_credits_fetched_once(page, case):
+    """System info's fold Credits and licences: nothing fetched before it
+    opens; at its first opening the list, Massimo first, Preact with its
+    version and licence as credits.json has them, its text in a fold of
+    its own, as text, in a box that scrolls and that its file's name
+    labels; an entry whose files are under other licences too says so,
+    and one that includes what it has no texts for says that, in the
+    page's language; closed and opened again, and System info left and
+    shown again, nothing fetched again. Fails on the page before: there
+    is no such fold."""
+    seen = credit_requests(page)
+    show_view(page, "info")
+    page.locator("#credits-info > summary").wait_for()
+    frames(page)
+    assert not seen, "nothing fetched before the fold opens"
+    toggle_credits(page)
+    preact = entry(page, "preact")
+    preact.wait_for()
+    assert len(seen) == 1, f"fetched once as it opens: {seen}"
+    names = page.evaluate("[...document.querySelectorAll('#credits-info .credit')].map((e) => e.dataset.name)")
+    assert names[:2] == ["Massimo", "Go"], f"Massimo first, then Go: {names[:3]}"
+    assert {"golang.org/x/crypto", "modernc.org/sqlite", "@preact/signals", "@tabler/icons", "@serenity-kit/opaque"} <= set(names), \
+        "the modules, the vendored packages, the icons and the OPAQUE client"
+    assert str(len(names)) in page.locator("#credits-info-sum").inner_text(), "the number of entries in the fold's head"
+    off = page.evaluate("""[...document.querySelectorAll('#credits-info .credit-head')].filter((h) => {
+      const beside = h.parentElement.getBoundingClientRect().left + 4;
+      return [...h.children].some((c) => [...c.getClientRects()].some((r) => r.left < beside));
+    }).map((h) => h.textContent)""")
+    assert not off, f"a head that wraps goes on under the name, not under the chevron: {off}"
+    broken = page.evaluate("[...document.querySelectorAll('#credits-info .credit-id')].filter((e) => e.getClientRects().length > 1).map((e) => e.textContent)")
+    assert not broken, f"a licence's identifier does not break inside itself: {broken}"
+    want = listed("preact")
+    head = preact.locator("summary").inner_text().split()
+    assert head == ["preact", want["version"], want["licence"]], f"Preact's name, version and licence ({head})"
+    assert preact.locator("pre").count() == 0, "its text not drawn while its fold is closed"
+    preact.locator("summary").click()
+    text = preact.locator("pre.credit-text")
+    text.first.wait_for()
+    assert text.count() == 1 and "Permission is hereby granted, free of charge" in text.inner_text(), "Preact's licence text"
+    assert page.evaluate("document.querySelector(\"#credits-info .credit[data-name='preact'] pre\").children.length") == 0, \
+        "the text as text"
+    assert "third_party/preact/preact" in preact.locator(".credit-origin").inner_text(), "where the repository holds it"
+    assert text.evaluate("(e) => document.getElementById(e.getAttribute('aria-labelledby')).textContent") == "LICENSE · MIT", \
+        "the box named by its file and that file's licence"
+    sqlite = entry(page, "modernc.org/sqlite")
+    mixed = page.evaluate("t('credits.mixed', { licence: 'BSD-3-Clause' })")
+    assert sqlite.locator(".credit-licence").inner_text() == mixed, "an entry whose files are under other licences too says so"
+    opaque = entry(page, "@serenity-kit/opaque")
+    includes = opaque.locator(".credit-includes").text_content()
+    assert includes == page.evaluate("(what) => t('credits.includes', { what })", listed("@serenity-kit/opaque")["includes"]) \
+        and "opaque-ke 4.0.1" in includes, f"what it includes, whose texts are not here, in the page's words ({includes!r})"
+    massimo = entry(page, "Massimo")
+    massimo.locator("summary").click()
+    box = massimo.locator("pre.credit-text")
+    assert "GNU AFFERO GENERAL PUBLIC LICENSE" in box.inner_text(), "Massimo's own licence"
+    assert box.evaluate("(e) => e.scrollHeight > e.clientHeight && getComputedStyle(e).overflowY === 'auto'"), \
+        "a long text scrolls inside its box"
+    assert box.evaluate("(e) => e.scrollWidth <= e.clientWidth"), "its lines wrap inside the box"
+    assert scroll_width(page) <= case.width, "no horizontal scroll with the licences open"
+    toggle_credits(page)
+    toggle_credits(page)
+    show_view(page, "tiles")
+    show_view(page, "info")
+    assert entry(page, "preact").locator("pre").first.is_visible(), "the fold and Preact's still open"
+    frames(page)
+    assert len(seen) == 1, f"fetched once: {seen}"
+    show_view(page, "tiles")
+
+
+def test_credits_failed_and_tried_again(page, case, watch):
+    """A fetch of the credits that fails says why in the fold, with Try
+    again; a try that fails again gives the focus back to Try again,
+    which lost it while it was off; one that goes through gives it to the
+    first entry."""
+    watch.expected.append(("/ui/credits.json", 500))
+    failing = [True]
+    tries = []
+
+    def handle(route):
+        tries.append(1)
+        if failing[0]:
+            route.fulfill(status=500, content_type="text/plain", body="broken")
+        else:
+            route.continue_()
+    safe_route(page, CREDITS, handle)
+    show_view(page, "info")
+    toggle_credits(page)
+    retry = page.locator("#credits-retry")
+    retry.wait_for()
+    assert page.locator("#credits-info-body .bad").inner_text() == FAILED[case.lang], "why the fetch failed"
+    assert page.locator("#credits-info .credit").count() == 0, "no list"
+    retry.focus()
+    page.keyboard.press("Enter")
+    assert wait_until(page, "!document.getElementById('credits-retry').disabled", 5) and len(tries) == 2, "the try failed again"
+    frames(page)
+    assert page.evaluate("document.activeElement === document.getElementById('credits-retry')"), \
+        "Try again has the focus back after a try that failed"
+    failing[0] = False
+    page.keyboard.press("Enter")
+    entry(page, "Massimo").wait_for()
+    assert page.evaluate("document.activeElement === document.querySelector('#credits-info .credit > summary')"), \
+        "the first entry takes the focus from Try again"
+    assert page.locator("#credits-retry").count() == 0, "Try again gone"
+    show_view(page, "tiles")
+
+
+def test_credits_answer_after_leaving(page, case):
+    """The credits' answer that comes after the page has left System info
+    changes nothing; shown again with the fold open, the page fetches
+    them then."""
+    held = []
+    held_first(page, held)
+    seen = credit_requests(page)
+    show_view(page, "info")
+    toggle_credits(page)
+    assert wait_held(page, held), "the fetch is on its way"
+    show_view(page, "tiles")
+    with page.expect_response(lambda r: r.url.endswith("/ui/credits.json")) as answered:
+        held[0].continue_()
+    answered.value.finished()
+    frames(page)
+    assert page.locator("#credits-info .credit").count() == 0, "the late answer drew nothing"
+    show_view(page, "info")
+    entry(page, "Massimo").wait_for()
+    assert len(seen) == 2, f"fetched again as System info is shown with the fold open: {seen}"
+    show_view(page, "tiles")
+
+
+def test_credits_answer_after_sign_out(new_context, case, watch, guard):
+    """The credits' answer of the user before comes while the next user's
+    System info, the fold still open, waits for a fetch of its own: it
+    changes nothing, and the fetch under way stays the next user's (the
+    fold opened again starts none beside it); its answer draws the list.
+    Only the session's number tells the two answers apart here."""
+    page = owner_page(new_context, guard, watch, URL, TOKEN)
+    held, sent = [], []
+    hold(page, CREDITS, "GET", held, sent)
+    show_view(page, "info")
+    toggle_credits(page)
+    assert wait_held(page, held), "the owner's fetch is on its way"
+    sign_out(page)
+    sign_in(page, "operator", OPERATOR_PASSWORD)
+    assert page.evaluate("state.me.user.name") == "operator", "the next user is in"
+    show_view(page, "info")
+    assert wait_held(page, held, n=2), "the operator's System info fetches the credits, the fold still open"
+    with page.expect_response(lambda r: r.url.endswith("/ui/credits.json")) as answered:
+        held[0].continue_()
+    answered.value.finished()
+    frames(page)
+    assert page.locator("#credits-info .credit").count() == 0, "the answer of the user before drew nothing"
+    toggle_credits(page)
+    toggle_credits(page)
+    frames(page)
+    assert len(sent) == 2, f"the operator's fetch still under way, none beside it: {sent}"
+    with page.expect_response(lambda r: r.url.endswith("/ui/credits.json")) as answered:
+        held[1].continue_()
+    answered.value.finished()
+    entry(page, "Massimo").wait_for()
+    nothing_waits(page)
     show_view(page, "tiles")

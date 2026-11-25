@@ -1555,12 +1555,37 @@ settings file, the data directory, the listen address, TLS, the log level
 and every `MASSIMO_*` variable with where it came from, a key, an IV, a
 token or a password as "set, not shown"
 (`docs/api-v1.md`, "GET /api/v1/store, GET /api/v1/config").
+Last, for every role, **Credits and licences** lists everything the server includes:
+Massimo itself, Go's runtime and standard library, the Go modules it links,
+and what the repository vendors (Preact and its signals, Tabler's icons,
+the OPAQUE client), its head the number of entries;
+each entry a fold of its own, its head the name, the version and the licence,
+Go's the version the server was built with,
+"licence in its text" where the text is known by no name,
+and "other licences among its files" where not all its files are under that one;
+its body where it comes from, what else it includes where its note names it
+(the Rust crates in the OPAQUE client), with the words that their own licence
+texts are not reproduced here,
+and each file of its licence (`LICENSE`, `NOTICE`, `PATENTS` and the like)
+with the licence it is known by, its text as text in a box that scrolls,
+which the file's name labels.
+The list is `/ui/credits.json`, the file `make credits` writes into `internal/credits/`
+and the server embeds, Go's version set to the binary's,
+served as the page's other files are (revalidated, an ETag);
+the data hold names and identifiers, every sentence around them is the page's;
+the page fetches the list as the fold is first opened, and not again while it holds it;
+a fetch that fails says why in the fold, with **Try again**;
+once the list comes its first entry takes the focus,
+and a try that fails again gives it back to **Try again**;
+an answer that comes after a sign-out, or after the page has left System info,
+changes nothing, and a fold left open fetches the list when the page is shown again.
+`massimo credits` prints the same list (`README.md`, "Command line").
 The page is drawn in place as its facts are read again,
 while a certificate is being read and each time the page is shown,
 and as its clock ticks:
 the folds stay open, a text selected stays selected
 and a copy says "Copied" until it fades.
-A sign-out forgets the facts, the store and the settings in effect,
+A sign-out forgets the facts, the store, the settings in effect and the credits,
 and ends the readings of a certificate;
 the next user who opens the page reads them again.
 While it is shown, the page follows the server's events:
