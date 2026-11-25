@@ -517,6 +517,12 @@ func TestListenDropIns(t *testing.T) {
 			t.Errorf("%q accepted", bad)
 		}
 	}
+	// install names its own -listen, not serve's setting as HealthURL does.
+	for bad, want := range map[string]string{":0": `-listen ":0": bad port`, "80": `-listen "80": address 80: missing port in address (want host:port or :port)`} {
+		if _, _, err := listenDropIns(bad, false, ""); err == nil || err.Error() != want {
+			t.Errorf("%q: %v, want %s", bad, err, want)
+		}
+	}
 }
 
 func TestSetEnvLines(t *testing.T) {

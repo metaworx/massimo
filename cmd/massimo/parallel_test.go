@@ -72,6 +72,7 @@ var serialTests = map[string]string{
 	"TestServiceEndWithoutStop":                    "swaps theService, sets ProgramData (tempServiceLog)",
 	"TestServiceStopWaitsForServe":                 "swaps theService, sets ProgramData (tempServiceLog)",
 	"TestServiceStopClosesTheStore":                "swaps theService, sets the Cube's address",
+	"TestUpdateHelperListenKeepsTheStart":          "swaps theService, sets ProgramData (tempServiceLog) and MASSIMO_UPDATE_API",
 	"TestRebootRequester":                          "sets rebootTake and rebootPoll",
 	"TestWindowsRebooter":                          "swaps runCommand, sets SystemRoot",
 	"TestHealthClientOwnAddresses":                 "swaps interfaceAddrs",

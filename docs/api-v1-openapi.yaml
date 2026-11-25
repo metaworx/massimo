@@ -3687,7 +3687,7 @@ paths:
         "401": {$ref: "#/components/responses/Unauthorized"}
         "429": {$ref: "#/components/responses/LockedOut"}
         "403":
-          description: The caller's role lacks update, no API token configured, no update helper, or Windows
+          description: The caller's role lacks update, no API token configured, no update helper, or the reason GET's blocked gives (a package manager, a job object on Windows, a listen address the helper cannot ask, a development build)
           content:
             application/json:
               schema: {$ref: "#/components/schemas/Error"}
@@ -5036,7 +5036,7 @@ components:
         checked_at: {type: string, format: date-time}
         check_error: {type: string}
         can_update: {type: boolean, description: POST would start an update}
-        blocked: {type: string, description: "Why an update cannot be started from the API (a package manager owning the binary without a helper of its own, no token, no helper, a development build)"}
+        blocked: {type: string, description: "Why an update cannot be started from the API (a package manager owning the binary without a helper of its own, no token, no helper, on Windows and under brew a listen address the helper cannot ask /healthz at, named by its setting, a development build)"}
         helper: {$ref: "#/components/schemas/UpdateStatus"}
         history:
           type: array

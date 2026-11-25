@@ -4,6 +4,7 @@
 package install
 
 import (
+	"errors"
 	"fmt"
 	"net"
 	"os"
@@ -21,15 +22,25 @@ const (
 	HealthDropIn = UnitDir + "/massimo-update.service.d/listen.conf"
 )
 
-// splitListen checks a listen address: host:port or :port, the port a
-// number.
+// splitListen checks a listen address of install's -listen (readListen).
 func splitListen(addr string) (host, port string, err error) {
+	if host, port, err = readListen(addr); err != nil {
+		return "", "", fmt.Errorf("-listen %q: %w", addr, err)
+	}
+	return host, port, nil
+}
+
+// readListen reads a listen address: host:port or :port, the port a
+// number from 1 to 65535, so not 0 and no service name; its error says
+// what is wrong and adds no prefix of its own: the caller names the
+// address and the setting.
+func readListen(addr string) (host, port string, err error) {
 	host, port, err = net.SplitHostPort(addr)
 	if err != nil {
-		return "", "", fmt.Errorf("-listen %q: %v (want host:port or :port)", addr, err)
+		return "", "", fmt.Errorf("%v (want host:port or :port)", err)
 	}
 	if n, err := strconv.Atoi(port); err != nil || n < 1 || n > 65535 {
-		return "", "", fmt.Errorf("-listen %q: bad port", addr)
+		return "", "", errors.New("bad port")
 	}
 	return host, port, nil
 }
@@ -81,11 +92,14 @@ func listenFromDropIn(b []byte) string {
 
 // HealthURL is the server's /healthz for a listen address (host:port or
 // :port) by the rule of the drop-ins and the macOS plist, https:// when
-// the server has TLS; serve uses it on Windows for the helper it starts.
+// the server has TLS; serve uses it on Windows and under brew for the
+// helper it starts. An address it cannot read, port 0 or a service name
+// among them, has none: its error names serve's setting, "-listen or
+// MASSIMO_LISTEN: …", and serve blocks updates from the API with it.
 func HealthURL(listen string, tls bool) (string, error) {
-	host, port, err := splitListen(listen)
+	host, port, err := readListen(listen)
 	if err != nil {
-		return "", err
+		return "", fmt.Errorf("-listen or MASSIMO_LISTEN: the update helper cannot ask %q for /healthz: %w", listen, err)
 	}
 	return healthURL(host, port, tls), nil
 }
