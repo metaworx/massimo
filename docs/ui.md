@@ -1080,13 +1080,51 @@ Every room has a tile:
   from the eQ-3 manuals; an explanation shown stays shown when its tab is drawn again.
 
 The **House** tile, named after the chosen Cube with the cube before its name
-("All rooms of …" its tooltip), sets several rooms at once: ECO, AUTO,
-COMFORT or MANU with a temperature, permanently or until a date and time,
-ECO and COMFORT each room's own presets, as its tile's More has them;
-its **Send** is off while no room is ticked,
+("All rooms of …" its tooltip), sets several rooms at once in one form,
+opened by a button of its modes' row:
+ECO, AUTO, COMFORT, MANU, or **Holiday**, its case before it,
+outlined in the accent colour.
+The form's choice of the five sets what it offers and its defaults:
+
+| Choice | Temperature | Duration |
+|--------|-------------|----------|
+| ECO, COMFORT | none: each room's own preset, as its tile's More has them | Permanently or until a date |
+| AUTO | none | none |
+| MANU | a field, the first room's setpoint | Permanently or until a date |
+| Holiday | a field, OFF (4.5) | until a date alone, a week ahead at 06:00 |
+
+Another choice in the form gives its defaults
+to a temperature and an end the user has not changed,
+and keeps those the user typed or stepped;
+the date and time are shown only with **Until**,
+never while **Permanently** is chosen,
+and a field hidden is no part of what is sent.
+An end that has passed is refused at **Send**, the field marked and saying why;
+one the user typed that has passed by the next open is forgotten there,
+the choice's default instead.
+Holiday sends each room ticked its holiday,
+one room command after another,
+each room's outcome in the result line, as the other choices do.
+Its **Send** is off while no room is ticked,
 the rooms a choice of checkboxes with **All rooms** first.
-What its panel holds stays when the rooms load again and when it closes:
+What its form holds stays when the rooms load again and when it closes:
 the rooms ticked, the mode, the end typed.
+
+Under the modes' row, two rows give the house's lowest and highest:
+the thermometer with **IS**, the lowest and the highest measured temperature,
+and the gauge with **SET**, the lowest and the highest setpoint,
+OFF where it is,
+each short label a tip with its full term, as on a room's tile.
+They are taken from the rooms' virtual wall thermostats,
+a room without a value passed over, and name no room;
+a stale measured temperature is left out while any room has a fresh one,
+as the server leaves a stale thermostat out within a room,
+and with only stale ones they are shown, greyed as a tile greys them;
+a row without any value shows "–".
+On a phone the two rows stand one under the other,
+the lowest under the lowest and the highest under the highest;
+where there is room, on one line.
+A tap on a value does nothing.
 
 **Devices without a room** are listed at the end:
 a device just paired, or one the original software paired through the proxy
@@ -2754,7 +2792,7 @@ which reads the written name alone), by the places the table names, each of them
 |---|---|---|
 | `state.cubes`, `state.found` | `loadCubes`, `addFound` (home.js, the stream's `cube_found`), `clearCubeData` | a signal: the header, the Cubes, Backup and restore, the log's choices, the House tile's name |
 | `state.serial`, `state.tz`, `state.serverDown`, `state.newVersion` | `state.serial` by `init` (the Cube stored), `loadCubes` and `selectCube`; `state.tz` by `loadTimeZone`; `state.serverDown` by `serverReached`, `state.newVersion` by `checkVersion` (header.js) | a signal |
-| `state.rooms` | `loadRooms`, `clearCubeData`; a room's `devices`, `vwt`, `ready`, `stale` by `updateDevice` (rooms.js) | the list a signal, each room a `live` item, so that a state event draws its tile alone; a reader across all rooms (the House tile, a room's copy, the log's names, `rfLabel`) reads the devices `untracked` and follows the list |
+| `state.rooms` | `loadRooms`, `clearCubeData`; a room's `devices`, `vwt`, `ready`, `stale` by `updateDevice` (rooms.js) | the list a signal, each room a `live` item, so that a state event draws its tile alone; a reader across all rooms (the House tile, a room's copy, the log's names, `rfLabel`) reads the devices `untracked` and follows the list; the House tile's lowest and highest read each room's `vwt`, in a part of their own |
 | `state.unlisted`, `state.roomsOf` | `loadRooms`, `clearCubeData`; `state.unlisted` also by `updateDevice` (rooms.js) | a signal |
 | `state.settings` | `loadSettings` (at the start and at every applying of the settings), `setSetting` | a `live` object, a signal per setting |
 | `state.device` | `loadSettings` (as this browser keeps them), `storeDeviceOverrides` | the settings kept for this device alone, a signal |
@@ -2999,7 +3037,7 @@ a value's age it takes from `received` of `rooms.js`, as the rooms do.
 | `Dropdown` | `menu.tsx` | a menu that drops down (`dropdown`), with `arrows` its arrow keys (`menuArrows`) and with `focusCurrent` the focus on its current item when it opens (among `arrows`' items, else its list's buttons that are on); a click on any button of its list closes it, as `dropdown()` of `components.js` does for every menu of the page, but on one marked `data-keep-open` (`MenuItem`'s `keepOpen`) | `id`, `cls`, `summaryId`, `summaryCls`, `label` (without it the summary is named by its text), `title` (where the tooltip is not the label), `summary`, `listCls`, `arrows` (a selector of its items), `focusCurrent`, `busy` (the summary turning while a request sent from its list runs), `onClick`, `onOpen` (told each time it opens), `onClose` (told each time it closes), the items as children |
 | `MenuItem` | `menu.tsx` | a menu's button, its icon, label, the icons after it and a grey second line | `icon`, `blank`, `label`, `icons`, `sub` (the second line, a text or elements, there whenever given, empty too), `subCls` (its class), `cls`, `value` (its `data-value`), `current`, `disabled`, `busy`, `keepOpen` (a click on it leaves the menu open, for an item whose result shows in the list), `onClick`; `current` "page" for the entry of the page shown (☰'s), `id`, `title`, `aria` (its name for a screen reader), `labelId` and `after` (a mark at its end) where the page names them |
 | `Picker` | `menu.tsx` | a menu that chooses one item, its summary the chosen one | `id`, `cls`, `summaryId`, `summaryCls`, `entries` (an item `{ value, label, sub, icon, icons, disabled }`, `{ group }` or `{ separator: true }`), `value`, `onPick(value)`, `shown` (`{ icon, label, title, aria }`) |
-| `Tip` | `tip.tsx` | a button with a short label that shows a text in a small box under itself while open, its first letter a capital (the label's full term: a room tile's IS and SET), named by its label and then the text (`aria-labelledby`, the box's text in the name while hidden too: "IS measured temperature"); a popup (`usePopup`): one open at a time, and one with the menus, Escape closing it alone, the focus staying on the button, a click outside and a sign-out closing it; the box kept in the window (`placePopup`); the button says whether it is open (`aria-expanded`) and names the box as what it controls; no menu, it has no items and takes no focus | `text` (the box's text), `label` (the short label, after the children in the button), `labelCls` (its class), `cls` (the button's classes beside `tip-btn`), the button's content before the label as children (an icon) |
+| `Tip` | `tip.tsx` | a button with a short label that shows a text in a small box under itself while open, its first letter a capital (the label's full term: a room tile's IS and SET, the House tile's), named by its label and then the text (`aria-labelledby`, the box's text in the name while hidden too: "IS measured temperature"); a popup (`usePopup`): one open at a time, and one with the menus, Escape closing it alone, the focus staying on the button, a click outside and a sign-out closing it; the box kept in the window (`placePopup`); the button says whether it is open (`aria-expanded`) and names the box as what it controls; no menu, it has no items and takes no focus | `text` (the box's text), `label` (the short label, after the children in the button), `labelCls` (its class), `cls` (the button's classes beside `tip-btn`), the button's content before the label as children (an icon) |
 | `usePopup`, `placePopup`, `closePopups` | `popup.ts` | a box that its button opens beside itself (a `Tip`'s text, a room tile's SET list): one popup open at a time, and one with the menus: the click that opens it closes an open menu or popup, as every click outside one does (`dropdown`), and a menu that opens, by a click, the keyboard or the page's code, closes it, as does a click outside it and, with `leave`, the focus moving to an element outside it; Escape closes it and nothing else, seen first and stopped there (`stopPropagation`, marked as the menus' Escape is), `escaped` told whether the focus was in it; placed again at a resize; `placePopup` keeps its box 16 px inside the window's sides, and with the element that scrolls in it inside its height too, 16 px under what is pinned at the window's top (`pinned`, a sticky header's bottom, which the caller reads): upward where the room below is short and the box fits above, else downward, that element's height capped to the room below, 160 px at least where the window has room for that; `closePopups` closes it at a sign-out (`MassimoParts.signedOut`) | `usePopup(prefix, { within, place, escaped, leave })`, giving `{ id, open, toggle, close }`; `placePopup(box, scroll, pinned)`; `closePopups()` |
 | `actionRunner`, `fader` | `action.ts` | a request, a reload, and its outcome (`Outcome`, `{ text, ok }`) in the region's message line (`showResult`) or in a part's state that a `ResultLine` draws, a success fading where a fade is given; `fader` is that fade alone, for a result set by other means | `where()`, `set(res)`, `fade` (ms), `reload()`, `bound` (an answer after a sign-out reloads and says nothing, `session.ts`); gives `run(fn, ok, fail)`, `say(text, ok)`; `set`, `ms` |
 | `Icon` | `icon.tsx` | a symbol of the page (`iconEl`) | `symbol`, `cls`, `mark` (the symbol is a mark, which blinks where the style makes it), `useId` (its `use` element's id, where the page names it) |
@@ -3021,14 +3059,14 @@ a value's age it takes from `received` of `rooms.js`, as the rooms do.
 | `TextField` | `field.tsx` | a row with a text input that shows a stored text, from its draft, or a free text (a name offered) by `value` and `set`, or, with neither, a field not controlled that its caller reads through `inputRef` (the sign-in card's, UiParts D210); with `row={false}` the input alone, standing in a tile's head (the log's search), as plain as written: `aria` its name for a screen reader, no name, `autocomplete` or `spellcheck` of its own | `label`, `id`, `name`, `draft` and `show`, or `value` and `set`, or `inputRef` alone; `wide` (on by default), `unit`, `hint`, `help`, `cls`, `limit`, `placeholder`, `type` (`password` too, by `value` and `set` or not controlled, never a draft; `search`), `autocomplete`, `inputCls` (the input's class, `mono` for a key), `maxLength`, `pattern`, `required`, `disabled`, `inputRef`, `row`, `aria` |
 | `NumberField`, `numberNorm` | `field.tsx` | a number input that shows a stored number (`numberInput`), its draft the input's text, "" for none, or a free number (a time) by `value` and `set`; with `row={false}` the input alone, in a row of the caller's, which draws its notice (`Meanwhile`); how such a draft compares, as a number | `label`, `id`, `name`, `min`, `max`, `step`, `draft` and `show`, or `value` and `set`; `aria` (its name where no label names it), `disabled`, `inputMode` (the keyboard a phone offers: `numeric` for the reboot's delay), `inputRef`, `onChange` (told of the value as the field is left changed: My settings' poll, saved then), `row`, and a row's `wide`, `unit`, `hint`, `help`, `cls`, `limit`; `v` |
 | `Select` | `field.tsx` | a row with a select, its options (`SelectOption`) each kept while it is the same; with `row={false}` the select alone, in a row of the caller's, which draws its notice, or standing in a tile's head (the log's choices) | `label`, `id`, `name`, `options` (`[value, label, disabled]` or `{ group, options }`), `value` and `onChange`, or `draft` and `show`; `row`, `wide`, `unit`, `hint`, `hintId` (the hint's id, which the select names as its description: the update channel's note, which changes with the choice), `help`, `cls`, `disabled`, `before` (between the label with its help and the select: a drawing's preview), `after` (after the select in its row: the language's note of a machine translation); without a row `aria` (its name for a screen reader) and `selectCls` (its own class, `hidden` for a choice left out) |
-| `DateTime` | `field.tsx` | a date and time field (`datetime-local`), its value as the input takes it | `value`, `set`, `id`, `cls`, `step`, `required`, `disabled`, `inputRef` |
+| `DateTime` | `field.tsx` | a date and time field (`datetime-local`), its value as the input takes it; with a limit, the limit's line before it and the field marked while the value is refused, as a number field's | `value`, `set`, `id`, `cls`, `step`, `required`, `disabled`, `inputRef`, `limit` (needs `id`) |
 | `localOf`, `isoOf` | `time.ts` | a `DateTime`'s value and the API's time as each other, for a field that shows a stored end and sends it (a user's end); the draft compares the field's minute, all it holds | `iso`; `local` |
 | `fmtWhen` | `time.ts` | an API time as date and time in the page's language, the hour of 24 (a backup's time, a device's in Notifications) | `iso` |
 | `Switch` | `field.tsx` | a checkbox drawn as a switch (`switchEl`), in its own row with its help where asked (`fieldRow` without a label) | `name`, `label`, `checked` and `onChange`, or `draft` and `show`; `row`, `help`, `rowCls` (classes its own row adds, a capability's `needs-…`), `cls` (the switch's classes), `id`, `disabled`, `title`, `aria` (its name where `label` is empty, which draws no text: My settings' "only on this device"), `data` (the checkbox's `data-` attributes), `badge` (inside the switch after its label, a capability's state), children after the switch |
 | `Choices` | `choices.tsx` | a choice of several among a list: a group of switches under its heading, All and None as buttons where asked (the configuration's Copy tab), under a legend (an integration's maximum) or without a heading (a role's capabilities, Capabilities for every role), or of checkboxes, All a checkbox first (`look` `check`, the House panel), or of radio buttons in a row where one option alone is chosen (`look` `one`, a suggested password's Words or Characters); an option locked shows whether it is chosen and is off (the owner's set, a capability while its request runs), an option held shows chosen and is off whatever is chosen, its why in a badge, and All chooses it not (a capability another chosen one includes) | `title`, `legend` (a fieldset under it), `label` (the group's name for a screen reader), `id`, `cls` (a class the group adds, `cap-grid`, `integration-caps`), `options` (`[value, label, disabled, { title, badge, lock, held }]`, the last for switches alone, `held` the why), `chosen`, `set(chosen)`, `all` (`{ all, none }`, their labels, `none` left out for All alone), `empty` (said where there is no option), `look` (`switch`, the default, `check` or `one`, its group named `id`) |
 | `ChoiceGroup` | `choices.tsx` | the frame of a choice of several drawn as switches, which `Choices` is drawn with and a region uses where each switch is a part of its own (Capabilities for every role, each switch saved at once) | `id`, `cls`, `label` (the group's name for a screen reader), `legend` (a fieldset under it), `head`, the switches as children |
 | `Tabs` | `tabs.tsx` | a row of tabs: a tab list of buttons, each with its key in `data-tab`, the one shown active and selected, and what follows the list (a close button) | `cls` (the row's class), `listCls`, `label` (the list's name), `tabs` (`{ key, label, cls }`), `current`, `onPick(key)`, children after the list |
-| `Stepper` | `field.tsx` | a number field between − and +, the step within its range; its buttons are named for a temperature, half a degree less and more, and the first user of another unit adds their names | `value`, `set`, `min`, `max`, `step`, `id` and `cls` of the field, `hidden` (the whole kept in its place unseen), children after the + (a unit) |
+| `Stepper` | `field.tsx` | a number field between − and +, the step within its range; its buttons are named for a temperature, half a degree less and more, and the first user of another unit adds their names | `value`, `set`, `min`, `max`, `step`, `id` and `cls` of the field, `hidden` (the whole kept in its place unseen), `disabled` (the field and its buttons off, the field no part of its form's check: one hidden with a value off its step), children after the + (a unit) |
 | `useDraft`, `Meanwhile` | `field.tsx` | a field that shows stored data keeps a draft: untouched it follows, changed it says "changed meanwhile" with Take theirs (D59-A); with a place, a form's (`useForm`), the draft is kept there | `stored`, `norm`, `place`; gives `value`, `stored`, `set`, `changed`, `meanwhile`, `take`; `draft`, `show` |
 | `SaveButton` | `field.tsx` | a form's Save by its state, as `FormFooter` draws it, for a Save that stands elsewhere (the scheme editor's Save as, inline with the name) | `label`, `look`, `busy`, `off`, `type` (submit unless given), `onClick` |
 | `FormFooter` | `field.tsx` | a form's row of actions (`formFooter`); with `look`, Save shows the form's state | `submit`, `busy`, `off`, `cancel` (its button of the class `form-cancel`, as the plain footer's), `cancelLabel`, `reset` (Reset, of the class `form-reset`, one fixed class per footer button as Cancel's `form-cancel`, off while clean), `look` (a `FormLook` of `useForm`), `extra`, `after` (after the submit button: My profile's ⓘ) |
@@ -3248,7 +3286,8 @@ so that a state event of a device draws its room's tile alone;
 `store.ts` holds what a tile keeps (`newUI`,
 the live object `roomUI` gives the plain actions, which set it as before)
 and what the House tile's panel keeps (`house`: the mode, the duration,
-the temperature and the end typed, the rooms unticked, the last result),
+the temperature and the end, whether the user changed either,
+the rooms unticked, the last result),
 across its close too,
 and the timer of an open window's next state by the clock;
 `facts.ts` what the rooms alone read of a room and its devices
@@ -3260,6 +3299,10 @@ the room's notices among them, a device's badges in words);
 `configuration.ts` what the configuration keeps and sends,
 `House.tsx` the House tile, its temperature a `Stepper`, its end a `DateTime`,
 its mode and its duration a choice of radio buttons side by side of its own (`Segments`),
+the mode's choice giving the others their defaults (`choose`),
+its lowest and highest a part of their own (`Range`),
+which reads each room's virtual wall thermostat,
+so that a state event draws them alone, IS and SET each a `Tip`,
 its rooms a `Choices` of checkboxes with All,
 its Send and Cancel a `FormFooter`;
 `Unlisted.tsx` the devices without a room, each row a device's row with
