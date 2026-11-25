@@ -358,9 +358,12 @@ export function Select({ label, id, wide, unit, hint, hintId, help, cls, labelCl
  * DateTime is a field of a date and a time (datetime-local), its value
  * as the input takes it ("YYYY-MM-DDTHH:MM"); the API's time is made of
  * it where it is sent. id, cls, step, required and disabled are the
- * input's, ref gives it the focus.
+ * input's, ref gives it the focus; limit, with an id, says what it takes
+ * in its line just before it while a value is refused (an end that has
+ * passed), the field then marked and described by it, as a number
+ * field's.
  */
-export function DateTime({ value, set, id, cls, step, required, disabled, inputRef }: {
+export function DateTime({ value, set, id, cls, step, required, disabled, inputRef, limit }: {
   value: string;
   set: (v: string) => void;
   id?: string;
@@ -369,11 +372,14 @@ export function DateTime({ value, set, id, cls, step, required, disabled, inputR
   required?: boolean;
   disabled?: boolean;
   inputRef?: Ref<HTMLInputElement>;
+  limit?: Limit;
 }) {
-  return (
+  const input = (
     <input ref={inputRef} type="datetime-local" id={id} class={cls} step={step === undefined ? undefined : String(step)} required={required}
-      disabled={disabled} value={value} onInput={(ev) => set(ev.currentTarget.value)} />
+      disabled={disabled} value={value} {...limitAria(id, limit)} onInput={(ev) => set(ev.currentTarget.value)} />
   );
+  if (!limit || id === undefined) return input;
+  return <><LimitLine id={id} limit={limit} />{input}</>;
 }
 
 /**
@@ -525,11 +531,14 @@ export function FormFooter({ submit, busy, off, cancel, cancelLabel, reset, look
  * Stepper is a number field between a − and a + button, which change it by step within min and max, rounded to
  * the step; an empty field steps from min. value is what the field shows,
  * set is told of every change, typed or stepped. id and cls are the
- * field's; hidden keeps the whole in its place unseen; children follow the
- * + (a unit). The buttons are named half a degree less and more: the first
- * user of another unit adds their names as a property.
+ * field's; hidden keeps the whole in its place unseen; disabled turns the
+ * field and its buttons off, and leaves the field out of its form's check,
+ * so that one hidden with a value off its step does not stop a submit;
+ * children follow the + (a unit). The buttons are named half a degree
+ * less and more: the first user of another unit adds their names as a
+ * property.
  */
-export function Stepper({ value, set, min, max, step, id, cls, hidden, children }: {
+export function Stepper({ value, set, min, max, step, id, cls, hidden, disabled, children }: {
   value: string;
   set: (v: string) => void;
   min: number;
@@ -538,6 +547,7 @@ export function Stepper({ value, set, min, max, step, id, cls, hidden, children 
   id?: string;
   cls?: string;
   hidden?: boolean;
+  disabled?: boolean;
   children?: ComponentChildren;
 }) {
   const by = (d: number) => () => {
@@ -546,10 +556,10 @@ export function Stepper({ value, set, min, max, step, id, cls, hidden, children 
   };
   return (
     <span class={hidden ? "inline hidden" : "inline"}>
-      <button type="button" class="step small" aria-label={t("temp.less")} onClick={by(-step)}>−</button>
-      <input type="number" id={id} class={cls} min={String(min)} max={String(max)} step={String(step)} value={value}
+      <button type="button" class="step small" aria-label={t("temp.less")} disabled={disabled} onClick={by(-step)}>−</button>
+      <input type="number" id={id} class={cls} min={String(min)} max={String(max)} step={String(step)} disabled={disabled} value={value}
         onInput={(ev) => set(ev.currentTarget.value)} />
-      <button type="button" class="step small" aria-label={t("temp.more")} onClick={by(step)}>+</button>
+      <button type="button" class="step small" aria-label={t("temp.more")} disabled={disabled} onClick={by(step)}>+</button>
       {children}
     </span>
   );

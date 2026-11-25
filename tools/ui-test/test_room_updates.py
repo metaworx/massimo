@@ -9,7 +9,9 @@ checkboxes, and sixteen of the twenty cases lost what the user had, and
 one of the House panel's. The configuration's three cases of the probe
 are with them, and since it is a part (Block 8) its tabs are checked to
 be the elements they were once the focus has left them, and to say a
-value stored meanwhile.
+value stored meanwhile. The House tile's one form, what each choice
+offers and its defaults, and its lowest and highest, which follow a
+state event in place, are with them too (AP RoomsPage v1.0, Block 7).
 
 Data comes the way the page gets it: a state event is updateDevice with
 a device of the room as it is, what every state event of the stream
@@ -19,7 +21,7 @@ redraw is the test's. The setpoint's PUT is answered with a stub where
 a test presses +, so that nothing reaches the fake Cube."""
 import pytest
 
-from helpers import frames, held_poll, hold, wait_held, wait_until
+from helpers import frames, held_poll, hold, mark, replaced, wait_held, wait_until
 
 
 def held(page):
@@ -521,6 +523,292 @@ def test_house_focus_stays(page, case):
     focus = page.evaluate("document.activeElement === document.querySelector('#house-rooms .check:not(.check-all) input')")
     page.locator("#house-panel .form-cancel").click()
     assert focus, f"the focus on the room's checkbox: {active(page)}"
+
+
+# The House form's one choice of a mode (AP RoomsPage v1.0, Block 7, D7-A):
+# what it offers and its defaults by the choice; nothing is sent.
+
+def house_mode(page):
+    """The House form's mode chosen, its radio button's value."""
+    return page.evaluate("(() => { const e = document.querySelector('#house-panel input[name=house-mode]:checked'); return e ? e.value : null; })()")
+
+
+def durations_shown(page):
+    """The durations the House form shows, its radio buttons' values, and the one chosen."""
+    boxes = page.locator("#house-panel input[name=house-duration]")
+    shown = [boxes.nth(i).get_attribute("value") for i in range(boxes.count()) if boxes.nth(i).is_visible()]
+    chosen = [boxes.nth(i).get_attribute("value") for i in range(boxes.count()) if boxes.nth(i).is_visible() and boxes.nth(i).is_checked()]
+    return shown, chosen
+
+
+def week_ahead(page):
+    """A week from the page's today at 06:00, as a date and time field holds it."""
+    return page.evaluate("""(() => {
+      const d = new Date(), p = (n) => String(n).padStart(2, "0");
+      const w = new Date(d.getFullYear(), d.getMonth(), d.getDate() + 7, 6, 0);
+      return w.getFullYear() + "-" + p(w.getMonth() + 1) + "-" + p(w.getDate()) + "T06:00";
+    })()""")
+
+
+def first_setpoint(page):
+    """The first room's setpoint, of the room with a thermostat the House lists first, as its temperature field holds it."""
+    return page.evaluate("String(roomState(state.rooms.find(roomThermostat)).setpoint)")
+
+
+def test_house_holiday_opens_with_its_defaults(page, case):
+    """The House tile's Holiday, its case icon in the modes' row, opens the
+    form with Holiday chosen: the temperature OFF (4.5), Until chosen and
+    Permanently not offered, the end a week ahead at 06:00, shown (D6-A,
+    D7-A). Fails on the page before, which had no Holiday."""
+    held(page)
+    button = page.locator("#house .house-modes #house-holiday")
+    assert button.locator("use[href='#icon-suitcase']").count() == 1, "the case icon"
+    button.click()
+    page.locator("#house-panel").wait_for(state="visible")
+    assert house_mode(page) == "vacation", f"Holiday chosen: {house_mode(page)}"
+    assert page.locator("#house-temp").is_visible() and page.locator("#house-temp").input_value() == "4.5", \
+        f"the temperature OFF: {page.locator('#house-temp').input_value()}"
+    assert durations_shown(page) == (["until"], ["until"]), f"Until alone, chosen: {durations_shown(page)}"
+    until = page.locator("#house-until")
+    assert until.is_visible() and until.input_value() == week_ahead(page), f"a week ahead at 06:00: {until.input_value()}"
+    page.locator("#house-panel .form-cancel").click()
+
+
+def test_house_manu_after_holiday_offers_permanently(page, case):
+    """Holiday, then MANU chosen in the form: Permanently offered again and
+    chosen, the temperature the first room's setpoint, the date hidden;
+    Holiday chosen again: OFF and a week ahead once more (D7-A, D8-A)."""
+    held(page)
+    page.locator("#house-holiday").click()
+    page.locator("#house-panel").wait_for(state="visible")
+    page.locator("#house-panel input[name=house-mode][value=manual]").check()
+    assert durations_shown(page) == (["permanent", "until"], ["permanent"]), f"Permanently again, chosen: {durations_shown(page)}"
+    assert page.locator("#house-temp").input_value() == first_setpoint(page), \
+        f"the first room's setpoint: {page.locator('#house-temp').input_value()} for {first_setpoint(page)}"
+    assert not page.locator("#house-until").is_visible(), "no date while Permanently"
+    page.locator("#house-panel input[name=house-mode][value=vacation]").check()
+    assert page.locator("#house-temp").input_value() == "4.5", "Holiday's OFF again"
+    assert durations_shown(page) == (["until"], ["until"]), f"Until alone: {durations_shown(page)}"
+    assert page.locator("#house-until").input_value() == week_ahead(page), "a week ahead again"
+    page.locator("#house-panel .form-cancel").click()
+
+
+def test_house_keeps_a_typed_temperature(page, case):
+    """A temperature typed in the form stays when another choice with a
+    temperature is chosen; one untouched takes the choice's default."""
+    held(page)
+    page.locator("#house-manu").click()
+    page.locator("#house-panel").wait_for(state="visible")
+    temp = page.locator("#house-temp")
+    assert temp.input_value() == first_setpoint(page), f"MANU's the first room's setpoint: {temp.input_value()}"
+    page.locator("#house-panel input[name=house-mode][value=vacation]").check()
+    assert temp.input_value() == "4.5", f"untouched, Holiday's OFF: {temp.input_value()}"
+    page.locator("#house-panel input[name=house-mode][value=manual]").check()
+    assert temp.input_value() == first_setpoint(page), f"untouched, MANU's setpoint again: {temp.input_value()}"
+    temp.fill("23.5")
+    page.locator("#house-panel input[name=house-mode][value=vacation]").check()
+    assert temp.input_value() == "23.5", "the typed temperature stays for Holiday"
+    page.locator("#house-panel .form-cancel").click()
+
+
+def days_ahead(page, days, hhmm):
+    """A day so many days from the page's today at a time, as a date and time field holds it."""
+    return page.evaluate("""([days, hhmm]) => {
+      const d = new Date(), p = (n) => String(n).padStart(2, "0");
+      const w = new Date(d.getFullYear(), d.getMonth(), d.getDate() + days);
+      return w.getFullYear() + "-" + p(w.getMonth() + 1) + "-" + p(w.getDate()) + "T" + hhmm;
+    }""", [days, hhmm])
+
+
+def test_house_keeps_a_changed_date(page, case):
+    """An end the user changed stays when another choice is chosen, Holiday
+    and COMFORT with Until; one untouched takes the choice's default."""
+    held(page)
+    page.locator("#house-manu").click()
+    page.locator("#house-panel").wait_for(state="visible")
+    page.locator("#house-panel input[name=house-duration][value=until]").check()
+    until = page.locator("#house-until")
+    assert until.input_value() == days_ahead(page, 1, "06:00"), f"untouched, tomorrow morning: {until.input_value()}"
+    page.locator("#house-panel input[name=house-mode][value=vacation]").check()
+    assert until.input_value() == week_ahead(page), f"untouched, Holiday's week ahead: {until.input_value()}"
+    changed = days_ahead(page, 10, "18:00")
+    until.fill(changed)
+    page.locator("#house-panel input[name=house-mode][value=manual]").check()
+    assert until.input_value() == changed, f"the changed end stays for MANU: {until.input_value()}"
+    page.locator("#house-panel input[name=house-mode][value=comfort]").check()
+    assert until.is_visible() and until.input_value() == changed, f"and for COMFORT with Until: {until.input_value()}"
+    page.locator("#house-panel .form-cancel").click()
+
+
+def test_house_untouched_date_at_each_open(page, case):
+    """An end the user has not changed is the choice's default again at
+    each open: MANU's tomorrow morning, then Holiday's week ahead, then
+    MANU's tomorrow morning once more, not the end the form held."""
+    held(page)
+    until = page.locator("#house-until")
+    page.locator("#house-manu").click()
+    page.locator("#house-panel input[name=house-duration][value=until]").check()
+    assert until.input_value() == days_ahead(page, 1, "06:00"), f"MANU's tomorrow morning: {until.input_value()}"
+    page.locator("#house-panel .form-cancel").click()
+    page.locator("#house-holiday").click()
+    assert until.input_value() == week_ahead(page), f"Holiday's week ahead at the next open: {until.input_value()}"
+    page.locator("#house-panel .form-cancel").click()
+    page.locator("#house-manu").click()
+    assert until.is_visible() and until.input_value() == days_ahead(page, 1, "06:00"), f"MANU's tomorrow morning again: {until.input_value()}"
+    page.locator("#house-panel .form-cancel").click()
+
+
+def test_house_forgets_a_past_end(page, case):
+    """An end the user typed that has passed by the next open is forgotten
+    there: the choice's default instead. Fails on the page before, which
+    kept a typed end however old."""
+    held(page)
+    page.locator("#house-manu").click()
+    page.locator("#house-panel input[name=house-duration][value=until]").check()
+    page.locator("#house-until").fill("2020-01-02T18:00")
+    page.locator("#house-panel .form-cancel").click()
+    page.locator("#house-manu").click()
+    until = page.locator("#house-until")
+    assert until.is_visible() and until.input_value() == days_ahead(page, 1, "06:00"), f"tomorrow morning, not 2020: {until.input_value()}"
+    page.locator("#house-panel .form-cancel").click()
+
+
+def test_house_date_hidden_while_permanently(page, case):
+    """The House form's date and time is hidden while Permanently is
+    chosen and shown with Until (D8-A); for AUTO the duration and the date
+    are hidden. Fails on the page before, where the date was only off."""
+    held(page)
+    page.locator("#house-manu").click()
+    page.locator("#house-panel").wait_for(state="visible")
+    page.locator("#house-panel input[name=house-duration][value=permanent]").check()
+    assert not page.locator("#house-until").is_visible(), "no date while Permanently"
+    page.locator("#house-panel input[name=house-duration][value=until]").check()
+    assert page.locator("#house-until").is_visible(), "the date with Until"
+    page.locator("#house-panel input[name=house-mode][value=auto]").check()
+    assert durations_shown(page) == ([], []), f"no duration for AUTO: {durations_shown(page)}"
+    assert not page.locator("#house-until").is_visible(), "no date for AUTO"
+    page.locator("#house-panel .form-cancel").click()
+
+
+# The House tile's lowest and highest (D9-A, D10-A): under the modes' row,
+# from the rooms' virtual wall thermostats.
+
+RANGE = "#house .house-range"
+
+
+def vwt_range(page, field):
+    """The lowest and the highest of a field of the rooms' virtual wall
+    thermostats' states, the rooms without one passed over; for the
+    measured temperature a stale one left out while any is fresh."""
+    return page.evaluate("""(f) => {
+      let vs = state.rooms.map((r) => r.vwt).filter((v) => v && v.state && typeof v.state[f] === "number");
+      if (f === "actual_temp" && vs.some((v) => !v.stale)) vs = vs.filter((v) => !v.stale);
+      const v = vs.map((x) => x.state[f]);
+      return [Math.min(...v), Math.max(...v)];
+    }""", field)
+
+
+def range_texts(page, row):
+    """A row's lowest and highest as it shows them."""
+    return [page.locator("%s .%s .range-%s" % (RANGE, row, which)).inner_text().strip() for which in ("low", "high")]
+
+
+def test_house_lowest_and_highest(page, case):
+    """Under the House tile's modes, the thermometer with IS and its tip,
+    the rooms' lowest and highest measured temperature, and the gauge with
+    SET and its tip, their lowest and highest setpoint, OFF where it is,
+    from the rooms' virtual wall thermostats; no room's name. The values
+    are aligned in columns where the rows are two (390 px), and on one
+    line where there is room (1100 px). Fails on the page before, which
+    had no such rows."""
+    held(page)
+    width = case.width
+    page.locator(RANGE).wait_for(state="visible")
+    for row, field, fmt, tag, full in (("range-is", "actual_temp", "fmtTemp", "room.is", "room.measured"),
+                                       ("range-set", "setpoint", "fmtSetpoint", "room.set", "room.setTemp")):
+        want = [page.evaluate("(v) => %s(v, '°')" % fmt, v) for v in vwt_range(page, field)]
+        assert range_texts(page, row) == want, f"{row}: {range_texts(page, row)} for {want}"
+        btn = page.locator("%s .%s button.tip-btn" % (RANGE, row))
+        assert btn.inner_text().strip() == page.evaluate("(k) => t(k)", tag), f"{row}'s short label: {btn.inner_text()!r}"
+        btn.click()
+        tip = page.locator("%s .%s .tip-text" % (RANGE, row))
+        assert tip.is_visible() and tip.inner_text().strip().lower() == page.evaluate("(k) => t(k)", full).lower(), \
+            f"{row}'s full term on a tap: {tip.inner_text()!r}"
+        page.keyboard.press("Escape")
+    text = page.locator(RANGE).inner_text()
+    names = [n for n in page.evaluate("state.rooms.map((r) => r.name)") if n and n in text]
+    assert not names, f"no room's name in the rows: {names}"
+    box = {(row, which): page.locator("%s .%s .range-%s" % (RANGE, row, which)).bounding_box()
+           for row in ("range-is", "range-set") for which in ("low", "high")}
+    one_line = abs(box["range-is", "low"]["y"] - box["range-set", "low"]["y"]) < 1
+    if width >= 1100:
+        assert one_line, f"one line at {width} px: {box}"
+    else:
+        assert not one_line, f"two rows at {width} px: {box}"
+        for which in ("low", "high"):
+            assert abs(box["range-is", which]["x"] - box["range-set", which]["x"]) < 0.5, f"the {which} values aligned: {box}"
+
+
+def test_house_lowest_and_highest_follow_a_state_event(page, case):
+    """A state event of a room's virtual wall thermostat that brings a new
+    lowest temperature and an OFF setpoint is shown in the House tile's
+    rows at once, their tips' buttons the same elements."""
+    held(page)
+    page.locator(RANGE).wait_for(state="visible")
+    buttons = [RANGE + " .range-is button.tip-btn", RANGE + " .range-set button.tip-btn"]
+    mark(page, buttons)
+    rid = page.evaluate("state.rooms.find((r) => r.vwt && r.vwt.state).id")
+    page.evaluate("""(rid) => {
+      const r = state.rooms.find((x) => x.id === rid);
+      const v = JSON.parse(JSON.stringify(r.vwt));
+      v.state.actual_temp = 9.5;
+      v.state.setpoint = 4.5;
+      updateDevice(v);
+    }""", rid)
+    frames(page)
+    low = page.evaluate("fmtTemp(9.5, '°')")
+    assert range_texts(page, "range-is")[0] == low, f"the new lowest: {range_texts(page, 'range-is')} for {low}"
+    assert range_texts(page, "range-set")[0] == page.evaluate("t('temp.off')"), f"OFF the lowest setpoint: {range_texts(page, 'range-set')}"
+    assert not replaced(page, buttons), "the tips' buttons stay"
+
+
+def stale_vwt(page, rid, actual=None):
+    """A state event of the room's virtual wall thermostat marked stale, its measured temperature actual where given."""
+    page.evaluate("""([rid, actual]) => {
+      const r = state.rooms.find((x) => x.id === rid);
+      const v = JSON.parse(JSON.stringify(r.vwt));
+      v.stale = true;
+      if (actual !== null) v.state.actual_temp = actual;
+      updateDevice(v);
+    }""", [rid, actual])
+
+
+def test_house_lowest_and_highest_leave_out_a_stale_temperature(page, case):
+    """A room whose virtual wall thermostat's measured temperature is stale
+    counts in neither the lowest nor the highest while any room has a fresh
+    one, as the server leaves a stale thermostat out within a room; with
+    only stale ones, they are shown, greyed as a tile greys them. Fails on
+    the page before, which counted the stale value."""
+    held(page)
+    page.locator(RANGE).wait_for(state="visible")
+    rids = page.evaluate("state.rooms.filter((r) => r.vwt && r.vwt.state && r.vwt.state.actual_temp !== undefined).map((r) => r.id)")
+    assert len(rids) >= 2, f"rooms with a measured temperature: {rids}"
+    stale_vwt(page, rids[0], 9.5)
+    frames(page)
+    want = [page.evaluate("(v) => fmtTemp(v, '°')", v) for v in vwt_range(page, "actual_temp")]
+    shown = range_texts(page, "range-is")
+    assert shown == want and shown[0] != page.evaluate("fmtTemp(9.5, '°')"), f"the stale 9.5 left out: {shown} for {want}"
+    low = page.locator(RANGE + " .range-is .range-low")
+    assert "stale" not in (low.get_attribute("class") or ""), "fresh values, not greyed"
+    for rid in rids[1:]:
+        stale_vwt(page, rid)
+    frames(page)
+    want = [page.evaluate("(v) => fmtTemp(v, '°')", v) for v in vwt_range(page, "actual_temp")]
+    shown = range_texts(page, "range-is")
+    assert shown == want and shown[0] == page.evaluate("fmtTemp(9.5, '°')"), f"only stale ones, shown: {shown} for {want}"
+    for which in ("low", "high"):
+        cls = page.locator(RANGE + " .range-is .range-" + which).get_attribute("class") or ""
+        assert "stale" in cls, f"the {which} greyed: {cls!r}"
 
 
 # A device without a room, as GET …/devices gives one (the fake Cube has

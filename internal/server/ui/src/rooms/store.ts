@@ -31,9 +31,12 @@ export function newUI(): RoomUI {
 
 /**
  * What the House tile's panel keeps, across its close too: open, the mode
- * chosen, permanently or until, the temperature and the end typed, the
- * rooms unticked (a room is ticked until it is unticked), and the result
- * of the last Send.
+ * chosen, permanently or until, the temperature and the end, whether the
+ * user changed either (tempTyped since the panel opened, untilTyped while
+ * the end typed is still to come at an open), so that a choice gives its
+ * defaults to the others alone, whether Send refused the end as passed
+ * (untilRefused, until it is changed), the rooms unticked (a room is
+ * ticked until it is unticked), and the result of the last Send.
  */
 export const house = live({
   open: false,
@@ -41,6 +44,9 @@ export const house = live({
   duration: "permanent" as "permanent" | "until",
   temp: "20",
   until: "",
+  tempTyped: false,
+  untilTyped: false,
+  untilRefused: false,
   ticks: {} as Record<number, boolean>,
   result: null as { text: string; ok: boolean } | null,
 });
