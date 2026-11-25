@@ -39,7 +39,11 @@ type target struct {
 // run as before the store. Config.SerialGiven serves the one Cube;
 // Config.Proxies and Config.ProxySerial win over the store for this run.
 // The plain MASSIMO_CUBE_ADDRESS without a serial is served from the
-// file until the Cube reports its serial, which the server then seeds.
+// file until the Cube reports its serial, which the server then seeds,
+// beside the store's Cubes too, its listener on the plain
+// MASSIMO_CUBE_PROXY from the start; at the address of a Cube the store
+// has, the plain lines are that Cube's, compared with its row
+// (plainOfStore).
 func setupCubes(ctx context.Context, st *store.Store, cfg Config, logger *slog.Logger) (setup, error) {
 	file, plain, err := FileCubes(cfg.Serial)
 	if err != nil {
@@ -61,11 +65,17 @@ func setupCubes(ctx context.Context, st *store.Store, cfg Config, logger *slog.L
 		targets = append(targets, t)
 	} else {
 		if plain != nil {
-			if sn, err := st.PlainSerial(ctx); err != nil {
+			sn, err := st.PlainSerial(ctx)
+			if err == nil && sn == "" {
+				sn, err = plainOfStore(ctx, st, *plain, logger)
+			}
+			if err != nil {
 				return setup{}, fmt.Errorf("serve: %w", err)
-			} else if sn != "" {
+			}
+			if sn != "" {
 				// The plain lines belong to the Cube that reported this
-				// serial before: compared with its row from now on.
+				// serial before, or to the store's Cube at their
+				// address: compared with its row from now on.
 				plain.Serial = sn
 				file = append(file, *plain)
 				plain = nil
@@ -135,19 +145,30 @@ func setupCubes(ctx context.Context, st *store.Store, cfg Config, logger *slog.L
 		}
 	} else {
 		// One listener per Cube on its proxy address (the address clients
-		// use); a single Cube without one listens on :62910.
+		// use); a single Cube without one listens on :62910. A Cube
+		// without a known serial, the plain MASSIMO_CUBE_ADDRESS's, is
+		// named by its address, beside other Cubes too: the server takes
+		// the serial it reports.
 		for _, t := range targets {
 			a := t.proxy
 			if a == "" && single {
 				a = ":" + env.CubePort
 			}
 			if a == "" {
-				logger.Warn("cube served without a proxy: several cubes are configured and this one has no proxy address", "serial", t.cfg.Serial)
+				if t.cfg.Serial == "" {
+					logger.Warn("cube served without a proxy: several cubes are configured and the plain MASSIMO_CUBE_ADDRESS's cube has no MASSIMO_CUBE_PROXY", "addr", t.cfg.Addr)
+				} else {
+					logger.Warn("cube served without a proxy: several cubes are configured and this one has no proxy address", "serial", t.cfg.Serial, "addr", t.cfg.Addr)
+				}
 				continue
 			}
 			a = env.WithPort(a)
 			_, port, _ := net.SplitHostPort(a)
-			out.listeners = append(out.listeners, server.ProxyListener{Serial: t.cfg.Serial, Addr: a, Discovery: port == env.CubePort, DiscoverySerial: cfg.ProxySerial})
+			pl := server.ProxyListener{Serial: t.cfg.Serial, Addr: a, Discovery: port == env.CubePort, DiscoverySerial: cfg.ProxySerial}
+			if t.cfg.Serial == "" {
+				pl.CubeAddr = t.cfg.Addr
+			}
+			out.listeners = append(out.listeners, pl)
 		}
 	}
 	for i := range out.listeners {
@@ -156,18 +177,67 @@ func setupCubes(ctx context.Context, st *store.Store, cfg Config, logger *slog.L
 			// "" too for a Cube without a known serial: the server takes
 			// the one it reports.
 			pl.Serial = targets[0].cfg.Serial
-		} else if pl.Serial == "" {
+		} else if pl.Serial == "" && pl.CubeAddr == "" {
 			return setup{}, fmt.Errorf("serve: several cubes configured; name the cube of each proxy listener as -proxy <serial>=%s, or pick one with -sn", pl.Addr)
 		}
 		if pl.DiscoverySerial == "" {
 			for _, t := range targets {
-				if strings.EqualFold(t.cfg.Serial, pl.Serial) {
+				if pl.CubeAddr != "" && t.cfg.Serial == "" && t.cfg.Addr == pl.CubeAddr || pl.CubeAddr == "" && strings.EqualFold(t.cfg.Serial, pl.Serial) {
 					pl.DiscoverySerial = t.proxySerial
 				}
 			}
 		}
 	}
 	return out, nil
+}
+
+// plainOfStore ties the plain lines to the store's configured Cube at
+// the plain MASSIMO_CUBE_ADDRESS, where there is one (PlainRow): two
+// runtimes would dial one Cube, which serves one client, and the one
+// that loses never reports its serial. As where the plain Cube reports a
+// serial the store serves (server.PlainServedNote), the setting names
+// that Cube from now on, and its row wins over the plain lines. It
+// returns the serial, "" for none.
+func plainOfStore(ctx context.Context, st *store.Store, plain store.FileCube, logger *slog.Logger) (string, error) {
+	rows, err := st.Cubes(ctx)
+	if err != nil {
+		return "", err
+	}
+	row, ok := PlainRow(rows, plain)
+	if !ok {
+		return "", nil
+	}
+	if err := st.SetSetting(ctx, store.PlainSerialKey, row.Serial); err != nil {
+		return "", err
+	}
+	logger.Warn(server.PlainServedNote, "serial", row.Serial, "addr", plain.Values[store.FieldAddress].Value)
+	return row.Serial, nil
+}
+
+// PlainRow returns the configured row whose address is the plain
+// MASSIMO_CUBE_ADDRESS's, the plain lines' Cube that serve ties them to
+// at its start (and massimo config shows as tied): the same host,
+// whatever its case and brackets, and the same port, the Cube's where
+// an address gives none. It reads and writes nothing.
+func PlainRow(rows []store.Cube, plain store.FileCube) (store.Cube, bool) {
+	want := cubeEndpoint(plain.Values[store.FieldAddress].Value)
+	for _, row := range rows {
+		if row.Configured && row.Address != "" && cubeEndpoint(row.Address) == want {
+			return row, true
+		}
+	}
+	return store.Cube{}, false
+}
+
+// cubeEndpoint is a Cube's address as host:port to compare: the host in
+// lower case, an IPv6 one bracketed once, and the Cube's port where the
+// address gives none.
+func cubeEndpoint(addr string) string {
+	host, port, err := net.SplitHostPort(addr)
+	if err != nil {
+		host, port = strings.TrimSuffix(strings.TrimPrefix(addr, "["), "]"), env.CubePort
+	}
+	return net.JoinHostPort(strings.ToLower(host), port)
 }
 
 // rowTarget is the target of a configured row of the store.

@@ -25,6 +25,7 @@ import (
 var serialTests = map[string]string{
 	// The settings in the process environment (t.Setenv).
 	"TestConfigPrintsTLS":                   "sets the TLS variables",
+	"TestConfigTiesThePlainLines":           "clears the Cube variables, sets MASSIMO_DATA and the plain Cube's variables",
 	"TestConfigViewHidesSecrets":            "sets MASSIMO_API_TOKEN, a Cube's key and MASSIMO_LISTEN",
 	"TestDataDir":                           "sets MASSIMO_DATA",
 	"TestNoEnv":                             "sets MASSIMO_ENV_FILE, as -no-env does",

@@ -274,6 +274,15 @@ func (s *Server) startProxy(pl ProxyListener) bool {
 		s.log.Error("proxy listener not started", "addr", pl.Addr, "error", err)
 		return false
 	}
+	return s.startProxyOn(rt, pl)
+}
+
+// startProxyOn is startProxy for the runtime rt. A runtime removeCube
+// has begun to remove gets no listener: the check and the listener's
+// place in s.proxies are under s.proxyMu, where removeCube marks it, so
+// that a start that found the runtime before it was unregistered does
+// not listen for a Cube no longer served.
+func (s *Server) startProxyOn(rt *runtime, pl ProxyListener) bool {
 	parent := s.track()
 	if parent == nil {
 		return false
@@ -284,6 +293,13 @@ func (s *Server) startProxy(pl ProxyListener) bool {
 	ctx, cancel := context.WithCancel(parent)
 	pr := &proxyRun{pl: pl, rt: rt, p: p, cancel: cancel, done: make(chan struct{})}
 	s.proxyMu.Lock()
+	if rt.removed {
+		s.proxyMu.Unlock()
+		cancel()
+		s.wg.Done() // track's
+		s.log.Info("proxy listener not started: its cube is no longer served", "addr", pl.Addr, "serial", rt.cubeSerial())
+		return false
+	}
 	s.proxies = append(s.proxies, pr)
 	s.proxyMu.Unlock()
 	first, _ := s.proxyRetry()
@@ -549,7 +565,7 @@ func (s *Server) startCubeProxy(rt *runtime) {
 	addr = withCubePort(addr)
 	_, port, _ := net.SplitHostPort(addr)
 	pl := ProxyListener{Serial: rt.cubeSerial(), Addr: addr, Discovery: port == strconv.Itoa(cubelan.CubePort), DiscoverySerial: cfg.ProxySerial}
-	s.startProxy(pl)
+	s.startProxyOn(rt, pl)
 }
 
 // withCubePort adds the Cube's port to an address that has none.
@@ -585,8 +601,12 @@ func (s *Server) addCube(row store.Cube) (*runtime, error) {
 	return rt, nil
 }
 
-// removeCube stops serving a Cube.
+// removeCube stops serving a Cube. It marks the runtime removed first,
+// so that no listener starts for it while it goes (startProxyOn).
 func (s *Server) removeCube(rt *runtime) {
+	s.proxyMu.Lock()
+	rt.removed = true
+	s.proxyMu.Unlock()
 	s.stopProxies(rt)
 	s.stopRuntime(rt)
 	s.unregister(rt)

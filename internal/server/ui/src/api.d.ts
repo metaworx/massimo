@@ -982,6 +982,10 @@ export interface SystemInfo {
   api_port?: number;
   /** The Cubes' proxy listeners, listening or not. */
   cube_proxies: {
+    /**
+     * The Cube's serial; absent until the Cube of a plain MASSIMO_CUBE_ADDRESS
+     * reports it.
+     */
     serial?: string;
     /**
      * The serial it answers discovery with: the Cube's proxy serial where set,
@@ -1144,8 +1148,9 @@ export interface UpdateInfo {
   can_update: boolean;
   /**
    * Why an update cannot be started from the API (a package manager owning the
-   * binary without a helper of its own, no token, no helper, a development
-   * build)
+   * binary without a helper of its own, no token, no helper, on Windows and
+   * under brew a listen address the helper cannot ask /healthz at, named by its
+   * setting, a development build)
    */
   blocked?: string;
   helper?: UpdateStatus;

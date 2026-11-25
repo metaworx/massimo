@@ -294,6 +294,15 @@ does today and compares it with the store:
    The store wins because the UI edited it on purpose; a stale line in
    the file is the expected state on a box that was migrated and
    never had its file cleaned.
+   The plain lines (`MASSIMO_CUBE_ADDRESS` and the other plain forms,
+   with no line of a serial) are the Cube's that `seed.plain_serial` names,
+   compared with its row in the same way.
+   The server sets it when the plain Cube first reports its serial,
+   and the start when a configured row's address is the plain address
+   (the same host whatever its case, the same port,
+   `62910` where one gives none):
+   two runtimes would dial one Cube, which serves one client.
+   The log then says that the plain lines are that Cube's.
 3. Keys and IVs came from `.env` by serial in every case,
    for the portal commands, which are gone since AP PortalDrop.
 4. `-addr` and `-sn` on the command line work as today for one run and write nothing.

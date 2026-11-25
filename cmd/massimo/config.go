@@ -205,6 +205,13 @@ func printStore(w io.Writer) {
 		if sn, _ := st.PlainSerial(context.Background()); sn != "" && plain != nil {
 			plain.Serial = sn
 			file, plain = append(file, *plain), nil
+		} else if plain != nil {
+			if row, ok := serve.PlainRow(rows, *plain); ok {
+				// serve ties the plain lines to the Cube at their
+				// address at its next start.
+				plain.Serial = row.Serial
+				file, plain = append(file, *plain), nil
+			}
 		}
 		st.Close()
 		if err != nil {

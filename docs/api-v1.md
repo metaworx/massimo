@@ -4288,10 +4288,12 @@ one on an address that address's interface;
 an interface comes with its MAC and its addresses but link-local ones,
 `api` marking those the API listens on, at `api_port`.
 `cube_proxies` are the Cubes' proxy listeners, listening or not,
-by Cube serial and address, with `discovery_serial`, the serial a listener
-answers discovery with: the Cube's proxy serial where one is set, else the
-Cube's own; absent for a listener that answers no discovery
-(only one on the Cube port does, docs/proxy.md);
+by Cube serial and address,
+the serial absent for the Cube of a plain `MASSIMO_CUBE_ADDRESS` until it reports one,
+with `discovery_serial`, the serial a listener answers discovery with:
+the Cube's proxy serial where one is set, else the Cube's own;
+absent for a listener that answers no discovery (only one on the Cube port does,
+docs/proxy.md);
 one that does not listen has the fields of a Cube's `proxy_failing`
 (`GET /api/v1/cubes`), and is tried again.
 
