@@ -67,6 +67,31 @@ SPOKEN = """() => {
 }"""
 
 
+# A fold's summary clicked, and the fold's toggle event taken: the event,
+# which tells the page's part the fold's new state (Fold's onToggle) and
+# so is a new start of its password fields, comes in a task of its own
+# after the click; a press on the dice before it would be dropped by that
+# new start.
+TOGGLE = """(sel) => new Promise((done) => {
+  const d = document.querySelector(sel);
+  d.addEventListener('toggle', () => setTimeout(done, 0), { once: true });
+  d.querySelector(':scope > summary').click();
+})"""
+
+
+def toggle_fold(page, sel):
+    """The fold sel opened or closed by its summary, its toggle event taken
+    and the part drawn again."""
+    page.evaluate(TOGGLE, sel)
+    frames(page)
+
+
+def open_fold(page, sel):
+    """The fold sel open, its toggle event taken (toggle_fold)."""
+    if not page.evaluate("(sel) => document.querySelector(sel).open", sel):
+        toggle_fold(page, sel)
+
+
 def five_words(value):
     """The five words of the list value is made of, joined by "-", or None:
     each word drawn may hold a "-" of its own (drop-down)."""
@@ -230,8 +255,7 @@ def test_my_profiles_set_a_password(page, case):
     user stays as it was)."""
     console = watch_console(page)
     show_view(page, "profile")
-    if not page.locator("#me-password").evaluate("(d) => d.open"):
-        page.locator("#me-password-title").click()
+    open_fold(page, "#me-password")
     page.locator("#me-new").wait_for(state="visible")
     check_suggest(page, case, "me-new", "me-again", console)
     edited(page, "me-new")
@@ -253,7 +277,7 @@ def test_my_profiles_set_a_password(page, case):
     finally:
         page.evaluate(REAL_REGISTER)
         page.unroute("**/api/v1/users/owner")
-    page.locator("#me-password-title").click()
+    toggle_fold(page, "#me-password")
     show_view(page, "tiles")
 
 
@@ -264,8 +288,7 @@ def test_my_profiles_change_password(new_context, case, watch, guard):
     console = watch_console(page)
     sign_in(page, "operator", OPERATOR_PASSWORD)
     show_view(page, "profile")
-    if not page.locator("#me-password").evaluate("(d) => d.open"):
-        page.locator("#me-password-title").click()
+    open_fold(page, "#me-password")
     page.locator("#me-current").fill(OPERATOR_PASSWORD)
     assert dice_of(page, "me-current").count() == 0, "no dice on the current password"
     check_suggest(page, case, "me-new", "me-again", console)
@@ -291,15 +314,15 @@ def test_the_users_forms(page, case):
         assert api_call("GET", f"api/v1/users/{name}")["auth_version"] == 2, "with the password, registered by OPAQUE"
         panel = page.locator(".user-panel[data-name='%s']" % name)
         panel.wait_for()
-        panel.locator("summary").click()
+        toggle_fold(page, ".user-panel[data-name='%s']" % name)
         field = f"user-{name}-password"
         page.locator("#" + field).wait_for(state="visible")
         check_suggest(page, case, field, None, console)
         reset_ends(page, field, ".user-panel[data-name='%s'] form .form-reset" % name)
         press(page, field)
-        panel.locator("summary").click()
+        toggle_fold(page, ".user-panel[data-name='%s']" % name)
         assert wait_until(page, f"!document.querySelector(\".user-panel[data-name='{name}']\").open", 3)
-        panel.locator("summary").click()
+        toggle_fold(page, ".user-panel[data-name='%s']" % name)
         page.locator("#" + field).wait_for(state="visible")
         assert page.locator(f"#{field}-kind").count() == 0, "the panel closed and opened: the row gone with the new start"
         assert page.evaluate(STATE, field)["type"] == "password", "and the suggestion hidden"
@@ -345,8 +368,7 @@ def test_the_choice_is_kept_and_the_keyboard_reaches_the_dice(page, case):
     press it, the focus staying there. Characters chosen is kept after a
     load: the next press suggests characters."""
     show_view(page, "profile")
-    if not page.locator("#me-password").evaluate("(d) => d.open"):
-        page.locator("#me-password-title").click()
+    open_fold(page, "#me-password")
     page.locator("#me-new").focus()
     page.keyboard.press("Tab")
     assert page.evaluate("document.activeElement === document.querySelector('.pw-box:has(> #me-new) > .pw-dice')"), "Tab reaches the dice"
@@ -361,13 +383,12 @@ def test_the_choice_is_kept_and_the_keyboard_reaches_the_dice(page, case):
     page.reload()
     assert wait_until(page, "!!window.MassimoParts && state.eventsOpen", 10), "loaded again"
     show_view(page, "profile")
-    if not page.locator("#me-password").evaluate("(d) => d.open"):
-        page.locator("#me-password-title").click()
+    open_fold(page, "#me-password")
     v = press(page, "me-new", "")
     assert is_chars(v), f"after a load, characters: {v!r}"
     assert kind_of(page, "me-new", "chars").is_checked(), "Characters chosen"
     page.evaluate("localStorage.removeItem('massimo.suggest')")
-    page.locator("#me-password-title").click()
+    toggle_fold(page, "#me-password")
     show_view(page, "tiles")
 
 
@@ -376,8 +397,7 @@ def test_copy(page, case):
     clipboard and without it, as over plain HTTP on the LAN."""
     page.context.grant_permissions(["clipboard-read", "clipboard-write"], origin=page.evaluate("location.origin"))
     show_view(page, "profile")
-    if not page.locator("#me-password").evaluate("(d) => d.open"):
-        page.locator("#me-password-title").click()
+    open_fold(page, "#me-password")
     v = press(page, "me-new", "")
     page.evaluate("navigator.clipboard.writeText('')")
     copy = page.locator(".pw-suggest .pw-copy")
@@ -398,7 +418,7 @@ def test_copy(page, case):
     finally:
         page.evaluate("""() => Object.defineProperty(navigator, "clipboard", { value: window.__clip, configurable: true })""")
     assert page.evaluate("navigator.clipboard.readText()") == v, "the fallback copies"
-    page.locator("#me-password-title").click()
+    toggle_fold(page, "#me-password")
     show_view(page, "tiles")
 
 
@@ -581,8 +601,7 @@ def test_a_late_suggestion_does_not_fill_after_a_save(page, case):
     comes later fills nothing (the PUT stubbed, so that the user stays as
     it was)."""
     show_view(page, "profile")
-    if not page.locator("#me-password").evaluate("(d) => d.open"):
-        page.locator("#me-password-title").click()
+    open_fold(page, "#me-password")
     held = held_list(page)
     page.locator("#me-new").fill("saved-by-hand")
     page.locator("#me-again").fill("saved-by-hand")
@@ -608,7 +627,7 @@ def test_a_late_suggestion_does_not_fill_after_a_save(page, case):
     finally:
         page.evaluate(REAL_REGISTER)
         page.unroute("**/api/v1/users/owner")
-    page.locator("#me-password-title").click()
+    toggle_fold(page, "#me-password")
     show_view(page, "tiles")
 
 
@@ -655,10 +674,9 @@ def reset_after_a_press(page, field, again, reset):
 def test_a_late_suggestion_does_not_fill_after_my_profiles_reset(page, case):
     """My profile's Set a password: Reset after a press while the list loads."""
     show_view(page, "profile")
-    if not page.locator("#me-password").evaluate("(d) => d.open"):
-        page.locator("#me-password-title").click()
+    open_fold(page, "#me-password")
     reset_after_a_press(page, "me-new", "me-again", "#me-password-form .form-reset")
-    page.locator("#me-password-title").click()
+    toggle_fold(page, "#me-password")
     show_view(page, "tiles")
 
 
@@ -671,7 +689,7 @@ def test_a_late_suggestion_does_not_fill_after_a_panels_reset(page, case):
         show_view(page, "system")
         panel = page.locator(".user-panel[data-name='%s']" % name)
         panel.wait_for()
-        panel.locator("summary").click()
+        toggle_fold(page, ".user-panel[data-name='%s']" % name)
         field = f"user-{name}-password"
         page.locator("#" + field).wait_for(state="visible")
         reset_after_a_press(page, field, None, ".user-panel[data-name='%s'] form .form-reset" % name)
