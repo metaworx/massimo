@@ -27,13 +27,15 @@ import (
 // start) and /ui/ (the files, the translations under /ui/i18n/, Massimo's
 // mark under /ui/brand/, which make ui-brand writes from tools/brand,
 // the vendored OPAQUE client under /ui/vendor/, ui/vendor/README.md, the
-// credits and licences at /ui/credits.json, internal/credits) and
+// credits and licences at /ui/credits.json, internal/credits, and EFF's
+// long word list a suggested password draws from, /ui/words-en.txt,
+// third_party/eff-wordlist/) and
 // talks to the API; beside the page, /sw.js is its service worker, whose
 // scope is the page's, /manifest.webmanifest makes it installable, and
 // /favicon.ico is where browsers look for an icon. /ui/connect.html is the
 // apps' connect page, a page of its own (docs/app.md).
 //
-//go:embed ui/index.html ui/connect.html ui/connect.js ui/i18n.js ui/components.js ui/app.js ui/header.js ui/home.js ui/rooms.js ui/tiles.js ui/week-program.js ui/config.js ui/login.js ui/providers.js ui/theme.js ui/notify.js ui/notifytext.js ui/sw.js ui/manifest.webmanifest ui/style.css ui/i18n/*.json ui/brand/*.svg ui/brand/*.css ui/brand/*.png ui/brand/*.ico ui/partials/*.html ui/vendor/opaque.js ui/vendor/opaque.LICENSE ui/parts.js
+//go:embed ui/index.html ui/connect.html ui/connect.js ui/i18n.js ui/components.js ui/app.js ui/header.js ui/home.js ui/rooms.js ui/tiles.js ui/week-program.js ui/config.js ui/login.js ui/providers.js ui/theme.js ui/notify.js ui/notifytext.js ui/sw.js ui/manifest.webmanifest ui/style.css ui/i18n/*.json ui/brand/*.svg ui/brand/*.css ui/brand/*.png ui/brand/*.ico ui/partials/*.html ui/vendor/opaque.js ui/vendor/opaque.LICENSE ui/words-en.txt ui/parts.js
 var uiFiles embed.FS
 
 // uiPartials are the frames of the page's skeleton in ui/partials/, a

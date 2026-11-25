@@ -23,7 +23,8 @@
  * Password says alone, as it does while it is typed (AP PasswordRules,
  * Block 2), with the name as it is typed, so that the line follows a
  * name changed after the password (Block 3), or Again where the two
- * passwords differ; a
+ * passwords differ; a dice beside Password suggests one and fills both
+ * (Block 4); a
  * missing password the browser refuses itself, the fields being
  * required, its focus on Password (AP LooseEnds, Block 2). A
  * refusal for lack of a session, or the server's word that the first
@@ -200,7 +201,7 @@ export function Owner() {
             <p id="setup-tls" class={"notice small" + hid(!card.selfSigned)} role="note">{t("header.selfSigned")}</p>
             <UserNameField label={t("users.name")} id="setup-user" msgId="setup-name-msg" nc={nc} autocomplete="username" inputRef={nameRef} typed={setTypedName} />
             <NewPassword ids={["setup-password", "setup-again"]} label={t("login.password")} inputRefs={[passRef, againRef]} required reset={opened + succeeded}
-              context={() => [typedName]} refused={refused} />
+              context={() => [typedName]} refused={refused} suggest />
             <label id="setup-keep-row" class={"switch login-keep" + hid(!offered)}>
               <input type="checkbox" id="setup-keep" checked={keep && offered} onChange={(ev) => setKeep(ev.currentTarget.checked)} />
               <span class="slider" aria-hidden="true" />
