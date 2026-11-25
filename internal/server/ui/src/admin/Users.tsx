@@ -28,7 +28,7 @@ import { isoOf, localOf } from "../shared/time";
 import { type Changes, Identities } from "../shared/identities";
 import { Tokens } from "../shared/tokens";
 import { UserNameField, useNameCheck } from "../shared/username";
-import { PasswordField } from "../shared/password";
+import { PasswordField, passwordProblem } from "../shared/password";
 import { useLang } from "../shared/lang";
 import { firstOwnerOf, isMe, me } from "../shared/me";
 import { askOwner, keptOpen } from "../shared/owner";
@@ -102,7 +102,10 @@ const trim = (v: string) => v.trim();
  * password shown is hidden again as the panel closes or opens. An
  * integration's user gets no password, a line in its place: it acts
  * through its integration alone (AP LooseEnds, D1); one it holds from
- * before, its manager removes with Remove the password.
+ * before, its manager removes with Remove the password. A new password is
+ * typed once (AP PasswordRules, D51-A) and held to the rule, its line
+ * under it; a Save the rule refuses sends nothing and puts the focus in
+ * it; left empty, the password stays as it is and is not checked.
  */
 function UserForm({ u, off, open }: { u: User; off: boolean; open: boolean }) {
   useLook();
@@ -116,6 +119,8 @@ function UserForm({ u, off, open }: { u: User; off: boolean; open: boolean }) {
   // shown once and never kept: the part's own state, not the forms' store
   const [password, setPassword] = useState("");
   const [current, setCurrent] = useState("");
+  const passRef = useRef<HTMLInputElement>(null);
+  const [refused, setRefused] = useState(0);
   const ask = useAsk<HTMLButtonElement>();
   const body: Record<string, unknown> = {};
   if ((manage || self) && display.changed) body.display_name = display.value.trim();
@@ -129,13 +134,22 @@ function UserForm({ u, off, open }: { u: User; off: boolean; open: boolean }) {
   form.track(changed, [display, role, disabled, expires, forget]);
   const submit = (ev: Event) => {
     ev.preventDefault();
+    if (form.look === "saving") return; // a second submit while the save runs, before the rule is asked
     if (!changed) {
       usersMsg(t("users.unchanged"), true);
+      return;
+    }
+    // a new password the rule refuses: nothing sent, its line saying so, the focus in it, in the submit's handler; empty is
+    // unchanged and not checked
+    if (password && passwordProblem(password, words())) {
+      setRefused((r) => r + 1);
+      passRef.current?.focus();
       return;
     }
     form.save(() => saveUser(u, { ...body }, password, self && !manage ? current : null));
   };
   const id = (field: string) => "user-" + u.name + "-" + field;
+  const words = () => [u.name, display.value.trim()];
   const admin = "admin-only" + hid(!manage);
   const ofIntegration = !!u.integration;
   return (
@@ -159,7 +173,7 @@ function UserForm({ u, off, open }: { u: User; off: boolean; open: boolean }) {
       ) : (
         <>
           <PasswordField label={t("users.password")} id={id("password")} name="password" autocomplete="new-password" placeholder={t("users.passwordHint")}
-            reset={open} value={password} set={(v) => {
+            reset={open} value={password} inputRef={passRef} rule={words} refused={refused} set={(v) => {
               setPassword(v);
               form.place("password").changed();
             }} />
@@ -218,7 +232,10 @@ function UserPanel({ u }: { u: User }) {
  * after the last keystroke and when the field is left, and Create sends
  * nothing while it is wrong; its display name, role, password and end.
  * What is typed is the form's own, until it is cancelled or the user is
- * added; the password never leaves it but registered by OPAQUE.
+ * added; the password never leaves it but registered by OPAQUE. The
+ * password is typed once (AP PasswordRules, D51-A) and held to the rule,
+ * its line under it; Create sends nothing while the rule refuses it and
+ * puts the focus in it; left empty, the user has keys only, not checked.
  */
 function NewUser() {
   useLook();
@@ -232,12 +249,22 @@ function NewUser() {
   const [password, setPassword] = useState("");
   const [expires, setExpires] = useState("");
   const nameRef = useRef<HTMLInputElement>(null);
+  const passRef = useRef<HTMLInputElement>(null);
+  const [refused, setRefused] = useState(0);
   const create = useBusy();
   const nc = useNameCheck(() => users.list.map((u) => u.name));
+  const words = () => [name.trim(), display.trim()];
   const submit = (ev: Event) => {
     ev.preventDefault();
+    if (create.busy) return; // a second submit while the creation runs, before the rule is asked
     if (!nc.check(name)) {
       nameRef.current?.focus();
+      return;
+    }
+    // a password the rule refuses: nothing sent, its line saying so, the focus in it; empty is a user with keys only
+    if (password && passwordProblem(password, words())) {
+      setRefused((r) => r + 1);
+      passRef.current?.focus();
       return;
     }
     const body: Record<string, unknown> & { name: string } = { name: name.trim(), role };
@@ -255,7 +282,7 @@ function NewUser() {
       <TextField label={t("users.displayName")} id="user-new-display_name" name="display_name" maxLength={64} value={display} set={setDisplay} />
       <Select label={t("users.role")} id="user-new-role" name="role" wide options={roleOptions()} value={role} onChange={setRole} />
       <PasswordField label={t("login.password")} id="user-new-password" name="password" autocomplete="new-password" placeholder={t("users.noPasswordHint")}
-        value={password} set={setPassword} />
+        value={password} set={setPassword} inputRef={passRef} rule={words} refused={refused} />
       <Field label={t("users.expires")} id="user-new-expires" wide>
         <DateTime id="user-new-expires" cls="field-control" step={60} value={expires} set={setExpires} />
       </Field>

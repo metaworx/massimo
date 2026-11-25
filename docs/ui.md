@@ -50,6 +50,28 @@ the page learns it from `/healthz` before anyone signs in,
 so that the card shows the eye or not from its first drawing,
 and none shows until it has answered.
 An API key's field, and a provider's client secret, have no eye.
+A new password, in the five forms that set one
+(the first owner's, My profile's **Change password** and **Set a password**,
+and in System settings → Users adding a user and a user's panel),
+has 8 to 64 characters, counted as typed, one per code point,
+as `massimo user` and the users' API hold it (AP PasswordRules, D4-A, D7-A):
+a line under the field, its description and a status region,
+says while it is typed what the rule finds:
+the hint "Min. 8 characters; better 15 or a few words." with an i while it is empty,
+then **Too short** or **Too long** with a warning's sign,
+or that the password can be set, with a tick (D6-A);
+it is written again only when what it says changes,
+and its place is as tall as its longest text, one line at 390 px in each language,
+so that the rows under it do not move.
+A submit the rule refuses, also by Enter in the field, sends nothing:
+the line says that it was refused, the field is outlined as refused and has the focus,
+until the next key, which brings the line back to what the password is,
+and only while the field holds a password the rule refuses (Reset empties it);
+the form's own message line says nothing of it,
+so that nothing says "too short" once the line says the password can be set.
+The rule's refusal comes before the mismatch of the two fields.
+The sign-in takes any password a user has, of any length,
+and so does the upgrade of a user of version 1 at its sign-in (below).
 At the page's start and after a sign-out the page waits for the card:
 the Cubes, the rooms, the log's alerts and the stream are read,
 and the poll that reads them again starts,
@@ -137,8 +159,9 @@ Its fields are emptied at each opening, and its two passwords once the
 owner is made, the card has closed and the page's first reads after it have settled
 (AP LooseEnds, D13), never at a refusal, Skip for now, Back or Escape;
 what Create the owner finds wrong is said alone,
-the focus on the field to change: the name, or Again where the two passwords
-differ; a missing password the browser refuses itself, its focus on Password;
+the focus on the field to change: the name, Password where the rule refuses it,
+which its line under Password says (above), or Again where the two passwords differ;
+a missing password the browser refuses itself, its focus on Password;
 under the form, **Skip for now**, which shows the page as it is for this load,
 and the next load asks again,
 and **Keep it open…**, where the server is not kept open already.
@@ -1227,6 +1250,8 @@ as the settings' ⓘ do:
   A user with keys only, such as the owner made from `MASSIMO_API_TOKEN`,
   has **Set a password** instead, without a current one, and a line saying
   that it lets the user sign in by name in any browser.
+  The new password has the rule's line under it;
+  a Save the rule refuses says so there, puts the focus in it, and sends nothing.
   **Reset** empties the fields; a new password typed is marked as the display name is,
   but kept nowhere but in its field, and gone at a sign-out;
   the current one alone, as a password manager fills it in, is no change.
@@ -1831,6 +1856,9 @@ settings forms and have none of it.
   **Save**, off while nothing differs from the user, and **Reset**;
   a new password typed stays in its field alone, in no draft, and goes
   with a Save, a Reset or a sign-out;
+  it is typed once (AP PasswordRules, D51-A), the rule's line under it,
+  and a Save the rule refuses sends nothing and puts the focus in it;
+  left empty, the password stays as it is, unchecked;
   **Remove**, which asks in place of the panel's actions;
   the user's sessions and API keys, each with its id, and **Revoke**,
   read when the panel opens and after every change of the users while it is open;
@@ -1858,7 +1886,9 @@ settings forms and have none of it.
   the letters a to z, digits and `. _ - @`, starting with a letter or a digit,
   at most 64 characters, capitals taken as lower case, and not a name in use.
   **Create** sends nothing while the name is wrong,
-  and turns until the browser has registered the password and the server has
+  nor while the rule refuses the password, typed once with its line under it,
+  the focus then in it; an empty password is a user with keys only, unchecked;
+  Create turns until the browser has registered the password and the server has
   added the user.
   With `settings`, **Password sign-in** switches off the sign-in that sends a
   password to the server,
@@ -2691,8 +2721,9 @@ a value's age it takes from `received` of `rooms.js`, as the rooms do.
 | `FileButton` | `file.tsx` | a button that opens the browser's choice of a file of the types it accepts, the same file again too | `id` (the button's), `cls`, `label`, `accept`, `off`, `inputId` and `inputLabel` (the input's id and its name in the page's language: the Appearance card's Import…), `onFile(file)` |
 | `Adder` | `adder.tsx` | the end of a list that adds an item: the new item's form in its place while shown, the button that shows it hidden meanwhile, the focus in the form's first field when it comes, in the drawing's own turn, and back on the button when it goes (Users, Roles, Sign-in providers) | `id` (the button's), `formId` (the form's place), `label`, `shown`, `set(shown)`, the form as children |
 | `UserNameField`, `useNameCheck`, `wordNameError` | `username.tsx` | a new user's login name (Add a user, the first owner's form): checked 2 s after the last keystroke and when left, the store's rule and the names in use; a fixed name clears the line at once; the server's refusal worded alike | `label`, `id`, `msgId` (the line under it, which describes it), `value` and `set` (Add a user's), or neither, the field not controlled and read through `inputRef` (the first owner's, UiParts D210), `nc` (`useNameCheck(taken)`: `problem`, `say`, `check(v)`, `typed(v)`), `name` (the input's, Add a user's alone), `autocomplete`, `placeholder`, `inputRef` |
-| `PasswordInput`, `PasswordField`, `reveal` | `password.tsx` | a password's input with its eye, every password field's (AP MobileApp, D84-A): the button at the field's right end, inside its box, labelled Show password and Hide password, `aria-pressed`, that turns the type between `password` and `text`, the value, the caret and the `autocomplete` kept, the click keeping the focus in the field; hidden again at each change of `reset` (the card's openings, a fold's open state) and at the form's submit, in the capture before the form's handler, and when switched off, the type never turned inside a closed fold, but as it opens; no eye while `reveal`, the setting `auth.password_reveal` as `/healthz` says it (`MassimoParts.chrome.reveal`), is not `true`; the field in its row | `id`, `name`, `autocomplete`, `value` and `set`, or `inputRef`, `required`, `disabled`, `placeholder`, `reset`; the row's `label`, `hint`, `cls` |
-| `NewPassword`, `newPasswordProblem` | `password.tsx` | a new password typed twice (My profile's Change password, the first owner's form), each field with its eye, free fields of the caller's own state, never a draft, or fields not controlled, read through their refs (the first owner's, UiParts D210); the pair's one check, the mismatch first, then none typed | `ids` (the two inputs'), `names` (their name attributes, My profile's alone), `label` (the first's), `value`, `set`, `again`, `setAgain`, or instead `inputRefs` (the two inputs' refs), `required`, `reset` |
+| `PasswordInput`, `PasswordField`, `reveal` | `password.tsx` | a password's input with its eye, every password field's (AP MobileApp, D84-A): the button at the field's right end, inside its box, labelled Show password and Hide password, `aria-pressed`, that turns the type between `password` and `text`, the value, the caret and the `autocomplete` kept, the click keeping the focus in the field; hidden again at each change of `reset` (the card's openings, a fold's open state) and at the form's submit, in the capture before the form's handler, and when switched off, the type never turned inside a closed fold, but as it opens; no eye while `reveal`, the setting `auth.password_reveal` as `/healthz` says it (`MassimoParts.chrome.reveal`), is not `true`; the field in its row | `id`, `name`, `autocomplete`, `value` and `set`, or `inputRef`, `required`, `disabled`, `placeholder`, `reset`, `describedBy` (the line that describes it), `typed` (told of each keystroke and change event), `invalid`; the row's `label`, `hint`, `cls`, `rule` (the rule's context words: given, its line under the field, following the value, or the keystrokes, change events and the value at each refusal of a field not controlled, empty again at each change of `reset`), `refused` (the caller's count of the submits the rule refused: the line says so until the next key, the field marked invalid, while its value is still refused) |
+| `NewPassword`, `newPasswordProblem` | `password.tsx` | a new password typed twice (My profile's Change password, the first owner's form), each field with its eye, the rule's line under the first, free fields of the caller's own state, never a draft, or fields not controlled, read through their refs (the first owner's, UiParts D210); the pair's one check, the rule first (its line says it, the focus then in the first field), then the mismatch, then none typed | `ids` (the two inputs'), `names` (their name attributes, My profile's alone), `label` (the first's), `value`, `set`, `again`, `setAgain` and `inputRef` (the first's), or instead `inputRefs` (the two inputs' refs), `required`, `reset`, `context` (the rule's words), `refused` (the submits the rule refused); `password`, `again`, `context` |
+| `passwordProblem`, `passwordSaid`, `PasswordRule` | `password.tsx` | the rule of a new password, as Go's `internal/password` holds it (AP PasswordRules, D7-A): `too_short` below 8 code points, `too_long` above 64, `""` where it may be set, the answers of its `testdata/cases.json`, which the UI test gives it through `MassimoParts.passwordProblem`; the context words, the user's names, taken and refusing nothing yet; a refusal's words, while typed or for a refused submit; the line under a new password's field (D6-A), drawn by `PasswordField`'s `rule`: the hint with an i while empty, the refusal with a warning's sign or a tick, a refused submit until the next key, a status region written only when what it says changes, its place the tallest of its texts | `password`, `context`; `answer`, `refused`; `id`, `value`, `context`, `refused` |
 | `toServers` | `app.ts` | back to the app's servers where the page is in the app (`appConnect` of `login.js`): ☰'s Select server, the sign-in's ☰ and Cancels, the first owner's Cancel | |
 | `toServerSettings`, `toAppSettings` | `app.ts` | to this server's settings and to the app's on the app's own page (`appServerSettings` and `appAppSettings` of `login.js`, contract version 5): ☰'s two entries after Select server | |
 | `app`, `readApp`, `appKeyId`, `signInRevoked` | `app.ts` | the app's status of the login by fingerprint, a signal read again at each opening of the sign-in, a fingerprint refused, the first owner's form and My profile shown (`login.status`), null in a browser; its key of this device's id, 0 for none; the ids of what the last sign-in's `setToken` revoked, `[]` in a browser (`tokenAnswer` of `login.js`) | `st` (the status) |

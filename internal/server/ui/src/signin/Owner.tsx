@@ -18,9 +18,12 @@
  * second tap meets the form, and Skip for now and the app's Cancel are
  * off meanwhile; a toast then says it (FirstOwner D22). What a submit
  * finds wrong is said alone, an earlier attempt's line cleared, and the
- * focus goes to the field to change: the name, or Again where the two
- * passwords differ; a missing password the browser refuses itself, the
- * fields being required, its focus on Password (AP LooseEnds, Block 2). A
+ * focus goes to the field to change: the name, Password where the rule
+ * refuses it, before the two are compared, which the line under
+ * Password says alone, as it does while it is typed (AP PasswordRules,
+ * Block 2), or Again where the two passwords differ; a
+ * missing password the browser refuses itself, the fields being
+ * required, its focus on Password (AP LooseEnds, Block 2). A
  * refusal for lack of a session, or the server's word that the first
  * owner exists already, turns the card to the sign-in (askLogin): the
  * server has users now. Under the form, Skip for now closes the card for
@@ -66,6 +69,7 @@ export function Owner() {
   const focus = card.focus;
   const offered = offer(app.value);
   const [keep, setKeep] = useState(false);
+  const [refused, setRefused] = useState(0);
   const nameRef = useRef<HTMLInputElement>(null);
   const passRef = useRef<HTMLInputElement>(null);
   const againRef = useRef<HTMLInputElement>(null);
@@ -127,12 +131,14 @@ export function Owner() {
     const n = name.trim();
     const password = passRef.current?.value || "";
     const again = againRef.current?.value || "";
-    const problem = n ? newPasswordProblem(password, again) : t("login.missing");
+    const problem = n ? newPasswordProblem(password, again, [n]) : { text: t("login.missing"), rule: false };
     if (problem) {
-      say(problem);
-      // the focus on the field to change, in the submit's handler: the name missing, or the two differing; no password
-      // at all never comes here, the browser refusing the required fields first
-      (n ? againRef : nameRef).current?.focus();
+      // the focus on the field to change, in the submit's handler: the name missing, the password the rule refuses, which
+      // its line says (it alone, so that nothing contradicts it once the password can be set), or the two differing; no
+      // password at all never comes here, the browser refusing the required fields first
+      if (problem.rule) setRefused((r) => r + 1);
+      else say(problem.text);
+      (!n ? nameRef : problem.rule ? passRef : againRef).current?.focus();
       return;
     }
     card.working = true;
@@ -186,7 +192,8 @@ export function Owner() {
             <p class="muted">{t("setup.text")}</p>
             <p id="setup-tls" class={"notice small" + hid(!card.selfSigned)} role="note">{t("header.selfSigned")}</p>
             <UserNameField label={t("users.name")} id="setup-user" msgId="setup-name-msg" nc={nc} autocomplete="username" inputRef={nameRef} />
-            <NewPassword ids={["setup-password", "setup-again"]} label={t("login.password")} inputRefs={[passRef, againRef]} required reset={opened + succeeded} />
+            <NewPassword ids={["setup-password", "setup-again"]} label={t("login.password")} inputRefs={[passRef, againRef]} required reset={opened + succeeded}
+              context={() => [nameRef.current?.value.trim() || ""]} refused={refused} />
             <label id="setup-keep-row" class={"switch login-keep" + hid(!offered)}>
               <input type="checkbox" id="setup-keep" checked={keep && offered} onChange={(ev) => setKeep(ev.currentTarget.checked)} />
               <span class="slider" aria-hidden="true" />
