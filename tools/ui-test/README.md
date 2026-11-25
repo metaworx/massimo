@@ -591,7 +591,7 @@ hence `failed_checks_forgotten`.
   browser with the same token,
   the mode kept "only on this device" stays in its browser and the user's
   applies again when the switch is off; the guest the runner creates (`guest1`,
-  password `guest-pass`) has no switches,
+  password `visit-pass`) has no switches,
   and its poll stays in the browser, none sent;
   the operator's poll and scheme, changed just before Sign out,
   reach the operator's account and leave the browser,

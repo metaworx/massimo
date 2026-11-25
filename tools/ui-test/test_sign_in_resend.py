@@ -156,7 +156,7 @@ def test_write_not_sent_again(new_context, case, watch, guard):
     tile.locator(".mode-auto").click()
     assert wait_until(page, DIALOG_OPEN, 5), "the sign-in opens again"
     before = len(seen)
-    sign_in(page, "guest1", "guest-pass")
+    sign_in(page, "guest1", "visit-pass")
     back(page, seen, before)
     assert page.evaluate("state.me.user.name") == "guest1", "another user"
     assert len(writes.sent) == 2, f"the setpoint is not sent again by another user: {len(writes.sent)}"
@@ -292,7 +292,7 @@ def test_stepped_setpoint_dropped_at_the_sign_in(new_context, case, watch, guard
     writes = Refusal(page, "**/api/v1/cubes/*/rooms/*/setpoint", "PUT", armed=0, answer=ok)
     reads = Refusal(page, "**/api/v1/me?again=1", "GET", armed=0)
     tile = page.locator(THERMOSTAT_ROOM).first
-    for user, password in (("operator", OPERATOR_PASSWORD), ("guest1", "guest-pass")):
+    for user, password in (("operator", OPERATOR_PASSWORD), ("guest1", "visit-pass")):
         reads.armed = 1  # the read sent again after the sign-in is answered
         tile.locator(".step-plus").click()
         assert not nothing_waits(page), "the stepped value waits for its time"

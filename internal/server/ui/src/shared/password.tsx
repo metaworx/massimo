@@ -22,8 +22,10 @@
  * newPasswordProblem is the one check of the pair. A new password is held
  * to the rule of internal/password (AP PasswordRules, D4-A, D7-A, D11-A),
  * passwordProblem, which answers its cases (testdata/cases.json) as Go
- * does: 8 to 64 code points, as typed; and the line under the field of a
- * new password, PasswordRule, says what the rule finds while it is typed
+ * does: 8 to 64 code points, as typed, and no word of its context, the
+ * user's names and the server's (D50-A; passwordRefusal, which gives it
+ * the server's, serverNames); and the line under the field of a new
+ * password, PasswordRule, says what the rule finds while it is typed
  * (D6-A). The sign-in, and the upgrade of a version-1 user at its sign-in
  * (login.js upgradePassword), hold no rule: they take the password a user
  * has.
@@ -32,6 +34,7 @@
 import { signal } from "@preact/signals";
 import type { Ref } from "preact";
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "preact/hooks";
+import { app, serverOf } from "./app";
 import { Field } from "./field";
 import { Icon } from "./icon";
 import { useLang } from "./lang";
@@ -44,31 +47,101 @@ export const MIN_PASSWORD = 8;
 export const MAX_PASSWORD = 64;
 
 /** A refusal of the rule, in the answers of internal/password's testdata/cases.json; a password it takes is answered "" ("ok" there). */
-export type PasswordAnswer = "too_short" | "too_long";
+export type PasswordAnswer = "too_short" | "too_long" | "context";
+
+/** MIN_WORD is the fewest letters a word of the context has: internal/password's MinWord. */
+const MIN_WORD = 4;
+
+/** ALWAYS are the names every new password is checked against beside the caller's: internal/password's Always. */
+const ALWAYS = ["massimo", "maxcube"];
+
+/** fold lower-cases s a code point at a time, by Unicode's simple mapping as Go's unicode.ToLower: the first code point of each one's toLowerCase, which is longer only for İ (i and a combining dot, where the simple mapping is i). */
+function fold(s: string): string {
+  return [...s].map((c) => [...c.toLowerCase()][0] || "").join("");
+}
+
+/** contextWords are the words of ALWAYS and of names, as passwordProblem takes them, lower-cased: each name trimmed of what is neither a letter, a mark nor a digit at either end, and each run of letters and marks in it, where it has MIN_WORD letters or more. */
+function contextWords(names: readonly string[]): string[] {
+  const out: string[] = [];
+  const add = (w: string) => {
+    if ((w.match(/\p{L}/gu) || []).length >= MIN_WORD) out.push(fold(w));
+  };
+  for (const name of [...ALWAYS, ...names]) {
+    add(name.replace(/^[^\p{L}\p{M}\p{Nd}]+|[^\p{L}\p{M}\p{Nd}]+$/gu, ""));
+    for (const run of name.match(/[\p{L}\p{M}]+/gu) || []) add(run);
+  }
+  return out;
+}
 
 /**
  * passwordProblem is the rule a new password is held to, as Go's
  * password.Check holds it: too_short below MIN_PASSWORD code points,
- * too_long above MAX_PASSWORD, "" where it may be set. A code point
- * counts one ([...s], as utf8.RuneCountInString counts), however many
- * UTF-16 units or UTF-8 bytes it takes, and the password is counted as
- * typed, not normalised. context are the words it is checked against,
- * the user's names, taken from every caller and refusing nothing yet, as
- * Go's. The empty password is too short: where empty means unchanged or
- * keys only, the caller does not ask. MassimoParts.passwordProblem, so
- * that the UI test gives it every case Go is tested with.
+ * too_long above MAX_PASSWORD, then context where it contains a word of
+ * its context, "" where it may be set. A code point counts one ([...s],
+ * as utf8.RuneCountInString counts), however many UTF-16 units or UTF-8
+ * bytes it takes, and the password is counted as typed, not normalised.
+ * context are the names it is checked against beside massimo and
+ * maxcube, as Go's: each gives the words contextWords says, and the
+ * password and the words are compared lower-cased a code point at a
+ * time (fold), so that both languages answer alike. The empty password
+ * is too short: where empty means unchanged or keys only, the caller
+ * does not ask. MassimoParts.passwordProblem, so that the UI test gives
+ * it every case Go is tested with.
  */
-export function passwordProblem(password: string, _context: readonly string[] = []): PasswordAnswer | "" {
+export function passwordProblem(password: string, context: readonly string[] = []): PasswordAnswer | "" {
   const n = [...password].length;
   if (n < MIN_PASSWORD) return "too_short";
   if (n > MAX_PASSWORD) return "too_long";
+  const folded = fold(password);
+  if (contextWords(context).some((w) => folded.includes(w))) return "context";
   return "";
+}
+
+/**
+ * hostWord is the server's name a host gives, as Go's password.HostWord
+ * answers: the first label of a host name, without what follows a single
+ * colon, its port; "" for anything in brackets or with more than one
+ * colon (an IPv6 address), for an IPv4 address, and for localhost,
+ * lower-cased as the rule lower-cases (fold), which name no server.
+ * MassimoParts.hostWord, so that the UI test gives it every host of
+ * cases.json.
+ */
+export function hostWord(host: string): string {
+  let h = host.trim();
+  if (h.startsWith("[") || h.split(":").length > 2) return ""; // an IPv6 address, with its port or not
+  h = h.split(":")[0];
+  if (/^\d{1,3}(\.\d{1,3}){3}$/.test(h) && h.split(".").every((n) => Number(n) <= 255 && (n === "0" || !n.startsWith("0")))) return "";
+  const label = h.split(".")[0];
+  return fold(label) === "localhost" ? "" : label;
+}
+
+/**
+ * serverNames are the server's names a new password must not contain:
+ * the first label of the page's host (hostWord), and in the app the name
+ * it gives this server (shared/app.ts serverOf, the sign-in card's, AP
+ * MobileApp, D62-A), none where that name is the server's address or
+ * its host and port, as the card leaves it out, and none where it is an
+ * address of another form (a "://" in it), which the card still shows as
+ * the name but which names no server. A name gives the rule every run of
+ * letters in it, where Go takes of a host its first label alone: the
+ * page can only refuse more. A signal's read, so that a part that draws
+ * the rule follows the app's status.
+ */
+export function serverNames(): string[] {
+  const name = serverOf(app.value)?.name || "";
+  return [hostWord(location.hostname), name.includes("://") ? "" : name];
+}
+
+/** passwordRefusal is the rule's answer for a new password on this page: passwordProblem with the user's names given and the server's (serverNames). */
+export function passwordRefusal(password: string, names: readonly string[]): PasswordAnswer | "" {
+  return passwordProblem(password, [...names, ...serverNames()]);
 }
 
 /** The words of each refusal under the field: now while it is typed, refused once a submit was refused for it. */
 const SAID: Record<PasswordAnswer, { now: () => string; refused: () => string }> = {
   too_short: { now: () => t("password.tooShort"), refused: () => t("password.refusedShort") },
   too_long: { now: () => t("password.tooLong"), refused: () => t("password.refusedLong") },
+  context: { now: () => t("password.context"), refused: () => t("password.refusedContext") },
 };
 
 /** passwordSaid is the words of a refusal of the rule; refused, those of a submit refused for it. */
@@ -85,12 +158,12 @@ export interface NewPasswordProblem {
 /**
  * newPasswordProblem says what is wrong with a new password typed twice,
  * null for nothing: the first typed and broken by the rule
- * (passwordProblem, with the context words), which its line says
+ * (passwordRefusal, with the user's names), which its line says
  * already, so that the two need not be typed alike first; then the two
  * differ, or none is typed.
  */
 export function newPasswordProblem(password: string, again: string, context: readonly string[]): NewPasswordProblem | null {
-  const answer = password ? passwordProblem(password, context) : "";
+  const answer = password ? passwordRefusal(password, context) : "";
   if (answer) return { text: passwordSaid(answer, true), rule: true };
   if (password !== again) return { text: t("setup.mismatch"), rule: false };
   if (!password) return { text: t("login.missing"), rule: false };
@@ -116,7 +189,7 @@ const RULE_TEXTS = [() => t("password.hint"), ...Object.values(SAID).flatMap((w)
  */
 export function PasswordRule({ id, value, context, refused }: { id: string; value: string; context: () => readonly string[]; refused: boolean }) {
   useLang();
-  const answer = value ? passwordProblem(value, context()) : "";
+  const answer = value ? passwordRefusal(value, context()) : "";
   const look = !value ? "" : answer ? (refused ? " bad refused" : " bad") : " ok";
   const text = !value ? t("password.hint") : answer ? passwordSaid(answer, refused) : t("password.fine");
   const sign = !value ? "icon-info" : answer ? "mark-warn" : "icon-check";
@@ -365,7 +438,7 @@ export function PasswordField(props: One & {
   const value = props.set ? props.value : typed;
   // refused only while the value shown is still one the rule refuses: a field emptied or changed by its form (Reset, a
   // draft taken away, a save's success) is no longer
-  const said = !!rule && refused !== keyed && !!value && !!passwordProblem(value, rule());
+  const said = !!rule && refused !== keyed && !!value && !!passwordRefusal(value, rule());
   const key = (v: string) => {
     if (own) setTyped(v);
     setKeyed(refused);

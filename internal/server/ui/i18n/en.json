@@ -1495,6 +1495,8 @@
   "password.tooLong": "Too long: at most 64 characters.",
   "password.refusedShort": "Refused: too short, at least 8 characters.",
   "password.refusedLong": "Refused: too long, at most 64 characters.",
+  "password.context": "Contains the user's or the server's name.",
+  "password.refusedContext": "Refused: has the user's or server's name.",
   "password.fine": "This password can be set.",
   "login.fingerprintPlain": "Not encrypted here: the login by fingerprint is used only over HTTPS or on the home network. Sign in with your password.",
   "login.fingerprintFailed": "Not signed in by fingerprint: {error}",

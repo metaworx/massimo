@@ -1540,6 +1540,8 @@
   "password.tooLong": "Za długie: najwyżej 64 znaki.",
   "password.refusedShort": "Odrzucone: za krótkie, min. 8 znaków.",
   "password.refusedLong": "Odrzucone: za długie, najwyżej 64 znaki.",
+  "password.context": "Zawiera nazwę użytkownika lub serwera.",
+  "password.refusedContext": "Odrzucone: nazwa użytkownika/serwera.",
   "password.fine": "To hasło można ustawić.",
   "login.fingerprintPlain": "Tutaj bez szyfrowania: logowanie odciskiem palca działa tylko przez HTTPS lub w sieci domowej. Zaloguj się hasłem.",
   "login.fingerprintFailed": "Nie zalogowano odciskiem palca: {error}",

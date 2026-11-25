@@ -182,9 +182,9 @@ export interface UserCreate {
   /** A role's key; viewer when absent, owner for the first owner */
   role?: string;
   /**
-   * 8 to 64 characters, Unicode code points as sent. Absent for a user with
-   * keys only, and an empty one counts as absent; this or record for the first
-   * owner
+   * 8 to 64 characters, Unicode code points as sent, without the user's or the
+   * server's name. Absent for a user with keys only, and an empty one counts as
+   * absent; this or record for the first owner
    */
   password?: string;
   /**
@@ -216,7 +216,7 @@ export interface UserChange {
   expires_at?: string | null;
   /**
    * Empty removes the password; any other has 8 to 64 characters, Unicode code
-   * points as sent
+   * points as sent, without the user's or the server's name
    */
   password?: string;
   /** Required when a user sets its own password, unless proof is given */

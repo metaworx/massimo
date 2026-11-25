@@ -1495,6 +1495,8 @@
   "password.tooLong": "Zu lang: höchstens 64 Zeichen.",
   "password.refusedShort": "Abgelehnt: zu kurz, mindestens 8 Zeichen.",
   "password.refusedLong": "Abgelehnt: zu lang, höchstens 64 Zeichen.",
+  "password.context": "Enthält Namen von Benutzer oder Server.",
+  "password.refusedContext": "Abgelehnt: Name von Benutzer/Server.",
   "password.fine": "Dieses Passwort kann gesetzt werden.",
   "login.fingerprintPlain": "Hier nicht verschlüsselt: Die Anmeldung mit Fingerabdruck gilt nur über HTTPS oder im Heimnetz. Melde dich mit deinem Passwort an.",
   "login.fingerprintFailed": "Nicht mit Fingerabdruck angemeldet: {error}",

@@ -15,6 +15,7 @@ import (
 	"encoding/json"
 	"errors"
 	"net/http"
+	"os"
 	"strconv"
 	"strings"
 	"time"
@@ -131,15 +132,34 @@ func noWayIn(u store.User) error {
 }
 
 // newPassword holds a plain password that a request sets to the rule of
-// internal/password, with the user's names as its context: 400 with the
-// rule's words where it fails. A record registered by OPAQUE is never
-// seen and so never checked, and the callers leave out an empty
-// password, which means none (AP PasswordRules, D11-A).
-func newPassword(pw string, u store.User) error {
-	if err := password.Check(pw, u.Name, u.DisplayName); err != nil {
+// internal/password, with the user's names and the server's as its
+// context: 400 with the rule's words where it fails, which name no word
+// of the context. A record registered by OPAQUE is never seen and so
+// never checked, and the callers leave out an empty password, which
+// means none (AP PasswordRules, D11-A, D50-A).
+func (s *Server) newPassword(r *http.Request, pw string, names ...string) error {
+	if err := password.Check(pw, append(names[:len(names):len(names)], s.serverNames(r)...)...); err != nil {
 		return fail(http.StatusBadRequest, "%v", err)
 	}
 	return nil
+}
+
+// hostName is the host's name, the server's name by default; the tests
+// give the server a fixed one, so that none reads the machine's.
+var hostName = os.Hostname
+
+// serverNames are the server's names a new password must not contain:
+// Options.ServerName, or the first label of the host's name, and the
+// first label of the request's Host. A Host a reverse proxy or a client
+// sets otherwise only adds a word or takes one away from the request's
+// own check of a new password: it lets nobody in.
+func (s *Server) serverNames(r *http.Request) []string {
+	name := s.opts.ServerName
+	if name == "" {
+		h, _ := hostName()
+		name = password.HostWord(h)
+	}
+	return []string{name, password.HostWord(r.Host)}
 }
 
 // busyRetry is the Retry-After, in seconds, of a password check or
@@ -404,7 +424,7 @@ func (s *Server) postUser(w http.ResponseWriter, r *http.Request) error {
 	}
 	auditTarget(r, "user:"+store.NormalName(u.Name))
 	if password != "" {
-		if err := newPassword(password, u); err != nil {
+		if err := s.newPassword(r, password, u.Name, u.DisplayName); err != nil {
 			return err
 		}
 	}
@@ -539,7 +559,11 @@ func (s *Server) putUser(w http.ResponseWriter, r *http.Request) error {
 	}
 	if req.Password != nil && *req.Password != "" {
 		// Before the current password is checked or a proof used up.
-		if err := newPassword(*req.Password, u); err != nil {
+		names := []string{u.Name, u.DisplayName}
+		if req.DisplayName != nil {
+			names = append(names, *req.DisplayName)
+		}
+		if err := s.newPassword(r, *req.Password, names...); err != nil {
 			return err
 		}
 	}

@@ -386,7 +386,7 @@ def test_a_users_panel(page, case):
     checked."""
     name = f"rule-panel-{case.width}-{case.lang}"
     remove_user(name)
-    api_call("POST", "api/v1/users", {"name": name, "role": "viewer", "password": "rule-password"})
+    api_call("POST", "api/v1/users", {"name": name, "role": "viewer", "password": "fixed-pw-01"})
     field = f"user-{name}-password"
     out, stop = writes(page)
     try:
@@ -436,7 +436,7 @@ def test_the_upgrade_at_the_sign_in_takes_a_short_password(page, case):
     that the user stays as it was. A forward guard."""
     name = f"rule-v1-{case.width}-{case.lang}"
     remove_user(name)
-    api_call("POST", "api/v1/users", {"name": name, "role": "viewer", "password": "rule-password"})
+    api_call("POST", "api/v1/users", {"name": name, "role": "viewer", "password": "fixed-pw-01"})
     put = []
 
     def user(route):

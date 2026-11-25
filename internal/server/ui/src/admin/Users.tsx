@@ -28,7 +28,7 @@ import { isoOf, localOf } from "../shared/time";
 import { type Changes, Identities } from "../shared/identities";
 import { Tokens } from "../shared/tokens";
 import { UserNameField, useNameCheck } from "../shared/username";
-import { PasswordField, passwordProblem } from "../shared/password";
+import { PasswordField, passwordRefusal } from "../shared/password";
 import { useLang } from "../shared/lang";
 import { firstOwnerOf, isMe, me } from "../shared/me";
 import { askOwner, keptOpen } from "../shared/owner";
@@ -141,7 +141,7 @@ function UserForm({ u, off, open }: { u: User; off: boolean; open: boolean }) {
     }
     // a new password the rule refuses: nothing sent, its line saying so, the focus in it, in the submit's handler; empty is
     // unchanged and not checked
-    if (password && passwordProblem(password, words())) {
+    if (password && passwordRefusal(password, words())) {
       setRefused((r) => r + 1);
       passRef.current?.focus();
       return;
@@ -149,7 +149,7 @@ function UserForm({ u, off, open }: { u: User; off: boolean; open: boolean }) {
     form.save(() => saveUser(u, { ...body }, password, self && !manage ? current : null));
   };
   const id = (field: string) => "user-" + u.name + "-" + field;
-  const words = () => [u.name, display.value.trim()];
+  const words = () => [u.name, u.display_name || "", display.value.trim()];
   const admin = "admin-only" + hid(!manage);
   const ofIntegration = !!u.integration;
   return (
@@ -262,7 +262,7 @@ function NewUser() {
       return;
     }
     // a password the rule refuses: nothing sent, its line saying so, the focus in it; empty is a user with keys only
-    if (password && passwordProblem(password, words())) {
+    if (password && passwordRefusal(password, words())) {
       setRefused((r) => r + 1);
       passRef.current?.focus();
       return;

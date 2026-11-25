@@ -116,7 +116,7 @@ func TestKeepOpenGoesWithTheFirstOwner(t *testing.T) {
 	if rec := sendFrom(s, "PUT", "/api/v1/settings", lan, "", `{"auth.keep_open":true}`); rec.Code != 200 {
 		t.Fatalf("set: %d %s", rec.Code, rec.Body.String())
 	}
-	if rec := sendFrom(s, "POST", "/api/v1/users", lan, "", `{"name":"root","password":"root-pass-1"}`); rec.Code != 201 {
+	if rec := sendFrom(s, "POST", "/api/v1/users", lan, "", `{"name":"root","password":"r-pass-001"}`); rec.Code != 201 {
 		t.Fatalf("the first owner: %d %s", rec.Code, rec.Body.String())
 	}
 	if _, set, _ := s.opts.Store.Setting(t.Context(), store.KeepOpenKey); set {
@@ -240,7 +240,7 @@ func TestFirstOwnerHeldIsRefused(t *testing.T) {
 	t.Parallel()
 	for _, opaque := range []bool{false, true} {
 		s := New(storeOptions(t, t.TempDir(), ""))
-		first, second := `{"name":"anna","password":"anna-pass-1"}`, `{"name":"bob","password":"bob-pass-1"}`
+		first, second := `{"name":"anna","password":"a-pass-001"}`, `{"name":"bob","password":"bob-pass-1"}`
 		if opaque {
 			first = `{"name":"anna","record":"` + recordFrom(t, s, "anna", "p") + `","ksf":"` + store.OpaqueKSF + `"}`
 			second = `{"name":"bob","record":"` + recordFrom(t, s, "bob", "p") + `","ksf":"` + store.OpaqueKSF + `"}`
@@ -286,7 +286,7 @@ func TestFirstOwnerOnce(t *testing.T) {
 	raced := 0
 	for round := range 12 {
 		s := New(storeOptions(t, t.TempDir(), ""))
-		bodies := []string{`{"name":"anna","password":"anna-pass-1"}`, `{"name":"bob","password":"bob-pass-1"}`}
+		bodies := []string{`{"name":"anna","password":"a-pass-001"}`, `{"name":"bob","password":"bob-pass-1"}`}
 		if round%2 == 1 {
 			bodies = []string{
 				`{"name":"anna","record":"` + recordFrom(t, s, "anna", "p") + `","ksf":"` + store.OpaqueKSF + `"}`,
@@ -372,7 +372,7 @@ func TestIntegrationLeavesAnOpenServerOpen(t *testing.T) {
 		t.Fatalf("the role owner on an open server: %d %s", rec.Code, rec.Body.String())
 	}
 	refusesWayIn(t, s, lan, "", system)
-	if rec := sendFrom(s, "POST", "/api/v1/users", lan, "", `{"name":"root","password":"root-pass-1"}`); rec.Code != 201 {
+	if rec := sendFrom(s, "POST", "/api/v1/users", lan, "", `{"name":"root","password":"r-pass-001"}`); rec.Code != 201 {
 		t.Fatalf("the first owner: %d %s", rec.Code, rec.Body.String())
 	}
 	if code, _, text := meFrom(t, s, lan, ""); code != 401 {

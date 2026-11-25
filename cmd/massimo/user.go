@@ -61,10 +61,12 @@ The roles are owner, manager, operator, guest, viewer, integration and the
 ones created through the API (viewer when -role is absent); -expires takes
 an RFC 3339 time, the end of a guest. -password-stdin reads the password
 from the first line of standard input, for scripts. A new password has 8
-to 64 characters; 15 or a few words are better. A password set before
-stays valid, but rename asks for one again: give a new one there where
-the old one is shorter, or -no-password, which leaves the user with its
-keys only.
+to 64 characters and contains no name of the user's or the host's, nor
+massimo or maxcube, whatever the case (a name of 4 letters or more); 15
+or a few words are better. A password set before stays valid, but rename
+asks for one again: give a new one there where the old one is shorter or
+holds the new name, or -no-password, which leaves the user with its keys
+only.
 `+dataDirUsage("user", "add", "anna", "-role", "operator"))
 }
 
@@ -199,16 +201,22 @@ func (u *userCmd) logChange(action, target string, detail map[string]any) {
 	}
 }
 
+// hostName is the host's name, the server's name a new password must not
+// contain (password.HostWord); the tests give it a fixed one (TestMain),
+// so that none reads the machine's.
+var hostName = os.Hostname
+
 // readPassword asks for a new password twice on the terminal, or reads
 // it from standard input with -password-stdin, and holds it to the rule
-// of internal/password; words are the user's names, which the rule
-// checks it against.
-func readPassword(fromStdin bool, words ...string) (string, error) {
+// of internal/password; names are the user's names, which the rule
+// checks it against with the host's name (AP PasswordRules, D50-A).
+func readPassword(fromStdin bool, names ...string) (string, error) {
 	pw, err := enterPassword(fromStdin)
 	if err != nil {
 		return "", err
 	}
-	if err := password.Check(pw, words...); err != nil {
+	host, _ := hostName()
+	if err := password.Check(pw, append(names[:len(names):len(names)], password.HostWord(host))...); err != nil {
 		return "", err
 	}
 	return pw, nil
@@ -429,7 +437,7 @@ func (u *userCmd) rename(args []string) error {
 	pw := ""
 	if !*noPassword {
 		if pw, err = readPassword(*fromStdin, names[1], us.DisplayName); err != nil {
-			if errors.Is(err, password.ErrTooShort) {
+			if errors.Is(err, password.ErrTooShort) || errors.Is(err, password.ErrContext) {
 				return fmt.Errorf("user rename: %w; a rename sets the password again, under the new name: give a new one, or -no-password, which leaves the user with its keys only", err)
 			}
 			return fmt.Errorf("user rename: %w", err)
