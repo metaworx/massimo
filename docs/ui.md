@@ -1721,11 +1721,17 @@ Go's the version the server was built with,
 "licence in its text" where the text is known by no name,
 and "other licences among its files" where not all its files are under that one;
 its body where it comes from, what else it includes where its note names it
-(the Rust crates in the OPAQUE client), with the words that their own licence
-texts are not reproduced here,
+(the Rust crates in the OPAQUE client), with the words that it includes
+the crates those are built with too,
+and that their licence texts, collected for Massimo from the crates' archives,
+are among its files,
 and each file of its licence (`LICENSE`, `NOTICE`, `PATENTS` and the like)
 with the licence it is known by, its text as text in a box that scrolls,
-which the file's name labels.
+which the file's name labels:
+the OPAQUE client's are its own `opaque.LICENSE`, MIT,
+and `opaque.LICENSE-3RD-PARTY`, the texts of its crates,
+which no one licence names,
+so that its head says "MIT, other licences among its files".
 The list is `/ui/credits.json`, the file `make credits` writes into `internal/credits/`
 and the server embeds, Go's version set to the binary's,
 served as the page's other files are (revalidated, an ETag);
@@ -3597,7 +3603,9 @@ it (`uiPageScripts` in `ui_test.go`) and its texts as the page's.
 One file is not the project's: `ui/vendor/opaque.js`,
 `@serenity-kit/opaque` as published, the OPAQUE client in WebAssembly,
 which the sign-in needs and which the browser does not offer
-(`ui/vendor/README.md` says which version, its licence and how to update it).
+(`ui/vendor/README.md` says which version, its licence and how to update it;
+`ui/vendor/opaque.LICENSE-3RD-PARTY` the licence texts of the Rust crates in it,
+which the credits carry and the page does not serve).
 `login.js` imports it when a sign-in first needs it, not with the page,
 and the page's `Content-Security-Policy` allows WebAssembly to compile
 (`'wasm-unsafe-eval'`) for it;

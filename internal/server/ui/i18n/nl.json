@@ -236,7 +236,7 @@
   "credits.kind.module": "Go-module",
   "credits.kind.moduleCopy": "Go-module, de kopie in {path}",
   "credits.kind.vendored": "in {path}",
-  "credits.includes": "Bevat {what}; hun eigen licentieteksten zijn hier niet opgenomen.",
+  "credits.includes": "Bevat {what} en de crates waarmee ze zijn gebouwd; hun licentieteksten, voor Massimo verzameld uit de archieven van de crates, staan onder de bestanden.",
   "credits.seeText": "licentie in de tekst",
   "credits.mixed": "{licence}, andere licenties onder de bestanden",
   "credits.notice": "kennisgeving",

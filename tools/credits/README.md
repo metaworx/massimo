@@ -28,7 +28,7 @@ In this order, each with every licence file it has
 | Go's runtime and standard library | `Go`; no version in the file: the binary shows its own (`runtime.Version()`) | `$(go env GOROOT)`; where a distribution keeps them elsewhere (Debian), `golang.org/x/sys`, whose `LICENSE` and `PATENTS` are Go's |
 | each Go module the binary links | its path and version | its directory in the module cache, or the repository's copy that `go.mod` replaces it with |
 | each directory of `third_party/` | a row of its note's table, else the directory's name | the directory, or the row's |
-| each file of `internal/server/ui/vendor/` | a row of its `README.md`'s table, else the file's name | the files beside it named after it (`opaque.LICENSE`) |
+| each file of `internal/server/ui/vendor/` | a row of its `README.md`'s table, else the file's name | the files beside it named after it (`opaque.LICENSE`, `opaque.LICENSE-3RD-PARTY`) |
 
 The modules are those `go list -deps ./cmd/massimo` finds,
 without cgo, for each platform the Makefile's `cross` builds,
@@ -57,12 +57,17 @@ The columns read, by their heads, in any order:
 | **Package** | the entry's name, the first word in backticks; without it the path's last element |
 | **Version** | its version |
 | **Licence** (or **License**) | its licence's SPDX identifier, before a comma (`` MIT, `LICENSE` ``) |
-| **Includes** | what else it holds, as names and versions alone |
+| **Includes** | what else it holds, as names and versions alone, whose licence texts are among its licence files: an entry with Includes and no licence file beside its first stops the program |
 
 Other columns are for the reader and not read.
 The table in the UI's `vendor/README.md` is read the same way,
 its first column a file of that directory,
-whose licence files lie beside it named after it (`opaque.LICENSE`).
+whose licence files lie beside it named after it:
+`opaque.LICENSE`, the OPAQUE client's own,
+and `opaque.LICENSE-3RD-PARTY`, the texts of the Rust crates it includes,
+which `go run ./tools/opaquecrates` writes (`tools/opaquecrates/README.md`);
+a further licence file is named by its text as every other,
+the crates' file by none, so that the entry reads as mixed.
 
 ## The licences
 
@@ -87,8 +92,12 @@ and System info and `massimo credits` say so.
 An entry without a licence file stops the program with an error naming it and where it looked,
 and the file is left as it was; it is never written as unknown.
 A licence file above 256 KiB stops it too, naming the file:
-that is three times the largest of today (modernc.org/sqlite's `LICENSE-3RD-PARTY.md`),
-and the whole list goes to a phone that opens the fold.
+that is above the largest of today,
+the OPAQUE client's `opaque.LICENSE-3RD-PARTY`, 186 KB,
+the texts of its Rust crates;
+and the whole list goes to a phone that opens the fold (399 KB today).
+A later OPAQUE client with more crates can pass it:
+then `make credits` stops, and the cap is weighed again.
 
 The file is the same on every machine:
 no absolute path, no time, no Go version, the order above, line ends as LF
