@@ -474,7 +474,7 @@ def test_a_double_click_on_yes_removes_once(page, case):
     makes the user."""
     name = f"rm-{case.width}-{case.lang}"
     remove_user(name)
-    api_call("POST", "api/v1/users", {"name": name, "role": "viewer", "password": "rm-pass"})
+    api_call("POST", "api/v1/users", {"name": name, "role": "viewer", "password": "rm-password"})
     deletes = []
     page.on("request", lambda r: deletes.append(r.url) if r.method == "DELETE" and r.url.endswith("/users/" + name) else None)
     try:
@@ -510,7 +510,7 @@ def test_a_refused_removal_says_the_servers_words(page, case, watch):
     server's refusal is TestSettingsFileKeyHolder's."""
     name = f"held-{case.width}-{case.lang}"
     remove_user(name)
-    api_call("POST", "api/v1/users", {"name": name, "role": "viewer", "password": "held-pass"})
+    api_call("POST", "api/v1/users", {"name": name, "role": "viewer", "password": "kept-pass"})
     words = f"user {name} holds the settings file's MASSIMO_API_TOKEN: change or remove it in the settings file first"
     path = "**/api/v1/users/" + name
     deletes = []
@@ -560,7 +560,7 @@ def test_create_is_busy_until_answered(page, case):
         page.locator("#user-add").click()
         form = page.locator("#user-new form")
         form.locator("input[name=name]").fill(name)
-        form.locator("input[name=password]").fill("busy-pass")
+        form.locator("input[name=password]").fill("slow-pass-1")
         form.locator("button[type=submit]").click()
         assert wait_held(page, held), "the POST is sent"
         assert_busy(page, "#user-new button[type=submit]", "Create")
@@ -632,7 +632,7 @@ def test_new_user_name_checked_while_typed(page, case, watch):
     name.press("Tab")
     assert name_msg(page, msg) == NAME_TAKEN[case.lang].format(name="operator"), "a listed name is in use, in lower case"
     name.fill("bad name")
-    page.locator("#user-new input[name=password]").fill("pw")
+    page.locator("#user-new input[name=password]").fill("own-secret-1")
     page.locator("#user-new button[type=submit]").click()
     page.wait_for_timeout(300)
     assert name_msg(page, msg) == NAME_BAD[case.lang] and not posts, f"Create with a bad name sends nothing: {posts}"
@@ -670,8 +670,8 @@ def test_first_owner_name_checked(page, case):
         name.fill("test manager")
         name.press("Tab")
         assert name_msg(page, "#setup-name-msg") == NAME_BAD[case.lang], "leaving the field checks it"
-        page.locator("#setup-password").fill("pw")
-        page.locator("#setup-again").fill("pw")
+        page.locator("#setup-password").fill("own-secret-1")
+        page.locator("#setup-again").fill("own-secret-1")
         page.locator("#setup-form button[type=submit]").click()
         page.wait_for_timeout(300)
         assert not posts, f"Create the owner with a bad name sends nothing: {posts}"

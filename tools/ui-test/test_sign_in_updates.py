@@ -11,7 +11,7 @@ import json
 import pytest
 
 from conftest import TOKEN, URL
-from helpers import frames, sign_out, wait_until
+from helpers import OPERATOR_PASSWORD, frames, sign_out, wait_until
 from test_connect import server_page
 
 OPEN_SETUP = json.dumps({"mode": "open", "user": None, "role": None, "capabilities": [], "setup": True})
@@ -62,8 +62,8 @@ def test_create_the_owner_stays_busy_while_the_app_keeps(new_context, case, watc
         }""" % json.dumps(TOKEN))
         page.locator("#setup-keep-row").wait_for(state="visible")
         page.locator("#setup-user").fill(f"owner-{case.width}-{case.lang}")
-        page.locator("#setup-password").fill("pw")
-        page.locator("#setup-again").fill("pw")
+        page.locator("#setup-password").fill("own-secret-1")
+        page.locator("#setup-again").fill("own-secret-1")
         page.locator("#setup-keep-row .slider").click()
         submit = page.locator("#setup-form button[type=submit]")
         submit.click()
@@ -115,7 +115,7 @@ def test_the_card_keeps_what_is_typed(new_context, case, watch, guard):
     page.locator("#login-form button[type=submit]").click()
     assert wait_until(page, "!document.getElementById('login-error').classList.contains('hidden')", 5), "a wrong password is refused"
     said = page.locator("#login-error").inner_text()
-    page.locator("#login-password").fill("op-pass")
+    page.locator("#login-password").fill(OPERATOR_PASSWORD)
     page.locator("#login-password").focus()
     page.evaluate(MARK, HELD)
     provider = json.dumps([{"key": "test-idp", "name": "Test IdP"}])
@@ -131,7 +131,7 @@ def test_the_card_keeps_what_is_typed(new_context, case, watch, guard):
     finally:
         page.unroute("**/api/v1/login/providers")
     assert page.evaluate(SAME, HELD) == [], "the card's elements are the same"
-    assert page.locator("#login-user").input_value() == "operator" and page.locator("#login-password").input_value() == "op-pass", \
+    assert page.locator("#login-user").input_value() == "operator" and page.locator("#login-password").input_value() == OPERATOR_PASSWORD, \
         "what is typed stays"
     assert page.evaluate("document.activeElement.id") == "login-password", "the focus stays in the password"
     assert page.locator("#login-error").inner_text() == said, "the refusal stays said"
@@ -148,7 +148,7 @@ def test_the_fields_are_emptied_at_an_opening_and_after_a_success(new_context, c
     emptied the fields there too."""
     page = open_card(new_context, guard, watch)
     page.locator("#login-user").fill("operator")
-    page.locator("#login-password").fill("op-pass")
+    page.locator("#login-password").fill(OPERATOR_PASSWORD)
     page.locator("#login-form button[type=submit]").click()
     page.wait_for_selector(".room", timeout=10000)
     assert page.evaluate("!document.getElementById('login-dialog').open"), "signed in"

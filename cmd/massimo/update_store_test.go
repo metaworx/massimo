@@ -24,7 +24,13 @@ import (
 // through WSL's interop).
 const runMainVar = "MASSIMO_TEST_RUN_MAIN"
 
+// testHost is the host's name the tests give the command, so that no
+// test reads the machine's, whose first label could be a word of a
+// fixture's password.
+const testHost = "kitchen.example.org"
+
 func TestMain(m *testing.M) {
+	hostName = func() (string, error) { return testHost, nil }
 	if os.Getenv(runMainVar) == "1" {
 		main()
 		os.Exit(0)

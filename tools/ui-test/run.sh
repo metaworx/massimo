@@ -205,8 +205,8 @@ n=0
 while [ $n -lt "$workers" ]; do
 	d="$work/set$n"
 	cd "$d"
-	printf 'op-pass\n' | env -i PATH="$PATH" HOME="$HOME" "$work/massimo" -data "$d" user add operator -role operator -password-stdin >/dev/null 2>>serve.log
-	printf 'guest-pass\n' | env -i PATH="$PATH" HOME="$HOME" "$work/massimo" -data "$d" user add guest1 -role guest -password-stdin >/dev/null 2>>serve.log
+	printf 'op-password\n' | env -i PATH="$PATH" HOME="$HOME" "$work/massimo" -data "$d" user add operator -role operator -password-stdin >/dev/null 2>>serve.log
+	printf 'visit-pass\n' | env -i PATH="$PATH" HOME="$HOME" "$work/massimo" -data "$d" user add guest1 -role guest -password-stdin >/dev/null 2>>serve.log
 	n=$((n + 1))
 done
 

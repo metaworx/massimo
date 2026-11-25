@@ -26,6 +26,23 @@ export interface StoredBackup {
   note?: string;
 }
 
+/**
+ * A Cube row of the store that no runtime serves and that keeps backups, as GET
+ * /api/v1/backups/unserved lists it
+ */
+export interface UnservedCube {
+  serial: string;
+  /** The row's name; absent where it has none */
+  name?: string;
+  /** The backups kept */
+  backups: number;
+  /**
+   * When the newest backup was taken
+   * @format date-time
+   */
+  newest: string;
+}
+
 export interface BackupList {
   backups: StoredBackup[];
   /**
@@ -181,7 +198,11 @@ export interface UserCreate {
   display_name?: string;
   /** A role's key; viewer when absent, owner for the first owner */
   role?: string;
-  /** Absent for a user with keys only; this or record for the first owner */
+  /**
+   * 8 to 64 characters, Unicode code points as sent, without the user's or the
+   * server's name. Absent for a user with keys only, and an empty one counts as
+   * absent; this or record for the first owner
+   */
   password?: string;
   /**
    * A password of auth_version 2 in place of password: the registration record,
@@ -210,7 +231,10 @@ export interface UserChange {
    * @format date-time
    */
   expires_at?: string | null;
-  /** Empty removes the password */
+  /**
+   * Empty removes the password; any other has 8 to 64 characters, Unicode code
+   * points as sent, without the user's or the server's name
+   */
   password?: string;
   /** Required when a user sets its own password, unless proof is given */
   current_password?: string;
@@ -1184,11 +1208,23 @@ export interface UpdateEntry {
   from?: string;
   /** The version asked for, where Massimo started it */
   to?: string;
-  /** The version the next start ran; absent while the update runs */
+  /**
+   * The channel asked for, where Massimo started it; for an update from
+   * outside, the one the box followed at the start that found it
+   */
+  channel?: string;
+  /**
+   * The version the next start ran, the one asked for or another apt chose;
+   * absent while the update runs
+   */
   reached?: string;
   /** @format date-time */
   reached_at?: string;
-  /** The update helper's outcome where it ended without reaching to */
+  /**
+   * The update helper's outcome where the box did not stay on a new version,
+   * rolled-back after reached ran: taken at the next read or the next update
+   * started where the helper did not restart the server, else at the next start
+   */
   result?: "failed" | "rolled-back" | "up-to-date";
 }
 
@@ -1300,6 +1336,12 @@ export interface FoundCube {
     removed_at: string;
   }[];
   /**
+   * In GET /api/v1/cubes: the backups the store keeps of the serial's row,
+   * which GET …/backups lists while no runtime serves it; 0 without a row;
+   * absent in the answer of a discovery
+   */
+  backups?: number;
+  /**
    * When the server first saw it
    * @format date-time
    */
@@ -1357,6 +1399,11 @@ export interface Cube {
    * store's, which wins
    */
   file_differs?: FileDifference[];
+  /**
+   * The backups the store keeps of the Cube (GET …/backups); 0 for a Cube
+   * without a row in the store, and without a store
+   */
+  backups: number;
   /**
    * The stored address; empty: from discovery (address is where it connects
    * now)

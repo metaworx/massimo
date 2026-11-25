@@ -4,13 +4,15 @@
 token's user, the owner, keeps them on the server, and a fresh browser
 signed in with the same token takes them; a setting kept for this device
 only stays in its browser; a guest (run.sh creates guest1, password
-guest-pass) has no switches and keeps its settings in the browser. The
+visit-pass) has no switches and keeps its settings in the browser. The
 page fixture removes the owner's preferences before every page."""
 import json
 import urllib.request
 
+import pytest
+
 from conftest import TOKEN, URL, api_call, clear_preferences
-from helpers import show_view, sign_out, wait_until
+from helpers import OPERATOR_PASSWORD, pause_clock, show_view, sign_out, wait_until
 
 
 def server_ui():
@@ -91,7 +93,7 @@ def test_guest_keeps_settings_in_the_browser(new_context, case, watch, guard):
     page.goto(URL)
     assert wait_until(page, "document.getElementById('login-dialog').open", 5), "the sign-in dialog"
     page.locator("#login-user").fill("guest1")
-    page.locator("#login-password").fill("guest-pass")
+    page.locator("#login-password").fill("visit-pass")
     page.locator("#login-form button[type=submit]").click()
     page.wait_for_selector(".room", timeout=10000)
     assert page.evaluate("document.body.classList.contains('no-sync')"), "a guest's settings do not follow it"
@@ -135,7 +137,7 @@ def test_log_out_leaves_nothing_for_the_next_user(new_context, case, watch, guar
         page.goto(URL)
         assert wait_until(page, "document.getElementById('login-dialog').open", 5), "the sign-in dialog"
         page.locator("#login-user").fill("operator")
-        page.locator("#login-password").fill("op-pass")
+        page.locator("#login-password").fill(OPERATOR_PASSWORD)
         page.locator("#login-form button[type=submit]").click()
         page.wait_for_selector(".room", timeout=10000)
         assert wait_until(page, "!document.body.classList.contains('no-sync')", 5), "the operator's settings follow it"
@@ -226,3 +228,29 @@ def test_device_column(page, case):
         assert title and title == sw.get_attribute("aria-label"), f"the tooltip names the setting ({title!r})"
     assert page.evaluate("document.getElementById('prefs').getBoundingClientRect().width") <= 640, "My settings at most 640 px"
     show_view(page, "tiles")
+
+
+@pytest.mark.clock
+def test_the_poll_field_sets_the_pace(page, case):
+    """My settings' poll, changed while the poll runs, starts it again at
+    the new pace: under the paused clock, 4 s typed, the page reads the
+    Cubes in each of the next two 4.1 s, which the pace before, 10 s,
+    cannot (AP LooseEnds, Block 3). A forward guard: the field restarted
+    the poll on the page before too; it fails where the field restarts
+    nothing."""
+    cubes = lambda r: r.method == "GET" and r.url.split("?")[0].endswith("/api/v1/cubes")  # noqa: E731
+    show_view(page, "prefs")
+    assert page.evaluate("!!state.pollTimer && state.settings.poll === 10"), "the poll runs at 10 s"
+    pause_clock(page)
+    try:
+        page.locator("#poll-input").fill("4")
+        page.locator("#poll-input").dispatch_event("change")
+        assert wait_until(page, "state.settings.poll === 4", 5), "4 s taken"
+        for _ in range(2):
+            with page.expect_request(cubes, timeout=5000):
+                page.clock.run_for(4100)
+    finally:
+        page.clock.resume()
+        page.locator("#poll-input").fill("10")
+        page.locator("#poll-input").dispatch_event("change")
+        show_view(page, "tiles")

@@ -89,9 +89,12 @@ type NameValue =
  * reading it through inputRef; name, autocomplete and placeholder
  * are the input's (the first owner's form names it not, as its plain
  * markup did, so that a password manager pairs that form as before),
- * inputRef gives it the focus.
+ * inputRef gives it the focus; typed is told of each keystroke and of
+ * each change event (a fill that sends no input event), for a caller
+ * that draws from a field not controlled (the first owner's password
+ * line, whose rule takes the name).
  */
-export function UserNameField({ label, id, msgId, value, set, nc, name, autocomplete, placeholder, inputRef }: NameValue & {
+export function UserNameField({ label, id, msgId, value, set, nc, name, autocomplete, placeholder, inputRef, typed }: NameValue & {
   label: string;
   id: string;
   msgId: string;
@@ -99,6 +102,7 @@ export function UserNameField({ label, id, msgId, value, set, nc, name, autocomp
   name?: string;
   autocomplete: string;
   placeholder?: string;
+  typed?: (v: string) => void;
 }) {
   return (
     <Field label={label} id={id} wide>
@@ -108,7 +112,9 @@ export function UserNameField({ label, id, msgId, value, set, nc, name, autocomp
           const v = ev.currentTarget.value;
           set?.(v);
           nc.typed(v);
+          typed?.(v);
         }}
+        onChange={typed ? (ev) => typed(ev.currentTarget.value) : undefined}
         onBlur={(ev) => nc.check(ev.currentTarget.value)} />
       <ResultLine id={msgId} cls="small cubes-msg field-hint" role="status" res={nc.problem ? { text: nc.problem, ok: false } : null} />
     </Field>

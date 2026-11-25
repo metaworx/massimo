@@ -10,7 +10,7 @@ import json
 import time
 
 from conftest import TOKEN, URL, api_call
-from helpers import show_view, wait_until
+from helpers import OPERATOR_PASSWORD, show_view, wait_until
 
 REGISTER = """async ([name, password, token, method]) => {
   const opaque = await opaqueModule();
@@ -159,7 +159,7 @@ def test_a_record_of_the_command_line_opens_in_the_browser(new_context, case, gu
     probe.on("request", lambda r: posts.append(r.url) if r.method == "POST" else None)
     probe.goto(URL)
     try:
-        assert sign_in_in(probe, "operator", "op-pass"), "the browser opens the record made in Go"
+        assert sign_in_in(probe, "operator", OPERATOR_PASSWORD), "the browser opens the record made in Go"
         assert not [u for u in posts if u.endswith("/api/v1/login")], "without the password sign-in"
     finally:
         ctx.close()
@@ -203,7 +203,7 @@ def test_the_password_sign_in_switched_off(page, case, new_context):
     how many users still have a password the server checks; off, such a
     user is refused in the dialog and one of version 2 signs in."""
     name = f"v1-{case.width}-{case.lang}"
-    api_call("POST", "api/v1/users", {"name": name, "role": "viewer", "password": "v1-pass"})
+    api_call("POST", "api/v1/users", {"name": name, "role": "viewer", "password": "v1-password"})
     try:
         show_view(page, "system")
         box = page.locator("#password-login")
@@ -215,9 +215,9 @@ def test_the_password_sign_in_switched_off(page, case, new_context):
         ctx = new_context()
         probe = ctx.new_page()
         probe.goto(URL)
-        refused = probe.evaluate("async ([n, p]) => { try { await signIn(n, p); return false; } catch (e) { return true; } }", [name, "v1-pass"])
+        refused = probe.evaluate("async ([n, p]) => { try { await signIn(n, p); return false; } catch (e) { return true; } }", [name, "v1-password"])
         assert refused, "a user of version 1 is refused with the switch off"
-        assert sign_in_in(probe, "operator", "op-pass"), "a user of version 2 signs in"
+        assert sign_in_in(probe, "operator", OPERATOR_PASSWORD), "a user of version 2 signs in"
         ctx.close()
     finally:
         api_call("PUT", "api/v1/settings", {"auth.password_login": None})

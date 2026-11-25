@@ -203,8 +203,9 @@ func runServe(args []string) error {
 
 	// SIGINT from a terminal, SIGTERM from systemd, launchd and kill, and
 	// the Windows service manager's stop: each stops the server, which
-	// writes the log's pending events, before the store is closed; so does
-	// a SIGHUP that -sighup makes a stop (sighup.go).
+	// takes the backups of the changes pending and writes the log's
+	// pending events, before the store is closed; so does a SIGHUP that
+	// -sighup makes a stop (sighup.go).
 	stopOn := []os.Signal{os.Interrupt, syscall.SIGTERM}
 	if hup == sighupStop {
 		stopOn = append(stopOn, syscall.SIGHUP)

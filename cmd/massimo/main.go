@@ -79,6 +79,8 @@ func main() {
 		err = runUser(rest)
 	case "install":
 		err = runInstall(rest)
+	case "credits":
+		err = runCredits(rest)
 	case "version", "--version", "-v", "-V":
 		fmt.Println(versionString())
 	case "help", "-h", "--help":
@@ -182,6 +184,7 @@ commands:
   install         install massimo serve as a service (systemd), or update or -remove it
   update          install the newest signed release from GitHub (-check only looks)
   restart         restart the installed server (systemd, launchd, the Windows service)
+  credits         list what this binary includes with each licence, or print one's licence (credits <name>)
   version         print the version (also --version)
 `)
 }

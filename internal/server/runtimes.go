@@ -7,9 +7,11 @@ package server
 // runs: Run starts those of Options, and the Cube routes (cubes_api.go)
 // add a Cube, change its configuration and remove it. Each runtime and
 // each listener has a context of its own under Run's, so that one can
-// be stopped without the others. A listener that cannot listen - an
-// address the host does not carry yet, a port in use - is tried again
-// with a backoff until it listens or is stopped (docs/proxy.md).
+// be stopped without the others; a runtime's is under the Cubes'
+// context, which outlives Run's by the stop's backups (backupsAtStop).
+// A listener that cannot listen - an address the host does not carry
+// yet, a port in use - is tried again with a backoff until it listens
+// or is stopped (docs/proxy.md).
 
 import (
 	"cmp"
@@ -136,9 +138,11 @@ func (s *Server) newRuntime(c CubeConfig, addr string) *runtime {
 	gw := slotsGateway{Client: rt.client, sent: func(m cube.Message, r *cube.SendResult) { s.slotsSent(rt, m, r) }}
 	rt.queue = engine.NewQueue(gw, qopts)
 	rt.store = opts.Store
+	rt.bk.look = make(chan struct{}, 1)
 	if opts.Store != nil {
 		rt.storeID.Store(c.StoreID)
 		rt.loadOptions(context.Background())
+		s.resumeBackupWatch(context.Background(), rt)
 	}
 	return rt
 }
@@ -198,10 +202,22 @@ func (s *Server) unregister(rt *runtime) {
 	s.order = kept
 }
 
-// startRuntime starts a runtime's connection, queue and loops under
-// Run's context; before Run it does nothing, and Run starts it.
+// trackRuntime is track for a runtime: counted while Run's context
+// lives, it returns the Cubes' context, which ends after Run's once the
+// stop's backups are taken (Run, backupsAtStop).
+func (s *Server) trackRuntime() context.Context {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	if s.trackLocked() == nil {
+		return nil
+	}
+	return s.cubesCtx
+}
+
+// startRuntime starts a runtime's connection, queue and loops under the
+// Cubes' context; before Run it does nothing, and Run starts it.
 func (s *Server) startRuntime(rt *runtime) {
-	parent := s.track()
+	parent := s.trackRuntime()
 	if parent == nil {
 		return
 	}

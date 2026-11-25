@@ -88,7 +88,8 @@ disc_a=${APP_EMU_DISCOVERY_PORT_A:-23941} disc_b=${APP_EMU_DISCOVERY_PORT_B:-239
 avd=massimo-test
 avd_home=${ANDROID_AVD_HOME:-$HOME/.android/avd}
 user=tester
-password=tester-pass-0000
+# not the user's name in it, which a new password may not hold
+password=quiet-harbour-0000
 pin=1111
 # on the emulator: the screens of failed tests (Rig.SHOTS in the app's
 # androidTest), and the owner's key (Rig.auditKey)

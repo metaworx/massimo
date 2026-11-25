@@ -94,7 +94,7 @@ echo "2. The owner first, the message's line as printed, from a directory _massi
 home=$work/home
 mkdir -m 750 "$home"
 owner_line=$(line)
-(cd "$home" && printf 'test-password-1\n' | run eval "${owner_line/<name>/anna} -password-stdin")
+(cd "$home" && printf 'quiet-harbour-17\n' | run eval "${owner_line/<name>/anna} -password-stdin")
 check "it creates the owner" grep -q 'added with the role owner' "$out"
 run sudo launchctl bootstrap system "$plist"
 check "loaded" loaded "$label"
@@ -143,7 +143,7 @@ check "the message is shown" message
 run sudo launchctl bootstrap system "$plist"
 up
 check "an open server answers the Mac itself ($(code "$api/cubes"))" [ "$(code "$api/cubes")" = 200 ]
-c=$(code -X POST -H 'Content-Type: application/json' -d '{"name":"anna","role":"owner","password":"test-password-1"}' "$api/users")
+c=$(code -X POST -H 'Content-Type: application/json' -d '{"name":"anna","role":"owner","password":"quiet-harbour-17"}' "$api/users")
 check "the first owner from the form's route ($c)" [ "$c" = 201 ]
 check "then closed ($(code "$api/cubes"))" [ "$(code "$api/cubes")" = 401 ]
 p1=$(pid)

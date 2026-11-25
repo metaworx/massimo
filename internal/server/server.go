@@ -27,6 +27,7 @@
 //	GET  /api/v1/cubes/{sn}/backups/{id}             a stored backup's file
 //	DELETE /api/v1/cubes/{sn}/backups/{id}           remove one
 //	GET  /api/v1/cubes/{sn}/backups/{id}/diff        what would turn another into it
+//	GET  /api/v1/backups/unserved                    the Cubes not served that keep backups
 //	POST /api/v1/cubes/{sn}/restore/plan             what restoring the backup in the body (or backup=<id>) would send
 //	POST /api/v1/cubes/{sn}/restore?plan=<hash>      send it; progress as restore_step events
 //	GET  /api/v1/cubes/{sn}/restore                  how the last restore went
@@ -221,6 +222,13 @@ type Options struct {
 	// "brew"), else what runs it (InstallWindowsService, InstallSystemd,
 	// InstallLaunchd); empty is InstallOther.
 	Install string
+	// ServerName is the server's name, which a new password set through
+	// the users' API must not contain, beside the first label of the
+	// request's host (AP PasswordRules, D50-A; password.Check), given as
+	// a name: each run of letters in it is a word. Empty, as massimo
+	// serve leaves it, takes the first label of the host's name
+	// (password.HostWord of os.Hostname).
+	ServerName string
 	// DiscoverInterval is how often the server looks for Cubes on the LAN
 	// (discovery.go), with a first run at the start; 0 runs it only on
 	// request, and while a Cube configured by serial has no address or a
@@ -315,6 +323,9 @@ type Options struct {
 	// confirmWithin is how long a write's devices have to show it, for
 	// the tests; zero for defaultConfirmWithin (confirm.go).
 	confirmWithin time.Duration
+	// noStopBackups leaves out the backups a stop takes (backupsAtStop),
+	// for the tests of a stop that is not clean, as a crash or a kill.
+	noStopBackups bool
 	// discoveryLate is how long, from an answer, a discovery run waits
 	// for its N and c answers where DiscoveryWait ends sooner
 	// (cubelan.SearchOptions.LateWait), for the tests, whose proxies never
@@ -432,6 +443,7 @@ type Server struct {
 	discRun   *discoveryRun   // the run going on, if any
 	discNext  *discoveryRun   // the run to start when discRun ends, if any
 	ctx       context.Context // Run's, for work that outlives a request
+	cubesCtx  context.Context // the runtimes', which outlives Run's by the stop's backups
 	foundMu   sync.Mutex
 	found     map[string]*foundCube // by serial, upper case
 	servers   []announce.Found      // the servers announced at the latest run, under foundMu
@@ -868,9 +880,14 @@ func New(opts Options) *Server {
 
 // Run connects every Cube and blocks until ctx ends. Cubes added
 // through the API while it runs are started the same way (runtimes.go).
+// Their runtimes run on a context of their own, which ends after ctx:
+// the stop first takes the automatic backup of each Cube whose change
+// is pending, within a few seconds (backupsAtStop).
 func (s *Server) Run(ctx context.Context) error {
+	cubesCtx, stopCubes := context.WithCancel(context.WithoutCancel(ctx))
+	defer stopCubes()
 	s.mu.Lock()
-	s.ctx = ctx
+	s.ctx, s.cubesCtx = ctx, cubesCtx
 	s.mu.Unlock()
 	// The log's writer (log.go), before the Cubes connect, on a context
 	// of its own: it ends once the server's goroutines have, so that what
@@ -914,6 +931,12 @@ func (s *Server) Run(ctx context.Context) error {
 	}
 	<-ctx.Done()
 	s.logStopping() // before the writer stops, which writes it
+	// The Cubes are still connected: a change pending gets its backup
+	// before they close, and before serve closes the store.
+	if !s.opts.noStopBackups {
+		s.backupsAtStop(cubesCtx)
+	}
+	stopCubes()
 	// Once ctx is done nothing new is tracked (track); taking the lock
 	// waits for a track that saw ctx alive, so Wait cannot race an Add.
 	s.mu.Lock()
@@ -1547,6 +1570,7 @@ func (s *Server) routes() {
 	api("GET /api/v1/cubes/{sn}/backups/{id}", "backup", s.getStoredBackup)
 	api("DELETE /api/v1/cubes/{sn}/backups/{id}", "restore", s.deleteBackup)
 	api("GET /api/v1/cubes/{sn}/backups/{id}/diff", "backup", s.diffBackups)
+	api("GET /api/v1/backups/unserved", "backup", s.listUnserved)
 	api("POST /api/v1/cubes/{sn}/restore/plan", "restore", s.planRestore)
 	api("POST /api/v1/cubes/{sn}/restore", "restore", s.startRestore)
 	api("GET /api/v1/cubes/{sn}/restore", "read", s.getRestore)
@@ -1717,6 +1741,10 @@ type cubeView struct {
 	// FileDiffers lists the settings file's lines for this Cube whose
 	// values differ from the store's, which wins.
 	FileDiffers []fileDifference `json:"file_differs,omitempty"`
+	// Backups counts the backups the store keeps of the Cube (GET
+	// …/backups); 0 for a Cube without a row in the store, and without a
+	// store.
+	Backups int `json:"backups"`
 	// The configuration PUT /api/v1/cubes/{sn} changes: whether the
 	// address follows discovery, the proxy listener's address and the
 	// serial of its discovery replies, and the hidden radio addresses.
@@ -1793,13 +1821,18 @@ type deviceDetail struct {
 	Wall       *cube.WallConfig       `json:"wall_thermostat,omitempty"`
 }
 
-func (s *Server) summary(rt *runtime) cubeView {
+// summary is a served Cube's view; counts are the store's backup counts
+// (backupCounts), nil for none.
+func (s *Server) summary(rt *runtime, counts map[string]int) cubeView {
 	snap := rt.client.Snapshot()
 	b := rt.client.Budget()
 	cfg := rt.config()
 	v := cubeView{Serial: rt.cubeSerial(), Name: cfg.Name, Address: rt.client.Address(), Configured: true, Source: cfg.Source, ConfiguredAddress: cfg.Addr, FollowDiscovery: cfg.Addr == "" || cfg.FollowDiscovery,
 		ProxyAddress: s.proxyAddress(rt), ProxySerial: cfg.ProxySerial, ProxyVirtual: rt.proxyVirtual.Load(), Hidden: hiddenStrings(cfg.Hidden), Budget: b, Pending: view.Pending(snap, b), Queued: rt.queue.Len()}
 	v.FileDiffers = s.fileDiffers(rt.cubeSerial())
+	if rt.storeID.Load() != 0 {
+		v.Backups = counts[store.NormalSerial(rt.cubeSerial())]
+	}
 	link := rt.client.Link()
 	v.Link = &link
 	v.ProxyListening = s.proxyListening(rt)
@@ -1829,17 +1862,37 @@ func (s *Server) summary(rt *runtime) cubeView {
 // Handlers.
 
 // listCubes handles GET /cubes: the configured Cubes, then the ones
-// discovery found that are not configured.
+// discovery found that are not configured, each with the backups the
+// store keeps of it, from one count (AP BackupWatch v1.0, D5-A).
 func (s *Server) listCubes(w http.ResponseWriter, r *http.Request) error {
+	counts := s.backupCounts(r.Context())
 	out := []any{}
 	for _, rt := range s.runtimes() {
-		out = append(out, s.summary(rt))
+		out = append(out, s.summary(rt, counts))
 	}
 	for _, f := range s.unconfigured() {
+		n := counts[store.NormalSerial(f.Serial)]
+		f.Backups = &n
 		out = append(out, f)
 	}
 	writeJSON(w, http.StatusOK, out)
 	return nil
+}
+
+// backupCounts are the store's backup counts by serial
+// (store.BackupCounts); nil without a store, or where they could not be
+// read, which the views then show as none.
+func (s *Server) backupCounts(ctx context.Context) map[string]int {
+	st := s.opts.Store
+	if st == nil {
+		return nil
+	}
+	counts, err := st.BackupCounts(ctx)
+	if err != nil {
+		s.log.Warn("store: backup counts not read", "error", err)
+		return nil
+	}
+	return counts
 }
 
 func (s *Server) getCube(w http.ResponseWriter, r *http.Request) error {
@@ -1851,7 +1904,7 @@ func (s *Server) getCube(w http.ResponseWriter, r *http.Request) error {
 	if err != nil {
 		return err
 	}
-	v := s.summary(rt)
+	v := s.summary(rt, s.backupCounts(r.Context()))
 	v.RoomList = s.roomsOf(rt, kind)
 	writeJSON(w, http.StatusOK, v)
 	return nil

@@ -15,12 +15,16 @@
  * it is now or of a stored backup, a restore's plan (POST
  * …/restore/plan) and its steps sent (POST …/restore), followed on the
  * event stream. Each box has its own message line and its format. An
- * answer after a sign-out is dropped (shared/session.ts).
+ * answer after a sign-out is dropped (shared/session.ts). The Cubes the
+ * server keeps backups of and does not serve (unserved) are its list of
+ * them (GET /api/v1/backups/unserved, AP BackupWatch v1.0, D4-B and
+ * D6-A), read when System settings is shown and after a delete, also
+ * those discovery does not hear.
  */
 
-import type { BackupList, RestorePlan, StoredBackup } from "../api";
+import type { BackupList, RestorePlan, StoredBackup, UnservedCube } from "../api";
 import type { Outcome } from "../shared/action";
-import { liveMap } from "../shared/live";
+import { live, liveMap } from "../shared/live";
 import { cubePath } from "../shared/path";
 import { session, stillSession } from "../shared/session";
 import { fmtWhen } from "../shared/time";
@@ -88,6 +92,32 @@ export function say(place: string, serial: string, text: string, ok?: boolean, n
   if (stillSession(n)) boxOf(place, serial).said = text ? { text, ok: !!ok } : null;
 }
 
+/** The Cubes the server keeps backups of and does not serve, as GET /api/v1/backups/unserved last listed them, by serial. */
+export const unservedList = live({ cubes: [] as UnservedCube[] });
+
+/**
+ * unserved lists the Cubes the server keeps backups of and does not
+ * serve, whose routes still list, give out, compare and delete them; a
+ * Cube served since the list was read is left out, its fold being a
+ * served Cube's.
+ */
+export function unserved(): UnservedCube[] {
+  return unservedList.cubes.filter((c) => !state.cubes.some((s) => s.serial === c.serial));
+}
+
+/** loadUnserved reads the Cubes not served that keep backups; a read that fails leaves their folds as they were. */
+export async function loadUnserved(): Promise<void> {
+  if (!can("backup")) return;
+  const n = session();
+  let r: UnservedCube[] | null;
+  try {
+    r = await api<UnservedCube[]>("GET", "api/v1/backups/unserved");
+  } catch {
+    return; // the folds as they were; each box says what its own reads meet
+  }
+  if (stillSession(n)) unservedList.cubes = r || [];
+}
+
 /** running says whether a restore sent to the Cube runs: its Restore… and Restore from file… are off meanwhile, in both places. */
 export function running(serial: string): boolean {
   return of(serial).run?.state === "running";
@@ -117,14 +147,37 @@ async function loadBackups(serial: string): Promise<void> {
   if (b.plan?.backup && !b.run && !b.list.some((x) => x.id === b.plan?.backup)) b.plan = null;
 }
 
-/** refreshBackups reads a Cube's list again and draws its boxes; a failure is said in each of them. */
-export async function refreshBackups(serial: string): Promise<void> {
+/** The reads of a Cube's list under way, by its serial, so that a box drawn meanwhile does not ask again (readUnloaded). */
+const reading = new Map<string, Promise<void>>();
+
+/** readList reads a Cube's list and draws its boxes; a failure is said in each of them. */
+async function readList(serial: string): Promise<void> {
   const n = session();
   try {
     await loadBackups(serial);
   } catch (e) {
     for (const place of ["cube", "sys"]) say(place, serial, t("backup.failed", { error: (e as Error).message }), false, n);
   }
+}
+
+/** refreshBackups reads a Cube's list again and draws its boxes; a failure is said in each of them. */
+export function refreshBackups(serial: string): Promise<void> {
+  const p = readList(serial);
+  reading.set(serial, p);
+  void p.finally(() => {
+    if (reading.get(serial) === p) reading.delete(serial);
+  });
+  return p;
+}
+
+/**
+ * readUnloaded reads a Cube's list where it has not loaded and no read of
+ * it is under way: a box drawn before its page knew its Cubes (a load
+ * onto System settings, or onto Cube settings without a Cube stored),
+ * whose page's showing read no list for it.
+ */
+export function readUnloaded(serial: string): void {
+  if (serial && !of(serial).loaded && !reading.has(serial)) void refreshBackups(serial);
 }
 
 /** saveResponse saves an answer as a file, named as the server says. */
@@ -193,6 +246,8 @@ export async function deleteBackup(place: string, serial: string, b: StoredBacku
     const { [b.id]: _gone, ...rest } = c.diff;
     c.diff = rest;
     await refreshBackups(serial);
+    // a Cube not served whose last backup went has no fold any more
+    if (unservedList.cubes.some((u) => u.serial === serial)) await loadUnserved();
     return true;
   } catch (e) {
     say(place, serial, t("backup.failed", { error: (e as Error).message }), false, n);
@@ -307,10 +362,12 @@ export function resynced(): void {
   }
 }
 
-/** forgetBackups forgets what the boxes kept of the user who was signed in (MassimoParts.signedOut): every Cube's data, every box's message. */
+/** forgetBackups forgets what the boxes kept of the user who was signed in (MassimoParts.signedOut): every Cube's data, every box's message, the reads under way. */
 export function forgetBackups(): void {
   known.clear();
+  reading.clear();
   cubeData.clear();
   boxUI.clear();
   foldUI.clear();
+  unservedList.cubes = [];
 }

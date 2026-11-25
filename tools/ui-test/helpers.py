@@ -31,6 +31,11 @@ from urllib.parse import parse_qs, urlparse
 
 from playwright.sync_api import Error
 
+# The password of the operator that run.sh adds with massimo user add, in
+# every set: of 8 characters or more, as a new password is
+# (internal/password).
+OPERATOR_PASSWORD = "op-password"
+
 OPEN = {"en": "open", "de": "offen"}
 USED = "0" * 48
 FOUND2 = {"serial": "LEQ0000506", "configured": False, "address": "192.168.1.78", "rf_address": "0a1b2e",
@@ -230,12 +235,12 @@ def hold(page, pattern, method, held, sent):
     page.route(pattern, handle)
 
 
-def wait_held(page, held, seconds=5):
-    """Waits until a held request has reached its route."""
+def wait_held(page, held, seconds=5, n=1):
+    """Waits until n held requests, one by default, have reached their route."""
     end = time.time() + seconds
-    while not held and time.time() < end:
+    while len(held) < n and time.time() < end:
         page.wait_for_timeout(100)
-    return bool(held)
+    return len(held) >= n
 
 
 @contextlib.contextmanager
