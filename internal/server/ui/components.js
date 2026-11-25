@@ -286,8 +286,9 @@ function keepBlink(use, key) {
 // copyText puts text on the clipboard: through navigator.clipboard where
 // the page may use it (HTTPS or localhost), else through a hidden text
 // area and the browser's copy command, which every browser still runs on
-// a click, as a page served over plain HTTP on the LAN needs. Resolves to
-// whether it copied.
+// a click, as a page served over plain HTTP on the LAN needs, the focus
+// given back to the element that had it, which the text area took.
+// Resolves to whether it copied.
 async function copyText(text) {
   if (navigator.clipboard && window.isSecureContext) {
     try {
@@ -297,6 +298,7 @@ async function copyText(text) {
       // refused: the fallback may still work
     }
   }
+  const had = document.activeElement;
   const area = document.createElement("textarea");
   area.value = text;
   area.setAttribute("readonly", "");
@@ -310,6 +312,7 @@ async function copyText(text) {
     ok = false;
   }
   area.remove();
+  if (had instanceof HTMLElement && had !== document.body && had.isConnected) had.focus({ preventScroll: true });
   return ok;
 }
 

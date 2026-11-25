@@ -1,0 +1,47 @@
+EFF's long word list: the notice of Massimo's copy
+
+The list: the Electronic Frontier Foundation's list of 7,776 English
+words for passphrases made with dice,
+
+  https://www.eff.org/files/2016/07/18/eff_large_wordlist.txt
+  (Last-Modified: Mon, 18 Jul 2016 22:41:51 GMT)
+
+published with Joseph Bonneau's article of July 19, 2016,
+https://www.eff.org/deeplinks/2016/07/new-wordlists-random-passphrases,
+and linked from https://www.eff.org/dice. Neither page carries a licence
+statement of its own; their footers link "Copyright (CC BY)" to
+https://www.eff.org/copyright, read on 2026-11-25.
+
+What that page states, in its words:
+
+  "Any and all original material on the EFF website may be freely
+  distributed at will under the Creative Commons Attribution 4.0
+  International License (CC-BY), unless otherwise noted. All material
+  that is not original to EFF may require permission from the copyright
+  holder to redistribute."
+
+Its words link the licence to https://creativecommons.org/licenses/by/4.0/.
+On the same page, beside those words, a badge (image alt "Creative
+Commons License") is a link rel="license" to
+http://creativecommons.org/licenses/by/3.0/us/, the Creative Commons
+licence of version 3.0 for the United States. Both are named here: the
+words say CC BY 4.0 and the badge's link CC BY 3.0 US. The list is
+EFF's own material with no other note, and Massimo takes the written
+statement, CC BY 4.0, whose legal code is LICENSE beside this file.
+
+The attribution EFF asks for, in its words:
+
+  "If you redistribute something you got from the EFF site, it is
+  appreciated if you make it known where the file originated, so people
+  can get more info or updated versions."
+
+Massimo's attribution: EFF's long word list, by the Electronic Frontier
+Foundation, https://www.eff.org/dice, under CC BY 4.0
+(https://creativecommons.org/licenses/by/4.0/). Changed: the dice
+numbers and the tab before each word dropped; the words kept as they
+are, one a line, in their order.
+
+SHA-256 of the original, eff_large_wordlist.txt (108,800 bytes):
+  addd35536511597a02fa0a9ff1e5284677b8883b83e986e43f15a3db996b903e
+SHA-256 of Massimo's copy, internal/server/ui/words-en.txt (62,144 bytes):
+  6d557f0693958fb5e650b68b5bee585eb82cf4da32965505c789e924743bc522
