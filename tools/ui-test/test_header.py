@@ -513,7 +513,7 @@ def test_reads_times_ago(page, case):
     time back."""
     assert wait_until(page, "Math.abs(serverSkew) < 3000", 5), "the server's clock from its answers: this machine's"
     assert page.locator(".pile-age").count() == 0, "no age above the pile"
-    page.evaluate("() => { state.settings.expert = true; applySettings(); }")  # before the hold: applySettings starts the poll
+    page.evaluate("() => { state.settings.expert = true; applySettings(); }")  # before the hold: applySettings restarts the running poll
     page.locator("#cube-problems .problems-sum").click()  # open, the list's times move on
     try:
         with held_poll(page):

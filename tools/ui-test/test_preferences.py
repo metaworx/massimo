@@ -9,8 +9,10 @@ page fixture removes the owner's preferences before every page."""
 import json
 import urllib.request
 
+import pytest
+
 from conftest import TOKEN, URL, api_call, clear_preferences
-from helpers import OPERATOR_PASSWORD, show_view, sign_out, wait_until
+from helpers import OPERATOR_PASSWORD, pause_clock, show_view, sign_out, wait_until
 
 
 def server_ui():
@@ -226,3 +228,29 @@ def test_device_column(page, case):
         assert title and title == sw.get_attribute("aria-label"), f"the tooltip names the setting ({title!r})"
     assert page.evaluate("document.getElementById('prefs').getBoundingClientRect().width") <= 640, "My settings at most 640 px"
     show_view(page, "tiles")
+
+
+@pytest.mark.clock
+def test_the_poll_field_sets_the_pace(page, case):
+    """My settings' poll, changed while the poll runs, starts it again at
+    the new pace: under the paused clock, 4 s typed, the page reads the
+    Cubes in each of the next two 4.1 s, which the pace before, 10 s,
+    cannot (AP LooseEnds, Block 3). A forward guard: the field restarted
+    the poll on the page before too; it fails where the field restarts
+    nothing."""
+    cubes = lambda r: r.method == "GET" and r.url.split("?")[0].endswith("/api/v1/cubes")  # noqa: E731
+    show_view(page, "prefs")
+    assert page.evaluate("!!state.pollTimer && state.settings.poll === 10"), "the poll runs at 10 s"
+    pause_clock(page)
+    try:
+        page.locator("#poll-input").fill("4")
+        page.locator("#poll-input").dispatch_event("change")
+        assert wait_until(page, "state.settings.poll === 4", 5), "4 s taken"
+        for _ in range(2):
+            with page.expect_request(cubes, timeout=5000):
+                page.clock.run_for(4100)
+    finally:
+        page.clock.resume()
+        page.locator("#poll-input").fill("10")
+        page.locator("#poll-input").dispatch_event("change")
+        show_view(page, "tiles")

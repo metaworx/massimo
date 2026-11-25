@@ -328,7 +328,7 @@ async function forgetSession(synced) {
   forgetNotSent();
   MassimoParts.rooms.closeHouse();
   closeEvents();
-  clearCubeData(); // app.js: nothing of this session behind the sign-in; the poll forgetUserSettings started stops
+  clearCubeData(); // app.js: nothing of this session behind the sign-in; the poll stops
   MassimoParts.pages.showView("tiles", "replace");
   await language;
 }

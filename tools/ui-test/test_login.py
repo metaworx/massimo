@@ -6,7 +6,7 @@ fails the test (the guard); the console is not watched, since the
 page's first requests without a token are refused on purpose."""
 from conftest import TOKEN, URL, api_call
 from helpers import (OPERATOR_PASSWORD, ApiReads, assert_login_card_centred, assert_login_row, frames, named_buttons,
-                     open_personal_page, scroll_settled, show_view, sign_out, wait_held, wait_until)
+                     open_personal_page, pause_clock, scroll_settled, show_view, sign_out, wait_held, wait_until)
 
 
 def test_sign_in_and_out(new_context, case, watch, guard):
@@ -126,6 +126,48 @@ def test_sign_in_starts_the_page_once(new_context, case, watch, guard):
     assert (len(tickets), len(mes)) == (2, 2), f"one start after the sign-in after Log out: {len(tickets)} ticket(s), {len(mes)} /me"
     sign_out(page)
     assert wait_until(page, "document.getElementById('login-dialog').open", 5), "signed out at the end"
+
+
+def test_no_poll_behind_the_sign_in_card(new_context, case, watch, guard):
+    """The page's poll waits for the start's sign-in: with the card open
+    past two poll intervals, under the paused clock, the page reads
+    neither the Cubes nor the log's alerts, which the server would refuse;
+    once the operator has signed in, the page's start reads each once, and
+    the poll reads the Cubes again at its interval (AP LooseEnds, Block 3).
+    Fails on the page before: the start started the poll before the card,
+    which read both at each interval behind it."""
+    ctx = new_context()
+    ctx.clock.install()
+    page = ctx.new_page()
+    guard.page = page
+    page.set_default_timeout(5000)
+    page.on("pageerror", lambda e: watch.problems.append(f"page error: {e}"))
+    reads = []
+    page.on("request", lambda r: reads.append(r.url.split("?")[0]) if r.method == "GET" else None)
+
+    def count(end):
+        return sum(1 for u in reads if u.endswith(end))
+
+    page.goto(URL)
+    assert wait_until(page, DIALOG_OPEN, 5), "the sign-in dialog opens"
+    pause_clock(page)
+    try:
+        every = page.evaluate("state.settings.poll") * 1000
+        page.clock.run_for(2 * every + 1000)
+        page.locator("#login-user").fill("operator")
+        page.locator("#login-password").fill(OPERATOR_PASSWORD)
+        page.locator("#login-form button[type=submit]").click()
+        page.wait_for_selector(".room", timeout=10000)
+        assert wait_until(page, "state.eventsOpen", 10), "the page started"
+        counts = (count("/api/v1/cubes"), count("/api/v1/log/alerts"))
+        assert counts == (1, 1), f"the Cubes and the alerts read once, by the start, none behind the card: {counts}"
+        with page.expect_request(lambda r: r.method == "GET" and r.url.split("?")[0].endswith("/api/v1/cubes"), timeout=5000):
+            page.clock.run_for(every)
+        assert count("/api/v1/cubes") == 2, "the poll reads the Cubes once the card has closed"
+    finally:
+        page.clock.resume()
+    sign_out(page)
+    assert wait_until(page, DIALOG_OPEN, 5), "signed out at the end"
 
 
 SIGN_IN_WITH = {"en": "Sign in with", "de": "Anmelden mit"}

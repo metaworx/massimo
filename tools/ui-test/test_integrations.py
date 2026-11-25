@@ -11,7 +11,7 @@ import ssl
 import urllib.request
 
 from conftest import URL, api_call
-from helpers import cleanup, focus_in_turn, frames, named_buttons, reads_of, safe_route, scroll_width, show_view, undo, wait_until
+from helpers import cleanup, focus_in_turn, frames, hold, named_buttons, reads_of, safe_route, scroll_width, show_view, undo, wait_held, wait_until
 
 HEADER = "X-MassimoHA-On-Behalf-Of"
 
@@ -185,11 +185,10 @@ def _end(uuid):
 def found_box(page):
     """System settings → Integrations, Seen on the LAN, opened afresh so
     that the card reads the found answer again, and that answer drawn.
-    A `p` in the box is no sign of it: the part keeps the box through a
-    new read, and draws why it does not look as soon as the list of
-    integrations is in, before the found answer is (refresh reads it
-    last); so the box is returned once the read this showing starts has
-    been answered and drawn."""
+    A `p` in the box is no sign of it: the part keeps the box, and the
+    answer an earlier showing drew, through a new read; so the box is
+    returned once the read this showing starts has been answered and
+    drawn."""
     show_view(page, "tiles")
     with page.expect_request(lambda r: r.method == "GET" and "/api/v1/integrations/found" in r.url, timeout=10000) as asked:
         show_view(page, "system")
@@ -271,6 +270,151 @@ def test_why_not_without_settings(page, case, reads):
         page.evaluate("history.replaceState(null, '', location.pathname)")
         page.reload()
         page.wait_for_selector(".room", timeout=10000)
+
+
+def test_nothing_of_the_lan_before_its_answer(page, case):
+    """Seen on the LAN says nothing while the LAN's answer has not come,
+    the list of integrations already in, nor offers Look again; once it
+    comes, why the server does not look (AP LooseEnds, Block 3). Fails on
+    the page before: the general "does not look", without its reason,
+    showed as soon as the list was in."""
+    held, sent = [], []
+    hold(page, "**/api/v1/integrations/found*", "GET", held, sent)
+    try:
+        show_view(page, "system")
+        assert wait_held(page, held, 10), "the LAN's answer held, the list and the users read before it"
+        frames(page)
+        box = page.locator("#integrations-found")
+        assert box.inner_text() == "", f"nothing of the LAN before its answer: {box.inner_text()!r}"
+        assert not page.locator("#integrations-look").is_visible(), "no Look again"
+        held.pop().continue_()
+        assert wait_until(page, "(document.querySelector('#integrations-found p') || {}).textContent === t('integrations.foundLoopback')", 5), \
+            "the reason once the answer has come"
+    finally:
+        for route in held:
+            route.continue_()
+        page.unroute("**/api/v1/integrations/found*")
+        show_view(page, "tiles")
+
+
+def is_read(end):
+    """A test of a GET whose path ends with end."""
+    return lambda r: r.method == "GET" and r.url.split("?")[0].endswith(end)
+
+
+def test_the_newest_read_of_the_integrations_wins(page, case):
+    """Two showings of System settings whose reads of the integrations
+    overlap, each answered with the server's list as it was at its
+    request: a request asking to be registered (test_parts_guard.py's,
+    put into the list, since the server takes ten requests from one
+    address in ten minutes) comes between the first two reads and goes
+    between the next two. The first read answered last leaves the
+    second's list, with the request; answered in their order, the second
+    read's list follows the first's, without it (AP LooseEnds, Block 3).
+    Fails on the page before: the older answer, written last, took the
+    request out."""
+    from test_parts_guard import GUARD_REQ, REQ_STUB
+    held = []
+    asks = {"now": False}
+
+    def handle(route):
+        """Each GET of the list held, with the server's answer at its request, the request in it while it asks."""
+        if route.request.method != "GET":
+            route.fallback()
+            return
+        answer = route.fetch()
+        body = answer.json() or []
+        if asks["now"]:
+            body = [REQ_STUB] + body
+        held.append((route, json.dumps(body)))
+
+    routed = safe_route(page, "**/api/v1/integrations", handle)
+    request = page.locator(f".integration-request[data-uuid='{GUARD_REQ}']")
+
+    def showing(n):
+        """System settings shown again, its read of the list the n-th held."""
+        show_view(page, "tiles")
+        show_view(page, "system")
+        assert wait_held(page, held, 10, n), f"read {n} of the list held"
+
+    def answer(n, then):
+        """The n-th held read answered, once the read its showing sends next, then, has been sent."""
+        route, body = held[n - 1]
+        with page.expect_request(then, timeout=5000):
+            route.fulfill(status=200, content_type="application/json", body=body)
+        frames(page)
+
+    answered = set()
+    try:
+        showing(1)
+        asks["now"] = True
+        showing(2)
+        answer(2, is_read("/api/v1/integrations/found"))
+        answered.add(2)
+        request.wait_for()
+        answer(1, is_read("/api/v1/users"))
+        answered.add(1)
+        assert request.count() == 1, "the older read, answered last, leaves the newer list"
+        showing(3)
+        asks["now"] = False
+        showing(4)
+        answer(3, is_read("/api/v1/users"))
+        answered.add(3)
+        assert request.count() == 1, "still asking at the third read"
+        answer(4, is_read("/api/v1/users"))
+        answered.add(4)
+        request.wait_for(state="detached")
+    finally:
+        page.unroute("**/api/v1/integrations", routed)
+        for n, (route, body) in enumerate(held, 1):
+            if n not in answered:
+                route.fulfill(status=200, content_type="application/json", body=body)
+        show_view(page, "tiles")
+
+
+def test_the_newest_read_of_a_panel_wins(page, case, reads):
+    """An integration's panel (test_parts_guard.py's integration, the list
+    stubbed) opened, its read of the integration held, while System
+    settings shown again reads it once more, as every load of the list
+    does for an open panel: the opening's read answered last leaves the
+    newer read's users (AP LooseEnds, Block 3). Fails on the page before:
+    the older answer, written last, put its user back."""
+    from test_parts_guard import GUARD_IG, IG_STUB, IG_USER
+    old_user = dict(IG_USER, id="c" * 32, name="Old user")
+    held = []
+
+    def details(route):
+        """The first read of the integration held with an older user, the others answered with the newer."""
+        if not held:
+            held.append(route)
+            return
+        route.fulfill(status=200, content_type="application/json", body=json.dumps(dict(IG_STUB, users=[IG_USER])))
+
+    reads.change("**/api/v1/integrations", lambda body: [IG_STUB])
+    routed = safe_route(page, f"**/api/v1/integrations/{GUARD_IG}", details)
+    answered = []
+    try:
+        show_view(page, "system")
+        panel = page.locator(f".integration-panel[data-uuid='{GUARD_IG}']")
+        panel.locator("> summary").click()
+        assert wait_held(page, held, 10), "the opening's read held"
+        show_view(page, "tiles")
+        show_view(page, "system")
+        newer = panel.locator(f".integration-user[data-id='{IG_USER['id']}']")
+        newer.wait_for()
+        with page.expect_response(f"**/api/v1/integrations/{GUARD_IG}") as late:
+            held[0].fulfill(status=200, content_type="application/json", body=json.dumps(dict(IG_STUB, users=[old_user])))
+            answered.append(1)
+        late.value.finished()
+        frames(page)
+        assert panel.locator(f".integration-user[data-id='{old_user['id']}']").count() == 0, "the older read's user not drawn"
+        assert newer.count() == 1, "the newer read's user stays"
+    finally:
+        if held and not answered:
+            held[0].fulfill(status=200, content_type="application/json", body=json.dumps(dict(IG_STUB, users=[IG_USER])))
+        page.unroute(f"**/api/v1/integrations/{GUARD_IG}", routed)
+        reads.clear("**/api/v1/integrations")
+        show_view(page, "tiles")
 
 
 def _record_opens(page):

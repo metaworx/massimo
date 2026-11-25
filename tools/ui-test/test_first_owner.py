@@ -130,6 +130,67 @@ def test_the_card_asks_at_the_start(new_context, case, watch, guard):
     owner_card(page)
 
 
+def is_read(method, end):
+    """A test of a request: of method, its path ending with end."""
+    return lambda r: r.method == method and r.url.split("?")[0].endswith(end)
+
+
+def test_no_poll_behind_the_owner_card(new_context, case, watch, guard):
+    """The page's poll waits for the start's card: with the first owner's
+    card open past two poll intervals, under the paused clock, the page
+    reads neither the Cubes nor the log's alerts; once Skip for now has
+    closed it, the page's start reads each once, and the poll reads the
+    Cubes again at its interval (AP LooseEnds, Block 3). Fails on the page
+    before: the start started the poll before the card, which read both at
+    each interval behind it."""
+    page = start_page(new_context, guard, watch, OPEN, clock=True)
+    owner_card(page)
+    pause_clock(page)
+    try:
+        every = page.evaluate("state.settings.poll") * 1000
+        page.clock.run_for(2 * every + 1000)
+        page.locator("#setup-skip").click()
+        assert wait_until(page, f"!({DIALOG_OPEN})", 5), "Skip for now closes the card"
+        page.wait_for_selector(".room", timeout=10000)
+        assert wait_until(page, "state.eventsOpen", 10), "the page started"
+        counts = (len(sent(page, "GET", "/api/v1/cubes")), len(sent(page, "GET", "/api/v1/log/alerts")))
+        assert counts == (1, 1), f"the Cubes and the alerts read once, by the start, none behind the card: {counts}"
+        with page.expect_request(is_read("GET", "/api/v1/cubes"), timeout=5000):
+            page.clock.run_for(every)
+        assert len(sent(page, "GET", "/api/v1/cubes")) == 2, "the poll reads the Cubes once the card has closed"
+    finally:
+        page.clock.resume()
+
+
+def test_a_setting_applied_behind_the_card_starts_no_poll(new_context, case, watch, guard):
+    """A running page that the first owner's card opened by the banner
+    stands still behind it: a new poll interval applied meanwhile, under
+    the paused clock, starts no poll, and past two intervals of it the
+    page reads no Cube; Back to the page starts the poll at the new pace
+    (AP LooseEnds, Block 3). Fails on the page before: applying the
+    settings started the poll behind the card."""
+    page = start_page(new_context, guard, watch, OPEN, clock=True)
+    owner_card(page)
+    page.locator("#setup-skip").click()
+    page.wait_for_selector(".room", timeout=10000)
+    assert wait_until(page, "state.eventsOpen", 10), "the page started"
+    page.locator("#open-banner-create").click()
+    owner_card(page)
+    pause_clock(page)
+    try:
+        before = len(sent(page, "GET", "/api/v1/cubes"))
+        page.evaluate("() => { setSetting('poll', 5); applySettings(); }")
+        page.clock.run_for(11000)
+        page.locator("#setup-skip").click()
+        assert wait_until(page, f"!({DIALOG_OPEN})", 5), "Back to the page closes the card"
+        assert len(sent(page, "GET", "/api/v1/cubes")) == before, "no read of the Cubes behind the card"
+        with page.expect_request(is_read("GET", "/api/v1/cubes"), timeout=5000):
+            page.clock.run_for(5100)
+        assert len(sent(page, "GET", "/api/v1/cubes")) == before + 1, "the poll at the new pace once the card is left"
+    finally:
+        page.clock.resume()
+
+
 @pytest.mark.parametrize("me", ["kept", "none", "users"])
 def test_no_card_where_not_asked(new_context, case, watch, guard, me):
     """No card on a server kept open (auth.keep_open: kept_open), on a

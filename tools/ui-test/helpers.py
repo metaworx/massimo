@@ -235,12 +235,12 @@ def hold(page, pattern, method, held, sent):
     page.route(pattern, handle)
 
 
-def wait_held(page, held, seconds=5):
-    """Waits until a held request has reached its route."""
+def wait_held(page, held, seconds=5, n=1):
+    """Waits until n held requests, one by default, have reached their route."""
     end = time.time() + seconds
-    while not held and time.time() < end:
+    while len(held) < n and time.time() < end:
         page.wait_for_timeout(100)
-    return bool(held)
+    return len(held) >= n
 
 
 @contextlib.contextmanager

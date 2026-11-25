@@ -61,10 +61,12 @@ declare global {
   function deviceOnly(key: string): boolean;
   /** Keeps a setting for this device alone with the value in effect, or stops: the user's value applies again. */
   function setDeviceOnly(key: string, on: boolean): void;
-  /** Applies the settings in effect to the page: expert mode, the appearance, the header, the poll. */
+  /** Applies the settings in effect to the page: expert mode, the appearance, the header, the poll's pace where it runs. */
   function applySettings(): void;
   /** Starts the page's poll again at the poll setting's pace. */
   function startPolling(): void;
+  /** Starts the page's poll again at the poll setting's pace where it runs; a poll that does not run stays stopped. */
+  function restartPolling(): void;
   /** Loads the language of a setting (auto: the browser's) and makes it the page's. */
   function changeLanguage(setting: string): Promise<void>;
   /** Draws every text of the page again after a change of language. */
