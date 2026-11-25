@@ -1,4 +1,4 @@
-# AP StartConfiguration v1.0: The settings file and the start
+# AP StartConfiguration v1.1: The settings file and the start
 
 ## TL;DR
 
@@ -15,10 +15,15 @@ every system.
 - install's own reader → env's parser
 - a failed reload through the API → rotates and checkpoints, as SIGHUP does
 - the Maintenance card → a badge and questions that say the next start fails
-- `GET /api/v1/restart` → `restart` or `update`
+- `update` and `reboot` → include `restart`, at the check; nothing stored
+  changes; `GET /api/v1/restart` → `restart` again
 - the start's own errors → name their setting; the guard runs on Windows
 - a plain Cube's address and proxy beside the store's Cubes → served,
   not a stopped start
+- `install -settings` with a file serve refuses → refused before any write
+
+Blocks 1 to 11 are built and merged (#425, #427, #430);
+v1.1 adds Blocks 12 and 13, each a pull request of its own from `main`.
 
 ### Blocks
 
@@ -33,6 +38,8 @@ every system.
 9. Helper: the Windows update helper's listen blocks updates, not the start
 10. Windows: the guard and `PerCubeValue` on Windows, in CI's Windows job
 11. PlainProxy: a plain Cube's proxy listens for it beside the store's Cubes
+12. Include: `update` and `reboot` include `restart`
+13. SettingsRefused: `install -settings` refuses a file serve refuses
 
 ## Discussion
 
@@ -47,6 +54,12 @@ start and its settings, D30-C, and named it StartConfiguration.
 On 2026-11-25: `PLAN++`, for this plan written and committed onto main,
 the update's question passed to AP UpdateHistory's session, and three
 stacked pull requests built, nothing merged.
+On 2026-11-25, at the run's completion gate: `EXEC merge`, for the three
+pull requests merged in order (#425, #427, #430), with D36-A, D37 and
+D38-B.
+At the next gate: `PLAN++`, for this revision with D39-A and D40-A,
+committed onto main, and its two blocks built as two pull requests from
+`main`, nothing merged.
 
 ### What is decided
 
@@ -83,6 +96,8 @@ The owner, 2026-11-24:
   update's question needs (D34).
 - **D34-A. Who may read `GET /api/v1/restart`:** a holder of `restart` or of
   `update`, since every update restarts the server.
+  Built in Block 6; D37 goes past it, and Block 12 takes the route back to
+  `restart` alone.
 - **D11-A. `settings_read` warnings in a row:** the newest settles the older
   ones (`any: true`).
 - **D20-A. The start's own errors:** `MASSIMO_LISTEN`, `MASSIMO_LOG`,
@@ -107,6 +122,27 @@ The owner, 2026-11-24:
 - **D25-A to D27-A, D31-A:** the three points outside the start had no plan,
   and are merged (#413).
 
+The owner, 2026-11-25, at the run's completion gate, on the points the run
+left open:
+
+- **D36-A. The plain proxy of a Cube the store has:** the store's rule, as
+  built in Block 11: the plain lines are that Cube's, compared with its
+  row; the plain proxy is a difference with its button.
+- **D37. Who may restart:** `reboot` and `update` each include `restart`,
+  in the owner's words.
+  Whether `reboot` also includes `update` was left open: an update may bring
+  new or incompatible features, while a reboot is mainly for maintenance.
+- **D38-B. `install -settings` with a file serve refuses** (a line that is
+  not `KEY=VALUE`): refused before any write, as UTF-16 is, in a pull
+  request of its own.
+
+And at the gate that offered this revision, with `PLAN++`:
+
+- **D39-A. How `include` is built:** at the check.
+  A holder of `update` or of `reboot` passes every check of `restart`;
+  no role's stored set changes, and no migration runs.
+- **D40-A. `reboot` does not include `update`,** for the owner's reason.
+
 ### Where it meets other plans
 
 - **AP Packaging** owns `packaging/env.template`; Block 1 adds one comment
@@ -116,7 +152,10 @@ The owner, 2026-11-24:
 - **AP UiParts** owns the parts' rules; Block 7 follows them in
   `src/maintenance/`.
 - **AP UpdateHistory** takes the update's question (D35-A), and reads
-  `GET /api/v1/restart` as Block 6 allows.
+  `GET /api/v1/restart` as Block 6 allows, and after Block 12 as `update`'s
+  holder, who holds `restart` through it.
+- **AP IntegrationUsers** owns the integrations' ceiling and maximum, which
+  Block 12 reads; AP UiParts the role editor's part (`src/admin/`).
 - Whichever plan lands second in a shared file carries the other's change.
 
 ## Analysis
@@ -164,6 +203,37 @@ What bears on the blocks:
 - **The SIGHUP test's race** (`cmd/massimo/reload_test.go:809`): it waits for
   the 401 and then reads the pending settings, but `reload()` sets the token
   before `DropKeepOpen` and `SetPendingRestart`; it failed #413's first run.
+
+For v1.1, read on main at 0b42e072:
+
+- **A principal's capabilities** (`internal/server/auth.go`): the role's
+  effective set (`store.Effective`: the role's rows less the capabilities
+  disabled for every role), then for an integration's user the ceiling and
+  the integration's maximum (`intersect`), and once more when an
+  integration acts for a user (`onbehalf.go`); `principal.has` reads the
+  set, and `GET /api/v1/me` lists it (`integrationCaps`).
+  An include taken before those bounds would be cut by them, so it is
+  taken on the set they leave.
+- **What `restart` admits** (`docs/store.md` §6): `GET` and
+  `POST /api/v1/restart`, `POST /api/v1/reload` and
+  `POST /api/v1/cubes/{sn}/refresh`.
+  Through D37 a holder of `update` or `reboot` gains the reload and a Cube's
+  refresh too.
+- **The seeded roles:** `update` is the role integration's alone, which
+  holds `restart` already, and `reboot` is seeded for no role, so no
+  seeded role's set changes; a role the owner made with `update` or
+  `reboot` and without `restart` gains it.
+- **Block 6's pair rule** (`capOr`, `routeCapabilities`, the two-capability
+  cases of `routeCapabilityError` and `capabilityRequired`) has one route,
+  `GET /api/v1/restart`; with the include it has none.
+- **The role editor** (`src/admin/Roles.tsx`) and the integration's maximum
+  (`src/integrations/`) show a switch per capability from the stored set;
+  the web UI's `can()` (`shared/me.ts`) reads `GET /api/v1/me`.
+- **`install -settings`** (`internal/install/install.go`,
+  `checkSettingsFile`): it reads the file leniently and refuses UTF-16
+  alone; serve's start refuses also a line that is not `KEY=VALUE` and a
+  line too long to read (`env.LoadFile`), so a service installed with such
+  a file does not start.
 
 ## Implementation Plan
 
@@ -343,11 +413,63 @@ Block 9; `make actionlint`; the pull request's Windows job runs.
 `go test ./internal/serve ./internal/server ./cmd/massimo`;
 `make lan-test` where the change reaches the proxy's discovery answers.
 
+### Block 12: Include
+
+- `update` and `reboot` each include `restart` (D37, D39-A), and `reboot`
+  does not include `update` (D40-A):
+  - one table of what a capability includes, beside `capabilities` in
+    `auth.go`, taken on a principal's set after every bound (the role's
+    effective set, an integration's ceiling and maximum, the acting for a
+    user), so that `has`, every route's check and `GET /api/v1/me` agree;
+  - a capability disabled for every role stays disabled: `restart` off
+    is off for a holder of `update` too;
+  - nothing stored changes: no migration, a role's rows as they are.
+- `GET /api/v1/restart` is registered with `restart` again; `capOr` and its
+  two-capability cases go, since no route has two.
+- The role editor and the integration's maximum show `restart` on and
+  locked where `update` or `reboot` is on, with a hint that says why;
+  what is saved stays the stored set.
+- Tests: a role with `update` alone, and one with `reboot` alone, restarts,
+  reloads and refreshes a Cube, and reads `GET /api/v1/restart` with
+  `available` as for `restart`'s holder; `reboot` alone is refused
+  `POST /api/v1/update`; `restart` disabled refuses both; an integration
+  whose maximum holds `update` passes `restart`'s check; `GET /api/v1/me`
+  lists `restart`; the role editor's switch in the four cases.
+- Docs: `docs/store.md` §6's table and a sentence on the include,
+  `docs/api-v1.md` where it names `restart`'s holders and the two
+  capabilities, the OpenAPI file and `api.d.ts` (`make api-types`),
+  `docs/ui.md`, the texts in all six `ui/i18n/<lang>.json`;
+  a `Changed` fragment.
+
+**Verification:** the tests fail with the include left out, and with it
+taken before the integration's bounds; `TestOpenAPICoversRoutes`;
+`go test ./internal/server ./internal/store`; `make ui-check`; the
+changed UI test files in the four cases.
+
+### Block 13: SettingsRefused
+
+- `install -settings <file>` reads the file as serve's start does
+  (`env.ReadFile`), and refuses what the start refuses, with the parser's
+  error, before any write (D38-B): a line that is not `KEY=VALUE`, a line
+  too long to read, and UTF-16 as before.
+- A settings file a re-install keeps, without `-settings`, is read
+  leniently as now, so that an upgrade never fails on it.
+- Tests: `install -settings` with each refused file writes nothing, on
+  each system, Windows through interop; a kept file with such a line
+  still installs, with its warning.
+- Docs: the README's `install` paragraph and `packaging/README.md` where
+  they say what `-settings` refuses; a `Fixed` fragment.
+
+**Verification:** the tests fail with today's `checkSettingsFile`;
+`go test ./internal/install ./cmd/massimo`; `GOOS=windows go vet ./...`.
+
 ### The pull requests
 
 - **First** (Blocks 1–3), **second** (4–7), **third** (8–11), each
   `main` merged in, the guidelines check over its range, its run green.
 - The third asks for the Windows job by its files.
+- v1.1: **Block 12** and **Block 13**, each a pull request of its own from
+  `main`, not stacked; the owner merges them, in either order.
 - Before each: `make ui`, `MASSIMO_ENV_FILE=/dev/null go test ./...`,
   `gofmt`, `go vet` for the three systems, `make cross`.
 
@@ -365,6 +487,9 @@ Block 9; `make actionlint`; the pull request's Windows job runs.
 - Block 9: `fix(update): The Windows update helper's listen blocks updates, not the start`
 - Block 10: `fix(env): PerCubeValue names a variable as it is set, and the start's guard runs on Windows`
 - Block 11: `fix(serve): A plain Cube's proxy listens beside the store's Cubes`
+- v1.1: `chore(aps): +StartConfiguration v1.1, -NOTE StartConfiguration v1.0`
+- Block 12: `feat(api): The update and reboot capabilities include restart`
+- Block 13: `fix(install): install -settings refuses a file serve refuses, before any write`
 
 ## Change History
 
@@ -372,3 +497,7 @@ Block 9; `make actionlint`; the pull request's Windows job runs.
   P1 to P10 and the SIGHUP test's race, with D1-A, D2-A, D3-B, D33-A,
   D4-A to D9-A, D10-C, D11-A, D20-A to D23-A, D24-B as refined, D30-C,
   D32-A, D34-A and D35-A.
+- v1.1 (2026-11-25): Blocks 12 and 13, by `PLAN++`, from D37 with D39-A and
+  D40-A, and D38-B; D36-A recorded as built; folds
+  "NOTE StartConfiguration v1.0: owner decisions d36 to d38", its file
+  removed. Blocks 1 to 11 are built and merged and stand as they are.
