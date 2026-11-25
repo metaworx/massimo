@@ -32,9 +32,12 @@ import (
 // radiator thermostats 0a0204, its master, to 0a0206, as 0a0202.
 
 // The radiator thermostat's C line: the comfort temperature's byte, the
-// week programme's start, the bytes of a day.
+// highest and the lowest setpoint's, the week programme's start, the
+// bytes of a day.
 const (
 	rawComfort = 0x12
+	rawMax     = 0x14
+	rawMin     = 0x15
 	rawProgram = 0x1d
 	rawDay     = 2 * cube.DaySlots
 )
@@ -437,6 +440,88 @@ func TestRoomEntryCarriesItsOrder(t *testing.T) {
 	}
 	if x := got[2]; x.Thermostat != "0a0205" || temps(x) != "[22,15]" {
 		t.Errorf("room 2, its master dead: %q %s", x.Thermostat, temps(x))
+	}
+}
+
+// A room entry carries the room's lowest and highest setpoint, as its
+// configuration has them (AP RoomsPage v1.0, Block 5), in GET …/rooms
+// and the Cube's room_list: room 1 its thermostats' 4.5 and 30.5 °C, the
+// recorded C lines' values; room 2 by most where its master differs
+// (0a0205 and 0a0206 at 6 and 25 °C, 0a0204 at the recorded values);
+// room 3, without a thermostat, neither.
+func TestRoomEntryCarriesItsRange(t *testing.T) {
+	t.Parallel()
+	r := startDrift(t, func(lines []cube.Message) []cube.Message {
+		for _, rf := range []cube.RFAddress{0x0a0205, 0x0a0206} {
+			withConfig(t, lines, rf, func(raw []byte) { raw[rawMax], raw[rawMin] = 50, 12 }) // 25 and 6 °C
+		}
+		return lines
+	})
+	field := func(x map[string]any, k string) string {
+		if v, ok := x[k]; ok {
+			return fmt.Sprint(v)
+		}
+		return "absent"
+	}
+	check := func(what string, rooms []map[string]any) {
+		t.Helper()
+		got := map[string]string{}
+		for _, x := range rooms {
+			got[field(x, "id")] = field(x, "min_setpoint") + " " + field(x, "max_setpoint")
+		}
+		if want := map[string]string{"1": "4.5 30.5", "2": "6 25", "3": "absent absent"}; !reflect.DeepEqual(got, want) {
+			t.Errorf("%s: the rooms' ranges %v, want %v", what, got, want)
+		}
+	}
+	var rooms []map[string]any
+	if code := getJSON(t, r.ts, "", "/api/v1/cubes/KEQ0000100/rooms", &rooms); code != 200 {
+		t.Fatalf("rooms: %d", code)
+	}
+	check("GET …/rooms", rooms)
+	var summary struct {
+		RoomList []map[string]any `json:"room_list"`
+	}
+	if code := getJSON(t, r.ts, "", "/api/v1/cubes/KEQ0000100", &summary); code != 200 {
+		t.Fatalf("the Cube: %d", code)
+	}
+	check("the Cube's room_list", summary.RoomList)
+}
+
+// Over the recorded greeting, each room's range is its one radiator
+// thermostat's, as its C line has it: 4.5 to 23 °C in four rooms, 4.5 to
+// 30.5 °C in two.
+func TestRoomEntryRangeOfTheRecordedGreeting(t *testing.T) {
+	t.Parallel()
+	r := startServer(t, quiet())
+	var rooms []view.Room
+	if code := getJSON(t, r.ts, "", "/api/v1/cubes/KEQ0000100/rooms", &rooms); code != 200 {
+		t.Fatalf("rooms: %d", code)
+	}
+	show := func(p *float64) string {
+		if p == nil {
+			return "none"
+		}
+		return fmt.Sprint(*p)
+	}
+	snap := r.rt.client.Snapshot()
+	ranges := map[string]int{}
+	for _, x := range rooms {
+		rf, err := cube.ParseRFAddress(x.Thermostat)
+		if err != nil {
+			t.Fatalf("room %d names no thermostat: %v", x.ID, err)
+		}
+		c := snap.Config(rf)
+		if c == nil || c.Thermostat == nil {
+			t.Fatalf("room %d: no C line of %s", x.ID, rf)
+		}
+		if x.MinSetpoint == nil || x.MaxSetpoint == nil || *x.MinSetpoint != c.Thermostat.MinSetpoint || *x.MaxSetpoint != c.Thermostat.MaxSetpoint {
+			t.Errorf("room %d: range %s to %s, want %s's %v to %v", x.ID, show(x.MinSetpoint), show(x.MaxSetpoint), rf, c.Thermostat.MinSetpoint, c.Thermostat.MaxSetpoint)
+			continue
+		}
+		ranges[show(x.MinSetpoint)+"-"+show(x.MaxSetpoint)]++
+	}
+	if want := map[string]int{"4.5-23": 4, "4.5-30.5": 2}; !reflect.DeepEqual(ranges, want) {
+		t.Errorf("the rooms' ranges %v, want %v", ranges, want)
 	}
 }
 

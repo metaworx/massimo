@@ -130,15 +130,17 @@ func (s *Server) roomsOf(rt *runtime, kind view.Kind) []view.Room {
 // its master, its wall thermostat, its radiator thermostats, as its room
 // commands name it (cubeio.RoomAddressee), which radiograms keep naming
 // whichever thermostat the entry names; comfort_temp and eco_temp the
-// room's, as its configuration shows them (roomConfig). A client marks a
-// setpoint of the room by them; each device keeps its own
-// (RoomMajority.D11-A).
+// room's, as its configuration shows them (roomConfig), and with them
+// min_setpoint and max_setpoint. A client marks a setpoint of the room by
+// the first two, each device keeping its own (RoomMajority.D11-A), and
+// offers the room's setpoints within the other two.
 func (rt *runtime) setRoomOrder(r *view.Room) {
 	if a, ok := cubeio.RoomAddressee(rt.client.Snapshot(), r.ID, rt.hidden()); ok && r.Thermostat == "" {
 		r.Thermostat = a.String()
 	}
 	if s, _, ok := rt.roomConfig(r.ID, nil); ok {
 		r.ComfortTemp, r.EcoTemp = new(s.Temps.Comfort), new(s.Temps.Eco)
+		r.MinSetpoint, r.MaxSetpoint = new(s.Temps.Min), new(s.Temps.Max)
 	}
 }
 
