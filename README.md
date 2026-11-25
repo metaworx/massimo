@@ -569,6 +569,10 @@ The other targets:
 build one more release binary each;
 `make build-release` adds the build record, `SHA256SUMS` and the release manifest;
 `make vet`, `make test` and `make clean` do what they say;
+`make clean-tests` removes what the test suites leave in the checkout,
+their results and caches,
+and `make distclean` both and what make installed into it,
+never `.env`, a store or a cache that every checkout shares;
 `make race` runs the race detector on the packages whose goroutines meet,
 and `make fuzz` each fuzz target for `FUZZTIME` (10 s).
 A build from `main`, or any other branch, is of the flavour `devel`
