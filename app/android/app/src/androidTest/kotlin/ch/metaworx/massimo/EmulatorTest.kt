@@ -33,11 +33,22 @@ abstract class EmulatorTest {
     /** page is its WebView. */
     protected lateinit var page: Page
 
-    /** capture keeps what a failure showed, the page's text with it, then closes the activity, whatever the test came to. */
+    /**
+     * capture keeps what a failure showed, the page's text with it, then
+     * closes the activity and takes the app's tasks out of recents
+     * ([Rig.removeTasks]), whatever the test came to, so that the
+     * orchestrator's clear before the next test kills nothing of it.
+     */
     @get:Rule
     val capture = KeepOnFailure(
         more = { name -> Rig.chunks("$name: the page at ${page.url()}", page.text("body").take(PAGE_TEXT)) },
-        after = { scenario?.close() },
+        after = {
+            try {
+                scenario?.close()
+            } finally {
+                Rig.removeTasks()
+            }
+        },
     )
 
     @Before
