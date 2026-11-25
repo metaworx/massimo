@@ -1137,7 +1137,8 @@ The default roles and their sets are seeded at the first start and can be
 changed afterwards by whoever holds the `roles` capability, with one exception:
 `owner` always has every capability and cannot be edited, disabled or deleted,
 and the store refuses to disable, delete, demote or give an end date to the
-last enabled owner user without one.
+last enabled owner user without one,
+an integration's user with the role `owner` not counting.
 The default roles keep their keys (`owner`, `manager`, `operator`, `guest`,
 `viewer`, `integration`), so that the code,
 the documentation and the translations can refer to them;
@@ -1275,8 +1276,17 @@ the roles and their sets are rows (section 5), seeded by the first migration.
 
 ### Bootstrap and compatibility
 
+- A regular user is a user that is not removed and is not an integration's
+  (`users.integration_id IS NULL`), a disabled one included;
+  "users" below means regular users (AP LooseEnds, D1).
+  A server whose only users are an integration's is open,
+  as one without users, and warns so at its start
+  (`the server is open: its only users are an integration's; create the owner`)
+  unless it is kept open on purpose;
+  a version before counted them, so such a server was closed and becomes open
+  at the upgrade (D2).
 - With `MASSIMO_API_TOKEN` set and no user in the store (the first start after
-  the update),
+  the update, or a store with an integration's users alone),
   the server creates the user `owner` with the role `owner` and no password,
   and a token of kind `api` with the hash of `MASSIMO_API_TOKEN`,
   label `MASSIMO_API_TOKEN`.
@@ -1295,6 +1305,13 @@ the roles and their sets are rows (section 5), seeded by the first migration.
   "Users: /api/v1/users and /api/v1/users/{name}"
   and "Tokens: /api/v1/users/{name}/tokens"):
   a revoked row keeps its hash, unique, so the next start could not add it back.
+  The file's key that an older start gave to an integration's user with the
+  role `owner`, live or revoked since (a revoke of the integration revokes it),
+  moves, at the start, to the first enabled regular owner,
+  or to the user `owner` made where there is none, in one transaction with it,
+  live again and its sessions ended, and the log says from whom
+  (`the settings file's key moved from an integration's user`;
+  AP LooseEnds, D1): such a user holds no key of its own.
   Whoever can edit the file is root or the service user,
   who can edit the database anyway.
 - Without `MASSIMO_API_TOKEN` and without users,
@@ -1313,8 +1330,9 @@ the roles and their sets are rows (section 5), seeded by the first migration.
   (AP FirstOwner, D11), and nothing changes about who is let in.
   It counts only while there are no users:
   every transaction of the store that makes a user removes it,
-  the API's first owner, `massimo user add`, the owner of `MASSIMO_API_TOKEN`,
-  a provider's user and an integration's among them,
+  the API's first owner, `massimo user add`, the owner of `MASSIMO_API_TOKEN`
+  and a provider's user among them;
+  an integration approved and its users leave it as it is,
   and the server removes it at its start and at each reload of the settings
   file where it finds users beside it,
   which a process of an older version can leave;
@@ -1601,6 +1619,16 @@ before: a name the owner gave stays.
 The names of an integration's users follow
 `^<uuid>:([a-z0-9]{1,64}|system)?$`; only the store makes them, and the
 rule of every other name has no colon.
+An integration's user acts through its integration alone:
+the store gives it no key but the integration's own (`CollectIntegrationKey`),
+no session, no password of either version and no identity at a provider
+(`ErrIntegrationUser`), whatever its role,
+so that no route can give it a way in of its own;
+what it held before stays, a key acting while its integration is active and
+within the role `integration` and the integration's maximum,
+a password or an identity signing in nowhere.
+They are not regular users: they neither close an open server nor block its
+first owner ("Bootstrap and compatibility").
 A request approved as an earlier integration (`merged_into`) reuses that
 one's row, users and links, as after a key lost or revoked;
 a revoke ends the key and keeps the rest.

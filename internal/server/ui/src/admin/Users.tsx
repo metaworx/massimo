@@ -23,7 +23,7 @@ import { hid } from "../shared/cls";
 import { DateTime, Field, FormFooter, Select, Switch, TextField, useDraft } from "../shared/field";
 import { Fold, FoldHead } from "../shared/fold";
 import { focusForm, useForm } from "../shared/forms";
-import { Question, busyProps, useAsk, useBusy, useSetAtOnce } from "../shared/question";
+import { BusyButton, Question, busyProps, useAsk, useBusy, useSetAtOnce } from "../shared/question";
 import { isoOf, localOf } from "../shared/time";
 import { type Changes, Identities } from "../shared/identities";
 import { Tokens } from "../shared/tokens";
@@ -99,7 +99,10 @@ const trim = (v: string) => v.trim();
  * in place of the actions, Reset and Save. The fields that show what is
  * stored keep their drafts by the user's name; Save sends those that
  * differ from the user as the list last gave it. open is the panel's: a
- * password shown is hidden again as the panel closes or opens.
+ * password shown is hidden again as the panel closes or opens. An
+ * integration's user gets no password, a line in its place: it acts
+ * through its integration alone (AP LooseEnds, D1); one it holds from
+ * before, its manager removes with Remove the password.
  */
 function UserForm({ u, off, open }: { u: User; off: boolean; open: boolean }) {
   useLook();
@@ -134,6 +137,7 @@ function UserForm({ u, off, open }: { u: User; off: boolean; open: boolean }) {
   };
   const id = (field: string) => "user-" + u.name + "-" + field;
   const admin = "admin-only" + hid(!manage);
+  const ofIntegration = !!u.integration;
   return (
     <form {...form.props} class={"user-form" + hid(off)} onSubmit={submit}>
       <TextField label={t("users.displayName")} id={id("display_name")} name="display_name" maxLength={64} draft={display} cls={hid(!manage && !self).trim() || undefined} />
@@ -143,13 +147,26 @@ function UserForm({ u, off, open }: { u: User; off: boolean; open: boolean }) {
         show={(v) => (v ? fmtShortTime(Date.parse(v)) : t("users.noEnd"))}>
         <DateTime id={id("expires")} cls="field-control" step={60} value={expires.value} set={expires.set} />
       </Field>
-      <PasswordField label={t("users.password")} id={id("password")} name="password" autocomplete="new-password" placeholder={t("users.passwordHint")}
-        reset={open} value={password} set={(v) => {
-          setPassword(v);
-          form.place("password").changed();
-        }} />
-      <PasswordField label={t("users.currentPassword")} id={id("current_password")} name="current_password" autocomplete="current-password"
-        cls={"field-current" + hid(manage || !self)} reset={open} value={current} set={setCurrent} />
+      {ofIntegration ? (
+        <>
+          <p class="muted small user-no-sign-in">{t("users.integrationNoSignIn")}</p>
+          {manage && u.has_password && (
+            <div class="actions">
+              <BusyButton cls="remove-password" label={t("users.removePassword")} run={() => saveUser(u, { password: "" }, "", null)} />
+            </div>
+          )}
+        </>
+      ) : (
+        <>
+          <PasswordField label={t("users.password")} id={id("password")} name="password" autocomplete="new-password" placeholder={t("users.passwordHint")}
+            reset={open} value={password} set={(v) => {
+              setPassword(v);
+              form.place("password").changed();
+            }} />
+          <PasswordField label={t("users.currentPassword")} id={id("current_password")} name="current_password" autocomplete="current-password"
+            cls={"field-current" + hid(manage || !self)} reset={open} value={current} set={setCurrent} />
+        </>
+      )}
       {ask.asking ? (
         <Question text={t("users.removeConfirm", { name: u.name })} yes={t("users.remove")} no={t("action.keep")} onNo={() => ask.done()}
           onYes={async () => {
@@ -169,7 +186,9 @@ function UserForm({ u, off, open }: { u: User; off: boolean; open: boolean }) {
  * in) and the badges; the integrations' users that act as it; its form,
  * or for a user that outranks the signed-in one why it cannot be changed;
  * its sessions and keys, the manager's and the user's own; its identities,
- * the manager's, where a provider is enabled.
+ * the manager's, where a provider is enabled. An integration's user is
+ * offered no new key and no identity to assign or change: what it holds
+ * is listed, to be revoked or removed.
  */
 function UserPanel({ u }: { u: User }) {
   useLook();
@@ -185,9 +204,10 @@ function UserPanel({ u }: { u: User }) {
       summary={<FoldHead name={userName(u)} mono={u.integration ? "" : u.name} badges={badges(u)} />}>
       {links && <p class="muted small user-integration-links">{t("users.linksList", { users: links })}</p>}
       <UserForm u={u} off={locked} open={ui.open} />
-      <Tokens u={u} off={!manage && !self} open={ui.open} reads={reads.value} run={run} say={usersMsg} labelId={"user-key-label-" + u.name} />
+      <Tokens u={u} off={!manage && !self} open={ui.open} reads={reads.value} run={run} say={usersMsg} labelId={"user-key-label-" + u.name}
+        listOnly={!!u.integration} />
       <Identities u={u} off={!manage || !enabled.value.length} open={ui.open} reads={reads.value} providers={enabled.value} run={run} say={usersMsg}
-        title={t("users.identities")} none={t("users.identitiesNone")} changes={changes} assign />
+        title={t("users.identities")} none={t("users.identitiesNone")} changes={u.integration ? undefined : changes} assign={!u.integration} />
       {locked && <p class="muted small">{t(u.role === "owner" ? "users.ownerOnly" : "users.outranked")}</p>}
     </Fold>
   );

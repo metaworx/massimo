@@ -606,6 +606,7 @@ with `Idempotency-Key` answering a retry without a second radio command.
 `MASSIMO_API_TOKEN` (or `-token`) becomes the owner's key at the first start,
 and is the one token without a store (`serve -addr`);
 while there are no users the API is open to the local network only,
+an integration's users not counting,
 and the first owner is created with `massimo user add` or by the web UI from
 the local network.
 See docs/api-v1.md, "Authentication".
