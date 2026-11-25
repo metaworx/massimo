@@ -52,15 +52,21 @@ the first one on a machine also fetches the test libraries.
   some 5 GB once unpacked.
 - **JDK 17** for Gradle, `JAVA_HOME=/usr/lib/jvm/java-17-openjdk-amd64`
   where another is the default.
+- **Room in `TMPDIR`** (`/tmp` where it is not set) for the run's AVD,
+  about 1.2 GB after a run, its data partition able to grow to 4 GB:
+  where `/tmp` is a tmpfs, that is memory, and `TMPDIR` names another place.
 - **The host's tools**: Go, `curl` and `openssl` for the servers;
   `unzip` and `sha1sum` for `sdk.sh fetch`;
   GNU coreutils' `timeout` and `env -C` for the run.
 
 ## What it does
 
-1. The checks above, then the AVD `massimo-test` in `~/.android/avd`
-   (`ANDROID_AVD_HOME`), made where missing,
-   its settings written from the pins at each run.
+1. The checks above, then the AVD `massimo-test`,
+   made at each run in the run's work directory (below, "The results"),
+   its settings written from the pins:
+   the run's own, which no other checkout's run starts or rewrites,
+   and made anew at no cost, since `-wipe-data` remakes its images anyway.
+   `ANDROID_AVD_HOME` is not read; the run sets it for the emulator alone.
 2. The emulator, without a window, audio or snapshots
    (`-no-window -no-audio -no-snapshot`), its data wiped (`-wipe-data`),
    so that every run starts from a phone just set up,
@@ -200,12 +206,19 @@ or Android 8 to 10, whose prompt takes no PIN.
 
 ## The results
 
-The servers' stores, their `massimo` and `tally`
+The AVD, the servers' stores, their `massimo` and `tally`
 are in the run's work directory,
-`massimo-app-emulator.XXXXXX` under `TMPDIR`,
-which goes at the end of the run;
-`KEEP=1 make app-emulator-test` keeps it and prints its path
+`massimo-app-emulator.XXXXXX` under `TMPDIR` (`/tmp` where it is not set),
+the AVD in its `avd/`;
+the directory goes at the end of the run,
+and `KEEP=1 make app-emulator-test` keeps it, the AVD with it,
+about 1.2 GB after a run, and prints its path
 (AP CleanRuns, D4-A).
+The directory holds the run's PID and the emulator's in `pid`.
+A run that was killed, whose cleanup could not run, leaves its own;
+a later run removes it once neither runs and it is older than a day,
+as the UI suite does with its own
+(`tools/workdir/README.md`; AP EmulatorRuns, D1-A, D3-B).
 
 `results/`, emptied at each run and not kept by git:
 `emulator.log` with the kernel's messages,
@@ -319,7 +332,7 @@ Its result counts with Android app's in the Tested record's `app=`.
 
 | File | What |
 |---|---|
-| `run.sh` | the run, as above |
+| `run.sh` | the run, as above; its work directory from `../workdir/workdir.sh`, which it sources, the UI suite's helper too (`tools/workdir/README.md`) |
 | `servers.sh` | the two servers, sourced by `run.sh` |
 | `fingers.sh` | the helper that answers each touch a test asks for |
 | `sdk.sh` | `check` and `fetch` of the pinned emulator and image |

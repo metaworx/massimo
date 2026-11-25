@@ -12,11 +12,11 @@
 #
 # In order: the SDK's adb, emulator and image (sdk.sh check) and KVM,
 # which the emulator needs, each said where it is missing before anything
-# starts; the AVD massimo-test, made where missing and its settings
-# written from the pins at each run; the emulator, without a window,
-# audio or snapshots, its data wiped, so that every run starts as a new
-# phone, the device's log kept from the moment adb sees it; while it
-# boots, the servers and the app's two APKs built; once it has booted,
+# starts; the AVD massimo-test, made at each run in the run's work
+# directory, its settings written from the pins; the emulator, without a
+# window, audio or snapshots, its data wiped, so that every run starts as
+# a new phone, the device's log kept from the moment adb sees it; while
+# it boots, the servers and the app's two APKs built; once it has booted,
 # its animations and autofill off, the screen kept on and the PIN set,
 # which a fingerprint needs, the lock screen away before and after it;
 # adb reverse for both servers' ports, the owner's key written to a file
@@ -48,20 +48,31 @@
 # Every adb command names the emulator by its serial, emulator-<port>:
 # no command goes to another device, and a phone adb knows is left alone.
 #
+# The AVD, the servers' stores and the binaries are in the run's work
+# directory, massimo-app-emulator.XXXXXX under TMPDIR (default /tmp),
+# made, swept and kept by tools/workdir/workdir.sh, which the UI suite
+# shares (AP EmulatorRuns, D3-B): the AVD is the run's own, which no other
+# checkout's run starts or rewrites, made at each run, since -wipe-data
+# remakes its images anyway, and it goes with the directory at the run's
+# end (D1-A). The directory holds the run's PID and the emulator's; a
+# run that was killed, whose cleanup could not run, leaves its own, which
+# a later run removes once neither runs and it is older than a day.
+#
 # Environment: ANDROID_HOME (the SDK; adb from its platform-tools);
 # APP_EMU_SDK (the SDK holding the emulator and the image, default
-# ANDROID_HOME); ANDROID_AVD_HOME (default ~/.android/avd); APP_EMU_PORT
-# (the emulator's console port, even, 5554 to 5682, default 5584);
-# APP_EMU_BOOT_TIMEOUT (seconds the boot may take once the builds are
-# done, default 300); APP_EMU_STRICT (1: a test skipped or not run fails
-# the run, as under CI=true; 0 or empty: it is said only); APP_EMU_CLASS (a test class,
-# or a class#method, as the instrumentation's -e class takes it);
-# APP_EMU_API_PORT_A and _B (the servers' ports, 9443 and 9444),
-# APP_EMU_CUBE_PORT_A and _B (their fake Cubes', 62941 and 62942) and
-# APP_EMU_DISCOVERY_PORT_A and _B (23941 and 23942); KEEP (1 keeps the
-# work directory, massimo-app-emulator.XXXXXX under TMPDIR, with the
-# servers' stores and the binaries, and prints its path; AP CleanRuns,
-# D4-A). JAVA_HOME as Gradle wants it (app/README.md).
+# ANDROID_HOME); APP_EMU_PORT (the emulator's console port, even, 5554
+# to 5682, default 5584); APP_EMU_BOOT_TIMEOUT (seconds the boot may take
+# once the builds are done, default 300); APP_EMU_STRICT (1: a test
+# skipped or not run fails the run, as under CI=true; 0 or empty: it is
+# said only); APP_EMU_CLASS (a test class, or a class#method, as the
+# instrumentation's -e class takes it); APP_EMU_API_PORT_A and _B (the
+# servers' ports, 9443 and 9444), APP_EMU_CUBE_PORT_A and _B (their fake
+# Cubes', 62941 and 62942) and APP_EMU_DISCOVERY_PORT_A and _B (23941 and
+# 23942); KEEP (1 keeps the work directory, the AVD in it, about 1.2 GB
+# after a run, with a file kept in it from the start, which a later run
+# leaves alone, and prints its path; AP CleanRuns, D4-A, and the file
+# kept, AP EmulatorRuns, D3-B). JAVA_HOME as Gradle wants it
+# (app/README.md).
 set -euo pipefail
 
 here=$(cd "$(dirname "$0")" && pwd)
@@ -70,6 +81,8 @@ root=$(cd "$here/../.." && pwd)
 . "$here/pins.sh"
 # shellcheck source=servers.sh
 . "$here/servers.sh"
+# shellcheck source=../workdir/workdir.sh
+. "$here/../workdir/workdir.sh"
 
 die() {
 	echo "app-emulator: $*" >&2
@@ -92,7 +105,6 @@ cube_a=${APP_EMU_CUBE_PORT_A:-62941} cube_b=${APP_EMU_CUBE_PORT_B:-62942}
 # shellcheck disable=SC2034
 disc_a=${APP_EMU_DISCOVERY_PORT_A:-23941} disc_b=${APP_EMU_DISCOVERY_PORT_B:-23942}
 avd=massimo-test
-avd_home=${ANDROID_AVD_HOME:-$HOME/.android/avd}
 user=tester
 # not the user's name in it, which a new password may not hold
 password=quiet-harbour-0000
@@ -154,7 +166,11 @@ rm -rf "$out"
 mkdir -p "$out"
 # an earlier run's report is not this one's
 rm -rf "$build/reports/androidTests/connected" "$build/outputs/androidTest-results/connected"
-work=$(mktemp -d "${TMPDIR:-/tmp}/massimo-app-emulator.XXXXXX")
+# the earlier runs' that are gone swept first, the run's PID in it and,
+# under KEEP=1, kept from the start (workdir.sh)
+work=$(workdir_make massimo-app-emulator)
+# the run's own AVD, which the emulator alone is told of
+avd_home="$work/avd"
 key=$(od -An -N16 -tx1 /dev/urandom | tr -d ' \n')
 pids=()
 emu_pid=""
@@ -194,11 +210,7 @@ cleanup() {
 	# they are waited for
 	for p in "$emu_pid" "$step_pid" "${pids[@]}"; do [ -z "$p" ] || kill -9 "$p" 2>/dev/null; done
 	wait 2>/dev/null
-	if [ "${KEEP:-}" = 1 ]; then
-		echo "app-emulator: KEEP=1, the work directory is kept: $work" >&2
-	else
-		rm -rf "$work"
-	fi
+	workdir_done "$work" app-emulator
 }
 trap cleanup EXIT
 trap 'exit 130' INT
@@ -361,6 +373,8 @@ ANDROID_HOME="$sdk" ANDROID_SDK_ROOT="$sdk" ANDROID_AVD_HOME="$avd_home" "$emula
 	-no-window -no-audio -no-snapshot -no-boot-anim -no-metrics -wipe-data -accel on -gpu swiftshader_indirect \
 	-camera-back none -camera-front none -skip-adb-auth -show-kernel </dev/null >"$out/emulator.log" 2>&1 &
 emu_pid=$!
+# an emulator that outlives a killed run keeps its AVD from the sweep
+workdir_pid "$work" "$emu_pid"
 started=$SECONDS
 devlog >"$out/logcat.txt" 2>&1 &
 pids+=("$!")
