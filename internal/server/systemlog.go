@@ -15,6 +15,7 @@ import (
 	"context"
 	"encoding/json"
 	"sort"
+	"strings"
 	"time"
 
 	"go.metaworx.ch/massimo/internal/update"
@@ -54,7 +55,11 @@ func (s *Server) emitBy(rt *runtime, ev event) {
 func (s *Server) noteStop(why string) { s.stopWhy.Store(why) }
 
 // logStarted writes server_started with the version, and the one before
-// when it changed, completing the last updates (noteVersionStart); and an
+// when it changed, completing the last updates (noteVersionStart); then
+// the notes on the settings file the start read, where it found any, as
+// a settings_read warning, why "start": server_started settles every
+// settings_read warning before it, and a note that stands stays a
+// warning across a restart (AP StartConfiguration, D33-A); and an
 // update's outcome the helper reported since the last one the log said.
 func (s *Server) logStarted(ctx context.Context) {
 	version := s.opts.Update.Version // the release's, without the Go details
@@ -77,6 +82,9 @@ func (s *Server) logStarted(ctx context.Context) {
 		}
 	}
 	s.logServer(systemEvent("server_started", 0, summary))
+	if len(s.opts.SettingsNotes) > 0 {
+		s.LogSettingsRead(ctx, "start", nil, nil, nil, s.opts.SettingsNotes)
+	}
 	s.logUpdateResult(ctx)
 }
 
@@ -123,23 +131,48 @@ func (s *Server) logStopping() {
 }
 
 // LogSettingsRead writes settings_read: the settings file read again,
-// why (the file changed, SIGHUP, the API), the variables that changed
-// and those that wait for the next start, by name, never their values,
-// which may be secrets; with who asked for it through the API (ctx). It
-// is at warn, with refused as its error, where the next start would
-// refuse a setting of the file (cmd/massimo's startchecks.go: a value
+// why (the file changed, SIGHUP, the API; "start" for the start's
+// notes, logStarted), the variables that changed and those that wait
+// for the next start, by name, never their values, which may be
+// secrets; with who asked for it through the API (ctx). It is at warn
+// where the read found what the next start refuses (refused) or a note
+// on the file (notes), with both in its error (settingsReadError), so
+// that the newest line says all that its read found. The next start
+// refuses a setting of the file (cmd/massimo's startchecks.go: a value
 // that does not parse, or does not go with another), or the file itself,
 // one that does not parse or is there but cannot be read, which changed
-// nothing (cmd/massimo's reload.go).
-func (s *Server) LogSettingsRead(ctx context.Context, why string, changed, pending []string, refused error) {
+// nothing (cmd/massimo's reload.go). A note names a line of the file
+// that the read set aside by its number, never its value (env.Note).
+func (s *Server) LogSettingsRead(ctx context.Context, why string, changed, pending []string, refused []Refusal, notes []string) {
 	c, p := append([]string{}, changed...), append([]string{}, pending...)
 	sort.Strings(c)
 	sort.Strings(p)
 	ev := systemEvent("settings_read", userIDOfContext(ctx), map[string]any{"why": why, "changed": c, "at_next_start": p})
-	if refused != nil {
-		ev.Level, ev.Error = "warn", refused.Error()
+	if text := settingsReadError(refused, notes); text != "" {
+		ev.Level, ev.Error = "warn", text
 	}
 	s.logServer(ev)
+}
+
+// settingsReadError is settings_read's error, which keeps the two kinds
+// of what a read found apart: the start's texts of what the next start
+// refuses after "the next start refuses: ", in its order, then the notes
+// on the file after "the settings file: ", in the file's order; each
+// list joined by "; ", and the two by "; " where both stand (AP
+// StartConfiguration, D3-B). It is "" for neither.
+func settingsReadError(refused []Refusal, notes []string) string {
+	var parts []string
+	if len(refused) > 0 {
+		texts := make([]string, len(refused))
+		for i, f := range refused {
+			texts[i] = f.Error
+		}
+		parts = append(parts, "the next start refuses: "+strings.Join(texts, "; "))
+	}
+	if len(notes) > 0 {
+		parts = append(parts, "the settings file: "+strings.Join(notes, "; "))
+	}
+	return strings.Join(parts, "; ")
 }
 
 // LogRotated writes log_rotated: serve's log file rotated (internal/

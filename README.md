@@ -777,6 +777,11 @@ changes nothing and is such a warning too,
 since every command stops on it at its start;
 the warning names the bad line by its number and never quotes it.
 A missing one changes nothing either, as an editor may be replacing it.
+A line the read sets aside (see "Cube variables") is a warning too,
+on the process's log and in the log after "the settings file: ",
+but no refusal: `GET /api/v1/restart` and the web UI's **Restart** do not name it.
+A start that finds one says it in the log after its start,
+so that the warning stays until a read finds the file fixed.
 `GET /api/v1/restart` and `POST /api/v1/reload` name what the next start refuses
 until a read finds nothing refused,
 and System settings → Maintenance says it under **Restart**,
@@ -1066,6 +1071,11 @@ and UTF-16 text, as PowerShell 5.1's `>` or `>>` writes it, is refused:
 save it as UTF-8.
 A line without a name is ignored, and so is a `MASSIMO_ENV_FILE` line:
 name the file with `-env`.
+Every command but `version` and `help` warns of a line set aside
+on stderr at its start, by its number and never its value
+(`warning: /etc/massimo/env: MASSIMO_HSTS is given on lines 3 and 4; the first wins`),
+`massimo config` lists them after the settings,
+and `serve` says them in its log too.
 On Linux and macOS the service user, the owner of `/etc/massimo/env`,
 reads that file alone and keeps its data in `/var/lib/massimo`,
 from any directory, as `sudo sshd` reads sshd's own configuration;

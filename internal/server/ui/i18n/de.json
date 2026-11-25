@@ -851,6 +851,7 @@
   "log.why.stop": "angehalten",
   "log.sum.read": "Einstellungsdatei neu gelesen ({why}): geändert {changed}; beim nächsten Start {pending}",
   "log.sum.readNothing": "Einstellungsdatei neu gelesen ({why}): nichts geändert",
+  "log.sum.readStart": "Einstellungsdatei beim Start gelesen",
   "log.readWhy.file": "die Datei hat sich geändert",
   "log.readWhy.sighup": "SIGHUP",
   "log.readWhy.api": "in der UI verlangt",

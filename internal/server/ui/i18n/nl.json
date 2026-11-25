@@ -852,6 +852,7 @@
   "log.why.stop": "gestopt",
   "log.sum.read": "instellingenbestand opnieuw gelezen ({why}): gewijzigd {changed}; bij de volgende start {pending}",
   "log.sum.readNothing": "instellingenbestand opnieuw gelezen ({why}): niets gewijzigd",
+  "log.sum.readStart": "instellingenbestand gelezen bij de start",
   "log.readWhy.file": "het bestand is gewijzigd",
   "log.readWhy.sighup": "SIGHUP",
   "log.readWhy.api": "gevraagd in de UI",

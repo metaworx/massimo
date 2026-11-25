@@ -851,6 +851,7 @@
   "log.why.stop": "stopped",
   "log.sum.read": "settings file read again ({why}): changed {changed}; at the next start {pending}",
   "log.sum.readNothing": "settings file read again ({why}): nothing changed",
+  "log.sum.readStart": "settings file read at the start",
   "log.readWhy.file": "the file changed",
   "log.readWhy.sighup": "SIGHUP",
   "log.readWhy.api": "asked for in the UI",

@@ -853,6 +853,7 @@
   "log.why.stop": "arrêté",
   "log.sum.read": "fichier de réglages relu ({why}) : modifié {changed} ; au prochain démarrage {pending}",
   "log.sum.readNothing": "fichier de réglages relu ({why}) : rien de modifié",
+  "log.sum.readStart": "fichier de réglages lu au démarrage",
   "log.readWhy.file": "le fichier a changé",
   "log.readWhy.sighup": "SIGHUP",
   "log.readWhy.api": "demandé dans l'interface",

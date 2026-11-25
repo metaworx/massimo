@@ -74,12 +74,15 @@ type Note struct {
 	// order: for a name given more than once every line of it, the
 	// first the one that wins.
 	Lines []int
-	// Name is the variable the lines give, "" for a line without one.
+	// Name is the variable the lines give, "" for a line without one
+	// and for a name that is no variable's (varName), which may be part
+	// of a secret wrapped onto a line of its own.
 	Name string
 	// Text says what the read did with them: "MASSIMO_X is given on
-	// lines 3 and 4; the first wins", "line 7 has no name before its =,
-	// ignored", "line 2 sets MASSIMO_ENV_FILE, ignored: name the file
-	// with -env".
+	// lines 3 and 4; the first wins", "lines 3 and 4 give the same name;
+	// the first wins" for a name that is no variable's, "line 7 has no
+	// name before its =, ignored", "line 2 sets MASSIMO_ENV_FILE,
+	// ignored: name the file with -env".
 	Text string
 }
 
@@ -110,6 +113,20 @@ func lineList(lines []int) string {
 		return strings.Join(s, "")
 	}
 	return strings.Join(s[:len(s)-1], ", ") + " and " + s[len(s)-1]
+}
+
+// varName reports whether k is a variable's name as settings files write
+// one, [A-Z_][A-Z0-9_]*, which a note may quote: anything else before a
+// line's = may be part of a secret, a value wrapped onto a line of its
+// own (base64 and hex hold lower-case letters), and is named by its
+// lines alone.
+func varName(k string) bool {
+	for i, c := range k {
+		if c != '_' && (c < 'A' || c > 'Z') && (i == 0 || c < '0' || c > '9') {
+			return false
+		}
+	}
+	return k != ""
 }
 
 // headSize is how much of the file readFile looks at before its lines:
@@ -148,7 +165,8 @@ func utf16Text(head []byte) bool {
 // secret, a value wrapped onto a line of its own, and the error is shown
 // at the start and in serve's log.
 //
-// The first line of a name wins, an empty one too. A line without a name
+// The first line of a name wins, an empty one too; its note quotes the
+// name only where it is a variable's (varName). A line without a name
 // is ignored. A MASSIMO_ENV_FILE line is ignored, in any case, as
 // Windows takes the name: the file File names stays the one the start
 // read, where a reload of another file would take its token as the
@@ -211,8 +229,12 @@ func readFile(path string) ([]pair, []Note, error) {
 		return nil, nil, fmt.Errorf("%s:%d: %w", path, n, err)
 	}
 	for _, p := range pairs {
-		if len(p.lines) > 1 {
+		switch {
+		case len(p.lines) < 2:
+		case varName(p.k):
 			notes = append(notes, Note{Lines: p.lines, Name: p.k, Text: fmt.Sprintf("%s is given on lines %s; the first wins", p.k, lineList(p.lines))})
+		default: // what is before its = may be a secret's
+			notes = append(notes, Note{Lines: p.lines, Text: fmt.Sprintf("lines %s give the same name; the first wins", lineList(p.lines))})
 		}
 	}
 	slices.SortStableFunc(notes, func(a, b Note) int { return cmp.Compare(a.Lines[0], b.Lines[0]) })

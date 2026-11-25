@@ -969,7 +969,11 @@ The server's own lines are there too: its start with its version, its stop
 and why, the settings file read again with the names of what changed
 (a warning, in the start's own words,
 where the next start would refuse a setting, or the file,
-one that does not parse or is there but cannot be read),
+one that does not parse or is there but cannot be read,
+and a warning of the lines it set aside, after "the settings file: ",
+which the start's own line says after its start too:
+"settings file read at the start: the settings file:
+MASSIMO_HSTS is given on lines 3 and 4; the first wins"),
 a restart, a reboot or an update asked for and its outcome, the backups, their
 prune and the log's, a restore started; and a Cube's new address or its
 leaving the LAN.
@@ -2156,7 +2160,7 @@ The server's sign, when it says an update is out, opens it at Software update.
   | Event | When the server sends it | What Maintenance reads |
   |---|---|---|
   | `change` of `announce` or an interval | the setting set, from any browser | the settings (`GET /api/v1/settings`) |
-  | `settings_read` | the settings file read again: changed on disk, SIGHUP, Reload now | at `info` nothing: the event names what waits for the next start, its time is when the file was read, and the next start refuses nothing, so the card takes a refusal away; at `warn` the restart's row (`GET /api/v1/restart`): the read found the next start refuses something, and the row names what |
+  | `settings_read` | the settings file read again: changed on disk, SIGHUP, Reload now; and at the start, after `server_started`, where the start found notes on the file | at `info` nothing: the event names what waits for the next start, its time is when the file was read, and the next start refuses nothing, so the card takes a refusal away; at `warn` the restart's row (`GET /api/v1/restart`): the read found the next start refuses something, or a note on the file, and the row names what the next start refuses, never a note |
   | `reboot` | a reboot asked for, begun or failed | the reboot's state (`GET /api/v1/reboot`) |
   | `reboot_cancelled` | a reboot taken back, or the owner's switch turned off | the same |
   | `resync` | the stream opened again with no replay: after the server's restart | the settings, the restart's row and the reboot's |

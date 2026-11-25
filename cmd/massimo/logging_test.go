@@ -156,8 +156,8 @@ func TestReloadListsTheLogLevel(t *testing.T) {
 	os.WriteFile(p, nil, 0o600)
 	t.Cleanup(func() { os.WriteFile(p, nil, 0o600); env.ReloadFile(p) }) // the env package forgets the test's names
 	start := settings()
-	free := newSettingsReloader(p, quietLog(), nil, start, nil)
-	fixed := newSettingsReloader(p, quietLog(), nil, start, fixedSettings(map[string]string{"log-level": "info"}))
+	free := newSettingsReloader(p, quietLog(), nil, start, nil, nil)
+	fixed := newSettingsReloader(p, quietLog(), nil, start, fixedSettings(map[string]string{"log-level": "info"}), nil)
 	os.WriteFile(p, []byte(env.LogLevel+"=debug\n"), 0o600)
 	if _, _, err := env.ReloadFile(p); err != nil {
 		t.Fatal(err)

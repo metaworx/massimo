@@ -377,6 +377,36 @@ func TestUTF16Refused(t *testing.T) {
 	}
 }
 
+// A name given twice that is no variable's name, as a secret wrapped onto
+// a line of its own may give one, is named by its lines alone: neither
+// the note's text nor its Name quotes it, at a start as at a reload; a
+// variable's name given twice is named (AP StartConfiguration, Block 2).
+func TestDuplicateOfNoVariableName(t *testing.T) {
+	const n, wrapped = "MASSIMO_TEST_W", "placeholder-secret+wrapped/1"
+	p := settingsFile(t, n+"=1\n"+wrapped+"==\n"+n+"=2\n"+wrapped+"==\n")
+	start, again, changed := readThrice(t, p, n, wrapped)
+	want := []Note{
+		{Lines: []int{1, 3}, Name: n, Text: n + " is given on lines 1 and 3; the first wins"},
+		{Lines: []int{2, 4}, Text: "lines 2 and 4 give the same name; the first wins"},
+	}
+	if !slices.EqualFunc(start.notes, want, sameNote) {
+		t.Errorf("the notes %v, want %v", start.notes, want)
+	}
+	agrees(t, "a name that is no variable's", start, again, changed)
+	quotesNone(t, start.notes)
+	for _, c := range []struct {
+		name string
+		ok   bool
+	}{
+		{"MASSIMO_X", true}, {"_X1", true}, {"X", true}, {"", false}, {"1X", false}, {"A-B", false},
+		{"c2VjcmV0", false}, {"c2Vj+cmV0", false}, {"massimo_x", false}, {"a/b", false}, {"\u00e4", false}, {"X Y", false},
+	} {
+		if varName(c.name) != c.ok {
+			t.Errorf("varName(%q) = %v, want %v", c.name, !c.ok, c.ok)
+		}
+	}
+}
+
 // A line without a name, "=x", sets nothing and is a note, which does
 // not quote its value; a reload no longer reports an empty name
 // changed. The notes come in the order of the lines they name first.

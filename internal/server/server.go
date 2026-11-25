@@ -272,6 +272,10 @@ type Options struct {
 	FileCubes map[string]store.FileCube
 	// SettingsFile names the settings file, for the log.
 	SettingsFile string
+	// SettingsNotes are the notes on the settings file the start read,
+	// their texts (cmd/massimo, env.LoadFile): the start writes them as
+	// a settings_read warning after its server_started (logStarted).
+	SettingsNotes []string
 	// ProxyFixed says the proxy listeners came from the command line
 	// (-proxy): a proxy address changed through the API is stored, and
 	// takes effect at the next start without -proxy.
