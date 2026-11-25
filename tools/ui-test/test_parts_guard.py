@@ -53,6 +53,7 @@ from typing import Callable
 import pytest
 
 from test_to_top import long_page, scrolled_to
+from test_users import INTEGRATION_USERS
 from helpers import LOG_ALERT_A, LOG_ALERT_B, LOG_CMD, LOG_CMD_LINE, STATE_EVENTS_JS, RepairStub, StubLog, log_lines, open_main_menu, reads_of, safe_route, show_view, stub_log_command, wait_until
 
 # The cases the guard runs in (D176-D); in the others its tests are
@@ -340,6 +341,16 @@ def users_keep_open_switch(page):
     shown while the server is kept open."""
     page.locator("#keep-open-switch").wait_for(state="attached")  # the switch's input, drawn under its slider
     page.locator("#keep-open-switch").focus()
+
+
+def users_open_listed(page):
+    """The same section with an integration's users listed (AP
+    AccessEnds, D7), the users' read answered with them from now on and
+    read again, the focus on Open Integrations under them."""
+    reads_of(page).change("**/api/v1/users", lambda body: INTEGRATION_USERS)
+    page.evaluate("() => MassimoParts.users.load()")
+    page.locator("#users-open-integrations").wait_for(state="visible")
+    page.locator("#users-open-integrations").focus()
 
 
 def main_menu_item(page):
@@ -917,13 +928,19 @@ REGIONS = (
         View("the operator's Remove asking", users_question),
     )),
     # Users on a server without users is a section of its own (AP
-    # FirstOwner, Block 4), drawn from who is in: who is in read again
-    # (loadMe, one of SOURCES) draws it again, with the stub of a server
-    # kept open, so that no card asks for the owner over it.
+    # FirstOwner, Block 4), drawn from who is in and the users: who is in
+    # read again (loadMe, one of SOURCES) and the users read again (System
+    # settings shown again) draw it again, with the stub of a server kept
+    # open, so that no card asks for the owner over it.
     Region("users-open", ("#sys-users-body",), (
         View("Users on a server kept open, the focus on Create the owner…", users_open_server, "#users-create-owner"),
         View("the switch that undoes keep open, in focus", users_keep_open_switch, "#keep-open-switch"),
-    )),
+        # Fails on the page before: no list. From now on it guards that
+        # Open Integrations and Create the owner… beside an integration's
+        # users stay through the data, the users read again among it; the
+        # rows themselves hold nothing a user can hold.
+        View("an integration's users listed, the focus on Open Integrations", users_open_listed, "#users-open-integrations"),
+    ), sources=("the page shown again: system",)),
     Region("roles", ("#sys-roles-body",), (View("the operator role's panel and the new role's form", roles),)),
     Region("capabilities", ("#sys-caps-body",), (View("System settings", system),)),
     Region("providers", ("#sys-providers-body",), (
