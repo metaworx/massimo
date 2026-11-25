@@ -1486,6 +1486,7 @@
   "login.missing": "Name and password are needed.",
   "login.failed": "Not signed in: {error}",
   "login.wrong": "Wrong name or password.",
+  "login.keyRefused": "The server does not know this API key.",
   "login.ways": "Sign in with",
   "setup.notKept": "The login by fingerprint was not kept; enable it at your next sign-in.",
   "login.fingerprint": "Login by fingerprint",

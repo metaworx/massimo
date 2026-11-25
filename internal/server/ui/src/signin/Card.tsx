@@ -29,7 +29,9 @@
  * and the password and the key once the card has closed on a sign-in and
  * the page's first reads after it have settled (store.ts settled; AP
  * LooseEnds, D13, D41-A), so that a password manager has taken the
- * sign-in for done first; never at a refusal or a dismissal. Each way signs in as askLogin's handlers did, then
+ * sign-in for done first; a dismissal empties nothing, nor does a
+ * refused password, kept for the retry, where a refused API key goes
+ * from its field (below). Each way signs in as askLogin's handlers did, then
  * finishSignIn of login.js goes on as they went on. The card is never
  * drawn anew: its buttons, their busy states and its fields stay through
  * every draw, the app's status, the providers, the language, a 401's
@@ -38,7 +40,13 @@
  * took too long included, which a new try passes; any other refusal (too
  * many attempts, a server not ready) with the server's words; Sign in
  * turns while a key signs in as while a password does, so that a second
- * Enter meanwhile signs in no second time (AP LooseEnds, Block 2).
+ * Enter meanwhile signs in no second time (AP LooseEnds, Block 2). A key
+ * is read with first and becomes the page's token only once the server
+ * has taken it: a refused one is said on the key's way, under its field,
+ * the field emptied and in focus, and the page's token and the app's
+ * bridge stay as they were (AP LooseEnds, D43). An answer to the key's
+ * read that comes once its opening has ended (another way signed in
+ * meanwhile, the card closed or opened anew, a sign-out) does nothing.
  */
 
 import { useLayoutEffect, useRef, useState } from "preact/hooks";
@@ -54,6 +62,7 @@ import { ModeSelect } from "../shared/mode";
 import { PasswordInput } from "../shared/password";
 import { BusyButton, busyProps, useBusy } from "../shared/question";
 import { VersionRow, version } from "../shared/server";
+import { session, stillSession } from "../shared/session";
 import { keepLogin, kept, offer, plainHere } from "./app";
 import { Owner } from "./Owner";
 import { ServerLine } from "./Server";
@@ -127,6 +136,7 @@ export function Card() {
     if (!focus.n) return;
     if (focus.on === "way") wayFocus();
     else if (focus.on === "password") passRef.current?.focus();
+    else if (focus.on === "key") keyRef.current?.focus();
     else if (focus.on === "retry") retryRef.current?.focus();
   }, [focus]);
   // the one place that puts the focus into the chosen way's first field, at an opening and at a way's click; none on a
@@ -174,9 +184,31 @@ export function Card() {
     const a = ask();
     const key = (keyRef.current?.value || "").trim();
     if (!key) return;
+    card.keySaid = null;
+    const n = session();
     kb.run(async () => {
+      // the key read with first, as who it is, before it becomes the page's token: a key the server refuses replaces
+      // no session of the page's, and no bridge keeps it (AP LooseEnds, D43)
+      // the opening the key was typed in still the card's and open, in the same session: an answer after another way
+      // signed in, after the card closed or opened anew, or after a sign-out, makes no token and writes nothing
+      const still = () => stillSession(n) && !!a && ask() === a && !a.closed;
+      let me: unknown;
+      try {
+        me = await apiRequest("GET", "api/v1/me", undefined, { token: key });
+      } catch (e) {
+        if (!still()) return;
+        const err = e as Error & { status?: number };
+        // a key the server does not know (401) in the page's language; a key it refuses for a reason (403, such as an
+        // integration disabled), a lockout, a server not reached with the server's or the browser's words, as the
+        // password's way says them; a refused key, a secret still, goes from its field
+        card.keySaid = { text: err.status === 401 ? t("login.keyRefused") : t("login.failed", { error: err.message }), ok: false };
+        if ((err.status === 401 || err.status === 403) && keyRef.current) keyRef.current.value = "";
+        askFocus("key");
+        return;
+      }
+      if (!still() || !a) return;
       await setToken(key); // in the app, the key kept by the bridge before the sign-in's reads go out with it
-      if (a) await finishSignIn(a);
+      await finishSignIn(a, me); // who is in as the key read it: settleSignIn reads it no second time
     });
   };
   // the login by fingerprint: a session from the key the app keeps
@@ -254,6 +286,7 @@ export function Card() {
         </div>
         <form id="login-key-form" class={hid(way !== "key").trim() || undefined} onSubmit={submitKey}>
           <label><span>{t("login.token")}</span> <input ref={keyRef} type="password" id="login-token" name="api-key" autocomplete="off" /></label>
+          <ResultLine id="login-key-error" cls="small" role="alert" res={card.keySaid} />
           <div class="actions">
             <button type="button" id="login-key-cancel" class={"form-cancel" + hid(!servers)} onClick={toServers}>{t("action.cancel")}</button>
             <button type="submit" {...busyProps("primary", kb.busy)}>{t("login.submit")}</button>

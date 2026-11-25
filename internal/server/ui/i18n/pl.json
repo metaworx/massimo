@@ -1531,6 +1531,7 @@
   "login.missing": "Potrzebne są nazwa i hasło.",
   "login.failed": "Nie zalogowano: {error}",
   "login.wrong": "Nieprawidłowa nazwa lub hasło.",
+  "login.keyRefused": "Serwer nie zna tego klucza API.",
   "login.ways": "Zaloguj przez",
   "setup.notKept": "Logowania odciskiem palca nie zachowano; włącz je przy następnym logowaniu.",
   "login.fingerprint": "Logowanie odciskiem palca",

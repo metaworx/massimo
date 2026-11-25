@@ -296,14 +296,18 @@ function resumePushes(held) {
 // forgets the one who was, as a sign-out does (forgetSession), and drops
 // the pushes held: the next user neither sees nor saves nor receives
 // anything of the last. A sign-in that nobody was signed in before has
-// nothing to forget.
-async function settleSignIn(was, held) {
+// nothing to forget. known is who is in as the sign-in read it already
+// (the API key's way reads it with the key first, AP LooseEnds, D43), so
+// that it is not read twice; undefined reads it.
+async function settleSignIn(was, held, known) {
   if (!was) return resumePushes(held);
-  let me = null;
-  try {
-    me = await apiRequest("GET", "api/v1/me");
-  } catch (e) {
-    // not known: forgotten, to be safe
+  let me = known === undefined ? null : known;
+  if (known === undefined) {
+    try {
+      me = await apiRequest("GET", "api/v1/me");
+    } catch (e) {
+      // not known: forgotten, to be safe
+    }
   }
   if (whoIs(me) === was) return resumePushes(held);
   await forgetSession(canSync());
@@ -479,11 +483,12 @@ function askLogin(on) {
 // not the open server for a moment, and Create the owner turns until
 // then (AP FirstOwner); on a running page the page it was opened on is
 // shown again, read anew under the owner (D37). An ask closed meanwhile (dismissed, or ended by
-// another way) is left as it is: nothing is closed or started twice. It
+// another way) is left as it is: nothing is closed or started twice. me,
+// where given, is who is in as the sign-in read it (settleSignIn). It
 // reports whether it ended the ask.
-async function finishSignIn(ask) {
+async function finishSignIn(ask, me) {
   if (ask.closed) return false;
-  await settleSignIn(ask.was, ask.held);
+  await settleSignIn(ask.was, ask.held, me);
   if (ask.closed) return false;
   if (ask.owner) await loadMe();
   if (ask.closed) return false;

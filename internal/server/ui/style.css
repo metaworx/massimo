@@ -1901,7 +1901,7 @@ massimo-week-program { display: contents; }
 .no-lock.no-structure.no-repair .room .menu { display: none; }
 
 /* the sign-in dialog, the first-owner form, System settings → Users and Roles */
-#login-error.bad { color: var(--bad); }
+#login-error.bad, #login-key-error.bad, #login-providers-error.bad { color: var(--bad); }
 /* the first owner's form in the sign-in card (ui/src/signin/Owner.tsx), at
    its own height (AP FirstOwner, D23), Skip for now in a row under it */
 .setup-form { display: flex; flex-direction: column; gap: 8px; }

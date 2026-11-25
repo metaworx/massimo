@@ -1488,6 +1488,7 @@
   "login.missing": "Le nom et le mot de passe sont nécessaires.",
   "login.failed": "Non connecté : {error}",
   "login.wrong": "Nom ou mot de passe incorrect.",
+  "login.keyRefused": "Le serveur ne connaît pas cette clé API.",
   "login.ways": "Se connecter avec",
   "setup.notKept": "La connexion par empreinte digitale n'a pas été conservée ; activez-la à votre prochaine connexion.",
   "login.fingerprint": "Connexion par empreinte digitale",
