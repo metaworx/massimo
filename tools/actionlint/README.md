@@ -19,6 +19,16 @@ the target runs it from the repository root:
 go tool -modfile=tools/actionlint/go.mod actionlint
 ```
 
+Until a release carries it, the pin is a pseudo-version of upstream's `main`,
+the merge of [rhysd/actionlint#651](https://github.com/rhysd/actionlint/pull/651).
+v1.7.12 writes a `run:` script into shellcheck's stdin before it starts shellcheck,
+and so hangs, asleep, on a script larger than the pipe's buffer:
+64 KiB,
+but 8 KiB once a user's pipes pass the kernel's `fs.pipe-user-pages-soft`,
+as on a machine with many sessions open.
+ci.yml's step "What to test" is larger than that.
+Dependabot's v1.7.13 replaces the pin.
+
 Dependabot proposes a new release (`.github/dependabot.yml`);
 by hand, in this directory:
 

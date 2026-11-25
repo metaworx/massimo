@@ -7,6 +7,8 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"io"
+	"log/slog"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -18,13 +20,16 @@ import (
 	"testing"
 	"time"
 
+	"go.metaworx.ch/massimo/internal/notify"
 	"go.metaworx.ch/massimo/internal/store"
+	"go.metaworx.ch/massimo/internal/testkit"
 	"go.metaworx.ch/massimo/internal/update"
 )
 
 type fakeFinder struct {
 	tag     string // "" = no release
 	flavour string // the release's flavour; "" = the channel asked for
+	err     error  // where set, the check fails with it
 	calls   int
 	channel string // the channel last asked for
 }
@@ -32,6 +37,9 @@ type fakeFinder struct {
 func (f *fakeFinder) Latest(ctx context.Context, channel string) (*update.Release, error) {
 	f.calls++
 	f.channel = channel
+	if f.err != nil {
+		return nil, f.err
+	}
 	if f.tag == "" {
 		return nil, nil
 	}
@@ -313,6 +321,47 @@ func TestUpdatePostsOneAtATime(t *testing.T) {
 	}
 }
 
+// TestUpdateRefusedAfterTheCheck: the helper the first POST started
+// writes its first state while a second POST's release check runs; the
+// second is refused then, before it writes a request.
+func TestUpdateRefusedAfterTheCheck(t *testing.T) {
+	t.Parallel()
+	req := filepath.Join(t.TempDir(), "update-request")
+	found := &fakeFinder{tag: "v0.1.0-alpha.10"}
+	var status string // updateServerWith's status file, set before the first POST
+	var checks atomic.Int32
+	f := finderFunc(func(ctx context.Context, channel string) (*update.Release, error) {
+		// A POST checks afresh (refresh), so the second POST's check is
+		// the second call: the helper's first state lands after that POST
+		// read the status file.
+		if checks.Add(1) == 2 {
+			if err := update.WriteStatus(status, update.Status{State: "checking", Channel: channel}); err != nil {
+				t.Error(err)
+			}
+		}
+		return found.Latest(ctx, channel)
+	})
+	ts, path := updateServerWith(t, "secret", UpdateOptions{Request: req, Finder: f})
+	status = path
+	if code, out := call(t, ts, "POST", "secret"); code != 202 {
+		t.Fatalf("POST: %d %v", code, out)
+	}
+	// The helper takes the request, as the path unit starts it.
+	if _, ok, err := update.TakeRequest(req); !ok || err != nil {
+		t.Fatalf("no request to take: %v", err)
+	}
+	code, out := call(t, ts, "POST", "secret")
+	if msg, _ := out["error"].(string); code != 409 || !strings.Contains(msg, "already running (checking)") {
+		t.Fatalf("POST while the helper checks: %d %v", code, out)
+	}
+	if _, err := os.Stat(req); !errors.Is(err, os.ErrNotExist) {
+		t.Fatalf("the refused POST left a request: %v", err)
+	}
+	if n := checks.Load(); n != 2 {
+		t.Fatalf("%d release checks, want one per POST", n)
+	}
+}
+
 // The channel is MASSIMO_UPDATE_CHANNEL where set, else the store's
 // update.channel, else the build's flavour; an update to a release of
 // another flavour stores the channel first, so that the box stays on it.
@@ -442,5 +491,355 @@ func TestUpdateChannelFromAptSuite(t *testing.T) {
 	}
 	if c, _ := s.opts.Store.SettingString(context.Background(), store.UpdateChannelKey); c != "" {
 		t.Fatalf("stored %q on a box apt owns", c)
+	}
+}
+
+// No server test reaches GitHub: the finder of a server whose options
+// name none panics, and startServer refuses a channel without a Finder.
+func init() {
+	defaultFinder = func() ReleaseFinder { return githubGuard{} }
+}
+
+// githubGuard is the finder of a server test that gave none.
+type githubGuard struct{}
+
+// Latest panics: the test gave the server a channel but no Finder, and
+// the check would have asked GitHub.
+func (githubGuard) Latest(_ context.Context, channel string) (*update.Release, error) {
+	panic("a server test checks the channel " + channel + " on GitHub: give it UpdateOptions.Finder")
+}
+
+// The guard is the finder of a server without one, and fails loudly.
+func TestNoServerTestReachesGitHub(t *testing.T) {
+	t.Parallel()
+	s := New(Options{Update: UpdateOptions{Channel: "alpha"}})
+	if _, ok := s.finder().(githubGuard); !ok {
+		t.Fatalf("a server without a Finder asks %T", s.finder())
+	}
+	defer func() {
+		if recover() == nil {
+			t.Fatal("the guard let the check through")
+		}
+	}()
+	s.updateRelease(t.Context(), true)
+}
+
+// finderFunc is a ReleaseFinder of a function.
+type finderFunc func(ctx context.Context, channel string) (*update.Release, error)
+
+// Latest calls f.
+func (f finderFunc) Latest(ctx context.Context, channel string) (*update.Release, error) {
+	return f(ctx, channel)
+}
+
+// selfCheckServer is a server over a store that runs v0.1.0-alpha.9 on
+// alpha and finds f's releases, not running; its rules run on clock (nil
+// for the real one) for one user who wants update, and told carries the
+// version of each update they tell.
+func selfCheckServer(t *testing.T, f ReleaseFinder, clock notify.Clock) (s *Server, told <-chan string) {
+	t.Helper()
+	s = New(Options{Store: testStore(t, ""), Logger: slog.New(slog.NewTextHandler(io.Discard, nil)),
+		Update: UpdateOptions{Version: "v0.1.0-alpha.9", Channel: "alpha", Finder: f}})
+	prefs := notify.Defaults()
+	prefs[notify.KindUpdate] = notify.Rule{On: true}
+	versions := make(chan string, 16)
+	s.notify = notify.New(notify.Options{
+		Clock: clock,
+		Users: func(context.Context) ([]notify.User, error) { return []notify.User{{ID: 1, Prefs: prefs}}, nil },
+		Deliver: func(_ int64, n notify.Notification) {
+			if n.Kind == notify.KindUpdate {
+				v, _ := n.Values["version"].(string)
+				versions <- v
+			}
+		},
+	})
+	ctx, cancel := context.WithCancel(context.Background())
+	done := make(chan struct{})
+	go func() { defer close(done); s.notify.Run(ctx) }()
+	t.Cleanup(func() { cancel(); <-done })
+	return s, versions
+}
+
+// The server checks for a release by itself: at its first tick, six
+// hours later and not before, whatever else asks; a check that failed
+// again ten minutes later, then six hours after the one that answered.
+func TestUpdateSelfCheckTimes(t *testing.T) {
+	t.Parallel()
+	f := &fakeFinder{tag: "v0.1.0-alpha.10"}
+	s, _ := selfCheckServer(t, f, nil)
+	start := time.Date(2026, 11, 24, 12, 0, 0, 0, time.UTC)
+	tick := func(at time.Time, checks int, what string) {
+		t.Helper()
+		s.updateTick(t.Context(), at)
+		if f.calls != checks {
+			t.Fatalf("%s: %d checks, want %d", what, f.calls, checks)
+		}
+	}
+	tick(start, 1, "the first tick")
+	if f.channel != "alpha" {
+		t.Fatalf("the channel checked: %q", f.channel)
+	}
+	tick(start.Add(time.Minute), 1, "the next tick")
+	tick(start.Add(selfCheckEvery-time.Minute), 1, "a minute before six hours")
+	tick(start.Add(selfCheckEvery), 2, "six hours on")
+	f.err = errors.New("no network")
+	failed := start.Add(2 * selfCheckEvery)
+	tick(failed, 3, "the check that failed")
+	tick(failed.Add(checkEvery-time.Minute), 3, "a minute before ten minutes")
+	f.err = nil
+	tick(failed.Add(checkEvery), 4, "ten minutes after the failure")
+	tick(failed.Add(checkEvery+selfCheckEvery-time.Minute), 4, "a minute before six hours after it")
+	tick(failed.Add(checkEvery+selfCheckEvery), 5, "six hours after it")
+}
+
+// Each check that finds a newer release pushes update; the rules tell
+// each version once.
+func TestUpdateSelfCheckTellsOncePerVersion(t *testing.T) {
+	t.Parallel()
+	f := &fakeFinder{tag: "v0.1.0-alpha.10"}
+	start := time.Date(2026, 11, 24, 12, 0, 0, 0, time.UTC)
+	clock := testkit.NewClock(start)
+	s, told := selfCheckServer(t, f, kitClock{clock})
+	expect := func(want string) {
+		t.Helper()
+		select {
+		case v := <-told:
+			if v != want {
+				t.Fatalf("told %s, want %s", v, want)
+			}
+		case <-time.After(testkit.Scale(10 * time.Second)):
+			t.Fatalf("%s not told", want)
+		}
+	}
+	s.updateTick(t.Context(), start)
+	expect("v0.1.0-alpha.10")
+	clock.Add(selfCheckEvery)
+	s.updateTick(t.Context(), start.Add(selfCheckEvery))
+	f.tag = "v0.1.0-alpha.11"
+	clock.Add(selfCheckEvery)
+	s.updateTick(t.Context(), start.Add(2*selfCheckEvery))
+	if f.calls != 3 {
+		t.Fatalf("%d checks, want 3", f.calls)
+	}
+	// the rules take the pushes in order: the next told is alpha.11's
+	// where alpha.10's second push was told nothing
+	expect("v0.1.0-alpha.11")
+}
+
+// Nothing is checked without a store or without a valid channel; a
+// channel set later is checked at the next tick.
+func TestUpdateSelfCheckNeedsStoreAndChannel(t *testing.T) {
+	t.Parallel()
+	f := &fakeFinder{tag: "v0.1.0-alpha.10"}
+	discard := slog.New(slog.NewTextHandler(io.Discard, nil))
+	now := time.Now()
+	New(Options{Logger: discard, Update: UpdateOptions{Version: "v0.1.0-alpha.9", Channel: "alpha", Finder: f}}).updateTick(t.Context(), now)
+	if f.calls != 0 {
+		t.Fatalf("a server without a store checked %d times", f.calls)
+	}
+	st := testStore(t, "")
+	s := New(Options{Store: st, Logger: discard, Update: UpdateOptions{Version: "v0.1.0-alpha.9", Finder: f}})
+	s.updateTick(t.Context(), now)
+	if f.calls != 0 {
+		t.Fatalf("a server without a channel checked %d times", f.calls)
+	}
+	if err := st.SetSetting(t.Context(), store.UpdateChannelKey, "beta"); err != nil {
+		t.Fatal(err)
+	}
+	s.updateTick(t.Context(), now.Add(time.Minute))
+	if f.calls != 1 || f.channel != "beta" {
+		t.Fatalf("the channel set later: %d checks, of %q", f.calls, f.channel)
+	}
+}
+
+// Run starts the server's own check: its first tick asks the finder,
+// and the loop ends with the server.
+func TestUpdateSelfCheckRuns(t *testing.T) {
+	t.Parallel()
+	asked := make(chan string, 64)
+	opts := storeOptions(t, t.TempDir(), "secret")
+	opts.Update = UpdateOptions{Version: "v0.1.0-alpha.9", Channel: "alpha", Finder: finderFunc(func(_ context.Context, channel string) (*update.Release, error) {
+		select {
+		case asked <- channel:
+		default:
+		}
+		return nil, nil
+	})}
+	opts.selfCheckTick = time.Millisecond
+	r := startServer(t, withOptions(opts))
+	select {
+	case c := <-asked:
+		if c != "alpha" {
+			t.Fatalf("checked %q", c)
+		}
+	case <-time.After(testkit.Scale(10 * time.Second)):
+		t.Fatal("Run checked nothing")
+	}
+	r.stop()
+}
+
+// fakePackages is a package source that has tag, or fails with err; calls
+// counts its reads, channel names the last one's channel.
+type fakePackages struct {
+	tag     string
+	err     error
+	calls   int
+	channel string
+}
+
+// read is the source's UpdateOptions.Source.
+func (f *fakePackages) read(_ context.Context, channel string) (string, error) {
+	f.calls++
+	f.channel = channel
+	return f.tag, f.err
+}
+
+// sourceServer is a server over a store that runs v0.1.0-alpha.9 on
+// alpha, finds f's releases and reads src as the box's package source,
+// apt's; with the helper's status file.
+func sourceServer(t *testing.T, f *fakeFinder, src *fakePackages) (*Server, *httptest.Server, string) {
+	t.Helper()
+	dir := t.TempDir()
+	status := filepath.Join(dir, "status.json")
+	s := New(Options{Store: testStore(t, ""), Token: "secret", Logger: slog.New(slog.NewTextHandler(io.Discard, nil)), Update: UpdateOptions{
+		Version: "v0.1.0-alpha.9", Channel: "alpha", Manager: "apt", Request: filepath.Join(dir, "update-request"), Status: status,
+		Finder: f, Source: src.read,
+	}})
+	ts := httptest.NewServer(s.Handler())
+	t.Cleanup(ts.Close)
+	return s, ts, status
+}
+
+// A release is available only where the box's package source has it:
+// latest is the source's newest, never newer than GitHub's, and
+// released GitHub's where the source has it not yet; a source that
+// cannot be read makes nothing available, and says why. The source is
+// read for the channel, and not where GitHub has nothing newer.
+func TestUpdateFromTheSource(t *testing.T) {
+	t.Parallel()
+	f, src := &fakeFinder{tag: "v0.1.0-alpha.11"}, &fakePackages{}
+	_, ts, _ := sourceServer(t, f, src)
+	get := func() map[string]any {
+		t.Helper()
+		var out map[string]any
+		if code := getJSON(t, ts, "secret", "/api/v1/update?refresh=1", &out); code != 200 {
+			t.Fatalf("GET: %d %v", code, out)
+		}
+		return out
+	}
+	for _, c := range []struct {
+		source, latest, released string
+		available                bool
+	}{
+		{"v0.1.0-alpha.11", "v0.1.0-alpha.11", "", true},                // level with GitHub
+		{"v0.1.0-alpha.10", "v0.1.0-alpha.10", "v0.1.0-alpha.11", true}, // behind, but newer than the running one
+		{"v0.1.0-alpha.12", "v0.1.0-alpha.11", "", true},                // never newer than GitHub's
+		{"v0.1.0-alpha.9", "v0.1.0-alpha.9", "v0.1.0-alpha.11", false},  // the running one
+		{"", "", "v0.1.0-alpha.11", false},                              // none in the index
+	} {
+		src.tag = c.source
+		out := get()
+		latest, _ := out["latest"].(string)
+		released, _ := out["released"].(string)
+		if latest != c.latest || released != c.released || out["available"] != c.available || out["can_update"] != c.available || out["source_error"] != nil {
+			t.Errorf("the source at %q: %v", c.source, out)
+		}
+	}
+	if src.channel != "alpha" {
+		t.Errorf("the source read for %q", src.channel)
+	}
+	if code, out := call(t, ts, "POST", "secret"); code != 409 || !strings.Contains(out["error"].(string), "v0.1.0-alpha.11 is out, but apt has it not yet") {
+		t.Errorf("POST while apt has nothing newer: %d %v", code, out)
+	}
+
+	src.err = errors.New("GET https://massimo.example.invalid/apt/dists/alpha/main/binary-armhf/Packages.gz: 503 Service Unavailable")
+	out := get()
+	if out["source_error"] != src.err.Error() || out["latest"] != nil || out["available"] != false || out["can_update"] != false {
+		t.Errorf("an unreadable source: %v", out)
+	}
+	if code, out := call(t, ts, "POST", "secret"); code != 502 || !strings.Contains(out["error"].(string), "reading what apt has failed") {
+		t.Errorf("POST with an unreadable source: %d %v", code, out)
+	}
+
+	src.err, f.tag = nil, "v0.1.0-alpha.9"
+	calls := src.calls
+	if out := get(); out["latest"] != "v0.1.0-alpha.9" || out["available"] != false || src.calls != calls {
+		t.Errorf("nothing newer on GitHub: %v, %d reads", out, src.calls-calls)
+	}
+}
+
+// After the helper's "nothing newer yet" for a version, it is held back:
+// not available, no Update, POST refused, until a check made after the
+// helper's answer finds it in the source; a newer release is not held.
+func TestUpdateHeldAfterNothingNewer(t *testing.T) {
+	t.Parallel()
+	f, src := &fakeFinder{tag: "v0.1.0-alpha.10"}, &fakePackages{tag: "v0.1.0-alpha.10"}
+	s, ts, status := sourceServer(t, f, src)
+	if code, out := call(t, ts, "POST", "secret"); code != 202 {
+		t.Fatalf("POST: %d %v", code, out)
+	}
+	get := func(path string) map[string]any {
+		t.Helper()
+		var out map[string]any
+		if code := getJSON(t, ts, "secret", path, &out); code != 200 {
+			t.Fatalf("GET: %d %v", code, out)
+		}
+		return out
+	}
+	// apt had nothing newer; the check the POST made is older than that
+	ended := time.Now()
+	for at := s.updateHistory(t.Context())[0].At; !ended.After(at); ended = time.Now() {
+	}
+	if err := update.WriteStatus(status, update.Status{State: "up-to-date", Channel: "alpha", Message: "apt has nothing newer yet", Time: ended}); err != nil {
+		t.Fatal(err)
+	}
+	if out := get("/api/v1/update"); out["held"] != "v0.1.0-alpha.10" || out["available"] != false || out["can_update"] != false || out["latest"] != "v0.1.0-alpha.10" {
+		t.Fatalf("held: %v", out)
+	}
+	// a later check that does not find it keeps it held, and POST, which
+	// checks again, is refused
+	src.tag = "v0.1.0-alpha.9"
+	if out := get("/api/v1/update?refresh=1"); out["held"] != "v0.1.0-alpha.10" || out["available"] != false {
+		t.Fatalf("held after a check without it: %v", out)
+	}
+	if code, out := call(t, ts, "POST", "secret"); code != 409 || !strings.Contains(out["error"].(string), "v0.1.0-alpha.10 is held back") {
+		t.Fatalf("POST while held: %d %v", code, out)
+	}
+	// a check that finds it ends the hold
+	src.tag = "v0.1.0-alpha.10"
+	if out := get("/api/v1/update?refresh=1"); out["held"] != nil || out["available"] != true || out["can_update"] != true {
+		t.Fatalf("after a check that finds it: %v", out)
+	}
+	// a newer release is not held by an older version's hold
+	s.holdVersion("v0.1.0-alpha.10", time.Now().Add(time.Hour))
+	f.tag, src.tag = "v0.1.0-alpha.11", "v0.1.0-alpha.11"
+	if out := get("/api/v1/update?refresh=1"); out["held"] != nil || out["latest"] != "v0.1.0-alpha.11" || out["available"] != true {
+		t.Fatalf("a newer release: %v", out)
+	}
+}
+
+// A hand install has no source: GitHub's release is offered as it is,
+// and a hold ends at the next check after it, which finds it there.
+func TestUpdateWithoutSource(t *testing.T) {
+	t.Parallel()
+	f := &fakeFinder{tag: "v0.1.0-alpha.10"}
+	ts, _ := updateServer(t, "secret", filepath.Join(t.TempDir(), "update-request"), f)
+	code, out := call(t, ts, "GET", "secret")
+	if code != 200 || out["latest"] != "v0.1.0-alpha.10" || out["released"] != nil || out["source_error"] != nil || out["available"] != true {
+		t.Fatalf("GET: %d %v", code, out)
+	}
+}
+
+// A check whose source could not be read is tried again after
+// checkEvery, as one that failed.
+func TestUpdateSelfCheckSourceFailed(t *testing.T) {
+	t.Parallel()
+	src := &fakePackages{err: errors.New("no network")}
+	s := New(Options{Store: testStore(t, ""), Logger: slog.New(slog.NewTextHandler(io.Discard, nil)),
+		Update: UpdateOptions{Version: "v0.1.0-alpha.9", Channel: "alpha", Manager: "apt", Finder: &fakeFinder{tag: "v0.1.0-alpha.10"}, Source: src.read}})
+	start := time.Date(2026, 11, 24, 12, 0, 0, 0, time.UTC)
+	s.updateTick(t.Context(), start)
+	if src.calls != 1 || !s.updateNext.Equal(start.Add(checkEvery)) {
+		t.Fatalf("%d reads, next check at %v", src.calls, s.updateNext)
 	}
 }

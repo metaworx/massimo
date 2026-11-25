@@ -52,6 +52,9 @@ type updateEntry struct {
 	// Result is the update helper's outcome where it ended without
 	// reaching To: failed, rolled-back or up-to-date.
 	Result string `json:"result,omitempty"`
+	// Auto is set where the server started it itself, at night
+	// (update_auto.go); By is nil then.
+	Auto bool `json:"auto,omitempty"`
 }
 
 // waiting reports whether the entry waits for the start that completes
@@ -100,12 +103,13 @@ func (s *Server) editHistory(ctx context.Context, edit func([]updateEntry) []upd
 
 // noteUpdateStart adds the entry of an update started in Massimo at at:
 // by whom (userID, 0 for the owner's key), from the running version to
-// the one asked for on channel. The entry before it, still waiting, ends
+// the one asked for on channel; auto where the server started it at
+// night (update_auto.go). The entry before it, still waiting, ends
 // with the outcome the update helper reported for it (helper, read just
 // before; helperFinal), so that a second Update leaves no entry open for
 // good; one the helper has no outcome for stays as it is.
-func (s *Server) noteUpdateStart(ctx context.Context, at time.Time, userID int64, from, to, channel string, helper *update.Status) {
-	e := updateEntry{At: at.UTC(), From: from, To: to, Channel: channel}
+func (s *Server) noteUpdateStart(ctx context.Context, at time.Time, userID int64, from, to, channel string, helper *update.Status, auto bool) {
+	e := updateEntry{At: at.UTC(), From: from, To: to, Channel: channel, Auto: auto}
 	if userID != 0 {
 		if u, ok, err := s.opts.Store.UserByID(ctx, userID); err == nil && ok {
 			e.By = &eventUser{Name: u.Name, DisplayName: u.DisplayName}
@@ -175,11 +179,13 @@ func (s *Server) noteVersionStart(ctx context.Context, before, version string, h
 // A helper that restarts the server is left to that start: while it
 // says restarting, the old version still answers, and the version it
 // came from being the one running is no rollback there. The row is
-// written only where the entry ends.
+// written only where the entry ends. An up-to-date also holds the
+// version the entry asked for back from Update (holdVersion).
 func (s *Server) noteHelperOutcome(ctx context.Context, helper *update.Status) {
 	if helper == nil || !unreached(helper.State) {
 		return
 	}
+	held := ""
 	s.editHistory(ctx, func(list []updateEntry) []updateEntry {
 		if len(list) == 0 || !list[0].waiting() {
 			return nil
@@ -189,8 +195,16 @@ func (s *Server) noteHelperOutcome(ctx context.Context, helper *update.Status) {
 			return nil
 		}
 		list[0].Result = r
+		if r == "up-to-date" {
+			held = list[0].To
+		}
 		return list
 	})
+	if held != "" {
+		// apt had nothing newer: the version asked for is held back
+		// until a later check finds it (AP AutoUpdate D5-B)
+		s.holdVersion(held, helper.Time)
+	}
 }
 
 // helperEnded is how the update helper's run of e ended without reaching

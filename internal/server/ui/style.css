@@ -2175,6 +2175,20 @@ massimo-week-program { display: contents; }
 /* the open server's warning's buttons (ui/src/signin/Banner.tsx): Create the
    owner… and Hide after its text, wrapping under it on a phone */
 .open-banner-actions { display: inline-flex; flex-wrap: wrap; gap: 6px; margin-left: 6px; vertical-align: middle; }
+/* The automatic update's question under the header and in Software update (ui/src/software/Ask.tsx). */
+.update-ask {
+  background: var(--card);
+  color: var(--fg);
+  border: 1px solid var(--accent);
+  border-left-width: 4px;
+  padding: 8px 12px;
+  border-radius: 8px;
+  margin: 12px 0;
+  overflow-wrap: anywhere;
+}
+.update-ask-actions { display: inline-flex; flex-wrap: wrap; gap: 6px; margin-left: 6px; vertical-align: middle; }
+.update-ask-actions button { white-space: nowrap; }
+.update-card-ask { margin: 6px 0; }
 .open-banner-actions button { white-space: nowrap; }
 /* System settings → Users on a server without users (ui/src/admin/Users.tsx) */
 .users-open { display: flex; flex-direction: column; gap: 8px; }

@@ -40,6 +40,7 @@
 //	GET  /api/v1/system                              how the server is installed, the computer, the caller's address (system_api.go)
 //	GET  /api/v1/update                              newest signed release on the update channel
 //	POST /api/v1/update                              ask the update helper to install it (needs a token)
+//	PUT  /api/v1/update/answer                       answer the question of the automatic update: now, tonight or skip (update_answer.go)
 //	GET  /api/v1/restart                             whether the server can be restarted from here (restart_api.go)
 //	POST /api/v1/restart                             restart it through its service manager
 //	POST /api/v1/reload                              read the settings file again at once, as SIGHUP does
@@ -300,6 +301,9 @@ type Options struct {
 	// (autoreset.go) and the error watch's timers (errorwatch.go), for
 	// the tests; nil is the real one.
 	clock notify.Clock
+	// selfCheckTick is the tick of the server's own release check
+	// (updateLoop), for the tests; 0 is a minute.
+	selfCheckTick time.Duration
 	// checkClock is the clock of the radio health checks, such as the
 	// readings of the Cubes' free slots (slots.go), for the tests; nil is
 	// the real one.
@@ -404,6 +408,11 @@ type Server struct {
 	// steps writes the queues' step rows in order (commands.go).
 	steps   serialWorker
 	updates updateCheck
+	// updateNext is when the server's own release check is due
+	// (updateTick), zero before the first, and auto the night's
+	// automatic update (update_auto.go); the update loop's alone.
+	updateNext time.Time
+	auto       autoState
 	// updateMu holds one update request at a time (startUpdate).
 	updateMu sync.Mutex
 	// historyMu holds the last updates' row while it is read and written
@@ -928,6 +937,10 @@ func (s *Server) Run(ctx context.Context) error {
 	if s.notify != nil {
 		s.wg.Add(1)
 		go func() { defer s.wg.Done(); s.notify.Run(ctx) }()
+	}
+	if s.opts.Store != nil {
+		s.wg.Add(1)
+		go func() { defer s.wg.Done(); s.updateLoop(ctx) }()
 	}
 	<-ctx.Done()
 	s.logStopping() // before the writer stops, which writes it
@@ -1585,6 +1598,7 @@ func (s *Server) routes() {
 	api("GET /api/v1/system", "read", s.getSystem)
 	api("GET /api/v1/update", "read", s.getUpdate)
 	api("POST /api/v1/update", "update", s.startUpdate)
+	api("PUT /api/v1/update/answer", "update", s.putUpdateAnswer)
 	api("GET /api/v1/restart", "restart or update", s.getRestart)
 	api("POST /api/v1/restart", "restart", s.startRestart)
 	api("POST /api/v1/reload", "restart", s.reloadSettings)

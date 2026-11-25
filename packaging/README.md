@@ -482,8 +482,17 @@ When it does not, the helper reports that, with the way back,
 `sudo apt install massimo=<previous version>`,
 and downgrades nothing:
 an older binary would run on a store the newer one may have migrated.
-"Nothing newer" is reported when the GitHub release is out before the apt
-repository has it.
+The GitHub release is out before the apt repository has it,
+so the server offers a release only once apt's index has it:
+it reads the `Packages.gz` of the suite the next update uses,
+without root and unsigned, for the box's architecture,
+from the source's `URIs:` (the site, or a local `file:` one),
+and offers the newest `massimo` there, never newer than the signed release;
+until then the web UI says "v… is out; apt has it not yet".
+apt verifies the index and the package before the helper installs anything.
+Where the helper still finds nothing newer for a version,
+"apt has nothing newer yet",
+the server holds that version back until a later check finds it in the index.
 Its sandbox is lighter than the hand install's,
 since apt and the package's scripts write `/usr`, `/etc` and `/var`;
 its log is `journalctl -u massimo-update`,
@@ -1380,6 +1389,16 @@ and waits until `/healthz` reports it.
 Nothing is downgraded.
 The channel is the formula's;
 `MASSIMO_UPDATE_CHANNEL` naming another one keeps the button off, with the reason.
+The tap's formula is pushed after the release is out,
+so the server offers a release only once the formula has it:
+it reads the `version` of the formula on GitHub,
+`raw.githubusercontent.com/metaworx/homebrew-<name>/HEAD/Formula/<formula>.rb`
+for the tap `metaworx/<name>` that brew's install receipt names,
+the file `brew update` fetches;
+a formula from another tap is offered the release on GitHub.
+Where `HOMEBREW_NO_AUTO_UPDATE` keeps the local tap old,
+the helper finds nothing newer,
+and the server holds that version back until a later check finds it.
 A server that `sudo brew services` runs as root,
 or one started by hand, keeps the button off as well:
 `brew upgrade massimo-alpha` and a restart of the service are then yours.

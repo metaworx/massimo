@@ -14,8 +14,8 @@ github.com/mattn/go-runewidth v0.0.21 h1:jJKAZiQH+2mIinzCJIaIG9Be1+0NR+5sz/lYEEj
 github.com/mattn/go-runewidth v0.0.21/go.mod h1:XBkDxAl56ILZc9knddidhrOlY5R/pDhgLpndooCuJAs=
 github.com/mattn/go-shellwords v1.0.12 h1:M2zGm7EW6UQJvDeQxo4T51eKPurbeFbe8WtebGE2xrk=
 github.com/mattn/go-shellwords v1.0.12/go.mod h1:EZzvwXDESEeg03EKmM+RmDnNOPKG4lLtQsUlTZDWQ8Y=
-github.com/rhysd/actionlint v1.7.12 h1:vQ4GeJN86C0QH+gTUQcs8McmK62OLT3kmakPMtEWYnY=
-github.com/rhysd/actionlint v1.7.12/go.mod h1:krOUhujIsJusovkaYzQ/VNH8PFexjNKqU0q5XI/4w+g=
+github.com/rhysd/actionlint v1.7.13-0.20260419144658-011a6d15e749 h1:rnO2zIJLDbOCZ6YF1pOFi1QrESdRAUunDHiXQpKT7XA=
+github.com/rhysd/actionlint v1.7.13-0.20260419144658-011a6d15e749/go.mod h1:krOUhujIsJusovkaYzQ/VNH8PFexjNKqU0q5XI/4w+g=
 github.com/robfig/cron/v3 v3.0.1 h1:WdRxkvbJztn8LMz/QEvLN5sBU+xKpSqwwUO1Pjr4qDs=
 github.com/robfig/cron/v3 v3.0.1/go.mod h1:eQICP3HwyT7UooqI/z+Ov+PtYAWygg1TEWWzGIFLtro=
 go.yaml.in/yaml/v4 v4.0.0-rc.3 h1:3h1fjsh1CTAPjW7q/EMe+C8shx5d8ctzZTrLcs/j8Go=

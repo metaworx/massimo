@@ -180,10 +180,11 @@ function serverReached(ok) {
   renderServerSign();
 }
 
-// updateDue loads, for one who may install updates, whether one is out:
-// at the first poll and every half hour after (ui/src/software/).
+// updateDue loads, for one who may install updates or choose their
+// channel, whether one is out, and the automatic update's question: at the
+// first poll and every half hour after (ui/src/software/).
 function updateDue() {
-  if (!hasCap("settings")) return; // login.js
+  if (!hasCap("settings") && !hasCap("update")) return; // login.js
   if (state.updateAt && Date.now() - state.updateAt < 30 * 60000) return;
   state.updateAt = Date.now();
   MassimoParts.software.load(false).then(renderServerSign);

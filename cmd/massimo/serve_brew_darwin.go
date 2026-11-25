@@ -4,6 +4,7 @@
 package main
 
 import (
+	"context"
 	"fmt"
 	"log/slog"
 	"os"
@@ -11,13 +12,16 @@ import (
 
 	"go.metaworx.ch/massimo/internal/install"
 	"go.metaworx.ch/massimo/internal/server"
+	"go.metaworx.ch/massimo/internal/update"
 )
 
 // serveBrewUpdate lets the web UI's button update through brew where
 // brew services runs the server as its user's job (update_brew.go): the
 // server starts the helper itself, with the request and status files in
 // the prefix's var/massimo and its log in var/log. Run as root, by hand
-// or with another channel, the manager's reason stays, with why.
+// or with another channel, the manager's reason stays, with why. A
+// release is offered once the tap's formula has it (brewFormulaURL); a
+// keg whose tap is not the project's is offered GitHub's.
 func serveBrewUpdate(log *slog.Logger, upd *server.UpdateOptions, m install.Manager, listen string, tls bool) {
 	job := os.Getenv("XPC_SERVICE_NAME")
 	exe, err := brewExecutable()
@@ -44,4 +48,9 @@ func serveBrewUpdate(log *slog.Logger, upd *server.UpdateOptions, m install.Mana
 	restart := fmt.Sprintf("gui/%d/%s", os.Getuid(), job)
 	upd.Start = brewHelperStarter(log, exe, upd.Request, upd.Status, restart, health, filepath.Join(k.prefix, "var", "log", "massimo-update.log"))
 	upd.Managed, upd.Manager, upd.Channel = "", "brew", flavour
+	if formula, err := brewFormulaURL(k); err != nil {
+		log.Info("the tap's formula is not read: the release on GitHub is offered", "reason", err)
+	} else {
+		upd.Source = func(ctx context.Context, _ string) (string, error) { return update.FormulaNewest(ctx, nil, formula) }
+	}
 }

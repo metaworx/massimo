@@ -292,6 +292,18 @@ from who is in or from a sign-in asked for (FirstOwner D45),
 so that a server open again shows its warning (FirstOwner D2).
 A server without a store keeps it as it is, without buttons (FirstOwner D39).
 ☰'s Create the owner… and System settings → Users open the card too.
+
+Under it, for a holder of `update`, the automatic update's question,
+on every page, where automatic updates are on and an update is due,
+as GET /api/v1/update's `auto.ask` says (`docs/api-v1.md`):
+the version out, the window it is installed in tonight, the server's time,
+and **Install now**, **Tonight** and **Skip this version**.
+The answer is the box's (`PUT /api/v1/update/answer`):
+Install now starts the update, Tonight leaves it to the night,
+Skip this version keeps the night from installing it until a newer release is out.
+The question goes in every other browser at the answer's line in the log,
+and a refused answer says why under the buttons.
+Everyone else sees nothing new.
 Opened so on a running page, the card hides the page as at every opening,
 and the page stands still behind it, its poll stopped and its stream closed,
 a restart's end opening none meanwhile (FirstOwner D34, D35);
@@ -572,7 +584,8 @@ The compacted header has **↑**, back to the top, first of the page buttons: �
   its state named first in the pill's label:
   the plug in green while the server answers;
   a blue "i" while an update is out,
-  for one who may install it (the list's second item opens Software update);
+  for one who may install it or choose its channel,
+  a holder of `update` or `settings` (the list's second item opens Software update);
   an amber triangle, blinking, once the server runs a new version
   (the list's second item reloads the page);
   the open plug, blinking, the pill filled red, after a poll without an answer:
@@ -1086,9 +1099,12 @@ and a warning of the lines it set aside, after "the settings file: ",
 which the start's own line says after its start too:
 "settings file read at the start: the settings file:
 MASSIMO_HSTS is given on lines 3 and 4; the first wins"),
-a restart, a reboot or an update asked for and its outcome, the backups, their
-prune and the log's, a restore started; and a Cube's new address or its
-leaving the LAN.
+a restart, a reboot or an update asked for and its outcome,
+an automatic update asked for at night ("update v… → v… asked for automatically")
+or postponed because the radio stayed busy,
+or the next start refused the settings file, until its window closed,
+the backups, their prune and the log's, a restore started;
+and a Cube's new address or its leaving the LAN.
 A line someone asked for says by whom ("backup 12 taken (by hand), by Anna").
 Every change made through the web UI, the API or `massimo user` is a line
 of its own, with who made it: "Cube changed KEQ0000000: name – → Upstairs, by
@@ -2184,6 +2200,27 @@ The server's sign, when it says an update is out, opens it at Software update.
   brew's formula, which another channel's formula replaces
   (the rolling ones from the tap `metaworx/massimo-rolling`);
   or `MASSIMO_UPDATE_CHANNEL`, until it is removed.
+  Under it **Automatic updates**, for a holder of `settings`,
+  saved at once as the channel is:
+  **Off**, the default, says updates are installed only when someone starts one;
+  **At night** names its window and shows it, its start and its end
+  as two times on the server's clock, 03:00 to 05:00 unless changed,
+  each saved as its field is left changed;
+  a window the server refuses, one shorter than 30 minutes,
+  goes back, and the note says why.
+  Under the window, "Next try: 25.11.2026, 03:00, the server's time",
+  where an update is due, on the server's clock whatever this browser's zone;
+  while the server's next start refuses the settings file,
+  "The next try waits until the settings file is fixed:
+  the server's next start refuses it." in its place.
+  At night the server installs the update itself inside the window,
+  once a night, while no command waits for the radio
+  and the next start takes the settings file;
+  a file fixed inside the window lets it come that night (`docs/api-v1.md`,
+  "GET /api/v1/update?refresh=1").
+  Where updates cannot be started from here, the choice is off, with the reason.
+  Under the version lines the automatic update's question, as under the header,
+  with the same three answers.
   On a box with the update helper installed (packaging/README.md, "Updating"),
   **Update** (with `update`) installs it and restarts the server.
   If the new version does not come up, the old one is put back.
@@ -2195,11 +2232,19 @@ The server's sign, when it says an update is out, opens it at Software update.
   Under Homebrew's service it says "Installed by brew",
   and **Update** runs `brew upgrade` as the service's user
   (packaging/README.md, "Homebrew").
+  There a release is offered once apt's index or brew's tap has it:
+  one out on GitHub that the source has not yet, without **Update**,
+  reads "v0.16.0-alpha.2 is out; apt has it not yet",
+  and a source that cannot be read says why.
+  A version the helper found nothing to install for,
+  "apt has nothing newer yet",
+  is held back without **Update** until a check finds it (`docs/api-v1.md`,
+  "GET /api/v1/update?refresh=1").
   While the helper works, **Check for updates** and **Update** are greyed out,
   also after a reload of the page, until it reports that it is done.
   **Last updates** lists the last three under the version lines,
   the date first, then the version with its channel in brackets,
-  then who started it,
+  then who started it, "automatically" for one the server started at night,
   or "outside Massimo" with apt or brew where Massimo did not start it:
   "24.11.2026, 15:53 · v0.16.0-alpha.1 (devel) · by Anna".
   The version is the one reached, the one apt chose where it is another,
@@ -2233,7 +2278,7 @@ The server's sign, when it says an update is out, opens it at Software update.
   | Event | When the server sends it | What Software update reads |
   |---|---|---|
   | `resync` | the stream opened again with no replay: after the server's restart, an update's among them | the versions, the helper's state and the last updates (`GET /api/v1/update`), and the setting |
-  | `change` of `update.channel` | the channel set, from any browser | the same |
+  | `change` of `update.channel`, `update.auto` or `update.auto_window` | the channel, the automatic update or its window set, from any browser | the same |
   | `update` | an update asked for from another browser | nothing at once: the page takes Update's question back and follows it as its own, the reading every 3 s with its 30 s of grace; an event more than a minute old by the server's clock, replayed after a gap of the stream, reads the versions once |
 
   The server's start and an update's end are written before any stream opens,

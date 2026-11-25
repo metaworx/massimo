@@ -17,11 +17,14 @@ package main
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"os"
 	"os/exec"
 	"path/filepath"
+	"slices"
 	"strings"
 	"time"
 
@@ -62,6 +65,36 @@ func (k brewKeg) linked() (string, error) {
 // brewTag is the release tag of a formula version: the formula builds
 // with -X main.version=v<version>.
 func brewTag(v string) string { return "v" + v }
+
+// brewTaps are the project's taps, whose formulae are on GitHub
+// (packaging/README.md, "Homebrew"); a keg from a tap of another name,
+// such as CI's local one, leaves its formula unread.
+var brewTaps = []string{"metaworx/massimo", "metaworx/massimo-rolling"}
+
+// brewFormulaURL is where the keg's formula is on GitHub, the file the
+// helper's brew update fetches (AP AutoUpdate D11): of the tap brew's
+// install receipt in the keg names, where that is one of brewTaps.
+func brewFormulaURL(k brewKeg) (string, error) {
+	p := filepath.Join(k.prefix, "Cellar", k.formula, k.version, "INSTALL_RECEIPT.json")
+	f, err := os.Open(p)
+	if err != nil {
+		return "", err
+	}
+	defer f.Close()
+	var receipt struct {
+		Source struct {
+			Tap string `json:"tap"`
+		} `json:"source"`
+	}
+	if err := json.NewDecoder(io.LimitReader(f, 1<<20)).Decode(&receipt); err != nil {
+		return "", fmt.Errorf("%s: %w", p, err)
+	}
+	tap := receipt.Source.Tap
+	if !slices.Contains(brewTaps, tap) {
+		return "", fmt.Errorf("the formula %s comes from the tap %q, not one of the project's", k.formula, tap)
+	}
+	return update.FormulaURL(tap, k.formula)
+}
 
 // brewExecutable is this binary's resolved path; a variable for the
 // tests.

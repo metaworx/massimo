@@ -25,24 +25,52 @@ const PackagedPath = "/usr/share/massimo/packaged"
 // the update helper fetches from on a box apt owns massimo on.
 const AptSource = "/etc/apt/sources.list.d/massimo.sources"
 
-// AptSuite reads the first suite the apt source at path names (its
-// Suites field, deb822 as packaging/apt/publish.sh writes it): the update
-// channel apt follows there.
-func AptSuite(path string) (string, error) {
+// AptSourceFields are what the apt source names, each field's first
+// value: where the repository is (URIs), the suite apt follows, the
+// update channel there (Suites), and the component (Components).
+type AptSourceFields struct {
+	URI, Suite, Component string
+}
+
+// ReadAptSource reads the apt source at path, deb822 as
+// packaging/apt/publish.sh writes it: the first value of its URIs,
+// Suites and Components fields. A source without a suite is an error;
+// the others are left empty where it names none.
+func ReadAptSource(path string) (AptSourceFields, error) {
+	var f AptSourceFields
 	b, err := os.ReadFile(path)
 	if err != nil {
-		return "", err
+		return f, err
 	}
 	for _, line := range strings.Split(string(b), "\n") {
 		k, v, ok := strings.Cut(line, ":")
-		if !ok || strings.HasPrefix(strings.TrimSpace(k), "#") || !strings.EqualFold(strings.TrimSpace(k), "Suites") {
+		if !ok || strings.HasPrefix(strings.TrimSpace(k), "#") || len(line) > 0 && (line[0] == ' ' || line[0] == '\t') {
 			continue
 		}
-		if f := strings.Fields(v); len(f) > 0 {
-			return f[0], nil
+		vs := strings.Fields(v)
+		if len(vs) == 0 {
+			continue
+		}
+		switch strings.ToLower(strings.TrimSpace(k)) {
+		case "uris":
+			f.URI = vs[0]
+		case "suites":
+			f.Suite = vs[0]
+		case "components":
+			f.Component = vs[0]
 		}
 	}
-	return "", fmt.Errorf("%s names no suite", path)
+	if f.Suite == "" {
+		return f, fmt.Errorf("%s names no suite", path)
+	}
+	return f, nil
+}
+
+// AptSuite reads the first suite the apt source at path names
+// (ReadAptSource): the update channel apt follows there.
+func AptSuite(path string) (string, error) {
+	f, err := ReadAptSource(path)
+	return f.Suite, err
 }
 
 // Manager is the package manager a marker names.

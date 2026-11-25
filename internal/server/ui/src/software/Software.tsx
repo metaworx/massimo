@@ -6,7 +6,9 @@
  *
  * Maintenance → Software update as a part, built once and updated in
  * place: the update channel for a holder of settings, saved at once, the
- * running version and whether a newer release is out, the release's
+ * automatic update at night and its window, the running version and
+ * whether a newer release is out, the automatic update's question
+ * (Ask.tsx), the release's
  * notes, the helper's last state, the last three updates, Check for
  * updates and Update, which asks in place of the buttons. A load that
  * comes in leaves the channel's choice, its focus and the question where
@@ -15,13 +17,15 @@
  */
 
 import type { Ref } from "preact";
-import { useLayoutEffect } from "preact/hooks";
+import { useLayoutEffect, useRef, useState } from "preact/hooks";
 import type { Setting, UpdateEntry, UpdateInfo, UpdateStatus } from "../api";
 import { hid } from "../shared/cls";
-import { Select } from "../shared/field";
+import { Field, Select } from "../shared/field";
 import { BusyButton, busyProps, Question, useAsk, useSetAtOnce } from "../shared/question";
+import { fmtServerClock } from "../shared/time";
 import { update } from "../shared/update";
-import { ask, data, loadUpdate, question, runUpdate, setChannel, UPDATE_FLAVOURS } from "./store";
+import { ask, data, loadUpdate, question, runUpdate, setAuto, setChannel, setWindow, UPDATE_FLAVOURS } from "./store";
+import { asked, AskButtons, askText } from "./Ask";
 import { cardBadges } from "../shared/card";
 import { can } from "../shared/me";
 import { useLook } from "../shared/look";
@@ -48,7 +52,8 @@ function helperText(h: UpdateStatus): string {
  * the one asked for with how far it got (under way for the newest, else
  * not reached), the version with its channel in brackets, and the
  * helper's outcome where it has one, a rollback after the version reached
- * included; and by whom, or from outside Massimo with the package manager.
+ * included; and by whom, automatically where the server started it at
+ * night, or from outside Massimo with the package manager.
  */
 function historyLine(e: UpdateEntry, newest: boolean): string {
   const withChannel = (version: string) => (version && e.channel ? t("update.history.withChannel", { version, channel: e.channel }) : version);
@@ -62,21 +67,32 @@ function historyLine(e: UpdateEntry, newest: boolean): string {
   if (!isNaN(ms)) parts.push(fmtInstant(new Date(ms))); // app.js
   parts.push(what);
   if (e.outside) parts.push(e.manager ? t("update.history.outsideWith", { manager: e.manager }) : t("update.history.outside"));
+  else if (e.auto) parts.push(t("update.history.auto"));
   else if (e.by) parts.push(t("update.history.by", { name: e.by.display_name || e.by.name || "" }));
   return parts.join(" · ");
 }
 
-/** versionLine says the running version and whether a newer release is out on the channel. */
+/**
+ * versionLine says the running version and whether a newer release is
+ * out on the channel: on a box apt or brew updates, one the package
+ * source has; GitHub's newest, where the source has it not yet; or that
+ * the source could not be read. A version the update helper found
+ * nothing to install for is held back until a check finds it.
+ */
 function versionLine(u: UpdateInfo): string {
   const version = u.current || t("update.unknownVersion");
+  const manager = u.manager || "";
   const parts = [u.channel ? t("update.runningChannel", { version, channel: u.channel }) : t("update.running", { version })];
   // a package manager owns the binary: the Debian package's helper installs through apt
-  if (u.manager) parts.push(t("update.manager", { manager: u.manager }));
+  if (manager) parts.push(t("update.manager", { manager }));
   if (u.check_error) parts.push(t("update.checkFailed", { error: u.check_error }));
+  else if (u.source_error) parts.push(t("update.sourceFailed", { manager, error: u.source_error }));
   else if (!u.channel) parts.push(t("update.noChannel"));
-  else if (!u.latest) parts.push(t("update.noRelease"));
-  else if (u.available) parts.push(t("update.available", { version: u.latest }));
-  else parts.push(t("update.upToDate"));
+  else if (!u.latest && !u.released) parts.push(t("update.noRelease"));
+  else if (u.held) parts.push(t("update.held", { version: u.held }));
+  else if (u.available) parts.push(t("update.available", { version: u.latest || "" }));
+  else if (!u.released) parts.push(t("update.upToDate"));
+  if (u.released && u.released !== u.held && !u.check_error && !u.source_error) parts.push(t("update.released", { version: u.released, manager }));
   if (u.available && u.blocked) parts.push(t("update.blocked", { reason: u.blocked }));
   return parts.join(" ");
 }
@@ -129,6 +145,91 @@ function Channel({ u, setting }: { u: UpdateInfo; setting: Setting }) {
   );
 }
 
+/**
+ * Auto is the automatic update's choice, for a holder of settings, who
+ * alone may change it: Off or At night (update.auto), saved at once as
+ * the channel is, its note saying what it does; at night its window
+ * (Window), and under it when the box will try next, or, where the
+ * server says the try waits for the settings file (auto.waits), that it
+ * waits until the file is fixed. Both are off, with the reason, where
+ * updates cannot be started from here (blocked).
+ */
+function Auto({ u, auto, win }: { u: UpdateInfo; auto: Setting; win: Setting }) {
+  useLook();
+  const mode = useSetAtOnce(auto.value || "off");
+  const stored = win.value || "03:00-05:00";
+  const [from, to] = stored.split("-");
+  const off = !!u.blocked;
+  const night = mode.value === "night";
+  const said = data.autoSaid;
+  let note = night ? t("update.autoNight", { from: from || "", to: to || "" }) : t("update.autoOff");
+  if (off) note = t("update.autoBlocked", { reason: u.blocked || "" });
+  if (said) note = said();
+  const a = u.auto;
+  let hint = "";
+  if (night && !off && a && a.next) {
+    hint = a.waits === "settings" ? t("update.autoWaitsSettings") : t("update.autoNext", { time: fmtServerClock(a.next) });
+  }
+  const options: [string, string][] = [["off", t("update.auto.off")], ["night", t("update.auto.night")]];
+  return (
+    <>
+      <Select label={t("update.auto")} id="update-auto" wide options={options} value={mode.value} disabled={off}
+        hint={note} hintId="update-auto-note" onChange={(v) => mode.set(v, setAuto)} />
+      {night && <Window stored={stored} off={off} hint={hint} />}
+    </>
+  );
+}
+
+/**
+ * Window is the automatic update's window, its start and its end as
+ * times on the server's clock: an end is saved as its field is left
+ * changed, the window shown as chosen until the server's answer shows
+ * what it keeps (a window it refuses, too short, goes back, and the
+ * automatic update's note says why); an end left while the other's save
+ * runs is saved after it. Under it hint, Auto's line of the next try.
+ */
+function Window({ stored, off, hint }: { stored: string; off: boolean; hint: string }) {
+  const [from, to] = stored.split("-");
+  const [edit, setEdit] = useState<{ from: string; to: string } | null>(null);
+  // the edit as the fields hold it, and the save that runs, outside the drawing
+  const held = useRef<{ from: string; to: string } | null>(null);
+  const sending = useRef(false);
+  const shown = edit || { from: from || "", to: to || "" };
+  const change = (v: { from: string; to: string }) => {
+    held.current = v;
+    setEdit(v);
+  };
+  const leave = () => {
+    const e = held.current;
+    if (!e || sending.current) return;
+    const w = e.from + "-" + e.to;
+    if (w === stored || !e.from || !e.to) {
+      held.current = null;
+      setEdit(null);
+      return;
+    }
+    sending.current = true;
+    void setWindow(w).finally(() => {
+      sending.current = false;
+      if (held.current === e) {
+        held.current = null;
+        setEdit(null);
+      } else leave(); // changed again while it saved
+    });
+  };
+  return (
+    <Field label={t("update.window")} id="update-window-start" wide hint={hint} hintId="update-auto-next">
+      <span class="inline field-control">
+        <input id="update-window-start" type="time" value={shown.from} disabled={off} aria-describedby={hint ? "update-auto-next" : undefined}
+          onInput={(ev) => change({ ...shown, from: ev.currentTarget.value })} onBlur={leave} />
+        <span class="muted">–</span>
+        <input id="update-window-end" type="time" value={shown.to} disabled={off} aria-label={t("update.windowTo")}
+          onInput={(ev) => change({ ...shown, to: ev.currentTarget.value })} onBlur={leave} />
+      </span>
+    </Field>
+  );
+}
+
 /** Software is the section's body. */
 export function Software() {
   useLook();
@@ -147,14 +248,22 @@ export function Software() {
   const failed = data.failed;
   const said = data.said;
   const version = question.version;
+  const askedVersion = asked();
   return (
     <>
       {u && setting && can("settings") && <Channel u={u} setting={setting} />}
+      {u && data.auto && data.window && can("settings") && <Auto u={u} auto={data.auto} win={data.window} />}
       <div ref={asking.row as Ref<HTMLDivElement>} class="update" aria-live="polite">
         <p id="update-text">{failed ? failed() : u ? versionLine(u) : "–"}</p>
+        {askedVersion && (
+          // the automatic update's question, as the banner under the header asks it (Ask.tsx)
+          <p id="update-card-ask" class="update-card-ask">
+            <span>{askText(askedVersion)}</span> <AskButtons prefix="update-card-ask" version={askedVersion} />
+          </p>
+        )}
         <p>
           <a id="update-link" class={u && u.release_url ? undefined : "hidden"} href={(u && u.release_url) || undefined} target="_blank" rel="noopener noreferrer">
-            {u && u.release_url ? t("update.notes", { version: u.latest || "" }) : ""}
+            {u && u.release_url ? t("update.notes", { version: u.released || u.latest || "" }) : ""}
           </a>
         </p>
         <p id="update-helper" class="muted small">{said ? said() : u && u.helper ? t("update.last", { state: helperText(u.helper) }) : ""}</p>

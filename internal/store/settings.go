@@ -36,6 +36,27 @@ const (
 // update.Flavours as a JSON string; unset, it follows its build's flavour.
 const UpdateChannelKey = "update.channel"
 
+// UpdateAutoKey says whether the box installs a release by itself:
+// UpdateAutoOff, the default, or UpdateAutoNight, in the window
+// UpdateWindowKey names while the radio is quiet (AP AutoUpdate D1, D7).
+const UpdateAutoKey = "update.auto"
+
+// The values of UpdateAutoKey.
+const (
+	UpdateAutoOff   = "off"
+	UpdateAutoNight = "night"
+)
+
+// UpdateWindowKey is the window of an automatic update, HH:MM-HH:MM in
+// the server's time zone, at least 30 minutes, its end past midnight
+// allowed; DefaultUpdateWindow where it is unset (AP AutoUpdate D2).
+const UpdateWindowKey = "update.auto_window"
+
+// DefaultUpdateWindow is the window of an automatic update where none is
+// set: after Europe's switch hour, 02:00 to 03:00, so that a night never
+// loses or repeats part of it.
+const DefaultUpdateWindow = "03:00-05:00"
+
 // Setting is one row of settings.
 type Setting struct {
 	Key       string

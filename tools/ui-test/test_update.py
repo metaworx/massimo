@@ -6,7 +6,7 @@ stubbed, and the setting update.channel where the channel is chosen;
 nothing is installed."""
 import json
 
-from helpers import show_view, update_json, wait_until
+from helpers import VIEWER, frames, show_view, update_json, wait_until
 
 
 def test_busy_while_the_helper_installs(page):
@@ -64,6 +64,46 @@ def test_update_through_apt(page):
     assert box.is_visible() and "apt" in box.inner_text() and plain not in box.inner_text(), \
         "Update asks about apt, not with the hand install's rollback"
     box.locator(".confirm-no").click()
+    page.unroute("**/api/v1/update*")
+
+
+def test_version_line_from_the_source(page):
+    """On a box apt updates, a release is offered once apt has it: one
+    out on GitHub that apt has not yet is named as such, without Update;
+    one the helper found nothing to install for is held back; an index
+    that cannot be read says why."""
+    show_view(page, "maint")
+    body = json.loads(update_json("up-to-date", "v0.0.1-test", False, "apt"))
+    body.update({"current": "v0.0.1-test", "latest": "v0.0.1-test", "released": "v0.0.2-test",
+                 "release_url": "https://example.invalid/releases/v0.0.2-test"})
+    page.route("**/api/v1/update*", lambda route: route.fulfill(status=200, content_type="application/json", body=json.dumps(body)))
+    page.locator("#update-check").click()
+    text = page.locator("#update-text")
+    released = page.evaluate("t('update.released', {version: 'v0.0.2-test', manager: 'apt'})")
+    assert wait_until(page, "document.getElementById('update-text').textContent.includes(%s)" % json.dumps(released), 5), \
+        "the line names the release apt has not yet: %r" % text.text_content()
+    assert page.evaluate("t('update.upToDate')") not in text.text_content(), "not up to date beside it"
+    assert not page.locator("#update-btn").is_visible(), "no Update"
+    assert "v0.0.2-test" in page.locator("#update-link").text_content(), "the notes are the release's"
+    page.unroute("**/api/v1/update*")
+
+    body.update({"latest": "v0.0.2-test", "held": "v0.0.2-test"})
+    del body["released"]
+    page.route("**/api/v1/update*", lambda route: route.fulfill(status=200, content_type="application/json", body=json.dumps(body)))
+    page.locator("#update-check").click()
+    held = page.evaluate("t('update.held', {version: 'v0.0.2-test'})")
+    assert wait_until(page, "document.getElementById('update-text').textContent.includes(%s)" % json.dumps(held), 5), \
+        "the line says the version is held back: %r" % text.text_content()
+    assert not page.locator("#update-btn").is_visible(), "no Update while held"
+    page.unroute("**/api/v1/update*")
+
+    del body["held"], body["latest"]
+    body["source_error"] = "GET https://massimo.example.invalid/apt/dists/alpha/main/binary-armhf/Packages.gz: 503"
+    page.route("**/api/v1/update*", lambda route: route.fulfill(status=200, content_type="application/json", body=json.dumps(body)))
+    page.locator("#update-check").click()
+    failed = page.evaluate("t('update.sourceFailed', {manager: 'apt', error: %s})" % json.dumps(body["source_error"]))
+    assert wait_until(page, "document.getElementById('update-text').textContent.includes(%s)" % json.dumps(failed), 5), \
+        "the line says the index could not be read: %r" % text.text_content()
     page.unroute("**/api/v1/update*")
 
 
@@ -204,3 +244,238 @@ def test_last_updates(page):
     assert wait_until(page, "document.getElementById('update-history').classList.contains('hidden')", 5), \
         "no list without a history"
     page.unroute("**/api/v1/update*")
+
+
+def auto_routes(page, blocked=None, waits=None):
+    """Stubs GET /api/v1/update with an update out, the automatic update
+    as the settings stand and its next try, and the settings update.channel,
+    update.auto and update.auto_window, off and 03:00-05:00 until a PUT
+    stores another; blocked is the reason updates cannot be started,
+    waits what the next try waits for at night (auto.waits).
+    Returns the bodies of the settings PUTs."""
+    state = {"update.auto": None, "update.auto_window": None}
+    defaults = {"update.auto": "off", "update.auto_window": "03:00-05:00"}
+    puts = []
+
+    def value(key):
+        return state[key] or defaults[key]
+
+    def views():
+        out = {"update.channel": {"value": "alpha", "default": "alpha", "set": False, "in_effect": "alpha", "applies": "now"}}
+        for key in state:
+            out[key] = {"value": value(key), "default": defaults[key], "set": state[key] is not None, "in_effect": value(key), "applies": "now"}
+        return out
+
+    def update(route):
+        body = json.loads(update_json("up-to-date", "v0.0.2-test", True))
+        body["auto"] = {"mode": value("update.auto"), "window": value("update.auto_window")}
+        if value("update.auto") == "night":
+            body["auto"]["next"] = "2026-11-25T03:00:00+01:00"
+            if waits:
+                body["auto"]["waits"] = waits
+        if blocked:
+            body.update({"blocked": blocked, "can_update": False})
+        route.fulfill(status=200, content_type="application/json", body=json.dumps(body))
+
+    def settings(route):
+        if route.request.method == "PUT":
+            body = json.loads(route.request.post_data)
+            puts.append(body)
+            for key, v in body.items():
+                if key in state:
+                    state[key] = v
+        route.fulfill(status=200, content_type="application/json", body=json.dumps(views()))
+
+    page.route("**/api/v1/update*", update)
+    page.route("**/api/v1/settings", settings)
+    return puts
+
+
+def test_automatic_updates(page):
+    """Software update sets the automatic update, saved at once: off by
+    default, saying updates wait for someone; at night it names the
+    window, which comes up with its two ends, and when the box tries
+    next, on the server's clock whatever the browser's zone; an end
+    changed is saved as its field is left."""
+    puts = auto_routes(page)
+    show_view(page, "maint")
+    sel = page.locator("#update-auto")
+    sel.wait_for(state="visible")
+    note = page.locator("#update-auto-note")
+    assert sel.is_enabled() and sel.input_value() == "off", "off by default"
+    assert note.text_content() == page.evaluate("t('update.autoOff')"), "the note says off"
+    assert not page.locator("#update-window-start").is_visible(), "no window while off"
+
+    sel.select_option("night")
+    assert wait_until(page, "!!document.getElementById('update-window-start')", 5), "the window comes up"
+    assert puts == [{"update.auto": "night"}], "night is stored: %r" % puts
+    night = page.evaluate("t('update.autoNight', {from: '03:00', to: '05:00'})")
+    assert wait_until(page, "document.getElementById('update-auto-note').textContent === %s" % json.dumps(night), 5), \
+        "the note names the window: %r" % note.text_content()
+    assert page.locator("#update-window-start").input_value() == "03:00" and page.locator("#update-window-end").input_value() == "05:00", \
+        "the window's ends"
+    when = page.evaluate("""new Intl.DateTimeFormat(i18n.lang, {year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit',
+        minute: '2-digit', hour12: false, timeZone: 'UTC'}).format(new Date(Date.UTC(2026, 10, 25, 3, 0)))""")
+    next_try = page.evaluate("t('update.autoNext', {time: %s})" % json.dumps(when))
+    assert wait_until(page, "(document.getElementById('update-auto-next') || {}).textContent === %s" % json.dumps(next_try), 5), \
+        "the next try on the server's clock: %r" % page.locator("#update-window-start").evaluate("e => e.closest('.field').textContent")
+    assert "03:00" in next_try, "03:00, the server's time: %r" % next_try
+
+    start = page.locator("#update-window-start")
+    start.fill("23:30")
+    start.blur()
+    assert wait_until(page, "document.getElementById('update-window-start').value === '23:30'", 5), "the start kept"
+    assert held_true(page, lambda: {"update.auto_window": "23:30-05:00"} in puts), "the window is stored as the field is left: %r" % puts
+    unroute_channel(page)
+
+
+def test_automatic_updates_wait_for_the_settings_file(page):
+    """While the server's next start refuses the settings file, the line
+    under the window says the next try waits until the file is fixed, in
+    place of when it comes, and the window's start is described by it."""
+    auto_routes(page, waits="settings")
+    show_view(page, "maint")
+    sel = page.locator("#update-auto")
+    sel.wait_for(state="visible")
+    sel.select_option("night")
+    waiting = page.evaluate("t('update.autoWaitsSettings')")
+    assert wait_until(page, "(document.getElementById('update-auto-next') || {}).textContent === %s" % json.dumps(waiting), 5), \
+        "the line says the try waits for the file: %r" % page.locator("#update-window-start").evaluate("e => e.closest('.field').textContent")
+    assert page.locator("#update-window-start").get_attribute("aria-describedby") == "update-auto-next", "the start is described by it"
+    unroute_channel(page)
+
+
+def held_true(page, cond, tries=100):
+    """Waits until cond(), a test of what the stubs saw, holds, letting the
+    page run between tries (the stubs answer only then); reports whether
+    it did."""
+    for _ in range(tries):
+        if cond():
+            return True
+        page.wait_for_timeout(50)
+    return cond()
+
+
+def test_automatic_updates_blocked(page):
+    """Where updates cannot be started from here, the automatic update is
+    off, with the reason."""
+    auto_routes(page, blocked="no update helper installed")
+    show_view(page, "maint")
+    sel = page.locator("#update-auto")
+    sel.wait_for(state="visible")
+    reason = page.evaluate("t('update.autoBlocked', {reason: 'no update helper installed'})")
+    assert wait_until(page, "document.getElementById('update-auto').disabled", 5), "the choice is off"
+    assert page.locator("#update-auto-note").text_content() == reason, "the note says why"
+    unroute_channel(page)
+
+
+def test_automatic_line(page):
+    """An update the server started itself at night says so in the last
+    updates, where a person's name would stand."""
+    show_view(page, "maint")
+    body = json.loads(update_json("up-to-date", "v0.0.1-test", False))
+    body["history"] = [{"at": "2026-11-25T02:00:00Z", "auto": True, "from": "v0.0.1", "to": "v0.0.2", "channel": "alpha",
+                        "reached": "v0.0.2", "reached_at": "2026-11-25T02:01:00Z"}]
+    page.route("**/api/v1/update*", lambda route: route.fulfill(status=200, content_type="application/json", body=json.dumps(body)))
+    page.locator("#update-check").click()
+    assert wait_until(page, "document.querySelectorAll('#update-history-list li').length === 1", 5), "one line"
+    want = page.evaluate("""[fmtInstant(new Date(Date.parse('2026-11-25T02:01:00Z'))),
+        t('update.history.withChannel', {version: 'v0.0.2', channel: 'alpha'}), t('update.history.auto')].join(' · ')""")
+    got = page.locator("#update-history-list li").text_content()
+    assert got == want, "the line: %r, not %r" % (got, want)
+    page.unroute("**/api/v1/update*")
+
+
+def ask_routes(page):
+    """Stubs GET /api/v1/update with v0.0.2-test due at night and the
+    automatic update's question asked, and PUT /api/v1/update/answer: now
+    answers as POST /api/v1/update does, tonight and skip end the
+    question. Returns the bodies of the answers."""
+    state = {"ask": True}
+    puts = []
+
+    def body():
+        b = json.loads(update_json("up-to-date", "v0.0.2-test", True))
+        b["auto"] = {"mode": "night", "window": "03:00-05:00", "next": "2026-11-25T03:00:00+01:00", "ask": state["ask"]}
+        return b
+
+    def handle(route):
+        if route.request.method != "PUT":
+            route.fulfill(status=200, content_type="application/json", body=json.dumps(body()))
+            return
+        a = json.loads(route.request.post_data)
+        puts.append(a)
+        state["ask"] = False
+        if a["answer"] == "now":
+            route.fulfill(status=202, content_type="application/json", body=json.dumps({"ok": True, "requested": a["version"], "channel": "alpha"}))
+            return
+        b = body()
+        b["auto"]["answer"] = {"version": a["version"], "answer": a["answer"], "at": "2026-11-24T20:00:00Z"}
+        route.fulfill(status=200, content_type="application/json", body=json.dumps(b))
+
+    page.route("**/api/v1/update*", handle)
+    page.route("**/api/v1/update/answer", handle)
+    return puts
+
+
+def unroute_ask(page):
+    page.unroute("**/api/v1/update*")
+    page.unroute("**/api/v1/update/answer")
+
+
+def test_update_question_banner(page):
+    """Where automatic updates are on and an update is due, a holder of
+    update is asked under the header, on any page: the version, the
+    window, and Install now, Tonight, Skip this version; Tonight answers
+    for the box and the banner goes."""
+    puts = ask_routes(page)
+    page.evaluate("state.updateAt = 0; updateDue()")
+    banner = page.locator("#update-ask")
+    banner.wait_for(state="visible")
+    text = page.evaluate("t('update.ask.text', {version: 'v0.0.2-test', from: '03:00', to: '05:00'})")
+    assert page.locator("#update-ask-text").text_content() == text, "the question: %r" % banner.text_content()
+    for answer, key in (("now", "update.ask.now"), ("tonight", "update.ask.tonight"), ("skip", "update.ask.skip")):
+        assert page.locator("#update-ask-" + answer).text_content() == page.evaluate("t(%s)" % json.dumps(key)), answer
+    page.locator("#update-ask-tonight").click()
+    banner.wait_for(state="hidden")
+    assert puts == [{"version": "v0.0.2-test", "answer": "tonight"}], "Tonight answered: %r" % puts
+    unroute_ask(page)
+
+
+def test_update_question_in_software(page):
+    """Software update asks the same: Skip this version there answers for
+    the box, and the question goes from the card and from under the
+    header; Install now starts the update, which the card then says."""
+    puts = ask_routes(page)
+    show_view(page, "maint")
+    page.locator("#update-check").click()
+    page.locator("#update-card-ask").wait_for(state="visible")
+    assert page.locator("#update-ask").is_visible(), "the banner too"
+    page.locator("#update-card-ask-skip").click()
+    page.locator("#update-card-ask").wait_for(state="hidden")
+    page.locator("#update-ask").wait_for(state="hidden")
+    assert puts == [{"version": "v0.0.2-test", "answer": "skip"}], "Skip answered: %r" % puts
+    unroute_ask(page)
+
+    puts = ask_routes(page)
+    page.locator("#update-check").click()
+    page.locator("#update-card-ask").wait_for(state="visible")
+    page.locator("#update-card-ask-now").click()
+    requested = page.evaluate("t('update.requested', {version: 'v0.0.2-test'})")
+    assert wait_until(page, "document.getElementById('update-helper').textContent === %s" % json.dumps(requested), 5), \
+        "the card says the update was requested: %r" % page.locator("#update-helper").text_content()
+    assert puts == [{"version": "v0.0.2-test", "answer": "now"}], "Install now answered: %r" % puts
+    unroute_ask(page)
+
+
+def test_update_question_not_for_viewer(page):
+    """A user without update is asked nothing, though the server asks."""
+    page.route("**/api/v1/me", lambda route: route.fulfill(status=200, content_type="application/json", body=json.dumps(VIEWER)))
+    page.evaluate("loadMe()")
+    assert wait_until(page, "!hasCap('update') && !hasCap('settings')", 5), "the viewer's capabilities"
+    ask_routes(page)
+    assert page.evaluate("MassimoParts.software.load(false).then((u) => !!(u && u.auto && u.auto.ask))"), "the server asks"
+    frames(page)
+    assert not page.locator("#update-ask").is_visible(), "no banner for a viewer"
+    unroute_ask(page)
+    page.unroute("**/api/v1/me")

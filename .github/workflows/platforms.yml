@@ -379,7 +379,7 @@ jobs:
         shell: bash
         run: |
           cat fakecube.log stub.log || true
-          for f in service.log serve.log update.log update-status.json; do
+          for f in service.log serve.log update.log update-status.json update-request; do
             echo "--- $f"; cat "C:/ProgramData/Massimo/$f" 2>/dev/null || true
           done
 

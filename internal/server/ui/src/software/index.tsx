@@ -17,6 +17,7 @@
 
 import type { UpdateInfo } from "../api";
 import { mounter, register } from "../shared/region";
+import { Ask } from "./Ask";
 import { Software } from "./Software";
 import { forgetSoftware, loadChannel, loadUpdate } from "./store";
 import { onView } from "../shared/pages";
@@ -25,6 +26,8 @@ export { serverEvent } from "./store";
 
 const mount = mounter("sys-software-body", () => <Software />);
 mount();
+// the automatic update's question under the header, on every page (Ask.tsx)
+mounter("update-ask-slot", () => <Ask />)();
 
 /** The functions the plain code calls, MassimoParts.software. */
 const software = register("software", {
