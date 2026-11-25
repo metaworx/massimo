@@ -970,8 +970,10 @@ after `n:`, a copy of the greeting's 0a010d as 0abcde in no room,
 and joins again after it was removed (a fourth field sets the delay);
 once it joined, a new connection's greeting lists it too,
 its C line and its entry in the device list, until a `t:` deletes it.
-An `m:` the fake acknowledges is the room and device list of every greeting after it,
-as a Cube keeps it.
+Put into a room, its C line keeps room 0, since the fake does not apply
+the set group radiogram (0x22); the room comes from the room and device list.
+An `m:` the fake can read, its blocks since `00`,
+is the room and device list of every greeting after it, as a Cube keeps it.
 `-free-slots 50` makes the S replies and the greeting's H line say 50 free memory slots,
 a Cube that holds no radiogram;
 without it the S replies say `0x31`, one radiogram pending,

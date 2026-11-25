@@ -4,6 +4,7 @@
 package fakecube
 
 import (
+	"encoding/base64"
 	"net"
 	"slices"
 	"strings"
@@ -301,6 +302,147 @@ func TestGreetingKeepsTheJoinedDeviceAndTheWrittenList(t *testing.T) {
 	s.SetGreeting(greeting)
 	if got := metadataOf(t, dial(t, addr).greet); len(got.Devices) != len(metadataOf(t, greeting).Devices) {
 		t.Fatalf("the list after SetGreeting: %d devices", len(got.Devices))
+	}
+}
+
+// entryOf is rf's entry in an L line, with its length byte; nil for none.
+func entryOf(t *testing.T, l cube.Message, rf cube.RFAddress) []byte {
+	t.Helper()
+	raw, err := base64.StdEncoding.DecodeString(l.Data)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, e := range entries(raw) {
+		if cube.RFAddressFromBytes(e[1:4]) == rf {
+			return slices.Clone(e)
+		}
+	}
+	return nil
+}
+
+// lastList is a greeting's L line.
+func lastList(greeting []cube.Message) cube.Message {
+	var l cube.Message
+	for _, m := range greeting {
+		if m.Type == 'L' {
+			l = m
+		}
+	}
+	return l
+}
+
+// startPairing serves the fixture with a copy of 0a010d that joins as
+// 0a0b0c, and returns the fake, its address and a client that made the
+// device join.
+func startPairing(t *testing.T) (*Server, string, *client) {
+	t.Helper()
+	greeting, err := LoadGreeting(fixture)
+	if err != nil {
+		t.Fatal(err)
+	}
+	pair, err := PairingFrom(greeting, 0x0a010d, 0x0a0b0c, "TEQ0000001", time.Millisecond)
+	if err != nil {
+		t.Fatal(err)
+	}
+	s := &Server{Greeting: greeting, Pair: pair}
+	addr, err := s.Start("127.0.0.1:0")
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { s.Close() })
+	c := dial(t, addr)
+	join(t, c, pair)
+	return s, addr, c
+}
+
+// join makes the Pair device join through c: n:, its N line, x:.
+func join(t *testing.T, c *client, p *Pairing) {
+	t.Helper()
+	if n := c.send(cube.CmdInclusion(time.Minute)); n.String() != NewDeviceLine(p.Device).String() {
+		t.Fatalf("n: brought %s, want the N line", n)
+	}
+	if n := c.send(cube.CmdCancelInclusion); n.Type != 'N' || n.Data != "" {
+		t.Fatalf("x: answered %s", n)
+	}
+}
+
+// A device that joins again while it is one of the fake's keeps what
+// changed in its entry, as a Cube does not reset a paired device at
+// another inclusion; one a t: deleted joins with the Pairing's entry.
+func TestJoiningAgainKeepsTheDeviceState(t *testing.T) {
+	t.Parallel()
+	s, addr, c := startPairing(t)
+	const rf cube.RFAddress = 0x0a0b0c
+	valve := 42
+	if err := s.SetState(rf, State{ValvePct: &valve}); err != nil {
+		t.Fatal(err)
+	}
+	join(t, c, s.Pair)
+	if e := entryOf(t, c.send(cube.CmdList), rf); len(e) <= lValve || e[lValve] != 42 {
+		t.Fatalf("l: after a second join: % x, want the valve at 42", e)
+	}
+	if e := entryOf(t, lastList(dial(t, addr).greet), rf); len(e) <= lValve || e[lValve] != 42 {
+		t.Fatalf("a new greeting after a second join: % x, want the valve at 42", e)
+	}
+	if a := c.send(cube.CmdDeleteDevices(true, rf)); a.Type != 'A' {
+		t.Fatalf("t: answered %s", a)
+	}
+	join(t, c, s.Pair)
+	if e := entryOf(t, c.send(cube.CmdList), rf); !slices.Equal(e, s.Pair.Entry) {
+		t.Fatalf("l: after a join that followed a t:: % x, want the Pairing's % x", e, s.Pair.Entry)
+	}
+}
+
+// A join changes no other line: the greeting SetGreeting gives after it
+// is a new connection's, the joined device's lines added, and a C line
+// SetConfig set is c:'s answer alone, as without a join.
+func TestAJoinLeavesTheOtherLines(t *testing.T) {
+	t.Parallel()
+	s, addr, _ := startPairing(t)
+	const rf, other cube.RFAddress = 0x0a0b0c, 0x0a010a
+	var next []cube.Message
+	var was cube.Message // other's C line in the greeting
+	for _, m := range s.Greeting {
+		switch {
+		case m.Type == 'L':
+			raw, err := base64.StdEncoding.DecodeString(m.Data)
+			if err != nil {
+				t.Fatal(err)
+			}
+			var kept []byte
+			for _, e := range entries(raw) {
+				if cube.RFAddressFromBytes(e[1:4]) != other {
+					kept = append(kept, e...)
+				}
+			}
+			m = cube.Message{Type: 'L', Data: base64.StdEncoding.EncodeToString(kept)}
+		case m.Type == 'C' && strings.HasPrefix(m.Data, other.String()+","):
+			was = m
+		}
+		next = append(next, m)
+	}
+	s.SetGreeting(next)
+	set, err := PairingFrom(next, 0x0a010d, other, "MEQ0000999", 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	s.SetConfig(set.Config)
+	fresh := dial(t, addr)
+	l := lastList(fresh.greet)
+	if listed(t, l, other) || !listed(t, l, rf) {
+		t.Fatalf("the greeting SetGreeting gave after a join: %s lists %s %v, %s %v; want only the joined device",
+			l, other, listed(t, l, other), rf, listed(t, l, rf))
+	}
+	for _, m := range fresh.greet {
+		if m.Type == 'C' && strings.HasPrefix(m.Data, other.String()+",") && m.String() != was.String() {
+			t.Fatalf("%s's C line in the greeting %s, want the greeting's %s", other, m, was)
+		}
+	}
+	if got := fresh.send(cube.Message{Type: 'c', Data: other.String()}); got.String() != set.Config.String() {
+		t.Fatalf("c:%s answered %s, want the line SetConfig set", other, got)
+	}
+	if config, _ := greeted(t, fresh.greet, rf); !config {
+		t.Fatal("the joined device's C line missing from the greeting")
 	}
 }
 

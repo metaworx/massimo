@@ -15,6 +15,7 @@ import (
 	"net"
 	"net/http"
 	"os"
+	"slices"
 	"strconv"
 	"strings"
 	"sync"
@@ -165,33 +166,32 @@ func (s *Server) audibleOr(gone <-chan struct{}) bool {
 	}
 }
 
-// join makes the Pair device one of the fake's devices: its C line, and
-// its entry in the L line in place of one it had before it was deleted,
-// are those of c:, l: and a new connection's greeting from now on. A C
-// line SetConfig set for it stays.
+// join makes the Pair device one of the fake's devices, as a Cube keeps
+// a device that joined: c:, l: and a new connection's greeting carry its
+// C line and its L entry from now on, added where the fake reads its
+// lines while it is joined (withJoinedLocked, configRawLocked,
+// liveGreetingLocked). A device that joins while it is one already
+// keeps what changed in its lines; one a t: deleted starts again from
+// the Pairing's. No other line changes: a greeting SetGreeting gives is
+// sent as it is, the joined device's lines added.
 func (s *Server) join(p *Pairing) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	rf := p.Device.RFAddress
+	if s.deleted[rf] && s.list != nil {
+		// The L line the fake changed still holds the entry of before.
+		if raw, err := base64.StdEncoding.DecodeString(s.list.Data); err == nil {
+			var list []byte
+			for _, e := range entries(raw) {
+				if cube.RFAddressFromBytes(e[1:4]) != rf {
+					list = append(list, e...)
+				}
+			}
+			s.list = &cube.Message{Type: 'L', Data: base64.StdEncoding.EncodeToString(list)}
+		}
+	}
 	s.joined = true
 	delete(s.deleted, rf)
-	if s.configs == nil {
-		s.configs = map[string]cube.Message{}
-	}
-	if _, ok := s.configs[rf.String()]; !ok {
-		s.configs[rf.String()] = p.Config
-	}
-	if raw := s.listLocked(); raw != nil && len(p.Entry) > 0 {
-		var list []byte
-		for _, e := range entries(raw) {
-			if cube.RFAddressFromBytes(e[1:4]) != rf {
-				list = append(list, e...)
-			}
-		}
-		list = append(list, p.Entry...)
-		s.list = &cube.Message{Type: 'L', Data: base64.StdEncoding.EncodeToString(list)}
-	}
-	s.live = true
 }
 
 // joinedLocked returns the Pair device while it is one of the fake's.
@@ -202,12 +202,48 @@ func (s *Server) joinedLocked() *Pairing {
 	return nil
 }
 
+// paired returns the Pair device while it is one of the fake's.
+func (s *Server) paired() *Pairing {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.joinedLocked()
+}
+
+// withJoinedEntryLocked is an L payload with the joined Pair device's
+// entry after the others where it has none.
+func (s *Server) withJoinedEntryLocked(raw []byte) []byte {
+	p := s.joinedLocked()
+	if p == nil || len(p.Entry) == 0 {
+		return raw
+	}
+	for _, e := range entries(raw) {
+		if cube.RFAddressFromBytes(e[1:4]) == p.Device.RFAddress {
+			return raw
+		}
+	}
+	return slices.Concat(raw, p.Entry)
+}
+
+// withJoinedLocked is an L line with the joined Pair device's entry
+// (withJoinedEntryLocked); a line that does not decode stays as it is.
+func (s *Server) withJoinedLocked(l cube.Message) cube.Message {
+	raw, err := base64.StdEncoding.DecodeString(l.Data)
+	if err != nil {
+		return l
+	}
+	if with := s.withJoinedEntryLocked(raw); len(with) != len(raw) {
+		return cube.Message{Type: 'L', Data: base64.StdEncoding.EncodeToString(with)}
+	}
+	return l
+}
+
 // writeMetadata takes an m: line, one block of the room and device list
 // numbered from 00 in decimal, as the original software writes them:
 // once the blocks since the last 00 are a list the fake can read, they
 // are a new connection's M lines, as the Cube's next M line showed an
 // m: on hardware (docs/cube-protocol.md). A block out of order drops
-// the write.
+// the write. The blocks are the fake's, not a connection's: two clients
+// writing m: at once would mix them, where a Cube takes one client.
 func (s *Server) writeMetadata(data string) {
 	idx, block, ok := strings.Cut(strings.TrimSpace(data), ",")
 	i, err := strconv.Atoi(idx)
@@ -307,14 +343,16 @@ func (s *Server) SetDeviceList(line cube.Message) {
 	s.list = &line
 }
 
-// deviceList returns the L line set with SetDeviceList.
-func (s *Server) deviceList() (cube.Message, bool) {
+// deviceList is the L line l: answers: the one set with SetDeviceList or
+// changed by the fake, else last, the connection's greeting's; with the
+// joined Pair device's entry.
+func (s *Server) deviceList(last cube.Message) cube.Message {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	if s.list == nil {
-		return cube.Message{}, false
+	if s.list != nil {
+		last = *s.list
 	}
-	return *s.list, true
+	return s.withJoinedLocked(last)
 }
 
 // config returns the C line set for rf with SetConfig.
@@ -739,16 +777,15 @@ func (s *Server) serve(conn net.Conn) {
 		case 'q':
 			return
 		case 'l':
-			l := last
-			if set, ok := s.deviceList(); ok {
-				l = set
-			}
-			l, _ = s.visible(l)
+			l, _ := s.visible(s.deviceList(last))
 			reply = l.Wire()
 		case 'c':
 			reply = "A:\r\n"
 			if rf, err := cube.ParseRFAddress(m.Data); err == nil && s.isDeleted(rf) {
 				break
+			}
+			if p := s.paired(); p != nil && strings.EqualFold(strings.TrimSpace(m.Data), p.Device.RFAddress.String()) {
+				reply = p.Config.Wire()
 			}
 			for _, g := range greeting {
 				if g.Type == 'C' && strings.HasPrefix(strings.ToLower(g.Data), strings.ToLower(strings.TrimSpace(m.Data))+",") {
@@ -840,18 +877,19 @@ func (s *Server) serve(conn net.Conn) {
 // PairingFrom builds a Pairing for a new device that is a copy of the
 // device template in greeting with another address and serial, in no
 // room, joining delay after n:: its C line, and its L entry where the
-// greeting's L line has one of template.
+// greeting's L line has one of template; an L line that does not decode
+// gives none, as the fake reads none from it.
 func PairingFrom(greeting []cube.Message, template, rf cube.RFAddress, serial string, delay time.Duration) (*Pairing, error) {
 	var entry []byte
 	for _, g := range greeting {
 		if g.Type != 'L' {
 			continue
 		}
+		entry = nil
 		raw, err := base64.StdEncoding.DecodeString(g.Data)
 		if err != nil {
-			return nil, err
+			continue
 		}
-		entry = nil
 		for _, e := range entries(raw) {
 			if cube.RFAddressFromBytes(e[1:4]) == template {
 				b := rf.Bytes()
