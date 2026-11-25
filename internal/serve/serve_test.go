@@ -5,6 +5,7 @@ package serve
 
 import (
 	"context"
+	"database/sql"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -187,6 +188,69 @@ func TestCloseWithoutRun(t *testing.T) {
 	}
 	if _, err := os.Stat(filepath.Join(data, store.FileName+"-wal")); err == nil {
 		t.Fatal("the store was not closed: its -wal file is left")
+	}
+}
+
+// The start's own errors, of the box's state, name their setting as
+// the start's checks do (AP StartConfiguration, D20-A), "serve: " once:
+// an API address that does not parse, a data directory that is a file,
+// for the store, the self-signed pair and DNS-01's cache alike, and,
+// once the API listens, an HTTP-01 address that does not parse.
+func TestOpenErrorsNameTheSetting(t *testing.T) {
+	t.Parallel()
+	noCubeEnv(t)
+	notDir := filepath.Join(t.TempDir(), "file")
+	if err := os.WriteFile(notDir, nil, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	hook := filepath.Join(t.TempDir(), "hook.sh")
+	if err := os.WriteFile(hook, []byte("#!/bin/sh\n"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	// A store refused, here a stranger's file, says what to do, not the
+	// directory's setting.
+	stranger := t.TempDir()
+	db, err := sql.Open("sqlite", store.Path(stranger))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := db.Exec(`CREATE TABLE other (x INTEGER)`); err != nil {
+		t.Fatal(err)
+	}
+	db.Close()
+	// Nothing asks the ACME directory before Run ends.
+	acme := TLS{Mode: "acme", Names: "massimo.example.net", HTTP: "127.0.0.1:99999", ACMEDirectory: "http://127.0.0.1:1/directory"}
+	for _, c := range []struct {
+		what string
+		cfg  Config
+		want string
+	}{
+		{"the API's address", Config{Listen: "127.0.0.1:99999", Addr: "127.0.0.1:1"},
+			"serve: -listen or MASSIMO_LISTEN: listen tcp: address 99999: invalid port"},
+		{"the data directory", Config{Listen: "127.0.0.1:0", DataDir: notDir},
+			"serve: -data or MASSIMO_DATA: store: mkdir " + notDir + ": "},
+		{"a store refused", Config{Listen: "127.0.0.1:0", DataDir: stranger}, "serve: store: "},
+		{"the data directory, self-signed", Config{Listen: "127.0.0.1:0", DataDir: notDir, TLS: TLS{Mode: "self-signed"}},
+			"serve: -data or MASSIMO_DATA: mkdir " + notDir + ": "},
+		{"the data directory, DNS-01", Config{Listen: "127.0.0.1:0", DataDir: notDir,
+			TLS: TLS{Mode: "acme", Names: "massimo.example.net", DNSHook: hook, ACMEDirectory: "http://127.0.0.1:1/directory"}},
+			"serve: -data or MASSIMO_DATA: mkdir " + notDir + ": "},
+		{"the HTTP-01 address", Config{Listen: "127.0.0.1:0", Addr: "127.0.0.1:1", TLS: acme},
+			"serve: -tls-http or MASSIMO_TLS_HTTP: listen tcp: address 99999: invalid port"},
+	} {
+		c.cfg.Proxies, c.cfg.RefreshInterval, c.cfg.DiscoverInterval, c.cfg.Logger = []string{"off"}, &never, &never, quietLog()
+		if c.cfg.DataDir == "" {
+			c.cfg.DataDir = t.TempDir()
+		}
+		inst, err := Open(context.Background(), c.cfg)
+		if err == nil {
+			ctx, cancel := context.WithTimeout(context.Background(), testkit.Scale(20*time.Second))
+			err = inst.Run(ctx)
+			cancel()
+		}
+		if err == nil || !strings.HasPrefix(err.Error(), c.want) {
+			t.Errorf("%s: %v, want %s…", c.what, err, c.want)
+		}
 	}
 }
 

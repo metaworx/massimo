@@ -23,12 +23,10 @@ import (
 	"go.metaworx.ch/massimo/internal/testkit"
 )
 
-// skipBuilt skips a test that runs the built massimo where it cannot.
+// skipBuilt skips a test that runs the built massimo with -short, which
+// builds nothing.
 func skipBuilt(t *testing.T) {
 	t.Helper()
-	if runtime.GOOS == "windows" {
-		t.Skip("the built binary has no .exe name")
-	}
 	if testing.Short() {
 		t.Skip("builds the binary")
 	}

@@ -133,15 +133,20 @@ func PerCube(name, sn string) string {
 }
 
 // PerCubeValue returns the per-Cube variable of name for the Cube sn as
-// it is set, and its value: the serial in the name in any case, since
-// Linux keeps the case a settings file gives it; the upper-case name and
-// "" when none is set.
+// it is set, and its value: the serial in the name in any case, as a
+// settings file may write it, and the name as the environment holds it,
+// which os.Getenv does not tell on Windows, where it finds a name in any
+// case. The exact name comes first, then the first set whatever its
+// case; the upper-case name and "" when none is set.
 func PerCubeValue(name, sn string) (variable, value string) {
 	want := PerCube(name, sn)
-	if v := os.Getenv(want); v != "" {
-		return want, v
+	vars := os.Environ()
+	for _, kv := range vars {
+		if k, v, _ := strings.Cut(kv, "="); v != "" && k == want {
+			return k, v
+		}
 	}
-	for _, kv := range os.Environ() {
+	for _, kv := range vars {
 		if k, v, _ := strings.Cut(kv, "="); v != "" && strings.EqualFold(k, want) {
 			return k, v
 		}

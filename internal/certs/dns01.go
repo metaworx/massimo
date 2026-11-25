@@ -97,7 +97,7 @@ func OpenDNS01(dataDir string, names []string, email, directory, hook string, lo
 		directory = acme.LetsEncryptURL
 	}
 	dir, _ := ACMEPaths(dataDir, "")
-	if err := os.MkdirAll(dir, 0o700); err != nil {
+	if err := mkdirData(dir); err != nil {
 		return nil, err
 	}
 	d := &DNS01{dataDir: dataDir, names: names, email: email, directory: directory, hook: hook, log: log,

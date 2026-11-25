@@ -25,6 +25,7 @@ import (
 var serialTests = map[string]string{
 	// The settings in the process environment (t.Setenv).
 	"TestConfigPrintsTLS":                   "sets the TLS variables",
+	"TestConfigTiesThePlainLines":           "clears the Cube variables, sets MASSIMO_DATA and the plain Cube's variables",
 	"TestConfigViewHidesSecrets":            "sets MASSIMO_API_TOKEN, a Cube's key and MASSIMO_LISTEN",
 	"TestDataDir":                           "sets MASSIMO_DATA",
 	"TestNoEnv":                             "sets MASSIMO_ENV_FILE, as -no-env does",
@@ -74,6 +75,7 @@ var serialTests = map[string]string{
 	"TestServiceEndWithoutStop":                    "swaps theService, sets ProgramData (tempServiceLog)",
 	"TestServiceStopWaitsForServe":                 "swaps theService, sets ProgramData (tempServiceLog)",
 	"TestServiceStopClosesTheStore":                "swaps theService, sets the Cube's address",
+	"TestUpdateHelperListenKeepsTheStart":          "swaps theService, sets ProgramData (tempServiceLog) and MASSIMO_UPDATE_API",
 	"TestRebootRequester":                          "sets rebootTake and rebootPoll",
 	"TestWindowsRebooter":                          "swaps runCommand, sets SystemRoot",
 	"TestHealthClientOwnAddresses":                 "swaps interfaceAddrs",

@@ -152,7 +152,7 @@ func runServe(args []string) error {
 	if *logPath != "" {
 		logFile, narrowErr, err = logfile.Open(logfile.Options{Path: *logPath, Format: logfile.Format(fileFormat), Size: rotateSize, Keep: keep, KeepMin: keepMin})
 		if err != nil {
-			return fmt.Errorf("serve: %w", err)
+			return fmt.Errorf("serve: -log or MASSIMO_LOG: %w", err)
 		}
 		defer logFile.Close()
 		fileOut = logFile
@@ -336,17 +336,22 @@ func defaultUpdateStatus() string {
 // serveUpdateHelper prepares the start of the update helper by the
 // server itself (Windows): this binary in its helper mode, with the
 // /healthz of the listen address, https:// when this server has TLS,
-// and update.log next to the status file.
+// and update.log next to the status file. A listen address with no
+// /healthz the helper can ask, port 0 or a service name, blocks updates
+// from the API with HealthURL's reason, which names the setting, and
+// the start goes on, as under brew (AP StartConfiguration, D21-A).
 func serveUpdateHelper(log *slog.Logger, listen string, tls bool, request, status string) (func() error, string, error) {
 	exe, err := os.Executable()
 	if err != nil {
 		return nil, "", err
 	}
-	health, err := install.HealthURL(listen, tls)
-	if err != nil {
-		return nil, "", err
+	var start func() error
+	var blocked string
+	if health, err := install.HealthURL(listen, tls); err != nil {
+		blocked = err.Error()
+	} else {
+		start, blocked = updateHelperStarter(log, exe, request, status, health, filepath.Join(filepath.Dir(status), "update.log"))
 	}
-	start, blocked := updateHelperStarter(log, exe, request, status, health, filepath.Join(filepath.Dir(status), "update.log"))
 	if blocked != "" {
 		log.Warn("updates cannot be started from the API", "reason", blocked)
 	}

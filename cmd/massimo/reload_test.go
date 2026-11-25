@@ -1120,14 +1120,18 @@ func TestServeReloadFromTheAPIRotatesAndCheckpoints(t *testing.T) {
 	if err := os.Mkdir(settingsFile, 0o700); err != nil {
 		t.Fatal(err)
 	}
-	failed("a file that cannot be read", settingsFile+":1: read "+settingsFile+": is a directory")
+	// The system's text: "is a directory", on Windows "Incorrect function."
+	_, readErr := os.ReadFile(settingsFile)
+	failed("a file that cannot be read", settingsFile+":1: "+readErr.Error())
 	os.Remove(settingsFile)
 	os.WriteFile(settingsFile, []byte(env.HSTS+"=60\n"), 0o600)
 	var res server.ReloadResult
 	if code, body := reload("a good read"); code != 200 || json.Unmarshal(body, &res) != nil || strings.Join(res.Pending, ",") != env.HSTS {
 		t.Fatalf("a good read: %d %s", code, body)
 	}
-	s.stop(t)
+	if runtime.GOOS != "windows" { // no SIGTERM to send: the test's end kills serve
+		s.stop(t)
+	}
 }
 
 // With -sighup stop, a SIGHUP stops serve as SIGTERM does: exit 0 and

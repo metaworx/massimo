@@ -352,8 +352,14 @@ type Options struct {
 
 // ProxyListener describes one Cube-protocol listener of the server.
 type ProxyListener struct {
-	Serial string // which Cube; empty with a single configured Cube
-	Addr   string // host:port to listen on, usually ":62910"
+	Serial string // which Cube; empty with a single configured Cube, or with CubeAddr
+	// CubeAddr names the Cube by its configured address (CubeConfig.Addr)
+	// where Serial is empty: a Cube whose serial was not known at the
+	// start, such as the plain MASSIMO_CUBE_ADDRESS's, served beside
+	// others. The server keys such a Cube by that address (register),
+	// and keeps that key beside the serial once it reports one (pump).
+	CubeAddr string
+	Addr     string // host:port to listen on, usually ":62910"
 	// Discovery answers UDP discovery requests for this Cube; only
 	// meaningful for a listener on the Cube's port 62910.
 	Discovery bool
@@ -490,6 +496,10 @@ type runtime struct {
 	// confirms are the writes the devices have not shown yet
 	// (confirm.go).
 	confirms confirmations
+	// removed is set, under the server's proxyMu, once removeCube has
+	// begun: no listener starts for the runtime from then on
+	// (startProxyOn).
+	removed bool
 
 	// last is each device's state as the last state event had it, for
 	// the changes of the next one; only the pump uses it.
@@ -893,9 +903,10 @@ func (s *Server) Run(ctx context.Context) error {
 		close(writerDone)
 	}
 	s.logStarted(ctx)
-	for _, rt := range s.runtimes() {
-		s.startRuntime(rt)
-	}
+	// The listeners before the Cubes' connections: a runtime that has not
+	// connected is removed by nothing but the API, so the pump finds the
+	// listeners of a runtime it removes among s.proxies and stops them,
+	// where a listener started after the removal would fail its lookup.
 	for _, pl := range s.opts.Proxy {
 		if pl.Discovery {
 			s.ensureResponder()
@@ -904,6 +915,9 @@ func (s *Server) Run(ctx context.Context) error {
 	}
 	for _, pl := range s.opts.Proxy {
 		s.startProxy(pl)
+	}
+	for _, rt := range s.runtimes() {
+		s.startRuntime(rt)
 	}
 	s.wg.Add(1)
 	go func() { defer s.wg.Done(); s.discoveryLoop(ctx) }()
@@ -986,10 +1000,18 @@ func (rt *runtime) hidden() view.Hidden {
 	return view.NewHidden(rt.config().Hidden, rt.client.Snapshot().Metadata(), rt.showHidden)
 }
 
-// proxyRuntime picks the Cube a proxy listener serves.
+// proxyRuntime picks the Cube a proxy listener serves: by its serial,
+// by its address (CubeAddr), or the single Cube. The listener keeps the
+// runtime, and serves it under the serial it reports from then on.
 func (s *Server) proxyRuntime(pl ProxyListener) (*runtime, error) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
+	if pl.Serial == "" && pl.CubeAddr != "" {
+		if rt, ok := s.cubes[strings.ToLower(pl.CubeAddr)]; ok {
+			return rt, nil
+		}
+		return nil, fmt.Errorf("no cube at %s configured", pl.CubeAddr)
+	}
 	if pl.Serial == "" {
 		if len(s.order) != 1 {
 			return nil, fmt.Errorf("several cubes configured, name one as <serial>=%s", pl.Addr)
@@ -1027,10 +1049,17 @@ func (s *Server) pump(ctx context.Context, rt *runtime) {
 					}
 					s.mu.Unlock()
 					if taken && other != rt {
-						// Another runtime serves the serial, one added by
-						// serial meanwhile: two clients would compete for a
-						// one-client Cube, so this one stops, as register
-						// refuses a second runtime for a serial.
+						// Another runtime serves the serial, one of the
+						// store's or one added by serial meanwhile: two
+						// clients would compete for a one-client Cube, so
+						// this one stops, as register refuses a second
+						// runtime for a serial. The plain lines are the
+						// other's Cube's from now on.
+						if rt.config().SeedFromFile {
+							s.log.Warn(PlainServedNote, "serial", h.Serial, "addr", rt.client.Address())
+							go s.plainServedAlready(rt)
+							return
+						}
 						s.log.Error("cube served twice: its serial is served already, the connection by address stops", "serial", h.Serial, "addr", rt.client.Address())
 						go s.removeCube(rt)
 						return
