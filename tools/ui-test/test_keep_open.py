@@ -16,8 +16,8 @@ import json
 import pytest
 
 from conftest import URL
-from helpers import ApiReads, assert_login_card_centred, frames, scroll_width, show_view, wait_held, wait_until
-from test_first_owner import APP, DIALOG_OPEN, IN_FIELD, OPEN, owner_card, sent, start_page, turned, wrapped
+from helpers import ApiReads, assert_login_card_placed, frames, scroll_width, show_view, wait_held, wait_until
+from test_first_owner import APP, DIALOG_OPEN, IN_FIELD, OPEN, dice_pressed, each_language, owner_card, sent, start_page, turned, wrapped
 
 BOX = "(() => { const r = document.getElementById('login-dialog').getBoundingClientRect(); return [r.top, r.height]; })()"
 KEPT = dict(OPEN, kept_open=True)
@@ -380,19 +380,27 @@ def test_the_turn_lets_the_card_go(new_context, case, watch, guard):
 
 @pytest.mark.parametrize("app", (False, True), ids=("browser", "app"))
 def test_keep_open_measures(new_context, case, watch, guard, app):
-    """The confirmation centred and no wider than the window, each
-    button's text on one line, at 390 px in all six languages; in the app
-    without the clipboard's API (as over plain HTTP, where the page is no
-    secure context) a tap on the address copies it by the page's other
-    way, in a browser by the clipboard's API, and says so (FirstOwner D8);
-    the address stays a text to select.
+    """The confirmation placed as the first owner's form is, in the middle
+    where it fits and at its top with the page scrolling where it is
+    taller (assert_login_card_placed; AP PasswordRules, D57-A), and no
+    wider than the window, each button's text on one line, at 390 px in
+    all six languages, before a press of the dice in the form and after
+    one, the two steps of one height; in the app without the clipboard's
+    API (as over plain HTTP, where the page is no secure context) a tap on
+    the address copies it by the page's other way, in a browser by the
+    clipboard's API, and says so (FirstOwner D8); the address stays a text
+    to select.
     Fails on the page before: no Keep it open…."""
     no_clipboard = "Object.defineProperty(navigator, 'clipboard', { value: undefined, configurable: true });"
     page = start_page(new_context, guard, watch, OPEN, app=APP if app else None, init=no_clipboard if app else None)
     owner_card(page)
     keep_step(page)
-    assert_login_card_centred(page, "the confirmation")
-    assert scroll_width(page) <= case.width, "no horizontal scroll"
+
+    def placed(what):
+        assert_login_card_placed(page, what)
+        assert scroll_width(page) <= case.width, f"no horizontal scroll on {what}"
+        assert not wrapped(page), f"each button's text on one line on {what}: {wrapped(page)}"
+    placed("the confirmation")
     if app:
         page.evaluate("() => { document.addEventListener('copy', () => { window.__copied = String(document.getSelection()); }); }")
     else:
@@ -403,16 +411,14 @@ def test_keep_open_measures(new_context, case, watch, guard, app):
     assert copied == page.evaluate("location.origin"), f"this page's address copied: {copied!r}"
     assert page.evaluate("getComputedStyle(document.getElementById('keep-open-origin')).userSelect") != "none", "a text to select"
     if case.width == 390:
-        page.locator("#login-menu summary").click()
-        for lang in ("fr", "it", "nl", "pl"):
-            page.locator("#login-lang").select_option(lang)
-            assert wait_until(page, f"i18n.lang === {lang!r} && document.getElementById('login-title').textContent === t('keepOpen.title')", 5), lang
-            frames(page)
-            assert_login_card_centred(page, f"the confirmation in {lang}")
-            assert scroll_width(page) <= case.width, f"no horizontal scroll in {lang}"
-            assert not wrapped(page), f"each button's text on one line in {lang}: {wrapped(page)}"
-        page.locator("#login-lang").select_option("auto")
-        page.keyboard.press("Escape")
+        each_language(page, case, "keepOpen.title", lambda lang: placed(f"the confirmation in {lang}"))
+    page.locator("#keep-open-back").click()
+    page.locator("#setup-form").wait_for(state="visible")
+    dice_pressed(page)
+    keep_step(page)
+    placed("the confirmation after a press of the dice")
+    if case.width == 390:
+        each_language(page, case, "keepOpen.title", lambda lang: placed(f"the confirmation after a press in {lang}"))
 
 
 def test_the_server_named_on_the_owner_steps(new_context, case, watch, guard):

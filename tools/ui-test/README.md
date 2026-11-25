@@ -589,10 +589,16 @@ hence `failed_checks_forgotten`.
   a page left open learns of an owner made elsewhere from its stream's
   ticket refused, with the card shown and after Skip, the password's way
   chosen;
-  the card centred and no wider than the window, each button's text on one
-  line, in a browser and in the app, at 390 px in six languages; on a
-  phone of 640 px it starts at the top and scrolls; over plain HTTP in the
-  app no sign-in's notice; on a touch screen no field in focus.
+  the card no wider than the window, each button's text on one line, in a
+  browser and in the app, at 390 px in six languages, before a press of the
+  dice and after one, centred where it fits the room the window leaves it
+  (868 of 900 px) and, where it is taller, at its top with the page
+  scrolling to its end, the card showing all it holds, each control inside
+  it and in view at some scroll (the sign-in card's tests keep it centred
+  and within its room);
+  on a phone of 640 px it starts at the top and scrolls; over
+  plain HTTP in the app no sign-in's notice; on a touch screen no field in
+  focus.
 - `test_keep_open.py`, keeping a server without users open (AP FirstOwner,
   Block 3), `/api/v1/me` and the setting's write stubbed:
   Keep it open… shows the confirmation in the form's place, the card not
@@ -606,7 +612,8 @@ hence `failed_checks_forgotten`.
   the switch in System settings → Users turns it off once and stays off for
   that showing, and a refusal leaves it on; turned off, the card offers
   Keep it open… again, and kept open from it the switch is back; after a
-  turn the card's ways out are on; the measures in six languages, and the
+  turn the card's ways out are on; the measures in six languages, before a
+  press of the dice in the form and after one, as the form's, and the
   address copied in a browser and in the app without the clipboard's API.
 - `test_ways.py`, the ways to the first owner on a running page (AP
   FirstOwner, Block 4), `/api/v1/me` stubbed: the banner's Create the
