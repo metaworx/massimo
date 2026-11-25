@@ -330,9 +330,10 @@ func TestModuleReplacedByACopy(t *testing.T) {
 }
 
 // licencesToday are the licences the files of the list are known by
-// today, by entry and file; an entry not here is not checked, a file not
-// here is its entry's licence. yaml.v3's LICENSE holds both the MIT
-// licence and Apache's notice: it is named by none.
+// today, by entry and file; an entry not here is not checked. yaml.v3's
+// LICENSE holds both the MIT licence and Apache's notice, and the OPAQUE
+// client's opaque.LICENSE-3RD-PARTY the texts of many: each is named by
+// none.
 var licencesToday = map[string]map[string]string{
 	"Massimo":                          {"LICENSE": "AGPL-3.0"},
 	"Go":                               {"LICENSE": "BSD-3-Clause"},
@@ -364,12 +365,13 @@ var licencesToday = map[string]map[string]string{
 	"@preact/signals":                  {"LICENSE": "MIT"},
 	"@preact/signals-core":             {"LICENSE": "MIT"},
 	"@tabler/icons":                    {"LICENSE": "MIT"},
-	"@serenity-kit/opaque":             {"opaque.LICENSE": "MIT"},
+	"@serenity-kit/opaque":             {"opaque.LICENSE": "MIT", "opaque.LICENSE-3RD-PARTY": ""},
 }
 
 // TestClassifyToday checks classify on the full texts the list holds:
-// every licence file of today's entries gets the name it has, and the
-// repository's own LICENSE is the AGPL-3.0's.
+// every licence file of today's entries gets the name it has, each file
+// licencesToday names is among its entry's, and the repository's own
+// LICENSE is the AGPL-3.0's.
 func TestClassifyToday(t *testing.T) {
 	b, err := os.ReadFile(filepath.Join("..", "..", outPath))
 	if err != nil {
@@ -396,6 +398,11 @@ func TestClassifyToday(t *testing.T) {
 			}
 			if got := classify(f.Text); got != w {
 				t.Errorf("%s: classify(%s) = %q, want %q", e.Name, f.Name, got, w)
+			}
+		}
+		for name := range want {
+			if !slices.ContainsFunc(e.Files, func(f credits.File) bool { return f.Name == name }) {
+				t.Errorf("%s: %s is not among its licence files", e.Name, name)
 			}
 		}
 	}
@@ -514,6 +521,28 @@ func TestNoteLicence(t *testing.T) {
 	err := run(tr.root, false, tr.source(), io.Discard)
 	if err == nil || !strings.Contains(err.Error(), "kept: its note says Apache-2.0, but LICENSE reads as MIT") {
 		t.Errorf("a note at odds with its text: %v", err)
+	}
+}
+
+// TestIncludesNeedTheirTexts checks that a vendored entry whose note
+// names what it includes stops make credits, naming it, while no
+// licence file beside its first holds their texts, which the page and
+// massimo credits say one does; with such a file beside it, the entry
+// is taken, mixed where that file is known by no licence.
+func TestIncludesNeedTheirTexts(t *testing.T) {
+	tr := newTree(t)
+	tr.write(t, "internal/server/ui/vendor/README.md", "| File | Package | Version | Licence | Includes |\n|---|---|---|---|---|\n| `x.js` | `@x/x` | 2.0.0 | MIT, `x.LICENSE` | `y` 1.0 |\n")
+	err := run(tr.root, false, tr.source(), io.Discard)
+	if err == nil || !strings.Contains(err.Error(), "@x/x: its note says it includes y 1.0, but no licence file beside x.LICENSE holds their texts") {
+		t.Errorf("what it includes without their texts: %v", err)
+	}
+	tr.write(t, "internal/server/ui/vendor/x.LICENSE-3RD-PARTY", "==> y 1.0 (MIT OR Apache-2.0) <==\n--- LICENSE-MIT\n"+mitText+
+		"--- LICENSE-APACHE\n                              Apache License\n                        Version 2.0, January 2004\n")
+	if err := run(tr.root, false, tr.source(), io.Discard); err != nil {
+		t.Fatal(err)
+	}
+	if e, _ := tr.list(t).Find("@x/x"); e.Includes != "y 1.0" || len(e.Files) != 2 || e.Files[1].Name != "x.LICENSE-3RD-PARTY" || e.Files[1].Licence != "" || !e.Mixed {
+		t.Errorf("the entry with its texts beside it: %+v", e)
 	}
 }
 

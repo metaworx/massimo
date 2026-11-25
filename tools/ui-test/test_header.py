@@ -485,14 +485,19 @@ def test_versions_copy(page, case):
 AGES = ((5, 5, "second"), (125, 2, "minute"), (3 * 3600 + 5, 3, "hour"), (3 * 86400, 3, "day"))
 # The chosen Cube read ago seconds before now on a server's clock skew ms
 # ahead: what the list says of it, its tooltip, and what it should say.
+# The Cube's entry is written whole into state.cubes, as the page's loads
+# write it, so that the parts that follow the Cubes draw it. Written in
+# place, it was drawn only where the render's clock (nowAgain) moved on,
+# which it does not where the header's tick came in the same millisecond:
+# the list then still said what it said at the tick.
 SET_READ = """async ([ago, skew]) => {
   serverSkew = skew;
-  const c = state.cubes.find((x) => x.serial === state.serial);
-  c.updated = new Date(Date.now() + skew - ago * 1000).toISOString();
+  const updated = new Date(Date.now() + skew - ago * 1000).toISOString();
+  state.cubes = state.cubes.map((c) => (c.serial === state.serial ? { ...c, updated } : c));
   MassimoParts.header.render();
   await new Promise((done) => setTimeout(done)); // the part draws after the call
   const v = document.querySelector('#cube-problems .read-times > :nth-child(2)');
-  return [v.textContent, v.title, fmtTimeOfDay(new Date(Date.parse(c.updated) - skew))];
+  return [v.textContent, v.title, fmtTimeOfDay(new Date(Date.parse(updated) - skew))];
 }"""
 # How long ago, in the page's language, as the header says it.
 AGO = "([n, unit]) => new Intl.RelativeTimeFormat(i18n.lang, {numeric: 'always', style: 'short'}).format(-n, unit)"
@@ -510,7 +515,7 @@ def test_reads_times_ago(page, case):
     tooltip; counting on by one clock, the list's and the expert line's the
     same. The server's clock is taken from its answers. The page's poll is
     held meanwhile (held_poll), so that it does not bring the Cube's own
-    time back."""
+    time back over the one SET_READ writes."""
     assert wait_until(page, "Math.abs(serverSkew) < 3000", 5), "the server's clock from its answers: this machine's"
     assert page.locator(".pile-age").count() == 0, "no age above the pile"
     page.evaluate("() => { state.settings.expert = true; applySettings(); }")  # before the hold: applySettings restarts the running poll

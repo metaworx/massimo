@@ -311,17 +311,22 @@ func uiVendorEntries(root string) ([]credits.Entry, error) {
 // licence file is known by where that one is known, and is that file's
 // where it is not; else that file's.
 // Mixed where the entry's licence is known and a licence file is under
-// another or under none known. None
-// found is an error.
+// another or under none known. None found is an error, and so is an
+// entry whose note names what it includes without a licence file beside
+// its first, which the page and massimo credits say holds their texts.
 func entryOf(e credits.Entry, dir, stem string) (credits.Entry, error) {
 	files, err := licenceFiles(dir, stem)
 	if err != nil {
 		return credits.Entry{}, err
 	}
 	var first *credits.File
+	licences := 0
 	for i := range files {
-		if !files[i].Notice && first == nil {
-			first = &files[i]
+		if !files[i].Notice {
+			licences++
+			if first == nil {
+				first = &files[i]
+			}
 		}
 	}
 	if first == nil {
@@ -330,6 +335,9 @@ func entryOf(e credits.Entry, dir, stem string) (credits.Entry, error) {
 			what = stem + ".LICENSE and the like"
 		}
 		return credits.Entry{}, fmt.Errorf("credits: %s: no licence file (LICENSE, LICENCE, COPYING) among the %s of %s", e.Name, what, dir)
+	}
+	if e.Includes != "" && licences < 2 {
+		return credits.Entry{}, fmt.Errorf("credits: %s: its note says it includes %s, but no licence file beside %s holds their texts", e.Name, e.Includes, first.Name)
 	}
 	switch {
 	case e.Licence == "":
@@ -355,10 +363,13 @@ func baseLicence(id string) string {
 	return strings.TrimSuffix(strings.TrimSuffix(id, "-or-later"), "-only")
 }
 
-// maxLicence is the largest licence file taken, 256 KiB: three times the
-// largest of today (modernc.org/sqlite's LICENSE-3RD-PARTY.md, 74 KB),
-// while the whole list, which a phone fetches, stays small; a larger file
-// is most likely no licence.
+// maxLicence is the largest licence file taken, 256 KiB: above the
+// largest of today, the OPAQUE client's opaque.LICENSE-3RD-PARTY (186 KB,
+// the texts of its Rust crates, tools/opaquecrates), while the whole
+// list, which a phone fetches as System info's fold first opens, stays
+// below half a megabyte (399 KB today); a larger file is most likely no
+// licence. A later OPAQUE client with more crates can pass it: then make
+// credits stops, naming the file, and the cap is weighed again.
 const maxLicence = 256 << 10
 
 // licenceFiles are the licence's files of dir, by name: those

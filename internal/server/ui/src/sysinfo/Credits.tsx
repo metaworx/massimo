@@ -47,7 +47,7 @@ function fileLicence(f: CreditFile): string {
 /**
  * Entry is an entry's fold: its head the name, version and licence,
  * wrapping as one text beside the chevron; its body the origin, what it
- * includes, whose own licence texts are not here, and its licence's
+ * includes, whose licence texts are among its files, and its licence's
  * files, each named with its licence above a box that scrolls, which
  * the name labels. n is its place in the list, for the boxes' labels.
  */

@@ -7,6 +7,7 @@ import (
 	"encoding/base64"
 	"fmt"
 	"math"
+	"slices"
 	"strings"
 	"time"
 
@@ -334,7 +335,9 @@ func (s *Server) addressesLocked() []cube.RFAddress {
 	return out
 }
 
-// listLocked is the L line the fake answers l: with.
+// listLocked is the payload of the L line the fake answers l: with, the
+// joined Pair device's entry included: a change to it (editEntryLocked)
+// keeps it in the fake's L line from then on.
 func (s *Server) listLocked() []byte {
 	l := s.list
 	if l == nil {
@@ -349,7 +352,7 @@ func (s *Server) listLocked() []byte {
 		return nil
 	}
 	raw, _ := base64.StdEncoding.DecodeString(l.Data)
-	return raw
+	return s.withJoinedEntryLocked(raw)
 }
 
 // entries splits an L payload into its entries, each with its length byte.
@@ -402,7 +405,7 @@ func guessType(n int) cube.DeviceType {
 }
 
 // configRawLocked is rf's C payload: the one set with SetConfig or
-// changed, else the greeting's.
+// changed, else the greeting's, else the joined Pair device's.
 func (s *Server) configRawLocked(rf cube.RFAddress) []byte {
 	line, ok := s.configs[rf.String()]
 	if !ok {
@@ -411,6 +414,9 @@ func (s *Server) configRawLocked(rf cube.RFAddress) []byte {
 				line, ok = g, true
 			}
 		}
+	}
+	if p := s.joinedLocked(); !ok && p != nil && p.Device.RFAddress == rf {
+		line, ok = p.Config, true
 	}
 	if !ok {
 		return nil
@@ -452,7 +458,10 @@ func (s *Server) editConfigLocked(rf cube.RFAddress, edit func(c []byte, t cube.
 }
 
 // liveGreetingLocked is the greeting with the lines the fake changed: the
-// current L line and C lines, without removed devices.
+// M lines an m: wrote, the current L line and C lines once a command or
+// the control changed one, and the Pair device's C line and L entry
+// while it is joined, after the others; the devices deleted or removed
+// are left out as the lines are sent (visible).
 func (s *Server) liveGreetingLocked() []cube.Message {
 	out := append([]cube.Message(nil), s.Greeting...)
 	if s.free != nil {
@@ -463,23 +472,69 @@ func (s *Server) liveGreetingLocked() []cube.Message {
 			}
 		}
 	}
-	if !s.live {
-		return out
-	}
-	for i, g := range out {
-		switch g.Type {
-		case 'L':
-			if s.list != nil {
-				out[i] = *s.list
+	if s.meta != nil {
+		isM := func(g cube.Message) bool { return g.Type == 'M' }
+		at := slices.IndexFunc(out, isM)
+		out = slices.DeleteFunc(out, isM)
+		if at < 0 { // a greeting without M lines: after its H line
+			at = 0
+			if len(out) > 0 && out[0].Type == 'H' {
+				at = 1
 			}
-		case 'C':
-			addr, _, _ := strings.Cut(g.Data, ",")
-			if c, ok := s.configs[strings.ToLower(addr)]; ok {
-				out[i] = c
+		}
+		out = slices.Insert(out, at, s.meta...)
+	}
+	if s.live {
+		for i, g := range out {
+			switch g.Type {
+			case 'L':
+				if s.list != nil {
+					out[i] = *s.list
+				}
+			case 'C':
+				addr, _, _ := strings.Cut(g.Data, ",")
+				if c, ok := s.configs[strings.ToLower(addr)]; ok {
+					out[i] = c
+				}
 			}
 		}
 	}
+	if p := s.joinedLocked(); p != nil {
+		for i, g := range out {
+			if g.Type == 'L' {
+				out[i] = s.withJoinedLocked(g)
+			}
+		}
+		out = s.withJoinedConfigLocked(out, p)
+	}
 	return out
+}
+
+// withJoinedConfigLocked is a greeting with the joined Pair device p's C
+// line after the last C line, or before the L line, where it has none:
+// the one the fake changed, else the Pairing's.
+func (s *Server) withJoinedConfigLocked(out []cube.Message, p *Pairing) []cube.Message {
+	rf := p.Device.RFAddress.String()
+	at := -1
+	for i, g := range out {
+		if g.Type != 'C' {
+			continue
+		}
+		if strings.HasPrefix(strings.ToLower(g.Data), rf+",") {
+			return out // the greeting has its own
+		}
+		at = i + 1
+	}
+	if at < 0 {
+		if at = slices.IndexFunc(out, func(g cube.Message) bool { return g.Type == 'L' }); at < 0 {
+			at = len(out)
+		}
+	}
+	c, ok := s.configs[rf]
+	if !ok {
+		c = p.Config
+	}
+	return slices.Insert(out, at, c)
 }
 
 // encodeActual writes a measured temperature into an L entry: a radiator

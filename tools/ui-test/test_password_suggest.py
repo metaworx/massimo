@@ -25,7 +25,7 @@ import os
 import re
 
 from conftest import TOKEN, api_call
-from helpers import OPERATOR_PASSWORD, frames, named_buttons, show_view, wait_held, wait_until
+from helpers import OPERATOR_PASSWORD, frames, named_buttons, open_fold, show_view, toggle_fold, wait_held, wait_until
 from test_first_owner import OPEN, owner_card, start_page, stub_creation
 from test_login import sign_in
 from test_password_eye import STATE, eye_of, fresh_page, reopen, say_reveal
@@ -65,31 +65,6 @@ SPOKEN = """() => {
   for (const el of document.querySelectorAll('[aria-label], [title]')) out.push(el.getAttribute('aria-label') || '', el.getAttribute('title') || '');
   return out;
 }"""
-
-
-# A fold's summary clicked, and the fold's toggle event taken: the event,
-# which tells the page's part the fold's new state (Fold's onToggle) and
-# so is a new start of its password fields, comes in a task of its own
-# after the click; a press on the dice before it would be dropped by that
-# new start.
-TOGGLE = """(sel) => new Promise((done) => {
-  const d = document.querySelector(sel);
-  d.addEventListener('toggle', () => setTimeout(done, 0), { once: true });
-  d.querySelector(':scope > summary').click();
-})"""
-
-
-def toggle_fold(page, sel):
-    """The fold sel opened or closed by its summary, its toggle event taken
-    and the part drawn again."""
-    page.evaluate(TOGGLE, sel)
-    frames(page)
-
-
-def open_fold(page, sel):
-    """The fold sel open, its toggle event taken (toggle_fold)."""
-    if not page.evaluate("(sel) => document.querySelector(sel).open", sel):
-        toggle_fold(page, sel)
 
 
 def five_words(value):

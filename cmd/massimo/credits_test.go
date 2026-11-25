@@ -19,7 +19,8 @@ import (
 // embedded list, the one System info shows, with its version (Go's the
 // binary's) and licence, "and others" where its files are under others
 // too, "see the text" where its text is known by none, under a head;
-// then what an entry includes, whose texts are not reproduced.
+// then what an entry includes, whose texts are among its files: the
+// OPAQUE client, MIT and others with its crates' texts.
 func TestCreditsList(t *testing.T) {
 	t.Parallel()
 	var out bytes.Buffer
@@ -44,7 +45,7 @@ func TestCreditsList(t *testing.T) {
 		if len(f) < 3 || f[0] != e.Name || f[1] != version || !strings.HasPrefix(strings.Join(f[2:], " "), entryLicence(e)) {
 			t.Errorf("line %q, want %s %s %s", lines[i+1], e.Name, version, entryLicence(e))
 		}
-		if e.Includes != "" && !strings.Contains(notes, e.Name+" includes "+e.Includes+"; their own licence texts are not reproduced here.") {
+		if e.Includes != "" && !strings.Contains(notes, e.Name+" includes "+e.Includes+" and the crates they are built with; their licence texts, collected for Massimo from the crates' archives, are among its files.") {
 			t.Errorf("what %s includes is not said:\n%s", e.Name, notes)
 		}
 	}
@@ -54,6 +55,7 @@ func TestCreditsList(t *testing.T) {
 	for _, c := range []struct{ name, want string }{
 		{"modernc.org/sqlite", "BSD-3-Clause and others"},
 		{"gopkg.in/yaml.v3", "see the text"},
+		{"@serenity-kit/opaque", "MIT and others"},
 	} {
 		if e, ok := l.Find(c.name); ok && entryLicence(e) != c.want {
 			t.Errorf("%s's licence %q, want %q", c.name, entryLicence(e), c.want)
@@ -65,9 +67,10 @@ func TestCreditsList(t *testing.T) {
 }
 
 // TestCreditsOne checks massimo credits <name>: what the entry
-// includes, whose texts are not reproduced, then each file of its
-// licence with the licence it is known by and its text, the name taken
-// without regard to case;
+// includes, whose texts are among its files, then each file of its
+// licence with the licence it is known by and its text, the OPAQUE
+// client's crates' after its own, the name taken without regard to
+// case;
 // a name the list does not hold is an error that names the list's
 // command, and two names are one too many.
 func TestCreditsOne(t *testing.T) {
@@ -92,6 +95,11 @@ func TestCreditsOne(t *testing.T) {
 	}
 	if o, _ := l.Find("@serenity-kit/opaque"); o.Includes == "" || !strings.HasPrefix(out.String(), includesLine(o)+"\n\n==> ") {
 		t.Errorf("what the OPAQUE client includes is not said first:\n%.300s", out.String())
+	}
+	own := strings.Index(out.String(), "==> @serenity-kit/opaque: opaque.LICENSE (MIT) <==\n")
+	crates := strings.Index(out.String(), "\n\n==> @serenity-kit/opaque: opaque.LICENSE-3RD-PARTY (see the text) <==\n")
+	if own < 0 || crates < own || !strings.Contains(out.String()[crates:], "\n==> opaque-ke 4.0.1 (Apache-2.0 OR MIT) <==\n") {
+		t.Errorf("the OPAQUE client's own licence, then its crates' texts, are not printed:\n%.300s", out.String())
 	}
 	err := creditsCommand([]string{"no-such-thing"}, &out)
 	if err == nil || !strings.Contains(err.Error(), `"no-such-thing" is not in the list`) || !strings.Contains(err.Error(), "massimo credits lists the names") {

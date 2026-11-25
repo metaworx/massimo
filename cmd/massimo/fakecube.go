@@ -34,7 +34,7 @@ func runFakeCube(args []string) error {
 	control := fs.String("control", "", "serve the control on this loopback address, such as 127.0.0.1:62911: set a device's state, remove it from its room and restore it, drop the connections, go silent, release a dead session (see the README)")
 	singleClient := fs.Bool("single-client", false, "serve one client at a time, as the Cube does: while a client is connected, or a dead session is held, another client's dial times out (on Linux; elsewhere its connection is closed at once)")
 	holdDead := fs.Duration("hold-dead", fakecube.DefaultHoldDead, "with -single-client, how long a session that ended while the fake was silent (the control's POST /silent) is held, as the Cube holds one whose end an outage lost; an R to -discovery frees it at once")
-	pair := fs.String("pair", "", "a device that joins pairing mode, <template rf>,<rf>,<serial>[,<delay>]: a copy of the greeting's device <template rf> in no room, joining <delay> (default 2s) after n:, again after a t: deleted it")
+	pair := fs.String("pair", "", "a device that joins pairing mode, <template rf>,<rf>,<serial>[,<delay>]: a copy of the greeting's device <template rf> in no room, joining <delay> (default 2s) after n:, again after a t: deleted it, and in a new connection's greeting once it joined")
 	fs.Usage = func() {
 		fmt.Fprint(os.Stderr, "usage: massimo fakecube -greeting <file> | -fixture <name> [-listen 127.0.0.1:62910]\n\nBehave like a Cube's LAN interface, using recorded data.\n\n")
 		fs.PrintDefaults()
