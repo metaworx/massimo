@@ -1039,7 +1039,8 @@ which the start's own line says after its start too:
 MASSIMO_HSTS is given on lines 3 and 4; the first wins"),
 a restart, a reboot or an update asked for and its outcome,
 an automatic update asked for at night ("update v… → v… asked for automatically")
-or postponed because the radio stayed busy until its window closed,
+or postponed because the radio stayed busy,
+or the next start refused the settings file, until its window closed,
 the backups, their prune and the log's, a restore started;
 and a Cube's new address or its leaving the LAN.
 A line someone asked for says by whom ("backup 12 taken (by hand), by Anna").
@@ -2145,9 +2146,14 @@ The server's sign, when it says an update is out, opens it at Software update.
   a window the server refuses, one shorter than 30 minutes,
   goes back, and the note says why.
   Under the window, "Next try: 25.11.2026, 03:00, the server's time",
-  where an update is due, on the server's clock whatever this browser's zone.
+  where an update is due, on the server's clock whatever this browser's zone;
+  while the server's next start refuses the settings file,
+  "The next try waits until the settings file is fixed:
+  the server's next start refuses it." in its place.
   At night the server installs the update itself inside the window,
-  once a night, while no command waits for the radio (`docs/api-v1.md`,
+  once a night, while no command waits for the radio
+  and the next start takes the settings file;
+  a file fixed inside the window lets it come that night (`docs/api-v1.md`,
   "GET /api/v1/update?refresh=1").
   Where updates cannot be started from here, the choice is off, with the reason.
   Under the version lines the automatic update's question, as under the header,

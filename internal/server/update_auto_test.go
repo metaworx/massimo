@@ -3,15 +3,16 @@
 
 package server
 
-// The automatic update at night (AP AutoUpdate v1.0, Block 3): the
-// window, the settings, the night's one try while the radio is quiet,
-// and what holds it back. The ticks are given their times; nothing
-// sleeps.
+// The automatic update at night (AP AutoUpdate v1.0, Block 3, and v1.1,
+// Block 6): the window, the settings, the night's one try while the
+// radio is quiet and the next start takes the settings file, and what
+// holds it back. The ticks are given their times; nothing sleeps.
 
 import (
 	"context"
 	"errors"
 	"log/slog"
+	"net/http/httptest"
 	"os"
 	"path/filepath"
 	"sync/atomic"
@@ -223,7 +224,7 @@ func TestNightInTheAnswer(t *testing.T) {
 // radio line waiting for the Cube, a write within its deadline, a
 // restore, pairing; once the radio is quiet it runs. Where the radio
 // stays busy until the window closes, the log says the update was
-// postponed, once.
+// postponed, once, the radio's reason its why.
 func TestNightWaitsForTheRadio(t *testing.T) {
 	t.Parallel()
 	reasons := map[string]func(rt *runtime) func(){
@@ -265,7 +266,8 @@ func TestNightWaitsForTheRadio(t *testing.T) {
 			b := newNightBox(t, testStore(t, ""), &fakeFinder{tag: "v0.1.0-alpha.10"}, nil)
 			rt := b.s.runtimes()[0]
 			quiet := busy(rt)
-			if why := b.s.radioBusy(); why == "" {
+			why := b.s.radioBusy()
+			if why == "" {
 				t.Fatal("the radio reads quiet")
 			}
 			if n := b.tick(t, nightAt(3, 0)); n != 0 {
@@ -274,9 +276,9 @@ func TestNightWaitsForTheRadio(t *testing.T) {
 			if n := b.tick(t, nightAt(4, 59)); n != 0 {
 				t.Fatalf("%d starts while the radio is busy", n)
 			}
-			postponed := testkit.Msg("automatic update postponed: the radio was busy until the window closed", "kind", "update_postponed", "version", "v0.1.0-alpha.10")
+			postponed := testkit.Msg(postponedLine, "kind", "update_postponed", "version", "v0.1.0-alpha.10", "why", why)
 			if n := b.tick(t, nightAt(5, 0)); n != 0 || len(b.logs.Since(0, postponed)) != 1 {
-				t.Fatalf("at the window's close: %d starts, %v", n, b.logs.Since(0, testkit.Msg("automatic update postponed: the radio was busy until the window closed")))
+				t.Fatalf("at the window's close: %d starts, %v", n, b.logs.Since(0, testkit.Msg(postponedLine)))
 			}
 			b.tick(t, nightAt(5, 1))
 			if got := b.logs.Since(0, postponed); len(got) != 1 {
@@ -295,6 +297,127 @@ func TestNightWaitsForTheRadio(t *testing.T) {
 			}
 		})
 	}
+}
+
+// postponedLine is the message of update_postponed's line, whatever held
+// the update back; its why says which.
+const postponedLine = "automatic update postponed: held back until the window closed"
+
+// While the next start refuses the settings file, the night waits as it
+// does for a busy radio (AP AutoUpdate v1.1, D15-A): the ticks inside
+// the window start nothing and use up no try, GET /api/v1/update says
+// the next try waits for the file, and the window's close writes
+// update_postponed once, the file its reason; the file fixed, the next
+// night installs, once. A refusal that ends inside the window lets the
+// try come at the next tick. With a busy radio too, the reason is the
+// file's, and the radio's once the file is fixed.
+func TestNightWaitsForTheSettingsFile(t *testing.T) {
+	t.Parallel()
+	refused := []Refusal{{Settings: []string{"MASSIMO_HSTS"}, Error: `-hsts or MASSIMO_HSTS "-1": want a number of days, 0 or more`}}
+	waits := func(why string) func(testkit.Record) bool {
+		return testkit.Msg("automatic update waits", "version", "v0.1.0-alpha.10", "why", why)
+	}
+	postponed := testkit.Msg(postponedLine, "kind", "update_postponed", "version", "v0.1.0-alpha.10", "why", settingsRefused, "window", "03:00-05:00")
+	t.Run("until the window closes", func(t *testing.T) {
+		t.Parallel()
+		st := testStore(t, "")
+		b := newNightBox(t, st, &fakeFinder{tag: "v0.1.0-alpha.10"}, nil)
+		ts := httptest.NewServer(b.s.Handler())
+		t.Cleanup(ts.Close)
+		auto := func() map[string]any {
+			t.Helper()
+			var out struct {
+				Auto map[string]any `json:"auto"`
+			}
+			if code := getJSON(t, ts, "secret", "/api/v1/update", &out); code != 200 {
+				t.Fatalf("GET: %d", code)
+			}
+			return out.Auto
+		}
+		b.s.SetRefused(refused)
+		for _, at := range []time.Time{nightAt(3, 0), nightAt(3, 30), nightAt(4, 59)} {
+			if n := b.tick(t, at); n != 0 {
+				t.Fatalf("%d starts at %v while the next start refuses the settings file", n, at)
+			}
+		}
+		if v, err := st.SettingString(t.Context(), autoTriedKey); err != nil || v != "" {
+			t.Fatalf("the night's try used up: %q %v", v, err)
+		}
+		if got := b.logs.Since(0, waits(settingsRefused)); len(got) != 1 {
+			t.Fatalf("the line of the wait %d times", len(got))
+		}
+		if a := auto(); a["waits"] != waitsSettings || a["next"] == nil {
+			t.Fatalf("GET while refused: %v", a)
+		}
+		if n := b.tick(t, nightAt(5, 0)); n != 0 || len(b.logs.Since(0, postponed)) != 1 {
+			t.Fatalf("at the window's close: %d starts, %v", n, b.logs.Since(0, testkit.Msg(postponedLine)))
+		}
+		b.tick(t, nightAt(5, 1))
+		if got := b.logs.Since(0, testkit.Msg(postponedLine)); len(got) != 1 {
+			t.Fatalf("postponed told %d times", len(got))
+		}
+		b.s.SetRefused(nil)
+		if a := auto(); a["waits"] != nil || a["next"] == nil {
+			t.Fatalf("GET once fixed: %v", a)
+		}
+		next := nightAt(3, 0).AddDate(0, 0, 1)
+		if n := b.tick(t, next); n != 1 {
+			t.Fatalf("%d starts the next night, the file fixed", n)
+		}
+		if n := b.tick(t, next.Add(time.Minute)); n != 1 {
+			t.Fatalf("%d starts after the night's one", n)
+		}
+	})
+	t.Run("fixed inside the window", func(t *testing.T) {
+		t.Parallel()
+		b := newNightBox(t, testStore(t, ""), &fakeFinder{tag: "v0.1.0-alpha.10"}, nil)
+		b.s.SetRefused(refused)
+		if n := b.tick(t, nightAt(3, 0)); n != 0 {
+			t.Fatalf("%d starts while refused", n)
+		}
+		b.s.SetRefused(nil)
+		if n := b.tick(t, nightAt(3, 1)); n != 1 {
+			t.Fatalf("%d starts at the tick after the fix", n)
+		}
+		if n := b.tick(t, nightAt(5, 0)); n != 1 || len(b.logs.Since(0, testkit.Msg(postponedLine))) != 0 {
+			t.Fatalf("at the window's close: %d starts, %v", n, b.logs.Since(0, testkit.Msg(postponedLine)))
+		}
+	})
+	t.Run("and a busy radio", func(t *testing.T) {
+		t.Parallel()
+		b := newNightBox(t, testStore(t, ""), &fakeFinder{tag: "v0.1.0-alpha.10"}, nil)
+		rt := b.s.runtimes()[0]
+		tk := rt.queue.Enqueue(engine.Command{Key: "night-test", Lines: []cube.Message{{Type: 's', Data: "AAAAAAAAAAA="}}})
+		withdraw := func() { rt.queue.Withdraw(tk, errors.New("the test is done with it")) }
+		t.Cleanup(withdraw) // where the test ends early; a second withdrawal finds nothing
+		radio := b.s.radioBusy()
+		if radio == "" {
+			t.Fatal("the radio reads quiet")
+		}
+		b.s.SetRefused(refused)
+		if n := b.tick(t, nightAt(3, 0)); n != 0 {
+			t.Fatalf("%d starts while refused and busy", n)
+		}
+		if n := b.tick(t, nightAt(5, 0)); n != 0 || len(b.logs.Since(0, postponed)) != 1 {
+			t.Fatalf("at the window's close: %d starts, %v", n, b.logs.Since(0, testkit.Msg(postponedLine)))
+		}
+		// the next night: the file fixed, the radio's wait has its line
+		next := nightAt(3, 0).AddDate(0, 0, 1)
+		b.tick(t, next)
+		b.s.SetRefused(nil)
+		for i := 1; i <= 2; i++ {
+			if n := b.tick(t, next.Add(time.Duration(i)*time.Minute)); n != 0 {
+				t.Fatalf("%d starts while the radio is busy", n)
+			}
+		}
+		if got := b.logs.Since(0, waits(radio)); len(got) != 1 {
+			t.Fatalf("the radio's wait told %d times", len(got))
+		}
+		withdraw()
+		if n := b.tick(t, next.Add(3*time.Minute)); n != 1 {
+			t.Fatalf("%d starts once the radio is quiet", n)
+		}
+	})
 }
 
 // A command without a radio line in the queue leaves the radio quiet.

@@ -276,6 +276,7 @@
   "update.window": "Tijdvenster, tijd van de server",
   "update.windowTo": "tot",
   "update.autoNext": "Volgende poging: {time}, tijd van de server.",
+  "update.autoWaitsSettings": "De volgende poging wacht tot het instellingenbestand is hersteld: de volgende start van de server weigert het.",
   "update.ask.text": "{version} is verschenen. Die wordt vannacht tussen {from} en {to} geïnstalleerd, tijd van de server, tenzij anders geantwoord:",
   "update.ask.now": "Nu installeren",
   "update.ask.tonight": "Vannacht",

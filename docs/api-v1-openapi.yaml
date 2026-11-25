@@ -5175,6 +5175,7 @@ components:
             mode: {type: string, enum: ["off", night], description: The setting update.auto}
             window: {type: string, description: "The setting update.auto_window, HH:MM-HH:MM in the server's time"}
             next: {type: string, format: date-time, description: "When the box will try: inside the window now, else at its next opening; absent while no update is due or the version is skipped"}
+            waits: {type: string, enum: [settings], description: "What the next try waits for, where next is set: settings while the server's next start refuses the settings file (GET /api/v1/restart's refused); absent otherwise, a busy radio included"}
             answer:
               type: object
               description: "The box's answer to the question (PUT /api/v1/update/answer), where it names the version offered or a newer one"

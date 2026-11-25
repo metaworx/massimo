@@ -277,6 +277,7 @@
   "update.window": "Fascia oraria, ora del server",
   "update.windowTo": "fino a",
   "update.autoNext": "Prossimo tentativo: {time}, ora del server.",
+  "update.autoWaitsSettings": "Il prossimo tentativo attende che il file delle impostazioni venga corretto: il prossimo avvio del server lo rifiuta.",
   "update.ask.text": "È disponibile {version}. Verrà installata stanotte tra le {from} e le {to}, ora del server, salvo risposta diversa:",
   "update.ask.now": "Installa ora",
   "update.ask.tonight": "Stanotte",

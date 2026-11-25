@@ -277,6 +277,7 @@
   "update.window": "Plage horaire, heure du serveur",
   "update.windowTo": "jusqu'à",
   "update.autoNext": "Prochain essai : {time}, heure du serveur.",
+  "update.autoWaitsSettings": "Le prochain essai attend que le fichier de réglages soit corrigé : le prochain démarrage du serveur le refuse.",
   "update.ask.text": "{version} est disponible. Elle sera installée cette nuit entre {from} et {to}, heure du serveur, sauf autre réponse :",
   "update.ask.now": "Installer maintenant",
   "update.ask.tonight": "Cette nuit",

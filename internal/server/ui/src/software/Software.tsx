@@ -149,8 +149,10 @@ function Channel({ u, setting }: { u: UpdateInfo; setting: Setting }) {
  * Auto is the automatic update's choice, for a holder of settings, who
  * alone may change it: Off or At night (update.auto), saved at once as
  * the channel is, its note saying what it does; at night its window
- * (Window), and when the box will try next. Both are off, with the
- * reason, where updates cannot be started from here (blocked).
+ * (Window), and under it when the box will try next, or, where the
+ * server says the try waits for the settings file (auto.waits), that it
+ * waits until the file is fixed. Both are off, with the reason, where
+ * updates cannot be started from here (blocked).
  */
 function Auto({ u, auto, win }: { u: UpdateInfo; auto: Setting; win: Setting }) {
   useLook();
@@ -163,13 +165,17 @@ function Auto({ u, auto, win }: { u: UpdateInfo; auto: Setting; win: Setting }) 
   let note = night ? t("update.autoNight", { from: from || "", to: to || "" }) : t("update.autoOff");
   if (off) note = t("update.autoBlocked", { reason: u.blocked || "" });
   if (said) note = said();
-  const next = night && !off && u.auto && u.auto.next ? fmtServerClock(u.auto.next) : "";
+  const a = u.auto;
+  let hint = "";
+  if (night && !off && a && a.next) {
+    hint = a.waits === "settings" ? t("update.autoWaitsSettings") : t("update.autoNext", { time: fmtServerClock(a.next) });
+  }
   const options: [string, string][] = [["off", t("update.auto.off")], ["night", t("update.auto.night")]];
   return (
     <>
       <Select label={t("update.auto")} id="update-auto" wide options={options} value={mode.value} disabled={off}
         hint={note} hintId="update-auto-note" onChange={(v) => mode.set(v, setAuto)} />
-      {night && <Window stored={stored} off={off} next={next} />}
+      {night && <Window stored={stored} off={off} hint={hint} />}
     </>
   );
 }
@@ -180,9 +186,9 @@ function Auto({ u, auto, win }: { u: UpdateInfo; auto: Setting; win: Setting }) 
  * changed, the window shown as chosen until the server's answer shows
  * what it keeps (a window it refuses, too short, goes back, and the
  * automatic update's note says why); an end left while the other's save
- * runs is saved after it. Under it when the box will try next.
+ * runs is saved after it. Under it hint, Auto's line of the next try.
  */
-function Window({ stored, off, next }: { stored: string; off: boolean; next: string }) {
+function Window({ stored, off, hint }: { stored: string; off: boolean; hint: string }) {
   const [from, to] = stored.split("-");
   const [edit, setEdit] = useState<{ from: string; to: string } | null>(null);
   // the edit as the fields hold it, and the save that runs, outside the drawing
@@ -212,9 +218,9 @@ function Window({ stored, off, next }: { stored: string; off: boolean; next: str
     });
   };
   return (
-    <Field label={t("update.window")} id="update-window-start" wide hint={next ? t("update.autoNext", { time: next }) : ""} hintId="update-auto-next">
+    <Field label={t("update.window")} id="update-window-start" wide hint={hint} hintId="update-auto-next">
       <span class="inline field-control">
-        <input id="update-window-start" type="time" value={shown.from} disabled={off} aria-describedby={next ? "update-auto-next" : undefined}
+        <input id="update-window-start" type="time" value={shown.from} disabled={off} aria-describedby={hint ? "update-auto-next" : undefined}
           onInput={(ev) => change({ ...shown, from: ev.currentTarget.value })} onBlur={leave} />
         <span class="muted">–</span>
         <input id="update-window-end" type="time" value={shown.to} disabled={off} aria-label={t("update.windowTo")}

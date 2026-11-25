@@ -275,6 +275,7 @@
   "update.window": "Zeitfenster, Zeit des Servers",
   "update.windowTo": "bis",
   "update.autoNext": "Nächster Versuch: {time}, Zeit des Servers.",
+  "update.autoWaitsSettings": "Der nächste Versuch wartet, bis die Einstellungsdatei korrigiert ist: Der nächste Start des Servers lehnt sie ab.",
   "update.ask.text": "{version} ist erschienen. Es wird heute Nacht zwischen {from} und {to} Uhr installiert, in der Zeit des Servers, außer ihr antwortet anders:",
   "update.ask.now": "Jetzt installieren",
   "update.ask.tonight": "Heute Nacht",

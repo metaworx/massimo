@@ -4060,8 +4060,9 @@ so that a note that stands stays a warning across a restart),
 and `auto` for one the server started itself at night, by nobody),
 `update_result` (the helper's outcome after the restart, once:
 `state`, `from`, `to`; a failure at `warn` with its `error`),
-`update_postponed` (the night's window closed while the radio held a due
-automatic update back: `version`, `why`, `window`),
+`update_postponed` (the night's window closed while the radio,
+or a settings file the next start refuses, held a due automatic update back:
+`version`, `why`, `window`),
 `backup` (`reason`, `id`, `bytes`; an automatic one that failed at `warn`),
 `backup_deleted` (`id`), `backups_pruned`, `log_pruned` and `audit_pruned` (`removed`),
 `log_rotated` (serve's `-log` file rotated: `why`, `size`, `format`, `sighup`
@@ -4496,14 +4497,26 @@ the proxy's clients' among them, no write waiting for its devices to show it,
 no restore and no pairing;
 a page open in a browser holds nothing back,
 nor do the Cube's own memory slots in use.
+It also waits while the server's next start refuses the settings file
+(`GET /api/v1/restart`, `refused`):
+the update restarts the server, which would not come back,
+the old version no more than the new.
+Neither wait uses up the night's try, and each tick, once a minute, asks again,
+so that a file fixed inside the window, which the server reads within seconds,
+lets the update come that same night.
+`waits` names what the next try waits for, where `next` is set:
+`settings` while the next start refuses the settings file;
+a busy radio sets none, since it passes within minutes.
 It checks afresh at the window's opening and every half hour inside it,
 so that a release built in the night is taken the same night,
 and tries once a night, a start that failed included, across a restart too.
 It tries nothing that `POST` would refuse:
 a version held back, an update running, nothing newer,
 a box that cannot start updates from here (`blocked`).
-A window that closes while the radio held a due update back
-writes `update_postponed` to the log; the next night tries again.
+A window that closes while the radio,
+or a settings file the next start refuses, held a due update back
+writes `update_postponed` to the log, its `why` the last reason;
+the next night tries again.
 `ask` says that the page asks a holder of `update`:
 Install now, Tonight or Skip this version,
 automatic updates at night, an update that `POST` would start,

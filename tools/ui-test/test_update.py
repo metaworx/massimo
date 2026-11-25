@@ -246,11 +246,12 @@ def test_last_updates(page):
     page.unroute("**/api/v1/update*")
 
 
-def auto_routes(page, blocked=None):
+def auto_routes(page, blocked=None, waits=None):
     """Stubs GET /api/v1/update with an update out, the automatic update
     as the settings stand and its next try, and the settings update.channel,
     update.auto and update.auto_window, off and 03:00-05:00 until a PUT
-    stores another; blocked is the reason updates cannot be started.
+    stores another; blocked is the reason updates cannot be started,
+    waits what the next try waits for at night (auto.waits).
     Returns the bodies of the settings PUTs."""
     state = {"update.auto": None, "update.auto_window": None}
     defaults = {"update.auto": "off", "update.auto_window": "03:00-05:00"}
@@ -270,6 +271,8 @@ def auto_routes(page, blocked=None):
         body["auto"] = {"mode": value("update.auto"), "window": value("update.auto_window")}
         if value("update.auto") == "night":
             body["auto"]["next"] = "2026-11-25T03:00:00+01:00"
+            if waits:
+                body["auto"]["waits"] = waits
         if blocked:
             body.update({"blocked": blocked, "can_update": False})
         route.fulfill(status=200, content_type="application/json", body=json.dumps(body))
@@ -323,6 +326,22 @@ def test_automatic_updates(page):
     start.blur()
     assert wait_until(page, "document.getElementById('update-window-start').value === '23:30'", 5), "the start kept"
     assert held_true(page, lambda: {"update.auto_window": "23:30-05:00"} in puts), "the window is stored as the field is left: %r" % puts
+    unroute_channel(page)
+
+
+def test_automatic_updates_wait_for_the_settings_file(page):
+    """While the server's next start refuses the settings file, the line
+    under the window says the next try waits until the file is fixed, in
+    place of when it comes, and the window's start is described by it."""
+    auto_routes(page, waits="settings")
+    show_view(page, "maint")
+    sel = page.locator("#update-auto")
+    sel.wait_for(state="visible")
+    sel.select_option("night")
+    waiting = page.evaluate("t('update.autoWaitsSettings')")
+    assert wait_until(page, "(document.getElementById('update-auto-next') || {}).textContent === %s" % json.dumps(waiting), 5), \
+        "the line says the try waits for the file: %r" % page.locator("#update-window-start").evaluate("e => e.closest('.field').textContent")
+    assert page.locator("#update-window-start").get_attribute("aria-describedby") == "update-auto-next", "the start is described by it"
     unroute_channel(page)
 
 

@@ -280,6 +280,7 @@
   "update.window": "Okno czasowe, czas serwera",
   "update.windowTo": "do",
   "update.autoNext": "Następna próba: {time}, czas serwera.",
+  "update.autoWaitsSettings": "Następna próba czeka, aż plik ustawień zostanie poprawiony: następne uruchomienie serwera go odrzuca.",
   "update.ask.text": "Dostępna jest wersja {version}. Zostanie zainstalowana dziś w nocy między {from} a {to}, czasu serwera, chyba że odpowiesz inaczej:",
   "update.ask.now": "Zainstaluj teraz",
   "update.ask.tonight": "Dziś w nocy",

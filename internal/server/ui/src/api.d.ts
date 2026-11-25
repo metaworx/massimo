@@ -1206,6 +1206,12 @@ export interface UpdateInfo {
      */
     next?: string;
     /**
+     * What the next try waits for, where next is set: settings while the
+     * server's next start refuses the settings file (GET /api/v1/restart's
+     * refused); absent otherwise, a busy radio included
+     */
+    waits?: "settings";
+    /**
      * The box's answer to the question (PUT /api/v1/update/answer), where it
      * names the version offered or a newer one
      */

@@ -9,12 +9,15 @@ package server
 // while no command waits for the radio on any Cube, once a night. It
 // checks afresh at the window's start and every half hour inside it
 // while it has tried nothing, so that a nightly built in the night is
-// taken the same night. A window that closes while the radio held a due
-// update back says so in the log (update_postponed). The try is
-// beginUpdate's, as POST /api/v1/update's, but nobody's and marked auto
-// in the history and the log; on Windows it starts the helper as POST
-// does. Nothing runs where POST would be refused: an open server, no
-// helper, a package manager without one, a version held back.
+// taken the same night. A due update waits, its try kept, while the
+// radio is busy or while the next start refuses the settings file (AP
+// AutoUpdate v1.1, D15-A): the update restarts the server, and neither
+// version would start; a window that closes while either held it back
+// says so in the log (update_postponed). The try is beginUpdate's, as
+// POST /api/v1/update's, but nobody's and marked auto in the history and
+// the log; on Windows it starts the helper as POST does. Nothing runs
+// where POST would be refused: an open server, no helper, a package
+// manager without one, a version held back.
 
 import (
 	"context"
@@ -35,6 +38,14 @@ const nightCheckEvery = 30 * time.Minute
 
 // minWindowMinutes is the shortest window of an automatic update.
 const minWindowMinutes = 30
+
+// settingsRefused is why a due update waits while the next start refuses
+// the settings file, as update_postponed's why says it.
+const settingsRefused = "the next start refuses the settings file"
+
+// waitsSettings is autoView.Waits while the next try waits for the
+// settings file.
+const waitsSettings = "settings"
 
 // autoTriedKey keeps when the server last tried an automatic update, so
 // that a night has one try across the restart an update makes, and
@@ -168,7 +179,8 @@ func (s *Server) radioBusy() string {
 type autoState struct {
 	window  time.Time // the start of the window it is for
 	checked time.Time // the last fresh check inside that window
-	// busy is why the radio held a due update back the last time, and
+	// busy is why a due update was held back the last time, the radio's
+	// reason (radioBusy) or the settings file's (settingsRefused), and
 	// version the update; told is set once update_postponed said so.
 	busy, version string
 	told          bool
@@ -177,8 +189,10 @@ type autoState struct {
 // nightTick runs the automatic update at a tick of the update loop
 // (updateTick), after its own check: a fresh check at the window's
 // start and every nightCheckEvery inside it, then the night's one try
-// where an update is due and the radio is quiet. A window that closed
-// while the radio held a due update back writes update_postponed.
+// where an update is due, the next start takes the settings file and the
+// radio is quiet. Each tick asks both again, so that the try comes within
+// a tick of a fix while the window is open. A window that closed while
+// either held a due update back writes update_postponed.
 func (s *Server) nightTick(ctx context.Context, now time.Time, checked bool) {
 	st := s.opts.Store
 	if st == nil || st.ReadOnly() {
@@ -211,9 +225,14 @@ func (s *Server) nightTick(ctx context.Context, now time.Time, checked bool) {
 	if !v.CanUpdate || s.skippedVersion(ctx, v.Latest) {
 		return
 	}
-	if why := s.radioBusy(); why != "" {
-		if a.busy == "" {
-			s.log.Info("automatic update waits for the radio", "version", v.Latest, "why", why)
+	// the settings file before the radio: only a fix of the file ends it
+	why := settingsRefused
+	if len(s.refusedAtNextStart()) == 0 {
+		why = s.radioBusy()
+	}
+	if why != "" {
+		if why != a.busy {
+			s.log.Info("automatic update waits", "version", v.Latest, "why", why)
 		}
 		a.busy, a.version = why, v.Latest
 		return
@@ -228,8 +247,9 @@ func (s *Server) nightTick(ctx context.Context, now time.Time, checked bool) {
 	}
 }
 
-// postponed writes update_postponed, once, where the radio held the
-// window's due update back and it closed without a try.
+// postponed writes update_postponed, once, where the radio or the
+// settings file the next start refuses held the window's due update back
+// and it closed without a try; its why is the last reason (autoState).
 func (s *Server) postponed(window string) {
 	a := &s.auto
 	if a.busy == "" || a.told {
@@ -246,6 +266,11 @@ type autoView struct {
 	// Next is when the box will try: inside the window now, else at its
 	// next opening; absent while no update is due.
 	Next *time.Time `json:"next,omitempty"`
+	// Waits names what the next try waits for, where Next is set and
+	// only a change on the box ends the wait: settings while the next
+	// start refuses the settings file (refusedAtNextStart). A busy radio
+	// sets none: it passes within minutes, and only the loop knows it.
+	Waits string `json:"waits,omitempty"`
 	// Answer is the answer to the question where it names the version
 	// offered or a newer one (update_answer.go); Ask says the page asks a
 	// holder of update: at night, an update due, no answer yet.
@@ -282,5 +307,8 @@ func (s *Server) autoFor(ctx context.Context, v updateView) *autoView {
 		next = time.Date(y, m, d+1, n.from.Hour(), n.from.Minute(), 0, 0, n.from.Location())
 	}
 	out.Next = &next
+	if len(s.refusedAtNextStart()) > 0 {
+		out.Waits = waitsSettings
+	}
 	return out
 }
