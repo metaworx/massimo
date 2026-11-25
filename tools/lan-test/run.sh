@@ -44,10 +44,13 @@
 #  13. that a reboot through the holder's API frees the Cube, which
 #      answers it, and the holder connects again.
 # The hosts are taken down whatever happened, their logs printed first
-# when a check failed. Needs Docker with Compose v2; exit 1 on a failed
+# when a check failed, and the work directory that they mount,
+# massimo-lan-test.XXXXXX under TMPDIR with the binary and the
+# greetings, goes with them; KEEP=1 keeps it and prints its path (AP
+# CleanRuns, D4-A). Needs Docker with Compose v2; exit 1 on a failed
 # check, 2 without Docker.
 set -euo pipefail
-readonly VERSION=1.6.0
+readonly VERSION=1.7.0
 readonly SERIAL=KEQ0000100
 readonly CUBE_MAC=00:1a:22:00:00:01
 readonly BUILD=v0.0.0-lan-test
@@ -75,7 +78,7 @@ if ! docker compose version >/dev/null 2>&1; then
 	exit 2
 fi
 
-work="$(mktemp -d)"
+work="$(mktemp -d "${TMPDIR:-/tmp}/massimo-lan-test.XXXXXX")"
 export LAN_TEST_WORK="$work"
 export COMPOSE_PROJECT_NAME="massimo-lan-$$"
 compose() { docker compose -f "$here/compose.yaml" "$@"; }
@@ -89,7 +92,11 @@ finish() {
 		done
 	fi
 	compose down --volumes --remove-orphans --timeout 2 >/dev/null 2>&1 || true
-	rm -rf -- "${work:?}"
+	if [ "${KEEP:-}" = 1 ]; then
+		echo "lan-test: KEEP=1, the work directory is kept: $work" >&2
+	else
+		rm -rf -- "${work:?}"
+	fi
 	exit "$rc"
 }
 trap finish EXIT
