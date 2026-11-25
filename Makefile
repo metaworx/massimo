@@ -50,7 +50,7 @@ export SOURCE_DATE_EPOCH ?= $(shell git log -1 --format=%ct 2>/dev/null || date 
 # The container the package test runs in (make deb-test).
 DEB_IMAGE ?= debian:trixie-slim
 
-.PHONY: all ui ui-check api-types credits build test vet race test-armv6 fuzz store-bench ui-test ui-screenshots ui-brand lan-test app-emulator-test actionlint windows linux linux-arm64 linux-armv7 linux-armv6 darwin darwin-amd64 darwin-arm64 cross deb-unit packages debver version deb-test deb-systemd-test apt-test site build-release release release-files clean release-alpha release-beta release-rc release-stable
+.PHONY: all ui ui-check api-types credits build test vet race test-armv6 fuzz store-bench ui-test ui-screenshots ui-brand lan-test app-emulator-test actionlint windows linux linux-arm64 linux-armv7 linux-armv6 darwin darwin-amd64 darwin-arm64 cross cross-check deb-unit packages debver version deb-test deb-systemd-test apt-test site build-release release release-files clean release-alpha release-beta release-rc release-stable
 
 # Development happens on main; a release is a tag on main, whose label is
 # the release's flavour (internal/update): -alpha.N is alpha, -beta.N beta,
@@ -338,34 +338,47 @@ app-emulator-test: ui
 actionlint:
 	go tool -modfile=tools/actionlint/go.mod actionlint
 
-# Cross builds; each lands in $(OUT)/.
+# Cross builds; each lands in $(OUT)/, or nowhere for cross-check:
+# $(call crossout,<file>) is $(OUT)/<file>, or /dev/null where
+# CROSS_DISCARD is set, and go build then compiles and links the binary
+# and writes nothing (AP CleanRuns, D2-A).
+CROSS_DISCARD ?=
+crossout = $(if $(CROSS_DISCARD),/dev/null,$(OUT)/$(1))
+
 windows: ui
-	GOOS=windows GOARCH=amd64 $(CROSS) -o $(OUT)/massimo-windows-amd64.exe $(PKG)
+	GOOS=windows GOARCH=amd64 $(CROSS) -o $(call crossout,massimo-windows-amd64.exe) $(PKG)
 
 linux: ui
-	GOOS=linux GOARCH=amd64 $(CROSS) -o $(OUT)/massimo-linux-amd64 $(PKG)
+	GOOS=linux GOARCH=amd64 $(CROSS) -o $(call crossout,massimo-linux-amd64) $(PKG)
 
 linux-arm64: ui
-	GOOS=linux GOARCH=arm64 $(CROSS) -o $(OUT)/massimo-linux-arm64 $(PKG)
+	GOOS=linux GOARCH=arm64 $(CROSS) -o $(call crossout,massimo-linux-arm64) $(PKG)
 
 # Raspberry Pi 2/3/4 with a 32-bit OS (LoxBerry on Raspberry Pi OS 32-bit).
 linux-armv7: ui
-	GOOS=linux GOARCH=arm GOARM=7 $(CROSS) -o $(OUT)/massimo-linux-armv7 $(PKG)
+	GOOS=linux GOARCH=arm GOARM=7 $(CROSS) -o $(call crossout,massimo-linux-armv7) $(PKG)
 
 # Raspberry Pi 1 (A, B, B+) and Zero / Zero W: ARMv6 with a hardware FPU.
 linux-armv6: ui
-	GOOS=linux GOARCH=arm GOARM=6 $(CROSS) -o $(OUT)/massimo-linux-armv6 $(PKG)
+	GOOS=linux GOARCH=arm GOARM=6 $(CROSS) -o $(call crossout,massimo-linux-armv6) $(PKG)
 
 # macOS on Intel and on Apple silicon.
 darwin-amd64: ui
-	GOOS=darwin GOARCH=amd64 $(CROSS) -o $(OUT)/massimo-darwin-amd64 $(PKG)
+	GOOS=darwin GOARCH=amd64 $(CROSS) -o $(call crossout,massimo-darwin-amd64) $(PKG)
 
 darwin-arm64: ui
-	GOOS=darwin GOARCH=arm64 $(CROSS) -o $(OUT)/massimo-darwin-arm64 $(PKG)
+	GOOS=darwin GOARCH=arm64 $(CROSS) -o $(call crossout,massimo-darwin-arm64) $(PKG)
 
 darwin: darwin-amd64 darwin-arm64
 
 cross: linux linux-arm64 linux-armv7 linux-armv6 darwin windows
+
+# Every platform of cross compiled and linked, and no binary written: the
+# test gate's check that every platform builds (GUIDELINES/project/
+# _CONTRACT.md), which leaves no $(OUT)/ behind; CI's job Vet and test
+# runs it (AP CleanRuns, D2-A).
+cross-check:
+	$(MAKE) --no-print-directory cross CROSS_DISCARD=1
 
 # The store's benchmarks (internal/store/events_bench_test.go) as test
 # binaries for the Raspberry Pis, the Pi 5's arm64 and the Pi 1's armv6,
