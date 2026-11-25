@@ -19,7 +19,9 @@ test has sent a command, the fake answering every command with 49 of its
 server reconnects for the budget, two minutes after the last write, and
 the greeting says all 50 free, at a moment no test chooses."""
 import pytest
-from helpers import scroll_settled, wait_until
+from conftest import clear_preferences
+from helpers import frames, scroll_settled, wait_until
+from test_first_owner import start_page
 from test_send import first_tile, open_tab
 
 
@@ -140,6 +142,44 @@ def test_scroll_to_the_bottom_stays_there(page, case):
     y, bottom = page.evaluate("[Math.round(window.scrollY), document.documentElement.scrollHeight - innerHeight]")
     assert abs(y - bottom) <= 1, f"the page stays at its bottom ({y}, its bottom {bottom})"
     page.evaluate("() => { document.getElementById('scroll-spacer').remove(); window.scrollTo(0, 0); }")
+
+
+# The page's position and its end, the farthest it scrolls down.
+AT_END = "[Math.round(window.scrollY), document.documentElement.scrollHeight - innerHeight]"
+
+
+def test_a_phone_page_at_its_end_stays_there_through_a_poll(new_context, case, watch, guard):
+    """A page on a touch screen, as a phone's at 390 px (is_mobile, the
+    page's width the device's), the last room's devices open and the page
+    scrolled to its end; then a poll, whose header render fits the
+    header's row again at the next frame (ui/src/header/fold.ts): the page
+    stays at its end. The fit measures the row at its whole width, wider
+    than a phone's page, and for that layout the page became as wide: the
+    browser zoomed out to show it, its window taller, and cut the scroll
+    of a page nearer its end than that, which then moved up at every poll
+    (AP RoomsPage, Block 1). The end may come nearer meanwhile, a notice
+    of a radiogram pending that goes making the header lower, and the
+    page then stays at its new end. Fails on the page before: 960 → 521
+    at 390 px."""
+    clear_preferences()
+    page = start_page(new_context, guard, watch, None, has_touch=True, is_mobile=case.width == 390)
+    page.wait_for_selector("#rooms .room[data-id]", timeout=10000)
+    assert wait_until(page, "state.eventsOpen", 10), "the stream is open"
+    tile = page.locator("#rooms .room[data-id]").last
+    tile.locator(".tile-info").click()
+    tile.locator(".devices .device").first.wait_for(state="visible")
+    quiet_header(page)
+    page.evaluate("window.scrollTo(0, document.documentElement.scrollHeight)")
+    assert scroll_settled(page), "the page comes to rest"
+    frames(page)
+    y, end = page.evaluate(AT_END)
+    assert abs(y - end) <= 1, f"the page at its end ({y}, its end {end})"
+    page.evaluate("poll(false)")
+    frames(page)
+    assert scroll_settled(page), "the page comes to rest after the poll"
+    after, now = page.evaluate(AT_END)
+    assert abs(after - now) <= 1 and (abs(after - y) <= 1 or now < end), \
+        f"the page stays at its end through a poll ({y} → {after}, its end {end} → {now})"
 
 
 # The page scrolled at once to y, and the top in the page of every node in
