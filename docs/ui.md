@@ -637,12 +637,26 @@ Every room has a tile:
 
 - **The setpoint row** under the room's name holds IS, SET and the chevrons:
   IS at the tile's left edge, the chevrons at its right edge, SET between them.
-  Each temperature has its icon with its label under it, then its value;
+  Each temperature has its icon with its short label under it, then its value:
+  IS, IST, ACT., ATT., IS or RZ. and SET, SOLL, CONS., IMP., DOEL or ZAD.
+  in English, German, French, Italian, Dutch and Polish;
   the values are as large as the tile's width allows,
   smaller in a narrow tile, such as one of three columns,
-  so that the row fits its tile in every language;
-  where a label is too long for the space, it is cut, its icon kept.
+  so that the row fits its tile in every language, the labels whole;
+  a label too long for the space would be cut, its icon kept.
   Nothing of the row leaves the tile or lies over another part of it.
+- **The full term** of IS and of SET shows in a tip under its icon
+  at a tap or a click on the icon with its label, or Enter or Space there,
+  "Measured temperature" for IS and "Set temperature" for SET.
+  The icon with its label is a button, shown at every width,
+  also where the chevrons wait for a hover;
+  a screen reader names it by its label and then the full term,
+  "IS measured temperature".
+  The same again or Escape closes it, the focus staying on the button,
+  and Escape closes the tip alone: an open holiday form or question stays.
+  A tap outside the tip closes it too, the focus going where the tap went.
+  One tip is open at a time, and one with the page's menus:
+  opening a tip closes an open menu, and a menu that opens closes the tip.
 - **IS** is the room's temperature, its virtual wall thermostat's
   (docs/api-v1.md, "The virtual wall thermostat"), which every client shows:
   the wall thermostat's, else the median of the radiator thermostats',
@@ -2837,6 +2851,7 @@ a value's age it takes from `received` of `rooms.js`, as the rooms do.
 | `Dropdown` | `menu.tsx` | a menu that drops down (`dropdown`), with `arrows` its arrow keys (`menuArrows`) and with `focusCurrent` the focus on its current item when it opens (among `arrows`' items, else its list's buttons that are on); a click on any button of its list closes it, as `dropdown()` of `components.js` does for every menu of the page, but on one marked `data-keep-open` (`MenuItem`'s `keepOpen`) | `id`, `cls`, `summaryId`, `summaryCls`, `label` (without it the summary is named by its text), `title` (where the tooltip is not the label), `summary`, `listCls`, `arrows` (a selector of its items), `focusCurrent`, `busy` (the summary turning while a request sent from its list runs), `onClick`, `onOpen` (told each time it opens), `onClose` (told each time it closes), the items as children |
 | `MenuItem` | `menu.tsx` | a menu's button, its icon, label, the icons after it and a grey second line | `icon`, `blank`, `label`, `icons`, `sub` (the second line, a text or elements, there whenever given, empty too), `subCls` (its class), `cls`, `value` (its `data-value`), `current`, `disabled`, `busy`, `keepOpen` (a click on it leaves the menu open, for an item whose result shows in the list), `onClick`; `current` "page" for the entry of the page shown (☰'s), `id`, `title`, `aria` (its name for a screen reader), `labelId` and `after` (a mark at its end) where the page names them |
 | `Picker` | `menu.tsx` | a menu that chooses one item, its summary the chosen one | `id`, `cls`, `summaryId`, `summaryCls`, `entries` (an item `{ value, label, sub, icon, icons, disabled }`, `{ group }` or `{ separator: true }`), `value`, `onPick(value)`, `shown` (`{ icon, label, title, aria }`) |
+| `Tip` | `tip.tsx` | a button with a short label that shows a text in a small box under itself while open, its first letter a capital (the label's full term: a room tile's IS and SET), named by its label and then the text (`aria-labelledby`, the box's text in the name while hidden too: "IS measured temperature"); one tip open at a time, and one with the menus: the click that opens it closes an open menu, as every click outside one does (`dropdown`), and a menu that opens, by a click, the keyboard or the page's code, closes it, as does a click outside it; Escape closes it and nothing else, seen first and stopped there (`stopPropagation`, marked as the menus' Escape is), the focus staying on the button; the box kept in the window; the button says whether it is open (`aria-expanded`) and names the box as what it controls; no menu, it has no items and takes no focus | `text` (the box's text), `label` (the short label, after the children in the button), `labelCls` (its class), `cls` (the button's classes beside `tip-btn`), the button's content before the label as children (an icon) |
 | `actionRunner`, `fader` | `action.ts` | a request, a reload, and its outcome (`Outcome`, `{ text, ok }`) in the region's message line (`showResult`) or in a part's state that a `ResultLine` draws, a success fading where a fade is given; `fader` is that fade alone, for a result set by other means | `where()`, `set(res)`, `fade` (ms), `reload()`, `bound` (an answer after a sign-out reloads and says nothing, `session.ts`); gives `run(fn, ok, fail)`, `say(text, ok)`; `set`, `ms` |
 | `Icon` | `icon.tsx` | a symbol of the page (`iconEl`) | `symbol`, `cls`, `mark` (the symbol is a mark, which blinks where the style makes it), `useId` (its `use` element's id, where the page names it) |
 | `Sign` | `icon.tsx` | a kind of `SIGNS` in a state, its mark blinking | `kind`, `state` ("", ok, warn, bad, open), `cls`, `blink` (the mark's key), `label` (named for a screen reader, else hidden) |

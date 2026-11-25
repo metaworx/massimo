@@ -20,7 +20,10 @@ read the rooms again, a burst of them twice at most. While the room's
 thermostats show different setpoints, a line under the setpoint row
 names each with its setpoint and mark, not while a write of the tile or
 the House tile waits for them to show it, a write of theirs is pending
-or a window of the room is open, and goes once they agree.
+or a window of the room is open, and goes once they agree. The
+setpoint row fits its tile in every language (AP RoomsPage v1.0,
+Block 3), its short labels whole, and a tap on IS or SET shows the full
+term in a tip (Block 4).
 
 The states come from state events applied in the page (updateDevice);
 every write is held at its route and answered with a stub, so nothing
@@ -476,6 +479,45 @@ def test_marks_and_off(page, case):
         tile.locator(".room-name-btn").click()
 
 
+# The short labels of IS and SET (AP RoomsPage v1.0, Block 4, D2-A) and
+# their full terms, the text of its tip (D3-A); the tip's button is
+# named by both, the label first (WCAG 2.5.3, Label in Name).
+SHORT = {"en": ("IS", "SET"), "de": ("IST", "SOLL")}
+FULL = {"en": ("measured temperature", "set temperature"), "de": ("gemessene Temperatur", "Solltemperatur")}
+
+# A tip of the setpoint row by its place, [tile, i], 0 for IS and 1 for
+# SET: whether its text is shown and its first letter a capital, the
+# text, its button's label and state, whether the button names the text
+# as what it controls and has the focus, the text's box inside the
+# window.
+TIP = """([s, i]) => {
+  const tip = document.querySelectorAll(s + " .setpoint-row .tip")[i];
+  const b = tip.querySelector(":scope > button"), text = tip.querySelector(":scope > .tip-text");
+  const r = text.getBoundingClientRect();
+  return {
+    shown: getComputedStyle(text).display !== "none" && r.width > 0, text: text.textContent,
+    capital: getComputedStyle(text, "::first-letter").textTransform === "uppercase",
+    label: b.querySelector(".temp-label")?.textContent, expanded: b.getAttribute("aria-expanded"),
+    controls: !!text.id && b.getAttribute("aria-controls") === text.id, focus: document.activeElement === b,
+    inside: r.left >= 0 && r.right <= document.documentElement.clientWidth,
+  };
+}"""
+
+
+def ax_name(page, selector):
+    """The accessible name Chromium gives the element selector finds,
+    as a screen reader is told it (its accessibility tree, through CDP)."""
+    cdp = page.context.new_cdp_session(page)
+    try:
+        cdp.send("Accessibility.enable")
+        root = cdp.send("DOM.getDocument", {"depth": 0})["root"]["nodeId"]
+        node = cdp.send("DOM.querySelector", {"nodeId": root, "selector": selector})["nodeId"]
+        nodes = cdp.send("Accessibility.getPartialAXTree", {"nodeId": node, "fetchRelatives": False})["nodes"]
+        return nodes[0].get("name", {}).get("value")
+    finally:
+        cdp.detach()
+
+
 # The widths the setpoint row is checked at, each with its tiles'
 # columns: phones of 346 and 390 px, one column; 610 px, two columns of
 # 281 px, nearly the narrowest tile there is (280 px, .tiles); 956 px,
@@ -484,10 +526,11 @@ FIT_WIDTHS = {346: 1, 390: 1, 610: 2, 956: 3}
 
 # The setpoint row of a tile measured: the tile's inner edges, the row's
 # content edges, each temperature's tag (its icon and label, whether
-# shown) and value (its text's box, its font size and the width its box
-# reserves, the min-width of IS's number and of SET's box with the mark's
-# room), SET's value box, the mark, the chevrons, the label each tag
-# should show, the page's width and the tiles' columns.
+# shown, the label's whole width and the width it is shown in) and value
+# (its text's box, its font size and the width its box reserves, the
+# min-width of IS's number and of SET's box with the mark's room), SET's
+# value box, the mark, the chevrons, the label each tag should show, the
+# page's width and the tiles' columns.
 FIT = """(s) => {
   const tile = document.querySelector(s), row = tile.querySelector(".setpoint-row");
   const rect = (e) => { const r = e.getBoundingClientRect(); return { l: r.left, r: r.right, t: r.top, b: r.bottom, w: r.width }; };
@@ -500,7 +543,8 @@ FIT = """(s) => {
     content: { l: rr.left + parseFloat(rs.paddingLeft), r: rr.right - parseFloat(rs.paddingRight) },
     tags: [...row.querySelectorAll(".temp-tag")].map((g) => {
       const icon = g.querySelector("svg"), label = g.querySelector(".temp-label");
-      return { icon: rect(icon), label: rect(label), text: label.textContent, shown: [g, icon, label].every(shown) };
+      return { icon: rect(icon), label: rect(label), text: label.textContent, shown: [g, icon, label].every(shown),
+        whole: label.scrollWidth, room: label.clientWidth };
     }),
     vals: [row.querySelector(".temp-is"), row.querySelector(".set-val")].map((box) => {
       const v = box.matches(".temp-big") ? box : box.querySelector(".temp-big");
@@ -515,7 +559,8 @@ FIT = """(s) => {
 
 def fit_problems(m, width):
     """What is wrong with a setpoint row measured by FIT: a tag hidden or
-    with another label, anything outside the tile, chevrons away from its
+    with another label, a label cut (AP RoomsPage v1.0, Block 4: the
+    short labels fit), anything outside the tile, chevrons away from its
     right edge, the parts of the row overlapping in their order (IS's tag
     and value, SET's tag and value with its mark, the chevrons), IS's text
     wider than the width its number reserves, SET's text with its mark
@@ -527,6 +572,8 @@ def fit_problems(m, width):
     for name, tag, val, want in (("IS", is_tag, is_val, m["want"][0]), ("SET", set_tag, set_val, m["want"][1])):
         if tag["text"] != want:
             out.append(f"{name}'s label {tag['text']!r}, not {want!r}")
+        if tag["whole"] > tag["room"]:
+            out.append(f"{name}'s label {tag['text']!r} cut: {tag['whole']} px in {tag['room']}")
         if tag["shown"]:
             order.append((f"{name}'s tag", min(tag["icon"]["l"], tag["label"]["l"]), max(tag["icon"]["r"], tag["label"]["r"])))
         else:
@@ -562,16 +609,17 @@ def fit_problems(m, width):
 def test_the_setpoint_row_fits_in_every_language(page, case):
     """At 346 and 390 px, one column of tiles, at 610 px, two, and at
     956 px, three (AP RoomsPage v1.0, Block 3), in each of the six
-    languages, whose labels of IS and SET differ in length (Italian's
-    the longest), in light and dark, at the widest value and at OFF, with
-    a mark and without: everything of the setpoint row inside its tile,
-    the chevrons at its right edge; the icons and labels of IS and SET
-    shown, a long label cut rather than hidden; the temperatures, their
-    tags and the chevrons side by side without overlapping; IS's value
-    within the width its number reserves, SET's with its mark within the
-    width its box reserves; the mark a superscript right after the
-    value's text; the mark moving neither the value nor the chevrons; no
-    horizontal scroll."""
+    languages, whose labels of IS and SET differ in length, in light and
+    dark, at the widest value and at OFF, with a mark and without:
+    everything of the setpoint row inside its tile, the chevrons at its
+    right edge; the icons and labels of IS and SET shown, each label,
+    the short ones of Block 4, whole, none cut with an ellipsis; the
+    temperatures, their tags and the chevrons side by side without
+    overlapping; IS's value within the width its number reserves, SET's
+    with its mark within the width its box reserves; the mark a
+    superscript right after the value's text; the mark moving neither
+    the value nor the chevrons; no horizontal scroll; the tip of IS and
+    of SET with its full term inside the window."""
     room = page.evaluate(ROOM, [None, False])
     rid, ths = room["id"], room["devices"]
     sel = '.room[data-id="%s"]' % rid
@@ -599,10 +647,199 @@ def test_the_setpoint_row_fits_in_every_language(page, case):
                     for sp, xs in places.items():
                         if len(xs) != 1:
                             problems.append(f"{width} px, {lang}, {theme}, {sp}: the mark moves the chevrons or the value: {xs}")
+                # each tip (Block 4) with its full term, inside the window
+                for i, key in enumerate(("room.measured", "room.setTemp")):
+                    page.locator(sel + " .setpoint-row .tip > button").nth(i).click()
+                    tip = page.evaluate(TIP, [sel, i])
+                    if not (tip["shown"] and tip["inside"] and tip["text"] == page.evaluate("(k) => t(k)", key)):
+                        problems.append(f"{width} px, {lang}: the tip of {key} not shown with its term inside the window: {tip}")
+                    page.keyboard.press("Escape")
         assert not problems, f"{len(problems)} problems, the first ones:\n" + "\n".join(problems[:40])
     finally:
         page.set_viewport_size(size)
         page.evaluate("async () => { await changeLanguage('en'); applyLanguage(); delete document.documentElement.dataset.theme; }")
+
+
+def test_a_tap_on_is_or_set_shows_its_full_term(page, case):
+    """IS and SET (AP RoomsPage v1.0, Block 4): each icon with its short
+    label is a button, which a click opens a tip under, the full term in
+    the page's language, its first letter a capital, inside the window;
+    the button's name, as Chromium tells a screen reader, is its short
+    label and then the full term, the tip closed and open; Escape closes
+    the tip, the focus staying on its button; so does a click outside
+    it; one tip is open at a time, and
+    one with the page's menus: opening a tip closes an open menu, and a
+    menu opened by a click, by the keyboard or by the page's code closes
+    the tip; Tab reaches the buttons, Enter and Space open and close the
+    tip, the focus staying on the button."""
+    room = page.evaluate(ROOM, [None, False])
+    sel = '.room[data-id="%s"]' % room["id"]
+    tile = page.locator(sel)
+    lang = case.lang
+    buttons = tile.locator(".setpoint-row .tip > button")
+    assert buttons.count() == 2, "IS and SET are each a tip's button"
+    more = tile.locator("details.more-menu")
+    dots = tile.locator(".tile-head > details.menu")
+
+    def tip(i):
+        return page.evaluate(TIP, [sel, i])
+
+    def name(i, what):
+        n = ax_name(page, sel + " .setpoint-row > .temp-block:nth-child(%d) .tip > button" % (i + 1))
+        short, full = SHORT[lang][i], FULL[lang][i]
+        # open, the box's first letter is drawn a capital, which Chromium's name takes over
+        assert n and n.startswith(short) and full.lower() in n.lower(), \
+            f"{short}: {what}, its name holds its short label first and its full term: {n!r}"
+
+    def closed(i, what):
+        t = tip(i)
+        assert not t["shown"] and t["expanded"] == "false", f"{SHORT[lang][i]}: {what}: {t}"
+        return t
+
+    def opened(i, what):
+        t = tip(i)
+        assert t["shown"] and t["expanded"] == "true" and t["text"] == FULL[lang][i] and t["capital"] and t["inside"], \
+            f"{SHORT[lang][i]}: {what}: {t}"
+        return t
+
+    try:
+        for i in (0, 1):
+            t = closed(i, "closed at first")
+            assert t["label"] == SHORT[lang][i] and t["controls"], \
+                f"{SHORT[lang][i]}: its short label shown, its tip what it controls: {t}"
+            name(i, "closed")
+            buttons.nth(i).click()
+            opened(i, "a click shows the full term")
+            name(i, "open")
+            page.keyboard.press("Escape")
+            t = closed(i, "Escape closes it")
+            assert t["focus"], f"{SHORT[lang][i]}: the focus stays on its button after Escape"
+
+        buttons.nth(0).click()
+        opened(0, "open")
+        buttons.nth(1).click()
+        opened(1, "the second opens")
+        closed(0, "the second closes the first")
+        tile.locator(".temp-is").click()
+        closed(1, "a click outside closes it")
+
+        buttons.nth(0).click()
+        opened(0, "open before More")
+        tile.locator(".more-sum").click()
+        assert more.get_attribute("open") is not None, "More opens"
+        closed(0, "More opened by a click closes the tip")
+        buttons.nth(0).click()
+        opened(0, "the tip opens over More")
+        assert more.get_attribute("open") is None, "the tip opening closes More"
+        dots.locator("summary").focus()
+        page.keyboard.press("Enter")
+        assert dots.get_attribute("open") is not None, "⋯ opens by the keyboard"
+        closed(0, "⋯ opened by the keyboard closes the tip")
+        page.keyboard.press("Escape")
+        buttons.nth(1).click()
+        opened(1, "open before the page's code opens More")
+        more.evaluate("(d) => { d.open = true; }")
+        # the details' toggle event, which closes the tip, comes a task later
+        assert wait_until(page, "document.querySelectorAll(%r)[1].getAttribute('aria-expanded') === 'false'" % (sel + " .setpoint-row .tip > button"), 5), \
+            f"More opened by the page's code closes the tip: {tip(1)}"
+        closed(1, "More opened by the page's code")
+        page.keyboard.press("Escape")
+
+        dots.locator("summary").focus()
+        page.keyboard.press("Tab")
+        assert tip(0)["focus"], "Tab reaches IS's button after ⋯"
+        page.keyboard.press("Enter")
+        t = opened(0, "Enter opens it")
+        assert t["focus"], "the focus stays on IS's button"
+        page.keyboard.press("Enter")
+        t = closed(0, "Enter again closes it")
+        assert t["focus"], "the focus stays on IS's button"
+        page.keyboard.press("Tab")
+        assert tip(1)["focus"], "Tab goes on to SET's button"
+        page.keyboard.press("Space")
+        t = opened(1, "Space opens it")
+        assert t["focus"], "the focus stays on SET's button"
+        page.keyboard.press("Space")
+        t = closed(1, "Space again closes it")
+        assert t["focus"], "the focus stays on SET's button"
+    finally:
+        page.keyboard.press("Escape")
+
+
+def test_escape_closes_the_tip_alone(page, case):
+    """An Escape while a tip is open (AP RoomsPage v1.0, Block 4) closes
+    the tip and nothing else: the room's holiday form, open with a
+    temperature typed into it, stays open with the temperature."""
+    room = page.evaluate(ROOM, [None, False])
+    sel = '.room[data-id="%s"]' % room["id"]
+    tile = page.locator(sel)
+    form = sel + " .vacation-panel"
+    try:
+        tile.locator(".more-sum").click()
+        tile.locator(".menu-holiday").click()
+        temp = tile.locator(".vacation-temp")
+        temp.click()
+        temp.press("Control+a")
+        page.keyboard.type("23.5")
+        tile.locator(".setpoint-row .tip > button").first.click()
+        assert page.evaluate(TIP, [sel, 0])["shown"], "the tip opens beside the holiday form"
+        page.keyboard.press("Escape")
+        t = page.evaluate(TIP, [sel, 0])
+        assert not t["shown"] and t["focus"], f"Escape closes the tip, the focus on its button: {t}"
+        assert page.evaluate("(s) => !document.querySelector(s).classList.contains('hidden')", form), "the holiday form stays open"
+        assert temp.input_value() == "23.5", f"with the temperature typed: {temp.input_value()!r}"
+        page.keyboard.press("Escape")
+        assert page.evaluate("(s) => document.querySelector(s).classList.contains('hidden')", form), "the next Escape closes the form"
+    finally:
+        page.keyboard.press("Escape")
+
+
+# The controls of the modes' row that an open tip of the tile's setpoint
+# row overlaps (AP RoomsPage v1.0, Block 4), each with whether the tip is
+# what lies at the middle of the overlap (elementFromPoint), and the
+# setpoint row's z-index.
+OVER = """(s) => {
+  const tile = document.querySelector(s), row = tile.querySelector(".setpoint-row");
+  const box = row.querySelector(".tip-text:not(.hidden)"), b = box.getBoundingClientRect();
+  const overlaps = [];
+  for (const c of tile.querySelectorAll(".mode-row button, .mode-row summary")) {
+    const r = c.getBoundingClientRect();
+    const l = Math.max(b.left, r.left) + 1, rt = Math.min(b.right, r.right) - 1, tp = Math.max(b.top, r.top) + 1, bt = Math.min(b.bottom, r.bottom) - 1;
+    if (r.width === 0 || l >= rt || tp >= bt) continue;
+    const e = document.elementFromPoint((l + rt) / 2, (tp + bt) / 2);
+    overlaps.push({ what: c.className, more: c.matches(".more-sum"), top: !!e && box.contains(e), at: e && (e.className.baseVal ?? e.className) });
+  }
+  return { z: getComputedStyle(row).zIndex, overlaps };
+}"""
+
+
+def test_an_open_tip_lies_over_the_modes_row(page, case):
+    """The setpoint row is a layer of its own only while a tip in it is
+    open (AP RoomsPage v1.0, Block 4), so that a popup of a row never
+    stays under a later tile for good; an open tip whose term is long
+    enough to reach over the modes' row under it, its More's summary
+    among them, is what lies wherever it overlaps them."""
+    room = page.evaluate(ROOM, [None, False])
+    sel = '.room[data-id="%s"]' % room["id"]
+    tile = page.locator(sel)
+    assert tile.locator(".setpoint-row").evaluate("(r) => getComputedStyle(r).zIndex") == "auto", \
+        "the setpoint row is no layer while no tip is open"
+    # SET's term five times over, the tile drawn again by a state event
+    # of its thermostat: its box wraps over the modes' row
+    page.evaluate("(k) => { window.__term = I18N[i18n.lang][k]; I18N[i18n.lang][k] = Array(5).fill(t(k)).join(' '); }", "room.setTemp")
+    page.evaluate(SET, [room["id"], {room["devices"][0]["rf"]: {"setpoint": 20}}])
+    try:
+        tile.locator(".setpoint-row .tip > button").nth(1).click()
+        tile.locator(".mode-row").scroll_into_view_if_needed()
+        m = page.evaluate(OVER, sel)
+        assert m["overlaps"] and any(o["more"] for o in m["overlaps"]), f"the tip overlaps the modes' row, More among them: {m}"
+        assert all(o["top"] for o in m["overlaps"]), f"the tip lies over the modes' row: {m}"
+        page.keyboard.press("Escape")
+        assert tile.locator(".setpoint-row").evaluate("(r) => getComputedStyle(r).zIndex") == "auto", "no layer once it is closed"
+    finally:
+        page.keyboard.press("Escape")
+        page.evaluate("(k) => { I18N[i18n.lang][k] = window.__term; delete window.__term; }", "room.setTemp")
+        page.evaluate(SET, [room["id"], {room["devices"][0]["rf"]: {"setpoint": 20}}])
 
 
 def test_more_shows_off_from_the_entry(page, case):
