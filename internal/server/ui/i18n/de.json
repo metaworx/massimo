@@ -322,6 +322,7 @@
   "restart.pending": "Gilt ab dem nächsten Neustart: {names}.",
   "restart.refused": "Der nächste Start lehnt Folgendes ab; nach einem Neustart, einem Update oder einem Neustart des Computers startet der Server erst wieder, wenn die Einstellungsdatei korrigiert ist:",
   "restart.refusal": "{names}: {error}",
+  "restart.confirmRefused": "Der nächste Start des Servers lehnt die Einstellungsdatei aber ab, wie sie ist: Der Server startet erst wieder, wenn die Datei korrigiert ist.",
   "restart.unavailable": "Von hier aus ist kein Neustart möglich: {reason}.",
   "restart.cannotAsk": "Der Server kann nicht nach dem Neustart gefragt werden: {error}",
   "reboot.button": "Neu starten",
@@ -404,6 +405,7 @@
   "maint.cannotAsk": "Der Server lässt sich nicht fragen: {error}",
   "maint.badge.pending.one": "{n} Änderung wartet auf einen Neustart",
   "maint.badge.pending.other": "{n} Änderungen warten auf einen Neustart",
+  "maint.badge.refused": "nächster Start schlägt fehl",
 
   "help.button": "Hilfe: {label}",
   "help.title": "Was bewirkt das?",

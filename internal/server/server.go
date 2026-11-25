@@ -1403,12 +1403,13 @@ func (s *Server) routes() {
 		}
 		writeJSON(w, http.StatusOK, h)
 	})
-	// api registers a route with the capability it needs (auth.go): the
+	// api registers a route with the capability it needs (auth.go), or
+	// with two of which either will do ("restart or update", capOr): the
 	// wrapper authenticates, checks the capability, and maps the handler's
 	// error to a status.
 	api := func(pattern, capability string, h func(http.ResponseWriter, *http.Request) error) {
-		if capability != capNone && capability != capAny && !validCapability(capability) {
-			panic(fmt.Sprintf("route %s: unknown capability %q", pattern, capability))
+		if msg := routeCapabilityError(pattern, capability); msg != "" {
+			panic(msg)
 		}
 		action, audited := actions[pattern]
 		if strings.HasPrefix(pattern, "GET ") {
@@ -1569,7 +1570,7 @@ func (s *Server) routes() {
 	api("GET /api/v1/update", "read", s.getUpdate)
 	api("POST /api/v1/update", "update", s.startUpdate)
 	api("PUT /api/v1/update/answer", "update", s.putUpdateAnswer)
-	api("GET /api/v1/restart", "restart", s.getRestart)
+	api("GET /api/v1/restart", "restart or update", s.getRestart)
 	api("POST /api/v1/restart", "restart", s.startRestart)
 	api("POST /api/v1/reload", "restart", s.reloadSettings)
 	api("GET /api/v1/reboot", "reboot", s.getReboot)

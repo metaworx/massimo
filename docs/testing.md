@@ -75,6 +75,27 @@ CI's jobs run the same targets, and so the same scales.
 A wait that holds returns at once, so a larger scale costs time only where a
 test would fail anyway.
 
+**A `-race` run by hand** takes what `make race` gives its tests:
+scale 2, and `RACEGCFLAGS` ("The race detector").
+A plain `go test -race` gives each wait half that time,
+and a store-heavy test needs about twice its time with `checkptr` on in SQLite,
+so a wait that holds under `make race` can time out there:
+that timeout is the run's, not a flaky test's.
+Where a document names `go test -race ./...`, as the shared Go baseline does,
+it means `make race` here.
+One package or one test runs through the target:
+
+```
+make race RACEPKGS=./internal/server TESTFLAGS='-run TestLogAfter'
+```
+
+or, after `make ui`, by hand with both:
+
+```
+MASSIMO_ENV_FILE=/dev/null MASSIMO_TEST_SCALE=2 go test -race -count=1 \
+	'-gcflags=modernc.org/...=-d=checkptr=0' ./internal/server
+```
+
 What does not take the scale:
 
 - **A window after which the test passes** because nothing came,

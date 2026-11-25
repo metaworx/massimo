@@ -323,6 +323,7 @@
   "restart.pending": "Geldt vanaf de volgende herstart: {names}.",
   "restart.refused": "De volgende start weigert wat volgt; de server komt na een herstart, een update of een herstart van de computer pas terug als het instellingenbestand is hersteld:",
   "restart.refusal": "{names}: {error}",
+  "restart.confirmRefused": "Maar de volgende start van de server weigert het instellingenbestand zoals het nu is: hij komt pas terug als het bestand is hersteld.",
   "restart.unavailable": "Opnieuw starten vanaf hier is niet mogelijk: {reason}.",
   "restart.cannotAsk": "Kan de server niet naar het opnieuw starten vragen: {error}",
   "reboot.button": "Herstarten",
@@ -405,6 +406,7 @@
   "maint.cannotAsk": "De server is niet te bevragen: {error}",
   "maint.badge.pending.one": "{n} wijziging wacht op een herstart",
   "maint.badge.pending.other": "{n} wijzigingen wachten op een herstart",
+  "maint.badge.refused": "volgende start mislukt",
 
   "help.button": "help: {label}",
   "help.title": "Wat doet dit?",

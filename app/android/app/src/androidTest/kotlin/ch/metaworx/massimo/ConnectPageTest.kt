@@ -7,6 +7,7 @@ import android.os.SystemClock
 import android.webkit.WebView
 import androidx.test.core.app.ActivityScenario
 import androidx.test.ext.junit.runners.AndroidJUnit4
+import org.junit.After
 import org.junit.Assert.assertEquals
 import org.junit.Assert.fail
 import org.junit.Test
@@ -22,6 +23,10 @@ import java.util.concurrent.TimeUnit
  */
 @RunWith(AndroidJUnit4::class)
 class ConnectPageTest {
+    /** removeTasks takes the app's tasks out of recents once a case has closed its activity, so that the orchestrator's clear kills nothing of the next test ([Rig.removeTasks]). */
+    @After
+    fun removeTasks() = Rig.removeTasks()
+
     private fun eval(sc: ActivityScenario<MainActivity>, js: String): String {
         var out = ""
         val done = CountDownLatch(1)

@@ -874,11 +874,17 @@ export interface RestoreProgress {
 }
 
 export interface RestartInfo {
-  /** Whether this caller's POST would restart the server now */
+  /**
+   * Whether this caller's POST would restart the server now; false for a caller
+   * without restart
+   */
   available: boolean;
   /** Who starts the server again; absent when nobody would */
   by?: "systemd" | "launchd" | "windows" | "exit";
-  /** Why the restart is not available */
+  /**
+   * Why the restart is not available, 'capability "restart" required' for a
+   * caller without restart
+   */
   blocked?: string;
   /**
    * The settings file's variables that changed since the start and apply only

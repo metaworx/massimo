@@ -279,6 +279,11 @@ func TestSameConfigAtDebug(t *testing.T) {
 	}
 	raw[0x12] = 44 // comfort 22.0
 	fc.SetConfig(cube.Message{Type: 'C', Data: rf + "," + base64.StdEncoding.EncodeToString(raw)})
+	// A re-read's C line reaches the snapshot twice, as Send's reply and
+	// as Reread's own apply: the wait above took the first one's line.
+	// The pump writes the second's after it, at debug, and a mark taken
+	// before then would take that line for the change's.
+	pumpSync(t, s)
 	m = logMark(t, ts)
 	rt.writer().Reread(ctx, 0x0a010d)
 	ev, next := logAfter(t, m, "the change", func(e event) bool { return e.Kind == "config" && e.Device == "0a010d" })

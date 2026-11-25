@@ -120,7 +120,8 @@ func TestDeclaredReadsTheSuite(t *testing.T) {
 }
 
 // TestReadResults: each testcase of every TEST-*.xml under the
-// directory, at any depth, with its outcome; other files are not read.
+// directory, at any depth, with its outcome and a failure's first lines;
+// other files are not read.
 func TestReadResults(t *testing.T) {
 	dir := t.TempDir()
 	put(t, dir, "fossDebug/TEST-massimo-test(AVD) - 14-_app-.xml", junit(
@@ -129,7 +130,11 @@ func TestReadResults(t *testing.T) {
     <skipped />
   </testcase>`,
 		`  <testcase name="only" classname="ch.example.BTest" time="2.0">
-    <failure>java.lang.AssertionError: the prompt stayed</failure>
+    <failure>
+java.lang.AssertionError: the prompt stayed
+
+	at ch.example.BTest.only(BTest.kt:4)
+</failure>
   </testcase>`,
 	))
 	put(t, dir, "fossDebug/test-result.pb", "not xml")
@@ -137,7 +142,11 @@ func TestReadResults(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	want := []result{{"ch.example.ATest#first", passed}, {"ch.example.ATest#second", skipped}, {"ch.example.BTest#only", failed}}
+	want := []result{
+		{"ch.example.ATest#first", passed, ""},
+		{"ch.example.ATest#second", skipped, ""},
+		{"ch.example.BTest#only", failed, "java.lang.AssertionError: the prompt stayed\nat ch.example.BTest.only(BTest.kt:4)"},
+	}
 	if len(got) != len(want) {
 		t.Fatalf("read %v, want %v", got, want)
 	}
@@ -173,9 +182,11 @@ func TestNarrow(t *testing.T) {
 	}
 }
 
-// TestRun: the line and each test's, and the exit code: 0 for a run of
-// every declared test passing; with -strict 1 for a test skipped, one not
-// run, none run or no results, and 0 without -strict all the same.
+// TestRun: the line and each test's, a failure's first lines under it,
+// Gradle's record of an instrumentation that ended early named as the
+// run's, and the exit code: 0 for a run of every declared test passing;
+// with -strict 1 for a test skipped, failed or not run, none run or no
+// results, and 0 without -strict all the same.
 func TestRun(t *testing.T) {
 	src := t.TempDir()
 	sources(t, src)
@@ -183,20 +194,52 @@ func TestRun(t *testing.T) {
 		return `  <testcase name="` + name + `" classname="` + class + `" time="1.0" />`
 	}
 	all := []string{pass("first", "ch.example.ATest"), pass("second", "ch.example.ATest"), pass("only", "ch.example.BTest")}
+	// seven lines, of which the report prints the first six
+	failure := `<testcase name="only" classname="ch.example.BTest"><failure>java.lang.AssertionError: the prompt stayed
+	at line 1
+	at line 2
+	at line 3
+	at line 4
+	at line 5
+	at line 6</failure></testcase>`
+	// the orchestrator's record of an instrumentation killed before its
+	// test, its seventh line past what the report prints
+	crash := `<testcase name="testRunFailed" classname="android-test" time="0.000"><failure>Test run failed to complete. Expected 3 tests, received 2.
+
+Time: 12.5
+There was 1 failure:
+1) only(ch.example.BTest)
+Test instrumentation process crashed. Check ch.example.BTest#only.txt for details
+
+FAILURES!!!
+Tests found: 3, Tests run: 2,  Failures: 1</failure></testcase>`
 	for _, tc := range []struct {
 		name   string
 		cases  []string
 		class  string
 		strict int
 		says   []string
+		never  []string
 	}{
-		{"every test", all, "", 0, []string{"app-emulator: the suite: 3 tests, 0 skipped, 0 failed; 0 of the 3 the sources declare not run", "passed   ATest.first", "passed   BTest.only"}},
-		{"one class", all[2:], "ch.example.BTest", 0, []string{"1 tests, 0 skipped, 0 failed; 0 of the 1 the sources declare not run"}},
-		{"a skip", []string{all[0], `<testcase name="second" classname="ch.example.ATest"><skipped/></testcase>`, all[2]}, "", 1, []string{"3 tests, 1 skipped", "skipped  ATest.second", "not every test the sources declare ran and passed"}},
-		{"one left out", all[:2], "", 1, []string{"2 tests, 0 skipped, 0 failed; 1 of the 3", "not run  BTest.only"}},
-		{"one more", append(append([]string{}, all...), pass("new", "ch.example.CTest")), "", 0, []string{"4 tests", "CTest.new (not among the tests the sources declare)"}},
-		{"none", nil, "", 1, []string{"0 tests", "not run  ATest.first"}},
-		{"no results", []string{"-"}, "", 1, []string{"no TEST-*.xml"}},
+		{"every test", all, "", 0, []string{"app-emulator: the suite: 3 tests, 0 skipped, 0 failed; 0 of the 3 the sources declare not run", "passed   ATest.first", "passed   BTest.only"}, nil},
+		{"one class", all[2:], "ch.example.BTest", 0, []string{"1 tests, 0 skipped, 0 failed; 0 of the 1 the sources declare not run"}, nil},
+		{"a skip", []string{all[0], `<testcase name="second" classname="ch.example.ATest"><skipped/></testcase>`, all[2]}, "", 1, []string{"3 tests, 1 skipped", "skipped  ATest.second", "not every test the sources declare ran and passed"}, nil},
+		{"one left out", all[:2], "", 1, []string{"2 tests, 0 skipped, 0 failed; 1 of the 3", "not run  BTest.only"}, nil},
+		{"one more", append(append([]string{}, all...), pass("new", "ch.example.CTest")), "", 0, []string{"4 tests", "CTest.new (not among the tests the sources declare)"}, nil},
+		{"a failure", []string{all[0], all[1], failure}, "", 1, []string{
+			"3 tests, 0 skipped, 1 failed; 0 of the 3",
+			"app-emulator:   failed   BTest.only\n",
+			"app-emulator:            java.lang.AssertionError: the prompt stayed\n",
+			"app-emulator:            at line 5\n",
+		}, []string{"at line 6"}},
+		{"a crash", []string{all[0], all[1], crash}, "", 1, []string{
+			"3 tests, 0 skipped, 1 failed; 1 of the 3 the sources declare not run",
+			"failed   android-test.testRunFailed (the instrumentation ended before the run did: a crash or a kill, the device's lines below)\n",
+			"app-emulator:            Test instrumentation process crashed. Check ch.example.BTest#only.txt for details\n",
+			"not run  BTest.only",
+		}, []string{"testRunFailed (not among", "Tests found"}},
+		{"none", nil, "", 1, []string{"0 tests", "not run  ATest.first"}, nil},
+		{"no results", []string{"-"}, "", 1, []string{"no TEST-*.xml"}, nil},
 	} {
 		results := t.TempDir()
 		if len(tc.cases) != 1 || tc.cases[0] != "-" {
@@ -220,6 +263,11 @@ func TestRun(t *testing.T) {
 			for _, s := range tc.says {
 				if !strings.Contains(out.String(), s) {
 					t.Errorf("%s, strict %v: the output does not say %q:\n%s", tc.name, strict, s, out.String())
+				}
+			}
+			for _, s := range tc.never {
+				if strings.Contains(out.String(), s) {
+					t.Errorf("%s, strict %v: the output says %q:\n%s", tc.name, strict, s, out.String())
 				}
 			}
 		}

@@ -20,7 +20,7 @@ from helpers import frames, hold, mark, owner_page, replaced, safe_route, show_v
 from test_admin_updates import across
 from test_unsaved import expire
 from test_reboot import RebootStub, iso, reboot_text
-from test_restart import AVAILABLE, BLOCKED, stub_restart
+from test_restart import AVAILABLE, BLOCKED, UNPARSED, settings_read, stub_restart
 from test_system_info import PENDING, UNREAD
 from test_update import channel_routes, unroute_channel
 
@@ -830,30 +830,78 @@ def test_a_settings_read_warning_reads_what_the_next_start_refuses(page, case):
     the restart's row, which says the file's error alone; one at info then
     says the start refuses nothing, and the row no longer says it, with
     nothing read (AP ReloadChecks, D8-B)."""
-    refused = {"error": "/etc/massimo/env:3: expected KEY=VALUE"}
+    refused = UNPARSED
     answer = {"body": AVAILABLE}
     safe_route(page, "**/api/v1/restart", lambda route: route.fulfill(status=200, content_type="application/json", body=answer["body"]))
-
-    def settings_read(level, summary):
-        """A settings_read event at level, as the stream brings it."""
-        page.evaluate("""([level, s]) => state.events.dispatchEvent(new MessageEvent('settings_read', { data: JSON.stringify({
-          kind: 'settings_read', source: 'system', time: new Date().toISOString(), summary: s,
-          ...(level ? { level, error: 'the next start refuses: ' + level } : {}) }) }))""", [level, summary])
     try:
         show_view(page, "maint")
         page.locator("#restart-btn").wait_for(state="visible")
         answer["body"] = json.dumps(dict(json.loads(AVAILABLE), pending=["MASSIMO_HSTS"], refused=[refused]))
         reads = counted(page, "**/api/v1/restart")
-        settings_read("warn", {"why": "the settings file changed", "changed": [], "at_next_start": ["MASSIMO_HSTS"]})
+        settings_read(page, "warn", {"why": "the settings file changed", "changed": [], "at_next_start": ["MASSIMO_HSTS"]})
         assert wait_until(page, "document.querySelector('#restart-refused .restart-refusal')?.textContent === %s" % json.dumps(refused["error"]), 5), \
             "the warning read what the next start refuses: the file's error, without a setting"
         assert len(reads) == 1, f"one read of the restart's row ({reads})"
         answer["body"] = json.dumps(dict(json.loads(AVAILABLE), pending=["MASSIMO_HSTS"]))
-        settings_read("", {"why": "the settings file changed", "changed": ["MASSIMO_HSTS"], "at_next_start": ["MASSIMO_HSTS"]})
+        settings_read(page, "", {"why": "the settings file changed", "changed": ["MASSIMO_HSTS"], "at_next_start": ["MASSIMO_HSTS"]})
         assert wait_until(page, "document.getElementById('restart-refused').classList.contains('hidden')", 5), "gone at info"
         answered(page)
         assert len(reads) == 1, f"nothing read at info ({reads})"
     finally:
+        page.unroute("**/api/v1/restart")
+
+
+def test_a_refusal_while_both_questions_are_open(page, case):
+    """The restart's question and the reboot's open, the focus on the
+    reboot's Cancel: a settings_read event at warn, whose read of the
+    restart's row finds the next start refuses the file, adds the
+    sentence to both texts in place, no box nor Cancel drawn anew, and
+    the focus stays; one at info, the focus moved to the restart's
+    Cancel, takes the sentence away from both the same way (AP
+    StartConfiguration, D10-C)."""
+    answer = {"body": AVAILABLE}
+    safe_route(page, "**/api/v1/restart", lambda route: route.fulfill(status=200, content_type="application/json", body=answer["body"]))
+    stub = RebootStub(page, {"available": True, "by": "systemd"})
+    sels = [".restart .confirm-box", ".restart .confirm-no", ".reboot .confirm-box", ".reboot .confirm-no"]
+
+    def texts():
+        return page.evaluate("[...document.querySelectorAll('.restart .confirm-text, .reboot .confirm-text')].map((e) => e.textContent)")
+
+    def focused(sel):
+        return page.evaluate("(s) => document.activeElement === document.querySelector(s)", sel)
+    try:
+        show_view(page, "maint")
+        page.locator("#restart-btn").wait_for(state="visible")
+        page.locator("#reboot-btn").wait_for(state="visible")
+        plain = page.evaluate("[t('restart.confirm'), tn('reboot.confirm', 60)]")
+        sentence = page.evaluate("t('restart.confirmRefused')")
+        page.locator("#restart-btn").click()
+        page.locator("#reboot-btn").click()
+        assert texts() == plain, f"both questions open, without the sentence ({texts()})"
+        assert focused(".reboot .confirm-no"), "the focus on the reboot's Cancel"
+        mark(page, sels)
+
+        answer["body"] = json.dumps(dict(json.loads(AVAILABLE), refused=[UNPARSED]))
+        settings_read(page, "warn", {"why": "the settings file changed", "changed": [], "at_next_start": []})
+        want = [q + " " + sentence for q in plain]
+        assert wait_until(page, f"JSON.stringify([...document.querySelectorAll('.restart .confirm-text, .reboot .confirm-text')].map((e) => e.textContent)) === JSON.stringify({json.dumps(want)})", 5), \
+            f"the sentence in both questions ({texts()})"
+        assert replaced(page, sels) == [], "the boxes and their Cancels kept"
+        assert focused(".reboot .confirm-no"), "the focus still on the reboot's Cancel"
+
+        page.locator(".restart .confirm-no").focus()
+        answer["body"] = AVAILABLE
+        settings_read(page, "", {"why": "the settings file changed", "changed": [], "at_next_start": []})
+        assert wait_until(page, f"JSON.stringify([...document.querySelectorAll('.restart .confirm-text, .reboot .confirm-text')].map((e) => e.textContent)) === JSON.stringify({json.dumps(plain)})", 5), \
+            f"the sentence gone from both ({texts()})"
+        assert replaced(page, sels) == [], "the boxes and their Cancels kept again"
+        assert focused(".restart .confirm-no"), "the focus still on the restart's Cancel"
+        page.locator(".restart .confirm-no").click()
+        page.locator(".reboot .confirm-no").click()
+        assert page.locator(".restart .confirm-box, .reboot .confirm-box").count() == 0, "both taken back"
+        assert not stub.requests, "nothing asked for"
+    finally:
+        stub.close()
         page.unroute("**/api/v1/restart")
 
 

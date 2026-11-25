@@ -7,23 +7,40 @@ and what it shows, nothing while the write is pending; its form in the
 configuration's devices tab says which values; the log's line names the
 write, the room and each device with what it shows.
 
-The confirmations come from state events applied in the page
-(updateDevice) and from events sent on the stream, since the fake Cube
-takes every write.
+The confirmations come from the rooms read as the test tells it (the
+fixture reads), which the page takes by a read of its own, and from
+events sent on the stream, since the fake Cube takes every write. Not
+from the page's state alone: every read of the rooms takes that back,
+the page's own and those the server's events start, and so does a
+state or config event of the device, which brings it as the server has
+it; the server sends them by itself after an earlier test's write, at
+its next poll of the Cube, and in the burst of the reconnect it makes
+two minutes after a write to read its Cube's budget.
 """
+import re
+
 from helpers import isolate_log, scroll_width, show_view, wait_log_live, wait_until
 
-# Gives the first reported thermostat of a room the confirmation cstate
-# (pending or unconfirmed, None for none) of fields, auto at 20 °C.
-CONFIRMATION = """([cstate, fields]) => {
+ROOMS = "**/rooms?devices=all"
+
+# The first reported thermostat of a room that is not virtual: its
+# room's id and name, its name and its radio address.
+THERMOSTAT = """() => {
   const r = state.rooms.find((r) => r.devices.some((d) => isThermostat(d) && d.reported && !d.virtual));
   if (!r) return null;
-  const d = JSON.parse(JSON.stringify(r.devices.find((d) => isThermostat(d) && d.reported && !d.virtual)));
-  Object.assign(d.state, { mode: "auto", setpoint: 20 });
-  if (cstate) d.confirmation = { state: cstate, since: new Date().toISOString(), fields };
-  else delete d.confirmation;
-  updateDevice(d);
+  const d = r.devices.find((d) => isThermostat(d) && d.reported && !d.virtual);
   return { id: r.id, room: r.name, name: deviceName(d), rf: d.rf_address };
+}"""
+
+# After each state or config event of the thermostat rf, which brings it
+# as the server has it, the page reads its rooms again: the reads answer
+# with what the test told them.
+READ_AFTER_ITS_EVENTS = """(rf) => {
+  for (const kind of ["state", "config"]) {
+    state.events.addEventListener(kind, (ev) => {
+      if (JSON.parse(ev.data).device === rf) loadRooms().catch(() => {});
+    });
+  }
 }"""
 
 SAYS = {
@@ -63,18 +80,46 @@ def head_icons(room):
     return room.locator(".tile-head .problems-sum svg use").evaluate_all("(us) => us.map((u) => u.getAttribute('href'))")
 
 
-def test_unconfirmed_marks(page, case):
+def told_thermostat(rf, told):
+    """A change of the rooms read (reads.change): the thermostat rf in
+    auto at 20 °C, with told["confirmation"], its write's, where it is
+    set, and none where it is not."""
+    def change(rooms):
+        for r in rooms or []:
+            for d in r.get("devices") or []:
+                if d.get("rf_address") == rf:
+                    d["state"] = dict(d.get("state") or {}, mode="auto", setpoint=20)
+                    d.pop("confirmation", None)
+                    if told.get("confirmation"):
+                        d["confirmation"] = told["confirmation"]
+        return rooms
+    return change
+
+
+def test_unconfirmed_marks(page, case, reads):
     """Pending shows nothing; not confirmed is an amber icon in the tile's
     head, its entry's flag titled with what the device does not show and
     what it shows; the device's row has the same flag; the form of its
     configuration names a configuration's values, a long day once."""
     says = SAYS[case.lang]
-    dev = page.evaluate(CONFIRMATION, ["pending", ["mode", "setpoint"]])
+    dev = page.evaluate(THERMOSTAT)
     assert dev, "a reported thermostat"
     room = room_of(page, dev["room"])
+    since = page.evaluate("new Date().toISOString()")
+    told = {}
+    reads.change(ROOMS, told_thermostat(dev["rf"], told))
+    page.evaluate(READ_AFTER_ITS_EVENTS, dev["rf"])
+
+    def confirmation(cstate, fields):
+        # the server's answer from now on, shown by a read of the page's own
+        told["confirmation"] = {"state": cstate, "since": since, "fields": fields} if cstate else None
+        page.evaluate("loadRooms()")
+
+    confirmation("pending", ["mode", "setpoint"])
+    room.locator(".setpoint-big", has_text=re.compile(r"^20[.,]0")).wait_for()  # the read drawn, at the 20 °C told
     assert "#icon-unconfirmed" not in head_icons(room), "nothing while pending"
 
-    page.evaluate(CONFIRMATION, ["unconfirmed", ["mode", "setpoint"]])
+    confirmation("unconfirmed", ["mode", "setpoint"])
     assert wait_until(page, "document.querySelector('.room .tile-head use[href=\"#icon-unconfirmed\"]') !== null", 5), "the tile's icon"
     icon = room.locator(".tile-head .problems-sum svg", has=page.locator("use[href='#icon-unconfirmed']")).first
     assert "tone-warn" in (icon.get_attribute("class") or ""), "amber"
@@ -93,16 +138,18 @@ def test_unconfirmed_marks(page, case):
     page.keyboard.press("Escape")
     room.locator(".room-name-btn").click()
 
-    page.evaluate(CONFIRMATION, ["unconfirmed", ["eco_temp", "program.monday", "program.monday.2"]])
+    confirmation("unconfirmed", ["eco_temp", "program.monday", "program.monday.2"])
     room.locator(".tile-cog").click()
     page.wait_for_selector(".room .config-body", timeout=5000)
     room.locator(".config-tabs [data-tab=devices]").click()
     form = room.locator(".cfg-device", has=page.locator(".device-name", has_text=dev["name"])).first
-    assert form.locator(".device-unconfirmed").inner_text().strip() == says["form"], form.locator(".device-unconfirmed").inner_text()
+    notice = form.locator(".device-unconfirmed")
+    notice.filter(has_text=says["form"]).wait_for()
+    assert notice.inner_text().strip() == says["form"], notice.inner_text()
     assert scroll_width(page) <= case.width, "no horizontal scroll in the devices tab"
     room.locator(".config-tabs .close").click()
 
-    page.evaluate(CONFIRMATION, [None, []])
+    confirmation(None, [])
     assert wait_until(page, "document.querySelector('.room .tile-head use[href=\"#icon-unconfirmed\"]') === null", 5), "gone once shown"
 
 
@@ -110,7 +157,7 @@ def test_unconfirmed_log_lines(page, case, reads):
     """The stream's unconfirmed line names the write, the room, and each
     device by name with what it shows; a late one the seconds it took."""
     says = SAYS[case.lang]
-    dev = page.evaluate(CONFIRMATION, [None, []])
+    dev = page.evaluate(THERMOSTAT)
     assert dev, "a reported thermostat"
     show_view(page, "log")
     isolate_log(page, reads)
@@ -137,7 +184,7 @@ def test_resend_log_lines(page, case, reads):
     more, still not confirmed with each device and what it shows, not
     sent and why, and confirmed by every thermostat."""
     says = SAYS[case.lang]
-    dev = page.evaluate(CONFIRMATION, [None, []])
+    dev = page.evaluate(THERMOSTAT)
     assert dev, "a reported thermostat"
     show_view(page, "log")
     isolate_log(page, reads)

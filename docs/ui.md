@@ -1169,8 +1169,9 @@ or the person marks it seen (`docs/api-v1.md`, "GET /api/v1/log/alerts"):
 a lost connection until the next one,
 a failed command until the same one is acknowledged,
 a failed backup until the next, a hold until it ends,
-a setting the next start would refuse until the settings file is read
-again without it or the server starts,
+a setting the next start would refuse, or a note on the settings file,
+until the file is read again without it or the server starts without one,
+the newest read's line standing for the ones before it,
 a room whose thermostats disagree until they agree again,
 a thermostat off its week programme until it follows it again,
 a room's setpoint not confirmed until every thermostat shows its re-send;
@@ -2257,8 +2258,19 @@ The server's sign, when it says an update is out, opens it at Software update.
   because a restart, an update or a reboot then leaves the server down
   until the file is fixed:
   the owner reads it where the restart is asked for.
-  It blocks nothing, and the restart is offered all the same;
-  a read that finds nothing refused, Reload now's among them, takes it away.
+  Meanwhile the card's head says so in a badge of its own, amber,
+  **next start fails**, beside the count of what waits, where something does,
+  also while the card is folded;
+  and the restart's question and the reboot's,
+  which otherwise promise a server back,
+  end with a sentence of their own:
+  the server's next start refuses the settings file as it is,
+  and the server does not come back until the file is fixed.
+  The card reads what the next start refuses only with `restart`,
+  so the reboot's question says it only to a holder of `restart` as well.
+  The notice blocks nothing, and the restart is offered all the same;
+  a read that finds nothing refused, Reload now's among them,
+  takes it away, with the badge and the sentence.
   **Announce on the LAN** (with `settings`) chooses **Automatic**, **On**
   or **Off** for the setting `announce`: the announcement by mDNS for
   `massimo discover`, the apps and Home Assistant, Automatic on unless the
