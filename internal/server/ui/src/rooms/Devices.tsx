@@ -86,9 +86,11 @@ function useDetail(d: Device, want: boolean): {
  * span so the decimal points of a column line up; an empty label makes a
  * spacer. Temperatures (an icon given) are bold. A preset, where given,
  * takes the icon's place with its mark (the setpoint at the device's eco
- * or comfort temperature, D18), so that it costs no width.
+ * or comfort temperature, D18), so that it costs no width. A cell of the
+ * right column carries the class end, by which its values end at the
+ * row's right edge.
  */
-function Cell({ label, value, unit, icon, preset, at, stale }: {
+function Cell({ label, value, unit, icon, preset, at, stale, end }: {
   label: string;
   value: string;
   unit: string;
@@ -96,10 +98,11 @@ function Cell({ label, value, unit, icon, preset, at, stale }: {
   preset?: Preset | null;
   at?: string;
   stale?: boolean;
+  end?: boolean;
 }) {
   const aged = !!at && value !== "";
   return (
-    <span class={aged ? "cell aged" : "cell"}>
+    <span class={(aged ? "cell aged" : "cell") + (end ? " end" : "")}>
       <span class="k">{label}</span>
       <span class={icon ? "num temp" : "num"}>{value}</span>
       <span class="u">{value === "" ? "" : unit}</span>
@@ -111,7 +114,7 @@ function Cell({ label, value, unit, icon, preset, at, stale }: {
 }
 
 /** A cell's values, as Cell takes them. */
-type CellOf = { label: string; value: string; unit: string; icon?: string; preset?: Preset | null; at?: string };
+type CellOf = { label: string; value: string; unit: string; icon?: string; preset?: Preset | null; at?: string; end?: boolean };
 
 /**
  * Values is a thermostat's two-column grid: valve and offset on the left,
@@ -134,7 +137,7 @@ function Values({ d, shown, offset }: { d: Device; shown: Device; offset?: numbe
   const rows = Math.max(left.length, right.length);
   const empty: CellOf = { label: "", value: "", unit: "" };
   const cells: CellOf[] = [];
-  for (let i = 0; i < rows; i++) cells.push(left[i] || empty, right[i] || empty);
+  for (let i = 0; i < rows; i++) cells.push(left[i] || empty, { ...(right[i] || empty), end: true });
   const cls = "device-vals" + (d.reported ? "" : " out-of-date") + (rows === 0 ? " hidden" : "") + (shown.stale ? " stale" : "");
   return (
     <div class={cls}>
