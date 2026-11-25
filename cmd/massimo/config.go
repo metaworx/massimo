@@ -23,8 +23,9 @@ import (
 	"go.metaworx.ch/massimo/internal/store"
 )
 
-// runConfig prints the MASSIMO_* settings in effect. Keys, IVs and
-// tokens are redacted to their length, so the output can be pasted into
+// runConfig prints the MASSIMO_* settings in effect. A secret's value
+// (server.SecretVariable, a name in any case) is redacted to its length,
+// as GET /api/v1/config leaves it out, so the output can be pasted into
 // a bug report; a Cube key or IV left over from the portal commands is
 // named as ignored (env.Removed). The notes on the settings file follow
 // the settings, as they name lines by their numbers and never a value.
@@ -56,7 +57,17 @@ func runConfig(args []string) error {
 	fmt.Printf("proxy serial:  %s\n", orNone(cubeEnv(env.ProxySerial)))
 	fmt.Printf("name:          %s\n", orNone(cubeEnv(env.Name)))
 	printTLS(os.Stdout)
+	printVariables(os.Stdout)
+	printNotes(os.Stdout, startNotes)
+	printStore(os.Stdout)
+	return nil
+}
 
+// printVariables prints every MASSIMO_* variable in effect, a line
+// each, with where it came from, a secret's value redacted to its length
+// (server.SecretVariable), and a note on a name the program ignores or
+// does not know.
+func printVariables(w io.Writer) {
 	var names []string
 	for _, kv := range os.Environ() {
 		if k, _, _ := strings.Cut(kv, "="); strings.HasPrefix(k, "MASSIMO_") {
@@ -64,10 +75,10 @@ func runConfig(args []string) error {
 		}
 	}
 	sort.Strings(names)
-	fmt.Println("\nvariables:")
+	fmt.Fprintln(w, "\nvariables:")
 	for _, k := range names {
 		v := os.Getenv(k)
-		if strings.HasSuffix(k, "_KEY") || strings.HasSuffix(k, "_IV") || strings.HasSuffix(k, "_TOKEN") {
+		if server.SecretVariable(k) {
 			v = redact(v)
 		}
 		src := env.Source(k)
@@ -78,11 +89,8 @@ func runConfig(args []string) error {
 		case !env.Known(k):
 			note = "   <- unknown name, typo?"
 		}
-		fmt.Printf("  %-40s %-45s (%s)%s\n", k, v, src, note)
+		fmt.Fprintf(w, "  %-40s %-45s (%s)%s\n", k, v, src, note)
 	}
-	printNotes(os.Stdout, startNotes)
-	printStore(os.Stdout)
-	return nil
 }
 
 // printNotes prints the notes on the settings file as the start read it,
