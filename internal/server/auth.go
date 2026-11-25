@@ -63,9 +63,11 @@ const (
 	tokenQueryDeprecated = "@1793836800"
 )
 
-// capabilities lists every capability of docs/store.md section 6 in its
-// order. A route is registered with one of them; the roles' sets are
-// rows of the store, and what a capability includes is includes'.
+// capabilities lists every capability of the table in docs/api-v1.md
+// ("Authentication") in its order; TestCapabilityTableCoversRoutes
+// holds the table to it. A route is registered with one of them; the
+// roles' sets are rows of the store, and what a capability includes is
+// includes'.
 var capabilities = []string{
 	"read", "preferences", "setpoint", "lock", "configure", "rename", "structure", "pair", "discover", "backup", "restore", "repair",
 	"guests", "users", "passwords", "roles", "roles.disable", "capabilities", "cubes", "cubes.reboot", "settings", "update", "restart", "reboot", "audit",
