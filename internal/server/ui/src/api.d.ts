@@ -1696,6 +1696,13 @@ export interface Room {
   comfort_temp?: number;
   /** The room's eco temperature, as comfort_temp */
   eco_temp?: number;
+  /**
+   * The room's lowest setpoint, as comfort_temp; a client offers the room's
+   * setpoints within min_setpoint and max_setpoint
+   */
+  min_setpoint?: number;
+  /** The room's highest setpoint, as comfort_temp */
+  max_setpoint?: number;
   devices: Device[];
   /**
    * The findings of the Cube's C lines against its room list that concern the

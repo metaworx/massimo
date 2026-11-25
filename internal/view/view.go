@@ -446,6 +446,14 @@ type Room struct {
 	// is one of them. The server sets them, none elsewhere.
 	ComfortTemp *float64 `json:"comfort_temp,omitempty"`
 	EcoTemp     *float64 `json:"eco_temp,omitempty"`
+	// MinSetpoint and MaxSetpoint are the room's lowest and highest
+	// setpoint, as its configuration is decided over its thermostats
+	// (cubeio.RoomConfig, as for ComfortTemp), absent for a room without a
+	// thermostat; a client offers the room's setpoints within them, 4.5
+	// being OFF and 30.5 ON there as in any setpoint. The server sets them,
+	// none elsewhere.
+	MinSetpoint *float64 `json:"min_setpoint,omitempty"`
+	MaxSetpoint *float64 `json:"max_setpoint,omitempty"`
 	// Ready is true when every member of the room has reported since the
 	// Cube's last restart; the Cube discards room commands otherwise.
 	Ready bool `json:"ready"`
