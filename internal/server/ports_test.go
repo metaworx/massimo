@@ -19,9 +19,12 @@ import (
 // listen at its address; one held with taken only once the test gives
 // it, the listens before failing as at a port another program holds,
 // since the test holds it. Any other address listens as net.Listen does.
+// The listens at each address are counted (listens), so that a test can
+// see that a proxy tries no more.
 type heldPorts struct {
-	mu   sync.Mutex
-	held map[string]*heldPort
+	mu    sync.Mutex
+	held  map[string]*heldPort
+	tries map[string]int
 }
 
 // heldPort is a listener a test holds for a proxy, and whether the test
@@ -65,10 +68,21 @@ func (h *heldPorts) taken(t *testing.T) (addr string, give func()) {
 	}
 }
 
+// listens is how many listens came at addr so far.
+func (h *heldPorts) listens(addr string) int {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	return h.tries[addr]
+}
+
 // listen is the proxies' listen (Options.proxyListen): the listener held
 // at addr once it is given, once; net.Listen's otherwise.
 func (h *heldPorts) listen(addr string) (net.Listener, error) {
 	h.mu.Lock()
+	if h.tries == nil {
+		h.tries = map[string]int{}
+	}
+	h.tries[addr]++
 	p := h.held[addr]
 	if p != nil && p.given {
 		delete(h.held, addr)

@@ -295,18 +295,27 @@ func TestConfigWriteShownAtOnce(t *testing.T) {
 	}
 }
 
-// A configuration write the C line shows is pending, then done.
+// A configuration write the C line shows is pending, then done. The fake
+// Cube applies it 300 ms after it came; the first re-read comes before
+// that, the last two well behind it on any runner, since they take the
+// scale: where the last re-read still came first, the write is not
+// confirmed at once, and the test says so.
 func TestConfigWriteConfirmed(t *testing.T) {
 	t.Parallel()
-	r := startServer(t, confirming(time.Minute, 150*time.Millisecond, shortFollow...))
+	follow := []time.Duration{50 * time.Millisecond, testkit.Scale(500 * time.Millisecond), testkit.Scale(time.Second)}
+	r := startServer(t, confirming(time.Minute, 300*time.Millisecond, follow...))
 	ts, rt := r.ts, r.rt
 	code, out := do(t, ts, "PUT", confirmBase+"/devices/0a0204/config", `{"eco_temp":16.5,"boost_minutes":10}`)
 	if code != 200 || out["confirmation"] != "pending" {
 		t.Fatalf("config: %d %v", code, out)
 	}
-	testkit.Eventually(t, "the C line shows it", func() bool { return openWrites(rt) == 0 })
-	if evs := unconfirmedEvents(t, ts, "not_confirmed"); len(evs) != 0 {
-		t.Fatalf("lines %+v", evs)
+	var lost []event
+	testkit.Eventually(t, "the C line shows it", func() bool {
+		lost = unconfirmedEvents(t, ts, "not_confirmed")
+		return len(lost) > 0 || openWrites(rt) == 0
+	})
+	if len(lost) != 0 {
+		t.Fatalf("not confirmed at the last re-read, which came before the fake Cube applied the write or read a C line that does not show it: %+v", lost)
 	}
 }
 
