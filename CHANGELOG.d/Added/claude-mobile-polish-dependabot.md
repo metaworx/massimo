@@ -1,3 +1,3 @@
-- Dependabot proposes the updates of the Android app's Gradle
-  dependencies and plugins, monthly in one pull request
-  (`GUIDELINES/project/CI.md`, "Dependabot").
+- Dependabot proposes the updates of the Android app monthly, its
+  libraries in one pull request and the Gradle wrapper and plugins in
+  another (`GUIDELINES/project/CI.md`, "Dependabot").
