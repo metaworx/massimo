@@ -120,7 +120,7 @@ func (s *Server) newRuntime(c CubeConfig, addr string) *runtime {
 	rt.clock = s.checkNow
 	rt.ring = &s.ring
 	rt.resets.hold = rt.errWatch.hold // a flag that keeps coming back (errorwatch.go)
-	copts := cubelan.Options{Addr: addr, PollInterval: opts.PollInterval, Hold: opts.CubeHold, Logger: s.partLog("cube", rt.serial), EventLines: true}
+	copts := cubelan.Options{Addr: addr, PollInterval: opts.PollInterval, Hold: opts.CubeHold, Logger: s.partLog("cube", rt), EventLines: true}
 	if opts.cubeOptions != nil {
 		opts.cubeOptions(&copts)
 	}
@@ -131,7 +131,7 @@ func (s *Server) newRuntime(c CubeConfig, addr string) *runtime {
 	// The queue's lines went to slog.Default() before: serve gave it no
 	// logger of its own.
 	if qopts.Logger == nil {
-		qopts.Logger = s.partLog("queue", rt.serial)
+		qopts.Logger = s.partLog("queue", rt)
 	}
 	// The queue's radio lines are readings of the Cube's free slots
 	// (slots.go).
@@ -272,7 +272,7 @@ func (s *Server) ensureResponder() *proxy.Responder {
 		s.log.Warn("proxy: discovery port not available, clients must be given the address", "port", cubelan.DiscoveryPort, "error", err)
 		return nil
 	}
-	r := proxy.NewResponder(s.partLog("proxy", ""))
+	r := proxy.NewResponder(s.partLog("proxy", nil))
 	s.responder = r
 	ctx := s.trackLocked()
 	go func() { defer s.wg.Done(); r.Serve(ctx, pc) }()
@@ -304,7 +304,7 @@ func (s *Server) startProxyOn(rt *runtime, pl ProxyListener) bool {
 		return false
 	}
 	p := proxy.New(proxy.Options{Client: rt.client, Queue: rt.queue, DiscoverySerial: pl.DiscoverySerial, HiddenList: func() []cube.RFAddress { return rt.config().Hidden },
-		ShowHidden: rt.showHidden, MaxDutyPct: s.opts.Queue.MaxDutyPct, OnWrite: rt.proxyWrote, Logger: s.partLog("proxy", rt.cubeSerial()),
+		ShowHidden: rt.showHidden, MaxDutyPct: s.opts.Queue.MaxDutyPct, OnWrite: rt.proxyWrote, Logger: s.partLog("proxy", rt),
 		OnEvent: rt.proxyEvent, Command: s.proxyCommand(rt), Virtual: func() []proxy.Virtual { return s.proxyVirtuals(rt) }})
 	ctx, cancel := context.WithCancel(parent)
 	pr := &proxyRun{pl: pl, rt: rt, p: p, cancel: cancel, done: make(chan struct{})}

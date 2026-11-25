@@ -108,6 +108,7 @@ import (
 	"go.metaworx.ch/massimo/internal/protocol/cube"
 	"go.metaworx.ch/massimo/internal/proxy"
 	"go.metaworx.ch/massimo/internal/push"
+	"go.metaworx.ch/massimo/internal/slogx"
 	"go.metaworx.ch/massimo/internal/store"
 	"go.metaworx.ch/massimo/internal/view"
 )
@@ -825,14 +826,17 @@ func nameUsers(ctx context.Context, n *store.Namer, ev *event) {
 	}
 }
 
-// partLog is the logger of a part the server starts: its source, and the
-// Cube it serves where it serves one.
-func (s *Server) partLog(source, serial string) *slog.Logger {
+// partLog is the logger of a part the server starts: its source, and,
+// where it serves the Cube of rt, that Cube's serial, read on each line,
+// so that a Cube whose serial is learned after the part started, one
+// given by its address alone (the plain MASSIMO_CUBE_ADDRESS's, -addr's
+// without -sn), has it on every line from then on.
+func (s *Server) partLog(source string, rt *runtime) *slog.Logger {
 	l := s.opts.Logger.With("source", source)
-	if serial != "" {
-		l = l.With("cube", serial)
+	if rt == nil {
+		return l
 	}
-	return l
+	return slogx.WithFunc(l, "cube", rt.cubeSerial)
 }
 
 // New creates a server; Run starts the Cube connections.

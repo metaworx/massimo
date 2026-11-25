@@ -112,7 +112,7 @@ func (s *Server) sendReboot(ctx context.Context, to, serial string) (cubelan.Reb
 	}
 	rctx, cancel := context.WithCancel(ctx)
 	defer cancel()
-	resp = proxy.NewResponder(s.partLog("proxy", ""))
+	resp = proxy.NewResponder(s.partLog("proxy", nil))
 	go resp.Serve(rctx, pc)
 	return resp.Reboot(ctx, to, serial)
 }
