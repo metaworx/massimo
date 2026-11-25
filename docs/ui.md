@@ -810,6 +810,47 @@ Every room has a tile:
   the value is sent 2 seconds after the last click, or at once with **Save**;
   **Cancel** drops it.
   A temperature set this way puts the room into manual mode.
+- **SET's list** opens under SET's value
+  at a tap or a click on the small chevron under it, or Enter or Space there;
+  the chevron stands exactly under the value's ° (under the last letter of OFF).
+  On top a field holds the value shown, "21,5" in German;
+  it takes a temperature typed with a point or a comma alike, or OFF,
+  and Enter sends it.
+  Under it are OFF and every half degree from the room's lowest setpoint
+  to its highest (`min_setpoint` and `max_setpoint` of the room's entry),
+  from 5.0 °C, as 4.5 °C is OFF, to 30.0 °C at most, without ON:
+  5.0 to 30.0 °C from a server before them,
+  OFF alone where the room's lowest is above its highest.
+  OFF is there whatever the room's lowest, as the chevrons go down to it.
+  Each entry carries its eco or comfort mark;
+  the value shown is marked, and the list scrolls to it within itself,
+  the page staying where it is.
+  A typed value is rounded to the half degree, 4.5 °C being OFF;
+  one the list has not got is marked on the field ("only OFF or 5.0 to 23.0 °C")
+  and not sent.
+  A choice or a typed value is sent at once,
+  as **Save** sends the chevrons' value, with **Save** turning until the answer;
+  the value every thermostat of the room shows already in manual mode is not sent again,
+  sparing the radio's duty cycle,
+  and a stepped value waiting is dropped then;
+  but it is in auto, on holiday or in a boost, while the thermostats differ,
+  and while a write of a mode or a setpoint to them is open,
+  pending or not confirmed after its deadline.
+  The chevron and the entries do nothing while a write of the tile runs,
+  keeping the focus, but for the chevron closing an open list;
+  they are hidden for a user who may not set a temperature.
+  The arrow keys move in the list, up from OFF to the field,
+  Home and End to its ends, and Enter or Space chooses;
+  Escape closes the list alone, the focus back on the chevron;
+  a tap outside it closes it, the focus going where the tap went,
+  and so do Tab out of it and a sign-out.
+  The list lies inside the window, 16 px from its edges,
+  and under the page's header:
+  upward over the value where the room below is short and it fits above,
+  else downward, its entries as tall as the room below allows,
+  160 px at least where the window has room for that.
+  One list is open at a time, and one with the page's menus and tips;
+  what is typed stays while it is open, whatever data comes in.
 - **While the room's thermostats show different setpoints**,
   a line under SET names each with its setpoint and its own mark, " · " between them:
   "Thermostats differ: Radiator 21.0 °C · Wall thermostat OFF",
@@ -2720,6 +2761,7 @@ in the order the page loads them:
   `home.js`, the home notice's place shown or hidden, the Cubes a `cube_found` event adds
   and the way to them, and what a Cube's address outside the networks needs;
 - `rooms.js` and `tiles.js`, the rooms' actions (the stepper's setpoint and its timer,
+  a setpoint chosen from SET's list,
   a tile's writes, a room's setpoint waiting for its thermostats (`awaitMembers`),
   the presets, the locks, the holiday form, Escape)
   and the room's facts they use (UiParts D218;
@@ -2905,7 +2947,8 @@ a value's age it takes from `received` of `rooms.js`, as the rooms do.
 | `Dropdown` | `menu.tsx` | a menu that drops down (`dropdown`), with `arrows` its arrow keys (`menuArrows`) and with `focusCurrent` the focus on its current item when it opens (among `arrows`' items, else its list's buttons that are on); a click on any button of its list closes it, as `dropdown()` of `components.js` does for every menu of the page, but on one marked `data-keep-open` (`MenuItem`'s `keepOpen`) | `id`, `cls`, `summaryId`, `summaryCls`, `label` (without it the summary is named by its text), `title` (where the tooltip is not the label), `summary`, `listCls`, `arrows` (a selector of its items), `focusCurrent`, `busy` (the summary turning while a request sent from its list runs), `onClick`, `onOpen` (told each time it opens), `onClose` (told each time it closes), the items as children |
 | `MenuItem` | `menu.tsx` | a menu's button, its icon, label, the icons after it and a grey second line | `icon`, `blank`, `label`, `icons`, `sub` (the second line, a text or elements, there whenever given, empty too), `subCls` (its class), `cls`, `value` (its `data-value`), `current`, `disabled`, `busy`, `keepOpen` (a click on it leaves the menu open, for an item whose result shows in the list), `onClick`; `current` "page" for the entry of the page shown (☰'s), `id`, `title`, `aria` (its name for a screen reader), `labelId` and `after` (a mark at its end) where the page names them |
 | `Picker` | `menu.tsx` | a menu that chooses one item, its summary the chosen one | `id`, `cls`, `summaryId`, `summaryCls`, `entries` (an item `{ value, label, sub, icon, icons, disabled }`, `{ group }` or `{ separator: true }`), `value`, `onPick(value)`, `shown` (`{ icon, label, title, aria }`) |
-| `Tip` | `tip.tsx` | a button with a short label that shows a text in a small box under itself while open, its first letter a capital (the label's full term: a room tile's IS and SET), named by its label and then the text (`aria-labelledby`, the box's text in the name while hidden too: "IS measured temperature"); one tip open at a time, and one with the menus: the click that opens it closes an open menu, as every click outside one does (`dropdown`), and a menu that opens, by a click, the keyboard or the page's code, closes it, as does a click outside it; Escape closes it and nothing else, seen first and stopped there (`stopPropagation`, marked as the menus' Escape is), the focus staying on the button; the box kept in the window; the button says whether it is open (`aria-expanded`) and names the box as what it controls; no menu, it has no items and takes no focus | `text` (the box's text), `label` (the short label, after the children in the button), `labelCls` (its class), `cls` (the button's classes beside `tip-btn`), the button's content before the label as children (an icon) |
+| `Tip` | `tip.tsx` | a button with a short label that shows a text in a small box under itself while open, its first letter a capital (the label's full term: a room tile's IS and SET), named by its label and then the text (`aria-labelledby`, the box's text in the name while hidden too: "IS measured temperature"); a popup (`usePopup`): one open at a time, and one with the menus, Escape closing it alone, the focus staying on the button, a click outside and a sign-out closing it; the box kept in the window (`placePopup`); the button says whether it is open (`aria-expanded`) and names the box as what it controls; no menu, it has no items and takes no focus | `text` (the box's text), `label` (the short label, after the children in the button), `labelCls` (its class), `cls` (the button's classes beside `tip-btn`), the button's content before the label as children (an icon) |
+| `usePopup`, `placePopup`, `closePopups` | `popup.ts` | a box that its button opens beside itself (a `Tip`'s text, a room tile's SET list): one popup open at a time, and one with the menus: the click that opens it closes an open menu or popup, as every click outside one does (`dropdown`), and a menu that opens, by a click, the keyboard or the page's code, closes it, as does a click outside it and, with `leave`, the focus moving to an element outside it; Escape closes it and nothing else, seen first and stopped there (`stopPropagation`, marked as the menus' Escape is), `escaped` told whether the focus was in it; placed again at a resize; `placePopup` keeps its box 16 px inside the window's sides, and with the element that scrolls in it inside its height too, 16 px under what is pinned at the window's top (`pinned`, a sticky header's bottom, which the caller reads): upward where the room below is short and the box fits above, else downward, that element's height capped to the room below, 160 px at least where the window has room for that; `closePopups` closes it at a sign-out (`MassimoParts.signedOut`) | `usePopup(prefix, { within, place, escaped, leave })`, giving `{ id, open, toggle, close }`; `placePopup(box, scroll, pinned)`; `closePopups()` |
 | `actionRunner`, `fader` | `action.ts` | a request, a reload, and its outcome (`Outcome`, `{ text, ok }`) in the region's message line (`showResult`) or in a part's state that a `ResultLine` draws, a success fading where a fade is given; `fader` is that fade alone, for a result set by other means | `where()`, `set(res)`, `fade` (ms), `reload()`, `bound` (an answer after a sign-out reloads and says nothing, `session.ts`); gives `run(fn, ok, fail)`, `say(text, ok)`; `set`, `ms` |
 | `Icon` | `icon.tsx` | a symbol of the page (`iconEl`) | `symbol`, `cls`, `mark` (the symbol is a mark, which blinks where the style makes it), `useId` (its `use` element's id, where the page names it) |
 | `Sign` | `icon.tsx` | a kind of `SIGNS` in a state, its mark blinking | `kind`, `state` ("", ok, warn, bad, open), `cls`, `blink` (the mark's key), `label` (named for a screen reader, else hidden) |
@@ -3159,7 +3202,8 @@ and the timer of an open window's next state by the clock;
 `facts.ts` what the rooms alone read of a room and its devices
 (a mode's badge, the problems of a tile's head and of a device's row with their label,
 the room's notices among them, a device's badges in words);
-`Tile.tsx` the tile, `Devices.tsx` a device's row and a tile's device list,
+`Tile.tsx` the tile, `SetValue.tsx` its SET with the chevron and its list,
+`Devices.tsx` a device's row and a tile's device list,
 `Config.tsx` a tile's configuration with its tabs, `ConfigDevices.tsx` its Devices tab,
 `configuration.ts` what the configuration keeps and sends,
 `House.tsx` the House tile, its temperature a `Stepper`, its end a `DateTime`,

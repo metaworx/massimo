@@ -74,6 +74,8 @@ declare global {
   function showTileResult(roomId: number, text: string, ok?: boolean): void;
   /** Steps the stepper's value waiting to be sent by delta, and sends it two seconds after the last step. */
   function stepSetpoint(room: PageRoom, delta: number): void;
+  /** Sends temp, chosen from SET's list or typed into its field, at once, as Save sends the stepper's value; nothing, and false, a stepped value dropped, where every thermostat of the room shows it in manual mode already and no write is open. */
+  function chooseSetpoint(room: PageRoom, temp: number): boolean;
   /** Drops the stepper's value waiting to be sent. */
   function cancelSetpoint(room: PageRoom): void;
   /** Sends the stepper's value waiting to be sent, now. */

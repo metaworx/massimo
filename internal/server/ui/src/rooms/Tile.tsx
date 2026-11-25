@@ -11,12 +11,13 @@
  * refused; the measured and the set temperature, each beside its icon
  * and short label, a tap on which shows the full term (shared/tip.tsx),
  * with the stepper, the setpoint marked where it is the room's eco or
- * comfort temperature (roomPresets); the members' setpoints while they
- * differ; the modes with More; the info and the cog; the holiday form,
- * the deletion's question, the room's repairs, the result line, the
- * device list and the configuration. Built once per room and updated in
- * place, so that an open menu, the focus, a click and what is typed
- * stay when data comes in. The tile's actions are the plain ones
+ * comfort temperature (roomPresets), its chevron opening the list of the
+ * room's temperatures and a field (SetValue.tsx); the members' setpoints
+ * while they differ; the modes with More; the info and the cog; the
+ * holiday form, the deletion's question, the room's repairs, the result
+ * line, the device list and the configuration. Built once per room and
+ * updated in place, so that an open menu, the focus, a click and what is
+ * typed stay when data comes in. The tile's actions are the plain ones
  * (rooms.js, tiles.js), which set the tile's live state (roomUI); the
  * room's repairs are the shared RepairBox, opened from ⋯; the
  * configuration is a part of its own (Config.tsx).
@@ -41,6 +42,7 @@ import { apiUntil, roomActual, roomActualDevice } from "../model/room";
 import { cubePath } from "../shared/path";
 import { fmtSetpoint, PresetMark, presetOf } from "../shared/setpoint";
 import { Tip } from "../shared/tip";
+import { SetValue } from "./SetValue";
 
 /** The arrow keys of More move between these: its buttons that are on, and the Hold switch where shown. */
 const MORE_ITEMS = ".menu-items button:not(:disabled), .menu-items .switch:not(.hidden) input";
@@ -313,12 +315,7 @@ export function Tile({ room }: { room: PageRoom }) {
         </div>
         <div class="temp-block">
           <Tip cls="temp-tag" label={t("room.set")} labelCls="temp-label" text={t("room.setTemp")}><Icon symbol="icon-set" cls="ti" /></Tip>
-          <span class="set-val">
-            <span class={"temp-big setpoint-big" + (ui.pending !== null ? " pending" : "")} aria-label={t("room.setTemp")}>
-              {th ? fmtSetpoint(shown, "°") : ""}
-            </span>
-            {preset && <PresetMark preset={preset} cls="ti" />}
-          </span>
+          <SetValue room={room} ui={ui} th={!!th} shown={shown} preset={preset} />
         </div>
         <div class="stepper needs-setpoint">
           <button type="button" class="step step-plus" aria-label={t("temp.more")} title={t("temp.moreTitle")} disabled={off} onClick={() => stepSetpoint(room, STEP)}>⌃</button>

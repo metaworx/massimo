@@ -209,6 +209,31 @@ function stepSetpoint(room, delta) {
   ui.timer = setTimeout(() => flushSetpoint(room), SEND_DELAY_MS);
 }
 
+// chooseSetpoint sends temp, a temperature chosen from SET's list or
+// typed into its field (ui/src/rooms/SetValue.tsx), at once, as Save
+// sends the stepper's value: shown with Save turning until the answer.
+// Where the room holds temp already it sends nothing, sparing the radio's
+// duty cycle, and says so (false): no write of the tile runs or waits
+// for the thermostats, every thermostat of the room with a state shows
+// manual mode (not a boost) at temp, and no write of a mode or a setpoint
+// is open on them or the room, pending or unconfirmed after its deadline
+// (confirmation); a stepped value waiting is dropped then. A room in
+// auto, on holiday or boosting, whose thermostats differ, or with such a
+// write open, is sent temp.
+function chooseSetpoint(room, temp) {
+  const ui = roomUI(room);
+  const open = (c) => !!c && c.fields.some((f) => f === "mode" || f === "setpoint");
+  const ths = room.devices.filter((d) => isThermostat(d) && d.state);
+  const held = (d) => d.state.mode === "manual" && d.state.setpoint === temp && !open(d.confirmation);
+  if (!ui.sending && !ui.awaiting && !open(room.confirmation) && ths.length && ths.every(held)) {
+    cancelSetpoint(room);
+    return false;
+  }
+  ui.pending = temp;
+  flushSetpoint(room);
+  return true;
+}
+
 function cancelSetpoint(room) {
   const ui = roomUI(room);
   if (ui.timer) clearTimeout(ui.timer);
