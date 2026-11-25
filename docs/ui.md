@@ -1920,7 +1920,13 @@ settings forms and have none of it.
   what to change: Off, Automatic on the loopback, a change waiting for
   the restart, or `-announce` or `MASSIMO_ANNOUNCE`, which decides;
   with `settings`, **Open Maintenance**, but where the flag or the
-  variable decides.
+  variable decides;
+  nothing of the LAN until the server's answer of what it saw has come.
+  Where System settings is shown again before its reads have answered,
+  or a panel's integration is read again,
+  the integrations, the users to act as, the LAN and the open panels
+  show the answers of the newest reads asked for, in whatever order they come;
+  a newer read that fails leaves them as they were until the next.
   In **Users**, an integration's user is shown by its chain,
   "<the integration's name> › <its display name>", with
   ", as <login name>" where it is linked (AP StoreRaise v1.2), without
@@ -3103,6 +3109,10 @@ No plain script calls it.
 Integrations (`ui/src/integrations/`) is a part alone, drawn into `#sys-integrations-body`
 and read each time System settings is shown; no plain script calls it:
 `store.ts` holds what it shows as the last loads gave it,
+the newest read of each kind, a number per kind, and per integration for its panel,
+beside the session's dropping the answer of a read that a later one of its kind
+was asked after,
+whether the LAN's answer has come (`seen`),
 each panel open, each request closed, the message line and the readings of an approval
 again, every 3 s in its first minute and every 15 s after, stopped while the list is not
 visible (another page, the card folded) and at a sign-out, and started again by every load
