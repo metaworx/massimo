@@ -17,6 +17,8 @@ import (
 	"testing"
 
 	"golang.org/x/sys/windows/svc/mgr"
+
+	"go.metaworx.ch/massimo/internal/env"
 )
 
 // On Windows, where PowerShell 5.1's > writes UTF-16, a -settings file
@@ -76,6 +78,57 @@ func TestInstallWindowsKeepsAFileServeRefuses(t *testing.T) {
 	}
 	if note := "warning: " + p.Env + ": line 2 is not KEY=VALUE: serve refuses the file until it is fixed\n"; !strings.HasPrefix(out.String(), note) {
 		t.Errorf("the line not said first:\n%s", out.String())
+	}
+}
+
+// A settings file a re-install keeps and cannot read, UTF-16 text, does
+// not stop Windows' install either: it is said to be one the next start
+// refuses, first, and the install goes on; Windows has no units that
+// follow the settings' TLS, so there is nothing of it to keep (AP
+// StartConfiguration, D51-A). A dry run, as above.
+func TestInstallWindowsKeepsAFileItCannotRead(t *testing.T) {
+	dir := t.TempDir()
+	t.Setenv("ProgramFiles", dir)
+	t.Setenv("ProgramData", dir)
+	p := WindowsPaths(dir, dir)
+	os.MkdirAll(filepath.Dir(p.Env), 0o700)
+	b, _ := os.ReadFile(utf16File(t, binary.LittleEndian, "", "MASSIMO_API_TOKEN=mine\r\nMASSIMO_TLS=self-signed\r\n", true))
+	os.WriteFile(p.Env, b, 0o600)
+	var out bytes.Buffer
+	if err := InstallWindows(Options{DryRun: true, Out: &out, Run: (&recorder{}).run}); err != nil {
+		t.Fatal(err)
+	}
+	if warning := "warning: " + p.Env + ": UTF-16 text, save it as UTF-8: the next start refuses the file until it is fixed\n"; !strings.HasPrefix(out.String(), warning) || !strings.Contains(out.String(), "would start the service") {
+		t.Errorf("the file not said first, or the service not started:\n%s", out.String())
+	}
+}
+
+// -tls over a settings file Windows' install keeps and cannot read,
+// UTF-16 text or a line too long, is refused with the parser's error
+// before the install does anything, before it reaches the service
+// manager, which stops the service. A dry run, as above.
+func TestInstallWindowsRefusesTLSOverAFileItCannotRead(t *testing.T) {
+	for _, u := range unreadable(t, "MASSIMO_API_TOKEN=mine\r\n") {
+		dir := t.TempDir()
+		t.Setenv("ProgramFiles", dir)
+		t.Setenv("ProgramData", dir)
+		p := WindowsPaths(dir, dir)
+		os.MkdirAll(filepath.Dir(p.Env), 0o700)
+		os.WriteFile(p.Env, u.text, 0o600)
+		_, _, readErr := env.ReadFileLenient(p.Env)
+		if readErr == nil {
+			t.Fatalf("%s: the file read", u.what)
+		}
+		before := tree(t, dir)
+		rec := &recorder{}
+		var out bytes.Buffer
+		err := InstallWindows(Options{TLS: "self-signed", DryRun: true, Out: &out, Run: rec.run})
+		if want := "-tls: " + readErr.Error() + "; nothing was written"; err == nil || err.Error() != want {
+			t.Errorf("%s: %v, want %s", u.what, err, want)
+		}
+		if after := tree(t, dir); !maps.Equal(after, before) || out.Len() != 0 || len(rec.cmds) != 0 {
+			t.Errorf("%s: before the refusal wrote, said %q, ran %q", u.what, out.String(), rec.cmds)
+		}
 	}
 }
 

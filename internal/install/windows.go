@@ -61,6 +61,9 @@ func InstallWindows(o Options) error {
 	if err := o.checkSettingsFile(serviceStart{}); err != nil {
 		return err
 	}
+	if err := o.checkTLSFile(winPaths().Env); err != nil {
+		return err
+	}
 	in := newInstaller(o)
 	in.svc = serviceStart{} // the service manager picks the working directory
 	p := winPaths()
@@ -212,14 +215,16 @@ func (in *installer) winBinary(p WinPaths) error {
 // checkKept warns of the settings file env that the install keeps, as
 // checkSettings does on Linux: the notes on its lines (readSettings) and
 // what serve's next start refuses of it (warnRefused); a file the parser
-// does not read is said to be unchecked. Nothing where there is none.
+// does not read, which the next start refuses, is said to be. Nothing
+// where there is none. Windows has no drop-ins that follow its TLS, so
+// there is nothing of it to keep (keptHTTPS).
 func (in *installer) checkKept(env string) {
 	if _, err := os.Stat(env); err != nil {
 		return
 	}
 	vars, err := in.readSettings(env)
 	if err != nil {
-		fmt.Fprintf(in.Out, "warning: cannot check %s: %v\n", env, err)
+		fmt.Fprintf(in.Out, "warning: %s: the next start refuses the file until it is fixed\n", fileError(env, env, err))
 		return
 	}
 	in.warnRefused(env, vars)

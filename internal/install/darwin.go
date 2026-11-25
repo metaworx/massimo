@@ -13,6 +13,7 @@ import (
 	"net"
 	"os"
 	"os/exec"
+	"path/filepath"
 	"regexp"
 	"strconv"
 	"strings"
@@ -149,6 +150,9 @@ func InstallDarwin(o Options) error {
 		return err
 	}
 	if err := o.checkSettingsFile(launchdStart()); err != nil {
+		return err
+	}
+	if err := o.checkTLSFile(filepath.Join(o.Root, EnvPath)); err != nil {
 		return err
 	}
 	in := newInstaller(o)

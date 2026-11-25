@@ -4,10 +4,12 @@
 package install
 
 import (
+	"bytes"
 	"errors"
 	"fmt"
 	"net/url"
 	"os"
+	"regexp"
 	"runtime"
 	"slices"
 	"strings"
@@ -288,34 +290,38 @@ func tlsOn(vars map[string]string) bool {
 
 // settingsVars reads the settings file env (a path under Root), or the
 // one being copied in a dry run (checkedFile); nothing when there is
-// neither.
-func (in *installer) settingsVars(env string) map[string]string {
+// neither. unread is set where it is there but cannot be read
+// (readSettings), UTF-16 text or a line too long, which the next start
+// refuses too: its TLS is not known, which is not TLS off.
+func (in *installer) settingsVars(env string) (vars map[string]string, unread bool) {
 	env = in.checkedFile(env)
 	if env == "" {
-		return nil
+		return nil, false
 	}
 	vars, err := in.readSettings(env)
-	if err != nil {
-		return nil
-	}
-	return vars
+	return vars, err != nil
 }
 
 // tlsEffective says whether the installed service has TLS: by this
-// run's options, else by the settings file.
+// run's options, else by the settings file, else, where that cannot be
+// read, by the units installed before (keptHTTPS).
 func (in *installer) tlsEffective(env string) bool {
 	switch in.tlsMode() {
 	case "off":
 		return false
 	case "":
-		return tlsOn(in.settingsVars(env))
+		vars, unread := in.settingsVars(env)
+		if unread {
+			return in.keptHTTPS()
+		}
+		return tlsOn(vars)
 	}
 	return true
 }
 
 // tlsHTTPEffective is the plain helper address of the installed
 // service, from this run's options, else the settings file; "" without
-// TLS.
+// TLS, and where the settings file cannot be read (capKept).
 func (in *installer) tlsHTTPEffective(env string) string {
 	if in.TLSHTTP != "" {
 		return in.TLSHTTP
@@ -323,5 +329,101 @@ func (in *installer) tlsHTTPEffective(env string) string {
 	if in.tlsMode() != "" && in.tlsMode() != "acme" || !in.tlsEffective(env) {
 		return ""
 	}
-	return in.settingsVars(env)[tlsHTTPVar]
+	vars, _ := in.settingsVars(env)
+	return vars[tlsHTTPVar]
+}
+
+// helperHTTPS finds an https:// health URL in the update helper's plist.
+var helperHTTPS = regexp.MustCompile(`<string>-health</string>\s*<string>https://`)
+
+// keptHTTPS says whether the update helper installed before checks the
+// server over https://, its health drop-in, on macOS its plist: where
+// the settings file cannot be read and -tls does not say, install keeps
+// the TLS the units have, as it does not know the settings' (AP
+// StartConfiguration, D51-A), rather than take TLS as off, which an https
+// server's health check, and so every update, would fail on once the
+// file is fixed. It says once what it found (warnUnread).
+func (in *installer) keptHTTPS() bool {
+	unit := HealthDropIn
+	if in.darwin {
+		unit = PlistPath(HelperLabel)
+	}
+	b, err := os.ReadFile(in.path(unit))
+	found := err == nil
+	https := found && (in.darwin && helperHTTPS.Match(b) || !in.darwin && bytes.Contains(b, []byte("Environment=MASSIMO_HEALTH=https://")))
+	if !in.tlsKept {
+		in.tlsKept = true
+		in.warnUnread(found, https)
+	}
+	return https
+}
+
+// warnUnread says that the settings file cannot be read, so that its TLS
+// is not known, and what the units keep until install runs again on a
+// file it can read: the update helper's scheme, that of the helper found
+// (found, https), else http://, none without the helper; and the listen
+// drop-in's capability, where it has one (capKept).
+func (in *installer) warnUnread(found, https bool) {
+	var until []string
+	switch {
+	case in.NoUpdateHelper:
+	case found && https:
+		until = append(until, "the update helper keeps checking https:// as installed before")
+	case found:
+		until = append(until, "the update helper keeps checking http:// as installed before")
+	default:
+		until = append(until, "the update helper checks http://")
+	}
+	if !in.darwin && in.capKept() {
+		until = append(until, "the listen drop-in keeps its capability to bind a port below 1024")
+	}
+	msg := "warning: " + EnvPath + " cannot be read, so its TLS is not known: run install again once the file is fixed"
+	if len(until) > 0 {
+		msg += "; until then " + strings.Join(until, ", and ")
+	}
+	fmt.Fprintln(in.Out, msg)
+}
+
+// checkTLSFile refuses -tls over a settings file kept that cannot be
+// read, kept, before an install writes anything, with the parser's error
+// (env.ReadFileLenient): -tls writes its lines into that file
+// (setEnvLines), which the next start refuses anyway, and the units
+// would follow a TLS the file does not say. UTF-16 text and a line too
+// long, one rule. Nothing where -tls is not given or there is no file.
+func (o Options) checkTLSFile(kept string) error {
+	if o.tlsMode() == "" {
+		return nil
+	}
+	if _, err := os.Stat(kept); err != nil {
+		return nil
+	}
+	if _, _, err := env.ReadFileLenient(kept); err != nil {
+		return fmt.Errorf("-tls: %w; nothing was written", err)
+	}
+	return nil
+}
+
+// fileError is err, an error of the read of the settings file at path,
+// naming the file by name, as the notes on its lines name it:
+// "/etc/massimo/env: UTF-16 text, save it as UTF-8".
+func fileError(name, path string, err error) string {
+	if rest, ok := strings.CutPrefix(err.Error(), path); ok {
+		return name + rest
+	}
+	return name + ": " + err.Error()
+}
+
+// capKept says whether the listen drop-in keeps the capability to bind a
+// port below 1024 that it has: where the settings file cannot be read
+// and -tls does not say, the plain helper address of MASSIMO_TLS_HTTP,
+// :80 the one that needs it, is not known (keptHTTPS).
+func (in *installer) capKept() bool {
+	if in.tlsMode() != "" {
+		return false
+	}
+	if _, unread := in.settingsVars(in.path(EnvPath)); !unread {
+		return false
+	}
+	b, err := os.ReadFile(in.path(ListenDropIn))
+	return err == nil && bytes.Contains(b, []byte(capLine))
 }

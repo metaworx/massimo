@@ -410,7 +410,7 @@ func TestInstallKeepsAFileServeRefuses(t *testing.T) {
 				continue
 			}
 			s := out.String()
-			if n := strings.Count(s, note); n != 1 || strings.Contains(s, "cannot check") || strings.Contains(s, "no MASSIMO_API_TOKEN") {
+			if n := strings.Count(s, note); n != 1 || strings.Contains(s, "the next start refuses the file until it is fixed") || strings.Contains(s, "no MASSIMO_API_TOKEN") {
 				t.Errorf("%s: the warning said %d times, or the file not read:\n%s", what, n, s)
 			}
 			if kept := EnvPath + " exists; kept it and did not copy " + good + "\n"; settings != "" && !strings.Contains(s, kept) {
@@ -433,6 +433,174 @@ func TestInstallKeepsAFileServeRefuses(t *testing.T) {
 			}
 			if b, _ := os.ReadFile(filepath.Join(root, ListenDropIn)); !strings.Contains(string(b), "AmbientCapabilities=CAP_NET_BIND_SERVICE") {
 				t.Errorf("%s: listen drop-in: %q", what, b)
+			}
+		}
+	}
+}
+
+// unreadable are settings files serve's start refuses and install cannot
+// read, text as UTF-16, as PowerShell 5.1's > writes it, and text with a
+// line too long, each with what it is.
+func unreadable(t *testing.T, text string) []struct {
+	what string
+	text []byte
+} {
+	t.Helper()
+	utf16, err := os.ReadFile(utf16File(t, binary.LittleEndian, "", text, true))
+	if err != nil {
+		t.Fatal(err)
+	}
+	return []struct {
+		what string
+		text []byte
+	}{{"UTF-16", utf16}, {"a line too long", []byte(text + "MASSIMO_X=" + strings.Repeat("x", bufio.MaxScanTokenSize) + "\n")}}
+}
+
+// unreadWarning is the warning of a settings file install cannot read,
+// with what the units keep until it runs again (warnUnread).
+func unreadWarning(until string) string {
+	w := "warning: " + EnvPath + " cannot be read, so its TLS is not known: run install again once the file is fixed"
+	if until != "" {
+		w += "; until then " + until
+	}
+	return w + "\n"
+}
+
+// A settings file a re-install keeps and cannot read, UTF-16 text or a
+// line too long, which the next start refuses, is no TLS off nor on:
+// the units keep the TLS they have, byte for byte, with a warning that
+// the next start refuses the file and one that says what they keep (AP
+// StartConfiguration, D51-A). Over https units, the health drop-in's
+// https://, the listen drop-in's capability, which MASSIMO_TLS_HTTP=:80
+// needs, and on macOS the update helper's https:// health URL; and over
+// http units without the capability, which stay so. By a hand install,
+// by one on a packaged box and by one on macOS, over the units of an
+// install that read the file.
+func TestInstallKeepsTheTLSOfAFileItCannotRead(t *testing.T) {
+	for _, c := range []struct {
+		what, text, listen string
+		linux, darwin      map[string]string // a unit's path, what it has
+		until, darwinUntil string
+	}{
+		{"over https units", "MASSIMO_API_TOKEN=t\nMASSIMO_TLS=acme\nMASSIMO_TLS_NAMES=massimo.example.net\nMASSIMO_TLS_HTTP=:80\n", "",
+			map[string]string{HealthDropIn: "Environment=MASSIMO_HEALTH=https://", ListenDropIn: capLine},
+			map[string]string{PlistPath(HelperLabel): "<string>https://127.0.0.1:8099/healthz</string>"},
+			"the update helper keeps checking https:// as installed before, and the listen drop-in keeps its capability to bind a port below 1024",
+			"the update helper keeps checking https:// as installed before"},
+		{"over http units", "MASSIMO_API_TOKEN=t\n", "127.0.0.1:8100",
+			map[string]string{HealthDropIn: "Environment=MASSIMO_HEALTH=http://127.0.0.1:8100/healthz", ListenDropIn: "Environment=MASSIMO_LISTEN=127.0.0.1:8100\n"},
+			map[string]string{PlistPath(HelperLabel): "<string>http://127.0.0.1:8100/healthz</string>"},
+			"the update helper keeps checking http:// as installed before",
+			"the update helper keeps checking http:// as installed before"},
+	} {
+		for _, k := range installKinds {
+			for _, u := range unreadable(t, c.text) {
+				what := fmt.Sprintf("%s, %s, %s", c.what, k.what, u.what)
+				var out bytes.Buffer
+				root, o, install := k.opts(t, &recorder{}, &out)
+				keep(t, root, c.text)
+				o.Listen = c.listen
+				if err := install(o); err != nil {
+					t.Fatalf("%s: the first install: %v", what, err)
+				}
+				units, until := c.linux, c.until
+				if k.darwin {
+					units, until = c.darwin, c.darwinUntil
+				}
+				before := map[string]string{}
+				for f, has := range units {
+					if before[f] = read(t, filepath.Join(root, f)); !strings.Contains(before[f], has) {
+						t.Fatalf("%s: the first install's %s lacks %q:\n%s", what, f, has, before[f])
+					}
+				}
+				if !k.darwin && c.listen != "" && strings.Contains(before[ListenDropIn], capLine) {
+					t.Fatalf("%s: the first install's listen drop-in has the capability", what)
+				}
+				os.WriteFile(filepath.Join(root, EnvPath), u.text, 0o600)
+				out.Reset()
+				o.Listen = ""
+				if err := install(o); err != nil {
+					t.Errorf("%s: %v", what, err)
+					continue
+				}
+				for f := range units {
+					if got := read(t, filepath.Join(root, f)); got != before[f] {
+						t.Errorf("%s: %s changed:\n%s\nwas\n%s", what, f, got, before[f])
+					}
+				}
+				for _, w := range []string{": the next start refuses the file until it is fixed\n", unreadWarning(until)} {
+					if n := strings.Count(out.String(), w); n != 1 {
+						t.Errorf("%s: %q said %d times:\n%s", what, w, n, out.String())
+					}
+				}
+			}
+		}
+	}
+}
+
+// The warning of a settings file install cannot read speaks of the
+// units there are: a first install over such a file, which has none to
+// keep, says that the update helper checks http:// until install runs
+// again; one without the update helper names none; each tells the owner
+// to run install again once the file is fixed. By a hand install, by one
+// on a packaged box and by one on macOS.
+func TestInstallSaysWhatItKeepsOfAFileItCannotRead(t *testing.T) {
+	text := "MASSIMO_API_TOKEN=t\nMASSIMO_TLS=self-signed\n"
+	for _, k := range installKinds {
+		for _, noHelper := range []bool{false, true} {
+			for _, u := range unreadable(t, text) {
+				var out bytes.Buffer
+				root, o, install := k.opts(t, &recorder{}, &out)
+				os.MkdirAll(filepath.Join(root, EnvDir), 0o750)
+				os.WriteFile(filepath.Join(root, EnvPath), u.text, 0o600)
+				o.NoUpdateHelper = noHelper
+				what := fmt.Sprintf("%s, %s, -no-update-helper %v", k.what, u.what, noHelper)
+				if err := install(o); err != nil {
+					t.Errorf("%s: %v", what, err)
+					continue
+				}
+				until := "the update helper checks http://"
+				if noHelper {
+					until = ""
+				}
+				if w := unreadWarning(until); strings.Count(out.String(), w) != 1 {
+					t.Errorf("%s: want %q once:\n%s", what, w, out.String())
+				}
+			}
+		}
+	}
+}
+
+// -tls over a settings file install keeps and cannot read, UTF-16 text
+// or a line too long, is refused with the parser's error and the word
+// that nothing was written, before the install writes, runs or says
+// anything: its lines would go into a file the start refuses, and the
+// units would follow a TLS the file does not say. By a hand install, by
+// one on a packaged box and by one on macOS, in a dry run too.
+func TestInstallRefusesTLSOverAFileItCannotRead(t *testing.T) {
+	for _, k := range installKinds {
+		for _, u := range unreadable(t, "MASSIMO_API_TOKEN=t\n") {
+			for _, dry := range []bool{false, true} {
+				var out bytes.Buffer
+				rec := &recorder{}
+				root, o, install := k.opts(t, rec, &out)
+				os.MkdirAll(filepath.Join(root, EnvDir), 0o750)
+				kept := filepath.Join(root, EnvPath)
+				os.WriteFile(kept, u.text, 0o600)
+				_, _, readErr := env.ReadFileLenient(kept)
+				if readErr == nil {
+					t.Fatalf("%s: the file read", u.what)
+				}
+				before := tree(t, root)
+				o.TLS, o.DryRun = "self-signed", dry
+				err := install(o)
+				what := fmt.Sprintf("%s, %s, dry run %v", k.what, u.what, dry)
+				if want := "-tls: " + readErr.Error() + "; nothing was written"; err == nil || err.Error() != want {
+					t.Errorf("%s: %v, want %s", what, err, want)
+				}
+				if after := tree(t, root); !maps.Equal(after, before) || out.Len() != 0 || len(rec.cmds) != 0 {
+					t.Errorf("%s: before the refusal wrote, said %q, ran %q", what, out.String(), rec.cmds)
+				}
 			}
 		}
 	}

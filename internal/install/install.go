@@ -163,6 +163,7 @@ type installer struct {
 	reboot  bool   // the reboot helper stays or comes (rebootWanted)
 	noted   bool   // the settings file's notes are said (readSettings)
 	copies  bool   // -settings is copied, or in a dry run would be (settingsCopy)
+	tlsKept bool   // the settings unread, what the units keep is said (keptHTTPS)
 	// svc is how the service starts serve, for the start's checks
 	// (warnRefused).
 	svc serviceStart
@@ -248,6 +249,9 @@ func Install(o Options) error {
 		return err
 	}
 	if err := o.checkSettingsFile(systemdStart()); err != nil {
+		return err
+	}
+	if err := o.checkTLSFile(filepath.Join(o.Root, EnvPath)); err != nil {
 		return err
 	}
 	in := newInstaller(o)
@@ -341,6 +345,9 @@ func configure(o Options, m Manager) error {
 		return err
 	}
 	if err := o.checkSettingsFile(systemdStart()); err != nil {
+		return err
+	}
+	if err := o.checkTLSFile(filepath.Join(o.Root, EnvPath)); err != nil {
 		return err
 	}
 	// Only the Debian package ships an update helper, and only apt is
@@ -719,7 +726,11 @@ func (in *installer) checkSettings() {
 	}
 	vars, err := in.readSettings(env)
 	if err != nil {
-		fmt.Fprintf(in.Out, "warning: cannot check %s: %v\n", EnvPath, err)
+		name := EnvPath
+		if env != in.path(EnvPath) {
+			name = env
+		}
+		fmt.Fprintf(in.Out, "warning: %s: the next start refuses the file until it is fixed\n", fileError(name, env, err))
 		return
 	}
 	name := env

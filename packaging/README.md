@@ -173,6 +173,20 @@ In a settings file it keeps it warns of a line that is not `KEY=VALUE`
 and of a value the next start refuses instead,
 so that a re-install does not fail on it,
 on Windows before it stops the service.
+A settings file it keeps but cannot read, UTF-16 text or a line too long,
+it warns of as one the next start refuses,
+and keeps the TLS the units have, as it does not know the file's:
+the update helper's health check as it was, `https://` or `http://`,
+the listen drop-in's `CAP_NET_BIND_SERVICE` where it has it,
+which `MASSIMO_TLS_HTTP=:80` needs,
+and on macOS the helper's URL as it was,
+rather than set them back as if TLS were off;
+where there were none, the helper checks `http://`.
+It says what it keeps, and to run it again once the file is fixed.
+`-tls` over such a file it refuses before it writes anything,
+on Windows before it stops the service:
+its lines would go into a file the start refuses.
+Windows has no units that follow the settings' TLS.
 Nothing needs to go into `/etc/massimo/env` for the first start.
 Either create the owner first and then start the service:
 

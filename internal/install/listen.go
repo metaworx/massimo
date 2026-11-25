@@ -58,11 +58,15 @@ func listenDropIns(addr string, tls bool, httpAddr string) (serve, health string
 	head := "# Written by `massimo install` (-listen, -tls), kept by later installs. Delete\n# this file (and its pair) and run `systemctl daemon-reload` to go back to\n# http://:8099.\n[Service]\n"
 	serve = head + "Environment=MASSIMO_LISTEN=" + addr + "\n"
 	if portBelow1024(port) || httpAddr != "" && portBelow1024(hostPort(httpAddr)) {
-		serve += "AmbientCapabilities=CAP_NET_BIND_SERVICE\n"
+		serve += capLine
 	}
 	health = head + "Environment=MASSIMO_HEALTH=" + healthURL(host, port, tls) + "\n"
 	return serve, health, nil
 }
+
+// capLine is the listen drop-in's line of the capability to bind a port
+// below 1024.
+const capLine = "AmbientCapabilities=CAP_NET_BIND_SERVICE\n"
 
 // portBelow1024 says whether a port needs the capability.
 func portBelow1024(port string) bool {
@@ -127,7 +131,8 @@ func healthURL(host, port string, tls bool) string {
 // later installs keep, and the helper's health URL, which follows the
 // address and the scheme (tls: the settings say the server has TLS;
 // httpAddr: the plain helper of -tls-http, whose port below 1024 needs
-// the capability too). The health drop-in is written whenever the
+// the capability too, which the listen drop-in keeps where the settings
+// cannot be read, capKept). The health drop-in is written whenever the
 // address or the scheme is not the unit's own, and rewritten when a
 // kept one would be wrong.
 func (in *installer) listen(tls bool, httpAddr string) error {
@@ -139,7 +144,8 @@ func (in *installer) listen(tls bool, httpAddr string) error {
 		}
 	}
 	_, healthErr := os.Stat(in.path(HealthDropIn))
-	needCap := httpAddr != "" && portBelow1024(hostPort(httpAddr))
+	keepCap := in.capKept()
+	needCap := httpAddr != "" && portBelow1024(hostPort(httpAddr)) || keepCap
 	if listen == "" && !tls && !needCap && healthErr != nil {
 		return nil // the units' own values hold
 	}
@@ -150,6 +156,9 @@ func (in *installer) listen(tls bool, httpAddr string) error {
 	serve, health, err := listenDropIns(addr, tls, httpAddr)
 	if err != nil {
 		return err
+	}
+	if keepCap && !strings.Contains(serve, capLine) {
+		serve += capLine
 	}
 	var files [][3]string // path, content, what
 	if in.Listen != "" || kept || needCap {
