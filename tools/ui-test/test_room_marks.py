@@ -367,15 +367,16 @@ def test_the_rooms_presets_over_a_wall_thermostats(page, case):
 def test_marks_and_off(page, case):
     """The tile's SET and a device row at OFF, at eco, at comfort, at
     comfort equal to eco, at none of them and at the highest: OFF
-    without a unit, the mark at the top right of the tile's value, out of
-    the flow, and in the place of the row's gauge, labelled; the tile's
-    value and the chevrons in the setpoint row, the row as large, and the
-    device row's icon slot in that row, where they are in every case, the
-    mark costing no width; the
-    stepped value marked as it is stepped onto eco, nothing moving; the
-    marks in the accent colour of the tile's and the row's other icons,
-    in light and in dark; no horizontal scroll. Each place is measured
-    in its row, which whatever is above the tile moves as a whole."""
+    without a unit; the preset's mark, labelled, in the tile's setpoint
+    row and in the device row's Set, there in the place of its gauge;
+    SET keeping its icon and label; SET's value box (AP RoomsPage v1.0,
+    Block 3) and the chevrons in the setpoint row, the row as large, and
+    the device row's icon slot in that row, where they are in every case;
+    the stepped value marked as it is stepped onto eco, the chevrons
+    staying put; the marks in the accent colour of the tile's and the
+    row's other icons, in light and in dark; no horizontal scroll. Each
+    place is measured in its row, which whatever is above the tile moves
+    as a whole."""
     room = page.evaluate(ROOM, [None, False])
     rid, ths = room["id"], room["devices"]
     sel = '.room[data-id="%s"]' % rid
@@ -401,7 +402,7 @@ def test_marks_and_off(page, case):
                 assert m == {"preset": preset, "label": label, "title": label, "role": "img", "symbol": SYMBOL[preset]}, f"{name}: the tile's mark: {m}"
             assert tile.locator(".temp-tag use[href='#icon-set']").count() == 1, f"{name}: SET keeps its icon"
             assert tile.locator(".temp-tag .temp-label").nth(1).inner_text() == ("SET" if lang == "en" else "SOLL"), f"{name}: and its label"
-            geometry.append((box(page, sel + " .setpoint-big", sp_row), box(page, sel + " .stepper", sp_row), box(page, sp_row, sp_row)))
+            geometry.append((box(page, sel + " .set-val", sp_row), box(page, sel + " .stepper", sp_row), box(page, sp_row, sp_row)))
 
             cell = set_cell(row, lang)
             assert cell.locator(".num").inner_text() == shown(sp, lang, ""), f"{name}: the row's value: {cell.locator('.num').inner_text()!r}"
@@ -423,7 +424,7 @@ def test_marks_and_off(page, case):
             assert abs(b["x"] - slots[0]["x"]) < 0.5 and abs(b["width"] - slots[0]["width"]) < 0.5, \
                 f"{name}: the row's icon slot stays where it is: {b}, {slots[0]}"
         for (name, *_), g in zip(CASES, geometry):
-            for what, a, b in zip(("the value", "the chevrons", "the setpoint row"), g, geometry[0]):
+            for what, a, b in zip(("the value's box", "the chevrons", "the setpoint row"), g, geometry[0]):
                 assert all(abs(x - y) < 0.5 for x, y in zip(a, b)), f"{name}: {what} stays where it is in the setpoint row: {a}, {geometry[0]}"
 
         # The stepped value: half a degree under the eco temperature, then
@@ -475,46 +476,132 @@ def test_marks_and_off(page, case):
         tile.locator(".room-name-btn").click()
 
 
+# The widths the setpoint row is checked at, each with its tiles'
+# columns: phones of 346 and 390 px, one column; 610 px, two columns of
+# 281 px, nearly the narrowest tile there is (280 px, .tiles); 956 px,
+# three columns of 297 px, as in the owner's screenshot.
+FIT_WIDTHS = {346: 1, 390: 1, 610: 2, 956: 3}
+
+# The setpoint row of a tile measured: the tile's inner edges, the row's
+# content edges, each temperature's tag (its icon and label, whether
+# shown) and value (its text's box, its font size and the width its box
+# reserves, the min-width of IS's number and of SET's box with the mark's
+# room), SET's value box, the mark, the chevrons, the label each tag
+# should show, the page's width and the tiles' columns.
+FIT = """(s) => {
+  const tile = document.querySelector(s), row = tile.querySelector(".setpoint-row");
+  const rect = (e) => { const r = e.getBoundingClientRect(); return { l: r.left, r: r.right, t: r.top, b: r.bottom, w: r.width }; };
+  const text = (e) => { const g = document.createRange(); g.selectNodeContents(e); return rect(g); };
+  const shown = (e) => getComputedStyle(e).display !== "none" && getComputedStyle(e).visibility === "visible" && e.getBoundingClientRect().width > 0;
+  const tr = tile.getBoundingClientRect(), ts = getComputedStyle(tile), rr = row.getBoundingClientRect(), rs = getComputedStyle(row);
+  const mark = row.querySelector(".set-val > .preset-mark");
+  return {
+    tile: { l: tr.left + parseFloat(ts.borderLeftWidth), r: tr.right - parseFloat(ts.borderRightWidth) },
+    content: { l: rr.left + parseFloat(rs.paddingLeft), r: rr.right - parseFloat(rs.paddingRight) },
+    tags: [...row.querySelectorAll(".temp-tag")].map((g) => {
+      const icon = g.querySelector("svg"), label = g.querySelector(".temp-label");
+      return { icon: rect(icon), label: rect(label), text: label.textContent, shown: [g, icon, label].every(shown) };
+    }),
+    vals: [row.querySelector(".temp-is"), row.querySelector(".set-val")].map((box) => {
+      const v = box.matches(".temp-big") ? box : box.querySelector(".temp-big");
+      return { text: text(v), size: parseFloat(getComputedStyle(v).fontSize), reserve: parseFloat(getComputedStyle(box).minWidth) };
+    }),
+    setBox: rect(row.querySelector(".set-val")), mark: mark && rect(mark), stepper: rect(row.querySelector(".stepper")),
+    want: [t("room.is"), t("room.set")], page: document.documentElement.scrollWidth,
+    cols: getComputedStyle(tile.parentElement).gridTemplateColumns.split(" ").length,
+  };
+}"""
+
+
+def fit_problems(m, width):
+    """What is wrong with a setpoint row measured by FIT: a tag hidden or
+    with another label, anything outside the tile, chevrons away from its
+    right edge, the parts of the row overlapping in their order (IS's tag
+    and value, SET's tag and value with its mark, the chevrons), IS's text
+    wider than the width its number reserves, SET's text with its mark
+    wider than the width its box reserves, a mark that is not a
+    superscript right after the value's text, a horizontal scroll."""
+    out = []
+    (is_tag, set_tag), (is_val, set_val) = m["tags"], m["vals"]
+    order = []
+    for name, tag, val, want in (("IS", is_tag, is_val, m["want"][0]), ("SET", set_tag, set_val, m["want"][1])):
+        if tag["text"] != want:
+            out.append(f"{name}'s label {tag['text']!r}, not {want!r}")
+        if tag["shown"]:
+            order.append((f"{name}'s tag", min(tag["icon"]["l"], tag["label"]["l"]), max(tag["icon"]["r"], tag["label"]["r"])))
+        else:
+            out.append(f"{name}'s icon or label hidden")
+        end = m["mark"]["r"] if name == "SET" and m["mark"] else val["text"]["r"]
+        order.append((f"{name}'s value", val["text"]["l"], end))
+    order.append(("the chevrons", m["stepper"]["l"], m["stepper"]["r"]))
+    for what, left, right in order:
+        if left < m["tile"]["l"] - 0.5 or right > m["tile"]["r"] + 0.5:
+            out.append(f"{what} leaves the tile: {left:.1f}…{right:.1f} of {m['tile']['l']:.1f}…{m['tile']['r']:.1f}")
+    for (a, _, a_right), (b, b_left, _) in zip(order, order[1:]):
+        if a_right > b_left + 0.5:
+            out.append(f"{a} over {b}: {a_right:.1f} > {b_left:.1f}")
+    if abs(m["stepper"]["r"] - m["content"]["r"]) > 0.5:
+        out.append(f"the chevrons end at {m['stepper']['r']:.1f}, not at the row's right edge {m['content']['r']:.1f}")
+    if is_val["text"]["w"] > is_val["reserve"] + 0.5:
+        out.append(f"IS's value {is_val['text']['w']:.1f} px wide, more than its number reserves, {is_val['reserve']:.1f}")
+    set_end = m["mark"]["r"] if m["mark"] else set_val["text"]["r"]
+    if set_end - m["setBox"]["l"] > set_val["reserve"] + 0.5:
+        out.append(f"SET's value with its mark {set_end - m['setBox']['l']:.1f} px wide, more than its box reserves, {set_val['reserve']:.1f}")
+    if m["mark"]:
+        gap = m["mark"]["l"] - set_val["text"]["r"]
+        if gap < -0.5 or gap > 0.25 * set_val["size"]:
+            out.append(f"the mark {gap:.1f} px after the value's text, not right after it")
+        if (m["mark"]["t"] + m["mark"]["b"]) / 2 >= (set_val["text"]["t"] + set_val["text"]["b"]) / 2:
+            out.append(f"the mark not raised: {m['mark']} beside {set_val['text']}")
+    if m["page"] > width:
+        out.append(f"a horizontal scroll: {m['page']} px")
+    return out
+
+
 @pytest.mark.cases("390-en")
 def test_the_setpoint_row_fits_in_every_language(page, case):
-    """At 390 px, in each of the six languages, whose labels of IS and SET
-    differ in length (Italian's the longest): the setpoint row fits its
-    tile and the page does not scroll, at the widest value and at OFF,
-    with a mark and without, in light and dark; the mark costs no width,
-    the chevrons where they are in the row without it."""
+    """At 346 and 390 px, one column of tiles, at 610 px, two, and at
+    956 px, three (AP RoomsPage v1.0, Block 3), in each of the six
+    languages, whose labels of IS and SET differ in length (Italian's
+    the longest), in light and dark, at the widest value and at OFF, with
+    a mark and without: everything of the setpoint row inside its tile,
+    the chevrons at its right edge; the icons and labels of IS and SET
+    shown, a long label cut rather than hidden; the temperatures, their
+    tags and the chevrons side by side without overlapping; IS's value
+    within the width its number reserves, SET's with its mark within the
+    width its box reserves; the mark a superscript right after the
+    value's text; the mark moving neither the value nor the chevrons; no
+    horizontal scroll."""
     room = page.evaluate(ROOM, [None, False])
     rid, ths = room["id"], room["devices"]
     sel = '.room[data-id="%s"]' % rid
-    got = []
+    size = page.viewport_size
+    problems = []
     try:
         for lang in ("en", "de", "fr", "it", "nl", "pl"):
             page.evaluate("async (l) => { await changeLanguage(l); applyLanguage(); }", lang)
-            for theme in ("light", "dark"):
-                page.evaluate("(t) => { document.documentElement.dataset.theme = t; }", theme)
-                steppers = {}
-                for sp, eco in ((30.5, 17), (30.5, 30.5), (4.5, 17), (4.5, 4.5)):
-                    page.evaluate(SET, [rid, {d["rf"]: {"setpoint": sp, "eco": eco, "comfort": 21} for d in ths}])
-                    page.evaluate(PRESETS, [rid, eco, 21])
-                    marked = eco == sp
-                    assert wait_until(page, "!!document.querySelector(%r) === %s" % (sel + " .set-val .preset-mark", "true" if marked else "false"), 5), \
-                        f"{lang}: the mark {marked} at {sp}"
-                    m = page.evaluate("""(s) => {
-                      const row = document.querySelector(s + " .setpoint-row");
-                      const r = row.getBoundingClientRect(), cs = getComputedStyle(row);
-                      const lo = r.left + parseFloat(cs.paddingLeft), hi = r.right - parseFloat(cs.paddingRight);
-                      const boxes = [...row.querySelectorAll(".temp-tag, .temp-big, .preset-mark, .stepper")].map((e) => e.getBoundingClientRect());
-                      const left = Math.min(...boxes.map((b) => b.left)), right = Math.max(...boxes.map((b) => b.right));
-                      return { scroll: row.scrollWidth, client: row.clientWidth, inside: left >= lo - 0.5 && right <= hi + 0.5,
-                        spare: Math.round((lo - left) * 10) / 10 + "/" + Math.round((right - hi) * 10) / 10,
-                        stepper: row.querySelector(".stepper").getBoundingClientRect().x - r.x, page: document.documentElement.scrollWidth };
-                    }""", sel)
-                    got.append((lang, theme, sp, marked, m))
-                    assert m["scroll"] <= m["client"] and m["inside"], f"{lang}, {theme}, {sp}, mark {marked}: the row's content fits inside its padding: {m}"
-                    assert m["page"] <= case.width, f"{lang}, {theme}: no horizontal scroll: {m}"
-                    steppers.setdefault(sp, set()).add(round(m["stepper"], 1))
-                for sp, xs in steppers.items():
-                    assert len(xs) == 1, f"{lang}, {theme}, {sp}: the mark moves the chevrons: {xs}"
+            for width, cols in FIT_WIDTHS.items():
+                page.set_viewport_size({"width": width, "height": size["height"]})
+                for theme in ("light", "dark"):
+                    page.evaluate("(t) => { document.documentElement.dataset.theme = t; }", theme)
+                    places = {}
+                    for sp, eco in ((30.5, 17), (30.5, 30.5), (4.5, 17), (4.5, 4.5)):
+                        page.evaluate(SET, [rid, {d["rf"]: {"setpoint": sp, "eco": eco, "comfort": 21} for d in ths}])
+                        page.evaluate(PRESETS, [rid, eco, 21])
+                        marked = eco == sp
+                        assert wait_until(page, "!!document.querySelector(%r) === %s" % (sel + " .set-val .preset-mark", "true" if marked else "false"), 5), \
+                            f"{lang}: the mark {marked} at {sp}"
+                        m = page.evaluate(FIT, sel)
+                        where = f"{width} px, {lang}, {theme}, {sp}, mark {marked}"
+                        assert m["cols"] == cols, f"{where}: {cols} columns of tiles: {m['cols']}"
+                        problems += [f"{where}: {p}" for p in fit_problems(m, width)]
+                        places.setdefault(sp, set()).add((round(m["stepper"]["l"], 1), round(m["setBox"]["l"], 1), round(m["vals"][1]["text"]["l"], 1)))
+                    for sp, xs in places.items():
+                        if len(xs) != 1:
+                            problems.append(f"{width} px, {lang}, {theme}, {sp}: the mark moves the chevrons or the value: {xs}")
+        assert not problems, f"{len(problems)} problems, the first ones:\n" + "\n".join(problems[:40])
     finally:
+        page.set_viewport_size(size)
         page.evaluate("async () => { await changeLanguage('en'); applyLanguage(); delete document.documentElement.dataset.theme; }")
 
 
