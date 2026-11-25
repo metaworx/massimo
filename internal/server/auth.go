@@ -63,8 +63,8 @@ const (
 )
 
 // capabilities lists every capability of docs/store.md section 6 in its
-// order. A route is registered with one of them; the roles' sets are
-// rows of the store.
+// order. A route is registered with one of them, or with two of which
+// either admits it (capOr); the roles' sets are rows of the store.
 var capabilities = []string{
 	"read", "preferences", "setpoint", "lock", "configure", "rename", "structure", "pair", "discover", "backup", "restore", "repair",
 	"guests", "users", "passwords", "roles", "roles.disable", "capabilities", "cubes", "cubes.reboot", "settings", "update", "restart", "reboot", "audit",
@@ -90,6 +90,12 @@ const (
 	capAny  = "any"
 )
 
+// capOr joins the two capabilities of a route that either admits:
+// GET /api/v1/restart is registered with "restart or update", since every
+// update restarts the server and its holder reads what the next start
+// refuses (AP StartConfiguration, D34-A).
+const capOr = " or "
+
 func validCapability(c string) bool {
 	for _, k := range capabilities {
 		if k == c {
@@ -97,6 +103,43 @@ func validCapability(c string) bool {
 		}
 	}
 	return false
+}
+
+// routeCapabilities splits a route's capability into those that admit
+// it: one, or two joined by capOr.
+func routeCapabilities(capability string) []string {
+	return strings.Split(capability, capOr)
+}
+
+// routeCapabilityError says what is wrong with the capability a route is
+// registered with, "" for nothing: capNone and capAny stand alone, any
+// other is one capability or two joined by capOr, each a known one. The
+// api helper panics on it (server.go).
+func routeCapabilityError(pattern, capability string) string {
+	if capability == capNone || capability == capAny {
+		return ""
+	}
+	caps := routeCapabilities(capability)
+	if len(caps) > 2 {
+		return fmt.Sprintf("route %s: more than two capabilities %q", pattern, capability)
+	}
+	for _, c := range caps {
+		if !validCapability(c) {
+			return fmt.Sprintf("route %s: unknown capability %q", pattern, c)
+		}
+	}
+	return ""
+}
+
+// capabilityRequired is the error of a request refused for want of the
+// route's capability: `capability "restart" required`, or for two
+// `capability "restart" or "update" required`.
+func capabilityRequired(capability string) string {
+	caps := routeCapabilities(capability)
+	for i, c := range caps {
+		caps[i] = strconv.Quote(c)
+	}
+	return "capability " + strings.Join(caps, capOr) + " required"
 }
 
 // authMode is how a server authenticates.
@@ -879,12 +922,18 @@ func (s *Server) touch(ctx context.Context, tok store.Token, ip string, now time
 }
 
 // allowed reports whether a principal may call a route registered with
-// a capability. The users routes also admit a guests or passwords
-// holder and a user's own name, and the device route a structure
-// holder; the handlers narrow what those may do.
+// a capability, or with two of which it holds either (capOr). The users
+// routes also admit a guests or passwords holder and a user's own name,
+// and the device route a structure holder; the handlers narrow what
+// those may do.
 func (s *Server) allowed(p *principal, capability string, r *http.Request) bool {
-	if capability == capAny || p.has(capability) {
+	if capability == capAny {
 		return true
+	}
+	for _, c := range routeCapabilities(capability) {
+		if p.has(c) {
+			return true
+		}
 	}
 	if capability == "users" && (p.has("guests") || p.has("passwords") || p.named() && strings.EqualFold(r.PathValue("name"), p.user.Name)) {
 		return true
@@ -1005,10 +1054,10 @@ func (s *Server) authorize(w http.ResponseWriter, r *http.Request, capability st
 	p = q
 	if !s.allowed(p, capability, r) {
 		if p.integration != nil {
-			writeJSON(w, http.StatusForbidden, map[string]any{"error": fmt.Sprintf("capability %q required", capability), "code": "forbidden"})
+			writeJSON(w, http.StatusForbidden, map[string]any{"error": capabilityRequired(capability), "code": "forbidden"})
 			return p, false
 		}
-		writeError(w, http.StatusForbidden, fmt.Sprintf("capability %q required", capability))
+		writeError(w, http.StatusForbidden, capabilityRequired(capability))
 		return p, false // the audit names who was refused
 	}
 	return p, true

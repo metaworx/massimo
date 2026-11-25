@@ -305,6 +305,7 @@
   "restart.pending": "S’applique au prochain redémarrage : {names}.",
   "restart.refused": "Le prochain démarrage refuse ce qui suit ; le serveur ne revient pas après un redémarrage, une mise à jour ou un redémarrage de l’ordinateur tant que le fichier de réglages n’est pas corrigé :",
   "restart.refusal": "{names} : {error}",
+  "restart.confirmRefused": "Mais le prochain démarrage du serveur refuse le fichier de réglages tel qu’il est : il ne revient pas tant que le fichier n’est pas corrigé.",
   "restart.unavailable": "Le redémarrage depuis cette page est impossible : {reason}.",
   "restart.cannotAsk": "Impossible d’interroger le serveur sur le redémarrage : {error}",
   "reboot.button": "Redémarrer",
@@ -387,6 +388,7 @@
   "maint.cannotAsk": "Impossible d'interroger le serveur : {error}",
   "maint.badge.pending.one": "{n} modification attend un redémarrage",
   "maint.badge.pending.other": "{n} modifications attendent un redémarrage",
+  "maint.badge.refused": "le prochain démarrage échoue",
 
   "help.button": "aide : {label}",
   "help.title": "À quoi cela sert-il ?",

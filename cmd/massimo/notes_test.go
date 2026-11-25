@@ -201,7 +201,7 @@ func TestServeLogsTheStartsNotes(t *testing.T) {
 		t.Fatal(err)
 	}
 	var fixed line
-	if !testkit.Within(testkit.Scale(25*time.Second), func() bool {
+	if !testkit.Within(25*time.Second, func() bool {
 		var lines []line
 		getJSON(s, "/api/v1/log?kind=settings_read&limit=100", &lines)
 		for _, l := range lines {

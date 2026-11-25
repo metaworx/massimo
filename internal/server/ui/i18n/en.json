@@ -303,6 +303,7 @@
   "restart.pending": "Applies at the next restart: {names}.",
   "restart.refused": "The next start refuses the following; the server does not come back after a restart, an update or a reboot until the settings file is fixed:",
   "restart.refusal": "{names}: {error}",
+  "restart.confirmRefused": "But the server's next start refuses the settings file as it is: it does not come back until the file is fixed.",
   "restart.unavailable": "No restart from here: {reason}.",
   "restart.cannotAsk": "Cannot ask the server about the restart: {error}",
   "reboot.button": "Reboot",
@@ -385,6 +386,7 @@
   "maint.cannotAsk": "Cannot ask the server: {error}",
   "maint.badge.pending.one": "{n} change waits for a restart",
   "maint.badge.pending.other": "{n} changes wait for a restart",
+  "maint.badge.refused": "next start fails",
 
   "help.button": "help: {label}",
   "help.title": "What does this do?",
