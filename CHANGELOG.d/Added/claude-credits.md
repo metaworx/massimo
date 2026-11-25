@@ -1,2 +1,2 @@
 - System info lists the credits and licences of everything the server
-  includes.
+  includes, and `massimo credits` prints them.

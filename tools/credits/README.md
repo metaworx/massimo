@@ -2,8 +2,9 @@
 
 `make credits` writes `internal/credits/credits.json`:
 the credits and licences of everything the `massimo` binary includes,
-which the binary embeds (`internal/credits`)
-and System info shows under **Credits and licences** (`docs/ui.md`, "System info").
+which the binary embeds (`internal/credits`),
+System info shows under **Credits and licences** (`docs/ui.md`, "System info")
+and `massimo credits` prints.
 git keeps the file;
 a change to a module or to a vendored file, or to a vendored file's note, writes it again.
 
@@ -81,7 +82,7 @@ An entry's licence is its note's Licence column, where it has one,
 which must be the licence its first licence file is known by,
 or the program stops naming both; else that file's.
 An entry whose licence files are not all under its licence is marked mixed,
-and System info says so.
+and System info and `massimo credits` say so.
 
 An entry without a licence file stops the program with an error naming it and where it looked,
 and the file is left as it was; it is never written as unknown.

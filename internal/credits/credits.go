@@ -7,8 +7,8 @@
 // and what the repository vendors under third_party/ and
 // internal/server/ui/vendor/, each with the files of its licence.
 // make credits (tools/credits) writes credits.json, which git keeps and
-// the binary embeds; System info shows it (served at /ui/credits.json).
-// go test fails while it is not current.
+// the binary embeds; System info shows it (served at /ui/credits.json)
+// and massimo credits prints it. go test fails while it is not current.
 package credits
 
 import (

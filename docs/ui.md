@@ -1579,6 +1579,7 @@ once the list comes its first entry takes the focus,
 and a try that fails again gives it back to **Try again**;
 an answer that comes after a sign-out, or after the page has left System info,
 changes nothing, and a fold left open fetches the list when the page is shown again.
+`massimo credits` prints the same list (`README.md`, "Command line").
 The page is drawn in place as its facts are read again,
 while a certificate is being read and each time the page is shown,
 and as its clock ticks:

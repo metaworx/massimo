@@ -219,7 +219,7 @@ api-types:
 # and the binary embeds it; go test (internal/credits, tools/credits)
 # fails while it is not current, and go run ./tools/credits -check says
 # so without writing. go list needs the bundle (ui), which the server
-# embeds.
+# embeds. massimo credits prints the list too.
 credits: ui
 	GOOS= GOARCH= GOARM= go run ./tools/credits
 
