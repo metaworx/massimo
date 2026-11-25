@@ -4,11 +4,13 @@
 // Command tally says what a connected run of the emulator suite ran
 // (tools/app-emulator/README.md, "The results"): the tests of Gradle's
 // JUnit results (every TEST-*.xml under the directory it is given), each
-// with how it went, against those the suite's sources declare (every
-// @Test of the androidTest's Kotlin, narrowed by the run's class filter
-// as the instrumentation's -e class takes it). Gradle passes a run whose
-// tests were skipped, or that ran fewer than declared; with -strict, as
-// CI runs it, either fails here.
+// with how it went, a failure with the first lines of its message,
+// against those the suite's sources declare (every @Test of the
+// androidTest's Kotlin, narrowed by the run's class filter as the
+// instrumentation's -e class takes it). Gradle passes a run whose tests
+// were skipped, or that ran fewer than declared, even one whose
+// instrumentation was killed before a test began; with -strict, as CI
+// runs it, each fails here.
 //
 // usage: tally -what <label> -tests <androidTest's kotlin dir> [-class <filter>] [-strict] <results dir>
 //
@@ -38,10 +40,21 @@ const (
 	failed  = "failed"
 )
 
-// result is a test that ran: its key (package.Class#method) and outcome.
+// result is a test that ran: its key (package.Class#method), its
+// outcome, and for a failure the first lines of its message, joined by
+// newlines.
 type result struct {
-	key, outcome string
+	key, outcome, msg string
 }
+
+// runFailed is the case Gradle adds to the results where the
+// instrumentation ended before every test had run, by a crash or a kill
+// (the orchestrator's "Test instrumentation process crashed"): the run's
+// own record, not a test.
+const runFailed = "android-test#testRunFailed"
+
+// msgLines is how many lines of a failure's message the report prints.
+const msgLines = 6
 
 // testcase is a JUnit testcase element; a skipped child marks a skip, a
 // failure or error child a failure.
@@ -113,11 +126,26 @@ func readFile(path string) ([]result, error) {
 		switch {
 		case len(c.Failures) > 0 || len(c.Errors) > 0:
 			r.outcome = failed
+			r.msg = firstLines(append(c.Failures, c.Errors...), msgLines)
 		case c.Skipped != nil:
 			r.outcome = skipped
 		}
 		out = append(out, r)
 	}
+}
+
+// firstLines is the first n lines of texts that are not blank, each
+// trimmed, joined by newlines.
+func firstLines(texts []string, n int) string {
+	var out []string
+	for _, t := range texts {
+		for _, l := range strings.Split(t, "\n") {
+			if l = strings.TrimSpace(l); l != "" && len(out) < n {
+				out = append(out, l)
+			}
+		}
+	}
+	return strings.Join(out, "\n")
 }
 
 var (
@@ -200,9 +228,11 @@ func short(key string) string {
 }
 
 // report writes what ran under the label what, each test with its
-// outcome, then the declared tests that did not run; it reports whether
-// the run is as -strict wants it: tests ran, none skipped or failed, and
-// every declared one among them.
+// outcome, a failure's first lines under it and Gradle's record of a run
+// the instrumentation did not complete named as such, then the declared
+// tests that did not run; it reports whether the run is as -strict wants
+// it: tests ran, none skipped or failed, and every declared one among
+// them.
 func report(w io.Writer, what string, got []result, want []string) bool {
 	n := map[string]int{}
 	ran := map[string]bool{}
@@ -224,10 +254,18 @@ func report(w io.Writer, what string, got []result, want []string) bool {
 	}
 	for _, r := range got {
 		note := ""
-		if !declaredSet[r.key] {
+		switch {
+		case r.key == runFailed:
+			note = " (the instrumentation ended before the run did: a crash or a kill, the device's lines below)"
+		case !declaredSet[r.key]:
 			note = " (not among the tests the sources declare)"
 		}
 		fmt.Fprintf(w, "app-emulator:   %-8s %s%s\n", r.outcome, short(r.key), note)
+		if r.msg != "" {
+			for _, l := range strings.Split(r.msg, "\n") {
+				fmt.Fprintf(w, "app-emulator:   %-8s %s\n", "", l)
+			}
+		}
 	}
 	for _, t := range missing {
 		fmt.Fprintf(w, "app-emulator:   %-8s %s\n", "not run", short(t))

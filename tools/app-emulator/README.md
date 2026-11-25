@@ -204,7 +204,8 @@ or Android 8 to 10, whose prompt takes no PIN.
 `emulator.log` with the kernel's messages,
 the device's `logcat.txt` from the boot on (the suite's steps under
 `MassimoEmu`, and for a failed test the window's hierarchy and the page's
-text), `fingers.log`, `keyguard.log`, each server's and fake Cube's log,
+text), its crash buffer `crash.txt` (each crash's stack whole),
+`fingers.log`, `keyguard.log`, each server's and fake Cube's log,
 `shots/` with the screen of each failed test,
 Gradle's `report/` and `test-results/` (its JUnit results, `TEST-*.xml`),
 and `enroll/`, the enrollment's report and results where it passed.
@@ -226,6 +227,46 @@ so that a new test is expected as soon as it is written.
 Gradle passes a run whose tests were skipped (an `assume`) or that ran fewer than that;
 strict, under CI (`CI=true`) or with `APP_EMU_STRICT=1`,
 the run fails there too, and says which.
+
+A failed test has the first lines of its failure under it.
+Where the instrumentation ended before every test had run,
+by a crash or a kill,
+Gradle passes the run all the same,
+and its results hold a case of their own, `android-test.testRunFailed`,
+the run's record, not a test:
+the tally names it so, with the orchestrator's text under it,
+and the test it lost is among those not run.
+A run that failed or ran short is then followed by what the device's log
+says of how the app's processes ended,
+beyond the orchestrator's own end of each test (`finished inst`,
+`clear data`) and the uninstall after the run:
+a kill by the system with its reason, a process that never attached,
+a crash (its stack in `crash.txt`), an ANR, the low-memory killer.
+Gradle's own logcat of a test killed before it began holds none of it.
+
+```text
+app-emulator:   failed   android-test.testRunFailed (the instrumentation ended before the run did: a crash or a kill, the device's lines below)
+app-emulator:            Test instrumentation process crashed. Check ch.metaworx.massimo.KeepTest#aServerIsAddedAndItsCertificateTrusted.txt for details
+app-emulator:   not run  KeepTest.aServerIsAddedAndItsCertificateTrusted
+app-emulator:   device: … ActivityTaskManager: Destroy timeout of remove-task, attempt to kill Task{… #15 type=standard A=10196:ch.metaworx.massimo}
+app-emulator:   device: … ActivityManager: Killing 7793:ch.metaworx.massimo/u0a196 (adj -10000): remove task
+```
+
+Those two lines are a race of the system's,
+which the tests keep away (`Rig.removeTasks`).
+Between two tests the orchestrator clears the app's data (`pm clear`),
+and Android 14 removes with it every task of the app still in recents
+and kills the app's processes;
+where the last test's activity is still closing,
+it waits a second first (`KILL_TASK_PROCESSES_TIMEOUT_MS`),
+and by then the next test's instrumentation may have started:
+not yet attached, it is killed with the rest,
+and that test does not run, through no fault of its own.
+Three of the suite's first runs in CI, on 2026-11-24, lost a test so.
+Each test therefore takes the app's tasks out of recents once it has closed its activity,
+which leaves the clear no task to wait for.
+Where a passing run's log still shows the app's "Destroy timeout of remove-task",
+`run.sh` says so in a warning, with the lines, and the run passes.
 
 The suite logs no key, token or password:
 the owner's key reaches the tests as a file on the emulator,
