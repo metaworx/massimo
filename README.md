@@ -966,6 +966,11 @@ which `serve -discover-target 127.0.0.1:23273` finds.
 `-pair 0a010d,0abcde,TEQ0000001` adds a device that joins pairing mode two seconds
 after `n:`, a copy of the greeting's 0a010d as 0abcde in no room,
 and joins again after it was removed (a fourth field sets the delay).
+`-free-slots 50` makes the S replies and the greeting's H line say 50 free memory slots,
+a Cube that holds no radiogram;
+without it the S replies say `0x31`, one radiogram pending,
+for which a `serve` with its periodic refresh on reconnects to read the
+budget two minutes after a write, and the H line says the greeting's own.
 
 The fake carries out the radio commands it acknowledges, as the devices do:
 a setpoint or mode (to every thermostat of the room for a room command),

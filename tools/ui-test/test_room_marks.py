@@ -175,17 +175,34 @@ def set_cell(row, lang):
     return row.locator(".device-vals .cell").nth(i)
 
 
+# The preset marks in a place, each one's preset (by its class), label,
+# tooltip, role and symbol.
+MARKS = """(w) => [...w.querySelectorAll('.preset-mark')].map((m) => ({
+  preset: [...m.classList].filter((c) => c.startsWith('preset-') && c !== 'preset-mark').map((c) => c.slice('preset-'.length))[0] || null,
+  label: m.getAttribute('aria-label'), title: m.getAttribute('title'), role: m.getAttribute('role'),
+  symbol: m.querySelector('use')?.getAttribute('href') ?? null }))"""
+
+# The preset of the one mark in a device row's Set cell, the cell found by
+# its label (not Offset's), in one look; null without the row, the cell
+# or one mark in it.
+ROW_SET_MARK = """([sel, k]) => {
+  const row = document.querySelector(sel);
+  const cell = row && [...row.querySelectorAll('.device-vals .cell')].find((c) => c.querySelector('.k')?.textContent === k);
+  const marks = cell ? cell.querySelectorAll('.preset-mark') : [];
+  const cls = marks.length === 1 ? [...marks[0].classList].find((c) => c.startsWith('preset-') && c !== 'preset-mark') : null;
+  return cls ? cls.slice('preset-'.length) : null;
+}"""
+
+
 def mark_of(where):
-    """The preset mark in a place: its preset (by its class), its label,
-    its tooltip and its symbol; None where there is none."""
-    marks = where.locator(".preset-mark")
-    if marks.count() == 0:
+    """The preset mark in a place, read in one look, so that a redraw
+    between two looks cannot count it twice: its preset (by its class),
+    its label, its tooltip and its symbol; None where there is none."""
+    marks = where.evaluate(MARKS)
+    if not marks:
         return None
-    assert marks.count() == 1, "one mark"
-    m = marks.first
-    cls = [c[len("preset-"):] for c in (m.get_attribute("class") or "").split() if c.startswith("preset-") and c != "preset-mark"]
-    return {"preset": cls[0] if cls else None, "label": m.get_attribute("aria-label"), "title": m.get_attribute("title"),
-            "role": m.get_attribute("role"), "symbol": m.locator("use").get_attribute("href")}
+    assert len(marks) == 1, f"one mark: {marks}"
+    return marks[0]
 
 
 def stroke(locator):
@@ -584,11 +601,15 @@ def test_a_config_event_brings_new_presets(page, case, reads):
                             d.setdefault("state", {})["setpoint"] = 18
             return rooms
         reads.change("**/api/v1/cubes/*/rooms?devices=all", room_eco)
+        reads.keep(th["rf"])  # the server's own events of it bring its eco of 16 back
         page.evaluate(config, [rid, th["rf"], ["temps"]])
         assert wait_until(page, "!!document.querySelector(%r)" % (sel + " .setpoint-row .preset-mark.preset-eco"), 5), \
             "the rooms read again: the tile's eco mark by the room's new eco"
         assert loads, "the rooms were read"
-        assert mark_of(set_cell(tile.locator('.device[data-rf="%s"]' % th["rf"]), case.lang))["preset"] == "eco", "the row's eco mark"
+        # waited for, the Set cell found at each look: a redraw of the row
+        # takes the mark until the rooms are read again
+        assert wait_until(page, "(%s)(%s) === 'eco'" % (ROW_SET_MARK, json.dumps(['%s .device[data-rf="%s"]' % (sel, th["rf"]), VAL_SET[case.lang]])), 5), \
+            "the row's eco mark"
     finally:
         reads.clear("**/api/v1/cubes/*/rooms?devices=all")
         page.evaluate("async () => { await loadRooms(); }")
