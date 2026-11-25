@@ -50,13 +50,15 @@ code() { curl -s -o /dev/null -w '%{http_code}' "$@"; }
 version() { up && sed -n 's/.*"version": *"massimo \([^ "]*\).*/\1/p' /tmp/hz; }
 mode() { stat -c '%a %U:%G' "$1" 2>/dev/null; }
 api=http://127.0.0.1:8099/api/v1
+# The owner's password holds neither its name nor a word of the host's
+# (the container is massimo-test), which a new password may not.
 first_owner() {
 	code -X POST -H 'Content-Type: application/json' \
-		-d '{"name":"anna","role":"owner","password":"test-password-1"}' "$api/users"
+		-d '{"name":"anna","role":"owner","password":"quiet-harbour-17"}' "$api/users"
 }
 login() {
 	code -X POST -H 'Content-Type: application/json' \
-		-d '{"user":"anna","password":"test-password-1"}' "$api/login"
+		-d '{"user":"anna","password":"quiet-harbour-17"}' "$api/login"
 }
 message() { grep -q 'massimo: not started' /tmp/out; }
 no_message() { ! message; }
@@ -75,7 +77,7 @@ fresh)
 	# enter, as its owner would run it.
 	useradd -m -s /bin/bash owner && chmod 700 /home/owner
 	run=${line/<name>/anna}
-	(cd /home/owner && printf 'test-password-1\n' | eval "$run -password-stdin") >/tmp/ua 2>&1
+	(cd /home/owner && printf 'quiet-harbour-17\n' | eval "$run -password-stdin") >/tmp/ua 2>&1
 	check "it creates the owner from /home/owner" grep -q 'added with the role owner' /tmp/ua
 	systemctl start massimo.service
 	up
