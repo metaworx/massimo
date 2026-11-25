@@ -3825,7 +3825,7 @@ of the same Cube, or of the server for the server's own:
 | `command` retried, failed or dropped | the same command key acknowledged for the same device |
 | `hold` | its end: the duty cycle's reset, or the wait for free slots |
 | `backup`, `restore_done`, `update_result`, `log_rotated` failed | the next one of its kind below warn |
-| `settings_read` with a value the next start would refuse, a file that does not parse or is there but cannot be read, or a note on the file | the next `settings_read` below warn, or `server_started` (a start's own notes follow it, as a `settings_read` of their own) |
+| `settings_read` with a value the next start would refuse, a file that does not parse or is there but cannot be read, or a note on the file | the next `settings_read`, also one at `warn`, whose line holds all that its read found, so that the newest is the alert; or `server_started` (a start's own notes follow it, as a `settings_read` of their own) |
 | `proxy_refused` | the Cube's `connected`, or `proxy_connected` |
 | `proxy_warning`, a pairing not stopped or not started | `pairing_ended`; `pairing_started` or `proxy_pairing` |
 | `disagree`, a room's thermostats differing or its state not sent again | a `disagree` of the same `room` whose `outcome` is `agree` |

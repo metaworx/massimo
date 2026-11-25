@@ -1106,8 +1106,9 @@ or the person marks it seen (`docs/api-v1.md`, "GET /api/v1/log/alerts"):
 a lost connection until the next one,
 a failed command until the same one is acknowledged,
 a failed backup until the next, a hold until it ends,
-a setting the next start would refuse until the settings file is read
-again without it or the server starts,
+a setting the next start would refuse, or a note on the settings file,
+until the file is read again without it or the server starts without one,
+the newest read's line standing for the ones before it,
 a room whose thermostats disagree until they agree again,
 a thermostat off its week programme until it follows it again,
 a room's setpoint not confirmed until every thermostat shows its re-send;
