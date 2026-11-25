@@ -1068,7 +1068,9 @@ directory (`KEY=VALUE` lines,
 `-no-env` for none;
 the environment wins over the file).
 A name given twice takes its first line, at a start as at a reload,
-and `massimo config` names its lines.
+and `massimo config` names its lines;
+on Windows a name in two cases is given twice,
+as `MASSIMO_X` and `massimo_x` are one variable there.
 A UTF-8 byte order mark at the file's start is skipped,
 and UTF-16 text, as PowerShell 5.1's `>` or `>>` writes it, is refused,
 by `install -settings` too, before it installs anything:

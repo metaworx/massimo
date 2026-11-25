@@ -92,9 +92,6 @@ func TestStartChecksCoverTheStart(t *testing.T) {
 	if testing.Short() {
 		t.Skip("runs the built massimo once per refused setting")
 	}
-	if runtime.GOOS == "windows" {
-		t.Skip("the built massimo is no .exe (builtBinary)")
-	}
 	cases := startRefusalCases(t, t.TempDir())
 	refused := map[string]bool{}
 	for _, c := range cases {
@@ -316,13 +313,12 @@ func startRefusalCases(t *testing.T, dir string) []startRefusal {
 	cert := file("cert.pem", "not read: the key is missing\n", 0o600)
 	key := file("key.pem", "not read: the certificate is missing\n", 0o600)
 	hook := file("hook.sh", "#!/bin/sh\n", 0o755)
-	noExec := file("noexec.sh", "#!/bin/sh\n", 0o644)
 	notDir := file("file", "a file where a directory belongs\n", 0o600)
 	logFile := filepath.Join(notDir, "serve.log")
 	missing := filepath.Join(dir, "missing")
 	acme := []string{env.TLS + "=acme", env.TLSNames + "=massimo.example.net"}
 	cubeAddress := env.PerCube(env.Address, guardCube) + "=127.0.0.1:1"
-	return []startRefusal{
+	cases := []startRefusal{
 		{of: env.LogFormat, what: "a bad format", lines: []string{env.LogFormat + "=xml"}},
 		{of: env.LogFileFormat, what: "none in the file", lines: []string{env.LogFileFormat + "=none"}},
 		{of: env.LogProcessFormat, what: "a bad format on stderr", lines: []string{env.LogProcessFormat + "=yaml"}},
@@ -348,7 +344,12 @@ func startRefusalCases(t *testing.T, dir string) []startRefusal {
 		{of: env.TLSHTTP, what: "the HTTP-01 port beside a DNS hook", lines: append(slices.Clone(acme), env.TLSHTTP+"=:80", env.ACMEDNSHook+"="+hook)},
 		{of: env.ACMEDNSHook, what: "a DNS hook without acme", lines: []string{env.ACMEDNSHook + "=" + hook}},
 		{of: env.ACMEDNSHook, what: "a DNS hook that is not there", lines: append(slices.Clone(acme), env.ACMEDNSHook+"="+missing)},
-		{of: env.ACMEDNSHook, what: "a DNS hook that is not executable", lines: append(slices.Clone(acme), env.ACMEDNSHook+"="+noExec)},
+	}
+	if runtime.GOOS != "windows" { // which checks no execute bit
+		noExec := file("noexec.sh", "#!/bin/sh\n", 0o644)
+		cases = append(cases, startRefusal{of: env.ACMEDNSHook, what: "a DNS hook that is not executable", lines: append(slices.Clone(acme), env.ACMEDNSHook+"="+noExec)})
+	}
+	return append(cases, []startRefusal{
 		{of: env.PerCube(env.Ignore, guardCube), what: "a Cube's bad hidden list", lines: []string{cubeAddress, env.PerCube(env.Ignore, guardCube) + "=zz"}},
 		{of: env.Ignore, what: "the plain hidden list beside a Cube", lines: []string{cubeAddress, env.Ignore + "=zz"}},
 
@@ -368,7 +369,7 @@ func startRefusalCases(t *testing.T, dir string) []startRefusal {
 		{of: env.TLSHTTP, what: "an HTTP-01 port that does not parse", alone: "a port taken shows at the listen alone", listens: true,
 			lines: append(slices.Clone(acme), env.TLSHTTP+"=127.0.0.1:99999", env.ACMEDirectory+"=http://127.0.0.1:1/directory"),
 			says:  "serve: -tls-http or MASSIMO_TLS_HTTP: listen tcp: address 99999: invalid port"},
-	}
+	}...)
 }
 
 // anyValue is a variable the start takes any value of: an odd one, for

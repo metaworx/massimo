@@ -11,6 +11,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"runtime"
 	"slices"
 	"sort"
 	"strconv"
@@ -18,15 +19,26 @@ import (
 	"sync"
 )
 
-// sources records where each variable came from: "file" when LoadFile
-// or ReloadFile set it, with its lines where the file gives it more
-// than once (pair.source), "environment, overrides <file>" when it was
-// already set (the environment wins). sourcesMu guards it, since serve
-// re-reads the file while it runs.
+// sources records where each variable came from, by its name's key
+// (nameKey): "file" when LoadFile or ReloadFile set it, with its lines
+// where the file gives it more than once (pair.source), "environment,
+// overrides <file>" when it was already set (the environment wins).
+// sourcesMu guards it, since serve re-reads the file while it runs.
 var (
 	sourcesMu sync.Mutex
 	sources   = map[string]string{}
 )
+
+// nameKey is the key a variable's name is known by in a read of the
+// settings file and in sources: on Windows, which takes a name in any
+// case, its upper case, so that MASSIMO_X and massimo_x are one name to
+// the read as they are one variable there; elsewhere the name.
+func nameKey(k string) string {
+	if runtime.GOOS == "windows" {
+		return strings.ToUpper(k)
+	}
+	return k
+}
 
 // fromFile reports whether src, a source of sources, is the file's.
 func fromFile(src string) bool { return strings.HasPrefix(src, "file") }
@@ -38,7 +50,7 @@ func fromFile(src string) bool { return strings.HasPrefix(src, "file") }
 func Source(name string) string {
 	sourcesMu.Lock()
 	defer sourcesMu.Unlock()
-	if s := sources[name]; s != "" {
+	if s := sources[nameKey(name)]; s != "" {
 		return s
 	}
 	return "environment"
@@ -177,7 +189,9 @@ func utf16Text(head []byte) bool {
 // where the others stop; the rest it refuses as they do.
 //
 // The first line of a name wins, an empty one too; its note quotes the
-// name only where it is a variable's (varName). A line without a name
+// name as that line writes it, and only where it is a variable's
+// (varName). On Windows a name in another case is the same name
+// (nameKey), as it is the same variable there. A line without a name
 // is ignored. A MASSIMO_ENV_FILE line is ignored, in any case, as
 // Windows takes the name: the file File names stays the one the start
 // read, where a reload of another file would take its token as the
@@ -227,7 +241,7 @@ func readFile(path string, lenient bool) ([]pair, []Note, error) {
 		if len(v) >= 2 && (v[0] == '"' && v[len(v)-1] == '"' || v[0] == '\'' && v[len(v)-1] == '\'') {
 			v = v[1 : len(v)-1]
 		}
-		i, again := index[k]
+		i, again := index[nameKey(k)]
 		switch {
 		case k == "":
 			notes = append(notes, Note{Lines: []int{n}, Text: fmt.Sprintf("line %d has no name before its =, ignored", n)})
@@ -236,7 +250,7 @@ func readFile(path string, lenient bool) ([]pair, []Note, error) {
 		case again:
 			pairs[i].lines = append(pairs[i].lines, n)
 		default:
-			index[k] = len(pairs)
+			index[nameKey(k)] = len(pairs)
 			pairs = append(pairs, pair{k, v, []int{n}})
 		}
 	}
@@ -311,9 +325,9 @@ func LoadFile(path string) ([]Note, error) {
 	for _, p := range pairs {
 		if os.Getenv(p.k) == "" {
 			os.Setenv(p.k, p.v)
-			sources[p.k] = p.source()
+			sources[nameKey(p.k)] = p.source()
 		} else {
-			sources[p.k] = "environment, overrides " + path
+			sources[nameKey(p.k)] = "environment, overrides " + path
 		}
 	}
 	return notes, nil
@@ -328,7 +342,9 @@ func LoadFile(path string) ([]Note, error) {
 // nothing and is returned; a parse error is the one LoadFile returns,
 // the line named by its number, never quoted (readFile). It takes the
 // lines LoadFile takes, the first of a name, and returns the names whose
-// value changed, sorted, and the notes LoadFile returns.
+// value changed, sorted, each by its key (nameKey), so that a caller
+// compares them with the names it knows, on Windows too, and the notes
+// LoadFile returns.
 func ReloadFile(path string) (changed []string, notes []Note, err error) {
 	pairs, notes, err := readFile(path, false)
 	if err != nil {
@@ -336,19 +352,20 @@ func ReloadFile(path string) (changed []string, notes []Note, err error) {
 	}
 	sourcesMu.Lock()
 	defer sourcesMu.Unlock()
-	named := map[string]bool{}
+	named := map[string]bool{} // by nameKey, as sources
 	for _, p := range pairs {
-		named[p.k] = true
-		src := sources[p.k]
+		key := nameKey(p.k)
+		named[key] = true
+		src := sources[key]
 		if strings.HasPrefix(src, "environment") || src == "" && os.Getenv(p.k) != "" {
-			sources[p.k] = "environment, overrides " + path
+			sources[key] = "environment, overrides " + path
 			continue
 		}
 		if os.Getenv(p.k) != p.v {
 			os.Setenv(p.k, p.v)
-			changed = append(changed, p.k)
+			changed = append(changed, key)
 		}
-		sources[p.k] = p.source()
+		sources[key] = p.source()
 	}
 	for k, src := range sources {
 		if fromFile(src) && !named[k] {
