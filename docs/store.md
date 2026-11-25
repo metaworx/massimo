@@ -1305,6 +1305,13 @@ the roles and their sets are rows (section 5), seeded by the first migration.
   "Users: /api/v1/users and /api/v1/users/{name}"
   and "Tokens: /api/v1/users/{name}/tokens"):
   a revoked row keeps its hash, unique, so the next start could not add it back.
+  The file's key that an older start gave to an integration's user with the
+  role `owner`, live or revoked since (a revoke of the integration revokes it),
+  moves, at the start, to the first enabled regular owner,
+  or to the user `owner` made where there is none, in one transaction with it,
+  live again and its sessions ended, and the log says from whom
+  (`the settings file's key moved from an integration's user`;
+  AP LooseEnds, D1): such a user holds no key of its own.
   Whoever can edit the file is root or the service user,
   who can edit the database anyway.
 - Without `MASSIMO_API_TOKEN` and without users,

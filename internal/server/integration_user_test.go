@@ -227,3 +227,41 @@ func TestHeldKeyOfAnInactiveIntegration(t *testing.T) {
 		})
 	}
 }
+
+// After the start that moves the settings file's key from an
+// integration's user to the owner, the key is marked in the owner's list
+// and not the integration's user's, and that user may be removed: the
+// file's key no longer holds it (AP LooseEnds, D1).
+func TestSettingsKeyLeavesAnIntegrationsUser(t *testing.T) {
+	t.Parallel()
+	opts := storeOptions(t, t.TempDir(), "")
+	st := opts.Store
+	ctx := t.Context()
+	i, _ := registerHA(t, st, []string{"read"})
+	held, err := st.AddUser(ctx, store.User{Name: "held", Role: store.RoleOwner}, "", 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := st.AddTokenHash(ctx, held.ID, store.TokenAPI, store.BootstrapLabel, store.HashToken("file"), time.Time{}); err != nil {
+		t.Fatal(err)
+	}
+	asAnIntegrations(t, st, "held", i)
+	opts.Token = "file"
+	s := startServer(t, withOptions(opts)).s
+	lan := "192.168.1.20:5000"
+	if s.AuthMode() != "users" {
+		t.Fatalf("after the start: %s", s.AuthMode())
+	}
+	var list []tokenView
+	rec := sendFrom(s, "GET", "/api/v1/users/held/tokens", lan, "file", "")
+	if json.Unmarshal(rec.Body.Bytes(), &list); rec.Code != 200 || len(list) != 0 {
+		t.Fatalf("the integration's user's keys: %d %s", rec.Code, rec.Body.String())
+	}
+	rec = sendFrom(s, "GET", "/api/v1/users/"+store.BootstrapUser+"/tokens", lan, "file", "")
+	if json.Unmarshal(rec.Body.Bytes(), &list); rec.Code != 200 || len(list) != 1 || !list[0].FromSettings {
+		t.Fatalf("the owner's keys: %d %s", rec.Code, rec.Body.String())
+	}
+	if rec := sendFrom(s, "DELETE", "/api/v1/users/held", lan, "file", ""); rec.Code != 200 {
+		t.Fatalf("the integration's user removed: %d %s", rec.Code, rec.Body.String())
+	}
+}

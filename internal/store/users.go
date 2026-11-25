@@ -410,8 +410,11 @@ func (s *Store) AddOpaqueUser(ctx context.Context, u User, record []byte, ksf st
 // while the server has no regular user (AddFirstOwner). The transaction begins
 // IMMEDIATE (the store's _txlock), so it holds the database's one write
 // lock from its start: a second one waits for the first to commit, and
-// its count then sees the first one's user.
-func (s *Store) addUser(ctx context.Context, u User, c credential, by int64, first bool) (User, error) {
+// its count then sees the first one's user. then, where given, runs in
+// the same transaction with the new user's id, before it commits: what
+// must not be left undone beside the user (the owner's key at a start,
+// Bootstrap).
+func (s *Store) addUser(ctx context.Context, u User, c credential, by int64, first bool, then ...func(tx *sql.Tx, id int64) error) (User, error) {
 	tx, err := s.db.BeginTx(ctx, nil)
 	if err != nil {
 		return User{}, fmt.Errorf("store: add user %s: %w", u.Name, err)
@@ -430,11 +433,17 @@ func (s *Store) addUser(ctx context.Context, u User, c credential, by int64, fir
 		return User{}, err
 	}
 	now := s.nowText()
-	_, err = tx.ExecContext(ctx, `INSERT INTO users (uuid, name, display_name, password_hash, opaque_record, opaque_ksf, auth_version, role_id, disabled, expires_at, invited_by, created_at, updated_at, updated_by, origin)
+	res, err := tx.ExecContext(ctx, `INSERT INTO users (uuid, name, display_name, password_hash, opaque_record, opaque_ksf, auth_version, role_id, disabled, expires_at, invited_by, created_at, updated_at, updated_by, origin)
 		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
 		newUUID(), u.Name, u.DisplayName, c.hash, c.record, c.ksf, c.authVersion(), role, u.Disabled, nullTime(u.ExpiresAt), nullID(by), now, now, nullID(by), s.nodeID)
 	if err != nil {
 		return User{}, fmt.Errorf("store: add user %s: %w", u.Name, err)
+	}
+	id, _ := res.LastInsertId()
+	for _, f := range then {
+		if err := f(tx, id); err != nil {
+			return User{}, err
+		}
 	}
 	dropped, err := s.dropKeepOpen(ctx, tx)
 	if err != nil {

@@ -225,6 +225,9 @@ At every later start, and whenever the server reads the file again while it runs
 (it looks every five seconds, and on SIGHUP; see README.md, "Server"),
 a token in the file that the store does not know is added to an enabled owner's keys,
 and a key with that label whose secret is not the file's any more is revoked.
+The file's key that an older start gave to an integration's user, live or revoked since,
+moves to that owner, or to the user `owner` the start makes where there is no other,
+since an integration's user holds no key of its own.
 The file stays the way to recover an owner who lost the password:
 put a token into it, log in with it, set a password; no restart is needed.
 
