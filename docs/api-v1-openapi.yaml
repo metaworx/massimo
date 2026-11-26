@@ -686,7 +686,10 @@ paths:
     get:
       summary: List the users
       x-capability: users
-      description: Every user with users; the guests with guests alone; the own user otherwise.
+      description: >-
+        Every user with users or passwords; else the own user and those the caller may change: with guests the
+        guests it reaches, regular ones or, for a call through an integration, that integration's own; with
+        integrations an integration's users but those stored as owner.
       responses:
         "200":
           description: The users by name
@@ -703,7 +706,8 @@ paths:
       summary: Create a user
       x-capability: users
       description: |
-        With users, any role; with guests alone, the role guest. On a
+        With users, any role; with guests alone, the role guest, and
+        through an integration none: a new user is a regular one. On a
         server without regular users (an integration's do not count), the
         first owner: open to a caller on the
         local network (loopback, a private range, link-local), the role
@@ -759,8 +763,13 @@ paths:
       x-capability: users
       description: |
         Any of the fields; absent ones stay. A user changes its own
-        display_name and, with current_password, its password; the
-        role, disabled and expires_at need users (guests for a guest). A
+        display_name and, with current_password, its password, never a
+        call through an integration for the user it is linked to; the
+        role, disabled and expires_at need users (guests for a guest it
+        reaches: a regular one, or for a call through an integration that
+        integration's own); integrations changes an integration's user but
+        one stored as owner, a role it outranks within the integration's
+        maximum (403 beyond). A
         password set by someone else ends the user's sessions. The last
         enabled owner cannot be disabled or demoted (409); an
         integration's user is none. An integration's user gets no password
@@ -798,7 +807,8 @@ paths:
       description: >-
         The user's tokens are revoked; its row stays for the audit. The last enabled owner without an end date stays
         (409), and so does the user that holds the settings file's MASSIMO_API_TOKEN (409), whose key the next start
-        would not add back: it is changed or removed in the settings file first.
+        would not add back: it is changed or removed in the settings file first. An integration's own user (<uuid>:)
+        and its system user stay too (403): DELETE /api/v1/integrations/{uuid} removes the integration and keeps both.
       parameters: [{$ref: "#/components/parameters/name"}, {$ref: "#/components/parameters/idempotencyKey"}]
       responses:
         "200":
@@ -951,7 +961,8 @@ paths:
         Each an e-mail at a provider, waiting for its first sign-in, or
         bound to the provider's subject, with what the provider said of
         the account at the last sign-in or link. A guests holder reaches a
-        guest's only; a user lists its own.
+        guest's it may change, an integrations holder an integration's
+        user's; a user lists its own.
       parameters:
         - {$ref: "#/components/parameters/name"}
       responses:
@@ -4757,11 +4768,14 @@ components:
         last_login_at: {type: string, format: date-time}
         may:
           type: object
-          description: "In the users routes' answers: what the caller may do with the user, change it beyond its own name and password (manage) or set its password (password), and the roles it may give it (roles); absent elsewhere"
-          required: [manage, password, roles]
+          description: "In the users routes' answers: what the caller may do with the user, change it beyond its own name and password (manage) or set its password (password), the roles it may give it (roles), and whether its role as stored lies beyond its integration's maximum (beyond); absent elsewhere"
+          required: [manage, password, roles, beyond]
           properties:
             manage: {type: boolean}
             password: {type: boolean}
+            beyond:
+              type: boolean
+              description: "An integration's user's role, as stored, lies beyond the role integration and its integration's maximum, within which it acts all the same; false for every other user. A role that roles leaves out may lie within them and be one the caller does not outrank"
             roles:
               type: array
               description: "The keys of the roles the caller may give the user, in the roles' order, empty where it may give none; of those, for an integration's user only the roles within the role integration and its integration's maximum, and integration itself, never owner. A holder of users without roles or integrations learns from it the keys of the roles it outranks and, for each integration's user, which of them lie within that integration's maximum"

@@ -6,9 +6,11 @@ package server
 // The users routes (docs/store.md section 6): list, create, change and
 // remove users, and the sessions and API keys of each. The route is
 // registered with users; a guests holder reaches it for users whose
-// role is guest, and a user reaches its own name for its display name,
-// its password and its tokens (auth.go, allowed). On an open server,
-// POST /api/v1/users from the local network creates the first owner.
+// role is guest, regular ones or, for a call through an integration,
+// that integration's own; an integrations holder for an integration's
+// users; and a user reaches its own name for its display name, its
+// password and its tokens (auth.go, allowed). On an open server, POST
+// /api/v1/users from the local network creates the first owner.
 
 import (
 	"context"
@@ -187,9 +189,24 @@ func (s *Server) userStore() (*store.Store, error) {
 // access is what a principal may do with users.
 type access struct {
 	all       bool // users: every user
-	guests    bool // guests: users whose role is guest
+	guests    bool // guests: users whose role is guest (guestOf)
 	passwords bool // passwords: the password of a user it outranks
-	self      bool // the user's own name
+	// integrations: an integration's users, whatever their role but
+	// owner (integrationsOf; AP AccessEnds, D41-A5).
+	integrations bool
+	// integration is the id of the integration the principal comes
+	// through, 0 for none: its call's, or its user's where that is an
+	// integration's and holds a key from before. Its guests holder
+	// reaches that integration's guests alone (D41-A4).
+	integration int64
+	// self is the user's own name, for a principal that comes through no
+	// integration: a call for an integration's user linked to a Massimo
+	// user acts with that user's role, but has none of the rights of its
+	// own name, its key, password, identities and fields, since it
+	// manages its own integration's users alone, and a key one of its
+	// users holds from before counts as such a call (selfOf; AP
+	// AccessEnds, D41-A4).
+	self bool
 	// outranks is the rank rule: whether the principal's role has every
 	// capability of the role named; nil where no rank applies (an open
 	// server, the one token of a server without a store).
@@ -202,9 +219,15 @@ type access struct {
 // outranks owner, and otherwise a role outranks one whose set is part
 // of its own. A role the store cannot read is outranked by owner alone.
 func (s *Server) accessOf(ctx context.Context, p *principal, name string) access {
-	a := access{all: p.has("users"), guests: p.has("guests"), passwords: p.has("passwords"), self: p.named() && strings.EqualFold(name, p.user.Name)}
+	a := access{all: p.has("users"), guests: p.has("guests"), passwords: p.has("passwords"), integrations: p.has("integrations"),
+		self: selfOf(p, name)}
 	if !p.named() || s.opts.Store == nil {
 		return a
+	}
+	if p.integration != nil {
+		a.integration = p.integration.ID
+	} else {
+		a.integration = p.user.IntegrationID
 	}
 	st, own := s.opts.Store, p.user.Role
 	sets := map[string]map[string]bool{}
@@ -243,41 +266,105 @@ func (s *Server) accessOf(ctx context.Context, p *principal, name string) access
 	return a
 }
 
+// selfOf reports whether name is the principal's own user's, the rights
+// of an own name being a regular user's alone: never a call's through
+// an integration, nor a key's that an integration's user holds from
+// before (access.self); auth.go's allowed admits by it too.
+func selfOf(p *principal, name string) bool {
+	return p.named() && p.integration == nil && p.user.IntegrationID == 0 && strings.EqualFold(name, p.user.Name)
+}
+
 // ranks reports whether the rank rule lets the principal act on a role.
 func (a access) ranks(role string) bool {
 	return a.outranks == nil || a.outranks(role)
 }
 
+// guestOf says whether guests reaches user u (AP AccessEnds, D41-A4): a
+// guest, a regular one where the principal comes through no
+// integration, one of that integration's where it does, so that a call
+// through an integration manages its own integration's guests alone and
+// no holder of guests of no integration an integration's.
+func (a access) guestOf(u store.User) bool {
+	return a.guests && u.Role == store.RoleGuest && u.IntegrationID == a.integration
+}
+
+// integrationsOf says whether integrations reaches user u (AP
+// AccessEnds, D41-A5): an integration's user, whatever its role but
+// owner, which stays an owner's alone as every owner does (D47-A).
+func (a access) integrationsOf(u store.User) bool {
+	return a.integrations && u.IntegrationID != 0 && u.Role != store.RoleOwner
+}
+
 // mayView says whether a principal sees a user: with users or
-// passwords every user, with guests a guest. The own user is the
+// passwords every user, with guests or integrations those it reaches
+// (guestOf, integrationsOf; AP AccessEnds, D45-A). The own user is the
 // handlers' question.
 func (a access) mayView(u store.User) bool {
-	return a.all || a.passwords || a.guests && u.Role == store.RoleGuest
+	return a.all || a.passwords || a.guestOf(u) || a.integrationsOf(u)
 }
 
 // mayManage says whether a principal may change a user, its name, role,
-// state and keys: with users, or with guests for a guest, a user it
-// outranks.
+// state and keys: with users, or with guests for a guest it reaches, a
+// user it outranks; with integrations an integration's user it reaches,
+// whatever its rank (AP AccessEnds, D47-A), the role given held to the
+// rank rule by mayAssign.
 func (a access) mayManage(u store.User) bool {
-	return (a.all || a.guests && u.Role == store.RoleGuest) && a.ranks(u.Role)
+	return (a.all || a.guestOf(u)) && a.ranks(u.Role) || a.integrationsOf(u)
 }
 
-// maySetPassword says whether a principal may set a user's password: as
-// it may manage it, or with passwords, a user it outranks.
+// maySetPassword says whether a principal may set a user's password: with
+// users, passwords, or guests for a guest it reaches, a user it
+// outranks. integrations sets none: an integration's user has no
+// password of its own (noWayIn).
 func (a access) maySetPassword(u store.User) bool {
-	return (a.all || a.passwords || a.guests && u.Role == store.RoleGuest) && a.ranks(u.Role)
+	return (a.all || a.passwords || a.guestOf(u)) && a.ranks(u.Role)
 }
 
-// mayAssign says whether a principal may give user u a role: any it
-// outranks with users, guest alone with guests. The role integration is
-// an integration's and its users' alone (integrations.go): an
-// integration's user is given it back by the same rule where it was
-// given another (AP AccessEnds, D5), and no other user is given it.
-func (a access) mayAssign(role string, u store.User) bool {
-	if role == store.RoleIntegration && u.IntegrationID == 0 {
+// mayAdd says whether a principal may add a user, which is a regular
+// one: with users, or with guests where it comes through no integration
+// (AP AccessEnds, D41-A4).
+func (a access) mayAdd() bool {
+	return a.all || a.guests && a.integration == 0
+}
+
+// mayAssign says whether a principal may give user u the role r, maxCaps
+// the maximum of u's integration: any role it outranks with users (a
+// role beyond the maximum taken, AP AccessEnds, D6-A), guest alone with
+// guests, to a regular user or, through an integration, to one of that
+// integration's (a new user is regular, so a call through an
+// integration makes none), and with integrations, for an integration's
+// user it reaches, a role it outranks within the role integration and
+// the maximum, never owner (D47-A, D48-A). The role
+// integration is an integration's and its users' alone
+// (integrations.go): an integration's user is given it back by the rank
+// rule where it was given another (D5), and no other user is given it.
+func (a access) mayAssign(r store.Role, u store.User, maxCaps []string) bool {
+	switch {
+	case r.Key == store.RoleIntegration && u.IntegrationID == 0:
 		return false
+	case a.all || a.guests && r.Key == store.RoleGuest && u.IntegrationID == a.integration:
+		return a.ranks(r.Key)
+	case a.integrationsOf(u) && a.ranks(r.Key):
+		return r.Key == store.RoleIntegration || r.Key != store.RoleOwner && allIn(r.Capabilities, within(maxCaps))
 	}
-	return (a.all || a.guests && role == store.RoleGuest) && a.ranks(role)
+	return false
+}
+
+// within is what an integration's user may act with, the role
+// integration and maxCaps, its integration's maximum.
+func within(maxCaps []string) map[string]bool {
+	return intersect(setOf(maxCaps), integrationCeiling)
+}
+
+// roleOf is the role key among roles, the store's; a key it does not
+// know comes back with no capabilities, for the store to refuse.
+func roleOf(roles []store.Role, key string) store.Role {
+	for _, r := range roles {
+		if r.Key == key {
+			return r
+		}
+	}
+	return store.Role{Key: key}
 }
 
 // assignable are the keys of the roles the principal may give user u,
@@ -295,12 +382,12 @@ func (a access) assignable(u store.User, roles []store.Role, maxCaps []string) [
 	if !a.mayManage(u) {
 		return out
 	}
-	within := intersect(setOf(maxCaps), integrationCeiling)
+	in := within(maxCaps)
 	for _, r := range roles {
-		if !a.mayAssign(r.Key, u) {
+		if !a.mayAssign(r, u, maxCaps) {
 			continue
 		}
-		if u.IntegrationID != 0 && r.Key != store.RoleIntegration && (r.Key == store.RoleOwner || !allIn(r.Capabilities, within)) {
+		if u.IntegrationID != 0 && r.Key != store.RoleIntegration && (r.Key == store.RoleOwner || !allIn(r.Capabilities, in)) {
 			continue
 		}
 		out = append(out, r.Key)
@@ -330,17 +417,43 @@ func (a access) rankFail(role, capability string) error {
 	return fail(http.StatusForbidden, "capability %q required", capability)
 }
 
-// assignFail is the refusal of a role the principal may not give user u.
-func (a access) assignFail(role string, u store.User) error {
+// throughIntegration is the refusal of a regular user, or another
+// integration's, to a call through an integration (AP AccessEnds,
+// D41-A4).
+func throughIntegration() error {
+	return fail(http.StatusForbidden, "a call through an integration changes its own integration's users alone")
+}
+
+// manageFail is the refusal of user u to a principal that may not change
+// it. A guest that guests does not reach (guestOf) is refused with why:
+// a call through an integration changes its own integration's users
+// alone, and an integration's guest is changed by its integration and by
+// holders of integrations or of users. Else the refusal is the rank
+// rule's or the capability's (rankFail).
+func (a access) manageFail(u store.User, capability string) error {
 	switch {
-	case role == store.RoleIntegration && u.IntegrationID == 0:
-		return fail(http.StatusForbidden, "the role integration is an integration's and its users' alone")
-	case !a.ranks(role) && role == store.RoleOwner:
-		return fail(http.StatusForbidden, "only an owner gives the role owner")
-	case !a.ranks(role):
-		return fail(http.StatusForbidden, "the role %s has capabilities yours lacks", role)
+	case a.guests && u.Role == store.RoleGuest && a.integration != 0 && u.IntegrationID != a.integration:
+		return throughIntegration()
+	case a.guests && !a.all && u.Role == store.RoleGuest && u.IntegrationID != a.integration:
+		return fail(http.StatusForbidden, "the user %s is an integration's: its own integration, a holder of integrations or of users changes it", u.Name)
 	}
-	return fail(http.StatusForbidden, "capability %q required to give the role %s", "users", role)
+	return a.rankFail(u.Role, capability)
+}
+
+// assignFail is the refusal of the role r the principal may not give
+// user u.
+func (a access) assignFail(r store.Role, u store.User) error {
+	switch {
+	case r.Key == store.RoleIntegration && u.IntegrationID == 0:
+		return fail(http.StatusForbidden, "the role integration is an integration's and its users' alone")
+	case !a.ranks(r.Key) && r.Key == store.RoleOwner:
+		return fail(http.StatusForbidden, "only an owner gives the role owner")
+	case !a.ranks(r.Key):
+		return fail(http.StatusForbidden, "the role %s has capabilities yours lacks", r.Key)
+	case a.integrationsOf(u):
+		return fail(http.StatusForbidden, "the role %s lies beyond the maximum of its integration", r.Key)
+	}
+	return fail(http.StatusForbidden, "capability %q required to give the role %s", "users", r.Key)
 }
 
 // userMay is what the caller may do with a user (userView.May): change
@@ -351,12 +464,28 @@ type userMay struct {
 	// Roles are the keys of the roles the caller may give the user
 	// (assignable), empty where it may give none.
 	Roles []string `json:"roles"`
+	// Beyond says that the user's role, as stored, lies beyond the role
+	// integration and its integration's maximum, within which it acts
+	// all the same (beyond; AP AccessEnds, D4): what Roles leaves out may
+	// lie within and be one the caller does not outrank.
+	Beyond bool `json:"beyond"`
 }
 
 // mayOf is what the principal may do with u, self where u is its own
 // user, of the store's roles and u's integration's maximum.
 func (a access) mayOf(u store.User, self bool, roles []store.Role, maxCaps []string) *userMay {
-	return &userMay{Manage: a.mayManage(u), Password: a.maySetPassword(u) || self, Roles: a.assignable(u, roles, maxCaps)}
+	return &userMay{Manage: a.mayManage(u), Password: a.maySetPassword(u) || self, Roles: a.assignable(u, roles, maxCaps), Beyond: beyond(u, roles, maxCaps)}
+}
+
+// beyond reports whether u is an integration's user whose stored role
+// lies beyond the role integration and maxCaps, its integration's
+// maximum: owner always, integration never, another where its set does
+// not lie within both.
+func beyond(u store.User, roles []store.Role, maxCaps []string) bool {
+	if u.IntegrationID == 0 || u.Role == store.RoleIntegration {
+		return false
+	}
+	return u.Role == store.RoleOwner || !allIn(roleOf(roles, u.Role).Capabilities, within(maxCaps))
 }
 
 // maxOf is the maximum of user u's integration, none for a regular user
@@ -389,9 +518,11 @@ func (s *Server) viewUserOf(r *http.Request, st *store.Store, n *store.Namer, u 
 	return v
 }
 
-// listUsers handles GET /api/v1/users: every user with users, the
-// guests and the own user with guests alone, each with what the caller
-// may do with it. The roles and the integrations are read once.
+// listUsers handles GET /api/v1/users: every user with users or
+// passwords; else the own user and those the caller may manage, with
+// guests the guests it reaches, with integrations an integration's users
+// (mayView); each with what the caller may do with it. The roles and the
+// integrations are read once.
 func (s *Server) listUsers(w http.ResponseWriter, r *http.Request) error {
 	st, err := s.userStore()
 	if err != nil {
@@ -423,7 +554,7 @@ func (s *Server) listUsers(w http.ResponseWriter, r *http.Request) error {
 	n := st.Namer()
 	n.Seed(users...)
 	for _, u := range users {
-		self := p.named() && u.ID == p.user.ID
+		self := selfOf(p, u.Name)
 		if a.mayView(u) || self {
 			v := s.viewUserOf(r, st, n, u)
 			v.May = a.mayOf(u, self, roles, maxima[u.IntegrationID])
@@ -491,9 +622,14 @@ func (s *Server) postUser(w http.ResponseWriter, r *http.Request) error {
 		if u.Role == "" {
 			u.Role = store.RoleViewer
 		}
-		if a := s.accessOf(ctx, p, ""); !a.mayAssign(u.Role, u) {
-			if !a.ranks(u.Role) || u.Role == store.RoleIntegration {
-				return a.assignFail(u.Role, u)
+		// A new user is regular: no maximum, and its role's set is asked
+		// of an integration's user alone (mayAssign).
+		if a, r := s.accessOf(ctx, p, ""), (store.Role{Key: u.Role}); !a.mayAssign(r, u, nil) {
+			switch {
+			case !a.mayAdd() && a.guests:
+				return throughIntegration()
+			case !a.ranks(u.Role) || u.Role == store.RoleIntegration:
+				return a.assignFail(r, u)
 			}
 			return fail(http.StatusForbidden, "capability %q required to create a user with the role %s", "users", u.Role)
 		}
@@ -582,7 +718,7 @@ func (s *Server) targetUser(r *http.Request, st *store.Store, selfOK bool, need 
 		if n == needView {
 			return store.User{}, access{}, fail(http.StatusForbidden, "capability %q required", "users")
 		}
-		return store.User{}, access{}, a.rankFail(u.Role, "users")
+		return store.User{}, access{}, a.manageFail(u, "users")
 	}
 	return u, a, nil
 }
@@ -629,13 +765,12 @@ func (s *Server) putUser(w http.ResponseWriter, r *http.Request) error {
 	// or with passwords another's password alone.
 	manage := a.mayManage(u)
 	if !manage && (req.Role != nil || req.Disabled != nil || len(req.ExpiresAt) > 0 || req.DisplayName != nil && !a.self) {
-		return a.rankFail(u.Role, "users")
+		return a.manageFail(u, "users")
 	}
-	if req.Role != nil && !a.mayAssign(*req.Role, u) {
-		return a.assignFail(*req.Role, u)
-	}
-	// What the answer's may names, read before anything is written or a
-	// proof used up; neither changes with this request.
+	// The roles' sets and the user's maximum, which a role given by a
+	// holder of integrations is held to and the answer's may names, read
+	// before anything is written or a proof used up; neither changes with
+	// this request.
 	roles, err := st.Roles(ctx)
 	if err != nil {
 		return userFail(err)
@@ -643,6 +778,11 @@ func (s *Server) putUser(w http.ResponseWriter, r *http.Request) error {
 	maxCaps, err := maxOf(ctx, st, u)
 	if err != nil {
 		return userFail(err)
+	}
+	if req.Role != nil {
+		if r := roleOf(roles, *req.Role); !a.mayAssign(r, u, maxCaps) {
+			return a.assignFail(r, u)
+		}
 	}
 	setsPassword := req.Password != nil || req.Record != nil
 	if req.Password != nil && *req.Password != "" || req.Record != nil {
@@ -652,7 +792,7 @@ func (s *Server) putUser(w http.ResponseWriter, r *http.Request) error {
 		}
 	}
 	if setsPassword && !a.self && !a.maySetPassword(u) {
-		return a.rankFail(u.Role, "passwords")
+		return a.manageFail(u, "passwords")
 	}
 	if req.Password != nil && *req.Password != "" {
 		// Before the current password is checked or a proof used up.
@@ -690,6 +830,12 @@ func (s *Server) putUser(w http.ResponseWriter, r *http.Request) error {
 	}
 	if req.DisplayName != nil || req.Role != nil || req.Disabled != nil || setEnd {
 		u, err = st.UpdateUser(ctx, u.Name, func(c *store.User) error {
+			// Asked again of the user as the write reads it: another change
+			// since the check above, an owner's making it an owner, say,
+			// leaves what the caller may change of it smaller.
+			if (req.Role != nil || req.Disabled != nil || setEnd || req.DisplayName != nil && !a.self) && !a.mayManage(*c) {
+				return a.manageFail(*c, "users")
+			}
 			if req.DisplayName != nil {
 				c.DisplayName = strings.TrimSpace(*req.DisplayName)
 			}
@@ -742,6 +888,23 @@ func (s *Server) putUser(w http.ResponseWriter, r *http.Request) error {
 	return nil
 }
 
+// integrationOwn reports whether u is an integration's own user, <uuid>:,
+// which holds its key, or its system user, <uuid>:system, and which
+// integration's. Removed, the integration's key went with the first and
+// a request attached to the integration again could not collect a key;
+// the integration's own removal (DELETE /api/v1/integrations/{uuid})
+// keeps both, so that it can.
+func integrationOwn(ctx context.Context, st *store.Store, u store.User) (store.Integration, bool, error) {
+	if u.IntegrationID == 0 {
+		return store.Integration{}, false, nil
+	}
+	i, ok, err := st.IntegrationByID(ctx, u.IntegrationID)
+	if err != nil || !ok {
+		return store.Integration{}, false, err
+	}
+	return i, u.ID == i.UserID || u.ID == i.SystemUserID, nil
+}
+
 // userSubject is a user as a change line names them: ids, login name,
 // display name and role as they are then, never a secret.
 func userSubject(u store.User) map[string]any {
@@ -756,8 +919,10 @@ func tokenSubject(tok store.Token, u store.User) map[string]any {
 
 // deleteUser handles DELETE /api/v1/users/{name}: the user is removed
 // and its tokens revoked; the last enabled owner stays, and so does the
-// user that holds the settings file's key, 409 (settingsKey). Where the
-// removal of a regular user turns the server open, the log warns.
+// user that holds the settings file's key, 409 (settingsKey). An
+// integration's own user and its system user stay, 403, for everyone
+// (integrationOwn). Where the removal of a regular user turns the server
+// open, the log warns.
 func (s *Server) deleteUser(w http.ResponseWriter, r *http.Request) error {
 	st, err := s.userStore()
 	if err != nil {
@@ -766,6 +931,11 @@ func (s *Server) deleteUser(w http.ResponseWriter, r *http.Request) error {
 	u, _, err := s.targetUser(r, st, false)
 	if err != nil {
 		return err
+	}
+	if i, own, err := integrationOwn(r.Context(), st, u); err != nil {
+		return userFail(err)
+	} else if own {
+		return fail(http.StatusForbidden, "the user %s is the integration's own: remove the integration itself, DELETE /api/v1/integrations/%s, which keeps it to be attached again", u.Name, i.UUID)
 	}
 	if file, ok, err := s.settingsKey(r.Context()); err != nil {
 		return userFail(err)

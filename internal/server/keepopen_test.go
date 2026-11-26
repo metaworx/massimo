@@ -571,8 +571,12 @@ func TestLastRegularUserRemovedWarns(t *testing.T) {
 	if s.AuthMode() != "open" {
 		t.Fatalf("after: %s", s.AuthMode())
 	}
+	// One of the integration's users, not its own or system user, which stay (AP AccessEnds, D47-A).
+	if _, err := st.IntegrationUser(t.Context(), i, store.IntegrationSeen{Subject: haAnna, Name: "Anna", Level: LevelView}); err != nil {
+		t.Fatal(err)
+	}
 	m = logs.Mark()
-	if rec := sendFrom(s, "DELETE", "/api/v1/users/"+i.UUID+":system", lan, "", ""); rec.Code != 200 {
+	if rec := sendFrom(s, "DELETE", "/api/v1/users/"+i.UUID+":"+haAnna, lan, "", ""); rec.Code != 200 {
 		t.Fatalf("an integration's user removed on the open server: %d %s", rec.Code, rec.Body.String())
 	}
 	logs.Await(t, m, "the removal's line", testkit.Msg("user removed"))
