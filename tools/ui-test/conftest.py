@@ -43,7 +43,8 @@ same order. run.sh's workers (--dist loadfile, which hands out whole
 files) are handed the files in that order rather than the largest
 first, each running a file's tests in it; which worker takes which file
 still depends on when each is free. A bad value of either stops the
-run (AP SteadyTests, Block 8).
+run. The UI soak (.github/workflows/ui-soak.yml) runs each test three
+times, shuffled (AP SteadyTests, Block 8).
 
 The page has helpers.PAGE_KIT before its own scripts, which records
 what its event stream brings. The fixture reads answers the page's own

@@ -1,0 +1,113 @@
+name: UI soak
+
+# The web UI's suite (tools/ui-test/README.md) run over and over, so
+# that its flaky tests show on main overnight rather than in a feature's
+# pull request (AP SteadyTests, Block 8; GUIDELINES/project/CI.md,
+# section 2): its four cases, a job each, as ci.yml's UI test jobs run
+# them, but every test three times (UI_TEST_REPEAT) in the order of a
+# seed (UI_TEST_SHUFFLE), the run's id unless one is given, the same in
+# all four jobs. Each job's summary lists the tests that failed in at
+# least one repeat, each with its case, how many of its runs failed and
+# the first failure's message, and the line that runs the case again in
+# the same order (tools/ui-test/soak_summary.py, from the first pass's
+# JUnit report, UI_TEST_JUNIT); a job is red where a test failed once,
+# as run.sh fails it, whatever its retry with the trace did. It gates
+# nothing: no workflow waits for it, no check requires it, and Retry
+# (retry.yml) follows CI and Nightly alone. At 00:20 UTC, so that it
+# ends before nightly.yml's 02:30; by hand, with
+# `gh workflow run ui-soak.yml --ref main -f repeat=3 -f seed=<n>`; and
+# on a pull request that changes the soak's own files, so that a change
+# to it runs before it merges: GitHub runs a workflow by hand only once
+# it is on the default branch.
+on:
+  schedule:
+    - cron: '20 0 * * *'
+  workflow_dispatch:
+    inputs:
+      repeat:
+        description: 'The times each test runs (UI_TEST_REPEAT), a whole number from 1'
+        type: string
+        default: '3'
+      seed:
+        description: "The tests' order (UI_TEST_SHUFFLE), a whole number; empty: the run's id"
+        type: string
+        default: ''
+  pull_request:
+    paths: [ .github/workflows/ui-soak.yml, tools/ui-test/soak_summary.py ]
+
+# One run per branch at a time; a new push to a pull request cancels the
+# run it supersedes, a night's run or one by hand is never cancelled.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+permissions:
+  contents: read
+
+# ci.yml's toolchain, which moves with it.
+env:
+  GO_VERSION: '1.26'
+
+jobs:
+  # In Microsoft's Playwright image, with the pip pin that moves with its
+  # tag, as ci.yml's UI test jobs (GUIDELINES/project/CI.md, section 3).
+  # Their case takes 7 to 11 minutes; three times each test, and the
+  # files handed out in the seed's order rather than the largest first,
+  # make about 20 to 35, so the limit is three times the UI test jobs'
+  # 30.
+  soak:
+    name: UI soak (${{ matrix.case }})
+    strategy:
+      fail-fast: false
+      matrix:
+        case: [ 1100-en, 1100-de, 390-en, 390-de ]
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    container:
+      image: mcr.microsoft.com/playwright/python:v1.64.1-noble
+    env:
+      UI_TEST_PYTHON: python
+      # A missing Playwright, pytest, pytest-playwright or pytest-xdist
+      # fails the job rather than skipping the suite.
+      UI_TEST_REQUIRED: 1
+      # git refuses the checkout, another user's than the container's
+      # root, and the binary under test needs no version stamp.
+      GOFLAGS: -buildvcs=false
+      UI_TEST_CASES: ${{ matrix.case }}
+      UI_TEST_REPEAT: ${{ inputs.repeat || '3' }}
+      UI_TEST_SHUFFLE: ${{ inputs.seed || github.run_id }}
+    steps:
+      # Nothing here fetches or pushes after the checkout.
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - uses: actions/setup-go@d8cbb8045d7f43706b9177cceb36c1f91a6644d5 # v7.1.0
+        with:
+          go-version: ${{ env.GO_VERSION }}
+          check-latest: true
+
+      - uses: ./.github/actions/ui-bundle
+
+      - name: Playwright
+        run: pip install "playwright==1.64.1" -r tools/ui-test/requirements.txt
+
+      # run.sh in four workers, as ci.yml's; conftest.py checks the
+      # repeat and the seed, and the log's header names both.
+      - name: The suite, each test repeated, shuffled
+        run: UI_TEST_JUNIT="$RUNNER_TEMP/ui-soak-junit.xml" tools/ui-test/run.sh
+
+      - name: The tests that failed
+        if: ${{ !cancelled() }}
+        run: python tools/ui-test/soak_summary.py "$RUNNER_TEMP/ui-soak-junit.xml" "UI soak ($UI_TEST_CASES)" >> "$GITHUB_STEP_SUMMARY"
+
+      # A failed test's screenshot, the video and the trace of its run
+      # once more, and the servers' logs, as ci.yml's ui-test-results;
+      # two weeks, a night's being read the morning after.
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        if: ${{ failure() }}
+        with:
+          name: ui-soak-results-${{ matrix.case }}
+          path: tools/ui-test/results/
+          if-no-files-found: ignore
+          retention-days: 14

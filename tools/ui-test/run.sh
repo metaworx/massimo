@@ -37,7 +37,9 @@
 # are handed the files in the order it gives them
 # (--no-loadscope-reorder), not the largest first. UI_TEST_JUNIT names a
 # file for the first pass's JUnit XML report (--junitxml), from the
-# caller's directory; the retry writes none (AP SteadyTests, Block 8).
+# caller's directory, which the UI soak reads for its summary
+# (.github/workflows/ui-soak.yml, AP SteadyTests, Block 8); the retry
+# writes none.
 # `run.sh screenshots` (make ui-screenshots) starts one set and runs
 # screenshots.py instead, which takes the screenshot set into
 # docs/screenshots/.

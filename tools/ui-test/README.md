@@ -160,7 +160,14 @@ A value that is not a whole number, or a repeat of 0, stops the run.
 No plugin is needed: `conftest.py` parametrizes and sorts the tests itself.
 `UI_TEST_JUNIT=<file>`, from the caller's directory,
 has the first pass write its JUnit XML report there (`--junitxml`);
-the retry writes none (AP SteadyTests, Block 8).
+the retry writes none.
+The UI soak (`.github/workflows/ui-soak.yml`,
+`GUIDELINES/project/CI.md`, section 2)
+runs every test three times, shuffled, in each case,
+and lists in each job's summary the tests that failed in a repeat,
+each with its case and how many of its runs failed,
+from that report (`soak_summary.py <junit.xml> [<title>]`;
+AP SteadyTests, Block 8).
 
 The run's sets, its `massimo` and the servers' logs and stores
 are in its work directory,
