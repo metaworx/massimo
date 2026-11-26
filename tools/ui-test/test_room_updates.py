@@ -30,7 +30,7 @@ from datetime import datetime, timedelta, timezone
 
 import pytest
 
-from helpers import frames, held_poll, hold, mark, replaced, wait_held, wait_until
+from helpers import answered, frames, held_poll, hold, mark, replaced, wait_held, wait_until
 from helpers import settled as looked_until
 
 
@@ -57,9 +57,10 @@ def state_event(page, rid):
 
 
 def rooms_loaded(page):
-    """The rooms loaded again, as a metadata event loads them."""
+    """The rooms loaded again, as a metadata event loads them, and the
+    reads the load sets off answered (answered)."""
     page.evaluate("loadRooms()")
-    page.wait_for_timeout(400)
+    answered(page)
 
 
 def settled(page):

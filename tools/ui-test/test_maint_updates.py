@@ -16,7 +16,7 @@ import time
 import pytest
 
 from conftest import TOKEN, URL, api_call
-from helpers import frames, hold, mark, owner_page, replaced, safe_route, scaled, show_view, update_json, wait_held, wait_until
+from helpers import answered, frames, hold, mark, owner_page, replaced, safe_route, scaled, show_view, update_json, wait_held, wait_until
 from test_admin_updates import across
 from test_unsaved import expire
 from test_reboot import RebootStub, iso, reboot_text
@@ -261,7 +261,7 @@ def test_the_session_end_ends_the_helpers_reading(new_context, case, watch, guar
     assert not software_busy(page), "the late answer started nothing"
     n = len(reads)
     page.clock.run_for(7000)
-    answered(page)
+    answered(page, held=reads)
     assert len(reads) == n, f"no reading for the next user ({len(reads) - n})"
 
 
@@ -321,12 +321,6 @@ def counted(page, pattern, method="GET"):
     return got
 
 
-def answered(page):
-    """A request of the page's own answered: one that the page sent before it has reached its route."""
-    page.evaluate("fetch('healthz').then((r) => r.status)")
-    frames(page)
-
-
 def settings_change(**want):
     """A match of Stream.wait: the change event of a PUT /api/v1/settings
     that set exactly want, as the server sends it for a write of the
@@ -373,14 +367,14 @@ def test_a_burst_of_events_makes_one_read_and_one_after_it(page, case):
         for _ in range(5):
             send(page, "resync")
         assert wait_held(page, held), "the first read"
-        answered(page)
+        answered(page, held=held)
         assert len(held) == 1, f"one read in flight ({len(held)})"
         held.pop().fallback()
         assert wait_held(page, held), "one more after it"
-        answered(page)
+        answered(page, held=held)
         assert len(held) == 1, f"one read for the four ({len(held)})"
         held.pop().fallback()
-        answered(page)
+        answered(page, held=held)
         assert not held, f"nothing more ({len(held)})"
     finally:
         page.unroute(UPDATE)
@@ -402,7 +396,7 @@ def test_a_burst_left_by_its_page_makes_no_second_read(page, case):
         show_view(page, "tiles")
         with page.expect_response(lambda r: "/api/v1/update" in r.url):
             held.pop().fallback()
-        answered(page)  # the first read's answer handled: the second would have been asked for by now
+        answered(page, held=held)  # the first read's answer handled: the second would have been asked for by now
         frames(page)
         assert not held, f"no second read for Rooms ({len(held)})"
     finally:
@@ -463,7 +457,7 @@ def test_the_channels_own_change_event_reads_nothing_behind_its_back(page, case)
             page.wait_for_timeout(50)
         n = len(reads)
         send(page, "change", {"action": "settings.update", "set": {"update.channel": "beta"}})
-        answered(page)
+        answered(page, held=checks)
         assert len(reads) == n, f"the late event reads nothing while the page's own change is under way ({len(reads) - n})"
         for c in checks:
             c.fallback()
@@ -595,7 +589,7 @@ def test_events_while_the_helper_is_followed_read_nothing(page, case):
         assert wait_held(page, held, 8), "the reading's next read"
         for kind in ("update", "resync", "resync"):
             send(page, kind, {"to": "v0.0.1-test"})
-        answered(page)
+        answered(page, held=held)
         assert len(held) == 1, f"the events read nothing beside the reading ({len(held)})"
         assert software_busy(page), "still followed"
         held.pop().fallback()
@@ -620,7 +614,7 @@ def test_a_read_asked_for_before_the_session_ended_is_not_made(new_context, case
     across(page, how)
     first = held.pop()
     first.fallback()
-    answered(page)
+    answered(page, held=held)
     assert not held, f"no read for the session before ({len(held)})"
 
 
@@ -960,8 +954,8 @@ def test_an_event_keeps_a_question_and_takes_back_one_whose_reboot_waits(page, c
         reads = counted(page, "**/api/v1/reboot")
         send(page, "change", {"action": "settings.update", "set": {"announce": "on"}})
         send(page, "reboot", {"by": "systemd"})
-        # the reboot's read waits behind the settings' read in the card's burst reader, so answered() alone,
-        # which waits for a request sent before its own, comes before it
+        # the reboot's read waits behind the settings' read in the card's burst reader: the read waited for,
+        # then answered, which follows a read started after another's answer, for any read after it
         assert wait_reads(page, reads, 1), f"the reboot read ({reads})"
         answered(page)
         assert len(reads) == 1, f"the reboot read ({reads})"
@@ -1063,7 +1057,7 @@ def test_an_intervals_own_change_event_reads_nothing_behind_its_back(page, case,
         sel.select_option("30")
         assert wait_held(page, held), "the PUT sent"
         send(page, "change", {"action": "settings.update", "set": {"poll_interval": "10s"}})
-        answered(page)
+        answered(page, held=held)
         assert reads == [], f"the event reads nothing while the PUT runs ({reads})"
         for r in held:
             r.fallback()
@@ -1101,7 +1095,7 @@ def test_another_setting_changed_during_the_own_put_is_read_after_it(page, case,
         m = stream.mark()
         api_call("PUT", "api/v1/settings", {"announce": "on"})  # the other browser
         stream.wait("the other browser's change", "change", match=settings_change(announce="on"), mark=m, server=True)
-        answered(page)
+        answered(page, held=held)
         assert reads == [], f"nothing read while the PUT runs ({reads})"
         m = stream.mark()
         answers = [r.fetch() for r in held]  # at the server, the page still without its answer
@@ -1190,7 +1184,7 @@ def test_the_session_end_forgets_system_info(new_context, case, watch, guard, ho
     frames(page)
     n = len(held)
     page.clock.run_for(5000)
-    answered(page)
+    answered(page, held=held)
     assert len(held) == n, f"no reading of the certificate for the next user ({len(held) - n})"
     assert "MASSIMO_API_TOKEN" not in page.locator("#config-info-body").inner_text(), "no variable of the first"
     assert page.locator("#info-client").inner_text() == "–" and "massimo-box" not in page.locator("#info-host").inner_text(), "no fact"

@@ -1,4 +1,4 @@
-# Testing the web UI (v1.29.0)
+# Testing the web UI (v1.30.0)
 
 An evaluation of a Cypress suite for the web UI, against the alternatives:
 what the Playwright smoke test covers today and what it cannot do well,
@@ -803,7 +803,7 @@ The suite's helpers for it are in `tools/ui-test/helpers.py`
   the poll's field, a sign-out;
   so the hold fails at its end where the timer is no longer the one it cleared.
   What a poll itself draws the test counts for one poll of its own (`poll(false)`),
-  once every request it started has been answered.
+  once every request it started has been answered (`answered`).
 - **The same element** (`mark`, `replaced`, `frames` of `helpers.py`):
   a test that holds that data takes nothing from the user marks the elements
   of its selectors, lets the data come, waits two frames and a task,
@@ -949,6 +949,31 @@ the server's and the test's, in order,
   What a reload brings is waited for too,
   not looked at once when the page is shown:
   the page's start goes on after it (`test_header.py`).
+- **The page's reads all answered** (`answered(page, held=…)`, AP SteadyTests, Block 4):
+  the one wait for a page that has read all it reads now,
+  before a test counts what an action read ("one read", "nothing read")
+  or checks what the answers drew:
+  every read of the page's own, to the API and to `/healthz`, has its answer,
+  but those of the routes the test holds (`held`, a list it may add to meanwhile),
+  and for 200 ms none has started or ended and the page's height stood still.
+  A read the page starts only after another has answered,
+  the next of a burst (`shared/burst.ts`), the next of the page's start
+  (`app.js`, `init`) or a load an answer sets off,
+  comes within those 200 ms and is waited for in turn.
+  The waits before it did not follow one:
+  a request of the test's own that overtakes the page's
+  (`test_maint_updates.py`'s `fetch('healthz')`) returns before the next read starts,
+  and `ApiReads.answered`, which looked at the reads in flight at the start and the end
+  of its quiet time, let a read start and end inside it;
+  of four reads chained 150 ms after each other's answer,
+  they returned after none and after one, the new wait after all four
+  (three runs each, 1100-en, 2026-11-26).
+  It reads the `ApiReads` the page fixture and `owner_page` make before the page's start
+  (`api_reads`), measures its quiet time from the test,
+  so that a page under a paused clock is waited for too,
+  and fails naming the reads still open;
+  the 200 ms are not scaled, its ceiling is.
+  `ApiReads.answered` is the same wait, for a test that makes its own.
 - **Nothing came, against an end:**
   a check that an action brought nothing has an end of its own,
   not a fixed wait that a slow runner outlasts:

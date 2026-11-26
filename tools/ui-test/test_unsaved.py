@@ -38,7 +38,8 @@ import time
 import pytest
 
 from conftest import URL, api_call
-from helpers import CUBES, OPERATOR_PASSWORD, choose_cube, describe_event, focus_in_turn, found_only, held_poll, hold, open_personal_page, show_view, sign_out, wait_held, wait_until
+from helpers import (CUBES, OPERATOR_PASSWORD, answered, choose_cube, describe_event, focus_in_turn, found_only, held_poll, hold, open_personal_page, show_view,
+                     sign_out, wait_held, wait_until)
 from test_login import sign_in
 
 pytestmark = pytest.mark.clock
@@ -379,38 +380,6 @@ def drawings(page, ms, poll=False):
     }""", [ms, poll])
 
 
-def answered(page, action):
-    """Runs action(), then waits until every request it started has been
-    answered, the stream's left out: what the page draws from their
-    answers is drawn then, those the action did not await among them (a
-    poll's check of the version, its log alerts). Returns action's
-    result."""
-    started, ended = [], []
-
-    def start(r):
-        if "/events?" not in r.url:
-            started.append(r)
-
-    def end(r):
-        ended.append(r)
-
-    page.on("request", start)
-    page.on("requestfinished", end)
-    page.on("requestfailed", end)
-    try:
-        result = action()
-        until = time.time() + 5
-        while any(r not in ended for r in started) and time.time() < until:
-            page.wait_for_timeout(50)
-        assert all(r in ended for r in started), f"the requests answered: {[r.url for r in started if r not in ended]}"
-    finally:
-        page.remove_listener("request", start)
-        page.remove_listener("requestfinished", end)
-        page.remove_listener("requestfailed", end)
-    page.evaluate("new Promise((done) => requestAnimationFrame(() => setTimeout(done)))")  # their answers handled
-    return result
-
-
 def came(stream, mark):
     """The events the page's stream brought since mark, in a few words
     each, for a failure's message: a stray event of the server's can then
@@ -486,7 +455,8 @@ def test_vwt_settings_kept_and_the_disk_opens_them(page, case, reads, stream):
             mark = stream.mark()
             n = drawings(page, 2000)
             assert not n, f"the page settles while the form is unsaved: drawn {n} in 2 s with nothing changed; {came(stream, mark)}"
-            n = answered(page, lambda: drawings(page, 0, poll=True))
+            n = drawings(page, 0, poll=True)
+            answered(page)  # the reads the poll did not await too, its check of the version and its log alerts
             assert sum(n.values()) < 10, f"a poll draws the pills a few times: {n}"
             mark = stream.mark()
             n = drawings(page, 1000)

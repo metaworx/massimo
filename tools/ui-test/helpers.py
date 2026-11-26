@@ -22,7 +22,9 @@ a test measures what the page does by itself; pause_clock pauses
 Playwright's clock at the page's now. open_fold, close_fold and
 toggle_fold take a fold's toggle event before a test acts inside it.
 wait_started waits for the page's start, the page fixture's and
-owner_page's, and says on a timeout which read it waited for.
+owner_page's, and says on a timeout which read it waited for; answered
+waits until the page has read all it reads now, a read it starts only
+after another has answered among them.
 
 Every wait of this kit, and the page fixture's, lasts its seconds times
 UI_TEST_SCALE (scaled), a positive number, 1 where it is not set: a
@@ -184,50 +186,107 @@ def scroll_settled(page, seconds=3):
     })""", scaled(seconds) * 1000)
 
 
+# The ApiReads of each page, the first made for it (api_reads).
+_API_READS = weakref.WeakKeyDictionary()
+
+
 class ApiReads:
-    """The page's requests to the API that have no answer yet, counted from
-    the moment it is made: a page shown sends its cards' reads at once, and
-    their answers come in any order, so a card that grows with a later one
-    (System settings → Integrations, with why the server does not look on
-    the LAN, api/v1/integrations/found) changes the page's height after the
-    answer a test waited for. The event stream, which stays open, is left
-    out."""
+    """The page's requests to the server that have no answer yet, its API's
+    and /healthz (the header's version check, a restart's following),
+    counted from the moment it is made: a page shown sends its cards' reads
+    at once, and their answers come in any order, so a card that grows with
+    a later one (System settings → Integrations, with why the server does
+    not look on the LAN, api/v1/integrations/found) changes the page's
+    height after the answer a test waited for. The event stream, which
+    stays open, is left out. The first made for a page is its own
+    (api_reads): the page fixture's and owner_page's, made before the
+    page's start. It holds its page weakly, so that the page's entry goes
+    with the page."""
 
     def __init__(self, page):
-        self.page = page
+        self._page = weakref.ref(page)
         self.open = set()
+        self.changes = 0  # the reads started and ended so far, for answered's quiet time
         page.on("request", self._sent)
         page.on("requestfinished", self._done)
         page.on("requestfailed", self._done)
+        _API_READS.setdefault(page, self)
+
+    @property
+    def page(self):
+        """The page, None once it is gone."""
+        return self._page()
 
     @staticmethod
     def _api(request):
-        return "/api/v1/" in request.url and not re.search(r"/events(\?|$)", request.url)  # not the stream (app.js connectEvents)
+        path = urlparse(request.url).path
+        return ("/api/v1/" in path and not re.search(r"/events$", path)) or path.endswith("/healthz")  # not the stream (app.js connectEvents)
 
     def _sent(self, request):
         if self._api(request):
             self.open.add(request)
+            self.changes += 1
 
     def _done(self, request):
-        self.open.discard(request)
+        if request in self.open:
+            self.open.discard(request)
+            self.changes += 1
 
     def pending(self):
         """The reads without an answer, each as its method and URL, sorted."""
         return sorted(f"{r.method} {r.url}" for r in self.open)
 
-    def answered(self, seconds=5, quiet_ms=200):
-        """Waits until every read has its answer and nothing more is drawn
-        for quiet_ms (the page's height unchanged, not scaled: it waits for
-        nothing to come); false after so many seconds (scaled)."""
+    def _waiting(self, held):
+        """The reads without an answer but those of held, routes (or
+        requests) the test holds."""
+        kept = {getattr(h, "request", h) for h in held}
+        return [r for r in self.open if r not in kept]
+
+    def answered(self, seconds=5, quiet_ms=200, held=()):
+        """Waits until every read has its answer, but those of held, the
+        routes (or requests) the test holds, a list it adds to meanwhile
+        among them; and for quiet_ms no read has started or ended and
+        nothing more is drawn (the page's height unchanged). A read the page
+        starts only after another has answered comes within quiet_ms of
+        that answer and is waited for in turn: a burst's next read
+        (shared/burst.ts), the next of the page's start (app.js init), a
+        load an answer sets off. quiet_ms is not scaled: it waits for
+        nothing to come. Measured from here, by Playwright's own timer, so
+        that a page under a paused clock is waited for as well. False after
+        so many seconds (scaled)."""
+        page = self.page
         end = time.monotonic() + scaled(seconds)
         while time.monotonic() < end:
-            if not self.open and self.page.evaluate("""(quiet) => new Promise((done) => {
-                const h = document.documentElement.scrollHeight;
-                setTimeout(() => done(document.documentElement.scrollHeight === h), quiet);
-            })""", quiet_ms) and not self.open:
+            if self._waiting(held):
+                page.wait_for_timeout(25)
+                continue
+            changes = self.changes
+            height = page.evaluate("document.documentElement.scrollHeight")
+            page.wait_for_timeout(quiet_ms)
+            if self.changes == changes and page.evaluate("document.documentElement.scrollHeight") == height and not self._waiting(held):
                 return True
-            self.page.wait_for_timeout(25)
         return False
+
+
+def api_reads(page):
+    """The page's ApiReads (the first made for it): the page fixture's and
+    owner_page's, made before the page's start; one made now for a page
+    of a test's own, which sees no read the page sent before."""
+    return _API_READS.get(page) or ApiReads(page)
+
+
+def answered(page, held=(), seconds=5):
+    """Waits until the page's reads have all answered and none starts
+    within the quiet time (ApiReads.answered of api_reads), held aside,
+    the routes the test holds; fails, naming the reads still open, after
+    so many seconds (scaled). The one wait for "the page has read all it
+    reads now", before a count of what an action read or a check of what
+    the answers drew: it follows a read that starts only after another
+    has answered, where a request of the test's own that overtakes the
+    page's does not (docs/ui-testing.md, section 9)."""
+    reads = api_reads(page)
+    assert reads.answered(seconds, held=held), \
+        f"the page's reads answered within {scaled(seconds):g} s: still open {', '.join(reads.pending()) or 'none'}"
 
 
 def scroll_width(page):

@@ -54,7 +54,8 @@ import pytest
 
 from test_to_top import long_page, scrolled_to
 from test_users import INTEGRATION_USERS
-from helpers import LOG_ALERT_A, LOG_ALERT_B, LOG_CMD, LOG_CMD_LINE, STATE_EVENTS_JS, RepairStub, StubLog, log_lines, open_main_menu, reads_of, safe_route, show_view, stub_log_command, wait_until
+from helpers import (LOG_ALERT_A, LOG_ALERT_B, LOG_CMD, LOG_CMD_LINE, STATE_EVENTS_JS, RepairStub, StubLog, answered, log_lines, open_main_menu, reads_of,
+                     safe_route, show_view, stub_log_command, wait_until)
 
 # The cases the guard runs in (D176-D); in the others its tests are
 # deselected at collection (D9-A).
@@ -92,11 +93,9 @@ class Region:
 
 
 # --- how the regions are shown ------------------------------------------
-
-def settle(page, ms=300):
-    """Lets the loads a view starts come back before the guard marks it."""
-    page.wait_for_timeout(ms)
-
+#
+# A view's loads come back before the guard marks it: answered of
+# helpers.py, after the last step of its showing.
 
 def tile(page, n=0):
     return page.locator("#rooms .room").nth(n)
@@ -156,7 +155,7 @@ def rooms_virtual(page):
     room = tile(page, 2)
     room.locator(".tile-info").click()
     room.locator(".devices .device.virtual form.vwt-settings").wait_for(state="visible")
-    settle(page, 500)  # the virtual thermostat's settings load and fill the form
+    answered(page)  # the virtual thermostat's settings load and fill the form
 
 
 def room_config(tab):
@@ -167,7 +166,7 @@ def room_config(tab):
             room.locator(".tile-cog").click()
             room.locator(".config-area .config-tabs").wait_for(state="visible")
         room.locator(f".config-tabs [role=tab][data-tab={tab}]").click()
-        settle(page)
+        answered(page)
     return show
 
 
@@ -194,7 +193,7 @@ def unlisted_form(page):
     row.wait_for(state="visible")
     row.locator(".put-open").click()
     row.locator("form input[name=name]").wait_for(state="visible")
-    settle(page)
+    answered(page)
 
 
 # A repair's preview, as GET …/repair/… answers one with something to
@@ -237,7 +236,7 @@ def rooms_repair_tile(page):
         room.locator(".tile-head > details.menu > summary").click()
         room.locator(".menu-repair").click()
     ask_run(room.locator(".repair-box .repair-item[data-repair=relink]"))
-    settle(page)
+    answered(page)
 
 
 def rooms_repair_device(page):
@@ -256,7 +255,7 @@ def rooms_repair_device(page):
     item = device.locator(".repair-item[data-repair=list]")
     item.locator("input[name=name]").wait_for(state="visible")
     ask_run(item)
-    settle(page)
+    answered(page)
 
 
 def house_panel(page):
@@ -376,13 +375,13 @@ def home_notice(page):
     page.goto(url)
     assert wait_until(page, "!document.getElementById('home-notice').classList.contains('hidden')", 10), "the notice shows"
     loaded(page)
-    settle(page)
+    answered(page)
 
 
 def system(page):
     if not page.locator("#system").is_visible():
         show_view(page, "system")
-    settle(page)
+    answered(page)
 
 
 # The fake Cube's fixture lists nothing in a Cube's problem list until
@@ -422,7 +421,7 @@ def stub_cubes(page):
         reads.found(found)
     page._guard_cubes = True
     page.evaluate("loadCubes()")
-    settle(page)
+    answered(page)
 
 
 def cubes_closed(page):
@@ -438,7 +437,7 @@ def cubes_open(page):
     if panel.get_attribute("open") is None:
         panel.locator(":scope > summary .cube-head-who").click()
     panel.locator(".cube-form").wait_for(state="visible")
-    settle(page)
+    answered(page)
 
 
 def cubes_problems(page):
@@ -460,7 +459,7 @@ def cubes_repair(page):
     if panel.locator(".repair-box:not(.hidden)").count() == 0:
         panel.locator(".cube-repair .repair-open").click()
     ask_run(panel.locator(".repair-box .repair-item[data-repair=reset]"))
-    settle(page)
+    answered(page)
 
 
 def cube_page_repair(page):
@@ -472,7 +471,7 @@ def cube_page_repair(page):
     if panel.locator(".repair-box:not(.hidden)").count() == 0:
         panel.locator(".cube-repair .repair-open").click()
     ask_run(panel.locator(".repair-box .repair-item[data-repair=reset]"))
-    settle(page)
+    answered(page)
 
 
 def cubes_found(page):
@@ -492,7 +491,7 @@ def cube_page(page):
     if not page.locator("#cube-page").is_visible():
         show_view(page, "cube")
     page.locator("#cube-page-body .cube-panel .cube-form").wait_for(state="visible")
-    settle(page)
+    answered(page)
 
 
 def cube_page_problems(page):
@@ -524,7 +523,7 @@ def pairing_running(page):
     form.wait_for(state="visible")
     assert wait_until(page, "document.querySelectorAll(\"#cube-page-body .pair-device select[name=room] option\").length > 1", 5), "the rooms offered"
     form.locator("select[name=room]").select_option(index=1)
-    settle(page)
+    answered(page)
 
 
 def users(page):
@@ -633,7 +632,7 @@ def log(page):
     show_view(page, "log")
     page.locator("#log-filter").fill("")
     page.locator("#log-lines .log-line").first.wait_for()
-    settle(page)
+    answered(page)
 
 
 def stub_log(page):
@@ -675,7 +674,7 @@ def log_stubbed(page):
     show_view(page, "log")
     page.evaluate("MassimoParts.log.load().then(() => MassimoParts.log.loadAlerts())")
     page.locator(f"#log-lines .log-line[data-id='{LOG_ALERT_A}'] .log-mark").wait_for()
-    settle(page)
+    answered(page)
 
 
 def log_command(page):
@@ -685,13 +684,13 @@ def log_command(page):
     if btn.get_attribute("aria-expanded") != "true":
         btn.click()
     page.locator(f"#log-lines .log-line[data-id='{LOG_CMD_LINE}'] .log-cmd-head").wait_for()
-    settle(page)
+    answered(page)
 
 
 def maint(page):
     if not page.locator("#maint-page").is_visible():
         show_view(page, "maint")
-    settle(page, 500)
+    answered(page)
 
 
 # The test server runs in a terminal and offers no update, no restart and
@@ -738,13 +737,13 @@ def info(page):
     page.locator("#credits-info > summary").click()
     page.locator("#credits-info .credit[data-name='preact'] > summary").click()
     page.locator("#credits-info .credit[data-name='preact'] pre").wait_for()
-    settle(page, 500)
+    answered(page)
 
 
 def personal(view):
     def show(page):
         show_view(page, view)
-        settle(page)
+        answered(page)
     return show
 
 
@@ -794,7 +793,7 @@ def first_owner(page):
     on_rooms(page)
     page.evaluate("() => { loadMe(); }")
     page.locator("#login-dialog[open] #setup-form").wait_for(state="visible")
-    settle(page)
+    answered(page)
 
 
 def keep_open_step(page):
@@ -804,7 +803,7 @@ def keep_open_step(page):
         first_owner(page)
     page.locator("#setup-keep-open").click()
     page.locator("#keep-open-address").fill("http://example.invalid")
-    settle(page)
+    answered(page)
 
 
 def sign_in_card(page):
@@ -812,7 +811,7 @@ def sign_in_card(page):
     (askLogin), the password's way chosen."""
     page.evaluate("askLogin(); null")
     page.locator("#login-dialog[open] #login-user").wait_for(state="visible")
-    settle(page)
+    answered(page)
 
 
 def sign_in_key(page):

@@ -1017,6 +1017,11 @@ Node is not needed.
   not looked at once right after another wait:
   the page goes on after the moment the first wait saw
   (`test_header.py`, the reload of the log).
+- A count of what an action read, or a check of what the answers drew,
+  waits with `answered(page)` of `helpers.py` until the page's reads have all answered,
+  a read the page starts only after another's answer among them;
+  the routes the test holds are given as `held`
+  (`docs/ui-testing.md`, section 9, "The page's reads all answered").
 - "Nothing came" is checked against an end, not after a fixed wait:
   a read sent after the action through the same route,
   the page's state that says nothing waits,
