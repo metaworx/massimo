@@ -1,36 +1,44 @@
-# AP AccessEnds v1.1: Follow-ups of two gates
+# AP AccessEnds v1.2: Follow-ups of two gates
 
 ## TL;DR
 
-The decisions the completion gate of AP LooseEnds and AP PasswordRules listed,
-each as its option A, D47-A with a log entry,
-and the credits' versions (D40): eight blocks, a pull request and a NOTE each.
+The decisions of the completion gate of AP LooseEnds and AP PasswordRules,
+then those of this plan's own of 2026-11-26:
+seven blocks merged, the list of common passwords moved into a plan of its own
+for the next version, and two blocks more, a pull request and a NOTE each.
 
-- late sign-in answer → does nothing, its session ended (LooseEnds.D44)
-- integration's user's roles → within its maximum, `integration` again (D45)
-- open server's Users → "No owner yet", its integration's users listed (D46)
-- first owner → told what the open server left: page, API, CLI, start;
-  a log alert (D47)
-- tall owner's card → right at its top (D57);
-  the suggestion whole under the field (D58); the dice's move measured,
-  D59 again (D23)
-- common passwords → Openwall's list, if D29 lets it (D55)
-- OPAQUE's crates → their licence texts in the credits (D56)
-- test files → not shipped, no bullet owed (D48)
-- Go modules' versions → read from the binary, not the list:
-  a bump fails no test (D40)
+- Blocks 1 to 4 and 6 to 8 → merged: #452, #456, #463, #455, #449, #447, #453
+- common passwords → AP CommonPasswords, next version:
+  Pwned Passwords, a switch to turn it off (D29-E, D43-A)
+- an integration's users → managed by `users` by rank, by `integrations`,
+  by their own integration's calls; no other integration's key,
+  no `guests` holder of no integration (D41-A4, A5)
+- dice → five words, twenty characters by turns;
+  Words or Characters gone, its label says the next (D44-A)
+- the shown suggestion → copies on a tap, its copy icon beside it;
+  the row under the field gone (D49-A)
+- the dice's move, the line's place,
+  the open-setup alert → as built (PasswordRules.D59-A, D19-A, D42-A)
+- then → retirement, the owner's word, once Blocks 9 and 10 are merged
 
 ### Blocks
 
 1. Late: every way of the sign-in card checks its opening after its answer
-2. Users: the roles an integration's user may get; the open server's Users
-3. OpenSetup: what was set up while the server was open, said once and logged
+   (merged, #452)
+2. Users: the roles an integration's user may get;
+   the open server's Users (merged, #456)
+3. OpenSetup: what was set up while the server was open,
+   said once and logged (merged, #463)
 4. Tall: the card's measure for a card taller than the window;
-   the suggestion's line
-5. Common: Openwall's list of common passwords, if D29 lets it
-6. Crates: the licence texts of the OPAQUE client's Rust crates
-7. Changelog: the shipped paths leave out the test files
-8. Versions: the credits take each Go module's version from the binary
+   the suggestion's line (merged, #455)
+5. Common: moved to AP CommonPasswords
+6. Crates: the licence texts of the OPAQUE client's Rust crates (merged, #449)
+7. Changelog: the shipped paths leave out the test files (merged, #447)
+8. Versions: the credits take each Go module's version from the binary;
+   merged, #453
+9. Managers: who manages an integration's users (D41-A4, A5)
+10. Alternate: the dice gives words and characters by turns;
+    the shown suggestion copies on a tap (D44-A)
 
 ## Discussion
 
@@ -77,7 +85,9 @@ and this plan is built under PLAN++, as both were.
   It gives PasswordRules.D10-A's aim another source than SecLists',
   which did not hold
   (`wip/2026-11-25_03-26_NOTE_PasswordRules_v1.0_no_list_of_common_passwords.md`).
-  Chosen on the header's sentence; D29 puts to the owner what the findings add.
+  Chosen on the header's sentence; D29 put to the owner what the findings add,
+  and the owner chose Pwned Passwords instead (D29-E, "Decided at the gate of
+  2026-11-26").
 - **PasswordRules.D56-A.
   The crates' licence texts,
   collected "consistent with the artifact",** in a file beside the vendored
@@ -106,6 +116,8 @@ and this plan is built under PLAN++, as both were.
 The choices the findings raised, numbered in block order,
 each taken as its option A;
 each the owner's to change, and the completion gate lists them.
+D1 to D39 were v1.0's;
+D45 to D53, for Blocks 9 and 10, are this revision's (at the section's end).
 
 For Block 1, Late:
 
@@ -330,48 +342,25 @@ For Block 4, Tall:
   - **B.**
     D59-B taken into this block now.
 
-For Block 5, Common, each going with the block under D29-A (D29 itself is open,
-below):
+For Block 5, Common, written for Openwall's list,
+moved with the block to AP CommonPasswords (D29-E),
+which restates what of them still holds for Pwned Passwords:
 
-- **D24-A.
-  The entry's licence in the credits.**
-  - **A (taken).**
-    The Licence cell of `MASSIMO.md` empty:
-    System info reads "licence in its text" and shows the header,
-    nothing the source does not say.
-  - **B.**
-    A made-up `LicenseRef-…` identifier, which looks like a licence.
-- **D25-A.
-  How the file is made again.**
-  - **A (taken).**
-    The one-line pipeline in `MASSIMO.md` and a test that holds the file to its
-    SHA-256, as EFF's list is held; no tool: the 15 MB source is not vendored,
-    so no check could run offline.
-  - **B.**
-    A tool, `go run ./tools/commonlist <password.lst>`:
-    more code for the same bytes.
-- **D26-A.
-  The order of the answers.**
-  - **A (taken).**
-    Length, then common, then the names:
-    whether a password is common does not depend on the names.
-  - **B.**
-    The names before common.
-- **D27-A.
-  Where the page gets the list.**
-  - **A (taken).**
-    Fetched at the first key in a new password's field;
-    a submit waits for it 5 s at most, then checks the rest and says so in the
-    console (PasswordRules' "A list not loaded").
-  - **B.**
-    In the bundle: 34 KB more at every load, the bytes in two places.
-- **D28-A.
-  The wordlists collection's terms.**
-  - **A (taken).**
-    Quoted in `NOTICE` beside the header,
-    so that nobody reads the header as the whole story.
-  - **B.**
-    The header alone.
+- **D24-A.**
+  The entry's Licence cell in `MASSIMO.md` empty,
+  so that System info reads "licence in its text": kept there.
+- **D25-A.**
+  The file made again by a one-line pipeline in `MASSIMO.md`,
+  held to its SHA-256: Openwall's, gone;
+  Pwned Passwords needs a scan of its own.
+- **D26-A.**
+  The answers' order, length, then common, then the names: kept there.
+- **D27-A.**
+  The list fetched at the first key in a new password's field,
+  a submit waiting for it 5 s at most: kept there.
+- **D28-A.**
+  The wordlists collection's terms quoted in `NOTICE`: Openwall's, gone;
+  Pwned Passwords' one unsettled clause takes its place.
 
 For Block 6, Crates:
 
@@ -462,6 +451,118 @@ For Block 7, Changelog:
   - **B.**
     Left out too.
 
+For Block 9, Managers (v1.2):
+
+- **D45-A.
+  What each holder sees of the users.**
+  - **A (taken).**
+    What it may manage, and its own user:
+    a holder of `guests` of no integration no longer lists an integration's
+    users stored as guest;
+    an integration's call lists its own integration's users stored as guest
+    and no regular guest;
+    a holder of `integrations` lists every integration's user;
+    a holder of `passwords` still lists every user, as now.
+  - **B.**
+    Each lists what it lists today, only its changes narrowed:
+    rows it may not touch, and a holder of `integrations` without `passwords`
+    blind to the users it may now manage.
+- **D46-A.
+  Where a holder of `integrations` manages an integration's users.**
+  - **A (taken).**
+    In Users, each one's panel as any user's,
+    its controls following the server's `may`:
+    the users routes let a holder of `integrations` in,
+    and the page shows it Users, without Add a user where it may create none.
+    The seeded manager, which holds `guests` and `passwords`, sees Users today:
+    only its panels' controls change.
+  - **B.**
+    In the Integrations card, Disable and Remove beside each user's Link:
+    a second place to change a user, a region reaching the users routes.
+- **D47-A.
+  The rank rule for a holder of `integrations`.**
+  - **A (taken, with C's owner rule; the coordinating session's choice).**
+    It applies to the role given alone, as the owner's words have it:
+    an integration's user is renamed, disabled, given an end date and removed
+    whatever its role, but one stored as `owner`,
+    which stays an owner's alone, as every owner is, so that the documented rule
+    "nobody but an owner changes an owner" holds without exception;
+    a role is given where the holder outranks it,
+    so the seeded manager, which lacks six capabilities of `integration`,
+    does not give `integration` back:
+    a user the manager moves off it waits for an owner to give it back.
+  - **B.**
+    `integration` given back to its own integration's user whatever the rank,
+    since every call of such a user stays within the maximum the holder sets
+    anyway.
+  - **C.**
+    An integration's user stored as `owner` changed by an owner alone,
+    as every owner is.
+- **D48-A.
+  A role beyond the maximum, from a holder of `integrations`.**
+  - **A (taken).**
+    Refused, `403`, as "only within the maximum" says;
+    a holder of `users` keeps D6-A, the role taken and the calls capped.
+  - **B.**
+    Taken, as D6-A takes it from a holder of `users`,
+    the page offering only those within.
+
+For Block 10, Alternate (v1.2):
+
+- **D49-A.
+  The row under the field.**
+  The row holds Words or Characters and Copy, nothing else (Analysis).
+  - **A (taken).**
+    It goes whole:
+    Words or Characters with the alternation,
+    Copy with the line's own copy, so that one place copies the suggestion;
+    a first press adds the line's place alone, 28 px less.
+  - **B.**
+    The row keeps Copy beside the line's copy: two ways to one copy.
+- **D50-A.
+  Where the turn is kept.**
+  - **A (taken).**
+    In each field, five words at each new start (where the line's place goes:
+    Reset, a save, a fold closed, the card's next opening);
+    a key leaves the turn as it is,
+    so that the next tap gives the other kind of the last one,
+    as the label says.
+  - **B.**
+    One turn for the page, every form's dice following it.
+  - **C.**
+    Five words again after a key.
+- **D51-A.
+  A tap that fills nothing** (the word list not had, no suggestion found,
+  an answer dropped as late).
+  - **A (taken).**
+    It turns all the same,
+    so that the tap after a list not had gives twenty characters,
+    which need no list, as Characters did; the label says so.
+  - **B.**
+    Only a suggestion filled turns it:
+    a list not had asks for words at each tap until it loads.
+- **D52-A.
+  What a screen reader hears of the line.**
+  - **A (taken).**
+    The line is no longer `aria-hidden`, which a control inside it cannot be;
+    its suggestion is a copy named "Copy the password" (`password.copyName`,
+    the row's Copy's name), its words hidden from a screen reader inside it
+    by a property of the shared `Copy`, its icon named alike;
+    `translate="no"` stays:
+    the password is told nowhere, as D22-A has it.
+  - **B.**
+    The copy's name alone, its words left as the button's content,
+    which Chromium leaves out of its tree,
+    but which a live region may still speak as it appears.
+- **D53-A.
+  The dice's move, now that the second tap gives characters.**
+  - **A (taken).**
+    PasswordRules.D59-A stands; the move and the card's height measured again
+    in each case and language, the numbers at the completion gate.
+  - **B.**
+    PasswordRules.D59-B now:
+    the card's top kept where it is while the line's place is shown.
+
 ### Decided after the first blocks
 
 The owner, 2026-11-25, while Blocks 1, 2, 4 and 6 were built:
@@ -481,62 +582,98 @@ The owner, 2026-11-25, while Blocks 1, 2, 4 and 6 were built:
   (the workflow scope and a second commit on each);
   `make credits` by hand at each bump.
 
-### Open: the owner's
+### Decided at the gate of 2026-11-26
 
-- **D29, on PasswordRules.D55: the wordlists collection's licence.**
-  The owner chose Openwall's list on its header's sentence alone.
-  The findings add: Openwall's wordlists collection publishes the first 3,546
-  entries of `password.lst`, byte for byte,
-  under terms that forbid charging for a copy and bundling the collection with a
-  product that is charged for; 613 of the cut's 3,510 entries, the commonest,
-  come from that part.
-  The header's sentence was added to John the Ripper's copy alone, in 2013;
-  it is the compiler's assumption, not a licence,
-  and it says nothing of the sources of the entries added in 2022.
-  Massimo is distributed under AGPL-3.0-or-later, which lets anyone sell a copy;
-  terms that forbid charging cannot be passed on with it,
-  so the list would ship on John's copy's sentence alone, an assumption.
-  - **A (recommended).**
-    No list for now (PasswordRules.D55-C): Block 5 dropped,
-    the completion gate saying why.
-  - **B.**
-    Built as chosen: the header quoted as the author's assumption,
-    the collection's terms beside it (Block 5 as written).
-  - **C.**
-    The owner asks Openwall first; Block 5 waits for the answer.
+The owner, 2026-11-26, at the completion gate of this plan's run,
+seven of its eight blocks merged and Block 5 not built,
+in three answers, in the owner's words:
 
-- **D41, who manages an integration's user stored as guest.**
-  Today any `guests` holder may disable, rename and remove such a user:
-  a role of the owner's such as the seeded manager,
-  and another integration's call, whose ceiling holds `guests` (`auth.go`,
-  `integrationCeiling`); run on main and on Block 2's tree,
-  200 each (`users_api.go`, `mayManage`).
-  Disabling it stops its calls even where it is linked to a Massimo user:
-  the chain checks the integration's user before the linked one (`onbehalf.go`).
-  Block 2's Role list steers an owner who narrows such a user to guest.
-  Older than this plan.
-  - **With a link,** the owner's question: there are two users.
-    The linked Massimo user is a regular user and managed as any,
-    under every option below (a `guests` holder,
-    an integration's call with `guests` among them,
-    manages it where it is a guest).
-    The integration's user behind the link is the one this decision is about.
-    A call through an integration acting for a linked user is capped by its
-    chain (the key, the ceiling, the integration's user's role,
-    the linked user's role, the maximum);
-    under A it manages its own integration's users and regular guests within
-    that, never another integration's users.
-  - **A (recommended).**
-    An integration's user is managed by a holder of `users`, by rank,
-    and by its own integration's calls;
-    a `guests` holder of no integration,
-    and another integration's call, no longer manage it.
-    Regular guests stay as they are.
-  - **A2.**
-    As A, and a call through an integration manages no regular user either;
-    the ceiling's `guests` then serves its own users alone.
-  - **B.**
-    As it is, said in the documents and beside the Role list.
+1. "D29-E with a cli/env switch to turn it off - e.g. on test servers -
+   showing a warning in `System info` if set. goes in the next version.
+   so hold off for now." / "PasswordRules.D59 - A." / "D42-A" /
+   "AP SecondFactor goes in the next version" / "EXEC flaky".
+2. "D19-A" / "D41: A4+A5" / "D44-Alternate with copy: just make the shown
+   suggestion copiable, like other strings (tapping/clicking on it copies the
+   value with the `Copied` mini-toast) and the small copy icon."
+3. "PLAN++ as recommended", on the proposal of this revision:
+   Blocks 9 and 10 as below; Block 5 in a plan of its own for the next version,
+   with D29-E and D43-A,
+   so that this plan can retire once Blocks 9 and 10 are merged;
+   D19-A folded in; built as before, a pull request and a NOTE per block,
+   merged by the coordinator when green; no retirement, no release.
+
+The first answer was recorded in a NOTE on v1.1, which this revision folds in:
+its decisions here, its facts on Pwned Passwords in AP CommonPasswords.
+
+- **D29-E.
+  Have I Been Pwned's Pwned Passwords, in the next version.**
+  On PasswordRules.D55: Openwall's list stays out, its first 3,546 entries,
+  the commonest,
+  standing in Openwall's wordlists collection under terms that forbid charging
+  for a copy, which an AGPL-3.0-or-later program cannot pass on.
+  The gate's options were E, Block 5 built from Pwned Passwords on the reading
+  that its terms allow it, their one unsettled clause said in the block's NOTE
+  and in the credits; F, Have I Been Pwned asked first; A, no list.
+  Block 5 moves with it into AP CommonPasswords,
+  which restates it and holds what was found on Pwned Passwords;
+  nothing of it is built in this plan ("hold off for now"),
+  and D24 to D28 go with it.
+- **D43-A, the owner's addition.
+  A switch turns the list off:**
+  a command-line option and an environment variable, for a test server, say;
+  where the list is off, System info shows a warning that says so.
+  Their names are AP CommonPasswords'.
+- **PasswordRules.D59-A, again.
+  The dice's move at the first press is left,** as Block 4 measured it:
+  25.3 to 40.0 px where the first owner's card stays centred,
+  the dice 33.2 px tall.
+  Block 10 makes the press add less, and D53 measures it again.
+- **D42-A.
+  The open-setup alert stays visible to every reader of the log,** as Block 3
+  built it: every later viewer or guest has it until they mark it seen,
+  though only an admin can act on it;
+  it shows nothing the `change` lines do not.
+- **D19-A, as built.
+  The suggestion's line keeps a place two lines tall** from the first press
+  until a new start, empty after a key;
+  the rarest five words, which take a third line at a phone's width,
+  grow it by that line, which the first key gives back, as `docs/ui.md` says.
+  "52.4 px always", D19-A's words above, does not hold for those draws.
+- **D41-A4 and A5.
+  Who manages an integration's users.**
+  An integration's users are managed by holders of `users`, by rank,
+  by holders of `integrations` and by their own integration's calls.
+  A holder of `guests` that comes through no integration manages regular guests
+  alone,
+  and a call through an integration its own integration's users alone (A3,
+  which A4 takes:
+  "calls through an integration manage only that integration's users"):
+  another integration's key no longer touches them,
+  and no call through an integration changes or creates a regular user.
+  A holder of `integrations` renames, disables, sets the end date of and
+  removes an integration's users, and gives one a role only within its
+  integration's maximum and one it outranks (A5).
+  The owner's note at the gate, "`users` holder may manage *all* users",
+  holds by rank, as it does for every user.
+  What each holder may do today and after is the Analysis, "For Block 9".
+  Block 9; D45 to D48 are its choices.
+- **D44-A, alternate with copy.**
+  The owner's question at the gate:
+  "what about removing the radio button for selecting the char-vs-words and
+  alternate between the two on each tap?"
+  Each tap of the dice gives the other kind: five words first,
+  then twenty characters, then five words again;
+  the Words or Characters choice goes, and the kind kept in the browser with it;
+  the dice's label says what the next tap gives;
+  the shown suggestion copies itself on a tap or a click, saying "Copied",
+  as the page's other strings do, with the small copy icon beside it;
+  the row under the field shrinks, D49 saying how far.
+  Block 10; D49 to D53 are its choices.
+
+Elsewhere, from the same answers:
+AP SecondFactor goes in the next version, as its own NOTE says;
+the run's unsteady tests went to the session "Fix flaky tests"
+at the owner's "EXEC flaky".
 
 ### What stays as it is
 
@@ -545,11 +682,13 @@ The owner, 2026-11-25, while Blocks 1, 2, 4 and 6 were built:
   both investigations saw it (a role's set widened, an integration's user given
   the role owner and removed, each without a credential).
   A decision of its own for the owner, which the completion gate names.
-- AP SecondFactor, at its plan gate: not this plan's.
+- AP SecondFactor: in the next version, the owner's word of 2026-11-26.
+- Block 5, D29-E and D43-A: AP CommonPasswords', for the next version.
 - Any retirement, of this plan, AP LooseEnds or AP PasswordRules:
-  the owner's word.
+  the owner's word;
+  this plan's is offered once Blocks 9 and 10 are merged.
 - A release.
-- The ten unsteady tests: another session's, "Fix flaky tests".
+- The unsteady tests: the session "Fix flaky tests"'.
 
 ## Analysis
 
@@ -557,6 +696,10 @@ Read on main at `chore(aps): +NOTE StartConfiguration v1.1, how the run went`,
 2026-11-25, by five investigations: each fact below was read in the code,
 and where it says "run", seen on a server of its own against the fake Cube with
 a fresh store, or measured in an exported copy with the suite's Chromium.
+The Analysis for Blocks 9 and 10 was read on main at
+`chore(aps): +NOTE AccessEnds v1.1, +NOTE SecondFactor v1.0, the gate's decisions`,
+2026-11-26, in the code alone:
+where it says "run" or "measured", it is a fact of an earlier run it names.
 
 ### For Block 1: the late answers of the sign-in card
 
@@ -773,57 +916,15 @@ a fresh store, or measured in an exported copy with the suite's Chromium.
   a card that starts at its top moves by its top before less 16 px (app 390:
   de 14, nl 25, it and pl 37 px).
 
-### For Block 5: Openwall's list
+### For Block 5: moved to AP CommonPasswords
 
-- **Today:**
-  no list (`internal/password`'s package comment); `Check` takes the length,
-  then the context words; the page's `passwordProblem` answers `too_short`,
-  `too_long` or `context`; both are held to `testdata/cases.json`.
-  `ui/words-en.txt` and `/ui/credits.json` are the models of a file served to
-  the page, the second from another package's bytes (`ui.go`).
-- **The source:**
-  `password.lst` at John the Ripper's last commit to touch it,
-  2022-01-20 ("Default wordlist: Start with the previous tiny list"),
-  15,327,454 bytes,
-  SHA-256 `bd84dbc84ce113fcf0b9489a8d6f665e52db43b5332937ad7a216405cb8ab7cf`,
-  the same at today's head.
-  Its header: compiled by Solar Designer of Openwall 1996 to 2022,
-  "It is assumed to be in the public domain."
-  (since 2013); its first 3,546 entries are mid-1990s Unix passwords and 2006 to
-  2010 "top N" lists,
-  the later ones from Pwned Passwords v8 overlapped with RockYou.
-- **What Openwall says elsewhere:**
-  John the Ripper's `LICENSE` (GPL version 2 or later,
-  relaxed terms per source file) does not name the list.
-  The wordlists collection's licence:
-  "You're allowed to use and redistribute this wordlists collection or parts
-  thereof, with or without modification,
-  provided that credit is given where it is due,
-  any modified versions are marked as such,
-  this license is kept intact and included with each copy,
-  and NO FEE IS CHARGED FOR OBTAINING A COPY except as negotiated with the
-  copyright holder.
-  […] You're also not permitted to bundle this wordlists collection with a
-  product you charge for."
-  Its `passwords/password.gz` of 2011 holds 3,546 entries,
-  byte for byte the first 3,546 of today's `password.lst` (run): D29.
-- **The cut:**
-  the 18 comment lines out, the first 10,000 entries,
-  those of 8 to 64 characters, lower-cased, repeats out, sorted bytewise:
-  3,510 lines, 33,834 bytes,
-  SHA-256 `c9c01713d12ffe61c580c9f57a2924360a39739fa19da0e6314915168ceb11bd`;
-  613 of them from the first 3,546 entries.
-  All ASCII, the longest 20 characters;
-  none matches the identifiers' patterns or a suggestion's shape,
-  and no password of the tests' fixtures is in it (run).
-- **The credits:**
-  a `third_party/` directory with a `MASSIMO.md` table,
-  a `LICENSE` and a `NOTICE` becomes an entry with no change to `tools/credits`;
-  an empty Licence cell and a text named by no licence give "licence in its
-  text"; `TestClassifyToday` needs the entry in `licencesToday`.
-- **The texts' widths** were not measured: the widest German line today,
-  39 characters, is 263 px of the Add-a-user panel's 279 px,
-  and the new German "now" text has 39 characters.
+Openwall's list is not taken (D29-E): its first 3,546 entries,
+byte for byte those of Openwall's wordlists collection of 2011, the commonest,
+stand under the collection's terms,
+which forbid charging for a copy and bundling it with a product that is charged
+for.
+What was found on Pwned Passwords, its terms, the scan, the list's shape,
+the page's SHA-1 and the credits, is AP CommonPasswords' Analysis.
 
 ### For Block 6: the crates' licence texts
 
@@ -946,43 +1047,242 @@ a fresh store, or measured in an exported copy with the suite's Chromium.
   the word list) take their versions from their notes, as now:
   their bump is a change of the file anyway.
 
+### For Block 9: who manages an integration's users
+
+- **Who reaches the users routes:**
+  each is registered with `users` (`internal/server/server.go:1526-1542`);
+  `allowed` lets in a holder of `guests` or `passwords` too,
+  and a user at its own name (`auth.go:962-968`):
+  a holder of `integrations` without them is refused before any handler.
+- **What a caller may, in `users_api.go`:**
+  `accessOf` (`:204-244`) reads `users`, `guests`,
+  `passwords` and the own name off the principal,
+  and the rank rule off its user's role (`:225-242`); `mayView`, `mayManage`,
+  `maySetPassword` and `mayAssign` (`:254-281`) test a user's role alone,
+  `guest` for a holder of `guests`,
+  and nothing of its integration but the role `integration`'s own rule
+  (`:277-279`).
+  So `guests` reaches every user stored as guest, regular or of any integration,
+  and an integration's call that holds it creates guests (`postUser`,
+  `:494-499`) and sets a regular guest's password (`:267-269`).
+- **Its choice of roles:**
+  `assignable` (`:293-309`) asks `mayManage` and `mayAssign`,
+  then narrows an integration's user to the ceiling and its maximum,
+  `integration` itself always within;
+  `mayOf` (`:358-360`) gives it as `may.roles` to the list (`listUsers`,
+  `:429`) and to a change's answer (`putUser`, `:740`),
+  which Block 2's Role list offers (`roleOptions`,
+  `src/admin/sendUsers.ts:61-72`):
+  `may.roles` follows whatever the four say.
+  `putUser` asks `mayAssign` (`:634-636`) before it reads the roles and the
+  maximum (`:639-646`).
+- **The principal's integration:**
+  a call with an integration's key carries it in `principal.integration`
+  (`auth.go:194-197`), set by `integrationPrincipal`:
+  without the header the key acts as the integration's own user
+  (`onbehalf.go:168-172`); with it, as one of its users or, linked,
+  as the Massimo user it is linked to, which is then `p.user`,
+  whose role the rank rule reads (`onbehalf.go:184-231`).
+  `accessOf` reads neither `integration` nor `actsFor`.
+  The integration's key is its own user's (`IntegrationOfUser`,
+  `internal/store/integrations.go:208-218`);
+  every other of its users is refused one (`noWayIn`, `users_api.go:127-132`),
+  but a key one holds from before this version keeps working (`docs/api-v1.md`,
+  "No way in of its own"; `TestAssignableRolesOfAnIntegrationsUser`'s `held`,
+  `users_api_test.go:816-838`): its principal's user is an integration's,
+  and `integration` stays unset,
+  since `IntegrationOfUser` finds the integration's own user alone.
+- **What such a call holds:**
+  the ceiling, the role `integration`,
+  holds `guests` and nothing else that manages people,
+  its comment saying "guests are an integration's to manage" (`auth.go:77-86`);
+  every call through an integration is held to it and the maximum
+  (`onbehalf.go:168`),
+  `view` and `control` to their levels (`onbehalf.go:48-52, 228-230`).
+  So a call holds `guests` where the maximum does,
+  at `admin` or without the header,
+  and through a link where the linked user's role holds it too.
+- **The seeded manager** holds `guests`, `passwords` and `integrations`,
+  not `users` (`internal/store/migrations/0001_initial.sql:210-220`,
+  `0008_passwords_capability.sql`, `0021_integrations.sql:121-125`);
+  it lacks `cubes`, `cubes.reboot`, `settings`, `update`, `reboot` and `audit`,
+  which the ceiling holds (`0021_integrations.sql`), so it outranks operator,
+  guest and viewer, and not `integration` (the rank rule,
+  `users_api.go:225-242`).
+- **The page:**
+  Users is drawn for a holder of `users`,
+  `guests` or `passwords` (`canManageUsersOf`, `src/shared/me.ts:95-97`;
+  `canManageUsers`, `login.js:43-45`; read at System settings,
+  `src/admin/index.tsx:54`);
+  a panel's controls follow the server's `may.manage` (`mayManage`,
+  `sendUsers.ts:39-43`; `UserForm`, `src/admin/Users.tsx:114, 155`);
+  Add a user is drawn for every reader of the card (`Users.tsx:433`).
+  The Integrations card lists an integration's users with Link alone
+  (`src/integrations/Integrations.tsx:239-263, 330-332`),
+  through `PUT /api/v1/integrations/{uuid}/users/{id}`,
+  which holds the rank rule on the user linked to
+  (`integrations_api.go:446-484`, `:470-472`).
+- **What each holder may manage** (a user's name, role, state,
+  end date and removal), today and after D41-A4 and A5:
+
+| Holder | Today | After |
+|--------|-------|-------|
+| the owner | every user | the same |
+| a holder of `users` that does not outrank `integration` (`users` with guest's and viewer's sets, say) | the users it outranks: an integration's users stored as guest or viewer, not those of `integration`; regular users | the same, by rank |
+| the seeded manager (`integrations`, `guests`, `passwords`) | every user stored as guest, regular or of any integration | regular guests (`guests`); every integration's user whatever its role but `owner`, a role given only within its maximum and one it outranks (D47, D48) |
+| a holder of `guests` of no integration | every user stored as guest, of any integration too | regular guests alone; no integration's user, nor listed (D45) |
+| the integration's own call (its key, `guests` in its chain) | every user stored as guest it outranks, regular or of any integration; new guests | its own integration's users stored as guest alone; no regular user, none made |
+| another integration's call | this integration's users stored as guest, as every guest | none of this integration's users |
+| a call through an integration for a linked local user | every user stored as guest the linked user's role outranks; its own name and password, as that user | its own integration's users stored as guest alone; its own name and password as before |
+
+- **What it ends:**
+  today a holder of `guests`, another integration's key among them,
+  renames, disables and removes an integration's user stored as guest
+  (run for D41 on main and on Block 2's tree, 200 each);
+  disabling it stops that user's calls, a linked one's too,
+  since the chain checks the integration's user before the linked one
+  (`onbehalf.go:193-195` before `:214-216`).
+  On an open server everything stays open ("What stays as it is").
+- **`may.roles` after:**
+  for the seeded manager,
+  `TestAssignableRolesWithinTheCeiling`'s user stored as guest under a maximum
+  of read, preferences and users is offered `viewer`,
+  where the test holds none (`users_api_test.go:906-910`),
+  `manage` holding by `integrations`;
+  an integration's own key keeps `guest` for its own user,
+  as `TestAssignableRolesOfAnIntegrationsUser` holds (`:859-867`).
+- **The rank rule's words**, "nobody but an owner changes an owner"
+  (`docs/fragments/_capability-rules.md`, synced into `docs/api-v1.md:281-300`
+  and `docs/store.md:1201-1220`):
+  it holds for an integration's user stored as `owner` too (D47-A):
+  a holder of `integrations` changes every integration's user but such a one.
+- **The API's documents:**
+  the capability table's rows `guests` and `integrations`
+  (`docs/api-v1.md:265, 279`); "Users",
+  who reaches the routes and who is listed (`:711-716`),
+  "A `guests` holder creates guests only" (`:760`) and who changes what
+  (`:792`); `may` (`:302-311`); "Acting for an integration's users",
+  its role (`:1114-1121`); `docs/api-v1-openapi.yaml` (`:689`, `:706`, `:763`);
+  `docs/store.md` section 6, the guests (`:1284-1292`).
+
+### For Block 10: the dice by turns, and the shown suggestion copied
+
+- **The row today:**
+  from the first press, under the rule's line, `.pw-suggest`
+  (`src/shared/password.tsx:656-666`) holds two things alone:
+  Words or Characters, a `Choices` of the look `one` (`:658-663`),
+  whose choice keeps the kind and presses at once;
+  and, while the field holds the suggestion, Copy (`:664`),
+  the text "Copy" named "Copy the password" (`password.copyName`).
+  It is 28 px of the 80 px a first press adds (Block 4's measures,
+  `docs/ui.md:170-171`).
+- **The kind and its keeping:**
+  `suggestKind`, a signal read at the page's load from this browser's storage
+  under `massimo.suggest`, and `chooseKind`, which sets and keeps it
+  (`src/shared/suggest.ts:48-58`);
+  every field reads it as it draws (`password.tsx:525`) and its dice presses
+  with it (`:645`);
+  `press` raises `turn` at once, so that an answer drawn before a later press,
+  a key or a new start fills nothing (`:628-644`).
+  The kept choice's test is
+  `test_the_choice_is_kept_and_the_keyboard_reaches_the_dice`
+  (`tools/ui-test/test_password_suggest.py:534-560`);
+  it and three more empty the key after them (`:558`, `:702`, `:750`, `:820`),
+  and every test that asks for a kind asks the row (`kind_of`, `:122-123`).
+- **The dice's label:**
+  `password.suggest`, "Suggest a password", its `aria-label` and `title`
+  (`password.tsx:415, 427`), which `check_suggest` holds
+  (`test_password_suggest.py:289-290`).
+- **The shown line:**
+  `<p id="<id>-shown" class="pw-shown" aria-hidden="true" translate="no">`,
+  the suggestion while the field holds it,
+  its place two lines tall from the first press on (`password.tsx:650-654`,
+  `style.css:1804`); `aria-hidden`,
+  so that the live regions of My profile and Users do not speak it (D22-A),
+  which `SPOKEN`,
+  `ax_holders` and `not_spoken` check
+  (`test_password_suggest.py:73-83, 132-171`) and `shown_line` asserts (`:254`);
+  `SHOWN_LINE` counts the lines over the line's first child,
+  its text (`:183-217`).
+- **How the page's other strings copy:**
+  `Copy` (`src/shared/copy.tsx:61-71`) is a span of `role="button"`
+  and `tabIndex` 0, named by its `aria-label` and `title`,
+  that copies on a click, Enter or Space (`copyHandlers`, `:18-32`);
+  with `icon`, `CopyPair` puts the copy icon after it,
+  a 26 px icon button named alike (`:35-51`, `style.css:242-246`).
+  `copied` says it (`components.js:323-341`):
+  "Copied" (`copy.done`) in a polite live region, `#copy-status`,
+  and above the element for 1.4 s (`.copyable.copied::after`,
+  `style.css:226-241`).
+  Without `name` a `Copy` is named "Copy {its text}" (`copy.tsx:62`,
+  `copy.what`):
+  the line's would put the password into its `aria-label` and `title`,
+  which `SPOKEN` reads, so it takes `password.copyName`, as the row's Copy does.
+- **A control under `aria-hidden`** is hidden from a screen reader and still
+  reached by Tab: the line can no longer be hidden whole (D52).
+- **After (D44-A, D49-A to D52-A):**
+  no row; the line holds a `Copy` of the suggestion with its icon after it,
+  both named "Copy the password", its words hidden from a screen reader;
+  the dice's label "Suggest five words" or "Suggest twenty characters",
+  for the next tap;
+  `suggestKind`, `chooseKind` and the key `massimo.suggest` go,
+  and `password.suggest`, `password.suggestKind`, `password.words`,
+  `password.chars` and `password.copy`, which nothing reads then,
+  leave the six files.
+  Tab goes from the field to the dice, the eye, the line's copy and its icon,
+  then the next field, where it went to the row's choice and Copy.
+- **The line's width:**
+  the icon and its gap take 30 px of the line (`style.css:242-246`),
+  so five words break sooner, and the rarest take a third line more often than
+  Block 4 measured (`docs/ui.md:146-150`);
+  D19-A grows the place by that line as now; measured in the block.
+- **The card's height and the dice's move,**
+  Block 4's measures less the row's 28 px, reckoned, not measured:
+  a first press adds about 52 px in place of 80;
+  the first owner's card in the app at 390 by 900 px after a press is about
+  823 px in English, 846 in Italian and Polish, 870 in Dutch,
+  892 in German and 915 in French, the room being 868 px;
+  in a browser at 390 px every language fits, French at about 848 px.
+  Where the card stays centred the dice moves up about 26 px,
+  half of what the press adds (40 today), more than half the dice's 33.2 px:
+  a second tap at the first one's place still misses it,
+  in the app in English, Italian, Polish and Dutch,
+  and in a browser in every language;
+  where the card starts at its top, in the app in German and French,
+  by about 14 and 3 px, as today.
+  The second tap is now the way to twenty characters (D53).
+
 ## Implementation Plan
 
 Each block moves its documents with its code and is a pull request of its own,
-its run recorded in a NOTE (AGENTS.md §5.4);
-the completion gate (`GUIDELINES/shared/GATE_WORKFLOW.md` §7.7) lists D1 to D39
-and puts D59 again (D23).
-The builders may run several blocks at once; Block 5 waits for D29,
-and nothing of D41 is built before the owner's answer.
+its run recorded in a NOTE (AGENTS.md §5.4).
+Blocks 1 to 4 and 6 to 8 are merged;
+the completion gate of their run (`GUIDELINES/shared/GATE_WORKFLOW.md` §7.7)
+listed D1 to D39 and put D59 again (D23).
+Block 5 has moved to AP CommonPasswords.
+Blocks 9 and 10 are built as the others were, a pull request and a NOTE each,
+merged by the coordinator when green; the builders may run both at once,
+and neither waits for the other.
+Their completion gate lists D45 to D53 and offers this plan's retirement,
+the owner's word; no release.
 
 **Files more than one block touches,** which the coordinator merges in turn,
-each later pull request merging `origin/main` first:
+each later pull request merging `origin/main` first.
+Those of Blocks 1 to 4 and 6 to 8 are merged with them.
+Blocks 9 and 10 share `docs/ui.md` alone, each in sections of its own.
+Each builds on files of the blocks before:
 
-- `docs/ui.md`:
-  Blocks 1 to 6.
-- `internal/server/ui/i18n/*.json`:
-  Blocks 2, 3, 5 and 6.
-- `internal/server/users_api.go` and `users_api_test.go`: Blocks 2 and 3.
-- `docs/api-v1.md`, `docs/api-v1-openapi.yaml` and the generated `src/api.d.ts`:
-  Blocks 2, 3 and 5;
-  a conflict in `api.d.ts` is settled by `go run ./tools/apitypes`, not by hand.
-- `internal/server/ui/style.css`:
-  Blocks 2 and 4; `src/shared/password.tsx`: Blocks 4 and 5.
-- `cmd/massimo/user.go` and `user_test.go`: Blocks 3 and 5.
-- `tools/ui-test/test_first_owner.py`:
-  Blocks 3 and 4.
-- `internal/credits/` (written by `make credits`),
-  `tools/credits/generate_test.go` and `internal/server/ui_test.go`:
-  Blocks 5 and 6;
-  a conflict in `internal/credits/` is settled by `make credits` again.
-- `src/signin/`:
-  Block 1 (`Card.tsx`, `store.ts`) and Block 3 (`Owner.tsx`), different files.
-- `tools/credits/`, `internal/credits/` and `cmd/massimo/credits.go`:
-  Blocks 6 and 8; Block 8 is built on Block 6's commit.
-- Block 7 shares none.
-
-Block 4 is best merged before Block 5:
-Block 5's texts can make the rule's line taller, which Block 4's measure sees.
+- Block 9 on Block 2's and Block 3's:
+  `internal/server/users_api.go` and `users_api_test.go`, `auth.go`,
+  `docs/api-v1.md`, `docs/api-v1-openapi.yaml` and the generated `src/api.d.ts`
+  (a conflict there settled by `go run ./tools/apitypes`, not by hand),
+  `src/admin/Users.tsx` and `tools/ui-test/test_users.py`;
+  and on Block 1's `login.js`.
+- Block 10 on Block 4's:
+  `src/shared/password.tsx`, `style.css`,
+  `tools/ui-test/test_password_suggest.py`,
+  and the measures of `test_first_owner.py` and `test_keep_open.py`;
+  `src/shared/copy.tsx` and `suggest.ts` are its alone.
 
 ### Block 1: Late
 
@@ -1373,103 +1673,7 @@ Block 5's texts can make the rule's line taller, which Block 4's measure sees.
 
 ### Block 5: Common
 
-**It waits for D29:**
-written as D29-B builds it; dropped under D29-A, the completion gate saying why,
-and waiting under D29-C for Openwall's answer;
-D24 to D28 go with it.
-
-- **Goal:**
-  the commonest passwords are refused, from Openwall's `password.lst`
-  (PasswordRules.D55-A, D24 to D28).
-- **Changes:**
-  1. `internal/password/common.txt` (new): the cut,
-     made by the pipeline in `MASSIMO.md` from `password.lst` at John the
-     Ripper's commit of 2022-01-20: 3,510 lines, 33,834 bytes, SHA-256
-     `c9c01713d12ffe61c580c9f57a2924360a39739fa19da0e6314915168ceb11bd`.
-  2. `internal/password/password.go`:
-     `go:embed`; the set built once; `Common() []byte` for the server's route;
-     `ErrCommon`, "password: a common password"; `Check`: the length,
-     then the whole password lower-cased in the set, then the names (D26);
-     the package comment loses its "no list" sentence,
-     and the cases' description gains the answer `common`.
-  3. `internal/server/ui.go`:
-     `GET /ui/common-passwords.txt`, as `/ui/credits.json` is:
-     `password.Common()`, `text/plain; charset=utf-8`, an ETag of the version,
-     no token (the first owner's form has none); the file's comment names it.
-  4. `src/shared/password.tsx`:
-     the answer `common`, `SAID.common`; `commonPasswords()`,
-     fetched once as the word list is (`src/shared/suggest.ts`), its form held,
-     a failure tried again at the next call,
-     started by the first key in a new password's field (D27);
-     `passwordProblem` checks the list after the length where it is loaded,
-     and the line redraws when it comes;
-     a submit of the five forms waits for it 5 s at most,
-     then checks the rest and warns in the console;
-     `MassimoParts.commonPasswords` for the tests.
-  5. `cmd/massimo/user.go`:
-     the rename's hint for `ErrCommon` too.
-  6. `third_party/openwall-passwords/` (new): `LICENSE`,
-     the source's 18 header lines as they stand; `NOTICE`,
-     in the form of `third_party/eff-wordlist/NOTICE`:
-     the address at the pinned commit, both SHA-256 values, what was changed,
-     that the header's sentence is the compiler's assumption and no licence,
-     that the 2022 entries come from Pwned Passwords v8 and RockYou as the
-     header says, and the collection's licence of the first 3,546 entries,
-     quoted (D28); `MASSIMO.md`, its table's Licence cell empty (D24),
-     and the pipeline (D25).
-  7. `ui/i18n/*.json`, FR, IT, NL and PL machine-translated and marked:
-     `password.common` "A common password:
-     easy to guess." / "Ein häufiges Passwort: leicht zu raten.";
-     `password.refusedCommon` "Refused: a common password." / "Abgelehnt:
-     ein häufiges Passwort.";
-     each measured at 390 px within the Add-a-user panel,
-     `RULE_TEXTS` reserving the tallest.
-  8. `make credits`:
-     the directory becomes an entry;
-     `tools/credits/generate_test.go`'s `licencesToday` gains it.
-- **Tests,** each seen failing on main first:
-  - `internal/password`:
-    `TestCommonList`: `common.txt` at its SHA-256, 3,510 lines, sorted, unique,
-    each 8 to 64, lower case, printable ASCII, a final newline,
-    and `MASSIMO.md` naming both SHA-256 values;
-    `cases.json` grows by the answer `common` (`password1`,
-    `PASSWORD1` and `12345678` common, `password1x` ok,
-    a common entry holding a name common by D26);
-    `TestErrorTexts` gains `ErrCommon`.
-  - `TestUsersPasswordRule` (`internal/server/users_api_test.go`):
-    `password1` answered 400 `password: a common password`;
-    `TestUserPasswordRule` (`cmd/massimo/user_test.go`): refused.
-  - `TestUIServed`:
-    `GET /ui/common-passwords.txt` 200, `text/plain`,
-    its body `password.Common()`.
-  - `tools/ui-test/test_password_rule.py`:
-    `Password1` says the common line in each form;
-    the parity test awaits the list first;
-    a submit with the list's fetch held sends nothing until it is let go,
-    then is refused;
-    a list that fails gives the length and the names and a console warning.
-- **Documents:**
-  `docs/api-v1.md` ("Users": the 400);
-  `docs/api-v1-openapi.yaml` (the two `password` descriptions),
-  `src/api.d.ts` by `go run ./tools/apitypes`; `README.md` (`massimo user`);
-  `docs/ui.md` (the line's texts, the `password.tsx` row,
-  the route and its fetch).
-- **CHANGELOG:**
-  `CHANGELOG.d/Security/claude-password-names.md` amended,
-  not released yet (COMMIT.md §5.2):
-  "- A new password is refused where it is a common one or contains the
-  user's or the server's name."
-- **Commit:**
-  `fix(security:auth): A common password is refused`
-- **Verification,** each by its exit code:
-  `make ui`, then `MASSIMO_ENV_FILE=/dev/null go test ./...`;
-  `MASSIMO_ENV_FILE=/dev/null MASSIMO_TEST_SCALE=2 go test -race -count=1 ./internal/server`;
-  `gofmt -l .` prints nothing; `go vet` for linux, windows and darwin;
-  `make credits`, then `go run ./tools/credits -check`;
-  `go run ./tools/apitypes -check`; `make cross`; `make ui-check`;
-  `PYTEST_ADDOPTS='test_password_rule.py test_password_names.py test_password_suggest.py test_first_owner.py test_users.py test_system_info.py' make ui-test`
-  in all four cases; the whole suite once, `UI_TEST_CASES=1100-en make ui-test`;
-  `GUIDELINES/shared/tools/check`.
+Moved to AP CommonPasswords, for the next version (D29-E, D43-A).
 
 ### Block 6: Crates
 
@@ -1645,11 +1849,271 @@ D24 to D28 go with it.
   `make ui-test` with `test_system_info.py` and `test_parts_guard.py` in all
   four cases; `make cross`.
 
+### Block 9: Managers
+
+- **Goal:**
+  an integration's users are managed by holders of `users`, by rank,
+  by holders of `integrations` and by their own integration's calls alone;
+  a holder of `guests` that comes through no integration manages regular guests
+  alone,
+  and a call through an integration none but its own integration's users (D41-A4
+  and A5, D45 to D48).
+- **Changes,** the first commit (the server):
+  1. `internal/server/users_api.go`, `access`:
+     `integrations` (`p.has("integrations")`) and `integration`,
+     the id of the principal's integration: `p.integration`'s,
+     else its user's where that is an integration's (a key held from before),
+     0 for none;
+     `accessOf` fills them.
+  2. `guestOf(u)`, whether `guests` reaches a user:
+     a guest, regular where the principal comes through no integration,
+     of the principal's integration where it does.
+     `mayView`, `mayManage`, `maySetPassword` and `mayAssign` take it in place
+     of the role alone;
+     `mayView` and `mayManage` hold besides for a holder of `integrations` and
+     an integration's user, whatever its role but `owner` (D45-A, D47-A);
+     `maySetPassword` does not (an integration's user has no password,
+     `noWayIn`).
+  3. `mayAssign` takes the role's capabilities and the user's maximum:
+     a holder of `users` as now (D6-A); a holder of `integrations`,
+     for an integration's user,
+     a role it outranks within the ceiling and the maximum,
+     `integration` by the rank rule alone (D47-A), and none beyond (D48-A);
+     `assignable` passes them;
+     `putUser` reads the roles and the maximum before it asks;
+     a new user is regular, so a call through an integration makes none.
+  4. The refusals say why, `403`:
+     "the user %s is an integration's: its own integration, a holder of
+     integrations or of users changes it" for a holder of `guests`;
+     "a call through an integration changes its own integration's users alone"
+     for such a call;
+     "the role %s lies beyond the maximum of its integration" for a holder of
+     `integrations`.
+  5. `internal/server/auth.go`:
+     `allowed` lets a holder of `integrations` into the users routes,
+     the handlers narrowing what it may (D46-A); its comment, and the ceiling's:
+     `guests` is an integration's for its own users stored as guest.
+- **Changes,** the second commit (the page, D46-A):
+  6. `canManageUsersOf` (`src/shared/me.ts`) and `canManageUsers` (`login.js`)
+     take `integrations` too, so that its holder sees Users,
+     each panel following `may` as now.
+  7. `src/admin/Users.tsx`:
+     Add a user drawn where the caller may make a user,
+     a holder of `users` or `guests`, not for a holder of `integrations` alone.
+     No new text.
+- **Tests,** each seen failing on main first:
+  - `internal/server/users_api_test.go`:
+    `TestWhoManagesAnIntegrationsUsers`: two integrations (`registerHA` twice),
+    the first's maximum holding `guests`;
+    the first's system user stored as guest and another of its users at
+    `integration`, the second's system user stored as guest,
+    and a regular guest.
+    The callers: the owner;
+    a holder of `users` with guest's and viewer's sets, which outranks guest
+    and viewer and not `integration`;
+    the seeded manager;
+    a holder of `guests` of no integration (`guests` and guest's set);
+    the first integration's key without the header and at `admin`;
+    the second's key;
+    the first's key at `admin` for a user linked to a Massimo manager;
+    and a key the first's other user holds from before (`asAnIntegrations`),
+    held to the first integration as its calls are.
+    For each, what the list shows (who, `may.manage`, `may.roles`),
+    and a display name, `disabled`, an end date and a removal,
+    `200` or `403` as the Analysis' table says;
+    a guest made by the first integration's key `403`,
+    and a regular guest's password set by it `403`;
+    the manager gives the system user viewer (`200`), `integration`, `owner`
+    and a role beyond the maximum (`403` each).
+  - `TestAssignableRolesWithinTheCeiling`:
+    the manager's `may` of the system user,
+    `manage` by `integrations`, `roles` `[viewer]`; its comment says so.
+  - `TestAssignableRolesOfAnIntegrationsUser` as it is:
+    the key's own user stored as guest, offered `guest`.
+  - `tools/ui-test/test_users.py`:
+    `test_an_integrations_holder_manages_its_users`:
+    a user of a role of `read` and `integrations` alone signed in:
+    System settings shows Users,
+    which lists the integration's users and itself alone;
+    a user's panel disables it, and Save is answered `200`; no Add a user;
+    every button named, no horizontal scroll.
+- **Documents:**
+  `docs/api-v1.md` (the capability table's rows `guests` and `integrations`;
+  "Users", who reaches the routes, who is listed, who creates guests,
+  who changes what; `may`; "Acting for an integration's users",
+  who manages them);
+  `docs/fragments/_capability-rules.md` (the rank rule for a holder of
+  `integrations`: the role given, never an owner, D47-A),
+  written into `docs/api-v1.md` and `docs/store.md` by
+  `GUIDELINES/shared/tools/sync-docs.sh`;
+  `docs/api-v1-openapi.yaml` (the users routes' descriptions),
+  `src/api.d.ts` by `go run ./tools/apitypes`;
+  `docs/store.md` section 6 (the guests); `docs/ui.md` ("Users": who sees it,
+  an integration's user's panel for a holder of `integrations`).
+- **CHANGELOG:**
+  the first commit,
+  `CHANGELOG.d/Security/claude-accessends-integration-users.md`:
+  "- An integration's users are changed by holders of users and of
+  integrations and by their own integration alone: another integration's key
+  and a holder of guests no longer change them.";
+  the second, `CHANGELOG.d/Added/claude-accessends-integrations-users-ui.md`:
+  "- A holder of integrations sees Users and changes an integration's users
+  there one by one."
+- **Commits:**
+  `fix(security:api): Another integration's key or a guests holder no longer manages an integration's users`,
+  `feat(ui): A holder of integrations sees Users and manages an integration's users there`.
+- **Verification,** each by its exit code: `make ui`,
+  then `MASSIMO_ENV_FILE=/dev/null go test ./...`;
+  `MASSIMO_ENV_FILE=/dev/null MASSIMO_TEST_SCALE=2 go test -race -count=1 ./internal/server`; `gofmt -l .` prints nothing; `go vet ./... && GOOS=windows go vet ./... && GOOS=darwin go vet ./...`; `go run ./tools/apitypes -check`; `GUIDELINES/shared/tools/sync-docs.sh --check`; `make cross`; `make ui-check`; `PYTEST_ADDOPTS='test_users.py test_integrations.py test_ways.py test_parts_guard.py' make ui-test` in all four cases; the whole suite once, `UI_TEST_CASES=1100-en make ui-test`; `GUIDELINES/shared/tools/changelog.sh check --staged --strict` on each commit; `GUIDELINES/shared/tools/check`.
+
+### Block 10: Alternate
+
+- **Goal:**
+  each tap of the dice gives the other kind, five words first;
+  Words or Characters goes, and the kind kept with it;
+  the dice's label says what the next tap gives;
+  the shown suggestion copies itself on a tap or a click, saying "Copied",
+  with its copy icon beside it; the row under the field goes (D44-A,
+  D49 to D53).
+- **Changes:**
+  1. `src/shared/suggest.ts`:
+     `suggestKind`, `chooseKind` and `KIND_KEY` go,
+     and the header's sentence on the kind kept;
+     `massimo.suggest` is read and written no more,
+     a value a browser kept left where it is: a word that says nothing.
+  2. `src/shared/password.tsx`, `PasswordField`:
+     the field's own kind of the next tap,
+     five words at each new start (where `offered` ends now: `reset`,
+     a value changed from outside), turned at each press, filled or not,
+     a key leaving it (D50-A, D51-A); the dice presses with it;
+     the row `.pw-suggest` goes, `Choices` with it (D49-A).
+  3. `PasswordInput`'s `suggest` gains `next`,
+     and the dice's `aria-label` and `title` say it:
+     `password.suggestWords` or `password.suggestChars`.
+  4. The shown line no longer `aria-hidden`;
+     while the field holds the suggestion, a `Copy` of it with its icon,
+     `name` `password.copyName`,
+     its words hidden from a screen reader inside it (D52-A),
+     its class keeping the body's font at 16 px; `translate="no"` stays;
+     empty after a key, its place as now (D19-A).
+  5. `src/shared/copy.tsx`, `Copy`:
+     a property, `quiet`, that hides the text it shows from a screen reader,
+     its name saying what it copies; the `@file` header says so.
+  6. `style.css`:
+     `.pw-suggest` and its two rules go;
+     the copy pair across the shown line's width, the words breaking inside it,
+     the icon after them; the comment above.
+  7. `ui/i18n/*.json`:
+     `password.suggestWords` "Suggest five words" / "Fünf Wörter vorschlagen",
+     `password.suggestChars` "Suggest twenty characters" / "Zwanzig Zeichen
+     vorschlagen"; `password.suggest`, `password.suggestKind`, `password.words`,
+     `password.chars` and `password.copy` go; FR, IT,
+     NL and PL machine-translated and marked.
+  8. The doc comments of `PasswordInput`, `PasswordField` and the file's header.
+- **Tests,** in `tools/ui-test/test_password_suggest.py`,
+  each new assertion seen failing on main first:
+  - `check_suggest`:
+    the dice labelled "Suggest five words" before the first press;
+    a press gives five words and the label "Suggest twenty characters",
+    the next twenty characters and the label back, the next five words;
+    no row at any time;
+    the line not `aria-hidden`, its copy and icon named `password.copyName`,
+    its words under `aria-hidden` inside the copy, `translate="no"`;
+    `not_spoken` as now.
+  - `SHOWN_LINE` and `shown_line`:
+    the words inside the copy, the icon after them within the row's width,
+    the lines counted over the words alone.
+  - `edited` and `reset_ends`: no copy in the line after a key,
+    none after Reset.
+  - `test_the_choice_is_kept_and_the_keyboard_reaches_the_dice` becomes
+    `test_the_dice_alternates_and_the_keyboard_reaches_it`:
+    Tab reaches the dice, Enter and Space press it,
+    five words then twenty characters, the focus staying;
+    after a load the first press gives five words,
+    whatever a browser kept under `massimo.suggest`;
+    Tab from the eye reaches the line's copy, then its icon.
+  - `test_copy`:
+    a click on the line, and Enter on it, copy the suggestion,
+    with the clipboard and without, the line marked `copied` with "Copied",
+    `#copy-status` saying it, the focus staying; the icon likewise.
+  - `test_the_list_is_fetched_once`:
+    a list that fails, and the next tap gives twenty characters (D51-A),
+    the tap after fetches the list again.
+  - `test_a_late_suggestion_does_not_overwrite_a_later_press`:
+    words pressed while the list loads, a second tap gives characters,
+    the late words fill nothing, and the label says words next.
+  - `test_a_list_of_another_form_is_refused`, `PLACES` and
+    `test_the_row_stays_while_one_types`, without the row:
+    the line's place stays, its copy gone after a key.
+  - `kind_of` and the `localStorage.removeItem('massimo.suggest')` lines go;
+    the module's docstring says what is.
+  - Block 4's measure tests (`test_first_owner.py`,
+    `test_keep_open.py`) as they are:
+    they see the card after a press 28 px shorter.
+  - The dice's move at the first press,
+    and the first owner's card's height after it,
+    measured as Block 4 measured them, in each case and language,
+    the numbers in the block's NOTE (D53-A).
+- **Documents:**
+  `docs/ui.md` (the password fields: the dice by turns and its label,
+  the line's copy, no row, the heights and the move after a press,
+  what a screen reader hears; the shared parts' rows of `Copy`,
+  `PasswordInput`, `PasswordField` and `suggest.ts`).
+- **CHANGELOG:**
+  amends `CHANGELOG.d/Added/claude-password-suggest.md`,
+  the dice not released yet (COMMIT.md §5.2):
+  "- A dice beside a new password's field suggests a password,
+  five words and twenty characters by turns, shown whole under the field,
+  where a tap copies it."
+- **Commit:**
+  `feat(ui): The dice alternates words and characters, and the shown suggestion copies on a tap`
+- **Verification,** each by its exit code: `make ui-check`;
+  `make ui`, then `MASSIMO_ENV_FILE=/dev/null go test ./internal/server/...`
+  (`TestUIPage`, `TestUINoHTMLInjection`, `TestUIFileHeaders`,
+  `TestUITranslations`);
+  `PYTEST_ADDOPTS='test_password_suggest.py test_first_owner.py test_keep_open.py test_password_rule.py test_password_names.py test_password_eye.py test_copy.py test_users.py test_parts_guard.py' make ui-test`
+  in all four cases; the whole suite once, `UI_TEST_CASES=1100-en make ui-test`;
+  screenshots at 1100 and 390 px;
+  `GUIDELINES/shared/tools/changelog.sh check --staged --strict`;
+  `GUIDELINES/shared/tools/check`.
+  No Go changes: no `go vet`, no `make cross`.
+  The owner's check on a phone, by hand: the dice by turns, a tap on the line,
+  the French card.
+
 ## Proposed commit message
 
-The plan: `chore(aps): +AccessEnds v1.0`
+This revision, with AP CommonPasswords' first, in one commit of the plans' own:
 
-Block 1:
+```
+chore(aps): +AccessEnds v1.2, +CommonPasswords v1.0, -NOTE AccessEnds v1.1 owner_decisions_of_the_gate
+
+The owner's answers of 2026-11-26 at the completion gate of AP AccessEnds, then "PLAN++ as recommended": Block 9, who manages an integration's users (D41-A4 and A5), and Block 10, the dice by turns and the shown suggestion copied with a tap (D44-A), D45 to D53 taken with PLAN++. Block 5, the list of common passwords, moves into AP CommonPasswords for the next version, with Have I Been Pwned's Pwned Passwords (D29-E) and a switch that turns it off (D43-A), so that AP AccessEnds can retire once Blocks 9 and 10 are merged. The NOTE of the gate's decisions is folded in.
+
+Key changes:
+- GUIDELINES/wip/2026-11-25_14-36_AP_AccessEnds_follow_ups_of_two_gates.md: v1.2: the TL;DR as the plan stands;
+  "Decided at the gate of 2026-11-26", the owner's words, D29-E, D43-A, PasswordRules.D59-A, D42-A, D19-A,
+  D41-A4 and A5, D44-A; D45 to D53 taken with PLAN++; the Analysis for Blocks 9 and 10; Block 5 moved;
+  Blocks 9 and 10
+- GUIDELINES/wip/2026-11-26_16-58_AP_CommonPasswords_a_list_of_common_passwords.md: v1.0, for the next
+  version: Block 5 as the owner decided it, the facts found on Pwned Passwords, D1 to D9 open, two blocks
+- the NOTE of the gate's decisions (AccessEnds v1.1, 2026-11-26): removed, folded into
+  v1.2, its decisions in the Discussion, its facts in AP CommonPasswords' Analysis
+
+File-revision-v1: GUIDELINES/wip/2026-11-25_14-36_AP_AccessEnds_follow_ups_of_two_gates.md::v1.2::2026-11-26::TL;DR, Discussion, Analysis, Implementation Plan, Proposed commit message, Change History::Blocks 9 and 10; Block 5 moved to AP CommonPasswords; the gate's NOTE folded in
+File-revision-v1: GUIDELINES/wip/2026-11-26_16-58_AP_CommonPasswords_a_list_of_common_passwords.md::v1.0::2026-11-26::All::first revision, for the next version
+Assisted-by: claude-code:claude-opus-5-5
+```
+
+Block 9:
+`fix(security:api): Another integration's key or a guests holder no longer manages an integration's users`, then `feat(ui): A holder of integrations sees Users and manages an integration's users there`.
+
+Block 10:
+`feat(ui): The dice alternates words and characters, and the shown suggestion copies on a tap`.
+
+Each cites `AP AccessEnds v1.2, Block <n>` and ends with
+`Assisted-by: claude-code:claude-opus-5-5`.
+
+v1.0's, Block 1, as the model the others followed:
 
 ```
 fix(ui): A sign-in's answer after another way signed in changes nothing
@@ -1671,7 +2135,7 @@ Key changes:
 Assisted-by: claude-code:claude-opus-5-5
 ```
 
-Blocks 2 to 8: the summaries of their blocks above.
+Blocks 2 to 8: the summaries of their blocks above, each merged.
 
 ## Change History
 
@@ -1684,3 +2148,13 @@ Blocks 2 to 8: the summaries of their blocks above.
   since every bump in `go.mod` failed CI until the list was made again;
   D41 open, the owner's, with what a link to a Massimo user changes.
   Block 7 is merged; Blocks 1 to 6 stand as they are.
+- v1.2 (2026-11-26): from the owner's answers at this plan's completion gate,
+  then "PLAN++ as recommended":
+  Block 9, Managers, who manages an integration's users (D41-A4 and A5),
+  and Block 10, Alternate, the dice by turns and the shown suggestion copied
+  with a tap (D44-A); D45 to D53 taken with PLAN++;
+  Block 5 moved to AP CommonPasswords for the next version,
+  with D29-E and D43-A, D24 to D28 with it;
+  PasswordRules.D59-A, D42-A and D19-A as built.
+  Folds in "NOTE AccessEnds v1.1: owner decisions of the gate".
+  Blocks 1 to 4 and 6 to 8 are merged.
