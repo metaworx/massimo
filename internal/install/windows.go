@@ -55,7 +55,7 @@ func InstallWindows(o Options) error {
 			return err
 		}
 	}
-	if err := o.checkTLS(serviceStart{}); err != nil {
+	if err := o.checkTLS(filepath.IsAbs); err != nil {
 		return err
 	}
 	if err := o.checkSettingsFile(serviceStart{}); err != nil {

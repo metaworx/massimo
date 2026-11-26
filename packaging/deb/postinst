@@ -21,9 +21,17 @@ dpkg-maintscript-helper rm_conffile /etc/logrotate.d/massimo 0.14.0~alpha.2~ -- 
 # kept, it makes the first comment a setting, and the template saved by an
 # editor that writes one would start a box that has no owner yet. Both
 # sides of the comparison are read here, so both lose it.
+# NUL bytes go before all that: UTF-16, as PowerShell's > and Notepad
+# write it, gives one to every ASCII character, and grep would take the
+# file for binary and write "binary file matches" into apt's output. grep
+# runs in the C locale: in a UTF-8 one the UTF-16 mark left at the start
+# is binary all the same. The mark keeps the first line a setting, so such
+# a file differs and is started, for serve to refuse UTF-16 in its own
+# words; one without the mark compares by its lines, as UTF-8 does.
 settings() {
 	bom=$(printf '\357\273\277')
-	sed -e "1s/^$bom//" -e 's/^[[:space:]]*//' -e 's/[[:space:]]*$//' "$1" | grep -v -e '^#' -e '^$' || true
+	tr -d '\000' <"$1" | sed -e "1s/^$bom//" -e 's/^[[:space:]]*//' -e 's/[[:space:]]*$//' |
+		LC_ALL=C grep -v -e '^#' -e '^$' || true
 }
 
 case "$1" in

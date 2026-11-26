@@ -9,7 +9,7 @@ package server
 // settings in effect, which cmd/massimo gathers (SetConfigView) since it
 // knows the flags and the settings file. A secret's value never leaves
 // the server: a key, an IV, a token or a password says only that it is
-// set.
+// set, and so does a name Massimo does not know, which may hold one.
 
 import (
 	"net/http"
@@ -40,8 +40,8 @@ type ConfigView struct {
 }
 
 // ConfigVariable is a MASSIMO_* variable in effect: its value, empty
-// for a secret, and where it came from (the environment, the settings
-// file).
+// for a secret and for a name Massimo does not know, and where it came
+// from (the environment, the settings file).
 type ConfigVariable struct {
 	Name    string `json:"name"`
 	Value   string `json:"value,omitempty"`
@@ -91,9 +91,11 @@ func (s *Server) getConfig(w http.ResponseWriter, r *http.Request) error {
 	}
 	v := view()
 	v.Version = s.opts.Version
-	// whatever gathered it, no secret leaves the server
+	// whatever gathered it, no secret leaves the server, nor the value of
+	// a name Massimo does not know, which a secret's rule by name misses:
+	// MASSIMO_API_TOKEN_OLD (AP StartConfiguration, D65-A)
 	for i := range v.Variables {
-		if SecretVariable(v.Variables[i].Name) {
+		if SecretVariable(v.Variables[i].Name) || v.Variables[i].Unknown {
 			v.Variables[i].Value, v.Variables[i].Secret = "", true
 		}
 	}
