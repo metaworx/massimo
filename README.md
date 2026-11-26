@@ -1005,7 +1005,12 @@ for tests that drive the fake from outside:
 `panel_locked`, and `reported: false` for a device the Cube holds no state for),
 `POST /devices/<rf>/remove` and `/restore` to take a device out of its room's
 lists and bring it back, `POST /drop` to make the clients connect again and
-read the greeting, and `GET /devices` for the device list;
+read the greeting,
+`POST /reset` to put the fake back as it started and drop the clients,
+which read it anew (the greeting's devices, states, rooms and M lines,
+no `-pair` device joined, no silence, and nothing acknowledged before it
+applied after it),
+and `GET /devices` for the device list;
 `POST /silent` and `DELETE /silent` pull the Cube's cable and put it back
 (the fake keeps its connections and holds every line meanwhile),
 `POST /release` forgets a dead session (below),

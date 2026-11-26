@@ -18,8 +18,9 @@ import (
 // The control of the fake: what a test does to the devices that the real
 // Cube would learn from them by radio. A device reports a new state
 // (SetState), leaves its room and comes back (Remove, Restore); the
-// connections drop (Drop). The same is offered over HTTP on loopback
-// (Control), for tests in another language that run `massimo fakecube`.
+// connections drop (Drop); the fake goes back to the Cube it started as
+// (Reset). The same is offered over HTTP on loopback (Control), for
+// tests in another language that run `massimo fakecube`.
 
 // State is a change of a device's reported state; nil fields stay.
 type State struct {
@@ -186,6 +187,7 @@ func (s *Server) withoutRemoved(m cube.Message) cube.Message {
 //	POST /devices/{rf}/remove    Remove
 //	POST /devices/{rf}/restore   Restore
 //	POST /drop                   Drop: the clients connect again
+//	POST /reset                  Reset: the greeting it started with, the clients connect again
 //	POST /silent                 SetSilent(true): the cable is out
 //	DELETE /silent               SetSilent(false): the cable is back
 //	POST /release                Release: a held dead session is forgotten
@@ -277,6 +279,10 @@ func (s *Server) controlHandler() http.Handler {
 	})
 	mux.HandleFunc("POST /drop", func(w http.ResponseWriter, r *http.Request) {
 		s.Drop()
+		w.WriteHeader(http.StatusNoContent)
+	})
+	mux.HandleFunc("POST /reset", func(w http.ResponseWriter, r *http.Request) {
+		s.Reset()
 		w.WriteHeader(http.StatusNoContent)
 	})
 	mux.HandleFunc("POST /silent", func(w http.ResponseWriter, r *http.Request) {
