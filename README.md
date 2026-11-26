@@ -1156,7 +1156,7 @@ reads that file alone and keeps its data in `/var/lib/massimo`,
 from any directory, as `sudo sshd` reads sshd's own configuration;
 `-env`, `-no-env` or `MASSIMO_ENV_FILE` turns both off.
 Keep the file out of git; `massimo config` shows what is in effect,
-secrets redacted.
+secrets redacted, as is the value of a name it does not know.
 
 `serve` keeps the Cubes in its own store instead,
 `massimo.db` in the data directory (`-data <dir>` before the command name,
@@ -1196,7 +1196,8 @@ at the latest at a clean stop),
 `store migrate` creates or migrates it without starting `serve`,
 and `store info` prints its schema version, node and row counts
 (also in the web UI, System settings → Maintenance → Store, as
-`massimo config`'s settings are under Settings in effect, secrets left out).
+`massimo config`'s settings are under Settings in effect, secrets and the
+values of unknown names left out).
 The copy holds the database alone:
 `opaque.key` and `node.key` beside it are kept with it,
 since without `opaque.key` no password of `auth_version` 2 signs in
