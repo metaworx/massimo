@@ -1,4 +1,4 @@
-# Testing the web UI (v1.33.0)
+# Testing the web UI (v1.34.0)
 
 An evaluation of a Cypress suite for the web UI, against the alternatives:
 what the Playwright smoke test covers today and what it cannot do well,
@@ -1022,6 +1022,22 @@ the server's and the test's, in order,
   A constant is not counted: a test file's `ROOMS` or `STALE` is another thing
   than the kit's of the same name.
   `go test ./tools/ui-test/idioms` runs it alone.
+- **The page's state written** (`state_writes.txt`, AP SteadyTests, Block 6):
+  the same test counts per test file the writes of the page's state in its page scripts,
+  against a list of its own that falls as the others do:
+  a field of `app.js`'s `state` assigned
+  (`state.x = …`, `state.x.y += …`, `state.x[k] = …`),
+  incremented or decremented, deleted, changed in place by an array's method
+  (`state.x.push(…)`), or the state or a field of it as `Object.assign`'s target.
+  A read (`state.x === …`) is none, nor a field of another object's state
+  (`themeState`, `MassimoParts.log.state`), nor a Python dict named `state`.
+  Data put into the page alone lasts until its next read or event
+  (above, "The page's reads answered"):
+  a test tells the page's reads what it wants shown,
+  through `Reads` (`reads.cube`, `reads.device`, `reads.room`, `reads.change`),
+  or the fake Cube, and its failure says so and points here.
+  The list held 39 writes in 13 files when it came (2026-11-26),
+  20 of them expert mode turned on or off for the page alone (`state.settings.expert`).
 - **The server sets** run without the server's poll of the fake Cube
   (`serve -poll 0`, AP SteadyTests, Block 5, D4-A):
   the server sends its fake Cube no line of its own between a test's steps,

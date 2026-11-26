@@ -1023,12 +1023,14 @@ Node is not needed.
   its action and waits with `stream.wait`,
   and finds the event's line by what the event names, not by `.first`.
 - `go test ./...` counts per test file its fixed pauses (`wait_for_timeout`),
-  its plain routes (`.route(`, not `safe_route`)
-  and its own definitions of a name `helpers.py` defines,
+  its plain routes (`.route(`, not `safe_route`),
+  its own definitions of a name `helpers.py` defines
+  and its page scripts' writes of the page's `state`,
   against the lists in `idioms/`, which may only fall:
   a new one fails it, and so does one taken out,
   until its line there is lowered in the same commit
-  (`docs/ui-testing.md`, section 9, "The old idioms counted").
+  (`docs/ui-testing.md`, section 9,
+  "The old idioms counted" and "The page's state written").
 - A wait that returns whether it was met is asserted where it is called.
 - A test's own wait loop ends at `scaled(seconds)` of `helpers.py`,
   so that `UI_TEST_SCALE` stretches it as it does the kit's waits;

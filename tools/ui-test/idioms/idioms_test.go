@@ -33,8 +33,21 @@ var (
 	kitDefRE = regexp.MustCompile(`(?m)^(?:def|class)\s+([A-Za-z]\w*)`)
 	// localDefRE is a name a test file defines, at any depth.
 	localDefRE = regexp.MustCompile(`(?m)^[ \t]*(?:def|class)\s+(\w+)`)
-	listLineRE = regexp.MustCompile(`^(test_\w+\.py)\s+([0-9]+)$`)
+	// stateRefRE is a field of the page's state, app.js's state, as a page
+	// script names it: state.x, state.x.y, state.x[k]; whether it is
+	// written is what comes before and after it (stateWrites).
+	stateRefRE = regexp.MustCompile(`state\.\w+(?:\.\w+|\[[^\]\n]+\])*`)
+	// assignRE is an assignment, compound or not, an increment or a
+	// decrement, at the start of what follows a field: = but not == or =>.
+	assignRE = regexp.MustCompile(`^(?:=(?:[^=>]|$)|\+\+|--|\*\*=|<<=|>>>=|>>=|&&=|\|\|=|\?\?=|[-+*/%&|^]=)`)
+	// assignStateRE is Object.assign into the state or a field of it.
+	assignStateRE = regexp.MustCompile(`\bObject\.assign\(\s*state\b`)
+	listLineRE    = regexp.MustCompile(`^(test_\w+\.py)\s+([0-9]+)$`)
 )
+
+// mutators are the methods that change an array in place.
+var mutators = map[string]bool{"push": true, "pop": true, "shift": true, "unshift": true, "splice": true, "sort": true,
+	"reverse": true, "fill": true, "copyWithin": true}
 
 // idiom is one old way of doing a thing that the guard counts per test
 // file, against its list.
@@ -63,6 +76,39 @@ func localKitDefs(kit map[string]bool) func(string) []string {
 		}
 		return out
 	}
+}
+
+// identOrDot is a byte that goes on a name or a member access before
+// state: themeState.x and MassimoParts.log.state.x are not app.js's.
+func identOrDot(c byte) bool {
+	return c == '_' || c == '$' || c == '.' || '0' <= c && c <= '9' || 'a' <= c && c <= 'z' || 'A' <= c && c <= 'Z'
+}
+
+// stateWrites is find for the writes of the page's state in a page
+// script: a field assigned (state.x = …, state.x.y += …, state.x[k] = …),
+// incremented or decremented, deleted, changed in place by an array's
+// method (state.x.push(…)), or the state or a field of it as
+// Object.assign's target; each as written. A read (state.x === …) is
+// none, and so is a Python dict named state (state["x"] = …).
+func stateWrites(text string) []string {
+	var out []string
+	for _, m := range stateRefRE.FindAllStringIndex(text, -1) {
+		s, e := m[0], m[1]
+		if s > 0 && identOrDot(text[s-1]) {
+			continue
+		}
+		ref := text[s:e]
+		before := strings.TrimRight(text[:s], " \t")
+		after := strings.TrimLeft(text[e:], " \t")
+		deleted := strings.HasSuffix(before, "delete") &&
+			(len(before) == len("delete") || !identOrDot(before[len(before)-len("delete")-1]))
+		prefixed := strings.HasSuffix(before, "++") || strings.HasSuffix(before, "--") || deleted
+		last := ref[strings.LastIndexByte(ref, '.')+1:]
+		if prefixed || assignRE.MatchString(after) || mutators[last] && strings.HasPrefix(after, "(") {
+			out = append(out, ref)
+		}
+	}
+	return append(out, assignStateRE.FindAllString(text, -1)...)
 }
 
 // kitNames are the public names helpers.py defines at its top level,
@@ -97,6 +143,10 @@ func idioms(t *testing.T) []idiom {
 			"a local copy of a helper of the kit drifts from it: " +
 				"import the name from helpers.py, and a helper several files need goes there under its own name",
 			localKitDefs(kitNames(t)), true},
+		{"writes of the page's state", "state_writes.txt",
+			"data put into the page alone lasts until its next read or event: tell the page's reads what it shows " +
+				"through Reads of helpers.py (reads.cube, reads.device, reads.room, reads.change), or the fake Cube",
+			stateWrites, true},
 	}
 }
 
@@ -213,6 +263,15 @@ func TestFind(t *testing.T) {
 		{matches(plainRouteRE), `safe_route(page, p, h); page.unroute(p); route.fulfill(status=200); route_matches(p, u)`, 0},
 		{localKitDefs(kit), "def wait_until(page, expr):\n    def mark(page, s):\nclass Reads:\n", 3},
 		{localKitDefs(kit), "def wait_until_shown(page):\ndef _mark(page):\nfrom helpers import mark, wait_until\n", 0},
+		{stateWrites, `() => { state.settings.expert = true; applySettings(); }`, 1},
+		{stateWrites, `state.updateAt = 0; state.n += 1; state.n++; --state.m; state.ui[rid].timer = null`, 5},
+		{stateWrites, `state.cubes = state.cubes.map((c) => c); state.a = state.b = 1`, 3},
+		{stateWrites, `delete state.details[rf]; state.rooms.push(r); state.found.splice(0, 1)`, 3},
+		{stateWrites, `Object.assign(state, { cubes: [] }); Object.assign(state.settings, { poll: 5 })`, 2},
+		{stateWrites, `state.x === 1 && state.y == 2 && state.z !== 3 && state.w >= 4 && state.v <= 5`, 0},
+		{stateWrites, `state.events.dispatchEvent(ev); clearInterval(state.pollTimer); f(state.rooms.find((r) => r.id))`, 0},
+		{stateWrites, `themeState.scheme = "x"; MassimoParts.log.state.lines = []; undelete state.x`, 0},
+		{stateWrites, "state = {\"helper\": \"up-to-date\"}\nstate[\"helper\"] = \"installing\"", 0},
 	} {
 		if got := len(c.find(c.text)); got != c.want {
 			t.Errorf("%q: found %d, want %d", c.text, got, c.want)
