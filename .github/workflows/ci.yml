@@ -80,7 +80,8 @@ jobs:
   # files but for its tests (internal/server/*_test.go, which the binary
   # under test does not hold: AP TestSpeed, D9-A), the OpenAPI file of
   # the API the page reads (with code only: a site document alone answers
-  # code=false), its suite or this file, lan
+  # code=false), its suite, the suites' work-directory helper
+  # (tools/workdir/) or this file, lan
   # when it touches the announcement, discovery,
   # the shared port, the proxy, the server's own files (not ui/:
   # discovery's runs are decided there), the Go module, the LAN test or
@@ -92,8 +93,9 @@ jobs:
   # touches app/, the files of the web UI the app bundles (all but
   # index.html, partials/, src/, parts.js and vendor/, as BundleUi in
   # app/android/app/build.gradle.kts leaves them out), the app's scripts
-  # under packaging/, the emulator suite's (tools/app-emulator/), or this
-  # file, build.yml or release.yml; app=unneeded
+  # under packaging/, the emulator suite's (tools/app-emulator/) and the
+  # suites' work-directory helper (tools/workdir/), or this file, build.yml
+  # or release.yml; app=unneeded
   # is carried as lan's is (AP MobileApp, D17-A). macos and windows, for
   # the macOS LaunchDaemon and Windows service jobs, are true for a push
   # and a tag; for a pull request when it touches the announcement (one
@@ -266,7 +268,7 @@ jobs:
             announce='internal/announce/|internal/sharedport/|internal/serve/|cmd/massimo/serve\.go$|go\.(mod|sum)$'
             # The UI tests' paths, the server's own Go files but its tests
             # (D9-A), which the binary under test does not hold.
-            uifiles="$(grep -vE '^internal/server/[^/]+_test\.go$' <<<"$changed" | grep -E '^(internal/server/ui/|internal/server/[^/]+\.go$|docs/api-v1-openapi\.yaml$|tools/ui-test/|tools/uibundle/|third_party/preact/|\.github/workflows/ci\.yml$)' || true)"
+            uifiles="$(grep -vE '^internal/server/[^/]+_test\.go$' <<<"$changed" | grep -E '^(internal/server/ui/|internal/server/[^/]+\.go$|docs/api-v1-openapi\.yaml$|tools/ui-test/|tools/workdir/|tools/uibundle/|third_party/preact/|\.github/workflows/ci\.yml$)' || true)"
             [ -n "$uifiles" ] || ui=false
             grep -qE "^(${announce}|internal/proxy/|internal/server/[^/]+$|internal/cubelan/|cmd/massimo/discover\.go$|tools/lan-test/|\.github/workflows/ci\.yml$)" <<<"$changed" || lan=false
             # Each platform's own paths (D1-A, D2-A): what its unit tests and
@@ -283,7 +285,7 @@ jobs:
             [ -n "$macfiles" ] || macos=false
             winfiles="$(grep -vE "$notwin" <<<"$changed" | grep -E "^(${announce}|internal/(install|update|safefile|cubelan|env)/|internal/server/(discovery|hostnets|runtimes|update_api|update_history)[^/]*\.go$|internal/proxy/proxy\.go$|cmd/massimo/(install|update|service|restart|reboot|discover|startchecks|notes|reload)[^/]*\.go$|cmd/massimo/serve_stop_test\.go$|(cmd|internal)/.*_(windows|other)[^/]*\.go$|packaging/(embed\.go|env\.template)$|\.github/workflows/(ci|platforms)\.yml$|\.github/actions/|tools/uibundle/)" || true)"
             [ -n "$winfiles" ] || windows=false
-            appfiles="$(grep -E '^(app/|packaging/app-[a-z-]+\.sh$|tools/app-emulator/|\.github/workflows/(ci|build|release)\.yml$)' <<<"$changed" || true)"
+            appfiles="$(grep -E '^(app/|packaging/app-[a-z-]+\.sh$|tools/app-emulator/|tools/workdir/|\.github/workflows/(ci|build|release)\.yml$)' <<<"$changed" || true)"
             bundled="$(grep -E '^internal/server/ui/' <<<"$changed" | grep -vE '^internal/server/ui/(index\.html$|partials/|src/|parts\.js$|vendor/)' || true)"
             [ -n "${appfiles}${bundled}" ] || app=false
           fi

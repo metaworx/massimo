@@ -971,17 +971,30 @@ func TestCIGatesHoldTheWindowsTests(t *testing.T) {
 // pull request: the paths the UI tests read, and the answer.
 var ciUILines = []string{"uifiles=", `[ -n "$uifiles" ] || ui=false`}
 
+// ciAppLines open the lines of ci.yml's What to test that answer app on
+// a pull request: the paths of the app and its emulator suite, the web
+// UI's files the app bundles, and the answer.
+var ciAppLines = []string{"appfiles=", "bundled=", `[ -n "${appfiles}${bundled}" ] || app=false`}
+
 // ciUIGate runs ci.yml's UI gate over a pull request's paths, as What to
 // test does, and returns its answer ui.
 func ciUIGate(t *testing.T, paths []string) string {
 	t.Helper()
+	return ciGate(t, "ui", ciUILines, paths)
+}
+
+// ciGate runs the lines of ci.yml's What to test that give a job's
+// answer (ui, app) on a pull request over its paths, the answer true
+// before them, as What to test sets it, and returns the answer.
+func ciGate(t *testing.T, answer string, lines, paths []string) string {
+	t.Helper()
 	bash := scriptShell(t)
-	script := "set -euo pipefail\nchanged=\"$(cat)\"\nui=true\n" + ciWhatLines(t, ciUILines) + "echo \"$ui\"\n"
+	script := "set -euo pipefail\nchanged=\"$(cat)\"\n" + answer + "=true\n" + ciWhatLines(t, lines) + "echo \"$" + answer + "\"\n"
 	cmd := exec.Command(bash, "-c", script)
 	cmd.Stdin = strings.NewReader(strings.Join(paths, "\n") + "\n")
 	out, err := cmd.Output()
 	if err != nil {
-		t.Fatalf("the UI gate: %v\n%s", err, out)
+		t.Fatalf("the %s gate: %v\n%s", answer, err, out)
 	}
 	return strings.TrimSpace(string(out))
 }
@@ -989,7 +1002,8 @@ func ciUIGate(t *testing.T, paths []string) string {
 // TestCIUIGateLeavesOutServerTests: a pull request that changes the
 // server's tests alone runs no UI job, since the binary under test does
 // not hold them (AP TestSpeed, D9-A); one that changes a server Go file
-// beside them, the page, the suite or the jobs' workflow runs them.
+// beside them, the page, the suite, the work-directory helper its run.sh
+// sources (AP EmulatorRuns, D3-B) or the jobs' workflow runs them.
 func TestCIUIGateLeavesOutServerTests(t *testing.T) {
 	for _, tc := range []struct {
 		paths []string
@@ -1002,6 +1016,7 @@ func TestCIUIGateLeavesOutServerTests(t *testing.T) {
 		{[]string{"internal/server/ui/app.js"}, "true"},
 		{[]string{"internal/server/ui/src/rooms/tile.tsx", "internal/server/rooms_test.go"}, "true"},
 		{[]string{"tools/ui-test/test_parts_guard.py"}, "true"},
+		{[]string{"tools/workdir/workdir.sh"}, "true"},
 		{[]string{".github/workflows/ci.yml"}, "true"},
 		{[]string{"docs/api-v1-openapi.yaml"}, "true"},
 		{[]string{"internal/server/testdata/greeting.txt"}, "false"},
@@ -1009,6 +1024,33 @@ func TestCIUIGateLeavesOutServerTests(t *testing.T) {
 	} {
 		if got := ciUIGate(t, tc.paths); got != tc.want {
 			t.Errorf("%v: ui=%s, want %s", tc.paths, got, tc.want)
+		}
+	}
+}
+
+// TestCIAppGateHoldsTheEmulatorSuite: a pull request that changes the
+// app, its scripts under packaging/, the emulator suite, the
+// work-directory helper the suite's run.sh sources (AP EmulatorRuns,
+// D3-B), a file of the web UI the app bundles or a workflow that builds
+// it runs the Android jobs; the page's files the app leaves out, the UI
+// suite alone and the server alone do not.
+func TestCIAppGateHoldsTheEmulatorSuite(t *testing.T) {
+	for _, tc := range []struct {
+		paths []string
+		want  string
+	}{
+		{[]string{"app/android/app/build.gradle.kts"}, "true"},
+		{[]string{"packaging/app-sign.sh"}, "true"},
+		{[]string{"tools/app-emulator/run.sh"}, "true"},
+		{[]string{"tools/workdir/workdir.sh"}, "true"},
+		{[]string{"internal/server/ui/app.js"}, "true"},
+		{[]string{".github/workflows/build.yml"}, "true"},
+		{[]string{"internal/server/ui/index.html", "internal/server/ui/src/rooms/tile.tsx"}, "false"},
+		{[]string{"tools/ui-test/test_parts_guard.py"}, "false"},
+		{[]string{"internal/server/rooms.go", "docs/ui.md"}, "false"},
+	} {
+		if got := ciGate(t, "app", ciAppLines, tc.paths); got != tc.want {
+			t.Errorf("%v: app=%s, want %s", tc.paths, got, tc.want)
 		}
 	}
 }

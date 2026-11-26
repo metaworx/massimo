@@ -52,27 +52,47 @@ the first one on a machine also fetches the test libraries.
   some 5 GB once unpacked.
 - **JDK 17** for Gradle, `JAVA_HOME=/usr/lib/jvm/java-17-openjdk-amd64`
   where another is the default.
+- **Room in `TMPDIR`** (`/tmp` where it is not set) for the run's AVD,
+  about 1.2 GB after a run, its data partition able to grow to 4 GB:
+  where `/tmp` is a tmpfs, that is memory, and `TMPDIR` names another place.
 - **The host's tools**: Go, `curl` and `openssl` for the servers;
   `unzip` and `sha1sum` for `sdk.sh fetch`;
-  GNU coreutils' `timeout` and `env -C` for the run.
+  GNU coreutils' `timeout`, `env -C` and `tail --pid` for the run;
+  `flock` (util-linux), which takes the run's locks,
+  and `ss` (iproute2), which finds the ports in use (below, "The ports").
 
 ## What it does
 
-1. The checks above, then the AVD `massimo-test` in `~/.android/avd`
-   (`ANDROID_AVD_HOME`), made where missing,
-   its settings written from the pins at each run.
+1. The checks above, then the checkout's lock and the run's slot,
+   which gives it its ports (below, "The ports"), then the AVD `massimo-test`,
+   made at each run in the run's work directory (below, "The results"),
+   its settings written from the pins:
+   the run's own, which no other checkout's run starts or rewrites,
+   and made anew at no cost, since `-wipe-data` remakes its images anyway.
+   `ANDROID_AVD_HOME` is not read; the run sets it for the emulator alone.
 2. The emulator, without a window, audio or snapshots
    (`-no-window -no-audio -no-snapshot`), its data wiped (`-wipe-data`),
    so that every run starts from a phone just set up,
-   on its own console port, 5584 (`APP_EMU_PORT`), the serial `emulator-5584`;
+   on the slot's console port, 5584 in slot 0,
+   or on the one `APP_EMU_PORT` gives, an even port from 5554 to 5584,
+   its serial `emulator-<port>` (below, "The ports");
    the kernel's messages in its log (`-show-kernel`),
    and the device's log kept from the moment `adb` sees it,
    so that a boot that stalls leaves both.
 3. While it boots, the two servers and the app's debug and test APKs built.
-4. Once it has booted (within `APP_EMU_BOOT_TIMEOUT`, 300 s,
+4. Once it has booted (within `APP_EMU_BOOT_TIMEOUT`, 420 s, as CI sets it,
    counted from the builds' end, so that a slow first build takes none of it):
-   its animations and autofill off, the screen kept on,
-   the PIN `1111` set (`adb shell locksettings set-pin`),
+   the error dialogs off first (`hide_error_dialogs`, below, "The ports"),
+   its animations and autofill off, the screen kept on;
+   then, within the same time, the end of its first setup awaited,
+   as the system and SystemUI see it, on two looks in a row at least 3 s apart:
+   `user_setup_complete` and `device_provisioned` are 1,
+   which the emulator's setup app sets as it ends,
+   SystemUI's own dump has the device provisioned and the setup complete,
+   and its keyguard has the SIM ready;
+   where that does not come, the run stops,
+   saying the step it waited for and what `adb` last said of it;
+   then the PIN `1111` set (`adb shell locksettings set-pin`),
    which a fingerprint needs,
    the lock screen taken away before it and, with the PIN, after it;
    `adb reverse` for both servers' ports,
@@ -80,9 +100,10 @@ the first one on a machine also fetches the test libraries.
    the helper started (below).
 5. A guard started that keeps the lock screen away while Gradle runs,
    looking every five seconds, the PIN typed where it shows:
-   on a busy host the boot can show it again minutes after the PIN was set,
-   and the enrollment then runs under it, finding nothing of Settings;
-   `keyguard.log` says each change it saw.
+   a SystemUI that stopped answering and was started again shows it anew,
+   and an enrollment run under it finds nothing of Settings;
+   `keyguard.log` says each change it saw,
+   SystemUI's pid among them, so that a SystemUI started again shows there.
    It reads the window manager's policy and the activities' keyguard state alone,
    since `dumpsys window`'s whole dump opens with the last ANR's copy of the state.
 6. The finger enrolled by `EnrollTest` alone (below, "The fingerprint");
@@ -113,8 +134,9 @@ so that every test starts from the app installed anew.
 ## The servers
 
 `servers.sh` builds `massimo` from the checkout, the page's parts first,
-and starts two servers, `a` on `127.0.0.1:9443` and `b` on `127.0.0.1:9444`
-(`APP_EMU_API_PORT_A`, `_B`),
+and starts two servers on the slot's ports,
+in slot 0 `a` on `127.0.0.1:9443` and `b` on `127.0.0.1:9444`
+(`APP_EMU_API_PORT_A`, `_B`; below, "The ports"),
 each in a temporary directory of its own with its store,
 `MASSIMO_ENV_FILE=/dev/null`, so that nothing of the checkout's `.env`
 is read,
@@ -129,6 +151,114 @@ checked against the one it answers with, and handed to the tests,
 which compare it with the app's fingerprint sheet and pin it to read the
 audit.
 The directories go at the end of the run.
+
+## The ports
+
+A run holds a slot, which gives it seven ports of its own,
+so that runs from two checkouts at once need no setting
+(`slots.sh`; AP EmulatorRuns, D2-A).
+Slot `k`, from 0 to 7, gives the console port of slot 0 - 2k,
+and each other port of slot 0 + 2k:
+
+| Port | Slot 0 | Slot `k` | Setting |
+|---|---|---|---|
+| the emulator's console, its serial `emulator-<port>` | 5584 | 5584 - 2k | `APP_EMU_PORT`, even, 5554 to 5584 |
+| server `a`, server `b` | 9443, 9444 | 9443 + 2k, 9444 + 2k | `APP_EMU_API_PORT_A`, `_B` |
+| their fake Cubes | 62941, 62942 | 62941 + 2k, 62942 + 2k | `APP_EMU_CUBE_PORT_A`, `_B` |
+| the fake Cubes' discovery | 23941, 23942 | 23941 + 2k, 23942 + 2k | `APP_EMU_DISCOVERY_PORT_A`, `_B` |
+
+The console ports count down, from 5584 to 5570,
+because `adb` finds an emulator by itself, after its server restarts,
+on the console ports 5554 to 5584 alone (it looks at 5555 to 5585).
+An emulator on another port is known only to the server it told at its start,
+and a later `adb` call loses it where that server was started again,
+by `adb kill-server`, a crash, or a client of another version.
+So `APP_EMU_PORT` takes an even port from 5554 to 5584 alone,
+and any other stops the run before it starts anything (AP EmulatorRuns, D6-B).
+A setting given replaces that port alone, in every slot.
+The run takes the first slot whose lock it can take,
+whose emulator `adb` does not list (one left by a killed run, which holds no lock)
+and none of whose ports listens, the console's pair (its port + 1, adb's) among them;
+`ss -Hltun` reads the listening sockets without connecting to them,
+since a connection to another program's server would put an error in its log.
+It says each slot it passed over and why,
+then the slot and its ports;
+where none of the eight is free, it stops before it starts anything.
+
+A slot's lock is a `flock` of the file `massimo-app-emulator-slot.<k>.lock`
+in `APP_EMU_LOCK_DIR`, `/tmp` where it is not set,
+not `TMPDIR`, so that runs with other `TMPDIR`s see one another's;
+the file is made where missing, readable by everyone,
+opened for reading, so that one another user made serves too,
+and it stays;
+a lock path that is a link or no regular file, a FIFO among them, is passed over.
+A run also locks this directory, `tools/app-emulator/`:
+a second run of the same checkout would take the first one's `results/`
+and the build and the reports in `app/android/`,
+so it stops at once and says that a run of this checkout is going;
+it waits for that, or runs from another checkout.
+
+The locks are taken after `adb devices`, which starts `adb`'s server,
+then handed to one holder, `tail --pid` of the run,
+which a subshell starts and leaves, so that it is none of the run's children,
+and which ignores `INT`, `TERM`, `HUP` and `QUIT`:
+it keeps them until `run.sh` has ended and been reaped, however it ends,
+a signal to its whole process group (Ctrl-C, `timeout`) and a `kill -9` among it,
+so also while the cleanup still writes `results/`,
+and lets them go within about a second.
+Nothing else the run starts holds them,
+neither an `adb` server that a later `adb` call starts again
+nor a loop of the run's that a `kill -9` leaves running.
+
+Two runs at once share the host.
+On a 16-core host, two runs started together booted their emulators
+in about 165 s each at a light load (a load average of about 2)
+and in about 335 s each with the host's load near 20,
+against 80 to 111 s for one alone.
+A busy host also slows SystemUI, which draws the lock screen.
+It can see the end of the first setup and the SIM up to two minutes after the system,
+about 4 to 116 s after the settings in the runs,
+the longest in a SystemUI started again,
+and where the PIN was set before then,
+the lock screen comes back as it does, under the enrollment.
+It can also stop answering for long enough to be declared not responding;
+with the error dialogs on and no lock screen showing just then,
+the system leaves it running behind its "isn't responding" dialog,
+no PIN typed reaches the lock screen,
+and Settings' enrollment ends under it.
+Before D5-A, four of eight runs failed so,
+three of them started two at once,
+each while other programs' tests kept the load average at 10 or more.
+So the run sets the PIN only once SystemUI too has seen the setup end,
+as "What it does" says above,
+after which the lock screen does not come back by itself while that SystemUI runs,
+and turns the error dialogs off (`settings put global hide_error_dialogs 1`):
+the system then kills a SystemUI that stops answering and starts it again.
+During the wait for the setup, in each run of two at once,
+SystemUI was killed twice: for its ANR,
+then, started again, for its content providers' timeout,
+which the setting plays no part in;
+the wait went on with the new SystemUI.
+After the PIN it costs more.
+A SystemUI started again, after its ANR or a restart of the system,
+shows the lock screen at its start and again at its first SIM events,
+and an enrollment or a prompt going on ends with the old one:
+Settings is stopped, and `Fingers.enroll` waits out its 240 s;
+the guard's PIN then only clears the screen.
+In the runs, SystemUI's ANRs came within 75 s of its start alone,
+mostly before the setup's end.
+An app in front that stops answering is killed so too.
+The app goes with its instrumentation ("Test instrumentation process crashed"),
+which the run names after a failure (below, "The results"),
+and Settings so ends the enrollment;
+the run names the app's lines alone,
+so Settings', SystemUI's and the other apps' ANRs are in `logcat.txt` only.
+`Rig.quiet` presses the dialog's Wait at a test's start alone,
+so it never offered Wait to an ANR in the middle of a test,
+and it now matters only where the setting was refused.
+`APP_EMU_BOOT_TIMEOUT`, 420 s from the builds' end,
+counts the wait for the setup too and can be tight on a busy host;
+two runs at once want a host with cores to spare.
 
 ## The fingerprint
 
@@ -200,12 +330,19 @@ or Android 8 to 10, whose prompt takes no PIN.
 
 ## The results
 
-The servers' stores, their `massimo` and `tally`
+The AVD, the servers' stores, their `massimo` and `tally`
 are in the run's work directory,
-`massimo-app-emulator.XXXXXX` under `TMPDIR`,
-which goes at the end of the run;
-`KEEP=1 make app-emulator-test` keeps it and prints its path
+`massimo-app-emulator.XXXXXX` under `TMPDIR` (`/tmp` where it is not set),
+the AVD in its `avd/`;
+the directory goes at the end of the run,
+and `KEEP=1 make app-emulator-test` keeps it, the AVD with it,
+about 1.2 GB after a run, and prints its path
 (AP CleanRuns, D4-A).
+The directory holds the run's PID and the emulator's in `pid`.
+A run that was killed, whose cleanup could not run, leaves its own;
+a later run removes it once neither runs and it is older than a day,
+as the UI suite does with its own
+(`tools/workdir/README.md`; AP EmulatorRuns, D1-A, D3-B).
 
 `results/`, emptied at each run and not kept by git:
 `emulator.log` with the kernel's messages,
@@ -289,6 +426,9 @@ as Google's SDK repository lists them
 (`repository2-3.xml`, `sys-img/google_apis/sys-img2-3.xml`).
 A pin moves by a decision, its values together;
 `TestPinsHoldTogether` (`scripts_test.go`) checks that they fit.
+A move of the image also rechecks the three texts that `setup_ended` looks for,
+in `run.sh`:
+they are Android 14 SystemUI's dump wording (above, "What it does", step 4).
 
 The image's WebView is the one it was built with, and it never updates,
 as the image has no Play Store:
@@ -319,10 +459,11 @@ Its result counts with Android app's in the Tested record's `app=`.
 
 | File | What |
 |---|---|
-| `run.sh` | the run, as above |
+| `run.sh` | the run, as above; its work directory from `../workdir/workdir.sh`, which it sources, the UI suite's helper too (`tools/workdir/README.md`) |
 | `servers.sh` | the two servers, sourced by `run.sh` |
+| `slots.sh` | the checkout's lock, the slot and its ports, and the holder of both locks, sourced by `run.sh` |
 | `fingers.sh` | the helper that answers each touch a test asks for |
 | `sdk.sh` | `check` and `fetch` of the pinned emulator and image |
 | `pins.sh` | the pins |
 | `tally/` | the command that says what a Gradle run ran, against the tests the sources declare, with its Go tests |
-| `scripts_test.go`, `doc.go` | the Go tests of the helper, of `sdk.sh` and of the pins, a part of `go test ./...` |
+| `scripts_test.go`, `doc.go` | the Go tests of the helper, of the slots, of `sdk.sh` and of the pins, a part of `go test ./...` |

@@ -126,6 +126,8 @@ never one in use, so that another checkout's run keeps its own.
 `KEEP=1` keeps the run's work directory, passed or failed,
 with a file `kept` in it from the start, which the later runs leave alone,
 and prints its path; it is then removed by hand (AP CleanRuns, D4-A).
+`tools/workdir/workdir.sh`, which the emulator suite shares,
+makes, sweeps and keeps it (`tools/workdir/README.md`; AP EmulatorRuns, D3-B).
 
 ## The fixtures
 

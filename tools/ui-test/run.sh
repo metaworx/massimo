@@ -79,7 +79,8 @@
 # gone and that are older than a day, and never one in use, another
 # user's or one that KEEP=1 kept: KEEP=1 keeps the run's, with a file
 # kept in it from the start, and prints its path (AP CleanRuns, D3-A,
-# D4-A).
+# D4-A). The helper the emulator suite shares, tools/workdir/workdir.sh,
+# makes, sweeps and keeps it (AP EmulatorRuns, D3-B).
 #
 # Environment: UI_TEST_PYTHON (default tools/ui-test/.venv/bin/python
 # when present, else python3), UI_TEST_REQUIRED, UI_TEST_WORKERS (4),
@@ -99,6 +100,8 @@ case "$mode" in
 esac
 here=$(cd "$(dirname "$0")" && pwd)
 root=$(cd "$here/../.." && pwd)
+# shellcheck source=../workdir/workdir.sh
+. "$here/../workdir/workdir.sh"
 py=${UI_TEST_PYTHON:-}
 if [ -z "$py" ]; then
 	if [ -x "$here/.venv/bin/python" ]; then py="$here/.venv/bin/python"; else py=python3; fi
@@ -133,33 +136,16 @@ discovery_port=${UI_TEST_DISCOVERY_PORT:-23919}
 down_port=${UI_TEST_DOWN_PORT:-$((api_port + 1))}
 token=ui-test-token
 
-# The work directories of earlier runs that are gone, older than a day
-# (-mmin, since BSD's find rounds -mtime's days up), not kept and this
-# user's; a directory without its PID is one whose run was killed as it
-# began. A directory that cannot be removed stays, and the run goes on.
-tmp=${TMPDIR:-/tmp}
-for d in "$tmp"/massimo-ui-test.*; do
-	if [ ! -d "$d" ] || [ ! -O "$d" ] || [ -e "$d/kept" ]; then continue; fi
-	p=$(cat "$d/pid" 2>/dev/null) || p=""
-	if [ -n "$p" ] && kill -0 "$p" 2>/dev/null; then continue; fi
-	[ -n "$(find "$d" -maxdepth 0 -mmin +1440 2>/dev/null)" ] || continue
-	rm -rf "$d" 2>/dev/null || :
-done
 if [ "$mode" = smoke ]; then rm -rf "$here/results"; fi
-work=$(mktemp -d "$tmp/massimo-ui-test.XXXXXX")
-echo $$ >"$work/pid"
-# kept from the start, so that a run killed before its cleanup keeps it
-if [ "${KEEP:-}" = 1 ]; then : >"$work/kept"; fi
+# the earlier runs' that are gone swept first, the run's PID in it and,
+# under KEEP=1, kept from the start (workdir.sh)
+work=$(workdir_make massimo-ui-test)
 pids=""
 # The trap below runs cleanup, which shellcheck takes for unreachable.
 # shellcheck disable=SC2317
 cleanup() {
 	for p in $pids; do kill "$p" 2>/dev/null || true; done
-	if [ "${KEEP:-}" = 1 ]; then
-		echo "ui-test: KEEP=1, the work directory is kept: $work" >&2
-	else
-		rm -rf "$work"
-	fi
+	workdir_done "$work" ui-test
 }
 trap cleanup EXIT INT TERM
 
