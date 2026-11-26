@@ -1,10 +1,10 @@
 # SPDX-License-Identifier: AGPL-3.0-or-later
 # Copyright (C) 2026 The Massimo Authors
 """Maintenance, the Cube intervals (AP CubePoll v1.0,
-Block 2), as the owner: the test server runs without -poll and -refresh,
-so those two can be chosen, and with -discover-interval 0, so the search
-is read-only and names the flag. A choice is stored and waits for the
-next restart, counted in the card's head; the default is stored as none.
+Block 2), as the owner: the test server runs without -refresh, so the
+refresh can be chosen, and with -discover-interval 0, so the search is
+read-only and names the flag. A choice is stored and waits for the next
+restart, counted in the card's head; the default is stored as none.
 Each case puts the settings back."""
 from conftest import api_call
 from helpers import named_buttons, scroll_width, show_view, wait_until
@@ -18,37 +18,38 @@ def badges(page):
     return page.locator("#sys-maint .section-badges").inner_text()
 
 
-def test_poll_interval_choice(page, case):
-    """10 s at first, the line saying what a poll does and this run's
-    value; 30 s is stored, waits for the restart and is counted; 10 s
+def test_refresh_interval_choice(page, case):
+    """6 h at first, the line saying what a refresh does and this run's
+    value; 1 h is stored, waits for the restart and is counted; 6 h
     again clears the store's value."""
-    api_call("PUT", "api/v1/settings", {"poll_interval": None})
+    api_call("PUT", "api/v1/settings", {"refresh_interval": None})
     try:
         show_view(page, "maint")
-        sel = page.locator("#interval-poll")
-        assert wait_until(page, "document.querySelector('#interval-poll-text').textContent.length > 0", 5), "the line is filled"
-        assert sel.is_enabled() and sel.input_value() == "10", "10 s, and the choice open"
-        before, head = page.locator("#interval-poll-text").inner_text(), badges(page)
-        assert before.startswith(page.evaluate("t('maint.pollHint')")), "the line says what a poll does"
+        sel = page.locator("#interval-refresh")
+        assert wait_until(page, "document.querySelector('#interval-refresh-text').textContent.length > 0", 5), "the line is filled"
+        assert sel.is_enabled() and sel.input_value() == "21600", "6 h, and the choice open"
+        before, head = page.locator("#interval-refresh-text").inner_text(), badges(page)
+        assert before.startswith(page.evaluate("t('maint.refreshHint')")), "the line says what a refresh does"
         assert not before.endswith(".."), "one full stop after a unit that has one"
-        sel.select_option("30")
-        assert wait_until(page, "!document.querySelector('#interval-poll-msg').classList.contains('hidden')", 5), "the change says how it went"
-        assert "ok" in (page.locator("#interval-poll-msg").get_attribute("class") or ""), "saved"
-        stored = setting("poll_interval")
-        assert stored.get("value") == "30s" and stored.get("set") is True, "30 s stored"
-        assert stored.get("in_effect") == "10s", "in effect only at the next start"
-        assert page.locator("#interval-poll-text").inner_text() != before, "the line says the change waits for the restart"
+        sel.select_option("3600")
+        assert wait_until(page, "!document.querySelector('#interval-refresh-msg').classList.contains('hidden')", 5), \
+            "the change says how it went"
+        assert "ok" in (page.locator("#interval-refresh-msg").get_attribute("class") or ""), "saved"
+        stored = setting("refresh_interval")
+        assert stored.get("value") == "1h" and stored.get("set") is True, "1 h stored"
+        assert stored.get("in_effect") == "6h", "in effect only at the next start"
+        assert page.locator("#interval-refresh-text").inner_text() != before, "the line says the change waits for the restart"
         assert wait_until(page, "document.querySelector('#sys-maint .section-badges').textContent.length > 0", 5), "counted in the card's head"
         assert wait_until(page, "document.querySelector('#sys-maint .section-badges').innerText !== %r" % head, 5), "the head counts one more"
-        sel.select_option("10")
+        sel.select_option("21600")
         # the line drawn from the PUT's answer: the save has answered
-        assert wait_until(page, "document.querySelector('#interval-poll-text').textContent === %r" % before, 5), "the line as at first"
-        assert setting("poll_interval").get("set") is False, "the default stored as none"
+        assert wait_until(page, "document.querySelector('#interval-refresh-text').textContent === %r" % before, 5), "the line as at first"
+        assert setting("refresh_interval").get("set") is False, "the default stored as none"
         assert wait_until(page, "document.querySelector('#sys-maint .section-badges').innerText === %r" % head, 5), "the head as at first"
         named_buttons(page, "Maintenance")
         assert scroll_width(page) <= case.width, "no horizontal scroll on Maintenance"
     finally:
-        api_call("PUT", "api/v1/settings", {"poll_interval": None})
+        api_call("PUT", "api/v1/settings", {"refresh_interval": None})
         show_view(page, "tiles")
 
 
