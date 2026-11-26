@@ -8,7 +8,9 @@
  * text that copies itself on a click, Enter or Space, a copy icon, and
  * something with its copy icon beside it; each named by what it copies, for a screen reader
  * and as its tooltip. The page's copyText and copied do the copying and
- * say that it was done.
+ * say that it was done. A text that copies itself may be quiet: its words
+ * hidden from a screen reader, its name alone saying what it copies (a
+ * suggested password, AP AccessEnds, D52-A).
  */
 
 import type { ComponentChildren, TargetedKeyboardEvent } from "preact";
@@ -51,19 +53,33 @@ export function CopyPair({ get, label, children }: { get: () => string; label: s
 }
 
 /**
+ * A Copy's properties: quiet only with a name, so that a text hidden from
+ * a screen reader is never named after itself, which would tell it.
+ */
+type CopyProps = { id?: string; text: string; value?: string; label?: string; icon?: boolean; cls?: string } & (
+  | { quiet?: false; name?: string }
+  | { quiet: true; name: string }
+);
+
+/**
  * Copy is a text that copies itself, a monospaced span by default (cls),
  * and with icon a copy icon after it; value, where given, is what it
  * copies in place of the text shown; label names what it copies, the
  * text itself without one, as "Copy …"; name, where given, is its whole
  * name in place of that (the server's version, which copies more than it
- * shows); id is its element's, where the page names it.
+ * shows); id is its element's, where the page names it. quiet hides the
+ * text shown from a screen reader, inside the element, so that no live
+ * region the text appears in speaks it and only the name is told: given
+ * only with a name, which says what it copies without the text (a
+ * suggested password, "Copy the password"), since the name made of the
+ * text would tell it (CopyProps).
  */
-export function Copy({ id, text, value, label, name, icon, cls }: { id?: string; text: string; value?: string; label?: string; name?: string; icon?: boolean; cls?: string }) {
+export function Copy({ id, text, value, label, name, icon, quiet, cls }: CopyProps) {
   const named = name || t("copy.what", { what: label || text });
   const get = () => (value === undefined ? text : value);
   const span = (
     <span id={id} class={(cls || "mono") + " copyable"} role="button" tabIndex={0} aria-label={named} title={named} {...copyHandlers(get)}>
-      {text}
+      {quiet ? <span aria-hidden="true">{text}</span> : text}
     </span>
   );
   if (!icon) return span;
