@@ -32,6 +32,8 @@ var serialTests = map[string]string{
 	"TestServePlainCubeServedAlready":         "loads a settings file into the environment",
 	"TestServePlainCubeWithoutProxyBeside":    "sets Cube variables",
 	"TestServePlainCubeNotReachedThenAdded":   "loads a settings file into the environment",
+	"TestServePlainNameOfAStoredCube":         "sets Cube variables",
+	"TestServePlainNameOfSeveralCubes":        "sets Cube variables",
 	"TestServePlainProxyAlone":                "sets Cube variables",
 	"TestServePlainSeedCutShort":              "loads a settings file into the environment",
 	"TestServeRemovedCubeStaysRemoved":        "sets Cube variables",

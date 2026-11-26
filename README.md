@@ -1296,8 +1296,12 @@ A Cube added in the web UI beside it is another Cube,
 with a proxy only on an address of its own.
 Where that is the plain Cube itself, `serve` serves it once:
 a plain address equal to its address, the Cube's port where one gives none,
+or a host name and an IP of it, either way round, at that port,
 ties the plain lines to it at the start,
 and so does the serial the plain Cube reports.
+The start looks the names up for 2 s at most, and only until the tie is saved;
+a name with the IPs of several Cubes ties none, and the log names them.
+`massimo config` shows the same tie.
 The plain lines are then that Cube's, compared with its row, whose values win,
 as for its other lines in the file:
 a plain `MASSIMO_CUBE_PROXY` that differs from the row, an empty one included,

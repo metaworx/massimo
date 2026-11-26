@@ -28,7 +28,7 @@ var serialTests = map[string]string{
 	"TestConfigKnowsANameInAnyCase":         "unsets MASSIMO_LISTEN and MASSIMO_CUBE_KEY (unsetForTest), sets them in lower case",
 	"TestConfigPrintsTLS":                   "sets the TLS variables",
 	"TestConfigRedactsASecretInAnyCase":     "unsets MASSIMO_API_TOKEN (unsetForTest), sets MASSIMO_API_Token and a password",
-	"TestConfigTiesThePlainLines":           "clears the Cube variables, sets MASSIMO_DATA and the plain Cube's variables",
+	"TestConfigTiesThePlainLines":           "clears the Cube variables, sets MASSIMO_DATA and the plain Cube's variables, swaps plainLookup",
 	"TestConfigViewHidesSecrets":            "sets MASSIMO_API_TOKEN, a Cube's key and MASSIMO_LISTEN",
 	"TestDataDir":                           "sets MASSIMO_DATA",
 	"TestNoEnv":                             "sets MASSIMO_ENV_FILE, as -no-env does",
