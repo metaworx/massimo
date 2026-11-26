@@ -142,6 +142,18 @@ if restarted; then fail "started on an older template: $(cat /tmp/calls)"; fi
 printf '\357\273\277' | cat - /tmp/env >/etc/massimo/env
 reinstall inactive
 if restarted; then fail "started on a template with a byte order mark: $(cat /tmp/calls)"; fi
+# A UTF-16 settings file, as PowerShell's > writes it, in a UTF-8 locale
+# as apt often runs: no "binary file matches" in apt's output, and
+# started, its mark a setting, for serve to refuse UTF-16 itself.
+{ printf '\377\376'; iconv -f UTF-8 -t UTF-16LE /tmp/env; } >/etc/massimo/env
+LC_ALL=C.UTF-8 reinstall inactive
+if grep -q 'binary file matches' /tmp/out; then fail "a UTF-16 settings file: $(cat /tmp/out)"; fi
+restarted || fail "a UTF-16 settings file was not started: $(cat /tmp/calls)"
+# Without the mark it compares by its lines: the template's, not started.
+iconv -f UTF-8 -t UTF-16LE /tmp/env >/etc/massimo/env
+LC_ALL=C.UTF-8 reinstall inactive
+if grep -q 'binary file matches' /tmp/out; then fail "a UTF-16 template without a mark: $(cat /tmp/out)"; fi
+if restarted; then fail "started on a UTF-16 template without a mark: $(cat /tmp/calls)"; fi
 # A setting of its own: started.
 cp /tmp/env /etc/massimo/env
 echo 'MASSIMO_ANNOUNCE=off' >>/etc/massimo/env
