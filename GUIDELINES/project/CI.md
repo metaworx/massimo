@@ -1,4 +1,4 @@
-# Massimo — CI Conventions (v1.74.0)
+# Massimo — CI Conventions (v1.75.0)
 
 What CI does in this project, for whoever has to change it.
 `/AGENTS.md` names this file as the canonical owner of CI conventions,
@@ -26,7 +26,7 @@ this document is the source of truth for *why*.
 
 | Platform | Files |
 |----------|-------|
-| GitHub Actions | `.github/workflows/ci.yml` (a push to `main` or of a version tag, a pull request), `.github/workflows/build.yml` (the release's build, called by ci.yml beside its tests and by nightly.yml), `.github/workflows/release.yml` (signing and publishing, called by ci.yml once its tests have passed and the build is done, and by nightly.yml), `.github/workflows/nightly.yml` (the nightly build, daily at 02:30 UTC and by hand on `main`), `.github/workflows/platforms.yml` (the Windows service and macOS LaunchDaemon jobs, called by ci.yml beside its tests and by nightly.yml before its build), `.github/workflows/retry.yml` (a macOS or Windows job no runner took, run again in a tag's run of ci.yml and in a nightly run, once that run has ended), `.github/workflows/publish.yml` (called by release.yml, or run by hand for a tag), `.github/workflows/caches.yml` (CodeQL's overlay databases of older commits deleted from the Actions caches, every hour) |
+| GitHub Actions | `.github/workflows/ci.yml` (a push to `main`, to a maintenance branch `maint/<x.y>` or of a version tag, a pull request), `.github/workflows/build.yml` (the release's build, called by ci.yml beside its tests and by nightly.yml), `.github/workflows/release.yml` (signing and publishing, called by ci.yml once its tests have passed and the build is done, and by nightly.yml), `.github/workflows/nightly.yml` (the nightly build, daily at 02:30 UTC and by hand on `main`), `.github/workflows/platforms.yml` (the Windows service and macOS LaunchDaemon jobs, called by ci.yml beside its tests and by nightly.yml before its build), `.github/workflows/retry.yml` (a macOS or Windows job no runner took, run again in a tag's run of ci.yml and in a nightly run, once that run has ended), `.github/workflows/publish.yml` (called by release.yml, or run by hand for a tag), `.github/workflows/caches.yml` (CodeQL's overlay databases of older commits deleted from the Actions caches, every hour) |
 
 There is no other platform.
 
@@ -38,12 +38,12 @@ the table and the paragraphs below give each step's reasons.
 ```mermaid
 flowchart TD
     start{{"What started the run"}}
-    start -->|"a pull request, a push to main, a version tag: ci.yml"| relcommit
+    start -->|"a pull request, a push to main or maint/x.y,<br/>a version tag: ci.yml"| relcommit
     start -->|"02:30 UTC or by hand: nightly.yml"| pick
     start -->|"a push to a release branch"| idle["Nothing runs"]
 
     subgraph gate ["ci.yml, What to test: the answers every job reads"]
-        relcommit{"A push to main of<br/>a release commit?"}
+        relcommit{"A push to main or maint/x.y<br/>of a release commit?"}
         same{"The same code as before?<br/>fingerprint.sh same"}
         siteonly{"The site's documents<br/>and untested ones alone?"}
         known{"On a push: is this code's<br/>verdict known?<br/>code-result.sh"}
@@ -69,7 +69,7 @@ flowchart TD
     retest --> atp
     full --> atp
     atp -->|"green, a push to main, site=true"| deploy["Deploy site"]
-    codetrue -->|"a push: Build beside the tests"| kind
+    codetrue -->|"a push to main or of a tag:<br/>Build beside the tests"| kind
 
     subgraph night ["nightly.yml, What to ship, then Platforms"]
         pick{"A commit of main newer than<br/>release/nightly whose suite passed?"}
@@ -121,7 +121,8 @@ flowchart TD
 | push to `main`, pull request (each push to its branch) | Vet and test (gofmt, go vet per platform, go test with `-count=1`, its skipped tests and its slowest tests and packages named in the summary, the three tests that need root once more as root, the store's benchmarks once each with `-short`, `make cross-check`, every platform built and none kept); actionlint (`make actionlint`: the workflows by actionlint, their `run:` scripts by the runner's shellcheck); UI types (`make ui-check`: `tsc --noEmit` over the web UI's parts, `internal/server/ui/src/`, then Biome's two hooks rules over them); Race (`make race`, the race detector on `internal/server`, `internal/store`, `internal/cubelan`, `internal/proxy`, `internal/serve`, `internal/announce`, `internal/notify`, `internal/engine`, `internal/cubeio` and `internal/certs`, `-count=1` and `-timeout 30m`, `checkptr` off for the packages under `modernc.org` alone, its skipped and its slowest tests named in the summary); Test (armv6, QEMU) (`make test-armv6`, every package's tests with `-short`, `-count=1` and `-timeout 30m` on 32-bit ARM, run by Ubuntu's `qemu-user` as the Raspberry Pi 1's core, its skipped and its slowest tests named in the summary); Fuzz on a push to `main` only (`make fuzz`, every fuzz target for 10 s, a crash's input kept as the artifact `fuzz-crash`, Go 1.26's own deadline passed with a warning); govulncheck for linux and windows; Debian package (`make packages`, then the amd64 one installed, checked and purged in a trixie and a bookworm container, then under systemd, each case in a container of its own (`make deb-systemd-test`: the first start, the restart, the upgrade from v0.12.0-alpha.1 with the service running), and installed again from an apt repository built with a throwaway key; the packages uploaded as the artifact `packages`); Platforms (platforms.yml, which nightly.yml calls too, its jobs "Platforms / Windows service" and "Platforms / macOS LaunchDaemon"): Windows service (the unit tests of the update, the installer, the command line, the start's guard among them, discovery, `internal/safefile` and the settings file's parser, `internal/env`; install, run, update from the API and by hand, roll back, remove, on a Windows runner; then a second `serve` announcing itself beside Windows' own mDNS, found by `massimo discover`; on a pull request only when it changes the job's own paths or the announcement's, as the job What to test answers, and not on the merge of a pull request that found it not needed); macOS LaunchDaemon (the unit tests of the update, the installer, the command line and `internal/safefile`; first `install` on the template's settings, `packaging/launchd/template-test.sh`: the message and its owner line run as printed, a loaded job restarted, a booted-out one left stopped, the web UI's way, the purge; then the same as Windows on a macOS runner, with a self-signed certificate: the service installed with `-tls self-signed`, the health check and the API over `https://`; then the Homebrew formula rendered for a tarball of the checkout, built from source, tested and checked for the marker; then a second `serve` beside Apple's mDNSResponder, found and resolved by `dns-sd`; on a pull request as the Windows job, with its own paths); UI test (the web UI's pytest suite, a job per case, "UI test (1100-en)", "UI test (1100-de)", "UI test (390-en)" and "UI test (390-de)", each its case in four workers, its log naming the 20 slowest phases of the tests; on failure the failed tests' screenshots, and the screenshots, videos and traces of their run once more, as `ui-test-results-<case>`; and "UI test (screenshots)", the screenshot set in a job of its own, uploaded as the artifact `ui-screenshots`, the PNGs only; on a pull request only when it changes the UI, its bundler (`tools/uibundle`), the vendored Preact, the server's own Go files but for its tests, the OpenAPI file, its suite or `ci.yml`, as the job What to test answers); LAN against avahi (`make lan-test`: a second `serve`'s searches finding a fake Cube, losing it with its cable pulled and finding it again, then from a box's proxy too; `serve` beside avahi-daemon, `avahi-browse` and `massimo discover` on a client; a third `serve` following the Cube by its serial to another address after the loss; in Docker; on a pull request only when it changes the announcement, discovery, the shared port, the server's own files, the proxy, the Go module, the LAN test or `ci.yml`, as the job What to test answers, and not on the merge of a pull request that found it not needed); Android app (`app/version.json` against its tag, the debug build with its unit tests and lint, the release APK built at two paths and compared byte for byte, then the AAB and the nightly APK signed with a key made for the run; on a pull request only when it changes `app/`, the web UI's files the app bundles, `packaging/app-*.sh`, `tools/app-emulator/`, `ci.yml`, `build.yml` or `release.yml`, as the job What to test answers, and not on the merge of a pull request that found it not needed); Android emulator (`make app-emulator-test`: the app's instrumented tests on an emulator of the pinned image, KVM given to the runner's user, against two servers on the runner with the fake Cube, the fingerprint simulated, in a step with a time limit of its own, strict: a test skipped or fewer run than the sources declare fail it; its results, the emulator's log, the device's, the servers', the screens of failed tests and Gradle's report and JUnit results, as the artifact `app-emulator-results`, on a failure or a cancellation, and kept seven days on a pass; where Android app runs, its result counted with Android app's under the Tested record's `app=`); Guidelines (section 4); Site (`packaging/site/build.sh --no-apt`: the site's pages and the docs of the commit, every link checked, a document under `docs/` missing from `docs/fragments/_documents.md` failing it; never deployed; also for a change to the site's documents alone); Code result, for a change to documents alone only (`packaging/code-result.sh`: the verdict of the last run that tested the code, below) |
 | beside the jobs above, on a push | Build (build.yml): What to release decides what the run releases, then every target built without cgo with the Debian packages, the build record, `SHA256SUMS` and the manifest, the provenance attested; for a version tag the Android app's APK and AAB, for the nightly build its nightly APK, unsigned, attested too; nothing signed (section 6) |
 | after every job above | All tests passed: fails unless none of them failed or was cancelled, but for a macOS or Windows job no runner took on a pull request or a push to `main`, which counts as not run, and names each with its result in its summary, an annotation for each that did not pass, and on a pull request in one comment; a job that passed only on a re-run counts, and is named in a line of the summary, a warning, that comment and, on a pull request, a comment of its own; then, on a push, once Build is done, Release (release.yml): a push to `main` becomes the `devel` build, the GitHub release `release/devel` replaced in place, signed with the rolling key (section 6); then, at every run of release.yml, Site (site.yml): the site built with the newest release's signed apt index and the docs of every channel, and deployed to GitHub Pages; nothing where no release carries the index yet; for a push to `main` of the site's documents alone, which has no Build and so no Release, Deploy site (site.yml) instead |
-| push to a release branch (`release/alpha`, later `release/beta` and `release/stable`) | nothing: ci.yml listens to `main` and the tags; the release moved the branch to a commit ci.yml had tested |
+| push to a maintenance branch `maint/<x.y>` (`make freeze`, section 6) | every job of the first row, as for a push to `main`, Fuzz included, and a release commit's push runs What to test alone, as on `main`; All tests passed writes the Tested record, but a macOS or Windows job no runner took fails it, as on a tag, since no nightly build follows the branch; no Build and no Release: the `devel` and nightly builds and the site stay `main`'s, and release.yml's Site, which runs for a release of nothing too, would deploy the site from the branch |
+| push to a release branch (`release/alpha`, later `release/beta` and `release/stable`) | nothing: ci.yml listens to `main`, the maintenance branches and the tags; the release moved the branch to a commit ci.yml had tested |
 | a version tag | every job above, as for a push to `main`, Build included, a macOS or Windows job no runner took failing it, which Retry runs again; then release.yml: sign the manifest and `SHA256SUMS` with the release key, verify the signatures against the public key compiled into `massimo`, publish the GitHub release; with the app's keys set, sign the Android app, add it to the release and its lines to `SHA256SUMS`, sign that again and attest the signed files (section 6); then, with the deploy key set, the Homebrew formula of the release's channel rendered and pushed to the tap (publish.yml, section 6), and, with the apt key set, the apt repository rebuilt from the releases and deployed to GitHub Pages |
 | daily at 02:30 UTC, or by hand (`gh workflow run nightly.yml --ref main`) | nightly.yml: What to ship (`packaging/nightly-pick.sh`) picks the newest commit of `main` whose suite passed and that is newer than the one the nightly build carries, and Platforms runs the macOS or Windows job first, on `main`'s head, where the Tested records say the job did not run for its code, the night skipped where that commit is not `main`'s head; once Platforms passed or was not needed (Platforms passed), build.yml, then release.yml: the nightly build, `release/nightly`; nothing where there is no such commit, and nothing, the site included, where Platforms did not pass (section 6). By hand, `dry_run` ships nothing and `platforms` runs both jobs on `main`'s head |
 | a tag's run of ci.yml or a nightly run that ended failed | retry.yml: where a macOS or Windows job no runner took is all that failed, the run's failed jobs and those after them run again, about 20 minutes later, at most twice (`packaging/ci-retry.sh`; below) |
@@ -160,12 +161,12 @@ so the test jobs, All tests passed and Release
 (`!cancelled() && … && needs.tests.result == 'success'`) name one;
 without it the first `devel` build, on 2026-11-10, was skipped.
 Every test job waits for What to test, the gate that opens ci.yml:
-on a push to `main` of a release commit,
+on a push to `main` or to a maintenance branch of a release commit,
 whose summary opens with `chore(release): `,
 it answers `suite=false`,
 and every job is skipped, All tests passed and Release too.
-`make release <flavour>` pushes `main` and the tag atomically,
-and `main` must equal `origin/main` before,
+`make release <flavour>` pushes `main`, or the maintenance branch it runs on,
+and the tag atomically, and the branch must equal its `origin` copy before,
 so the tag's run tests that very commit;
 running the suite on `main` as well tested it twice
 and made a `devel` build under the release's own version (owner, 2026-11-10,
@@ -183,7 +184,7 @@ declared as `[ci] untested` in `GUIDELINES/config.ini` and rendered into the con
 or config.ini itself.
 What to test asks it whether the code is the same:
 `fingerprint.sh same` of a pull request's base and its merge commit,
-or of the commit `main` was at (`github.event.before`) and the one pushed;
+or of the commit the branch was at (`github.event.before`) and the one pushed;
 a tag is always tested whole,
 and the tool's exit 2, an unknown commit included, counts as code.
 A release commit is recognised by its role,
@@ -194,7 +195,8 @@ A green run is carried to later commits with the same code (owner, 2026-11-11,
 AP TestedTree).
 All tests passed, once it has, writes a commit status, context `Tested`,
 on the commit the run tested:
-a pull request's head, or the commit pushed to `main`.
+a pull request's head,
+or the commit pushed to `main` or to a maintenance branch.
 It holds `fingerprint.sh fingerprint` of the tree that ran,
 a pull request's merge commit in its run,
 and whether the UI tests, LAN, Fuzz, the Android app, macOS and Windows
@@ -1150,8 +1152,9 @@ Never echo any slice of a secret to the log.
 
 ## 6. Releases
 
-`make release <flavour>` on `main` (checked out, clean,
-equal to `origin/main`), the flavour `alpha`, `beta`, `rc` or `stable`,
+`make release <flavour>` on `main` or on a maintenance branch `maint/<x.y>` (checked out,
+clean, equal to its `origin` copy),
+the flavour `alpha`, `beta`, `rc` or `stable`,
 cuts `CHANGELOG.md`'s `[Unreleased]` into the section of the next tag,
 which `packaging/next-version.sh` names: `vX.Y.Z-<flavour>.N`,
 or `vX.Y.Z` for stable, `BUMP=minor` for a feature
@@ -1159,12 +1162,12 @@ and `BUMP=patch` for a fix of a stable release.
 First `tools/store-fixture/make.sh` dumps the store the release writes,
 built from `HEAD` under the coming tag's name and flavour,
 into `internal/store/testdata/releases/<tag>.sql`,
-committed on `main` as `test(store): The store <tag> writes` (docs/store.md,
+committed on the branch as `test(store): The store <tag> writes` (docs/store.md,
 "Migrations");
 then `changelog.sh cut --commit --tag create` makes the `chore(release):` commit on it,
 and the signed tag at it with the section as its message,
 so that the tag holds its own dump, which `sign` checks before it signs.
-`main` and the tag are pushed atomically;
+The branch and the tag are pushed atomically;
 the tag's push runs ci.yml, whose last job calls release.yml.
 Once the release is published, `sign` pushes the tag's commit to
 `release/<flavour>` (`release/alpha`) with the deploy key
@@ -1179,12 +1182,40 @@ A tag of the same name is refused, since `release/devel` and
 So a released section and its tag agree from the start, which is what
 `changelog.sh check` holds them to in the guidelines job.
 `DRY=1` runs every step as a dry run.
+
+At the feature freeze of a line `x.y`, `make freeze <x.y>` (AP MaintBranch,
+D2-A) cuts the maintenance branch `maint/<x.y>` at `origin/main` and pushes it,
+and refuses where it exists already, where the name is not two numbers,
+and where a version tag of a later line is out;
+it prints where `main`'s next store migration starts,
+the next multiple of 100 (docs/store.md, "Migrations"),
+and `DRY=1` prints the push instead.
+Completions and fixes for `x.y` then go to `maint/<x.y>`,
+and every `x.y` release is cut there:
+`make release` counts the version tags of `x.y` and the lines before it alone,
+and refuses a next tag of another line
+(`BUMP=minor` starts a line that has no tag yet);
+on `main` it refuses a version whose line has a maintenance branch.
+The session that merged into `maint/<x.y>`, or cut a release there,
+merges it upward into `main` with a `merge:` commit straight away (D1-A).
+A push to `maint/<x.y>` runs the suite as a push to `main` does (section 2),
+but builds and releases nothing:
+the `devel` and nightly builds and the site stay `main`'s.
+A tag on `maint/<x.y>` descends from the last release before the freeze,
+which `main` held then, so `release/<flavour>` fast-forwards to it;
+a release of an older line after a newer one of the same flavour could not,
+so an old maintenance branch releases nothing after the next freeze (D3-A).
+The `signing` environment admits any version tag, so it needs no change;
+the ruleset for `maint/*` (the required checks, no force push, no deletion)
+is the owner's.
+
 The flavour of a release (`internal/update`) is the pre-release identifier
 of the tag's name (`v0.7.0-alpha.1` is `alpha`), `stable` for a tag without one;
 a box on a channel takes its own flavour's releases and every more stable one's.
 The `channel:` line of a tag message and the branch holding the commit,
 which older tags fell back to, no longer count;
-a tag whose commit is not on `main` is refused.
+a tag whose commit is neither on `main` nor, for a tag of `x.y`,
+on `maint/<x.y>` is refused (build.yml's What to release fetches both).
 The GitHub release is created with the tag's commit as its target;
 a box reads the flavour from the tag's name to leave a release its channel
 does not take unfetched (`internal/update`, `hintedFlavour`);

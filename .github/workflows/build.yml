@@ -18,7 +18,8 @@ name: Build
 # builds and deploys. The flavour of a release
 # (internal/update) is the pre-release label of its tag (v0.7.0-alpha.1
 # is alpha), stable for a tag without one (v1.0.0). The commit must be on
-# main, where every release is cut (`make release-alpha`). `build` runs
+# main or, for a tag of X.Y, on the maintenance branch maint/X.Y, where
+# every release is cut (`make release alpha`). `build` runs
 # the toolchain and the third-party actions, builds every platform's
 # binaries and the Debian packages holding them, writes the build record
 # (massimo-build.txt, its log among it), which the signed manifest lists,
@@ -145,10 +146,30 @@ jobs:
               echo "::error::${tag} names no flavour: a release tag is vX.Y.Z or vX.Y.Z-<label>.N."
               exit 1
             fi
-            if ! git merge-base --is-ancestor "$sha" origin/main; then
-              echo "::error::${tag} (${sha}) is not on main, where every release is cut."
+            # main and the maintenance branches, maint/X.Y, where a frozen
+            # line's releases are cut (make freeze): a tag on main, or one
+            # of X.Y on maint/X.Y.
+            git fetch --quiet --force origin '+refs/heads/main:refs/remotes/origin/main' \
+              '+refs/heads/maint/*:refs/remotes/origin/maint/*'
+            on=""
+            if git merge-base --is-ancestor "$sha" origin/main; then
+              on=main
+            else
+              while read -r ref; do
+                line="${ref#refs/remotes/origin/maint/}"
+                case "$tag" in "v${line}."*) ;; *) continue ;; esac
+                if git merge-base --is-ancestor "$sha" "$ref"; then
+                  on="maint/${line}"
+                  break
+                fi
+              done < <(git for-each-ref --format='%(refname)' refs/remotes/origin/maint |
+                grep -E '^refs/remotes/origin/maint/(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$' || true)
+            fi
+            if [ -z "$on" ]; then
+              echo "::error::${tag} (${sha}) is neither on main nor on its line's maintenance branch, maint/X.Y, where every release is cut."
               exit 1
             fi
+            echo "${tag} is on ${on}."
             # 0.x is pre-release by definition, as is any -suffix.
             case "$tag" in v0.*|*-*) ;; *) prerelease=false ;; esac
             kind=release version="$tag"

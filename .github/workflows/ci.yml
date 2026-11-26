@@ -1,7 +1,8 @@
 name: CI
 
-# Once per commit: a push to main, or a pull request (each push to its
-# branch), never both; and a release tag. Formatting, vet, the tests, a
+# Once per commit: a push to main or to a maintenance branch maint/X.Y
+# (make freeze), or a pull request (each push to its branch), never both;
+# and a release tag. Formatting, vet, the tests, a
 # cross build of every release binary, actionlint on the workflows, the
 # types of the web UI's parts, govulncheck, the Debian package in a container, and the Windows
 # service and the macOS LaunchDaemon on their runners (platforms.yml). A pull
@@ -14,23 +15,27 @@ name: CI
 # platform's code or the announcement, and the Android app's jobs, its
 # build and its flows on an emulator, only when it changes the app, the
 # web UI's files it bundles, its scripts or the release's workflows; a
-# push to main or of a tag runs all of it, but for a push
-# to main of a release commit, which its tag's run tests (What to test).
-# A push builds the release beside the tests (build.yml), and once every
+# push to main, to a maintenance branch or of a tag runs all of it, but for
+# a push of a release commit to main or a maintenance branch, which its
+# tag's run tests (What to test).
+# A push to main or of a tag builds the release beside the tests
+# (build.yml), and once every
 # test job has passed ("All tests passed") calls release.yml, which signs
 # and publishes a tag as its release, and a push to main as the devel
-# build. The nightly build is nightly.yml's, and Retry (retry.yml) runs
+# build; a push to a maintenance branch builds and releases nothing, and
+# deploys no site: the devel and nightly builds and the site are main's. The nightly build is nightly.yml's, and Retry (retry.yml) runs
 # a macOS or Windows job no runner took again in a tag's run. A push to a release branch
 # (release/alpha) runs nothing: the release moved it to a commit this
 # workflow had tested.
 on:
   push:
-    branches: [ main ]
+    branches: [ main, 'maint/[0-9]+.[0-9]+' ]
     tags: [ 'v[0-9]+.[0-9]+.[0-9]+', 'v[0-9]+.[0-9]+.[0-9]+-*' ]
   pull_request:
 
 # A new push to a pull request cancels the run it supersedes; runs of
-# main are never cancelled, each commit of main keeps its own.
+# main and of a maintenance branch are never cancelled, each commit keeps
+# its own.
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
@@ -55,10 +60,10 @@ env:
 jobs:
   # What the run tests, the one job every test job waits for
   # (GUIDELINES/project/CI.md, section 2). suite is false for a push to
-  # main of a release commit (its role, by commit_title.py, is release):
-  # make release-alpha pushes main and the tag at once, and the tag's run
-  # tests the same commit, so main's run skips every job and makes no
-  # devel build. code is false where fingerprint.sh finds the same code as
+  # main or to a maintenance branch of a release commit (its role, by
+  # commit_title.py, is release): make release alpha pushes the branch and
+  # the tag at once, and the tag's run tests the same commit, so the
+  # branch's run skips every job and makes no devel build. code is false where fingerprint.sh finds the same code as
   # the base (a pull request's) or as the commit main was at (a push's):
   # documents alone, as config.ini's [ci] untested names them; every job
   # but Guidelines and Code result is skipped, and main makes no devel
@@ -175,7 +180,7 @@ jobs:
             base=HEAD^1
             prev="$(git rev-parse --verify --quiet "${HEAD_SHA}^1" || true)"
             ;;
-          push:refs/heads/main)
+          push:refs/heads/main | push:refs/heads/maint/*)
             # commit_title.py prints role|type|component|breaking|headline
             # for any summary config.ini allows, chore(release:x) included.
             role="$(python3 GUIDELINES/shared/tools/commit_title.py --root GUIDELINES parse "${MESSAGE%%$'\n'*}" 2>/dev/null | cut -d'|' -f1 || true)"
@@ -1161,14 +1166,15 @@ jobs:
 
   # The release's build (build.yml), beside the test jobs, so that its
   # files are ready when they have passed: for a push of main or of a
-  # tag, unless What to test answered suite=false. It holds no secret,
+  # tag, unless What to test answered suite=false; not for a push to a
+  # maintenance branch, whose releases are its tags. It holds no secret,
   # and nothing is signed until All tests passed; a build whose tests fail
   # is thrown away with the run. id-token and attestations: the build's
   # provenance.
   build:
     name: Build
     needs: changes
-    if: ${{ !cancelled() && github.event_name == 'push' && needs.changes.outputs.suite != 'false' && needs.changes.outputs.code != 'false' }}
+    if: ${{ !cancelled() && github.event_name == 'push' && !startsWith(github.ref, 'refs/heads/maint/') && needs.changes.outputs.suite != 'false' && needs.changes.outputs.code != 'false' }}
     permissions:
       contents: read
       id-token: write
@@ -1180,11 +1186,12 @@ jobs:
   # (packaging/nightly-pick.sh). It fails unless none of the jobs above
   # failed or was cancelled (a pull request skips some). It counts
   # What to test with the others, so that a gate that failed fails it,
-  # although every job ran; for a release commit pushed to main,
-  # which What to test leaves untested, it is skipped, and so is Release.
+  # although every job ran; for a release commit pushed to main or to a
+  # maintenance branch, which What to test leaves untested, it is skipped,
+  # and so is Release.
   # Once it has passed, it writes the Tested status (GUIDELINES/project/CI.md,
   # section 2) on the commit the run tested, a pull request's head or the
-  # commit pushed to main: the fingerprint of the code that ran and whether
+  # commit pushed to main or to a maintenance branch: the fingerprint of the code that ran and whether
   # the UI tests, LAN, Fuzz, the Android app, macOS and Windows passed for
   # it, in this run or the one it carries on, the Android app where its
   # build and its emulator both passed; LAN, the Android app, macOS
@@ -1194,7 +1201,8 @@ jobs:
   # not run (AP TestSpeed, D5-A, D16-A): it fails nothing, the record says
   # false for it, the merge's push runs it, and the nightly build runs it
   # before it ships the code; on a tag it fails, and Retry (retry.yml)
-  # runs it again. What to test reads the record to skip what passed. Not for a run
+  # runs it again; on a push to a maintenance branch, which no nightly
+  # build follows, it fails too. What to test reads the record to skip what passed. Not for a run
   # that tested documents alone, nor for a tag; a fork's pull request has
   # a read-only token, and the step's failure fails nothing.
   tests:
@@ -1279,7 +1287,7 @@ jobs:
       # The record's words from the needs, What to test's answers and
       # Platforms' outputs (packaging/tested-record.sh).
       - name: Write the Tested status
-        if: needs.changes.outputs.fp != '' && (github.event_name == 'pull_request' || github.ref == 'refs/heads/main')
+        if: needs.changes.outputs.fp != '' && (github.event_name == 'pull_request' || github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/heads/maint/'))
         continue-on-error: true
         timeout-minutes: 2
         env:
@@ -1298,7 +1306,9 @@ jobs:
   # and the build is done, with build.yml's answers as inputs and the
   # permissions its jobs need: contents to publish, pages and id-token to
   # deploy the site. A push of the site's documents alone has no build, so
-  # no Release: Deploy site deploys it.
+  # no Release: Deploy site deploys it. Nor has a push to a maintenance
+  # branch: release.yml's Site runs for a release of nothing too, and would
+  # deploy the site from it.
   # The condition names its status function: without one GitHub adds
   # success(), which is false while any job up the chain was skipped, as
   # Fuzz is on a pull request and Changed paths, now What to test, was on
@@ -1309,7 +1319,7 @@ jobs:
   release:
     name: Release
     needs: [ tests, build ]
-    if: ${{ !cancelled() && github.event_name == 'push' && needs.tests.result == 'success' && needs.build.result == 'success' }}
+    if: ${{ !cancelled() && github.event_name == 'push' && !startsWith(github.ref, 'refs/heads/maint/') && needs.tests.result == 'success' && needs.build.result == 'success' }}
     permissions:
       contents: write
       pages: write
