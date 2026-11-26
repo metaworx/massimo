@@ -141,6 +141,49 @@ the jobs Vet and test, Race and Test (armv6, QEMU)
 name their 20 slowest tests and their 10 slowest packages in the run's summary
 (`GUIDELINES/project/CI.md`, section 3).
 
+## A write on its way
+
+The fake Cube applies a radio command once it acknowledged it:
+at once, or `ApplyAfter` later, as a device takes it at its wakeup.
+A test that checks a write while it is on its way -
+pending, its tag, a 412 for a tag from before it -
+does not race that window:
+on a slow runner its read comes after the apply,
+or after the re-read that confirms it.
+It holds the fake's apply instead, for as long as it needs:
+
+```go
+release := fc.HoldApply() // the devices asleep: the write stays on its way
+t.Cleanup(release)
+// the write, and what the test checks while it is on its way
+release() // they wake and take it
+// the wait for the confirmation
+```
+
+- **While a hold lasts** the fake applies nothing:
+  each command that falls due meanwhile,
+  at its acknowledgement or `ApplyAfter` later,
+  is applied at the release, in the order they fell due,
+  before the release returns.
+- **Holds nest**, and only the last release applies;
+  a second call of one release does nothing,
+  so `t.Cleanup(release)` beside the test's own call is safe.
+- **A test that never releases** keeps the write on its way to its end,
+  as `TestRoomProgramTagOfTheMembers` does.
+- **`ApplyAfter` stays** for a test of the delay itself,
+  as `TestApplyDelayDiscardAndOff`.
+
+**The follow-up outlasts the release.**
+The server re-reads a written C line after each of its `FollowUpDelays`
+and judges the write not confirmed at the last re-read:
+a release after it leaves the write unconfirmed.
+`TestProgramTag` re-reads every 100 ms, 600 times.
+The follow-up ends at the first re-read that shows the write,
+so only a held write waits for more.
+A write the L entry confirms, such as a setpoint, needs no re-read,
+but its deadline (`confirmWithin`) counts from the answer,
+and takes the scale, as in `TestRoomCommandConfirmed`.
+
 ## The race detector
 
 `-race` turns on `checkptr` too, which checks, as the code runs,
