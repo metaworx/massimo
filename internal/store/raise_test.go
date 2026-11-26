@@ -274,13 +274,19 @@ func oldBackup(t *testing.T, s *Store, cubeID int64, reason, format string, at t
 // raiseVersion is 0024's number.
 const raiseVersion = 24
 
-// undoneFromNewest is what a downgrade to 23 undoes: every version from
-// the newest down to the raise, newest first, the additive ones after it
-// included (0025).
-func undoneFromNewest() []int {
+// undoneFromNewest is what a downgrade to 23 undoes: every migration
+// from the newest down to the raise, newest first, the additive ones
+// after it included (0025); by the migrations' numbers, which a new
+// block of 100 leaves with a gap.
+func undoneFromNewest(t *testing.T) []int {
+	t.Helper()
+	ms, err := loadMigrations(embeddedMigrations())
+	if err != nil {
+		t.Fatal(err)
+	}
 	var out []int
-	for v := SchemaVersion(); v >= raiseVersion; v-- {
-		out = append(out, v)
+	for i := len(ms) - 1; i >= 0 && ms[i].version >= raiseVersion; i-- {
+		out = append(out, ms[i].version)
 	}
 	return out
 }
@@ -305,12 +311,16 @@ func TestReleasedStoresDownAgain(t *testing.T) {
 		t.Run(strings.TrimSuffix(filepath.Base(dump), ".sql"), func(t *testing.T) {
 			below := t.TempDir()
 			_, release := loadDump(t, dump, Path(below))
-			// Where Downgrade stops for that release: before the first
-			// migration whose min_reader is above it.
+			// Where Downgrade stops for that release: at the migration
+			// before the first whose min_reader is above it, which a new
+			// block of 100 makes other than its version minus 1.
 			stop := ms[len(ms)-1].version
-			for _, m := range ms {
+			for i, m := range ms {
 				if m.minReader > release {
-					stop = m.version - 1
+					stop = 0
+					if i > 0 {
+						stop = ms[i-1].version
+					}
 					break
 				}
 			}
@@ -627,7 +637,7 @@ func TestRaiseDownLosses(t *testing.T) {
 	s.Close()
 
 	d, err := Downgrade(dir, 23, Options{Logger: quiet(), Now: clock})
-	if err != nil || d.To != 23 || !slices.Equal(d.Undone, undoneFromNewest()) {
+	if err != nil || d.To != 23 || !slices.Equal(d.Undone, undoneFromNewest(t)) {
 		t.Fatalf("downgrade %+v %v", d, err)
 	}
 	if got, want := fileSchema(t, rawDB(t, dir)), schemaAt(t, 23); fmt.Sprint(got) != fmt.Sprint(want) {

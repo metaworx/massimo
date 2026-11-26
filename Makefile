@@ -50,9 +50,11 @@ export SOURCE_DATE_EPOCH ?= $(shell git log -1 --format=%ct 2>/dev/null || date 
 # The container the package test runs in (make deb-test).
 DEB_IMAGE ?= debian:trixie-slim
 
-.PHONY: all ui ui-check api-types credits build test vet race test-armv6 fuzz store-bench ui-test ui-screenshots ui-brand lan-test app-emulator-test actionlint windows linux linux-arm64 linux-armv7 linux-armv6 darwin darwin-amd64 darwin-arm64 cross cross-check deb-unit packages debver version deb-test deb-systemd-test apt-test site build-release release release-files clean clean-tests distclean release-alpha release-beta release-rc release-stable
+.PHONY: all ui ui-check api-types credits build test vet race test-armv6 fuzz store-bench ui-test ui-screenshots ui-brand lan-test app-emulator-test actionlint windows linux linux-arm64 linux-armv7 linux-armv6 darwin darwin-amd64 darwin-arm64 cross cross-check deb-unit packages debver version deb-test deb-systemd-test apt-test site build-release release release-files clean clean-tests distclean release-alpha release-beta release-rc release-stable freeze
 
-# Development happens on main; a release is a tag on main, whose label is
+# Development happens on main; a release is a tag on main, or on the
+# maintenance branch maint/<x.y> of its line once that line is frozen
+# (make freeze, below), whose label is
 # the release's flavour (internal/update): -alpha.N is alpha, -beta.N beta,
 # -rc.N rc, and a tag without one stable. Versions: below v1.0.0, and with
 # any suffix, a release is a pre-release; below v1.0.0 a minor may break
@@ -65,16 +67,21 @@ DEB_IMAGE ?= debian:trixie-slim
 # FLAVOUR has the build's as its default; make release-alpha and its
 # siblings are names for it. The next tag is packaging/next-version.sh's:
 # the newest version any version tag has, or BUMP's next of it, with the
-# flavour's next number, or the version itself for stable. It runs on main,
-# checked out, clean and equal to origin/main. It fetches main and the
-# version tags alone: CI moves the rolling tags (release/devel,
+# flavour's next number, or the version itself for stable. It runs on main
+# or on a maintenance branch maint/<x.y>, checked out, clean and equal to
+# its origin copy. On maint/<x.y> the version tags of x.y and of the lines
+# before it alone count, and the next tag must be one of x.y (BUMP=minor
+# starts x.y where it has no tag yet); on main a version whose line has a
+# maintenance branch on origin is refused, as that line is released there.
+# The devel and nightly builds stay main's (release.yml). It fetches that
+# branch and the version tags alone: CI moves the rolling tags (release/devel,
 # release/nightly) in place, and fetch --tags refuses to move a checkout's
 # older copy of one ("would clobber existing tag"); a refspec allows one *
 # and no class, so the fetch takes refs/tags/v*, and every match after it
 # is strict. First tools/store-fixture/make.sh dumps the store the release
 # writes, built from HEAD under the coming tag's name and flavour (the
 # release commit changes only the changelog), into
-# internal/store/testdata/releases/<tag>.sql, committed on main as
+# internal/store/testdata/releases/<tag>.sql, committed on the branch as
 # "test(store): The store <tag> writes", so that the tag holds its own dump
 # and every later binary's TestMigratesReleasedStores migrates it; the
 # release CI refuses a tag without it (docs/store.md, "Migrations"). Then
@@ -84,15 +91,15 @@ DEB_IMAGE ?= debian:trixie-slim
 # hold stops the release before anything is written, and checked against
 # the tag before the push. Then changelog.sh cuts CHANGELOG.md's
 # [Unreleased] into the release's section, with the file as its manifest
-# (GUIDELINES/config.ini), makes the chore(release) commit on main and the signed
-# tag at it with that section as its message; main and the tag are then
-# pushed atomically, all or nothing, and CI tests the tag and releases it
-# (ci.yml calling release.yml), which then fast-forwards the branch
-# release/<flavour> to it. It refuses when main's head is released already,
-# when changelog.sh check finds something and when [Unreleased] holds no
-# bullet. DRY=1 runs every step as a dry run: the dump and its commit are
-# named, changelog.sh says what it would cut and tag, and the push is
-# printed, not made. ASSISTED_BY=agent:model gives the dump's commit and
+# (GUIDELINES/config.ini), makes the chore(release) commit on the branch and
+# the signed tag at it with that section as its message; the branch and the
+# tag are then pushed atomically, all or nothing, and CI tests the tag and
+# releases it (ci.yml calling release.yml), which then fast-forwards the
+# branch release/<flavour> to it. It refuses when the branch's head is
+# released already, when changelog.sh check finds something and when
+# [Unreleased] holds no bullet. DRY=1 runs every step as a dry run: the
+# dump and its commit are named, changelog.sh says what it would cut and
+# tag, and the push is printed, not made. ASSISTED_BY=agent:model gives the dump's commit and
 # the release commit an agent's Assisted-by
 # trailer (COMMIT.md 3.3); the owner's own release needs none.
 # make release was the build until 2026-11-12 (AP Channels, D42-A): with no
@@ -125,29 +132,44 @@ release:
 		"") echo "release: make release <alpha|beta|rc|stable> cuts a release; the build of a release is make build-release" >&2; exit 2 ;; \
 		*) echo "release: $$flavour is not a flavour a release is cut as: alpha, beta, rc or stable" >&2; exit 2 ;; \
 	esac; \
-	git fetch --quiet origin main 'refs/tags/v*:refs/tags/v*' || { \
-		echo "release: git fetch origin main 'refs/tags/v*:refs/tags/v*' failed; run it to see why" >&2; exit 1; }; \
-	sha=$$(git rev-parse origin/main) && \
-	if [ "$$(git symbolic-ref --quiet --short HEAD)" != main ]; then \
-		echo "release: check out main first; the release commit is made on it" >&2; exit 1; fi; \
+	branch=$$(git symbolic-ref --quiet --short HEAD) || branch=""; line=""; \
+	case "$$branch" in \
+		main) ;; \
+		maint/*) line=$${branch#maint/}; \
+			printf '%s\n' "$$line" | grep -Eqx '(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)' || { \
+				echo "release: $$branch is no maintenance branch, which is maint/<x.y>, two numbers" >&2; exit 1; } ;; \
+		*) echo "release: check out main or a maintenance branch maint/<x.y> first; the release commit is made on it" >&2; exit 1 ;; \
+	esac; \
+	git fetch --quiet origin "+refs/heads/$$branch:refs/remotes/origin/$$branch" 'refs/tags/v*:refs/tags/v*' || { \
+		echo "release: git fetch origin $$branch 'refs/tags/v*:refs/tags/v*' failed; run it to see why" >&2; exit 1; }; \
+	sha=$$(git rev-parse "refs/remotes/origin/$$branch") && \
 	if [ -n "$$(git status --porcelain --untracked-files=no)" ]; then \
-		echo "release: main has uncommitted changes" >&2; exit 1; fi; \
+		echo "release: $$branch has uncommitted changes" >&2; exit 1; fi; \
 	if [ "$$(git rev-parse HEAD)" != "$$sha" ]; then \
-		echo "release: main is not origin/main ($$sha); pull or push first" >&2; exit 1; fi; \
+		echo "release: $$branch is not origin/$$branch ($$sha); pull or push first" >&2; exit 1; fi; \
 	if done=$$(git describe --tags --exact-match --match 'v[0-9]*.[0-9]*.[0-9]*' $$sha 2>/dev/null); then \
-		echo "release: main ($$sha) is already released as $$done" >&2; exit 1; fi; \
-	next=$$(git tag -l | packaging/next-version.sh $$flavour $(BUMP)) || exit 1; \
+		echo "release: $$branch ($$sha) is already released as $$done" >&2; exit 1; fi; \
+	tags=$$(git tag -l); \
+	if [ -n "$$line" ]; then \
+		tags=$$(printf '%s\n' "$$tags" | awk -F. -v x="$${line%.*}" -v y="$${line#*.}" \
+			'/^v[0-9]+\.[0-9]+\.[0-9]+(-[a-z][a-z0-9]*\.[0-9]+)?$$/ { a = substr($$1, 2) + 0; if (a < x || (a == x && $$2 + 0 <= y)) print }'); fi; \
+	next=$$(printf '%s\n' "$$tags" | packaging/next-version.sh $$flavour $(BUMP)) || exit 1; \
+	nl=$$(printf '%s\n' "$$next" | sed -E 's/^v([0-9]+\.[0-9]+)\..*/\1/'); \
+	if [ -n "$$line" ] && [ "$$nl" != "$$line" ]; then \
+		echo "release: $$branch releases $$line alone, not $$next; BUMP=minor starts a line without a tag, the one after the newest" >&2; exit 1; fi; \
+	if [ -z "$$line" ] && git ls-remote --exit-code --heads origin "refs/heads/maint/$$nl" >/dev/null 2>&1; then \
+		echo "release: $$nl is frozen on maint/$$nl, where its releases are cut; main's next is BUMP=minor's" >&2; exit 1; fi; \
 	appcode=$$(packaging/app-version.sh release $$next 2) || { \
 		echo "release: the Android app's versionCode cannot hold $$next; nothing written" >&2; exit 1; }; \
 	cut="cut $${next#v} --commit --tag create$(if $(ASSISTED_BY), --assisted-by $(ASSISTED_BY))"; \
 	$(CHANGELOG_SH) -q check || { \
-		echo "release: changelog.sh check finds something; fix it on main first" >&2; exit 1; }; \
+		echo "release: changelog.sh check finds something; fix it on $$branch first" >&2; exit 1; }; \
 	dump=internal/store/testdata/releases/$$next.sql; \
 	if [ -n "$(DRY)" ]; then \
 		echo "release: would run: tools/store-fixture/make.sh --ref HEAD --flavour $$flavour $$next, and commit $$dump"; \
 		echo "release: would write app/version.json: version $${next#v}, versionCode $$appcode"; \
 		$(CHANGELOG_SH) $$cut || exit 1; \
-		echo "release: would run: git push --atomic origin main refs/tags/$$next"; \
+		echo "release: would run: git push --atomic origin refs/heads/$$branch refs/tags/$$next"; \
 		exit 0; fi; \
 	$(CHANGELOG_SH) -q $$cut || { \
 		echo "release: changelog.sh refuses to cut $$next; nothing written" >&2; exit 1; }; \
@@ -166,9 +188,10 @@ release:
 		echo "release: the dump's commit, the release commit or $$next is not where it should be; nothing pushed" >&2; exit 1; fi; \
 	packaging/app-version.sh check $$next || { \
 		echo "release: app/version.json is not $$next's; nothing pushed; to start over: git tag -d $$next; git reset --keep $$sha" >&2; exit 1; }; \
-	git push --atomic origin main refs/tags/$$next || { \
+	git push --atomic origin "refs/heads/$$branch" "refs/tags/$$next" || { \
 		echo "release: the push failed and published nothing; to start over: git tag -d $$next && git reset --keep $$sha" >&2; exit 1; }; \
-	echo "tagged $$next ($$rel); CI tests and releases it, then moves release/$$flavour: https://github.com/metaworx/massimo/actions"
+	echo "tagged $$next ($$rel) on $$branch; CI tests and releases it, then moves release/$$flavour: https://github.com/metaworx/massimo/actions"; \
+	if [ -n "$$line" ]; then echo "release: now merge $$branch upward into main, a merge: commit pushed to main"; fi
 
 # make release-alpha, make release-beta, make release-rc and
 # make release-stable: make release with that flavour.
@@ -176,6 +199,67 @@ release-alpha release-beta release-rc release-stable:
 	@f='$(@:release-%=%)'; flag='$(if $(filter command line,$(origin FLAVOUR)),$(FLAVOUR))'; \
 	if [ -n "$$flag" ] && [ "$$flag" != "$$f" ]; then echo "release: $$f or FLAVOUR=$$flag, not both" >&2; exit 2; fi; \
 	$(MAKE) --no-print-directory release FLAVOUR=$$f
+
+# make freeze <x.y>, or make freeze FREEZE=<x.y>, is the feature freeze of
+# the line x.y (AP MaintBranch, D2-A): it cuts the maintenance branch
+# maint/<x.y> at origin/main and pushes it. Completions and fixes for x.y
+# then target maint/<x.y>, every x.y release is cut there (make release),
+# and it is merged upward into main, which opens for the next line. The
+# line is two numbers, as 0.17; it fetches main and the version tags as
+# make release does, and refuses where origin has maint/<x.y> already and
+# where a version tag of a later line exists. It then prints where main's
+# next store migration starts: the next multiple of 100 above the last
+# migration origin/main holds (internal/store/migrations/NNNN_<name>.sql;
+# docs/store.md, "Migrations"), so that the line's fixes keep the numbers
+# below it. DRY=1 prints the push instead of making it.
+ifeq ($(firstword $(MAKECMDGOALS)),freeze)
+FREEZE_WORDS := $(wordlist 2,$(words $(MAKECMDGOALS)),$(MAKECMDGOALS))
+# make freeze 0.17: the word is a goal of its own, which does nothing;
+# freeze reads it. A word of digits and dots alone, so that no other
+# target's recipe is replaced; freeze refuses any other word.
+FREEZE_LINES := $(foreach w,$(FREEZE_WORDS),$(if $(subst .,,$(subst 0,,$(subst 1,,$(subst 2,,$(subst 3,,$(subst 4,,$(subst 5,,$(subst 6,,$(subst 7,,$(subst 8,,$(subst 9,,$(w)))))))))))),,$(w)))
+ifneq ($(FREEZE_LINES),)
+$(FREEZE_LINES):
+	@:
+endif
+endif
+freeze:
+	@words='$(FREEZE_WORDS)'; flag='$(if $(filter command line,$(origin FREEZE)),$(FREEZE))'; \
+	set -- $$words; \
+	if [ $$# -gt 1 ]; then echo "freeze: one line, not $$words" >&2; exit 2; fi; \
+	word=$${1:-}; \
+	if [ -n "$$word" ] && [ -n "$$flag" ] && [ "$$word" != "$$flag" ]; then \
+		echo "freeze: $$word or FREEZE=$$flag, not both" >&2; exit 2; fi; \
+	line=$${word:-$$flag}; \
+	if [ -z "$$line" ]; then echo "freeze: make freeze <x.y> cuts maint/<x.y> at origin/main" >&2; exit 2; fi; \
+	printf '%s\n' "$$line" | grep -Eqx '(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)' || { \
+		echo "freeze: $$line is no line: two numbers, x.y, as 0.17" >&2; exit 2; }; \
+	branch=maint/$$line; \
+	git fetch --quiet origin '+refs/heads/main:refs/remotes/origin/main' 'refs/tags/v*:refs/tags/v*' || { \
+		echo "freeze: git fetch origin main 'refs/tags/v*:refs/tags/v*' failed; run it to see why" >&2; exit 1; }; \
+	sha=$$(git rev-parse refs/remotes/origin/main) || exit 1; \
+	git ls-remote --exit-code --heads origin "refs/heads/$$branch" >/dev/null; rc=$$?; \
+	case $$rc in \
+		0) echo "freeze: origin has $$branch already; a line is frozen once" >&2; exit 1 ;; \
+		2) ;; \
+		*) echo "freeze: git ls-remote origin failed; run it to see why" >&2; exit 1 ;; \
+	esac; \
+	later=$$(git tag -l 'v[0-9]*.[0-9]*.[0-9]*' | awk -F. -v x="$${line%.*}" -v y="$${line#*.}" \
+		'/^v[0-9]+\.[0-9]+\.[0-9]+(-[a-z][a-z0-9]*\.[0-9]+)?$$/ { a = substr($$1, 2) + 0; if (a > x || (a == x && $$2 + 0 > y)) print }' | head -n 1); \
+	if [ -n "$$later" ]; then \
+		echo "freeze: $$later is out, of a line after $$line; a line is frozen before the next one is released" >&2; exit 1; fi; \
+	last=$$(git ls-tree --name-only "$$sha" internal/store/migrations/ | sed -nE 's|^internal/store/migrations/([0-9]+)_[^/]*\.sql$$|\1|p' | sort -n | tail -n 1); \
+	n=$$(printf '%s\n' "$${last:-0}" | sed -E 's/^0+([0-9])/\1/'); \
+	first=$$(printf '%04d' $$(( (n / 100 + 1) * 100 ))); \
+	if [ -n "$(DRY)" ]; then \
+		echo "freeze: would run: git push origin $$sha:refs/heads/$$branch"; \
+	else \
+		git push --quiet origin "$$sha:refs/heads/$$branch" || { \
+			echo "freeze: the push of $$branch failed; nothing frozen" >&2; exit 1; }; \
+		echo "freeze: $$branch is origin/main ($$sha)"; \
+	fi; \
+	echo "freeze: completions and fixes for $$line target $$branch, and every $$line release is cut there (make release); merge it upward into main after each"; \
+	echo "freeze: main's next store migration is $$first, the last being $${last:-none} (docs/store.md, \"Migrations\")"
 
 all: test build
 

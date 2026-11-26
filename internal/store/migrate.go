@@ -5,7 +5,10 @@ package store
 
 // Migrations: migrations/NNNN_<name>.sql, embedded, applied in order in
 // one transaction each, each recorded in schema_version with its
-// min_reader (docs/store.md section 5, "Migrations"). Every file
+// min_reader (docs/store.md section 5, "Migrations"). The numbers start
+// at 1 and rise, each the one before plus 1 or the next multiple of 100
+// above it: a line of releases numbers in blocks of 100, and a store
+// never takes a number below its own ("Two lines of releases"). Every file
 // declares its min_reader in a comment line "-- min_reader: N". A
 // migration that keeps the previous min_reader is additive; one that
 // raises it changes a meaning, and the store copies the file to
@@ -82,10 +85,11 @@ func SchemaVersion() int {
 	return ms[len(ms)-1].version
 }
 
-// loadMigrations reads the migrations of fsys, checked: numbered from 1
-// without gaps, each with a min_reader that never falls and never
-// exceeds its own version, and each down part beside the migration of
-// its name.
+// loadMigrations reads the migrations of fsys, checked: numbered from 1,
+// each number the one before plus 1 or the next multiple of 100 above
+// it (nextVersion), no number twice, each with a min_reader that never
+// falls and never exceeds its own version, and each down part beside the
+// migration of its name. An error names the file.
 func loadMigrations(fsys fs.FS) ([]migration, error) {
 	entries, err := fs.ReadDir(fsys, ".")
 	if err != nil {
@@ -127,19 +131,46 @@ func loadMigrations(fsys fs.FS) ([]migration, error) {
 	for up := range downs {
 		return nil, fmt.Errorf("store: migration %s.down.sql: there is no %s", strings.TrimSuffix(up, ".sql"), up)
 	}
-	sort.Slice(out, func(i, j int) bool { return out[i].version < out[j].version })
-	prev := 0
-	for i, m := range out {
-		if m.version != i+1 {
-			return nil, fmt.Errorf("store: migration %s: expected version %d", m.name, i+1)
+	sort.Slice(out, func(i, j int) bool {
+		if out[i].version != out[j].version {
+			return out[i].version < out[j].version
 		}
-		if m.minReader < prev || m.minReader > m.version {
-			return nil, fmt.Errorf("store: migration %s: min_reader %d must lie between %d and %d", m.name, m.minReader, prev, m.version)
+		return out[i].name < out[j].name
+	})
+	version, name, minReader := 0, "", 0
+	for _, m := range out {
+		if m.version == version && name != "" {
+			return nil, fmt.Errorf("store: migrations %s and %s: both are version %d", name, m.name, m.version)
 		}
-		prev = m.minReader
+		if !nextVersion(version, m.version) {
+			if version == 0 {
+				return nil, fmt.Errorf("store: migration %s: version %d, but the first is version 1", m.name, m.version)
+			}
+			return nil, fmt.Errorf("store: migration %s: version %d after %s; the next is %d, or %d for a new block of 100",
+				m.name, m.version, name, version+1, nextBlock(version))
+		}
+		if m.minReader < minReader || m.minReader > m.version {
+			return nil, fmt.Errorf("store: migration %s: min_reader %d must lie between %d and %d", m.name, m.minReader, minReader, m.version)
+		}
+		version, name, minReader = m.version, m.name, m.minReader
 	}
 	return out, nil
 }
+
+// nextVersion reports whether a migration of version v may follow one of
+// version prev (0: none): the first is 1, and each after it is prev plus
+// 1, or the next multiple of 100 above prev, which starts a new block
+// (docs/store.md, "Two lines of releases").
+func nextVersion(prev, v int) bool {
+	if prev == 0 {
+		return v == 1
+	}
+	return v == prev+1 || v == nextBlock(prev)
+}
+
+// nextBlock is the first version of the block of 100 after the one that
+// holds v: 100 for 1 to 99, 200 for 100 to 199.
+func nextBlock(v int) int { return (v/100 + 1) * 100 }
 
 // fileVersion reads the file's schema version and min_reader; both are
 // 0 for an empty file. A file with tables but no schema_version is
@@ -400,15 +431,16 @@ func roleUUIDs(ctx context.Context, _ *Store, tx *sql.Tx) error {
 
 // copyBefore writes a consistent copy of the file, as it is before the
 // migration to version, to massimo.db.before-<version>, mode 0600, and
-// returns its path; cur is the file's version. A copy left from an
-// earlier attempt (a crash between the copy and the commit) is of the
-// same state while the file is still at version-1, so it is replaced;
-// a file that has moved on is refused, since the copy is then the only
-// state an older binary can read.
+// returns its path; cur is the file's version, the one of the
+// migration before version, which need not be version-1 (a new block of
+// 100). A copy left from an earlier attempt (a crash between the copy
+// and the commit) is of a state before version while the file is still
+// below it, so it is replaced; a file that has moved on is refused,
+// since the copy is then the only state an older binary can read.
 func (s *Store) copyBefore(ctx context.Context, version, cur int) (string, error) {
 	dst := s.path + ".before-" + strconv.Itoa(version)
-	if cur != version-1 {
-		return "", fmt.Errorf("store: %s is at version %d, not %d; the copy %s is not made again", s.path, cur, version-1, dst)
+	if cur >= version {
+		return "", fmt.Errorf("store: %s is at version %d, not below %d; the copy %s is not made again", s.path, cur, version, dst)
 	}
 	if _, err := os.Stat(dst); err == nil {
 		s.log.Info("store: replacing a copy left by an earlier attempt", "copy", dst, "version", version)

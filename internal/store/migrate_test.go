@@ -12,13 +12,16 @@ package store
 
 import (
 	"context"
+	"database/sql"
 	"flag"
 	"fmt"
 	"io/fs"
 	"os"
+	"slices"
 	"sort"
 	"strings"
 	"testing"
+	"testing/fstest"
 )
 
 // updateStoreSQL makes TestStoreSQL write migrations/store.sql again:
@@ -171,5 +174,151 @@ func TestMigrationFilesNamed(t *testing.T) {
 	}
 	if strings.Join(embeddedNames, " ") != strings.Join(numbered, " ") {
 		t.Fatalf("embedded %v, the numbered migrations %v", embeddedNames, numbered)
+	}
+}
+
+// blockMigrations are test migrations after the embedded first one in
+// blocks of 100 (docs/store.md, "Two lines of releases"): 0002 in the
+// first block, then 0100 and 0101, then 0200. 0100 raises min_reader and
+// fills the column it adds, so that it shows it ran after 0002; each
+// from 0100 on has its down part.
+func blockMigrations(t *testing.T) fstest.MapFS {
+	t.Helper()
+	return testMigrations(t, map[string]string{
+		"0002_notes.sql":            blockNotes,
+		"0100_note_kind.sql":        "-- min_reader: 100\nALTER TABLE notes ADD COLUMN kind TEXT NOT NULL DEFAULT '';\nUPDATE notes SET kind = 'old';\n",
+		"0100_note_kind.down.sql":   "ALTER TABLE notes DROP COLUMN kind;\n",
+		"0101_note_index.sql":       "-- min_reader: 100\nCREATE INDEX notes_kind ON notes (kind);\n",
+		"0101_note_index.down.sql":  "DROP INDEX notes_kind;\n",
+		"0200_note_author.sql":      "-- min_reader: 100\nALTER TABLE notes ADD COLUMN author TEXT;\n",
+		"0200_note_author.down.sql": "ALTER TABLE notes DROP COLUMN author;\n",
+	})
+}
+
+// blockNotes is 0002 of blockMigrations, additive.
+const blockNotes = "-- min_reader: 1\nCREATE TABLE notes (id INTEGER PRIMARY KEY, text TEXT NOT NULL);\n"
+
+// fileVersions are the versions of the file's schema_version rows, in
+// order.
+func fileVersions(t *testing.T, db *sql.DB) []int {
+	t.Helper()
+	rows, err := db.Query(`SELECT version FROM schema_version ORDER BY rowid`)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer rows.Close()
+	var out []int
+	for rows.Next() {
+		var v int
+		if err := rows.Scan(&v); err != nil {
+			t.Fatal(err)
+		}
+		out = append(out, v)
+	}
+	if err := rows.Err(); err != nil {
+		t.Fatal(err)
+	}
+	return out
+}
+
+// A gap up to the next multiple of 100 starts a new block: the set
+// loads, an empty file takes every migration in order, a file of the
+// block before takes the new block's in order, with the copy before the
+// raise across the gap, and a downgrade undoes the versions the file
+// holds, not every number between them.
+func TestMigrationBlocks(t *testing.T) {
+	t.Parallel()
+	ctx := context.Background()
+	ms, err := loadMigrations(blockMigrations(t))
+	if err != nil {
+		t.Fatal(err)
+	}
+	var versions []int
+	for _, m := range ms {
+		versions = append(versions, m.version)
+	}
+	if want := []int{1, 2, 100, 101, 200}; !slices.Equal(versions, want) {
+		t.Fatalf("loaded %v, want %v", versions, want)
+	}
+
+	fresh, err := Open(t.TempDir(), Options{Logger: quiet(), migrations: blockMigrations(t)})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if v, mr := fresh.SchemaVersion(); v != 200 || mr != 100 {
+		t.Fatalf("fresh: version %d min_reader %d", v, mr)
+	}
+	if got := fileVersions(t, fresh.db); !slices.Equal(got, versions) {
+		t.Fatalf("fresh: applied %v, want %v", got, versions)
+	}
+	fresh.Close()
+
+	// A store of the first block goes on to the next ones.
+	dir := t.TempDir()
+	s, err := Open(dir, Options{Logger: quiet(), migrations: testMigrations(t, map[string]string{"0002_notes.sql": blockNotes})})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := s.db.ExecContext(ctx, `INSERT INTO notes (text) VALUES ('kept')`); err != nil {
+		t.Fatal(err)
+	}
+	s.Close()
+	s, err = Open(dir, Options{Logger: quiet(), migrations: blockMigrations(t)})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := fileVersions(t, s.db); !slices.Equal(got, versions) {
+		t.Fatalf("migrated: applied %v, want %v", got, versions)
+	}
+	var text, kind string
+	if err := s.db.QueryRowContext(ctx, `SELECT text, kind FROM notes`).Scan(&text, &kind); err != nil || text != "kept" || kind != "old" {
+		t.Fatalf("the note after the migration: %q %q %v", text, kind, err)
+	}
+	s.Close()
+	cp, err := sql.Open("sqlite", Path(dir)+".before-100")
+	if err != nil {
+		t.Fatal(err)
+	}
+	var top int
+	if err := cp.QueryRow(`SELECT max(version) FROM schema_version`).Scan(&top); err != nil || top != 2 {
+		t.Fatalf("the copy before 0100 is at %d, not 2: %v", top, err)
+	}
+	cp.Close()
+
+	d, err := Downgrade(dir, 2, Options{Logger: quiet(), migrations: blockMigrations(t)})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if d.From != 200 || d.To != 2 || d.MinReader != 1 || !slices.Equal(d.Undone, []int{200, 101, 100}) {
+		t.Fatalf("downgraded %+v", d)
+	}
+}
+
+// A gap that ends anywhere but at the next multiple of 100, a number
+// twice, and a first number other than 1 are refused, naming the file.
+func TestMigrationBlocksRefused(t *testing.T) {
+	t.Parallel()
+	ok := "-- min_reader: 1\nSELECT 1;"
+	for name, c := range map[string]struct {
+		fsys  fstest.MapFS
+		names []string
+	}{
+		"gap to another number":   {testMigrations(t, map[string]string{"0002_x.sql": ok, "0050_y.sql": ok}), []string{"0050_y.sql", "0002_x.sql"}},
+		"gap past the next block": {testMigrations(t, map[string]string{"0002_x.sql": ok, "0200_y.sql": ok}), []string{"0200_y.sql"}},
+		"gap within a block":      {testMigrations(t, map[string]string{"0100_x.sql": ok, "0150_y.sql": ok}), []string{"0150_y.sql", "0100_x.sql"}},
+		"a number twice":          {testMigrations(t, map[string]string{"0002_x.sql": ok, "0002_y.sql": ok}), []string{"0002_x.sql", "0002_y.sql"}},
+		"below the first":         {testMigrations(t, map[string]string{"0000_x.sql": ok}), []string{"0000_x.sql"}},
+		"a block first":           {fstest.MapFS{"0100_x.sql": {Data: []byte(ok)}}, []string{"0100_x.sql"}},
+	} {
+		_, err := loadMigrations(c.fsys)
+		if err == nil {
+			t.Errorf("%s: accepted", name)
+			continue
+		}
+		for _, n := range c.names {
+			if !strings.Contains(err.Error(), n) {
+				t.Errorf("%s: %v does not name %s", name, err, n)
+			}
+		}
 	}
 }

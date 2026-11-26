@@ -934,6 +934,8 @@ On one of the owner's boxes, only with the owner's go:
 `internal/store/migrations/NNNN_<name>.sql`, embedded with `go:embed`,
 applied in order inside one transaction each,
 with the version and the `min_reader` of each written to `schema_version`.
+The numbers start at 1 and rise, each the one before plus 1
+or the next multiple of 100 above it ("Two lines of releases", below).
 The first file is `0001_initial.sql`, the whole schema above.
 `0002_commands_auth.sql` (stage (b)) adds `users.auth_version`,
 the `commands` table of docs/server.md item 7 (a parent row per write request
@@ -1149,6 +1151,12 @@ Rules:
   which migrates it:
   the file stays sound, no table loses a row, `events` keeps exactly its own,
   every event has its source, and the log, the users and the backups read;
+  its schema is a fresh store's, compared by SQLite's pragmas
+  (each table's columns with type, `NOT NULL`, default and key,
+  its foreign keys and its indexes), not by the text of the statements;
+  and no column holds fewer values that are not NULL than before,
+  but for the columns a migration moves, drops or empties on purpose,
+  which the test lists with the migration and the reason (`columnFates`);
   `TestReleasedStoresDownAgain` takes each down again (above).
   Each release's file is so migrated by every later binary;
   a tag's own dump, at its binary's schema, is opened as it is.
@@ -1171,6 +1179,45 @@ Rules:
   (`git show <tag>:internal/store/migrations/store.sql`).
   `TestMigrationFilesNamed` holds the directory to the numbered migrations and
   `store.sql`: a file of another name would be skipped without a word.
+
+#### Two lines of releases
+
+A release may come from a fix line, `maint/<x.y>`, while `main` goes on,
+so the numbers come in blocks of 100.
+
+- The fix line numbers within the current block (0027, 0028, …).
+  `main` starts the next hundred at the freeze that cuts the fix line (0100).
+- `loadMigrations` takes each number as the one before plus 1,
+  or the next multiple of 100 above it: 0026 to 0100 is a new block,
+  0026 to 0050 or to 0200 is refused, and so is a number twice.
+  The error names the file.
+- The store never applies a number below its own version.
+  A store of `main`'s block skips the fix line's files,
+  which `main` holds since the fix line merges upward.
+- A change of the fix line that `main` needs as well gets a copy at the top
+  of `main`'s block, written for `main`'s schema and guarded,
+  so that it does nothing where the change is in place:
+  on a store that came from the fix line,
+  and on a fresh store, which runs every file in order
+  and so takes the fix line's migration first.
+- A fix line's migration is additive and guarded:
+  a new table, column or index,
+  `IF NOT EXISTS`, or a check of `pragma_table_info` before a column is added.
+  It makes no table again.
+- The risk that stays: a migration of the newer line that makes a table again
+  copies the columns it knows.
+  One written before the fix existed drops the fix's column, with its values,
+  on a store that came from the fix line,
+  and the guarded copy then adds the column back empty.
+  `TestMigratesReleasedStores` catches that before the newer line ships,
+  since every later binary migrates every released store's dump:
+  the column then holds fewer values than before,
+  where the fix line's dump holds a value in it
+  (`tools/store-fixture/make.sh` sends every release the same requests,
+  so a fix's column needs one of its own there).
+  The fix is a copy of that migration that carries the column over.
+- A downgrade undoes the versions the file's `schema_version` holds,
+  not every number between them.
 
 ## 6. Users, roles and capabilities
 

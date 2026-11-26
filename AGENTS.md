@@ -34,7 +34,7 @@ refer to linked documents for extended guidance.
   6. Commit Policy (STRICT)
   7. Additional References
   8. Document Governance
-- Massimo — Project Contract (v1.21.0)
+- Massimo — Project Contract (v1.22.0)
   1. Project Facts
   2. Primary References
   3. Project-Specific Conventions
@@ -431,7 +431,7 @@ Their values come from `GUIDELINES/config.ini`.
 ---
 
 
-# Massimo — Project Contract (v1.21.0)
+# Massimo — Project Contract (v1.22.0)
 
 What binds work in this project, for everyone working on it.
 Inlined into `/AGENTS.md` for agents and into `GUIDELINES/README.md` for people,
@@ -456,7 +456,7 @@ so that the two cannot drift apart.
 | Language(s)           | declared as `project.languages` in `GUIDELINES/config.ini`, kept honest by `GUIDELINES/shared/tools/detect-languages.sh --check` |
 | Source directories    | `cmd/massimo/` (the command line and `serve`), `internal/` (the packages: `protocol/cube`, `cubelan`, `engine`, `server` with the web UI in `server/ui/`, `proxy`, `backup`, `store`, `update`, `install`, …), `packaging/` (unit files, plists, the installers' assets), `tools/ui-test/` (the Playwright smoke test), `tools/brand/` (the generator of the mark and every file made from it), `docs/` (the protocol findings, the API, the designs, the handovers) |
 | Shipped-code paths    | declared as `project.shipped` in `GUIDELINES/config.ini` and listed below; kept honest by `GUIDELINES/shared/tools/changelog.sh check` (rule: `GUIDELINES/shared/COMMIT.md` §5) |
-| Version manifest      | for the server none: the version is the nearest git tag (`git describe --tags`, baked in by `make`); for the Android app `app/version.json`, the changelog's manifest (`GUIDELINES/config.ini`), its versionCode counted by `packaging/app-version.sh` and written by `make release` into the release commit (AP MobileApp, D12-A); a release is cut with `make release <flavour>`, the flavour `alpha`, `beta`, `rc` or `stable` (`BUMP=minor` for a feature, `BUMP=patch` for a fix of a stable release, `DRY=1` to see it first; `make build-release` is the build) on a clean `main` equal to `origin/main`: `changelog.sh cut` moves `[Unreleased]` into the release's section in a `chore(release):` commit, tags it with that section as the message, and `main` and the tag are pushed atomically; CI tests the tag, releases it and then fast-forwards `release/<flavour>` to it; `README.md`, "Versions" |
+| Version manifest      | for the server none: the version is the nearest git tag (`git describe --tags`, baked in by `make`); for the Android app `app/version.json`, the changelog's manifest (`GUIDELINES/config.ini`), its versionCode counted by `packaging/app-version.sh` and written by `make release` into the release commit (AP MobileApp, D12-A); a release is cut with `make release <flavour>`, the flavour `alpha`, `beta`, `rc` or `stable` (`BUMP=minor` for a feature, `BUMP=patch` for a fix of a stable release, `DRY=1` to see it first; `make build-release` is the build) on a clean `main` equal to `origin/main`, or on a maintenance branch `maint/<x.y>` equal to its `origin` copy for a release of x.y once `make freeze <x.y>` has cut it: `changelog.sh cut` moves `[Unreleased]` into the release's section in a `chore(release):` commit, tags it with that section as the message, and the branch and the tag are pushed atomically; CI tests the tag, releases it and then fast-forwards `release/<flavour>` to it; `README.md`, "Versions" |
 | Test gate command     | `make ui` first, the web UI's bundle the server embeds (every Makefile target that compiles Go runs it), then `MASSIMO_ENV_FILE=/dev/null go test ./...` (the gate of `GUIDELINES/shared/lang/go/TESTING.md`; `make race`, `-race` for `internal/server`, `internal/store`, `internal/cubelan`, `internal/proxy`, `internal/serve`, `internal/announce`, `internal/notify`, `internal/engine`, `internal/cubeio` and `internal/certs`, is recommended, and CI's Race job runs it), then `make cross-check` (every platform compiles and links, and no binary is written; `make cross` is the build into `dist/`), and `make ui-test` for a change under `internal/server/ui/` (the pytest suite of `tools/ui-test/`, needs the Playwright venv, `tools/ui-test/README.md`; one test with `PYTEST_ADDOPTS='-k "<test name> and 390-de"' make ui-test`), and `make lan-test` for a change to discovery, the mDNS announcement (`internal/announce`), `discover` or the proxy's discovery answers (Docker with Compose v2, `tools/lan-test/README.md`), and `make app-emulator-test` for a change under `app/` or to what of the server the app drives (the sign-in and the login by key, a user's tokens, the connect page), where KVM is open to the user (the Android SDK's pinned emulator and image and JDK 17, `tools/app-emulator/README.md`, "What it needs"); CI's job Android emulator runs it in any case |
 | Lint command          | `gofmt -l .` prints nothing and `go vet ./... && GOOS=windows go vet ./... && GOOS=darwin go vet ./...` exits 0, as `GUIDELINES/shared/lang/go/LINTING.md` requires per platform; `make actionlint` exits 0 for a change under `.github/` (actionlint pinned in `tools/actionlint/`, the `run:` scripts by shellcheck where it is installed, as CI's job is); `make ui-check` exits 0 for a change under `internal/server/ui/src/` (`tsc --noEmit`, then Biome's two hooks rules of `tools/ui-check/biome.jsonc`, TypeScript and Biome locked in `tools/ui-check/`, needs Node.js and npm, as CI's job UI types runs it); `govulncheck ./...` runs in CI for linux and windows; no other linter |
 | Commit summary        | declared as `[commit]` in `GUIDELINES/config.ini` and shown below; held to it by `GUIDELINES/shared/tools/commit-msg.sh` (rule: `GUIDELINES/shared/COMMIT.md` §3.1) |
@@ -713,8 +713,17 @@ the ones an agent trips over most come first:
   `release/alpha` is the release branch, only ever fast-forwarded,
   by the release once it is out (`GUIDELINES/project/CI.md`, "Releases");
   `release/devel` and `release/nightly` are tags, moved by CI.
+  At a line's feature freeze `make freeze <x.y>` cuts `maint/<x.y>` from `origin/main`;
+  completions and fixes for x.y then target `maint/<x.y>`,
+  every x.y release is cut there,
+  and `main` opens for the next line.
+  The session that merged into `maint/<x.y>`, or cut a release there,
+  merges it upward into `main` with a `merge:` commit and pushes that
+  straight away (AP MaintBranch, D1-A);
+  an old maintenance branch releases nothing after the next freeze (D3-A).
   A branch merges `origin/main` before its pull request (merge,
-  never rebase a stack).
+  never rebase a stack),
+  or `origin/maint/<x.y>` where that is its base.
   Commits are signed (SSH, the repository's git config);
   run `timeout 60 git commit …` because a locked key agent hangs instead of failing.
 - **Hosts.**

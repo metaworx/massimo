@@ -17,6 +17,7 @@ package store
 
 import (
 	"context"
+	"database/sql"
 	"database/sql/driver"
 	"errors"
 	"fmt"
@@ -162,10 +163,13 @@ type downPart struct {
 	sql     string
 }
 
-// downParts collects the down parts of the versions first to cur,
-// newest first: this binary's (fsys, nil the embedded migrations) where
-// it has one, else the file's own. A version with neither is an error
-// that names the copy made before the migration that raised min_reader.
+// downParts collects the down parts of the versions first to cur that
+// the file's schema_version holds, newest first: this binary's (fsys,
+// nil the embedded migrations) where it has one, else the file's own.
+// The versions are the file's rows, not every number between, since a
+// new block of 100 leaves a gap (docs/store.md, "Two lines of
+// releases"). A version with neither is an error that names the copy
+// made before the migration that raised min_reader.
 func (s *Store) downParts(ctx context.Context, fsys fs.FS, first, cur int) ([]downPart, error) {
 	if fsys == nil {
 		fsys = embeddedMigrations()
@@ -185,27 +189,36 @@ func (s *Store) downParts(ctx context.Context, fsys fs.FS, first, cur int) ([]do
 	if err := s.db.QueryRowContext(ctx, `SELECT count(*) FROM pragma_table_info('schema_version') WHERE name = 'down_sql'`).Scan(&has); err != nil {
 		return nil, fmt.Errorf("store: downgrade: %w", err)
 	}
+	// A file before migration 0023 has no down parts of its own.
+	downSQL := `NULL`
 	if has > 0 {
-		rows, err := s.db.QueryContext(ctx, `SELECT version, down_sql FROM schema_version WHERE version >= ? AND down_sql IS NOT NULL`, first)
-		if err != nil {
+		downSQL = `down_sql`
+	}
+	rows, err := s.db.QueryContext(ctx, `SELECT version, `+downSQL+` FROM schema_version WHERE version BETWEEN ? AND ? ORDER BY version DESC`, first, cur)
+	if err != nil {
+		return nil, fmt.Errorf("store: downgrade: %w", err)
+	}
+	var versions []int // newest first, each once
+	for rows.Next() {
+		var v int
+		var q sql.NullString
+		if err := rows.Scan(&v, &q); err != nil {
+			rows.Close()
 			return nil, fmt.Errorf("store: downgrade: %w", err)
 		}
-		for rows.Next() {
-			var v int
-			var q string
-			if err := rows.Scan(&v, &q); err != nil {
-				rows.Close()
-				return nil, fmt.Errorf("store: downgrade: %w", err)
-			}
-			stored[v] = q
+		if len(versions) == 0 || versions[len(versions)-1] != v {
+			versions = append(versions, v)
 		}
-		rows.Close()
-		if err := rows.Err(); err != nil {
-			return nil, fmt.Errorf("store: downgrade: %w", err)
+		if q.Valid {
+			stored[v] = q.String
 		}
 	}
+	rows.Close()
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("store: downgrade: %w", err)
+	}
 	var out []downPart
-	for v := cur; v >= first; v-- {
+	for _, v := range versions {
 		q, ok := known[v]
 		if !ok {
 			q, ok = stored[v]
