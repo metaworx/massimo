@@ -16,12 +16,11 @@
  * inside, none twice; a fetch that fails, or a file of another form, is
  * a ListError and is tried again at the next. A
  * suggestion the caller's rule refuses is drawn again, at most TRIES
- * times. The kind chosen, words or characters, is kept in this browser
- * (readStored, store), and for this page where the browser keeps
- * nothing. Nothing here logs or keeps a password.
+ * times. Which kind a press gives is its field's (shared/password.tsx,
+ * AP AccessEnds, D44-A, D50-A); nothing is kept in this browser, and a
+ * kind one kept under massimo.suggest before is left there, read no more.
+ * Nothing here logs or keeps a password.
  */
-
-import { signal } from "@preact/signals";
 
 /** The two kinds of a suggestion. */
 export type SuggestKind = "words" | "chars";
@@ -44,18 +43,6 @@ const WORD_LIMIT = Math.floor(2 ** 32 / LIST_SIZE) * LIST_SIZE;
 
 /** CHAR_LIMIT is where a byte is drawn again: the largest multiple of the alphabet's 56 at or below 256. */
 const CHAR_LIMIT = Math.floor(256 / ALPHABET.length) * ALPHABET.length;
-
-/** The key the kind chosen is kept under in this browser. */
-const KIND_KEY = "massimo.suggest";
-
-/** suggestKind is the kind of suggestion chosen last in this browser, words where none was. */
-export const suggestKind = signal<SuggestKind>(readStored(KIND_KEY) === "chars" ? "chars" : "words");
-
-/** chooseKind makes kind the one suggested from now on, and keeps it in this browser where it can. */
-export function chooseKind(kind: SuggestKind): void {
-  suggestKind.value = kind;
-  store(KIND_KEY, kind);
-}
 
 /** pick is a number below n, without bias: a 32-bit number drawn again at or above the largest multiple of n below 2^32. */
 function pick(n: number, limit: number): number {

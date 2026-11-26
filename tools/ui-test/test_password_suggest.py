@@ -8,29 +8,34 @@ settings → Users the adding of a user and a user's panel. A press fills
 the form, both fields where it has two, with five words of EFF's long list
 joined by "-" or twenty characters of an alphabet of 56, which the rule
 takes and the form saves, and shows it as text, eye or none, until it is
-edited; another press gives another. While the field holds it, a line
-right under the field shows it whole, aria-hidden and not translated, on
-two lines at most (AP PasswordRules, D58-A). From the first press on, a
-row under the field offers Words or Characters, kept in this browser, and
-Copy, and the shown line keeps a place of two lines, empty after a key;
-neither is there before. The rule's line says that a password was
-suggested, and no status region, label or console line holds it, but
-under aria-hidden.
+edited. The presses give five words and twenty characters by turns, five
+words first and again at each new start, a key leaving the turn, and the
+dice's label says what the next gives (AP AccessEnds, D44-A, D50-A,
+D51-A). While the field holds the suggestion, a line right under the
+field shows it whole, not translated, on two lines but in the rarest
+draws (AP PasswordRules, D58-A): a text that copies itself on a click or
+Enter, saying "Copied", with its copy icon after it, both named Copy the
+password, its words hidden from a screen reader (D52-A). The line keeps a
+place of two lines from the first press on, empty after a key; there is
+no line before, and no row under the field at any time (D49-A). The
+rule's line says that a password was suggested, and no status region,
+label, console line or node of the accessibility tree but the field's
+holds it.
 Picking is without bias, numbers at or above the limit drawn again,
 which the test shows by handing the page's crypto.getRandomValues chosen
 numbers; a suggestion the rule refuses, a word of the list that is the
 user's name, is drawn again, at most 20 times, and the line says so
 where none is found. The list is fetched once, at the first press that
-needs it; a fetch that fails says so in the line, and Characters still
-works; a suggestion that comes after the card has opened anew fills
-nothing."""
+needs it; a fetch that fails says so in the line, and the next press
+gives twenty characters, which need none; a suggestion that comes after
+the card has opened anew fills nothing."""
 import json
 import os
 import re
 
 import pytest
 
-from conftest import TOKEN, api_call
+from conftest import TOKEN, URL, api_call
 from helpers import OPERATOR_PASSWORD, frames, named_buttons, open_fold, scroll_width, show_view, toggle_fold, wait_held, wait_until
 from test_first_owner import OPEN, owner_card, start_page, stub_creation
 from test_login import sign_in
@@ -39,6 +44,7 @@ from test_password_rule import REAL_REGISTER, SAME_LINE, STUB_REGISTER, WATCH_LI
 from test_users import remove_user
 
 LIST = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "..", "internal", "server", "ui", "words-en.txt")
+I18N = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "..", "internal", "server", "ui", "i18n")
 with open(LIST, encoding="utf-8") as _f:
     WORD_LIST = _f.read().split("\n")[:-1]
 ALPHABET = "23456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnpqrstuvwxyz"
@@ -64,8 +70,9 @@ REAL_RANDOM = "() => { if (window.__realRandom) { crypto.getRandomValues = windo
 
 # Every text of the page a screen reader is told or reads as a name: the
 # status and live regions' texts, but what is aria-hidden in them, which
-# a screen reader is not told (the line that shows a suggestion whole,
-# which check_suggest holds aria-hidden), every aria-label and title; and
+# a screen reader is not told (the words of the line that shows a
+# suggestion whole, which shown_line holds aria-hidden inside its copy),
+# every aria-label and title; and
 # the console's lines, which the test gathers (watch_console). An
 # aria-hidden text that a description or a label refers to is read out
 # all the same: not_spoken reads the browser's accessibility tree too
@@ -107,8 +114,13 @@ def is_chars(value):
 
 
 def copy_of(page, field):
-    """The Copy of the field's row."""
-    return page.locator(f".field:has(> .pw-box > #{field}) .pw-copy")
+    """The shown line's suggestion, a text that copies itself."""
+    return page.locator(f"#{field}-shown .pw-copy")
+
+
+def icon_of(page, field):
+    """The copy icon after the shown line's suggestion."""
+    return page.locator(f"#{field}-shown .copy-icon")
 
 
 def dice_of(page, field):
@@ -119,8 +131,31 @@ def value(page, field):
     return page.locator("#" + field).input_value()
 
 
-def kind_of(page, field, kind):
-    return page.locator(f"#{field}-kind input[value={kind}]")
+NEXT = {"words": "password.suggestWords", "chars": "password.suggestChars"}
+
+
+def says_next(page, field, kind, what):
+    """The dice labelled, aria-label and title, by what its next press
+    gives: five words or twenty characters."""
+    dice = dice_of(page, field)
+    want = words(page, NEXT[kind])
+    got = [dice.get_attribute("aria-label"), dice.get_attribute("title")]
+    assert got == [want, want], f"{field}: {what}: the dice says {kind} next: {got}"
+
+
+# What the field's row holds besides its label and the field's box: the
+# id or the first class of each element.
+ROW = """(field) => [...document.getElementById(field).closest('.field').children]
+  .filter((c) => c.tagName !== 'LABEL' && !c.classList.contains('pw-box')).map((c) => c.id || c.classList[0] || c.tagName)"""
+
+
+def no_row(page, field):
+    """Nothing under the field but the shown line, where there is one, the
+    rule's line and the hint: no row of a choice of kind, no Copy of its
+    own, no radio button (AP AccessEnds, D49-A)."""
+    row = page.evaluate(ROW, field)
+    assert all(c in (f"{field}-shown", "pw-rule", "muted") for c in row), f"{field}: no row under the field: {row}"
+    assert page.locator(f".field:has(> .pw-box > #{field}) input[type=radio]").count() == 0, f"{field}: no choice of kind"
 
 
 def watch_console(page):
@@ -172,25 +207,43 @@ def not_spoken(page, console, password, what):
 
 
 # The line under a new password's field that shows its suggestion whole,
-# null where there is none: its text, its attributes, its font's size, its
-# lines (a Range's boxes over its text) and the character before each
-# break, its height, its width and its row's, whether its text fits its
-# width, and its place: next after the field's box and before the rule's
-# line, under the box, inside the field's row. most is the lines the widest
-# suggestion of the value's kind takes at the line's width, laid out in a
-# copy of the line out of the flow: the list's widest word five times,
-# or the alphabet's widest character twenty times (given as worst).
+# null where there is none: its text, its attributes, and of the
+# suggestion it holds, a text that copies itself (.pw-copy) with its copy
+# icon after it: their names, roles and focus order, and whether the
+# words are under aria-hidden inside the copy; the words' font's size,
+# their lines (a Range's boxes over their text, the icon left out) and
+# the character before each break, the line's height, its width and its
+# row's, whether its content fits its width, the icon's place (after the
+# words, within the row, and within the line's height); and the line's
+# place: next after the field's box and before the rule's line, under the
+# box, inside the field's row. most is the lines the widest suggestion of
+# the value's kind takes there, laid out in a copy of the line out of the
+# flow, icon and all: the list's widest word five times, or the
+# alphabet's widest character twenty times (given as worst). room is the
+# width the words have beside the icon.
 SHOWN_LINE = """([field, worst]) => {
   const line = document.getElementById(field + '-shown');
   if (!line) return null;
   const box = document.getElementById(field).closest('.pw-box');
   const row = box.closest('.field');
-  const range = document.createRange();
-  range.selectNodeContents(line);
-  const lines = new Set([...range.getClientRects()].map((r) => Math.round(r.top))).size;
+  const l = line.getBoundingClientRect(), b = box.getBoundingClientRect(), f = row.getBoundingClientRect();
+  const next = line.nextElementSibling;
+  const base = {text: line.textContent, hidden: line.getAttribute('aria-hidden'), translate: line.getAttribute('translate'),
+                height: l.height, lineHeight: parseFloat(getComputedStyle(line).lineHeight),
+                after: box.nextElementSibling === line, before: !!next && next.classList.contains('pw-rule'), under: l.top >= b.bottom - 0.5,
+                inside: l.left >= f.left - 0.5 && l.right <= f.right + 0.5, width: l.width, rowWidth: f.width};
+  const copy = line.querySelector('.pw-copy');
+  if (!copy) return Object.assign(base, {copy: null});
+  const icon = line.querySelector('.copy-icon');
+  const textOf = (el) => document.createTreeWalker(el, NodeFilter.SHOW_TEXT).nextNode();
+  const countLines = (el) => {
+    const r = document.createRange();
+    r.selectNodeContents(el);
+    return new Set([...r.getClientRects()].map((x) => Math.round(x.top))).size;
+  };
+  const text = textOf(copy);
   const breaks = [];
-  const text = line.firstChild;
-  for (let i = 1, last = null; text && text.nodeType === Node.TEXT_NODE && i <= text.length; i++) {
+  for (let i = 1, last = null; text && i <= text.length; i++) {
     const one = document.createRange();
     one.setStart(text, i - 1);
     one.setEnd(text, i);
@@ -198,22 +251,26 @@ SHOWN_LINE = """([field, worst]) => {
     if (last !== null && top !== last) breaks.push(text.data[i - 2]);
     last = top;
   }
-  const l = line.getBoundingClientRect(), b = box.getBoundingClientRect(), f = row.getBoundingClientRect();
-  const next = line.nextElementSibling;
-  const copy = document.createElement('p');
-  copy.className = line.className;
-  copy.style.cssText = `position: absolute; visibility: hidden; left: 0; top: 0; width: ${l.width}px; margin: 0`;
-  copy.textContent = worst;
-  document.body.append(copy);
-  const all = document.createRange();
-  all.selectNodeContents(copy);
-  const most = new Set([...all.getClientRects()].map((r) => Math.round(r.top))).size;
-  copy.remove();
-  return {text: line.textContent, hidden: line.getAttribute('aria-hidden'), translate: line.getAttribute('translate'), lines, breaks, most,
-          fontSize: getComputedStyle(line).fontSize, width: l.width, rowWidth: f.width,
-          height: l.height, lineHeight: parseFloat(getComputedStyle(line).lineHeight), fits: line.scrollWidth <= line.clientWidth,
-          after: box.nextElementSibling === line, before: !!next && next.classList.contains('pw-rule'), under: l.top >= b.bottom - 0.5,
-          inside: l.left >= f.left - 0.5 && l.right <= f.right + 0.5};
+  const hiddenWords = text && text.parentElement.closest('[aria-hidden="true"]');
+  const c = copy.getBoundingClientRect(), i = icon ? icon.getBoundingClientRect() : null;
+  const clone = line.cloneNode(true);
+  clone.removeAttribute('id');
+  for (const el of clone.querySelectorAll('[id]')) el.removeAttribute('id');
+  clone.style.cssText = `position: absolute; visibility: hidden; left: 0; top: 0; width: ${l.width}px; margin: 0`;
+  document.body.append(clone);
+  textOf(clone.querySelector('.pw-copy')).data = worst;
+  const most = countLines(clone.querySelector('.pw-copy'));
+  clone.remove();
+  const tabbable = [...line.querySelectorAll('[tabindex], button')].filter((el) => el.tabIndex >= 0);
+  return Object.assign(base, {
+    copy: {role: copy.getAttribute('role'), tabindex: copy.getAttribute('tabindex'), name: copy.getAttribute('aria-label'), title: copy.getAttribute('title'),
+           copyable: copy.classList.contains('copyable'), words: text ? text.data : null,
+           wordsHidden: !!hiddenWords && copy.contains(hiddenWords) && hiddenWords !== copy, spanHidden: copy.getAttribute('aria-hidden')},
+    icon: icon ? {name: icon.getAttribute('aria-label'), title: icon.getAttribute('title'), tag: icon.tagName,
+                  after: i.left >= c.right - 0.5, within: i.right <= f.right + 0.5 && i.top >= l.top - 0.5 && i.bottom <= l.bottom + 0.5} : null,
+    order: tabbable.map((el) => (el === copy ? 'copy' : el === icon ? 'icon' : el.tagName)),
+    lines: text ? countLines(copy) : 0, breaks, most, room: c.width,
+    fontSize: getComputedStyle(copy).fontSize, fits: line.scrollWidth <= line.clientWidth});
 }"""
 
 
@@ -240,22 +297,35 @@ def shown_state(page, field):
 
 
 def shown_line(page, field, value):
-    """The line under field shows value, the field's, whole: hidden from a
-    screen reader and from a page's translation, right under the field's
-    box and before the rule's line, as wide as the field's row, inside it,
-    in the body's font at 16 px (AP AccessEnds, D21-A), its text within its
-    width, broken after a "-" alone, on no more lines than the widest
-    suggestion of its kind takes there (most), which for five words is at
-    most three, and at most two where three of the widest words fit a line;
-    its place two lines tall or as tall as its lines."""
+    """The line under field shows value, the field's, whole, as a text
+    that copies itself with its copy icon after it (AP AccessEnds, D44-A):
+    the line not aria-hidden, which a control inside it cannot be, and
+    not translated; the copy a button to the keyboard, it and its icon
+    both named Copy the password, the words under aria-hidden inside the
+    copy, so that no screen reader is told them (D52-A), the copy before
+    the icon in the focus order; the line right under the field's box and
+    before the rule's line, as wide as the field's row, inside it, the
+    words in the body's font at 16 px (D21-A), within the line's width,
+    broken after a "-" alone, on no more lines than the widest suggestion
+    of its kind takes there beside the icon (most), at most three, the
+    icon after the words, within the row and the line's height; its place
+    two lines tall or as tall as the words' lines."""
     s = page.evaluate(SHOWN_LINE, [field, worst(page, value)])
-    assert s is not None, f"{field}: the shown line"
-    assert s["text"] == value, f"{field}: the shown line holds the field's value whole: {s['text']!r}, {value!r}"
-    assert s["hidden"] == "true" and s["translate"] == "no", f"{field}: not read out, not translated: {s}"
+    assert s is not None and s["copy"] is not None, f"{field}: the shown line, with the suggestion's copy: {s}"
+    c, i = s["copy"], s["icon"]
+    name = words(page, "password.copyName")
+    assert s["text"] == value and c["words"] == value, f"{field}: the shown line holds the field's value whole: {s['text']!r}, {value!r}"
+    assert s["hidden"] is None and s["translate"] == "no", f"{field}: the line not aria-hidden, not translated: {s}"
+    assert c["role"] == "button" and c["tabindex"] == "0" and c["copyable"] and c["name"] == name and c["title"] == name, \
+        f"{field}: the suggestion copies itself, named {name!r}: {c}"
+    assert c["wordsHidden"] and c["spanHidden"] is None, f"{field}: its words hidden from a screen reader inside the copy: {c}"
+    assert i is not None and i["tag"] == "BUTTON" and i["name"] == name and i["title"] == name, f"{field}: its copy icon, named alike: {i}"
+    assert s["order"] == ["copy", "icon"], f"{field}: the copy, then its icon, to the keyboard: {s['order']}"
     assert s["after"] and s["before"] and s["under"] and s["inside"], f"{field}: right under the field, before the rule's line: {s}"
     assert abs(s["width"] - s["rowWidth"]) <= 0.5 and s["fontSize"] == "16px", f"{field}: the row's width, 16 px: {s}"
     assert 1 <= s["lines"] <= s["most"] <= 3 and s["fits"], f"{field}: within its width, on no more lines than the widest takes: {s}"
-    assert all(c == "-" for c in s["breaks"]), f"{field}: broken after a \"-\" alone, never inside a word: {s}"
+    assert all(ch == "-" for ch in s["breaks"]), f"{field}: broken after a \"-\" alone, never inside a word: {s}"
+    assert i["after"] and i["within"], f"{field}: the icon after the words, within the row and the line: {s}"
     assert abs(s["height"] - max(2, s["lines"]) * s["lineHeight"]) <= 0.5, f"{field}: its place two lines tall, or as its lines: {s}"
     return s
 
@@ -274,20 +344,21 @@ def press(page, field, before=None):
 
 def check_suggest(page, case, field, again, console):
     """The form's first new password, field, and its second, again where it
-    has one: no row and no shown line before the first press; the dice
-    before the eye inside the box, labelled; a press fills both with five
-    words of the list, shown as text and whole in the shown line under the
-    first field alone (shown_line), the rule's line saying it was
-    suggested and nothing telling the password (not_spoken); the row comes
-    with it, Words chosen; another press gives another, the shown line
-    with it; Characters gives twenty of the alphabet, and Words again five
-    words, each in the shown line. Returns the last value."""
-    assert page.locator(f"#{field}-kind").count() == 0, f"{field}: no row before the first press"
+    has one: no shown line before the first press, and no row under the
+    field at any time (no_row); the dice before the eye inside the box,
+    labelled Suggest five words; a press fills both with five words of the
+    list, shown as text and whole in the shown line under the first field
+    alone, a copy with its icon (shown_line), the rule's line saying it was
+    suggested and nothing telling the password (not_spoken), the dice
+    labelled Suggest twenty characters; the next press gives twenty of the
+    alphabet, the rule's line written anew, the dice labelled for five
+    words again; the next five words, another, each in the shown line.
+    Returns the last value."""
     assert page.locator(f"#{field}-shown").count() == 0, f"{field}: no line before the first press"
+    no_row(page, field)
     dice = dice_of(page, field)
     dice.wait_for(state="visible")
-    assert dice.get_attribute("aria-label") == words(page, "password.suggest") and dice.get_attribute("title") == words(page, "password.suggest"), \
-        f"{field}: the dice labelled"
+    says_next(page, field, "words", "before the first press")
     eye = eye_of(page, field)
     if eye.count():
         assert dice.bounding_box()["x"] + dice.bounding_box()["width"] <= eye.bounding_box()["x"] + 0.5, f"{field}: the dice before the eye"
@@ -302,66 +373,74 @@ def check_suggest(page, case, field, again, console):
     assert s["type"] == "text", f"{field}: the suggestion shown: {s}"
     assert line(page, field)["text"] == words(page, SUGGESTED), f"{field}: the rule's line says it was suggested: {line(page, field)}"
     assert page.evaluate("(p) => window.MassimoParts.passwordProblem(p, [])", v) == "", f"{field}: the rule takes it"
-    assert kind_of(page, field, "words").is_checked(), f"{field}: the row with Words chosen"
     assert page.evaluate("document.activeElement && document.activeElement.classList.contains('pw-dice')"), f"{field}: the focus on the dice"
-    assert copy_of(page, field).count() == 1, f"{field}: Copy offered for the suggestion"
+    says_next(page, field, "chars", "after five words")
+    no_row(page, field)
     shown_line(page, field, v)
     not_spoken(page, console, v, field)
     page.evaluate(WATCH_LINE, field)
-    w = press(page, field, v)
-    assert five_words(w) and w != v, f"{field}: another press, another: {w!r}"
-    shown_line(page, field, w)
+    c = press(page, field, v)
+    assert is_chars(c), f"{field}: the next press, twenty of the alphabet: {c!r}"
+    if again:
+        assert value(page, again) == c, f"{again}: filled alike"
+    shown_line(page, field, c)
     assert wait_until(page, f"window.__lineWrites > 0 && document.getElementById({field + '-rule'!r}).textContent === t('password.suggested')", 3), \
         f"{field}: the rule's line written anew at the second press, for a screen reader: {page.evaluate('window.__lineWrites')}"
     assert page.evaluate(SAME_LINE, field), f"{field}: the same line"
     page.evaluate("() => { window.__lineWatch.disconnect(); }")
-    kind_of(page, field, "chars").check()
-    assert wait_until(page, f"document.getElementById({field!r}).value.length === 20", 5), f"{field}: Characters suggests at once"
-    c = value(page, field)
-    assert is_chars(c), f"{field}: twenty of the alphabet: {c!r}"
-    if again:
-        assert value(page, again) == c, f"{again}: filled alike"
-    shown_line(page, field, c)
+    says_next(page, field, "words", "after twenty characters")
+    no_row(page, field)
     not_spoken(page, console, c, field)
     named_buttons(page, f"{field} with its dice")
-    kind_of(page, field, "words").check()
-    assert wait_until(page, f"document.getElementById({field!r}).value.length !== 20", 5), f"{field}: Words again"
-    shown_line(page, field, value(page, field))
-    return value(page, field)
+    w = press(page, field, c)
+    assert five_words(w) and w != v, f"{field}: the next, five words again, another: {w!r}"
+    says_next(page, field, "chars", "after five words again")
+    shown_line(page, field, w)
+    return w
 
 
 def edited(page, field):
     """A key typed into the field: a password's field again, the eye as it
-    was (hidden), the rule's line saying what the rule finds, no Copy, and
-    the shown line empty, its place kept."""
+    was (hidden), the rule's line saying what the rule finds, no copy in
+    the shown line, which is empty, its place kept, and the dice still
+    labelled for what its next press gives (a key leaves the turn, AP
+    AccessEnds, D50-A)."""
+    label = dice_of(page, field).get_attribute("aria-label")
     page.locator("#" + field).press("End")
     page.locator("#" + field).press_sequentially("x")
     frames(page)
     assert page.evaluate(STATE, field)["type"] == "password", f"{field}: edited, a password's field again"
     assert line(page, field)["text"] == words(page, "password.fine"), f"{field}: the rule's line"
-    assert copy_of(page, field).count() == 0, f"{field}: edited, no Copy"
+    assert copy_of(page, field).count() == 0 and icon_of(page, field).count() == 0, f"{field}: edited, no copy in the shown line"
     shown = shown_state(page, field)
     assert shown is not None and shown["text"] == "", f"{field}: edited, no password in the shown line, its place kept: {shown}"
+    assert dice_of(page, field).get_attribute("aria-label") == label, f"{field}: a key leaves the turn: {label!r}"
 
 
 def reset_ends(page, field, reset):
     """A suggestion, then the form's Reset: the field emptied is a
-    password's field again, its eye not pressed, and the row, Copy and the
-    shown line gone."""
+    password's field again, its eye not pressed, the shown line and its
+    copy gone, and the next press gives five words again, a new start (AP
+    AccessEnds, D50-A)."""
     press(page, field)
+    if dice_of(page, field).get_attribute("aria-label") != words(page, NEXT["chars"]):
+        press(page, field)  # so that, but for the Reset, the next press would give twenty characters
+    says_next(page, field, "chars", "before Reset")
     assert page.evaluate(STATE, field)["type"] == "text"
     page.locator(reset).click()
     frames(page)
     s = page.evaluate(STATE, field)
     assert s["value"] == "" and s["type"] == "password" and s.get("pressed", "false") == "false", f"{field}: Reset ends the suggestion: {s}"
-    assert page.locator(f"#{field}-kind").count() == 0 and copy_of(page, field).count() == 0, f"{field}: Reset: no row, no Copy"
-    assert page.locator(f"#{field}-shown").count() == 0, f"{field}: Reset: no line"
+    assert copy_of(page, field).count() == 0 and page.locator(f"#{field}-shown").count() == 0, f"{field}: Reset: no line, no copy"
+    no_row(page, field)
+    says_next(page, field, "words", "after Reset")
 
 
 def test_the_first_owners_form(new_context, case, watch, guard):
     """The first owner's form, its fields not controlled: the dice beside
-    Password fills both; the row comes with the first press; an edit hides
-    it; a submit the form refuses, Again changed, keeps the suggestion in
+    Password fills both, five words and twenty characters by turns, the
+    shown line coming with the first press; a submit the form refuses,
+    Again changed, keeps the suggestion in
     the field, a password's field again, and empties the shown line, its
     place kept; a suggestion creates the owner."""
     page = start_page(new_context, guard, watch, OPEN)
@@ -414,8 +493,10 @@ def test_the_shown_line_ends_as_the_card_closes(new_context, case, watch, guard)
 def test_my_profiles_set_a_password(page, case):
     """My profile of a user with keys only (the test's owner): Set a
     password, the fields controlled; the suggestion is saved, registered as
-    suggested, and hidden at the submit, the shown line gone with the save
-    (the PUT stubbed, so that the user stays as it was)."""
+    suggested, and hidden at the submit, the shown line gone with the save,
+    which is a new start: the next press gives five words again (AP
+    AccessEnds, D50-A; the PUT stubbed, so that the user stays as it
+    was)."""
     console = watch_console(page)
     show_view(page, "profile")
     open_fold(page, "#me-password")
@@ -423,6 +504,9 @@ def test_my_profiles_set_a_password(page, case):
     check_suggest(page, case, "me-new", "me-again", console)
     edited(page, "me-new")
     v = press(page, "me-new")
+    if dice_of(page, "me-new").get_attribute("aria-label") != words(page, NEXT["chars"]):
+        v = press(page, "me-new", v)  # so that, but for the save, the next press would give twenty characters
+    says_next(page, "me-new", "chars", "before the save")
     put = []
 
     def user(route):
@@ -438,6 +522,7 @@ def test_my_profiles_set_a_password(page, case):
         assert page.evaluate("window.__registered") == [v] and len(put) == 1, f"registered as suggested: {put}"
         assert page.evaluate(STATE, "me-new")["type"] == "password", "hidden at the submit"
         assert page.locator("#me-new-shown").count() == 0, "saved: no shown line"
+        says_next(page, "me-new", "words", "after the save, a new start")
     finally:
         page.evaluate(REAL_REGISTER)
         page.unroute("**/api/v1/users/owner")
@@ -462,7 +547,8 @@ def test_my_profiles_change_password(new_context, case, watch, guard):
 
 def test_the_users_forms(page, case):
     """System settings → Users: adding a user, whose suggestion creates it
-    with that password, and a user's panel, its one field filled."""
+    with that password, and a user's panel, its one field filled; the
+    panel closed and opened is a new start, the next press five words."""
     console = watch_console(page)
     name = f"suggest-{case.width}-{case.lang}"
     remove_user(name)
@@ -484,13 +570,14 @@ def test_the_users_forms(page, case):
         check_suggest(page, case, field, None, console)
         reset_ends(page, field, ".user-panel[data-name='%s'] form .form-reset" % name)
         press(page, field)
+        says_next(page, field, "chars", "a press after Reset")
         toggle_fold(page, ".user-panel[data-name='%s']" % name)
         assert wait_until(page, f"!document.querySelector(\".user-panel[data-name='{name}']\").open", 3)
         toggle_fold(page, ".user-panel[data-name='%s']" % name)
         page.locator("#" + field).wait_for(state="visible")
-        assert page.locator(f"#{field}-kind").count() == 0, "the panel closed and opened: the row gone with the new start"
-        assert page.locator(f"#{field}-shown").count() == 0, "and the shown line"
+        assert page.locator(f"#{field}-shown").count() == 0, "the panel closed and opened: the shown line gone with the new start"
         assert page.evaluate(STATE, field)["type"] == "password", "and the suggestion hidden"
+        says_next(page, field, "words", "the panel closed and opened, a new start")
     finally:
         remove_user(name)
     show_view(page, "tiles")
@@ -498,9 +585,11 @@ def test_the_users_forms(page, case):
 
 def test_shown_with_the_eye_off(new_context, case, watch, guard):
     """With auth.password_reveal off there is no eye, and the suggestion
-    still shows, until it is edited. With the eye on, a password shown by
-    it stays shown after an edit of a suggestion, and the eye pressed on a
-    suggestion hides it."""
+    still shows, until it is edited; the press after the key gives the
+    kind the dice named before it, twenty characters after five words (a
+    key leaves the turn, AP AccessEnds, D50-A). With the eye on, a
+    password shown by it stays shown after an edit of a suggestion, and
+    the eye pressed on a suggestion hides it."""
     page = start_page(new_context, guard, watch, OPEN)
     say_reveal(page, False)
     page.reload()
@@ -512,6 +601,8 @@ def test_shown_with_the_eye_off(new_context, case, watch, guard):
     assert page.evaluate(STATE, "setup-password")["type"] == "text", "the suggestion shown, without the eye"
     shown_line(page, "setup-password", shown)
     edited(page, "setup-password")
+    after = press(page, "setup-password")
+    assert is_chars(after), f"the press after a key gives the kind the dice named, twenty characters: {after!r}"
     on = start_page(new_context, guard, watch, OPEN)
     owner_card(on)
     eye_of(on, "setup-password").click()
@@ -531,61 +622,232 @@ def test_shown_with_the_eye_off(new_context, case, watch, guard):
     assert shown_state(on, "setup-password")["text"] == "", "and the shown line with it"
 
 
-def test_the_choice_is_kept_and_the_keyboard_reaches_the_dice(page, case):
+FOCUSED = "(sel) => document.activeElement === document.querySelector(sel)"
+
+
+def test_the_dice_alternates_and_the_keyboard_reaches_it(page, case):
     """The keyboard: Tab from the field reaches the dice, Enter and Space
-    press it, the focus staying there. Characters chosen is kept after a
-    load: the next press suggests characters."""
+    press it, five words then twenty characters, the focus staying there;
+    Tab from the eye then reaches the shown line's copy and its icon,
+    after it the next field. After a load the first press gives five
+    words, whatever a browser kept under massimo.suggest, where the page
+    kept the kind chosen before (AP AccessEnds, D44-A). Fails on the page
+    before: Space gave five words again, and a kept "chars" gave
+    characters after the load."""
     show_view(page, "profile")
     open_fold(page, "#me-password")
     page.locator("#me-new").focus()
     page.keyboard.press("Tab")
-    assert page.evaluate("document.activeElement === document.querySelector('.pw-box:has(> #me-new) > .pw-dice')"), "Tab reaches the dice"
+    assert page.evaluate(FOCUSED, ".pw-box:has(> #me-new) > .pw-dice"), "Tab reaches the dice"
     page.keyboard.press("Enter")
     assert wait_until(page, "document.getElementById('me-new').value !== ''", 5), "Enter presses it"
     first = value(page, "me-new")
+    assert five_words(first), f"Enter: five words: {first!r}"
     page.keyboard.press("Space")
     assert wait_until(page, f"document.getElementById('me-new').value !== {first!r}", 5), "and Space"
-    assert page.evaluate("document.activeElement.classList.contains('pw-dice')"), "the focus stays on the dice"
-    kind_of(page, "me-new", "chars").check()
-    assert wait_until(page, "document.getElementById('me-new').value.length === 20", 5)
-    page.reload()
-    assert wait_until(page, "!!window.MassimoParts && state.eventsOpen", 10), "loaded again"
-    show_view(page, "profile")
-    open_fold(page, "#me-password")
-    v = press(page, "me-new", "")
-    assert is_chars(v), f"after a load, characters: {v!r}"
-    assert kind_of(page, "me-new", "chars").is_checked(), "Characters chosen"
-    page.evaluate("localStorage.removeItem('massimo.suggest')")
+    frames(page)
+    assert is_chars(value(page, "me-new")), f"Space: twenty characters: {value(page, 'me-new')!r}"
+    assert page.evaluate(FOCUSED, ".pw-box:has(> #me-new) > .pw-dice"), "the focus stays on the dice"
+    if eye_of(page, "me-new").count():
+        page.keyboard.press("Tab")
+        assert page.evaluate(FOCUSED, ".pw-box:has(> #me-new) > .pw-eye"), "Tab reaches the eye"
+    page.keyboard.press("Tab")
+    assert page.evaluate(FOCUSED, "#me-new-shown .pw-copy"), "Tab from the eye reaches the shown line's copy"
+    page.keyboard.press("Tab")
+    assert page.evaluate(FOCUSED, "#me-new-shown .copy-icon"), "then its icon"
+    page.keyboard.press("Tab")
+    assert page.evaluate("document.activeElement === document.getElementById('me-again')"), "then the next field"
+    page.evaluate("localStorage.setItem('massimo.suggest', 'chars')")
+    try:
+        page.reload()
+        assert wait_until(page, "!!window.MassimoParts && state.eventsOpen", 10), "loaded again"
+        show_view(page, "profile")
+        open_fold(page, "#me-password")
+        says_next(page, "me-new", "words", "after a load")
+        v = press(page, "me-new", "")
+        assert five_words(v), f"after a load, five words, whatever the browser kept: {v!r}"
+    finally:
+        page.evaluate("localStorage.removeItem('massimo.suggest')")
     toggle_fold(page, "#me-password")
     show_view(page, "tiles")
 
 
+def lang_init(lang):
+    """A script that makes lang the browser's language, before the page's own."""
+    return f"Object.defineProperty(navigator, 'languages', {{ get: () => [{lang!r}] }}); " \
+           f"Object.defineProperty(navigator, 'language', {{ get: () => {lang!r} }});"
+
+
+def texts_of(lang):
+    """The page's texts in lang, as its file holds them."""
+    with open(os.path.join(I18N, lang + ".json"), encoding="utf-8") as f:
+        return json.load(f)
+
+
+# The dice's label in the languages the suite's cases do not run: before
+# five words, before twenty characters.
+DICE_SAYS = {
+    "fr": ("Suggérer cinq mots", "Suggérer vingt caractères"),
+    "it": ("Suggerisci cinque parole", "Suggerisci venti caratteri"),
+    "nl": ("Vijf woorden voorstellen", "Twintig tekens voorstellen"),
+    "pl": ("Zaproponuj pięć słów", "Zaproponuj dwadzieścia znaków"),
+}
+
+
+@pytest.mark.cases("1100-en")
+def test_the_dice_names_its_next_kind_in_every_language(new_context, case, watch, guard):
+    """In French, Italian, Dutch and Polish, each the browser's language,
+    as the suite's cases run English and German: the first owner's dice
+    labelled, aria-label and title, with its language's words (DICE_SAYS)
+    for five words before the first press and after the second, and for
+    twenty characters after the first (AP AccessEnds, D44-A), each press
+    giving the kind its label named. Fails on the page before: Suggest a
+    password."""
+    for lang, said in DICE_SAYS.items():
+        page = start_page(new_context, guard, watch, OPEN, init=lang_init(lang))
+        owner_card(page)
+        assert wait_until(page, f"i18n.lang === {lang!r}", 5), f"the page in {lang}"
+        frames(page)
+        dice = dice_of(page, "setup-password")
+
+        def says(kind, what):
+            want = said[0 if kind == "words" else 1]
+            got = [dice.get_attribute("aria-label"), dice.get_attribute("title")]
+            assert got == [want, want], f"{lang}: {what}: the dice says {kind} next in its words, {want!r}: {got}"
+        says("words", "before the first press")
+        v = press(page, "setup-password")
+        assert five_words(v), f"{lang}: five words: {v!r}"
+        says("chars", "after five words")
+        c = press(page, "setup-password", v)
+        assert is_chars(c), f"{lang}: twenty characters: {c!r}"
+        says("words", "after twenty characters")
+        page.context.close()
+
+
+# The line under a new password's field that says what the rule finds:
+# its height and its line's, and its place's, as tall as the tallest of
+# its texts, each drawn hidden in the same cell.
+RULE_PLACE = """(field) => {
+  const line = document.getElementById(field + '-rule');
+  return {text: line.textContent, height: line.getBoundingClientRect().height, lineHeight: parseFloat(getComputedStyle(line).lineHeight),
+          place: line.closest('.pw-rule').getBoundingClientRect().height};
+}"""
+
+
+@pytest.mark.cases("390-en")
+def test_the_rule_line_is_one_line_in_every_language(new_context, case, watch, guard):
+    """Add a user at 390 px, the narrowest field of a new password there,
+    in each of the six languages, the browser's: the word list not had,
+    the line under the field says so on one line, in its language's words,
+    and its place is one line tall, each of the line's texts fitting one
+    line, so that the rows under it stay where they are (docs/ui.md). Fails
+    with a text that takes two lines there, as German's first words for
+    the word list not had did."""
+    for lang in ("en", "de", "fr", "it", "nl", "pl"):
+        texts = texts_of(lang)
+        ctx = new_context()
+        ctx.add_init_script(f"localStorage.setItem('massimo.token', {TOKEN!r})")
+        ctx.add_init_script(lang_init(lang))
+        page = ctx.new_page()
+        guard.page = page
+        page.set_default_timeout(5000)
+        page.route("**/ui/words-en.txt", lambda route: route.fulfill(status=503, body="no"))
+        page.goto(URL)
+        page.wait_for_selector(".room", timeout=10000)
+        assert wait_until(page, f"i18n.lang === {lang!r}", 5), f"the page in {lang}"
+        show_view(page, "system")
+        page.locator("#user-add").click()
+        page.locator("#user-new-password").wait_for(state="visible")
+        dice_of(page, "user-new-password").click()
+        assert wait_until(page, "document.getElementById('user-new-password-rule').textContent === t('password.noList')", 5), \
+            f"{lang}: the word list not had, said"
+        r = page.evaluate(RULE_PLACE, "user-new-password")
+        assert r["text"] == texts["password.noList"], f"{lang}: in its words: {r}"
+        assert r["height"] <= r["lineHeight"] + 0.5 and abs(r["place"] - r["lineHeight"]) <= 0.5, \
+            f"{lang}: the line and its place one line tall at 390 px: {r}"
+        ctx.close()
+
+
+def copied_here(page, sel, v, what, clipboard=True):
+    """The element sel, clicked or given Enter (what), copied v and said
+    so: "Copied" above it (the class copied, its data-copied) and in the
+    status region #copy-status, the focus on it still; with clipboard,
+    the browser's clipboard holds v."""
+    assert wait_until(page, "document.getElementById('copy-status').textContent === t('copy.done')", 3), f"{what}: said in the status region"
+    el = page.locator(sel)
+    assert "copied" in (el.get_attribute("class") or "").split() and el.get_attribute("data-copied") == words(page, "copy.done"), \
+        f"{what}: Copied shows on it: {el.get_attribute('class')!r}"
+    assert page.evaluate(FOCUSED, sel), f"{what}: the focus stays on it"
+    if clipboard:
+        assert wait_until(page, "navigator.clipboard.readText().then((t) => t === %r)" % v, 3), f"{what}: the suggestion copied"
+
+
 def test_copy(page, case):
-    """Copy copies what the field holds and says so, with the browser's
-    clipboard and without it, as over plain HTTP on the LAN."""
+    """The shown line's suggestion copies itself, as the page's other
+    strings do (Copy; AP AccessEnds, D44-A): a click on it, Enter and
+    Space on it, copy the field's value, "Copied" showing on it and said
+    in the status region, the focus staying, with the browser's clipboard
+    and without it, as over plain HTTP on the LAN; its copy icon likewise.
+    The line or its icon copied, then the dice pressed while Copied still
+    shows: the new suggestion is not marked Copied. Fails on the page
+    before: no copy in the shown line."""
     page.context.grant_permissions(["clipboard-read", "clipboard-write"], origin=page.evaluate("location.origin"))
     show_view(page, "profile")
     open_fold(page, "#me-password")
     v = press(page, "me-new", "")
-    page.evaluate("navigator.clipboard.writeText('')")
-    copy = page.locator(".pw-suggest .pw-copy")
-    assert copy.get_attribute("aria-label") == words(page, "password.copyName"), "Copy named"
-    copy.click()
-    assert wait_until(page, "navigator.clipboard.readText().then((t) => t === %r)" % v, 3), "Copy copies the suggestion"
-    assert wait_until(page, "document.getElementById('copy-status').textContent === t('copy.done')", 3), "and says so"
-    page.evaluate("navigator.clipboard.writeText('')")
+    line, icon = "#me-new-shown .pw-copy", "#me-new-shown .copy-icon"
+    name = words(page, "password.copyName")
+    assert page.locator(line).get_attribute("aria-label") == name and page.locator(icon).get_attribute("aria-label") == name, "named"
+    # the clipboard, the status region and every element's mark of a copy emptied, so that each copy is seen anew
+    clear = """() => {
+      navigator.clipboard.writeText('');
+      const s = document.getElementById('copy-status');
+      if (s) s.textContent = '';
+      for (const el of document.querySelectorAll('.copied')) el.classList.remove('copied');
+    }"""
+    page.evaluate(clear)
+    page.locator(line).click()
+    copied_here(page, line, v, "a click on the line")
+    page.evaluate(clear)
+    page.locator(line).focus()
+    page.keyboard.press("Enter")
+    copied_here(page, line, v, "Enter on the line")
+    page.evaluate(clear)
+    page.locator(line).focus()
+    page.keyboard.press("Space")
+    copied_here(page, line, v, "Space on the line")
+    page.evaluate(clear)
+    page.locator(icon).click()
+    copied_here(page, icon, v, "a click on the icon")
+    page.evaluate(clear)
+    page.locator(icon).focus()
+    page.keyboard.press("Enter")
+    copied_here(page, icon, v, "Enter on the icon")
+    page.evaluate(clear)
     page.evaluate("""() => {
       window.__clip = navigator.clipboard;
       Object.defineProperty(navigator, "clipboard", { value: undefined, configurable: true });
     }""")
     try:
+        page.locator(line).click()
+        copied_here(page, line, v, "without the clipboard, a click on the line", clipboard=False)
         page.evaluate("document.getElementById('copy-status').textContent = ''")
-        copy.click()
-        assert wait_until(page, "document.getElementById('copy-status').textContent === t('copy.done')", 3), "without the clipboard: said"
-        assert page.evaluate("document.activeElement === document.querySelector('.pw-suggest .pw-copy')"), "the focus stays on Copy"
+        page.locator(icon).focus()
+        page.keyboard.press("Enter")
+        copied_here(page, icon, v, "without the clipboard, Enter on the icon", clipboard=False)
     finally:
         page.evaluate("""() => Object.defineProperty(navigator, "clipboard", { value: window.__clip, configurable: true })""")
     assert page.evaluate("navigator.clipboard.readText()") == v, "the fallback copies"
+    assert value(page, "me-new") == v and page.evaluate(STATE, "me-new")["type"] == "text", "the suggestion still shown"
+    # copied, then the dice pressed while Copied still shows: the new suggestion, which nobody copied, is not marked so
+    for what, sel in (("the line", line), ("its icon", icon)):
+        page.evaluate(clear)
+        page.locator(sel).click()
+        assert wait_until(page, f"document.querySelector({sel!r}).classList.contains('copied')", 3), f"{what}: Copied shows on it"
+        n = press(page, "me-new", value(page, "me-new"))
+        marked = page.evaluate("() => [...document.querySelectorAll('#me-new-shown .copied')].map((el) => el.className)")
+        assert marked == [] and page.locator(line).text_content() == n, \
+            f"{what} copied, then the dice: the new suggestion not marked Copied: {marked}"
     toggle_fold(page, "#me-password")
     show_view(page, "tiles")
 
@@ -633,7 +895,8 @@ def test_numbers_at_the_limit_are_drawn_again(page, case):
 def test_a_name_that_is_a_word_is_drawn_again(page, case):
     """A user to be added named as a word of the list: a suggestion holding
     it is refused by the rule and drawn again; where every one of the 20
-    draws holds it, the line says that none was found and the field keeps
+    draws holds it, at the press of five words after the press of twenty
+    characters, the line says that none was found and the field keeps
     what it had."""
     console = watch_console(page)
     name = f"{WORD_LIST[0]}-{case.width}-{case.lang}"  # abacus-…
@@ -650,6 +913,8 @@ def test_a_name_that_is_a_word_is_drawn_again(page, case):
     assert v == "-".join(WORD_LIST[5:10]), f"the draw with the name refused, the next taken: {v!r}"
     assert draws == 10, f"two draws of five words: {draws}"
     assert WORD_LIST[0] not in v
+    c = press(page, "user-new-password", v)
+    assert is_chars(c), f"the next press, twenty characters: {c!r}"
     page.evaluate(STUB_RANDOM, [[], 0])
     try:
         dice_of(page, "user-new-password").click()
@@ -659,33 +924,50 @@ def test_a_name_that_is_a_word_is_drawn_again(page, case):
     finally:
         page.evaluate(REAL_RANDOM)
     assert draws == 100, f"20 draws of five words: {draws}"
-    assert value(page, "user-new-password") == v, "the field keeps what it had"
+    assert value(page, "user-new-password") == c, "the field keeps what it had"
     not_spoken(page, console, v, "the name's test")
+    not_spoken(page, console, c, "the name's test")
     page.locator("#user-new .form-cancel").click()
     show_view(page, "tiles")
 
 
+def fetched(page):
+    """The requests for the word list the page sent."""
+    return len([u for _, u in page.requests if u.endswith("/ui/words-en.txt")])
+
+
 def test_the_list_is_fetched_once(new_context, case, watch, guard):
-    """The word list is fetched at the first press, once for two presses
-    while it loads; a fetch that fails says so in the line, Characters
-    still suggests, and the next press of Words fetches it again; a
-    suggestion that comes after the card opened anew fills nothing."""
+    """The word list is fetched at the first press of words, once for two
+    presses of words while it loads, the press between them giving twenty
+    characters at once, and the last press's words filling once it has
+    loaded; a fetch that fails says so in the line, the next press still
+    gives twenty characters, which need no list, the label saying so (AP
+    AccessEnds, D51-A), and the press after fetches the list again; a
+    suggestion that comes after the card opened anew fills nothing. Fails
+    on the page before: the second press gave words, and the press after a
+    failed fetch asked for words again."""
     page = start_page(new_context, guard, watch, OPEN)
     held = []
     page.route("**/ui/words-en.txt", lambda route: held.append(route))
     owner_card(page)
-    assert not [u for _, u in page.requests if u.endswith("/ui/words-en.txt")], "not fetched before a press"
-    dice_of(page, "setup-password").click()
+    assert not fetched(page), "not fetched before a press"
     dice_of(page, "setup-password").click()
     wait_held(page, held)
-    held[0].continue_()
-    assert wait_until(page, "document.getElementById('setup-password').value !== ''", 5), "filled once loaded"
-    assert len(held) == 1, f"two presses while it loads, one fetch: {len(held)}"
-    v = value(page, "setup-password")
-    assert five_words(v), v
+    says_next(page, "setup-password", "chars", "the first press waiting for the list")
+    c = press(page, "setup-password", "")
+    assert is_chars(c), f"the second press while it loads: twenty characters at once: {c!r}"
     dice_of(page, "setup-password").click()
-    assert wait_until(page, f"document.getElementById('setup-password').value !== {v!r}", 5), "the list kept: the next press fills"
-    assert len([u for _, u in page.requests if u.endswith("/ui/words-en.txt")]) == 1, "fetched once"
+    says_next(page, "setup-password", "chars", "the third press waiting for the list")
+    held[0].continue_()
+    assert wait_until(page, f"document.getElementById('setup-password').value !== {c!r}", 5), "filled once loaded"
+    v = value(page, "setup-password")
+    assert five_words(v), f"the last press's words: {v!r}"
+    assert len(held) == 1, f"two presses of words while it loads, one fetch: {len(held)}"
+    n = press(page, "setup-password", v)
+    assert is_chars(n), f"the next, twenty characters: {n!r}"
+    w = press(page, "setup-password", n)
+    assert five_words(w) and w != v, f"the list kept: the next press of words fills: {w!r}"
+    assert fetched(page) == 1, "fetched once"
     # a fetch that fails, on a page of its own
     failing = start_page(new_context, guard, watch, OPEN)
     failing.route("**/ui/words-en.txt", lambda route: route.fulfill(status=503, body="no"))
@@ -693,14 +975,16 @@ def test_the_list_is_fetched_once(new_context, case, watch, guard):
     dice_of(failing, "setup-password").click()
     assert wait_until(failing, "document.getElementById('setup-password-rule').textContent === t('password.noList')", 5), "the line says so"
     assert value(failing, "setup-password") == "", "nothing filled"
-    kind_of(failing, "setup-password", "chars").check()
-    assert wait_until(failing, "document.getElementById('setup-password').value.length === 20", 5), "Characters still suggests"
+    says_next(failing, "setup-password", "chars", "after the list not had")
+    dice_of(failing, "setup-password").click()
+    assert wait_until(failing, "document.getElementById('setup-password').value.length === 20", 5), "the next press gives twenty characters"
+    assert is_chars(value(failing, "setup-password")), value(failing, "setup-password")
     assert wait_until(failing, "document.getElementById('setup-password-rule').textContent === t('password.suggested')", 3), "and the line says so"
     failing.unroute("**/ui/words-en.txt")
-    kind_of(failing, "setup-password", "words").check()
-    assert wait_until(failing, "document.getElementById('setup-password').value.split('-').length >= 5", 5), "Words fetches it again"
-    failing.evaluate("localStorage.removeItem('massimo.suggest')")
-    # a suggestion that comes after the card opened anew: nothing filled, no row
+    dice_of(failing, "setup-password").click()
+    assert wait_until(failing, "document.getElementById('setup-password').value.split('-').length >= 5", 5), "the press after fetches it again"
+    assert fetched(failing) == 2, f"fetched again: {fetched(failing)}"
+    # a suggestion that comes after the card opened anew: nothing filled, no shown line
     late = start_page(new_context, guard, watch, OPEN)
     held = []
     late.route("**/ui/words-en.txt", lambda route: held.append(route))
@@ -714,7 +998,8 @@ def test_the_list_is_fetched_once(new_context, case, watch, guard):
     late.evaluate("() => window.MassimoParts.suggestPassword('words').then(() => {})")
     frames(late)
     assert value(late, "setup-password") == "" and value(late, "setup-again") == "", "nothing filled after the new start"
-    assert late.locator("#setup-password-kind").count() == 0, "and no row"
+    assert late.locator("#setup-password-shown").count() == 0, "and no shown line"
+    says_next(late, "setup-password", "words", "the card opened anew, a new start")
 
 
 def held_list(page):
@@ -735,19 +1020,20 @@ def let_list_go(page, held):
 
 
 def test_a_late_suggestion_does_not_overwrite_a_later_press(new_context, case, watch, guard):
-    """Words pressed while the list loads, then Characters: the characters
-    fill, and the words that come later do not replace them."""
+    """Words pressed while the list loads, then a second tap, which gives
+    twenty characters at once: the characters fill, the words that come
+    later do not replace them, and the dice says five words next."""
     page = start_page(new_context, guard, watch, OPEN)
     held = held_list(page)
     owner_card(page)
     dice_of(page, "setup-password").click()
-    kind_of(page, "setup-password", "chars").check()
-    assert wait_until(page, "document.getElementById('setup-password').value.length === 20", 5), "Characters fills"
+    assert wait_held(page, held), "the list's request held"
+    dice_of(page, "setup-password").click()
+    assert wait_until(page, "document.getElementById('setup-password').value.length === 20", 5), "the second tap fills twenty characters"
     c = value(page, "setup-password")
     let_list_go(page, held)
     assert value(page, "setup-password") == c and value(page, "setup-again") == c, "the late words fill nothing"
-    assert kind_of(page, "setup-password", "chars").is_checked(), "Characters still chosen"
-    page.evaluate("localStorage.removeItem('massimo.suggest')")
+    says_next(page, "setup-password", "words", "after the late words")
 
 
 def test_a_late_suggestion_does_not_overwrite_a_typed_password(new_context, case, watch, guard):
@@ -802,8 +1088,8 @@ def test_a_late_suggestion_does_not_fill_after_a_save(page, case):
 def test_a_list_of_another_form_is_refused(new_context, case, watch, guard):
     """The list is held to its form: with line ends of CRLF, or a word
     twice, it is not taken, and the line says that it was not loaded; a
-    failure of the browser's random numbers at a press of Characters says
-    that no suggestion could be made."""
+    failure of the browser's random numbers at the next press, which gives
+    twenty characters, says that no suggestion could be made."""
     with open(LIST, encoding="utf-8") as f:
         good = f.read()
     for what, body in (("CRLF", good.replace("\n", "\r\n")), ("a word twice", good.replace("zoom\n", "abacus\n"))):
@@ -814,16 +1100,16 @@ def test_a_list_of_another_form_is_refused(new_context, case, watch, guard):
         assert wait_until(page, "document.getElementById('setup-password-rule').textContent === t('password.noList')", 5), f"{what}: not loaded"
         assert value(page, "setup-password") == "", f"{what}: nothing filled"
     page.evaluate("() => { crypto.getRandomValues = () => { throw new Error('no random numbers'); }; }")
-    kind_of(page, "setup-password", "chars").check()
+    says_next(page, "setup-password", "chars", "after the list refused")
+    dice_of(page, "setup-password").click()
     assert wait_until(page, "document.getElementById('setup-password-rule').textContent === t('password.noSuggestion')", 5), \
         "a failure of the random numbers: no suggestion could be made"
-    page.evaluate("localStorage.removeItem('massimo.suggest')")
 
 
 def reset_after_a_press(page, field, again, reset):
     """A password typed, Words pressed while the list loads, then the
-    form's Reset: the suggestion that comes later fills nothing, and the
-    row has gone with the Reset."""
+    form's Reset: the suggestion that comes later fills nothing, the shown
+    line has gone with the Reset, and the next press gives five words."""
     held = held_list(page)
     page.locator("#" + field).fill("typed-before-reset")
     if again:
@@ -836,7 +1122,8 @@ def reset_after_a_press(page, field, again, reset):
     let_list_go(page, held)
     assert value(page, field) == "" and (not again or value(page, again) == ""), f"{field}: nothing filled after the Reset"
     assert page.evaluate(STATE, field)["type"] == "password", f"{field}: a password's field"
-    assert page.locator(f"#{field}-kind").count() == 0, f"{field}: no row after the Reset"
+    assert page.locator(f"#{field}-shown").count() == 0, f"{field}: no shown line after the Reset"
+    says_next(page, field, "words", "after the Reset")
 
 
 def test_a_late_suggestion_does_not_fill_after_my_profiles_reset(page, case):
@@ -879,23 +1166,22 @@ def test_a_late_suggestion_does_not_overwrite_again(new_context, case, watch, gu
 
 
 # The places of the field's row and of the row after the field's: the
-# kind's choice (None without it), the line that shows the suggestion
-# (its top and height, None without it) and the next field's top.
+# line that shows the suggestion (its top and height, None without it),
+# the rule's line's top, and the field's and the next field's tops.
 PLACES = """(field) => {
-  const kind = document.getElementById(field + '-kind');
   const shown = document.getElementById(field + '-shown');
   const row = document.getElementById(field).closest('.field').nextElementSibling;
-  return {kind: kind ? Math.round(kind.getBoundingClientRect().top) : null, next: Math.round(row.getBoundingClientRect().top),
+  return {rule: Math.round(document.getElementById(field + '-rule').getBoundingClientRect().top), next: Math.round(row.getBoundingClientRect().top),
           own: Math.round(document.getElementById(field).getBoundingClientRect().top),
           shown: shown ? [Math.round(shown.getBoundingClientRect().top), Math.round(shown.getBoundingClientRect().height)] : null};
 }"""
 
 
-def test_the_row_stays_while_one_types(new_context, case, watch, guard):
+def test_the_shown_line_stays_while_one_types(new_context, case, watch, guard):
     """After a suggestion, the field emptied by keys and typed in again:
-    the row stays, Copy goes, the line that showed the suggestion keeps its
-    place, empty, and nothing under the field, nor the field in the centred
-    card, moves."""
+    the line that showed the suggestion keeps its place, empty, its copy
+    gone, no row comes, and nothing under the field, nor the field in the
+    centred card, moves."""
     page = start_page(new_context, guard, watch, OPEN)
     owner_card(page)
     press(page, "setup-password")
@@ -910,9 +1196,10 @@ def test_the_row_stays_while_one_types(new_context, case, watch, guard):
     f.press_sequentially("m")
     frames(page)
     typed = page.evaluate(PLACES, "setup-password")
-    assert before == emptied == typed and before["kind"] is not None and before["shown"] is not None, \
-        f"the row and the shown line's place stay, nothing moves: {before}, {emptied}, {typed}"
-    assert copy_of(page, "setup-password").count() == 0, "no Copy for what is typed"
+    assert before == emptied == typed and before["shown"] is not None, \
+        f"the shown line's place stays, nothing moves: {before}, {emptied}, {typed}"
+    assert copy_of(page, "setup-password").count() == 0 and icon_of(page, "setup-password").count() == 0, "no copy for what is typed"
+    no_row(page, "setup-password")
 
 
 # The lines five words take at a width, by their widths in the body's
@@ -936,11 +1223,12 @@ def test_the_widest_suggestion_in_a_users_panel(page, case):
     """The widest suggestion of five words there can be, the list's widest
     word five times, the page's random numbers handed its place in the
     list, in a user's panel at 390 px: the line under the field shows it
-    whole inside the field's row, broken after a "-" alone, on as many
-    lines as the words' widths give at the line's width (WORDS_LINES):
-    three with the test machine's fonts, where three of the widest do not
-    fit a line, the place as tall as they; and the page has no horizontal
-    scroll (AP AccessEnds, D21-A). Fails on the page before: no line."""
+    whole inside the field's row, its copy icon after it, broken after a
+    "-" alone, on as many lines as the words' widths give at the width
+    the icon leaves them (WORDS_LINES): three with the test machine's
+    fonts, where three of the widest do not fit a line, the place as tall
+    as they; and the page has no horizontal scroll (AP AccessEnds, D21-A,
+    D44-A). Fails on the page before: no copy in the line."""
     name = f"widest-{case.width}-{case.lang}"
     remove_user(name)
     api_call("POST", "api/v1/users", {"name": name, "role": "viewer", "password": "fixed-pw-01"})
@@ -959,7 +1247,7 @@ def test_the_widest_suggestion_in_a_users_panel(page, case):
             page.evaluate(REAL_RANDOM)
         assert v == "-".join([widest] * 5), f"the widest suggestion: {v!r}"
         s = shown_line(page, field, v)
-        given = page.evaluate(WORDS_LINES, [[widest] * 5, s["width"]])
+        given = page.evaluate(WORDS_LINES, [[widest] * 5, s["room"]])
         assert s["lines"] == given >= 2, f"on the lines the widths give, {given}: {s}"
         assert scroll_width(page) <= case.width, f"no horizontal scroll: {scroll_width(page)}"
         page.locator(panel + " form .form-reset").click()

@@ -28,24 +28,23 @@
  * password, PasswordRule, says what the rule finds while it is typed
  * (D6-A). The first new password of each form that sets one has a dice
  * beside its eye that suggests one (D14-A to D19-A; shared/suggest.ts),
+ * five words and twenty characters by turns (AP AccessEnds, D44-A),
  * fills the form with it and shows it, in the field and whole in a line
- * under it (D58-A), and from then on offers Words or Characters and Copy
- * under the field. The sign-in, and the upgrade of a version-1 user at
- * its sign-in (login.js upgradePassword), hold no rule: they take the
- * password a user has.
+ * under it (D58-A), where a tap copies it. The sign-in, and the upgrade
+ * of a version-1 user at its sign-in (login.js upgradePassword), hold no
+ * rule: they take the password a user has.
  */
 
 import { signal } from "@preact/signals";
 import type { Ref } from "preact";
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "preact/hooks";
 import { app, serverOf } from "./app";
-import { Choices } from "./choices";
 import { Copy } from "./copy";
 import { Field } from "./field";
 import { Icon } from "./icon";
 import { useLang } from "./lang";
 import { session, stillSession } from "./session";
-import { chooseKind, ListError, type SuggestKind, suggestKind, suggestPassword } from "./suggest";
+import { ListError, type SuggestKind, suggestPassword } from "./suggest";
 
 /** Whether the password fields offer their eye: the server's setting auth.password_reveal, as /healthz says it; null until it has, when none shows one. */
 export const reveal = signal<boolean | null>(null);
@@ -301,10 +300,12 @@ type One = { value: string; set: (v: string) => void; inputRef?: Ref<HTMLInputEl
  * comes back. The type never turns while the field is in a closed fold (a
  * details): Chrome draws nothing of an input whose type turned there once
  * the fold opens, so it is turned as the fold opens, before it is painted.
- * suggest, given, draws the dice before the eye, labelled Suggest a
- * password, which calls its press; while its shown is true the password
- * shows as text, eye or none (a suggestion, D19-A), and the eye, pressed
- * then, hides it (its hide) and the eye's own state is as it was.
+ * suggest, given, draws the dice before the eye, which calls its press,
+ * labelled by what that press gives, its next: Suggest five words or
+ * Suggest twenty characters (AP AccessEnds, D44-A); while its shown is
+ * true the password shows as text, eye or none (a suggestion, D19-A), and
+ * the eye, pressed then, hides it (its hide) and the eye's own state is
+ * as it was.
  */
 export function PasswordInput(props: One & {
   id: string;
@@ -319,7 +320,7 @@ export function PasswordInput(props: One & {
   describedBy?: string;
   invalid?: boolean;
   typed?: (v: string) => void;
-  suggest?: { shown: boolean; press: () => void; hide: () => void };
+  suggest?: { shown: boolean; press: () => void; hide: () => void; next: SuggestKind };
 }) {
   useLang();
   const { id, name, autocomplete, required, disabled, placeholder, inputCls, cls, reset, inputRef, describedBy, invalid, typed, suggest } = props;
@@ -412,7 +413,7 @@ export function PasswordInput(props: One & {
     setShown(!visible);
   };
   const label = t(visible ? "password.hide" : "password.show");
-  const dice = t("password.suggest");
+  const dice = t(suggest?.next === "chars" ? "password.suggestChars" : "password.suggestWords");
   return (
     <span class={"pw-box" + (on ? " has-eye" : "") + (suggest ? " has-dice" : "") + (cls ? " " + cls : "")}>
       <input ref={bind} id={id} type={type as "text"} name={name} class={inputCls} autocomplete={autocomplete} autocapitalize="none"
@@ -459,7 +460,12 @@ export function PasswordInput(props: One & {
  * that nothing contradicts the line once the password can be set.
  *
  * suggest, given with rule, offers the dice (PasswordInput's suggest): a
- * press draws a suggestion of the kind chosen (shared/suggest.ts), drawn
+ * press draws a suggestion of the kind the field gives next
+ * (shared/suggest.ts), five words at the first press and at each new
+ * start, then twenty characters and five words by turns: each press
+ * turns it, whatever it fills, and a key leaves it, so that the next
+ * press gives the other kind of the last, as the dice's label says (AP
+ * AccessEnds, D44-A, D50-A, D51-A). A suggestion is drawn
  * again where the rule refuses it, fills the field with it, a controlled
  * one by its set, one not controlled by its element and an input event,
  * so that the line and the caller's state follow, fills also (the form's
@@ -472,22 +478,23 @@ export function PasswordInput(props: One & {
  * suggested, never which, written anew at each fill. While the field
  * holds the suggestion, a line right under it shows the suggestion
  * whole (AP PasswordRules, D58-A), which the field, narrower, shows a
- * part of: in the body's font at 16 px, aria-hidden, since the field,
- * text then, gives the value and the rule's line says that it was
- * suggested, and a line read out inside the live regions of My profile
- * and Users would speak the password; translate="no", so that a page's
- * translation leaves its words alone (AP AccessEnds, D20-A to D22-A).
- * From the first press on a row under the rule's line offers Words or
- * Characters, which suggests one of that kind and is kept in this
- * browser, and while the field holds the suggestion Copy, which copies
- * it; the shown line keeps its place, two lines tall, from the first
- * press on too, empty while the suggestion is not shown (AP AccessEnds,
- * D19-A). A key never takes the row or that place away, so that nothing
- * under the field moves between presses or while one types, but after
- * the rarest draws at a phone's width, whose five words take a third
- * line, which the first key gives back: they go with a value changed
- * from outside (Reset, a save) and at a new start. They are not there
- * before, so that a form keeps its height until the dice is used. A
+ * part of: in the body's font at 16 px, a text that copies itself on a
+ * tap, a click, Enter or Space and says "Copied", as the page's other
+ * strings do, its copy icon after it (Copy; AP AccessEnds, D44-A, D49-A),
+ * a Copy of each suggestion its own, so that Copied never shows over the
+ * next, both named Copy the password, its words quiet, hidden from a screen
+ * reader, since the field, text then, gives the value and the rule's
+ * line says that it was suggested, and words read out inside the live
+ * regions of My profile and Users would speak the password (D52-A);
+ * translate="no", so that a page's translation leaves its words alone
+ * (AP AccessEnds, D20-A to D22-A). The line keeps its place, two lines
+ * tall, from the first press on, empty while the suggestion is not shown
+ * (AP AccessEnds, D19-A). A key never takes that place away, so that
+ * nothing under the field moves between presses or while one types, but
+ * after the rarest draws at a phone's width, whose five words take a
+ * third line, which the first key gives back: it goes with a value
+ * changed from outside (Reset, a save) and at a new start. It is not
+ * there before, so that a form keeps its height until the dice is used. A
  * suggestion drawn while another press, a key in the field, a submit, a
  * change from outside, the dialog's close, a new start or a sign-out
  * came, or after either field changed, fills nothing. The word
@@ -511,18 +518,22 @@ export function PasswordField(props: One & {
 }) {
   const { label, id, hint, cls, rule, refused = 0, suggest, also, ...input } = props;
   const [typed, setTyped] = useState("");
-  // the suggestion: the row offered from the first press, the value filled (a suggestion while the field still holds
-  // it), what the line says of one, and the count of the line's fills. turn rises at every press, every key in the
-  // field, every submit and every new start: a suggestion drawn while it rose fills nothing
+  // the suggestion: the shown line's place offered from the first press, the value filled (a suggestion while the field
+  // still holds it), what the line says of one, and the count of the line's fills. turn rises at every press, every
+  // key in the field, every submit and every new start: a suggestion drawn while it rose fills nothing
   const [offered, setOffered] = useState(false);
   const [filled, setFilled] = useState("");
   const [note, setNote] = useState<SuggestNote>("");
   const [fills, setFills] = useState(0);
   const turn = useRef(0);
   const filling = useRef(false);
+  // the kind the next press gives, five words at each new start and the other kind after each press (AP AccessEnds,
+  // D50-A, D51-A): a ref for the press, which a second press may follow before the field is drawn again, and its
+  // state for the dice's label
+  const nextKind = useRef<SuggestKind>("words");
+  const [next, setNext] = useState<SuggestKind>("words");
   // the value as the field's keys and fills last left it: one that differs came from outside (Reset, a save)
   const known = useRef<string | undefined>(undefined);
-  const kind = suggestKind.value;
   // the refusal the line said last until a key: the count of refusals at the last key, or at the last new start
   const [keyed, setKeyed] = useState(refused);
   const el = useRef<HTMLInputElement | null>(null);
@@ -541,6 +552,8 @@ export function PasswordField(props: One & {
     setOffered(false);
     setFilled("");
     setNote("");
+    nextKind.current = "words";
+    setNext("words");
   }, [props.reset]);
   // a suggestion shown is hidden at the submit, in the capture before the form's own handler, as the eye's password,
   // and one still drawn fills nothing after it
@@ -582,13 +595,13 @@ export function PasswordField(props: One & {
   const own = rule && !props.set;
   const value = props.set ? props.value : typed;
   // a suggestion while the field holds what was filled: emptied or changed, by a key or by its form (Reset, a save's
-  // success), it is a password's field again, the eye as it was, and Copy is not offered
+  // success), it is a password's field again, the eye as it was, and the shown line is empty
   const suggested = filled !== "" && value === filled;
   // refused only while the value shown is still one the rule refuses: a field emptied or changed by its form (Reset, a
   // draft taken away, a save's success) is no longer
   const said = !!rule && refused !== keyed && !!value && !!passwordRefusal(value, rule());
-  // a value changed from outside, not by a key or a fill (the form's Reset, a save's success): the suggestion and its row
-  // end, and one still drawn fills nothing
+  // a value changed from outside, not by a key or a fill (the form's Reset, a save's success): the suggestion and its
+  // line's place end, the next press gives five words, and one still drawn fills nothing
   useLayoutEffect(() => {
     if (known.current === undefined || value === known.current) return;
     known.current = undefined;
@@ -596,6 +609,8 @@ export function PasswordField(props: One & {
     setOffered(false);
     setFilled("");
     setNote("");
+    nextKind.current = "words";
+    setNext("words");
   }, [value]);
   const key = (v: string) => {
     known.current = v;
@@ -625,7 +640,12 @@ export function PasswordField(props: One & {
     setNote("");
     setFills((f) => f + 1);
   };
-  const press = async (k: SuggestKind) => {
+  // a press gives the kind next names and turns it at once, whatever it fills (D51-A): after a list not had, the next
+  // press gives twenty characters, which need none
+  const press = async () => {
+    const k = nextKind.current;
+    nextKind.current = k === "words" ? "chars" : "words";
+    setNext(nextKind.current);
     const n = session();
     const mine = ++turn.current;
     // what the two fields hold at the press: a suggestion that comes after either changed fills nothing
@@ -642,28 +662,21 @@ export function PasswordField(props: One & {
     if (v === null) setNote("none");
     else fill(v);
   };
-  const dice = suggest && rule ? { shown: suggested, press: () => press(kind), hide: () => setFilled("") } : undefined;
+  const dice = suggest && rule ? { shown: suggested, press, hide: () => setFilled(""), next } : undefined;
   return (
     <Field label={label} id={id} wide hint={hint} cls={cls}>
       <PasswordInput {...input} inputRef={bind} id={id} cls="field-control" describedBy={rule ? id + "-rule" : undefined} invalid={said}
         typed={rule ? key : undefined} suggest={dice} />
       {dice && offered && (
-        // the suggestion whole while the field holds it, its place there from the first press with the row; translate
-        // false, the property, writes the attribute translate="no", where a string would turn it on
-        <p id={id + "-shown"} class="pw-shown" aria-hidden="true" translate={false}>{suggested ? filled : ""}</p>
+        // the suggestion whole while the field holds it, a text that copies itself with its icon, its words quiet, its
+        // place there from the first press; a Copy of each suggestion its own (its key), so that Copied, said of the last
+        // one, never shows over the next, the press having given the focus to the dice; translate false, the property,
+        // writes the attribute translate="no", where a string would turn it on
+        <p id={id + "-shown"} class="pw-shown" translate={false}>
+          {suggested && <Copy key={filled} text={filled} name={t("password.copyName")} icon quiet cls="pw-copy" />}
+        </p>
       )}
       {rule && <PasswordRule id={id + "-rule"} value={value} context={rule} refused={said} note={note || (suggested ? "suggested" : "")} fresh={fills} />}
-      {dice && offered && (
-        <div class="pw-suggest small">
-          <Choices look="one" id={id + "-kind"} label={t("password.suggestKind")} options={[["words", t("password.words")], ["chars", t("password.chars")]]}
-            chosen={[kind]} set={(c) => {
-              const k = c[0] === "chars" ? "chars" : "words";
-              chooseKind(k);
-              press(k);
-            }} />
-          {suggested && <Copy text={t("password.copy")} value={filled} name={t("password.copyName")} cls="pw-copy" />}
-        </div>
-      )}
     </Field>
   );
 }
