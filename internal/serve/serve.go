@@ -86,7 +86,8 @@ type Config struct {
 	Token string
 	// PollInterval, RefreshInterval and DiscoverInterval win over the
 	// store's settings for this run where they are set, 0 included
-	// (never, or only on request); nil takes the store's setting, else
+	// (never, or only on request: a PollInterval of 0 or less polls
+	// never); nil takes the store's setting, else
 	// server.DefaultPollInterval and the others.
 	PollInterval, RefreshInterval, DiscoverInterval *time.Duration
 	// StaleAfter wins over the store's stale_after and stale_after_wall
@@ -311,6 +312,9 @@ func open(ctx context.Context, cfg Config, root *slog.Logger, src certs.Source, 
 		} else if ok {
 			*d.v = v
 		}
+	}
+	if cfg.PollInterval != nil && *cfg.PollInterval <= 0 {
+		poll = -1 // never, where the server takes 0 for its default
 	}
 
 	// The duty cycle's hold (AP LegacyLogs, D143-A) has no flag.

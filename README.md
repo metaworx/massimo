@@ -833,6 +833,11 @@ with its duty cycle and free slots.
 `serve` asks each Cube for its device list every 10 seconds (`-poll`),
 as the original software does: the Cube answers it from its memory,
 without radio time.
+`-poll 0` asks never, as `watch -poll 0` does:
+the server then reads the device list with each connection's greeting,
+the periodic refresh's (`-refresh`) and a refresh's through the API among them,
+for a test that wants no line of the server's own between its steps
+(the web UI's suite runs so, `tools/ui-test/README.md`).
 Between these polls the connection's TCP keepalive probes the Cube.
 A Cube that stops answering, as one whose network cable is out, is lost
 once it leaves two polls in a row unanswered,
