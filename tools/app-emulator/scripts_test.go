@@ -590,8 +590,8 @@ func TestSlotTakesTheFirstFree(t *testing.T) {
 		{"ss warns", slotSetup{ssWarns: true}, []string{slotLine(0, 0)}, []int{0}},
 		{"a server's port given", slotSetup{env: []string{"APP_EMU_API_PORT_A=9999"}},
 			[]string{"taken slot=0 port=5584 serial=emulator-5584 api_a=9999 api_b=9444 cube_a=62941 cube_b=62942 disc_a=23941 disc_b=23942"}, []int{0}},
-		{"the console's port given", slotSetup{env: []string{"APP_EMU_PORT=5600"}, listening: []string{"9443"}},
-			[]string{"slot 0 passed over: port 9443 in use", slotLine(1, 5600)}, []int{1}},
+		{"the console's port given", slotSetup{env: []string{"APP_EMU_PORT=5560"}, listening: []string{"9443"}},
+			[]string{"slot 0 passed over: port 9443 in use", slotLine(1, 5560)}, []int{1}},
 	} {
 		out, code := slotTake(t, tc.setup)
 		if code != 0 {
@@ -605,6 +605,53 @@ func TestSlotTakesTheFirstFree(t *testing.T) {
 		}
 		if n := strings.Count(out, "passed over"); n != len(tc.says)-1 {
 			t.Errorf("%s: %d slots passed over, want %d:\n%s", tc.name, n, len(tc.says)-1, out)
+		}
+	}
+}
+
+// TestSlotPortGiven: slot_port_given takes a console port given that
+// adb finds by itself after its server restarts, an even one from 5554
+// to 5584, and an APP_EMU_PORT unset or empty; it refuses any other,
+// saying so (AP EmulatorRuns, D6-B).
+func TestSlotPortGiven(t *testing.T) {
+	const body = `rc=0
+slot_port_given || rc=$?
+echo "rc=$rc"
+`
+	for _, tc := range []struct {
+		name, before string
+		env          []string
+		taken        bool
+	}{
+		{"5554", "", []string{"APP_EMU_PORT=5554"}, true},
+		{"5570", "", []string{"APP_EMU_PORT=5570"}, true},
+		{"5584", "", []string{"APP_EMU_PORT=5584"}, true},
+		{"empty", "", nil, true},
+		{"unset", "unset APP_EMU_PORT", nil, true},
+		{"5553", "", []string{"APP_EMU_PORT=5553"}, false},
+		{"5583", "", []string{"APP_EMU_PORT=5583"}, false},
+		{"5586", "", []string{"APP_EMU_PORT=5586"}, false},
+		{"5682", "", []string{"APP_EMU_PORT=5682"}, false},
+		{"5552", "", []string{"APP_EMU_PORT=5552"}, false},
+		{"a word", "", []string{"APP_EMU_PORT=console"}, false},
+		{"a leading zero", "", []string{"APP_EMU_PORT=05560"}, false},
+	} {
+		out, code, _ := slotScript(t, slotSetup{env: tc.env, before: tc.before}, body)
+		if code != 0 {
+			t.Errorf("%s: exit %d:\n%s", tc.name, code, out)
+			continue
+		}
+		if tc.taken {
+			if out != "rc=0\n" {
+				t.Errorf("%s: not taken, or said something:\n%s", tc.name, out)
+			}
+			continue
+		}
+		value := strings.TrimPrefix(tc.env[0], "APP_EMU_PORT=")
+		want := "app-emulator: APP_EMU_PORT is an emulator's console port, even, from 5554 to 5584, " +
+			"the ports adb finds an emulator on by itself after its server restarts, not '" + value + "'\nrc=1\n"
+		if out != want {
+			t.Errorf("%s: says\n%s\nwant\n%s", tc.name, out, want)
 		}
 	}
 }

@@ -73,8 +73,9 @@ the first one on a machine also fetches the test libraries.
 2. The emulator, without a window, audio or snapshots
    (`-no-window -no-audio -no-snapshot`), its data wiped (`-wipe-data`),
    so that every run starts from a phone just set up,
-   on the slot's console port, 5584 in slot 0 (`APP_EMU_PORT`),
-   the serial `emulator-5584`;
+   on the slot's console port, 5584 in slot 0,
+   or on the one `APP_EMU_PORT` gives, an even port from 5554 to 5584,
+   its serial `emulator-<port>` (below, "The ports");
    the kernel's messages in its log (`-show-kernel`),
    and the device's log kept from the moment `adb` sees it,
    so that a boot that stalls leaves both.
@@ -161,7 +162,7 @@ and each other port of slot 0 + 2k:
 
 | Port | Slot 0 | Slot `k` | Setting |
 |---|---|---|---|
-| the emulator's console, its serial `emulator-<port>` | 5584 | 5584 - 2k | `APP_EMU_PORT` |
+| the emulator's console, its serial `emulator-<port>` | 5584 | 5584 - 2k | `APP_EMU_PORT`, even, 5554 to 5584 |
 | server `a`, server `b` | 9443, 9444 | 9443 + 2k, 9444 + 2k | `APP_EMU_API_PORT_A`, `_B` |
 | their fake Cubes | 62941, 62942 | 62941 + 2k, 62942 + 2k | `APP_EMU_CUBE_PORT_A`, `_B` |
 | the fake Cubes' discovery | 23941, 23942 | 23941 + 2k, 23942 + 2k | `APP_EMU_DISCOVERY_PORT_A`, `_B` |
@@ -169,6 +170,11 @@ and each other port of slot 0 + 2k:
 The console ports count down, from 5584 to 5570,
 because `adb` finds an emulator by itself, after its server restarts,
 on the console ports 5554 to 5584 alone (it looks at 5555 to 5585).
+An emulator on another port is known only to the server it told at its start,
+and a later `adb` call loses it where that server was started again,
+by `adb kill-server`, a crash, or a client of another version.
+So `APP_EMU_PORT` takes an even port from 5554 to 5584 alone,
+and any other stops the run before it starts anything (AP EmulatorRuns, D6-B).
 A setting given replaces that port alone, in every slot.
 The run takes the first slot whose lock it can take,
 whose emulator `adb` does not list (one left by a killed run, which holds no lock)

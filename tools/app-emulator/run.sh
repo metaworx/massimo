@@ -95,7 +95,9 @@
 # Environment: ANDROID_HOME (the SDK; adb from its platform-tools);
 # APP_EMU_SDK (the SDK holding the emulator and the image, default
 # ANDROID_HOME); APP_EMU_PORT (the emulator's console port, even, 5554
-# to 5682, default the slot's, 5584 - 2k); APP_EMU_BOOT_TIMEOUT (seconds
+# to 5584, the ports adb finds by itself after its server restarts, any
+# other refused before anything starts; default the slot's, 5584 - 2k;
+# AP EmulatorRuns, D6-B); APP_EMU_BOOT_TIMEOUT (seconds
 # the boot and the first setup's end may take once the builds are done,
 # default 420, as CI sets it);
 # APP_EMU_STRICT (1: a test skipped or not run fails the run, as under
@@ -154,11 +156,9 @@ build="$root/app/android/app/build"
 app_re='ch\.metaworx\.massimo'
 timer_re='Destroy timeout of remove-task, attempt to kill Task\{[^}]* A=[0-9]+:ch\.metaworx\.massimo\}'
 
-if [ -n "${APP_EMU_PORT:-}" ]; then
-	if ! [[ $APP_EMU_PORT =~ ^[0-9]+$ ]] || [ "$APP_EMU_PORT" -lt 5554 ] || [ "$APP_EMU_PORT" -gt 5682 ] || [ $((APP_EMU_PORT % 2)) -ne 0 ]; then
-		die "APP_EMU_PORT is an emulator's console port, even, from 5554 to 5682, not '$APP_EMU_PORT'"
-	fi
-fi
+# a console port given is one adb finds by itself (slots.sh), said before
+# anything starts
+slot_port_given || exit 1
 if ! [[ $boot_s =~ ^[0-9]+$ ]]; then
 	die "APP_EMU_BOOT_TIMEOUT is a number of seconds, not '$boot_s'"
 fi

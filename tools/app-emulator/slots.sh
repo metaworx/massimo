@@ -9,7 +9,8 @@
 # 5555 to 5585 alone), the servers' 9443 + 2k and 9444 + 2k, their fake
 # Cubes' 62941 + 2k and 62942 + 2k, and the fake Cubes' discovery ports
 # 23941 + 2k and 23942 + 2k; a port variable given (APP_EMU_PORT,
-# APP_EMU_API_PORT_A, …) replaces that port alone.
+# APP_EMU_API_PORT_A, …) replaces that port alone, APP_EMU_PORT one of
+# the ports adb finds by itself, 5554 to 5584 (slot_port_given).
 #
 # A slot is held by a flock of its lock file,
 # massimo-app-emulator-slot.<k>.lock in APP_EMU_LOCK_DIR (default /tmp,
@@ -40,6 +41,21 @@
 # and disc_b, which run.sh and servers.sh read, not this file. The locks
 # are on fd 8 (the checkout) and fd 9 (the slot) until slot_hold.
 # shellcheck shell=bash disable=SC2034,SC2154
+
+# slot_port_given checks APP_EMU_PORT where it is given: the emulator's
+# console port, even, from 5554 to 5584, the ports adb finds an emulator
+# on by itself after its server restarts (it looks at 5555 to 5585), so
+# that a server another program starts again does not lose the run's
+# emulator (AP EmulatorRuns, D6-B). It says so and fails for any other
+# value, and does nothing where the variable is unset or empty.
+slot_port_given() {
+	[ -n "${APP_EMU_PORT:-}" ] || return 0
+	if [[ $APP_EMU_PORT =~ ^[1-9][0-9]{3}$ ]] && [ "$APP_EMU_PORT" -ge 5554 ] && [ "$APP_EMU_PORT" -le 5584 ] && [ $((APP_EMU_PORT % 2)) -eq 0 ]; then
+		return 0
+	fi
+	echo "app-emulator: APP_EMU_PORT is an emulator's console port, even, from 5554 to 5584, the ports adb finds an emulator on by itself after its server restarts, not '$APP_EMU_PORT'" >&2
+	return 1
+}
 
 # slot_checkout dir locks dir, the suite's directory, on fd 8, and fails
 # where another run holds it, saying so.
