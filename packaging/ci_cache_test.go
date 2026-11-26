@@ -245,14 +245,28 @@ func TestCachePruneWorkflow(t *testing.T) {
 // environment for the event and ref given, and returns its outputs.
 func runGoCache(t *testing.T, event, ref string, env []string, args ...string) map[string]string {
 	t.Helper()
+	return runCacheScript(t, "..", "packaging/go-cache.sh", event, ref, env, args...)
+}
+
+// runCacheScript runs the cache script with the arguments in dir, as
+// CI's step does in the checkout, with GitHub's environment for the
+// event and ref given, and returns its outputs. No GIT_ variable of the
+// caller's reaches it: a hook's GIT_DIR would point its git elsewhere.
+func runCacheScript(t *testing.T, dir, script, event, ref string, env []string, args ...string) map[string]string {
+	t.Helper()
 	bash := scriptShell(t)
 	out := filepath.Join(t.TempDir(), "outputs")
-	cmd := exec.Command(bash, append([]string{"packaging/go-cache.sh"}, args...)...)
-	cmd.Dir = ".."
-	cmd.Env = append(append(os.Environ(), "GITHUB_OUTPUT="+out, "RUNNER_OS=Linux", "RUNNER_ARCH=X64",
+	cmd := exec.Command(bash, append([]string{script}, args...)...)
+	cmd.Dir = dir
+	for _, kv := range os.Environ() {
+		if !strings.HasPrefix(kv, "GIT_") {
+			cmd.Env = append(cmd.Env, kv)
+		}
+	}
+	cmd.Env = append(append(cmd.Env, "GITHUB_OUTPUT="+out, "RUNNER_OS=Linux", "RUNNER_ARCH=X64",
 		"GITHUB_EVENT_NAME="+event, "GITHUB_REF="+ref), env...)
 	if got, err := cmd.CombinedOutput(); err != nil {
-		t.Fatalf("go-cache.sh %v: %v\n%s", args, err, got)
+		t.Fatalf("%s %v: %v\n%s", filepath.Base(script), args, err, got)
 	}
 	b, err := os.ReadFile(out)
 	if err != nil && !os.IsNotExist(err) {
@@ -367,6 +381,137 @@ func TestGoCacheJobs(t *testing.T) {
 		}
 		if restore, ui := strings.Index(job, "packaging/go-cache.sh hold"), strings.Index(job, "./.github/actions/ui-bundle"); restore < 0 || ui < restore {
 			t.Errorf("job %s builds the UI's bundle before it holds the trim", id)
+		}
+	}
+}
+
+// TestAppGradleCache: an Android job's Gradle cache key is its own, the
+// build's Gradle files' and the week's, a build script of a new module
+// among the files and gradle.properties not; a run restores the newest
+// with the same files, or else the job's newest, and only a push to main
+// saves.
+func TestAppGradleCache(t *testing.T) {
+	scriptShell(t)
+	if _, err := exec.LookPath("git"); err != nil {
+		t.Skip("no git")
+	}
+	script, err := filepath.Abs("app-gradle-cache.sh")
+	if err != nil {
+		t.Fatal(err)
+	}
+	home := t.TempDir()
+	repo := filepath.Join(home, "repo")
+	env := []string{"HOME=" + home, "GRADLE_USER_HOME=", "GIT_CONFIG_GLOBAL=" + os.DevNull, "GIT_CONFIG_NOSYSTEM=1"}
+	write := func(name, body string) {
+		t.Helper()
+		p := filepath.Join(repo, filepath.FromSlash(name))
+		if err := os.MkdirAll(filepath.Dir(p), 0o755); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(p, []byte(body), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	git := func(args ...string) {
+		t.Helper()
+		cmd := exec.Command("git", args...)
+		cmd.Dir = repo
+		for _, kv := range os.Environ() {
+			if !strings.HasPrefix(kv, "GIT_") {
+				cmd.Env = append(cmd.Env, kv)
+			}
+		}
+		cmd.Env = append(cmd.Env, env...)
+		if out, err := cmd.CombinedOutput(); err != nil {
+			t.Fatalf("git %s: %v: %s", strings.Join(args, " "), err, out)
+		}
+	}
+	for name, body := range map[string]string{
+		"app/android/gradle/wrapper/gradle-wrapper.properties": "distributionUrl=gradle-9.8.2-bin.zip\n",
+		"app/android/gradle/libs.versions.toml":                "[versions]\nagp = \"9.5.1\"\n",
+		"app/android/settings.gradle.kts":                      "include(\":app\")\n",
+		"app/android/build.gradle.kts":                         "plugins {}\n",
+		"app/android/app/build.gradle.kts":                     "android {}\n",
+		"app/android/gradle.properties":                        "org.gradle.jvmargs=-Xmx2g\n",
+	} {
+		write(name, body)
+	}
+	git("init", "-q")
+	git("add", ".")
+	run := func(event, ref string, more ...string) map[string]string {
+		t.Helper()
+		return runCacheScript(t, repo, script, event, ref, append(slices.Clone(env), more...), "emulator")
+	}
+
+	pr := run("pull_request", "refs/pull/7/merge")
+	same := "gradle-emulator-Linux-X64-"
+	files, week, ok := strings.Cut(strings.TrimPrefix(pr["key"], same), "-")
+	if !strings.HasPrefix(pr["key"], same) || !ok || len(files) != 16 || !strings.HasPrefix(week, "20") || !strings.Contains(week, "-W") {
+		t.Errorf("key %q, want %s<files>-<year>-W<week>", pr["key"], same)
+	}
+	if want := same + files + "-\n" + same; pr["restore-keys"] != want {
+		t.Errorf("restore-keys %q, want %q", pr["restore-keys"], want)
+	}
+	gradle := filepath.Join(home, ".gradle")
+	if want := gradle + "/caches/modules-2\n" + gradle + "/caches/journal-1\n" + gradle + "/wrapper/dists"; pr["path"] != want {
+		t.Errorf("path %q, want %q", pr["path"], want)
+	}
+	if got := run("pull_request", "refs/pull/7/merge", "GRADLE_USER_HOME=/gradle")["path"]; !strings.HasPrefix(got, "/gradle/caches/modules-2\n") {
+		t.Errorf("with GRADLE_USER_HOME=/gradle: path %q", got)
+	}
+	for _, c := range []struct{ event, ref, save string }{
+		{"pull_request", "refs/pull/7/merge", "false"},
+		{"push", "refs/heads/main", "true"},
+		{"push", "refs/tags/v1.2.3", "false"},
+	} {
+		if got := run(c.event, c.ref); got["save"] != c.save || got["restore-keys"] != pr["restore-keys"] {
+			t.Errorf("%s of %s: restore-keys %q, save %q, want %q, %s", c.event, c.ref, got["restore-keys"], got["save"], pr["restore-keys"], c.save)
+		}
+	}
+
+	// The files' prefix of the restore keys, which the week leaves out.
+	filesOf := func() string {
+		t.Helper()
+		first, _, _ := strings.Cut(run("pull_request", "refs/pull/7/merge")["restore-keys"], "\n")
+		return first
+	}
+	write("app/android/gradle.properties", "org.gradle.jvmargs=-Xmx4g\n")
+	if got := filesOf(); got != same+files+"-" {
+		t.Errorf("gradle.properties changed the key: %q, was %q", got, same+files+"-")
+	}
+	write("app/android/gradle/libs.versions.toml", "[versions]\nagp = \"9.6.0\"\n")
+	changed := filesOf()
+	if changed == same+files+"-" {
+		t.Errorf("the version catalogue left the key as it was: %q", changed)
+	}
+	write("app/android/core/build.gradle.kts", "android {}\n")
+	git("add", ".")
+	if got := filesOf(); got == changed {
+		t.Errorf("a new module's build script left the key as it was: %q", got)
+	}
+}
+
+// TestAppGradleCacheJobs: both Android jobs restore Gradle's downloads
+// under a key of their own before their first Gradle build, and save
+// them as their last step, on a push to main alone, under the key they
+// restored with, where that key was not found.
+func TestAppGradleCacheJobs(t *testing.T) {
+	wf := readWorkflow(t, "ci.yml")
+	for id, gradle := range map[string]string{"android": "./gradlew", "emulator": "tools/app-emulator/run.sh"} {
+		job := workflowJob(t, wf, id)
+		wants(t, "ci.yml's job "+id, job,
+			"        run: packaging/app-gradle-cache.sh "+id+"\n",
+			"          path: ${{ steps.gradlecache.outputs.path }}\n",
+			"          restore-keys: ${{ steps.gradlecache.outputs.restore-keys }}\n",
+			"        if: steps.gradlecache.outputs.save == 'true' && steps.gradlecache-restore.outputs.cache-hit != 'true'\n")
+		if n := strings.Count(job, "          key: ${{ steps.gradlecache.outputs.key }}\n"); n != 2 {
+			t.Errorf("job %s uses the Gradle key %d times, want 2: restored and saved", id, n)
+		}
+		if restore, build := strings.Index(job, "      - uses: actions/cache/restore@"), strings.Index(job, gradle); restore < 0 || build < restore {
+			t.Errorf("job %s runs Gradle before it restores the cache", id)
+		}
+		if save := strings.LastIndex(job, "      - uses: actions/cache/save@"); save < 0 || strings.Contains(job[save+1:], "\n      - ") {
+			t.Errorf("job %s does not save the cache as its last step", id)
 		}
 	}
 }

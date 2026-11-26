@@ -732,7 +732,7 @@ and skips the night where the commit is older (section 6, D15-B).
 
 The Android app job (AP MobileApp, Block 4) builds `app/android` with the
 image's JDK 17 and Android SDK (platform 37.0, build-tools 36.0.0),
-Gradle through the committed wrapper, nothing cached.
+Gradle through the committed wrapper, its downloads from the job's cache (section 3).
 It checks `app/version.json` against its tag (`packaging/app-version.sh check`),
 runs `:app:assembleFossDebug :app:testFossDebugUnitTest :app:lintFossDebug`
 and `:app:lintNightlyDebug`,
@@ -775,6 +775,7 @@ of the run's (`APP_EMU_SDK`), held to the size and the SHA-1 Google's SDK
 repository gives, as sdkmanager checks them,
 since sdkmanager installs the newest revision alone;
 the runner image's SDK, its licences accepted, stays as it is.
+Gradle's downloads come from a cache of the job's own (section 3).
 The emulator boots without a window, audio or snapshots,
 its data wiped, within `APP_EMU_BOOT_TIMEOUT` of the builds' end (420 s here).
 An emulator in CI is known to stall at its boot or at a prompt,
@@ -970,6 +971,33 @@ Where CI differs, and why:
   and GitHub keeps a cache seven days after its last use:
   two weeks hold about 1.6 GB of the repository's 10 GB,
   and each new Go or `go.sum`, a new key for all three jobs, about 0.8 GB more.
+- Android app and Android emulator keep a cache each of Gradle's downloads
+  (AP SteadyTests, Block 9), through `packaging/app-gradle-cache.sh` and `actions/cache`:
+  the artifacts Gradle fetched (`~/.gradle/caches/modules-2`),
+  the journal of when it last used each (`caches/journal-1`)
+  and the wrapper's distribution (`wrapper/dists`).
+  Without it every run fetched all of them,
+  and on `main` after #456 (run 45681849967) Maven Central answered
+  the emulator's with 429 Too Many Requests, bouncycastle's BOM and asm among them.
+  A job's key is its name (the two run other tasks, which fetch other artifacts),
+  the runner's system and CPU, the hash of the build's Gradle files
+  (the wrapper's properties, the build scripts, the version catalogue),
+  and the ISO week: a new cache each week, and with each change to those files.
+  It is saved as the Go caches are, by a push to `main` alone,
+  once every step passed and where it did not find its key;
+  every run restores the newest with the same files, or else the job's newest.
+  Gradle prunes it itself at the end of a build
+  (with `--no-daemon`, in the foreground):
+  an artifact unused for 30 days, by the journal,
+  and the distribution of a Gradle version no longer run;
+  so what `main` saves is what the job used in its last 30 days,
+  an update's old versions leave it a month later,
+  and, saved each week, nothing a run restores and uses is that old.
+  Gradle's build cache is not in it:
+  the release APK built at two paths keeps its `--no-build-cache`,
+  and build.yml's Android app job, which builds the release, restores no cache.
+  A job's cache is estimated at 0.4 GB, Gradle's downloads of a local build;
+  two weeks of both jobs hold about 1.6 GB.
 - The Go jobs that gate run their tests with `-count=1`:
   Vet and test's `go test`, `make race`, `make test-armv6`,
   and the Windows and macOS jobs' unit tests.
