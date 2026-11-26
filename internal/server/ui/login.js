@@ -39,9 +39,10 @@ function hasCap(c) {
   return (me.capabilities || []).includes(c);
 }
 
-// canManageUsers: the users routes, with users or with guests.
+// canManageUsers: the users routes, with users, guests, passwords, or
+// integrations for an integration's users (AP AccessEnds, D46-A).
 function canManageUsers() {
-  return hasCap("users") || hasCap("guests") || hasCap("passwords");
+  return hasCap("users") || hasCap("guests") || hasCap("passwords") || hasCap("integrations");
 }
 
 // hasSystem reports whether the signed-in user sees System settings: one
