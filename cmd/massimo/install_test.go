@@ -5,6 +5,7 @@ package main
 
 import (
 	"bytes"
+	"crypto/tls"
 	"maps"
 	"net"
 	"os"
@@ -96,8 +97,8 @@ func TestInstallChecksTheFileAlone(t *testing.T) {
 
 // A -tls-cert and -tls-key pair that does not load is refused as the
 // start refuses it, before the install writes anything, where install
-// itself checks only that the files are there (D48-A); a pair that
-// loads is installed.
+// itself checks only that the files are there (D48-A), in crypto/tls's
+// own words, which say "tls: " once; a pair that loads is installed.
 func TestInstallRefusesAPairThatDoesNotLoad(t *testing.T) {
 	t.Parallel()
 	cert, _, _ := testPair(t, t.TempDir())
@@ -110,6 +111,9 @@ func TestInstallRefusesAPairThatDoesNotLoad(t *testing.T) {
 	loadErr := serve.CheckTLS(serve.TLS{Mode: "files", Cert: cert, Key: key})
 	if want := "-tls files: serve's start refuses:\n  " + loadErr.Error() + "\nnothing was written"; err == nil || err.Error() != want {
 		t.Errorf("%v, want %s", err, want)
+	}
+	if _, pairErr := tls.LoadX509KeyPair(cert, key); pairErr == nil || loadErr.Error() != pairErr.Error() {
+		t.Errorf("the start says %q, want crypto/tls's %v", loadErr, pairErr)
 	}
 	if after := fileTree(t, o.Root); !maps.Equal(after, before) || out.Len() != 0 {
 		t.Errorf("before the refusal wrote, or said %q", out.String())
