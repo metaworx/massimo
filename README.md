@@ -1113,7 +1113,9 @@ Names are upper case, but for the serial in a Cube's line:
 on Windows the start takes `massimo_listen` as `MASSIMO_LISTEN`,
 and so do a reload and `massimo config`;
 on Linux and macOS such a line is set aside, a Cube's line too
-(`line 3 sets MASSIMO_LISTEN in another case, ignored: names are upper case`).
+(`line 3 sets MASSIMO_LISTEN in another case, ignored: names are upper case`),
+and a Cube's variable named in another case in the environment is not read,
+`MASSIMO_CUBE_KEQ0000000_Name` where `MASSIMO_CUBE_keq0000000_NAME` is.
 A UTF-8 byte order mark at the file's start is skipped,
 and UTF-16 text, as PowerShell 5.1's `>` or `>>` writes it, is refused:
 save it as UTF-8.
