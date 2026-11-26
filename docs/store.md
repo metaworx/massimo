@@ -299,8 +299,8 @@ does today and compares it with the store:
    compared with its row in the same way.
    The server sets it when the plain Cube first reports its serial,
    and the start when a configured row's address is the plain address
-   (the same host whatever its case, the same port,
-   `62910` where one gives none),
+   (the same host whatever its case, an IPv6 zone in its own case,
+   the same port, `62910` where one gives none),
    or, where no row's is as written, when a row at the same port has a host
    with an IP address of the plain host's: a host name and an IP of one Cube.
    Where several rows have one, none is tied, and the log names them.
@@ -308,7 +308,8 @@ does today and compares it with the store:
    and a lookup that fails or does not answer in time ties nothing;
    `massimo config` shows the tie the same way.
    Two runtimes would dial one Cube, which serves one client.
-   The log then says that the plain lines are that Cube's.
+   The log then says that the plain lines are that Cube's;
+   the start's line names its row's address beside the plain one.
 3. Keys and IVs came from `.env` by serial in every case,
    for the portal commands, which are gone since AP PortalDrop.
 4. `-addr` and `-sn` on the command line work as today for one run and write nothing.

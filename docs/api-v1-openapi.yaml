@@ -4016,7 +4016,9 @@ paths:
       x-capability: settings
       description: |
         A key's, an IV's, a token's or a password's value never leaves the
-        server: the variable is listed with secret true and no value.
+        server: the variable is listed with secret true and no value. So is
+        a name Massimo does not know, with unknown true, since it may hold a
+        secret under a name the rule misses, MASSIMO_API_TOKEN_OLD.
       responses:
         "200":
           description: The settings in effect
@@ -5194,8 +5196,8 @@ components:
             required: [name, source]
             properties:
               name: {type: string}
-              value: {type: string, description: Absent for a secret}
-              secret: {type: boolean}
+              value: {type: string, description: Absent for a secret and for an unknown name}
+              secret: {type: boolean, description: "The value is not shown: a secret, or an unknown name"}
               source: {type: string, description: "Where the value came from, the environment or the settings file"}
               unknown: {type: boolean, description: "A name Massimo does not know, perhaps a typo"}
     UpdateInfo:

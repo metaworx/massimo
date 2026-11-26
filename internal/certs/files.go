@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"log/slog"
 	"os"
+	"strings"
 	"sync"
 	"time"
 )
@@ -60,16 +61,29 @@ func openFiles(source, certPath, keyPath string, log *slog.Logger) (*Files, erro
 }
 
 // Load reads a certificate and key pair from PEM files and describes it.
+// Its error says "tls: " once (tlsOnce).
 func Load(source, certPath, keyPath string) (*tls.Certificate, Status, error) {
 	cert, err := tls.LoadX509KeyPair(certPath, keyPath)
 	if err != nil {
-		return nil, Status{}, fmt.Errorf("tls: %w", err)
+		return nil, Status{}, tlsOnce(err)
 	}
 	st, err := Describe(source, &cert)
 	if err != nil {
 		return nil, Status{}, fmt.Errorf("tls: %s: %w", certPath, err)
 	}
 	return &cert, st, nil
+}
+
+// tlsOnce is err, an error of crypto/tls's LoadX509KeyPair, said with
+// "tls: " once: crypto/tls's own errors, such as "tls: private key does
+// not match public key", say it already and are returned as they are;
+// a path error, which does not, is wrapped in it under %w, so that
+// unwrapPath still finds it.
+func tlsOnce(err error) error {
+	if strings.HasPrefix(err.Error(), "tls: ") {
+		return err
+	}
+	return fmt.Errorf("tls: %w", err)
 }
 
 // Paths are the files served.
