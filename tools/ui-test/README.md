@@ -14,13 +14,17 @@ The script:
    `L:` line with device states (measured temperatures included),
    a window contact, "Fenster Kind 1", that reports an open window,
    and an eco button, "Eco-Taster Kind 2" (0a010e, `test_rooms.py`),
-   each with its `C:` line as a Cube sends one for every device;
+   each with its `C:` line as a Cube sends one for every device,
+   and its control (`-control`) on a loopback port of its own,
+   which resets it before each test file (`conftest.py`, `known_cube`);
    `massimo serve` against the fake Cube,
-   with the API token `ui-test-token`;
+   with the API token `ui-test-token` and without its poll of the Cube
+   (`-poll 0`, `docs/ui-testing.md` section 9);
    the Cube comes from `MASSIMO_CUBE_KEQ0000100_ADDRESS` and `_NAME` ("Fake Cube"),
    which the server seeds into its store,
    `massimo.db` in the set's temporary directory;
-   and the second server, of a Cube that is not connected (`test_home.py`);
+   and the second server, of a Cube that is not connected (`test_home.py`),
+   also with `-poll 0`;
 3. waits until every program of every set says it listens on its own port
    and every server is connected to its fake Cube,
    and stops if one of them has stopped meanwhile:
@@ -32,17 +36,19 @@ The script:
 4. runs the pytest suite in this directory with `pytest-playwright` (Chromium),
    in the workers, a file's tests together in one worker (`--dist loadfile`),
    handing worker `gw<n>` set n's page address in `UI_TEST_URL`,
-   the token in `UI_TEST_TOKEN` and the server's log in `UI_TEST_SERVE_LOG`
+   the token in `UI_TEST_TOKEN`, the server's log in `UI_TEST_SERVE_LOG`
+   and the fake Cube's control in `UI_TEST_CONTROL_URL`
    (`conftest.py` takes them from `UI_TEST_URL_<n>` and the others).
 
 Set 0 runs on loopback ports of its own:
 the fake Cube on 62919 (`UI_TEST_CUBE_PORT`) with its discovery on 23919
-(`UI_TEST_DISCOVERY_PORT`),
+(`UI_TEST_DISCOVERY_PORT`)
+and its control on 63019 (`UI_TEST_CONTROL_PORT`, the fake Cube's + 100),
 the server on 8119 (`UI_TEST_API_PORT`)
 and the second server on 8120 (`UI_TEST_DOWN_PORT`, the server's + 1).
-Set n takes the fake Cube's two ports + n and the servers' two + 2n,
+Set n takes the fake Cube's three ports + n and the servers' two + 2n,
 so another session running the suite at the same time needs ports further apart
-than twice its workers.
+than twice its workers, and a fake Cube's port 100 away from another's control.
 The programs run in empty temporary directories without the caller's environment,
 so a `.env` or `MASSIMO_*` variables can't point them at real hardware.
 All are stopped at the end.

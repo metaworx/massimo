@@ -2,10 +2,11 @@
 # Copyright (C) 2026 The Massimo Authors
 """Maintenance, the Cube intervals (AP CubePoll v1.0,
 Block 2), as the owner: the test server runs without -refresh, so the
-refresh can be chosen, and with -discover-interval 0, so the search is
-read-only and names the flag. A choice is stored and waits for the next
-restart, counted in the card's head; the default is stored as none.
-Each case puts the settings back."""
+refresh can be chosen, and with -poll 0 and -discover-interval 0, so the
+poll and the search are read-only and name their flags (AP SteadyTests,
+Block 5). A choice is stored and waits for the next restart, counted in
+the card's head; the default is stored as none. Each case puts the
+settings back."""
 from conftest import api_call
 from helpers import named_buttons, scroll_width, show_view, wait_until
 
@@ -16,6 +17,27 @@ def setting(key):
 
 def badges(page):
     return page.locator("#sys-maint .section-badges").inner_text()
+
+
+def test_poll_interval_set_by_its_flag(page, case):
+    """-poll 0 decides the poll for this run: 10 s chosen, read-only, the
+    line saying what a poll does, naming the flag and the run's value,
+    Off."""
+    api_call("PUT", "api/v1/settings", {"poll_interval": None})
+    try:
+        show_view(page, "maint")
+        sel = page.locator("#interval-poll")
+        assert wait_until(page, "document.querySelector('#interval-poll-text').textContent.length > 0", 5), "the line is filled"
+        assert sel.is_disabled() and sel.input_value() == "10", "10 s, read-only where the flag decides"
+        text = page.locator("#interval-poll-text").inner_text()
+        assert text.startswith(page.evaluate("t('maint.pollHint')")), "the line says what a poll does"
+        assert "-poll" in text and page.evaluate("t('maint.off')") in text, "the line names the flag and Off"
+        assert not text.endswith(".."), "one full stop after a unit that has one"
+        stored = setting("poll_interval")
+        assert stored.get("fixed_by") == "-poll" and stored.get("in_effect") == "0", f"never polled in this run: {stored}"
+    finally:
+        api_call("PUT", "api/v1/settings", {"poll_interval": None})
+        show_view(page, "tiles")
 
 
 def test_refresh_interval_choice(page, case):

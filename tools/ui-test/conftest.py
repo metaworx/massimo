@@ -4,9 +4,17 @@
 ui-test) against the server and the fake Cube it starts; it hands over
 the page's address in UI_TEST_URL and the API token in UI_TEST_TOKEN.
 In pytest-xdist's workers, which run.sh starts with a server set each,
-worker gw<n> takes set n's addresses and log from UI_TEST_URL_<n>,
-UI_TEST_DOWN_URL_<n> and UI_TEST_SERVE_LOG_<n> in place of the plain
-names, before this module or a test file reads them.
+worker gw<n> takes set n's addresses, log and fake Cube's control from
+UI_TEST_URL_<n>, UI_TEST_DOWN_URL_<n>, UI_TEST_SERVE_LOG_<n> and
+UI_TEST_CONTROL_URL_<n> in place of the plain names, before this module
+or a test file reads them.
+
+Each test file starts from the recorded Cube (known_cube, autouse for
+the module): the worker's fake Cube goes back to the greeting it started
+with, and the server has connected to it again and read it, before the
+file's first test. The servers run without their poll of the Cube (run.sh,
+-poll 0), so nothing of the server's own reaches the fake between a
+test's steps.
 
 Every test runs four times, at 1100 and 390 px wide and in English and
 German, the language from the browser context's locale (`case`, with the
@@ -73,6 +81,7 @@ import json
 import os
 import sqlite3
 import ssl
+import time
 import tokenize
 import urllib.request
 
@@ -80,7 +89,7 @@ import pytest
 
 _WORKER = os.environ.get("PYTEST_XDIST_WORKER", "")
 if _WORKER.startswith("gw"):
-    for _name in ("UI_TEST_URL", "UI_TEST_DOWN_URL", "UI_TEST_SERVE_LOG"):
+    for _name in ("UI_TEST_URL", "UI_TEST_DOWN_URL", "UI_TEST_SERVE_LOG", "UI_TEST_CONTROL_URL"):
         _set = f"{_name}_{_WORKER[2:]}"
         if _set not in os.environ:
             raise RuntimeError(f"worker {_WORKER} has no server set ({_set}): give run.sh UI_TEST_WORKERS rather than pytest -n")
@@ -247,6 +256,69 @@ def api_call(method, path, body=None, token=None):
     with urllib.request.urlopen(req, timeout=5, context=tls) as resp:
         text = resp.read()
     return json.loads(text) if text else None
+
+
+# The fake Cube's control of the worker's set (massimo fakecube -control),
+# which run.sh hands over in UI_TEST_CONTROL_URL; "" for a server started
+# by hand, whose fake Cube is not reset.
+CONTROL = os.environ.get("UI_TEST_CONTROL_URL", "")
+# The Cube of the worker's set, the fake's serial (greeting.txt).
+CUBE = "KEQ0000100"
+# How long a reset may take, before the scale: the server connects again
+# a second after the drop (its backoff), and reads the greeting.
+RESET_SECONDS = 15
+
+
+def newest_connected():
+    """The id of the newest connected event in the set's Cube's log, 0
+    for none."""
+    events = api_call("GET", f"api/v1/cubes/{CUBE}/log?kind=connected&limit=1") or []
+    return events[-1]["id"] if events else 0
+
+
+def cube_entry():
+    """The set's Cube as GET /api/v1/cubes lists it; {} where it lists
+    none."""
+    return next((c for c in api_call("GET", "api/v1/cubes") or [] if c.get("serial") == CUBE), {})
+
+
+def reset_cube():
+    """The fake Cube back to the greeting it started with (its control's
+    POST /reset), and the server connected to it again: the reset drops
+    the server's connection, and the server connects again and reads
+    the greeting. Done once a connected event newer than the reset is in
+    the Cube's log and the Cube is listed connected; a timeout names
+    what it waited for and what it saw."""
+    before = newest_connected()
+    req = urllib.request.Request(CONTROL.rstrip("/") + "/reset", method="POST")
+    with urllib.request.urlopen(req, timeout=5) as resp:
+        if resp.status != 204:
+            raise RuntimeError(f"the fake Cube's reset (POST {CONTROL}/reset) answered {resp.status}")
+    limit = scaled(RESET_SECONDS)
+    deadline = time.monotonic() + limit
+    while True:
+        newest, entry = newest_connected(), cube_entry()
+        link = (entry.get("link") or {}).get("state")
+        if newest > before and entry.get("connected") and link == "connected":
+            return
+        if time.monotonic() > deadline:
+            raise RuntimeError(
+                f"the fake Cube's reset: the server did not connect to it again and read it within {limit:g} s: "
+                f"waited for a connected event in {CUBE}'s log newer than {before} (the newest is {newest}) "
+                f"and {CUBE} listed connected (connected {entry.get('connected')}, link {link})")
+        time.sleep(0.05)
+
+
+@pytest.fixture(scope="module", autouse=True)
+def known_cube():
+    """Each test file starts from the recorded Cube (AP SteadyTests,
+    Block 5): before its first test the worker's fake Cube is reset and
+    the server has read it again (reset_cube), so that no earlier
+    file's write, pairing or room list reaches it. Without the control
+    (UI_TEST_CONTROL_URL) or the token, as against a server started by
+    hand, nothing is reset."""
+    if CONTROL and TOKEN:
+        reset_cube()
 
 
 def address_failures():

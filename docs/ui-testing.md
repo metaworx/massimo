@@ -1,4 +1,4 @@
-# Testing the web UI (v1.31.0)
+# Testing the web UI (v1.32.0)
 
 An evaluation of a Cypress suite for the web UI, against the alternatives:
 what the Playwright smoke test covers today and what it cannot do well,
@@ -1022,8 +1022,16 @@ the server's and the test's, in order,
   A constant is not counted: a test file's `ROOMS` or `STALE` is another thing
   than the kit's of the same name.
   `go test ./tools/ui-test/idioms` runs it alone.
-- **The server sets** keep the server's 10 s poll of the fake Cube,
-  which brings no line of its own (the fake Cube's states do not change).
+- **The server sets** run without the server's poll of the fake Cube
+  (`serve -poll 0`, AP SteadyTests, Block 5, D4-A):
+  the server sends its fake Cube no line of its own between a test's steps,
+  and learns what the fake holds only where it connects or a test asks
+  (below).
+  With the poll, every 10 s, the device list and the events it brought
+  fell into whichever test ran then.
+  So the poll's interval in Maintenance is read-only in a UI run,
+  set by `-poll`, Off (`test_cube_intervals.py`),
+  and a test that chooses an interval chooses the refresh's.
   Their fake Cube has every memory slot free (`-free-slots 50`,
   AP ServerTraffic, D1-A):
   with the fake's default of one radiogram pending,
@@ -1051,3 +1059,33 @@ the server's and the test's, in order,
   a test that deletes the newest backup leaves the one taken at the start,
   so the Cube does not count as one without a backup.
   This is quiet, not off: no setting or flag of `serve` turns them off.
+- **A test file starts from the recorded Cube** (`known_cube`, `conftest.py`,
+  AP SteadyTests, Block 5):
+  before a file's first test the worker's fake Cube goes back to the greeting
+  it started with (`greeting.txt`) through its control's `POST /reset`
+  (`massimo fakecube -control`, on a port of its own, `UI_TEST_CONTROL_PORT`):
+  its devices, their states, its rooms and M lines,
+  no device joined by pairing,
+  and nothing an earlier file sent applied after the reset.
+  The reset drops the server's connection;
+  the fixture waits until the server has connected again and read the greeting,
+  a `connected` event in the Cube's log newer than the one before the reset,
+  and the Cube listed connected,
+  for 15 s, scaled; on a timeout it names what it waited for and what it saw.
+  A reset took 1.4 to 1.9 s (2026-11-26, six files),
+  most of it the server's wait of a second before it connects again.
+  So no earlier file's write, pairing or room list reaches a file,
+  whichever worker runs it after whichever file.
+  Within a file the tests share the fake Cube, the four cases among them:
+  a test that changes the fake still puts it back.
+  What the server keeps in its store, users, settings, backups,
+  the reset does not touch.
+- **A test that needs a read asks for it:**
+  where a test needs the server to read what the fake Cube now holds,
+  a write the fake applied, it asks:
+  `POST …/cubes/<serial>/refresh` reconnects and reads the whole greeting,
+  the device list among it, and answers once the server has it;
+  the page then learns of it by the events of the reconnect.
+  No test waited for the server's poll when the suite first ran without it
+  (2026-11-26, 1100-en): the five that failed chose the poll's interval,
+  which `-poll` makes read-only, and choose the refresh's now.
