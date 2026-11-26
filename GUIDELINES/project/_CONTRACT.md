@@ -1,6 +1,6 @@
 > **Fragment** — inlined by `tools/sync-docs.sh`; not a standalone document.
 
-# {{project_name}} — Project Contract (v1.22.0)
+# {{project_name}} — Project Contract (v1.23.0)
 
 <!-- TEMPLATE: installed as {{guidelines_root}}/project/_CONTRACT.md. Replace
      every {{TODO: …}}, delete rows that do not apply. Shared documents
@@ -275,6 +275,12 @@ the ones an agent trips over most come first:
   merges it upward into `main` with a `merge:` commit and pushes that
   straight away (AP MaintBranch, D1-A);
   an old maintenance branch releases nothing after the next freeze (D3-A).
+  A plan's own commits (its registration, revisions, NOTEs, analyses
+  and retirement) go onto the branch its work merges into:
+  `maint/<x.y>` while any of its blocks ship in x.y, `main` otherwise,
+  and reach `main` by the upward merge (D5-A);
+  a plan open at the freeze is retired on `maint/<x.y>` where its work
+  shipped in x.y.
   A branch merges `origin/main` before its pull request (merge,
   never rebase a stack),
   or `origin/maint/<x.y>` where that is its base.
