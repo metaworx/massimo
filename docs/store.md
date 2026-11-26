@@ -299,8 +299,8 @@ does today and compares it with the store:
    compared with its row in the same way.
    The server sets it when the plain Cube first reports its serial,
    and the start when a configured row's address is the plain address
-   (the same host whatever its case, the same port,
-   `62910` where one gives none),
+   (the same host whatever its case, an IPv6 zone in its own case,
+   the same port, `62910` where one gives none),
    or, where no row's is as written, when a row at the same port has a host
    with an IP address of the plain host's: a host name and an IP of one Cube.
    Where several rows have one, none is tied, and the log names them.

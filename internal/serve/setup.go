@@ -250,7 +250,8 @@ const plainLookupTime = 2 * time.Second
 // Cube: a host name and an IP of one Cube. Where several rows have one,
 // none is, and they are returned in several, for the start's warning.
 // A lookup that fails or does not answer in time ties nothing. lookup
-// nil is the system's resolver. It writes nothing.
+// nil is the system's resolver. It writes nothing. An IPv6 zone, an
+// interface's name, is the same in its own case alone (cubeEndpoint).
 func PlainRow(ctx context.Context, rows []store.Cube, plain store.FileCube, lookup HostLookup) (row store.Cube, ok bool, several []store.Cube) {
 	want := cubeEndpoint(plain.Values[store.FieldAddress].Value)
 	host, port, _ := net.SplitHostPort(want)
@@ -339,14 +340,20 @@ func lookupHosts(ctx context.Context, lookup HostLookup, hosts []string) map[str
 }
 
 // cubeEndpoint is a Cube's address as host:port to compare: the host in
-// lower case, an IPv6 one bracketed once, and the Cube's port where the
+// lower case, but for an IPv6 zone, an interface's name, kept as
+// written; an IPv6 host bracketed once; and the Cube's port where the
 // address gives none.
 func cubeEndpoint(addr string) string {
 	host, port, err := net.SplitHostPort(addr)
 	if err != nil {
 		host, port = strings.TrimSuffix(strings.TrimPrefix(addr, "["), "]"), env.CubePort
 	}
-	return net.JoinHostPort(strings.ToLower(host), port)
+	ip, zone, zoned := strings.Cut(host, "%")
+	host = strings.ToLower(ip)
+	if zoned {
+		host += "%" + zone
+	}
+	return net.JoinHostPort(host, port)
 }
 
 // rowTarget is the target of a configured row of the store.

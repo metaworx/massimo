@@ -68,7 +68,8 @@ func (l *lookups) hosts() []string {
 }
 
 // A name ties to the row at one of its IPs, and an IP to the row whose
-// name has it, at the same port alone; IPv4 in IPv6 is IPv4. Where
+// name has it, at the same port alone; IPv4 in IPv6 is IPv4, and an
+// IPv6 zone, an interface's name, ties in its own case alone. Where
 // several rows have an IP of the plain host's, none is tied, and they
 // are returned.
 func TestPlainRowByLookup(t *testing.T) {
@@ -97,6 +98,8 @@ func TestPlainRowByLookup(t *testing.T) {
 		{"unknown.lan", []string{"192.0.2.1"}, "", nil},
 		{"several.lan", []string{"192.0.2.7", "192.0.2.9", "[2001:db8::7]:62910"}, "", []string{"KEQ0000100", "KEQ0000102"}},
 		{"cube.example", []string{"cube.lan", "192.0.2.1"}, "", []string{"KEQ0000100", "KEQ0000101"}},
+		{"[fe80::1%Eth0]:62910", []string{"[FE80::1%Eth0]:62910"}, "KEQ0000100", nil},
+		{"[fe80::1%Eth0]:62910", []string{"[fe80::1%eth0]:62910"}, "", nil},
 	} {
 		l := &lookups{names: names}
 		row, ok, several := PlainRow(t.Context(), rowsAt(c.rows...), plainAt(c.plain), l.lookup)

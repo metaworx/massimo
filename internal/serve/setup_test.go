@@ -717,8 +717,8 @@ func cubeListed(t *testing.T, base, serial string) (listedCube, int) {
 // The plain MASSIMO_CUBE_ADDRESS is a stored Cube's where both name the
 // same host and port, whatever the host's case and brackets, the Cube's
 // port where one gives none; the plain address alone ties too, another
-// port does not. The start then serves the one Cube, and the setting
-// names it.
+// port does not, and nor does an IPv6 zone in another case. The start
+// then serves the one Cube, and the setting names it.
 func TestServePlainAddressOfAStoredCube(t *testing.T) {
 	ctx := context.Background()
 	for _, c := range []struct {
@@ -730,6 +730,8 @@ func TestServePlainAddressOfAStoredCube(t *testing.T) {
 		{"Cube.example", "cube.example:62910", true},
 		{"fe80::1", "[fe80::1]:62910", true},
 		{"[fe80::1]", "[FE80::1]:62910", true},
+		{"[fe80::1%Eth0]:62910", "[FE80::1%Eth0]:62910", true},
+		{"[fe80::1%Eth0]:62910", "[fe80::1%eth0]:62910", false},
 		{"192.0.2.1", "192.0.2.1:62911", false},
 		{"192.0.2.1", "192.0.2.10", false},
 	} {
