@@ -37,8 +37,15 @@ handed over before the stream opens again.
 A test marked clock gets Playwright's clock installed before the page's
 scripts run, its time flowing as the real one: the test moves it on with
 page.clock.fast_forward, for what the page does after a minute. A test
+sets the page's wall time with page.clock.set_system_time and an aware
+datetime, which moves Date alone and runs no timer; a float would be
+taken as seconds and multiplied by 1000, as with pause_at. A test
 pauses it with helpers.pause_clock alone: a test module that calls
 clock.pause_at itself fails its collection (pytest_collect_file).
+
+A test marked browser_context_args, pytest-playwright's mark, gets its
+context with those arguments on top of the case's viewport and locale:
+timezone_id for a page in a zone of the test's own (test_room_updates.py).
 
 test_login.py opens a context of its own, without the token, from
 pytest-playwright's new_context with the case's viewport and locale.

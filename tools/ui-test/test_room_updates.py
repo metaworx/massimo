@@ -11,7 +11,10 @@ are with them, and since it is a part (Block 8) its tabs are checked to
 be the elements they were once the focus has left them, and to say a
 value stored meanwhile. The House tile's one form, what each choice
 offers and its defaults, and its lowest and highest, which follow a
-state event in place, are with them too (AP RoomsPage v1.0, Block 7).
+state event in place, are with them too (AP RoomsPage v1.0, Block 7),
+and tomorrow morning, the default end of its MANU until a date and of a
+room's holiday form, on the days of a change of the clocks, the page in
+Zurich's zone under Playwright's clock.
 
 Data comes the way the page gets it: a state event is updateDevice with
 a device of the room as it is, what every state event of the stream
@@ -23,6 +26,8 @@ test makes up, the House tile's virtual wall thermostats', is told to
 the rooms' read as well and kept (tell_vwt, AP ToldData), so that the
 server's own events and any read of the rooms bring it back, and its
 check waits for it."""
+from datetime import datetime, timedelta, timezone
+
 import pytest
 
 from helpers import frames, held_poll, hold, mark, replaced, wait_held, wait_until
@@ -676,6 +681,46 @@ def test_house_forgets_a_past_end(page, case):
     until = page.locator("#house-until")
     assert until.is_visible() and until.input_value() == days_ahead(page, 1, "06:00"), f"tomorrow morning, not 2020: {until.input_value()}"
     page.locator("#house-panel .form-cancel").click()
+
+
+# Tomorrow morning across a change of the clocks: the page in Zurich's
+# zone under Playwright's clock, set to a moment whose day or the next
+# has 23 or 25 hours; the page's local time then, and the end expected.
+ZURICH = "Europe/Zurich"
+CLOCK_CHANGES = [
+    # the evening before the spring change, Saturday 23:30 CET
+    (datetime(2027, 3, 27, 23, 30, tzinfo=timezone(timedelta(hours=1))), "2027-03-27T23:30", "2027-03-28T06:00"),
+    # just after midnight on the day of the autumn change, Sunday 00:30 CEST
+    (datetime(2027, 10, 31, 0, 30, tzinfo=timezone(timedelta(hours=2))), "2027-10-31T00:30", "2027-11-01T06:00"),
+]
+
+
+@pytest.mark.clock
+@pytest.mark.browser_context_args(timezone_id=ZURICH)
+@pytest.mark.parametrize("now, local, tomorrow", CLOCK_CHANGES, ids=["spring-evening", "autumn-night"])
+def test_tomorrow_morning_across_a_change_of_the_clocks(page, case, now, local, tomorrow):
+    """The default end of the House tile's MANU until a date and of a
+    room's holiday form is tomorrow at 06:00 also across a change of the
+    clocks: on the evening before the spring change and in the night of
+    the autumn one, in Zurich's zone. Fails on the page before, which
+    added 24 hours: Monday 06:00 on the spring evening, two days ahead,
+    and Sunday 06:00 in the autumn night, the day itself."""
+    held(page)
+    page.clock.set_system_time(now)
+    seen = page.evaluate("[Intl.DateTimeFormat().resolvedOptions().timeZone, localDateTimeValue(new Date())]")
+    assert seen == [ZURICH, local], f"the page in {ZURICH} at {local}: {seen}"
+    page.locator("#house-manu").click()
+    page.locator("#house-panel").wait_for(state="visible")
+    page.locator("#house-panel input[name=house-duration][value=until]").check()
+    house_end = page.locator("#house-until").input_value()
+    page.locator("#house-panel .form-cancel").click()
+    _, tile = first_room(page)
+    page.locator(tile + " .more-sum").click()
+    page.locator(tile + " .menu-holiday").click()
+    holiday_end = page.locator(tile + " .vacation-until").input_value()
+    page.locator(tile + " .vacation-panel .form-cancel").click()
+    assert (house_end, holiday_end) == (tomorrow, tomorrow), \
+        f"tomorrow at 06:00, {tomorrow}: the House tile's end {house_end}, the room's holiday's {holiday_end}"
 
 
 def test_house_date_hidden_while_permanently(page, case):
