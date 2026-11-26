@@ -1174,8 +1174,9 @@ export interface ConfigView {
   log_level: string;
   variables: {
     name: string;
-    /** Absent for a secret */
+    /** Absent for a secret and for an unknown name */
     value?: string;
+    /** The value is not shown: a secret, or an unknown name */
     secret?: boolean;
     /** Where the value came from, the environment or the settings file */
     source: string;

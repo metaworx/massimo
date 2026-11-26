@@ -24,11 +24,12 @@ import (
 )
 
 // runConfig prints the MASSIMO_* settings in effect. A secret's value
-// (server.SecretVariable, a name in any case) is redacted to its length,
-// as GET /api/v1/config leaves it out, so the output can be pasted into
-// a bug report; a Cube key or IV left over from the portal commands is
-// named as ignored (env.Removed). The notes on the settings file follow
-// the settings, as they name lines by their numbers and never a value.
+// and that of a name Massimo does not know (hidden) are redacted to
+// their length, as GET /api/v1/config leaves them out, so the output can
+// be pasted into a bug report; a Cube key or IV left over from the
+// portal commands is named as ignored (env.Removed). The notes on the
+// settings file follow the settings, as they name lines by their numbers
+// and never a value.
 func runConfig(args []string) error {
 	fs := flag.NewFlagSet("config", flag.ContinueOnError)
 	snFlag(fs)
@@ -64,14 +65,14 @@ func runConfig(args []string) error {
 }
 
 // printVariables prints every MASSIMO_* variable in effect, a line
-// each, with where it came from, a secret's value redacted to its length
-// (server.SecretVariable), and a note on a name the program ignores or
-// does not know (massimoNames).
+// each, with where it came from, a hidden value redacted to its length,
+// and a note on a name the program ignores or does not know
+// (massimoNames).
 func printVariables(w io.Writer) {
 	fmt.Fprintln(w, "\nvariables:")
 	for _, k := range massimoNames() {
 		v := os.Getenv(k)
-		if server.SecretVariable(k) {
+		if hidden(k) {
 			v = redact(v)
 		}
 		src := env.Source(k)
@@ -98,6 +99,15 @@ func printNotes(w io.Writer, notes []env.Note) {
 	}
 }
 
+// hidden reports whether massimo config and GET /api/v1/config hide a
+// variable's value: a secret's (server.SecretVariable, a name in any
+// case), and that of a name Massimo does not know, which the rule by
+// name misses where it holds a secret, MASSIMO_API_TOKEN_OLD (AP
+// StartConfiguration, D65-A). A known name keeps the rule by name.
+func hidden(k string) bool {
+	return server.SecretVariable(k) || !env.Known(env.NameKey(k))
+}
+
 // massimoNames are the MASSIMO_* variables in effect, sorted, each named
 // as the environment holds it, which on Windows may be in any case: the
 // start reads such a name there (env.NameKey; AP StartConfiguration,
@@ -116,16 +126,17 @@ func massimoNames() []string {
 // configView is what massimo config shows, for GET /api/v1/config
 // (System settings → Maintenance): the settings file, the data
 // directory, the address serve listens on, its TLS mode, the log level
-// and every MASSIMO_* variable with where it came from, a secret's value
-// left out (server.SecretVariable). The command's own text stays as it
-// is; both are made of the same helpers.
+// and every MASSIMO_* variable with where it came from, a hidden value
+// left out and marked as a secret's, which the web UI shows beside the
+// unknown name's mark. The command's own text stays as it is; both are
+// made of the same helpers.
 func configView(listen, tls string) server.ConfigView {
 	file := env.File()
 	_, err := os.Stat(file)
 	v := server.ConfigView{File: file, FileFound: err == nil, DataDir: dataDir(), Listen: listen, TLS: tls, LogLevel: logLevelState()}
 	for _, k := range massimoNames() {
 		cv := server.ConfigVariable{Name: k, Source: env.Source(k), Unknown: !env.Known(env.NameKey(k))}
-		if server.SecretVariable(k) {
+		if hidden(k) {
 			cv.Secret = true
 		} else {
 			cv.Value = os.Getenv(k)

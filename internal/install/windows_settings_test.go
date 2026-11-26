@@ -207,6 +207,56 @@ func TestInstallWindowsLeavesARelativePath(t *testing.T) {
 	}
 }
 
+// On Windows too a relative -acme-dns-hook is refused, asking for the
+// absolute path, before the install does anything, before it reaches
+// the service manager (AP StartConfiguration, D66-A): the service runs
+// the hook from the working directory its manager picks, not install's,
+// where a hook of that name is there and is refused all the same. A
+// path on a drive without its directory, one from the drive's root
+// without the drive, and a Linux path are relative too. An absolute
+// hook passes. Dry runs, as above, the service manager's connection the
+// test's, which counts the times it was asked.
+func TestInstallWindowsRefusesARelativeHook(t *testing.T) {
+	cwd := t.TempDir()
+	t.Chdir(cwd)
+	if err := os.WriteFile(filepath.Join(cwd, "hook.cmd"), []byte("@echo off\r\n"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	asked := 0
+	connectManager = func() (*mgr.Mgr, error) {
+		asked++
+		return nil, errors.New("no service manager in the test")
+	}
+	t.Cleanup(func() { connectManager = connect })
+	abs := filepath.Join(cwd, "hook.cmd")
+	vol := filepath.VolumeName(abs)
+	for _, hook := range []string{"hook.cmd", `.\hook.cmd`, vol + "hook.cmd", strings.TrimPrefix(abs, vol), "/usr/local/libexec/massimo-dns-hook"} {
+		dir := t.TempDir()
+		t.Setenv("ProgramFiles", dir)
+		t.Setenv("ProgramData", dir)
+		before := tree(t, dir)
+		rec := &recorder{}
+		var out bytes.Buffer
+		err := InstallWindows(Options{TLS: "acme", TLSNames: "massimo.example.net", ACMEDNSHook: hook, DryRun: true, Out: &out, Run: rec.run})
+		if want := fmt.Sprintf("-acme-dns-hook %q: give the hook's absolute path", hook); err == nil || err.Error() != want {
+			t.Errorf("%s: %v, want %s", hook, err, want)
+		}
+		if after := tree(t, dir); !maps.Equal(after, before) || out.Len() != 0 || len(rec.cmds) != 0 || asked != 0 {
+			t.Errorf("%s: before the refusal wrote, said %q, ran %q, asked the service manager %d times", hook, out.String(), rec.cmds, asked)
+		}
+	}
+	dir := t.TempDir()
+	t.Setenv("ProgramFiles", dir)
+	t.Setenv("ProgramData", dir)
+	var out bytes.Buffer
+	if err := InstallWindows(Options{TLS: "acme", TLSNames: "massimo.example.net", ACMEDNSHook: abs, DryRun: true, Out: &out, Run: (&recorder{}).run}); err != nil {
+		t.Errorf("an absolute hook: %v", err)
+	}
+	if !strings.Contains(out.String(), "MASSIMO_ACME_DNS_HOOK="+abs) {
+		t.Errorf("an absolute hook not set:\n%s", out.String())
+	}
+}
+
 // The settings saved as UTF-8 are copied as they are, the byte order
 // mark too.
 func TestWinSettingsCopiesUTF8(t *testing.T) {

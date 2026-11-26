@@ -134,11 +134,15 @@ func PerCube(name, sn string) string {
 
 // PerCubeValue returns the per-Cube variable of name for the Cube sn as
 // it is set in environ, KEY=VALUE lines as os.Environ gives them, and
-// its value: the serial in the name in any case, as a settings file may
-// write it, and the name as the environment holds it, which os.Getenv
-// does not tell on Windows, where it finds a name in any case. The exact
-// name comes first, then the first set whatever its case; the
-// upper-case name and "" when none is set.
+// its value. It reads the name as Serials does, by its key (NameKey),
+// and the serial in it alone in any case, as a settings file may write
+// it: on Linux and macOS MASSIMO_CUBE_keq0000000_NAME is read, and
+// MASSIMO_CUBE_KEQ0000000_Name is not, as the start ignores a known name
+// in another case (AP StartConfiguration, D53-A). It names the variable
+// as the environment holds it, which os.Getenv does not tell on Windows,
+// where it finds a name in any case. The exact name comes first, then
+// the first whose serial is written in another case; the upper-case name
+// and "" when none is set.
 func PerCubeValue(name, sn string, environ []string) (variable, value string) {
 	want := PerCube(name, sn)
 	for _, kv := range environ {
@@ -146,12 +150,33 @@ func PerCubeValue(name, sn string, environ []string) (variable, value string) {
 			return k, v
 		}
 	}
+	suffix := perCubeSuffix(name)
 	for _, kv := range environ {
-		if k, v, _ := strings.Cut(kv, "="); v != "" && strings.EqualFold(k, want) {
-			return k, v
+		if k, v, _ := strings.Cut(kv, "="); v != "" {
+			if s, ok := serialIn(k, suffix); ok && strings.EqualFold(s, sn) {
+				return k, v
+			}
 		}
 	}
 	return want, ""
+}
+
+// perCubeSuffix is what follows the serial in the per-Cube form of name:
+// "_ADDRESS" for MASSIMO_CUBE_ADDRESS.
+func perCubeSuffix(name string) string { return "_" + strings.TrimPrefix(name, Prefix) }
+
+// serialIn is the serial in k, the name of a per-Cube variable whose
+// form ends in suffix (perCubeSuffix), with ok false where k is none:
+// the name compared by its key (NameKey), so on Windows in any case and
+// its serial in upper case, elsewhere as written. A serial never
+// contains "_".
+func serialIn(k, suffix string) (sn string, ok bool) {
+	mid, ok := strings.CutPrefix(NameKey(k), Prefix)
+	if !ok {
+		return "", false
+	}
+	sn, ok = strings.CutSuffix(mid, suffix)
+	return sn, ok && sn != "" && !strings.Contains(sn, "_")
 }
 
 // Get returns the value of name for the Cube sn: the per-Cube variable
@@ -184,16 +209,14 @@ func Own(name, sn string, single bool) string {
 // lower case in the name is the same Cube, and on Windows the name in
 // any case (NameKey).
 func Serials(name string, environ []string) (serials []string, values map[string]string) {
-	suffix := "_" + strings.TrimPrefix(name, Prefix)
+	suffix := perCubeSuffix(name)
 	values = map[string]string{}
 	for _, kv := range environ {
 		k, v, _ := strings.Cut(kv, "=")
-		mid, ok := strings.CutPrefix(NameKey(k), Prefix)
-		if !ok || v == "" {
+		if v == "" {
 			continue
 		}
-		// A serial never contains "_".
-		if sn, ok := strings.CutSuffix(mid, suffix); ok && sn != "" && !strings.Contains(sn, "_") {
+		if sn, ok := serialIn(k, suffix); ok {
 			sn = strings.ToUpper(sn)
 			if _, seen := values[sn]; !seen {
 				serials = append(serials, sn)

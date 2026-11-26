@@ -55,7 +55,8 @@ func (s *Server) loadFound() {
 // PlainServedNote is the log's line where the plain
 // MASSIMO_CUBE_ADDRESS names a Cube the store serves already, at the
 // start (internal/serve) or once that Cube reported its serial
-// (plainServedAlready): its serial is the line's.
+// (plainServedAlready): its serial is the line's, and at the start its
+// row's address too (row_addr), beside the plain one (addr).
 const PlainServedNote = "the plain MASSIMO_CUBE_ADDRESS is a cube the store serves: the plain lines are that cube's from now on, compared with its row, whose values win; take the plain lines out of the settings file, or take a value from the file in the web UI"
 
 // seedLearned adds the plain MASSIMO_CUBE_ADDRESS Cube to the store once

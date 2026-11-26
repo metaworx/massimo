@@ -247,7 +247,10 @@ func TestSerialsOfANameInAnotherCase(t *testing.T) {
 // PerCubeValue names the variable as it is set, for massimo config and
 // the store's file view, on Windows too, where os.Getenv finds it by
 // the upper-case name; where two spellings are set, as Linux can have
-// them, the upper-case name wins.
+// them, the upper-case name wins. It reads the serial in any case, and
+// the rest of the name by its key (NameKey): a name in another case on
+// Windows alone, as Serials and the start's read of the file do (AP
+// StartConfiguration, D53-A).
 func TestPerCubeValue(t *testing.T) {
 	t.Setenv("MASSIMO_CUBE_keq0000000_ADDRESS", "192.0.2.5")
 	if name, v := PerCubeValue(Address, "KEQ0000000", os.Environ()); name != "MASSIMO_CUBE_keq0000000_ADDRESS" || v != "192.0.2.5" {
@@ -255,6 +258,22 @@ func TestPerCubeValue(t *testing.T) {
 	}
 	if name, v := PerCubeValue(Address, "KEQ0000001", os.Environ()); name != "MASSIMO_CUBE_KEQ0000001_ADDRESS" || v != "" {
 		t.Fatalf("PerCubeValue of a Cube without one: %s=%q", name, v)
+	}
+	for _, c := range []struct{ name, variable, sn string }{
+		{Name, "MASSIMO_CUBE_KEQ0000002_Name", "KEQ0000002"},
+		{Address, "massimo_cube_keq0000003_address", "keq0000003"},
+	} {
+		t.Setenv(c.variable, "set")
+		wantName, wantValue := PerCube(c.name, c.sn), ""
+		if runtime.GOOS == "windows" {
+			wantName, wantValue = c.variable, "set"
+		}
+		if name, v := PerCubeValue(c.name, c.sn, os.Environ()); name != wantName || v != wantValue {
+			t.Errorf("PerCubeValue of %s on %s: %s=%q, want %s=%q", c.variable, runtime.GOOS, name, v, wantName, wantValue)
+		}
+		if v := Own(c.name, c.sn, false); v != wantValue {
+			t.Errorf("Own of %s on %s: %q, want %q", c.variable, runtime.GOOS, v, wantValue)
+		}
 	}
 	if runtime.GOOS == "windows" { // one variable in any case
 		return

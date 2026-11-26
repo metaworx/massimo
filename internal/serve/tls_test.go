@@ -116,7 +116,7 @@ func TestCheckTLS(t *testing.T) {
 		{TLS{Mode: "acme", Names: "a.example.net", DNSHook: hook, HTTP: ":80"}, "-tls-http is for the HTTP-01 challenge; with -acme-dns-hook the DNS-01 challenge needs no port"},
 		{TLS{Mode: "files", Cert: certPath}, "-tls files needs -tls-cert and -tls-key (MASSIMO_TLS_CERT and MASSIMO_TLS_KEY)"},
 		{TLS{Cert: certPath, Key: missingKey}, "tls: " + keyErr.Error()},
-		{TLS{Mode: "files", Cert: keyPath, Key: keyPath}, "tls: " + pairErr.Error()},
+		{TLS{Mode: "files", Cert: keyPath, Key: keyPath}, pairErr.Error()}, // crypto/tls says "tls: " itself
 		{TLS{Mode: "acme"}, "tls: -tls acme needs the names of -tls-names"},
 		{TLS{Mode: "acme", Names: "*.example.net"}, "tls: a wildcard (*.example.net) needs the DNS-01 challenge (-acme-dns-hook)"},
 		{TLS{Mode: "acme", Names: "192.0.2.10", DNSHook: hook}, "tls: no certificate for an address (192.0.2.10); use a DNS name"},
