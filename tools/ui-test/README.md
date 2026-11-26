@@ -66,6 +66,7 @@ tools/ui-test/run.sh smoke test_log.py                # one file
 tools/ui-test/run.sh smoke 'test_log.py::test_log_changes[1100-en-chromium]' -x
 UI_TEST_WORKERS=1 make ui-test                        # in one process
 KEEP=1 make ui-test                                   # the work directory kept
+UI_TEST_SCALE=2 make ui-test                          # every wait twice as long
 PYTEST_ADDOPTS='test_parts_guard.py' make ui-test    # the parts' guard alone
 PYTEST_ADDOPTS='test_parts_guard.py -k rooms' make ui-test  # the guard of one region
 ```
@@ -100,7 +101,7 @@ the video took a quarter of a second of every test's set-up and tear-down:
 on 2026-11-19 (AP TestSpeed, D8-A).
 When tests fail, `run.sh` runs them once more with both
 (`--last-failed --video retain-on-failure --tracing retain-on-failure`,
-the same arguments),
+the same arguments), at four times the scale (below),
 and keeps the screenshot, the video and the trace of each that fails again
 in `tools/ui-test/results/retry/`;
 it says whether they failed again, and the run fails either way:
@@ -114,6 +115,21 @@ in CI's UI jobs' logs too, so that a run shows where its time went;
 the retry lists none of its own.
 `python -m playwright show-trace <trace.zip>` replays a trace step by step,
 with the page's DOM, console and network at every step.
+
+`UI_TEST_SCALE` stretches every wait of the suite:
+each wait of `helpers.py`, and the page fixture's,
+lasts its seconds times the scale,
+a positive number, 1 where it is not set,
+as `MASSIMO_TEST_SCALE` does for the Go tests.
+A slow or loaded machine sets more;
+`run.sh` refuses a value that is not a positive number.
+Its retry runs at four times the scale given,
+since the trace and the video slow the page as well:
+a test's set-up, which loads the page, took up to 3.8 times as long
+with them as without, a test's call twice as long at the median
+(1100-en, three files, 2026-11-26).
+A window that waits for nothing to come is not scaled
+(`docs/ui-testing.md`, section 9, "The scale").
 
 The run's sets, its `massimo` and the servers' logs and stores
 are in its work directory,
@@ -147,6 +163,10 @@ makes, sweeps and keeps it (`tools/workdir/README.md`; AP EmulatorRuns, D3-B).
   with `browser_context_args` set from `case`),
   the token put into `localStorage` before the page loads,
   the page loaded with its room tiles and its event stream open;
+  it waits 30 s for the tiles (`helpers.wait_started`, scaled),
+  longer than the page's own limit of a read, 20 s,
+  so that a late read fails as the page fails it;
+  on a timeout it names the API reads still open and the page's message line;
 - `watch`:
   what the page did, for a test or the guard to look at: the stream requests,
   the used ticket handed out, console and page errors,
@@ -974,6 +994,13 @@ Node is not needed.
   its action and waits with `stream.wait`,
   and finds the event's line by what the event names, not by `.first`.
 - A wait that returns whether it was met is asserted where it is called.
+- A test's own wait loop ends at `scaled(seconds)` of `helpers.py`,
+  so that `UI_TEST_SCALE` stretches it as it does the kit's waits;
+  a window that waits for nothing to come does not take it.
+- What a reload or a click brings is waited for,
+  not looked at once right after another wait:
+  the page goes on after the moment the first wait saw
+  (`test_header.py`, the reload of the log).
 - "Nothing came" is checked against an end, not after a fixed wait:
   a read sent after the action through the same route,
   the page's state that says nothing waits,

@@ -200,8 +200,10 @@ func TestProxyFailingInTheAPI(t *testing.T) {
 	if len(failing) != 1 {
 		t.Fatalf("proxy_failing %v", out["proxy_failing"])
 	}
+	// At least the PUT's own try: the slot's next ones, 5 ms apart, can
+	// come before the answer on a loaded runner, as System Info's below.
 	f := failing[0].(map[string]any)
-	if f["addr"] != addr || f["error"] == "" || f["since"] == nil || f["next_try"] == nil || f["tries"] != 1.0 {
+	if tries, _ := f["tries"].(float64); f["addr"] != addr || f["error"] == "" || f["since"] == nil || f["next_try"] == nil || tries < 1 {
 		t.Fatalf("proxy_failing[0] %v", f)
 	}
 	var sys systemView
