@@ -309,6 +309,19 @@ the poll and the stream go on behind it.
 signed in and the card closed, Skip for now and Cancel off meanwhile,
 then a toast says so,
 and in the app that the login by fingerprint was not kept where it was not.
+Where the server's answer lists what was set up before the owner and still works,
+as a rule while the server was open
+(`open_setup`: an integration with its key, or one whose key may still be collected,
+a sign-in provider, a role added or changed, a capability turned off),
+the toast says that too, "Still in effect from before you: …", by name,
+in the warn tone, for 30 seconds,
+its **Show** under the text at phone width and beside it from 760 px,
+never taller than the window;
+Show opens System settings → Integrations with the card in view
+and its heading in focus where an integration is listed,
+else the log with its title in focus,
+whose line of it stays a warning until it is marked seen (AP AccessEnds, D11, D13).
+A sign-out takes the toast away, as any toast of the user who left.
 Where the server has users after all,
 another device having made the owner meanwhile,
 the card becomes the sign-in's, the password's way chosen,
@@ -1249,7 +1262,12 @@ a restart, a reboot or an update asked for and its outcome,
 an automatic update asked for at night ("update v… → v… asked for automatically")
 or postponed because the radio stayed busy,
 or the next start refused the settings file, until its window closed,
-the backups, their prune and the log's, a restore started;
+the backups, their prune and the log's, a restore started,
+and, at the server's first regular user, what was set up before it
+and still works, a warning until a person marks it seen ("First owner anna;
+still in effect from before this user: 1 integration: Kitchen;
+roles added or changed: Viewer", "First user bob, Viewer, by the command line; …"
+where `massimo user add` made the user);
 and a Cube's new address or its leaving the LAN.
 A line someone asked for says by whom ("backup 12 taken (by hand), by Anna").
 Every change made through the web UI, the API or `massimo user` is a line
@@ -2741,7 +2759,7 @@ A region's root is drawn once into its place in the skeleton (`mounter` of `shar
 | the users, roles and providers | `admin/` | `#sys-users-body`, `#sys-roles-body`, `#sys-caps-body`, `#sys-providers-body` | `users.load` (My profile) |
 | the integrations | `integrations/` | `#sys-integrations-body` | — |
 | Backup and restore | `backups/` | `#backups-cubes`, `#cube-backup-body` | `backups.cubeChanged`, `backups.restoreEvent`, `backups.resynced` (app.js) |
-| the log | `log/` | `#logview` | `log.mount`, `log.event`, `log.render`, `log.load`, `log.poll`, `log.prune`, `log.cubesPolled`, `log.cubeChanged`, `log.selects`, `log.choicesChanged`, `log.loadAlerts`, `log.sign`, `log.kinds` (app.js); `log.state`, `log.alerts`, `log.matches`, `log.ofChoices`, `log.rangeStart`, `log.upperFirst` (the UI tests) |
+| the log | `log/` | `#logview` | `log.mount`, `log.event`, `log.render`, `log.load`, `log.poll`, `log.prune`, `log.cubesPolled`, `log.cubeChanged`, `log.selects`, `log.choicesChanged`, `log.loadAlerts`, `log.sign`, `log.kinds` (app.js); `log.focusHead` (the sign-in's first owner's toast); `log.state`, `log.alerts`, `log.matches`, `log.ofChoices`, `log.rangeStart`, `log.upperFirst` (the UI tests) |
 | Software update | `software/` | `#sys-software-body` | `software.load` (header.js) |
 | Maintenance | `maintenance/` | `#sys-maint-body` | — |
 | System info | `sysinfo/` | `#sys-info-body` | — |
@@ -3017,7 +3035,9 @@ and a Cube's entry under the Cube;
 (`roomActualDevice`, `roomActual`), a stale device's warning (`staleText`),
 a holiday's end as the API takes it (`apiUntil`) and what a device has not shown
 of the writes to it (`confirmItem`, `confirmFieldsText`, `confirmFieldName`);
-a value's age it takes from `received` of `rooms.js`, as the rooms do.
+a value's age it takes from `received` of `rooms.js`, as the rooms do;
+`opensetup.ts` what an open server left to its first owner in words (`openSetupText`),
+for the first owner's toast and the log's `open_setup` line.
 
 ### The shared parts
 

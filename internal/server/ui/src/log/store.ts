@@ -682,8 +682,16 @@ export async function toggleLogCommand(id: number): Promise<void> {
   logState.commands = commands;
 }
 
-/** Where the focus goes once the drawing is done: a line's Mark seen by its id, "search" for the search; null for nowhere. */
-export const markFocus = signal<number | "search" | null>(null);
+/**
+ * Where the focus goes once the drawing is done: a line's Mark seen by its id, "search" for the search, "head" for the
+ * log's title (focusHead); null for nowhere.
+ */
+export const markFocus = signal<number | "search" | "head" | null>(null);
+
+/** focusHead gives the log's title the focus in the drawing that follows, for a way to the log from another page (MassimoParts.log). */
+export function focusHead(): void {
+  markFocus.value = "head";
+}
 
 /**
  * seen marks a line seen from its own Mark seen, which then goes, and

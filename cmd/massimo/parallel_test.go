@@ -24,7 +24,10 @@ import (
 // tests'.
 var serialTests = map[string]string{
 	// The settings in the process environment (t.Setenv).
+	"TestConfigHidesASecretInAnyCase":       "unsets MASSIMO_API_TOKEN (unsetForTest), sets MASSIMO_API_Token",
+	"TestConfigKnowsANameInAnyCase":         "unsets MASSIMO_LISTEN and MASSIMO_CUBE_KEY (unsetForTest), sets them in lower case",
 	"TestConfigPrintsTLS":                   "sets the TLS variables",
+	"TestConfigRedactsASecretInAnyCase":     "unsets MASSIMO_API_TOKEN (unsetForTest), sets MASSIMO_API_Token and a password",
 	"TestConfigTiesThePlainLines":           "clears the Cube variables, sets MASSIMO_DATA and the plain Cube's variables, swaps plainLookup",
 	"TestConfigViewHidesSecrets":            "sets MASSIMO_API_TOKEN, a Cube's key and MASSIMO_LISTEN",
 	"TestDataDir":                           "sets MASSIMO_DATA",
@@ -33,6 +36,7 @@ var serialTests = map[string]string{
 	"TestReloadWarnsOfARefusedSetting":      "unsets settings variables (unsetForTest), clears the Cube variables, sets MASSIMO_HSTS and reloads a settings file into the environment",
 	"TestReloadWarnsOfAnUnreadableFile":     "unsets settings variables (unsetForTest) and reloads a settings file into the environment",
 	"TestReloadWarnsAsTheBoxChanges":        "clears the Cube variables, unsets the TLS variables (unsetForTest) and reloads a settings file into the environment",
+	"TestReloadSeesANameInAnyCase":          "unsets settings variables (unsetForTest) and reloads a settings file into the environment",
 	"TestReloadTellsTheNotes":               "unsets settings variables (unsetForTest) and reloads a settings file into the environment",
 	"TestRestartHelper":                     "sets ProgramData",
 	"TestSettingsReloader":                  "unsets settings variables (unsetForTest) and reloads a settings file into the environment",
@@ -44,6 +48,7 @@ var serialTests = map[string]string{
 	"TestUserStoreDir":                      "changes the working directory (t.Chdir), swaps stderr, stdin and stdout",
 	"TestUserCommands":                      "sets MASSIMO_DATA, swaps stdin and stdout (runUserWith)",
 	"TestUserCommandsLog":                   "sets MASSIMO_DATA, swaps stdin and stdout (runUserWith)",
+	"TestUserAddSaysWhatWasSetUp":           "sets MASSIMO_DATA, swaps stdin and stdout (runUserWith)",
 	"TestUserListChain":                     "sets MASSIMO_DATA, swaps stdin and stdout (runUserWith)",
 	"TestUserPasswordRule":                  "sets MASSIMO_DATA, swaps stdin and stdout (runUserWith)",
 	"TestUserPasswordNames":                 "sets MASSIMO_DATA, swaps stdin and stdout (runUserWith)",

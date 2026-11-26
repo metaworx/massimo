@@ -513,7 +513,11 @@ What the parallel tests share:
   so that what a settings file it loads sets is undone at its end;
 - **massimo built once** (`builtBinary` in `cmd/massimo`),
   which the tests that run `massimo serve` as a process start side by side,
-  each with a data directory of its own and the API at port 0;
+  each with a data directory of its own and the API at port 0,
+  in `massimo-test-bin-*` in the temp directory:
+  `TestMain` removes it, trying for 5 s,
+  and names on stderr one it could not remove (seen with `-v`),
+  and a run sweeps one a killed run left once it is a day old;
 - **the store's template**, made once per test binary and only read;
   each test writes a copy of its own ("The store's template");
 - **SQLite's allocator**,

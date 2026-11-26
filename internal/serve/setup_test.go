@@ -634,7 +634,7 @@ func TestServePlainCubeBesideStored(t *testing.T) {
 	}
 	defer conn.Close()
 	fc.Serve(held)
-	defer fc.Close() // only once it serves: Close needs its listener
+	defer fc.Close()
 	conn.SetReadDeadline(time.Now().Add(testkit.Scale(20 * time.Second)))
 	if m, err := cube.NewReader(conn).Read(); err != nil || m.Type != 'H' || !strings.HasPrefix(m.Data, "KEQ0000100,") {
 		t.Fatalf("greeting %v %v", m, err)

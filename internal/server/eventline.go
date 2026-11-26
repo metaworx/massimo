@@ -54,6 +54,7 @@ var (
 		"restart":              "restart requested",
 		"update":               "update requested",
 		"update_postponed":     "automatic update postponed: held back until the window closed",
+		"open_setup":           openSetupMessage,
 	}
 	failedMessages = map[string]string{
 		"backup":       "backup failed",

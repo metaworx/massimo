@@ -534,13 +534,24 @@ func (s *Server) postUser(w http.ResponseWriter, r *http.Request) error {
 		return userFail(err)
 	}
 	auditSubject(r, userSubject(created))
+	out := userCreated{userView: s.viewUserOf(r, st, nil, created)}
 	if p.mode == modeOpen {
 		s.log.Info("first owner created", "user", created.Name, "remote", s.clientIP(r))
+		// the owner is written: a client gone now leaves the line to be said all the same
+		out.OpenSetup = s.tellOpenSetup(context.WithoutCancel(ctx), created.Name, created.Role)
 	} else {
 		s.log.Info("user added", "user", created.Name, "role", created.Role, "remote", s.clientIP(r))
 	}
-	writeJSON(w, http.StatusCreated, s.viewUserOf(r, st, nil, created))
+	writeJSON(w, http.StatusCreated, out)
 	return nil
+}
+
+// userCreated is the answer of POST /api/v1/users: the user, and for the
+// first owner what the open server left, where it left anything
+// (tellOpenSetup, AP AccessEnds, Block 3).
+type userCreated struct {
+	userView
+	OpenSetup *openSetupView `json:"open_setup,omitempty"`
 }
 
 // What a route needs of the user of its path (targetUser).

@@ -23,10 +23,12 @@ import (
 	"strings"
 	"text/tabwriter"
 	"time"
+	"unicode"
 
 	"golang.org/x/term"
 
 	"go.metaworx.ch/massimo/internal/password"
+	"go.metaworx.ch/massimo/internal/server"
 	"go.metaworx.ch/massimo/internal/store"
 )
 
@@ -293,20 +295,102 @@ func (u *userCmd) add(args []string) error {
 			return fmt.Errorf("user add: %w", err)
 		}
 	}
-	created := store.User{}
-	if pw != "" {
-		// A password of version 2: the browser signs in by OPAQUE and
-		// the server never sees it (docs/store.md section 6).
-		created, err = u.st.AddUserOpaque(u.ctx, nu, pw, 0)
-	} else {
-		created, err = u.st.AddUser(u.ctx, nu, "", 0)
-	}
+	// A password of version 2: the browser signs in by OPAQUE and the
+	// server never sees it (docs/store.md section 6). The first regular
+	// user, whatever its role, closes an open server, and is told what
+	// was set up before it (AP AccessEnds, D12): the store says whether
+	// it is, in the transaction that writes it.
+	created, first, err := u.st.AddCommandUser(u.ctx, nu, pw, 0)
 	u.audit("user.add", "user:"+store.NormalName(names[0]), map[string]any{"role": *role, "password": pw != ""}, err)
 	if err != nil {
 		return fmt.Errorf("user add: %w", err)
 	}
 	fmt.Fprintf(stdout, "user %s added with the role %s%s\n", created.Name, created.Role, u.where())
+	if first {
+		u.tellOpenSetup(created)
+	}
 	return nil
+}
+
+// tellOpenSetup says what was set up before the store's first regular
+// user, created, and still works (store.OpenSetup), where anything was,
+// as the server says it for its first owner (internal/server's
+// opensetup.go): a line on standard output, and the log's open_setup
+// line at warn, by the command line, which stays a log alert until a
+// person marks it seen. Names only, never a key or a secret.
+func (u *userCmd) tellOpenSetup(created store.User) {
+	set, err := u.st.OpenSetup(u.ctx)
+	if err != nil {
+		fmt.Fprintln(stderr, "warning: what was set up before this user not read:", err)
+		return
+	}
+	if set.Empty() {
+		return
+	}
+	fmt.Fprintln(stdout, openSetupLine(set))
+	now := time.Now()
+	summary := server.OpenSetupSummary(created.Name, created.Role, set, "cli")
+	data, _ := json.Marshal(map[string]any{"kind": "open_setup", "source": "system", "level": "warn", "summary": summary, "time": now})
+	if err := u.st.InsertEvent(u.ctx, store.Event{Kind: "open_setup", Source: "system", Level: store.LevelWarn, Time: now, Data: data}); err != nil {
+		fmt.Fprintln(stderr, "warning: log line not written:", err)
+	}
+}
+
+// openSetupLine is what was set up before the first regular user, in a
+// line of the command's output, a part for each list joined by "; ":
+// "still in effect from before this user: 1 integration (Kitchen); roles
+// added or changed: viewer; check them in System settings". A name an
+// integration reported comes from a request without a credential, so it
+// is printed without its control and format characters (terminalText).
+func openSetupLine(set store.OpenSetup) string {
+	var parts []string
+	if n := len(set.Integrations); n > 0 {
+		names := make([]string, n)
+		for i, x := range set.Integrations {
+			names[i] = terminalText(x.Name)
+		}
+		word := "integrations"
+		if n == 1 {
+			word = "integration"
+		}
+		parts = append(parts, fmt.Sprintf("%d %s (%s)", n, word, strings.Join(names, ", ")))
+	}
+	if len(set.Providers) > 0 {
+		keys := make([]string, len(set.Providers))
+		for i, p := range set.Providers {
+			keys[i] = p.Key
+			if p.AutoCreate {
+				keys[i] += " (creates users)"
+			}
+		}
+		parts = append(parts, "sign-in providers: "+strings.Join(keys, ", "))
+	}
+	if len(set.Roles) > 0 {
+		keys := make([]string, len(set.Roles))
+		for i, r := range set.Roles {
+			keys[i] = r.Key
+		}
+		parts = append(parts, "roles added or changed: "+strings.Join(keys, ", "))
+	}
+	if len(set.CapabilitiesOff) > 0 {
+		parts = append(parts, "capabilities off: "+strings.Join(set.CapabilitiesOff, ", "))
+	}
+	return "still in effect from before this user: " + strings.Join(parts, "; ") + "; check them in System settings"
+}
+
+// terminalText is s without its control characters and its format
+// characters (Unicode Cc and Cf), for a terminal: an escape sequence in
+// a name that a request without a credential gave, an integration's,
+// written to the owner's terminal would be obeyed, and a bidirectional
+// override such as U+202E would reorder what the terminal shows. No
+// letter, digit, mark, space or punctuation is taken.
+func terminalText(s string) string {
+	return strings.Map(func(r rune) rune {
+		if unicode.IsControl(r) || unicode.Is(unicode.Cf, r) {
+			return -1
+		}
+		return r
+	}, s)
 }
 
 func (u *userCmd) list(args []string) error {
@@ -354,7 +438,7 @@ func (u *userCmd) list(args []string) error {
 		if !us.LastLoginAt.IsZero() {
 			last = us.LastLoginAt.Local().Format("2006-01-02 15:04")
 		}
-		fmt.Fprintf(w, "%s\t%s\t%s\t%s\t%s\t%d\t%s\n", us.Name, namer.Current(u.ctx, us), us.Role, state, password, len(tokens), last)
+		fmt.Fprintf(w, "%s\t%s\t%s\t%s\t%s\t%d\t%s\n", us.Name, terminalText(namer.Current(u.ctx, us)), us.Role, state, password, len(tokens), last)
 	}
 	return w.Flush()
 }
@@ -558,7 +642,8 @@ func (u *userCmd) tokens(args []string) error {
 		if from == "" {
 			from = "-"
 		}
-		fmt.Fprintf(w, "%d\t%s\t%s\t%s\t%s\t%s\t%s\n", t.ID, t.Kind, t.Label, when(t.CreatedAt), when(t.LastUsedAt), from, when(t.ExpiresAt))
+		// an integration's key is labelled with the name the integration reported
+		fmt.Fprintf(w, "%d\t%s\t%s\t%s\t%s\t%s\t%s\n", t.ID, t.Kind, terminalText(t.Label), when(t.CreatedAt), when(t.LastUsedAt), from, when(t.ExpiresAt))
 	}
 	return w.Flush()
 }

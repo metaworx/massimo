@@ -181,6 +181,18 @@ those that are not an integration's, disabled ones included:
   naming whom and by whom.
   `POST /api/v1/users` from an address on the local network creates the first
   owner (see that route), and `massimo user add` does the same on the box.
+  The first regular user, made either way or from `MASSIMO_API_TOKEN`
+  at a start or a reload of the settings file,
+  is told once what was set up before it and still works, where anything was,
+  as a rule while the server was open, else left by an owner since removed
+  (AP AccessEnds, Block 3):
+  the integrations active with a key, or one still to be collected,
+  the sign-in providers enabled, the roles added or changed,
+  and the capabilities turned off, by name, never a key or a secret.
+  The log's `open_setup` line at `warn` says it,
+  an alert until a person marks it seen, with its line in the server's log,
+  `the first regular user was made; what was set up before it still works: check it`,
+  and the first owner's answer of `POST /api/v1/users` holds it as `open_setup`.
   The setting `auth.keep_open` says the server is kept open on purpose,
   so that the web UI does not ask for the first owner;
   it changes nothing about who is let in,
@@ -231,26 +243,28 @@ since an integration's user holds no key of its own.
 The file stays the way to recover an owner who lost the password:
 put a token into it, log in with it, set a password; no restart is needed.
 
-The capabilities, what each allows and the routes it guards;
-the OpenAPI file carries each operation's as `x-capability`:
+The capabilities, what each allows and the routes it guards,
+`…` standing for any part of a path;
+a test holds each row to the routes the server registers with its capability,
+and the OpenAPI file carries each operation's as `x-capability`:
 
 | Capability | Allows | Routes |
 |---|---|---|
-| `read` | see everything of the Cubes and one's own user | every `GET` of a Cube, its rooms, devices, configuration, programmes, log, pairing and restore state but its backups, the event stream and its ticket, `GET /api/v1/commands/{id}`, `GET /api/v1/log` and its `alerts`, `GET /api/v1/system`, `GET /api/v1/push/vapid`, `GET /api/v1/update`; `GET /api/v1/me` for any signed-in user |
-| `preferences` | keep one's own settings and colour schemes on the server, so that they follow the user across browsers, and be notified; without it they stay in the browser | `PUT`/`DELETE /api/v1/me/preferences/{key}`, `/api/v1/me/push` |
+| `read` | see everything of the Cubes and one's own user: rooms, devices, configuration, programmes, the log and the stream, the pairing and restore state, a command's outcome, the server's log and its alerts, the system's facts, the update state | `GET /api/v1/cubes`, `GET /api/v1/cubes/{sn}`, `GET …/rooms`, `GET …/devices`, `GET …/devices/{rf}`, `GET …/rooms/{id}/config`, `GET …/rooms/{id}/program`, `GET …/devices/{rf}/program`, `GET …/log`, `GET …/events`, `POST …/events/ticket`, `GET …/pairing`, `GET …/restore`, `GET /api/v1/commands/{id}`, `GET /api/v1/log`, `GET /api/v1/log/alerts`, `GET /api/v1/system`, `GET /api/v1/push/vapid`, `GET /api/v1/update`; `GET /api/v1/me` and one's own preferences, `GET /api/v1/me/preferences…`, for any signed-in user |
+| `preferences` | keep one's own settings and colour schemes on the server, so that they follow the user across browsers, and be notified; without it they stay in the browser | `PUT`/`DELETE /api/v1/me/preferences/{key}`, `GET`/`POST /api/v1/me/push`, `DELETE /api/v1/me/push/{id}` |
 | `setpoint` | set temperatures and modes | `PUT …/devices/{rf}/setpoint`, `PUT …/rooms/{id}/setpoint` |
 | `lock` | lock and unlock the thermostats' buttons | `PUT …/devices/{rf}/lock` |
-| `configure` | temperatures, device settings, week programmes, and new batteries marked | `PUT …/rooms/{id}/config`, `PUT …/devices/{rf}/config`, `PUT …/rooms/{id}/program`, `PUT …/devices/{rf}/program`, the copy of a room's settings in `PUT …/devices/{rf}`, `POST …/devices/{rf}/battery` |
+| `configure` | temperatures, device settings, week programmes, and new batteries marked | `PUT …/rooms/{id}/config`, `PUT …/devices/{rf}/config`, `PUT …/rooms/{id}/program`, `PUT …/devices/{rf}/program`, `POST …/devices/{rf}/battery`; the copy of a room's settings in `PUT …/devices/{rf}` |
 | `rename` | room and device names | `PUT …/rooms/{id}`, `PUT …/devices/{rf}` with `name` |
-| `structure` | move and remove devices, delete rooms | `PUT …/devices/{rf}` with `room_id`, `DELETE …/devices/{rf}`, `DELETE …/rooms/{id}` |
-| `pair` | put the Cube into pairing mode and stop it | `POST …/pairing`, `DELETE …/pairing` |
+| `structure` | move and remove devices, delete rooms | `PUT …/devices/{rf}` with `room_id`, `DELETE …/devices/{rf}`, `DELETE …/rooms/{id}`; beside `repair`, `GET`/`POST …/repair/unlink-relink` |
+| `pair` | put the Cube into pairing mode and stop it | `POST`/`DELETE …/pairing` |
 | `discover` | search for Cubes on the LAN | `POST /api/v1/cubes/discover` |
-| `backup` | download a backup, and the backups the server keeps | `GET …/backup`, `GET`/`POST …/backups`, `GET …/backups/{id}` and its `diff`, `GET /api/v1/backups/unserved` |
+| `backup` | download a backup, and the backups the server keeps | `GET …/backup`, `GET`/`POST …/backups`, `GET …/backups/{id}`, `GET …/backups/{id}/diff`, `GET /api/v1/backups/unserved` |
 | `restore` | plan and run a restore, delete a kept backup | `POST …/restore/plan`, `POST …/restore`, `DELETE …/backups/{id}` |
-| `repair` | the repairs of a Cube's rooms and devices: their communication errors reset, a device's configuration re-sent from its room, a device placed or listed where the Cube and its list disagree, a room's master named, a room re-linked; "unlink all and re-link" needs `structure` as well ("Repairs", below) | `GET`/`POST …/repair/…` |
-| `guests` | create, change and remove users whose role is `guest` | the users routes, limited to guests |
-| `users` | every user: create, role, disable, password, tokens, the identities they sign in with | `GET`/`POST /api/v1/users`, `…/users/{name}`, `…/users/{name}/tokens`, `…/users/{name}/identities…` |
-| `passwords` | set the password of a user (the manager's by default) | `GET /api/v1/users`, `PUT …/users/{name}` with a password, `POST …/users/{name}/register` |
+| `repair` | the repairs of a Cube's rooms and devices: their communication errors reset, a device's configuration re-sent from its room, a device placed or listed where the Cube and its list disagree, a room's master named, a room re-linked; "unlink all and re-link" needs `structure` as well ("Repairs", below) | `GET`/`POST …/repair/…`; `GET`/`POST …/repair/unlink-relink` with `structure` as well |
+| `guests` | create, invite, change, disable and remove users whose role is `guest`, and give them an end date | the users routes, `GET`/`POST`/`PUT`/`DELETE /api/v1/users…`, for users whose role is `guest` |
+| `users` | every user: create, role, disable, password, tokens, the identities they sign in with | `GET`/`POST /api/v1/users`, `GET`/`PUT`/`DELETE …/users/{name}`, `GET`/`POST …/users/{name}/tokens`, `DELETE …/users/{name}/tokens/{id}`, `POST …/users/{name}/register`, `GET`/`POST`/`PUT`/`DELETE …/users/{name}/identities…` |
+| `passwords` | set the password of a user (the manager's by default) | `GET /api/v1/users`, `GET …/users/{name}`, `PUT …/users/{name}` with a password, `POST …/users/{name}/register` |
 | `roles` | a role's capabilities and name, create and delete roles | `GET`/`POST /api/v1/roles`, `PUT`/`DELETE /api/v1/roles/{key}` |
 | `roles.disable` | disable and enable a role | `PUT /api/v1/roles/{key}/disabled` |
 | `capabilities` | disable and enable a capability for every role but `owner` | `GET /api/v1/capabilities`, `PUT /api/v1/capabilities/{key}` |
@@ -262,8 +276,9 @@ the OpenAPI file carries each operation's as `x-capability`:
 | `reboot` | reboot the computer the server runs on, where its owner switched that on; includes `restart`; seeded for no role | `GET`/`POST`/`DELETE /api/v1/reboot` |
 | `audit` | read the audit | `GET /api/v1/audit` |
 | `auth` | the OpenID Connect providers users sign in through; seeded for no role | `GET`/`POST /api/v1/providers`, `PUT`/`DELETE /api/v1/providers/{key}` |
-| `integrations` | the registered integrations: requests, approval, their maximum, their users and links ("Integrations", below) | `GET /api/v1/integrations`, `…/integrations/found`, `GET`/`PUT`/`DELETE …/integrations/{uuid}`, its `approve`, `refuse` and `accept-instance`, `PUT …/integrations/{uuid}/users/{id}` |
+| `integrations` | the registered integrations: requests, approval, their maximum, their users and links ("Integrations", below) | `GET /api/v1/integrations`, `GET …/integrations/found`, `GET`/`PUT`/`DELETE …/integrations/{uuid}`, `POST …/integrations/{uuid}/approve`, `POST …/integrations/{uuid}/refuse`, `POST …/integrations/{uuid}/accept-instance`, `PUT …/integrations/{uuid}/users/{id}` |
 
+<!-- BEGIN GENERATED PARTIAL docs/fragments/_capability-rules.md - do not edit; run "GUIDELINES/shared/tools/sync-docs.sh" -->
 `update` and `reboot` each include `restart`, since each restarts the server:
 their holder passes every check of `restart` as a holder of `restart` does,
 and `GET /api/v1/me` lists `restart` beside them.
@@ -273,7 +288,8 @@ an integration's ceiling and maximum, a call's level):
 an integration whose maximum holds `update` and not `restart` restarts the server,
 a call of it at `control`, which leaves no `update`, does not,
 and `restart` disabled for every role is disabled for their holders too.
-No role's stored set changes: `GET /api/v1/roles` shows it as saved,
+Nothing stored changes, and no migration runs:
+`GET /api/v1/roles` shows each role's set as saved,
 and the rule below compares the stored sets.
 `reboot` does not include `update`, nor `update` `reboot`.
 
@@ -281,6 +297,8 @@ A user changes only users whose role has no capability its own lacks,
 and gives only such roles: an owner changes everyone,
 nobody but an owner changes an owner or gives the role `owner`,
 and a role made with `users` but without, say, `restore` changes no manager.
+<!-- END GENERATED PARTIAL docs/fragments/_capability-rules.md -->
+
 The users routes say what the caller may do with each user they list
 (`"may": {"manage": true, "password": true, "roles": ["guest", "viewer"]}`):
 change it, set its password,
@@ -757,6 +775,10 @@ where two requests come at the same moment,
 the server counts the regular users again as it writes the owner,
 and the second is `409` with `the first owner exists already: sign in`;
 its registration (below) kept nothing, so nothing is left of it.
+Its answer holds `open_setup` where anything set up before it still works
+(Authentication):
+`integrations` (`uuid`, `name`), `providers` (`key`, `name`, `auto_create`),
+`roles` (`key`, `name`) and `capabilities_off`, each where it lists any.
 From then on the server is in users mode (Authentication).
 
 `GET /api/v1/users/{name}` is one user.
@@ -3962,7 +3984,7 @@ of the same Cube, or of the server for the server's own:
 | `error_watch` `back` or `lasting` | the same device's `error_watch` `clear` of the same `flag` |
 | `unconfirmed`, a room's setpoint or its re-send not confirmed, its re-send failed | an `unconfirmed` of the same `target` whose `outcome` is `resend_confirmed` |
 
-Any other, such as `proxy_discarded` and `proxy_delete_refused`,
+Any other, such as `proxy_discarded`, `proxy_delete_refused` and `open_setup`,
 is settled only by a person's mark.
 The alerts the signed-in user marked seen are left out:
 the preference `log.seen` (see "Preferences"),
@@ -4111,7 +4133,10 @@ or a settings file the next start refuses, held a due automatic update back:
 or `reload`; `previous`, the name the old file has now; `kept` and `removed`,
 the rotated files kept and those deleted; at `warn` with its `error` where a
 step failed),
-`restore_started` (`id`, `steps`, `radio_commands`).
+`restore_started` (`id`, `steps`, `radio_commands`),
+`open_setup` at `warn`, what was set up before the first regular user and still works
+(Authentication): the `user` and its `role`, the lists of `open_setup` where it holds any,
+and `via` `cli` where `massimo user add` made the user.
 A Cube's own: `address_changed` (`from`, `to`, for a Cube that follows discovery)
 and `cube_gone` (with `cube`, a Cube found before that no longer answers).
 `change`, source `config`: every request that changed something, once it

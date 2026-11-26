@@ -690,3 +690,149 @@ def test_no_sign_in_notice_on_the_owner_card_over_plain_http(new_context, case, 
     frames(page)
     assert page.locator("#login-fp-plain").is_hidden(), "no sign-in's notice"
     assert page.locator("#setup-keep-row").is_hidden(), "no switch over plain HTTP"
+
+
+# What was set up before the first owner, as the first owner's answer
+# lists it (AP AccessEnds, Block 3), and what the toast says of it after
+# setup.done.
+OPEN_SETUP = {
+    "integration": {"integrations": [{"uuid": "0a0b0c0d-0000-4000-8000-000000000001", "name": "Kitchen"}], "roles": [{"key": "viewer"}]},
+    "roles": {"providers": [{"key": "cloud", "name": "Nextcloud", "auto_create": True}], "roles": [{"key": "viewer"}, {"key": "night", "name": "Night shift"}],
+              "capabilities_off": ["update"]},
+    # longer than the window at either width, where nothing caps the toast's height
+    "long": {
+        "integrations": [{"uuid": f"0a0b0c0d-0000-4000-8000-0000000000{i:02d}", "name": f"Home Assistant Ferienhaus Oberdorf {i}"} for i in range(1, 25)],
+        "providers": [{"key": "cloud", "name": "Nextcloud", "auto_create": True}, {"key": "google", "name": "Google"}],
+        "roles": [{"key": "viewer"}, {"key": "operator"}, {"key": "night", "name": "Night shift"}],
+        "capabilities_off": ["update", "pair", "repair"],
+    },
+    "nothing": None,
+}
+TOLD = {
+    "integration": {
+        "en": "Still in effect from before you: 1 integration: Kitchen; roles added or changed: Viewer. Check it.",
+        "de": "Noch wirksam aus der Zeit vor dir: 1 Integration: Kitchen; hinzugefügte oder geänderte Rollen: Betrachter. Prüfe es.",
+    },
+    "roles": {
+        "en": "Still in effect from before you: sign-in providers: Nextcloud (creates users); "
+              "roles added or changed: Viewer, Night shift; capabilities off: start a software update. Check it.",
+        "de": "Noch wirksam aus der Zeit vor dir: Anmeldedienste: Nextcloud (legt Benutzer an); "
+              "hinzugefügte oder geänderte Rollen: Betrachter, Night shift; abgeschaltete Fähigkeiten: ein Software-Update starten. Prüfe es.",
+    },
+}
+SHOW = {"en": "Show", "de": "Anzeigen"}
+# a rectangle of an element, the window's height beside it
+RECT = "(s) => { const r = document.querySelector(s).getBoundingClientRect(); return {top: r.top, bottom: r.bottom, left: r.left, right: r.right, vh: innerHeight}; }"
+
+
+def created_with(new_context, case, watch, guard, setup):
+    """A page whose first owner was created by the card, the creation
+    answered with setup as its open_setup (None for none), each toast
+    asked for noted in window.__toasts beside what it shows; once the
+    page has started and the toast is shown."""
+    name = f"owner-{case.width}-{case.lang}"
+    stage = {"me": OPEN}
+    page = start_page(new_context, guard, watch, lambda: stage["me"])
+    owner_card(page)
+    made = []
+    stub_creation(page, made)
+    answer = {"name": name, "role": "owner"}
+    if setup:
+        answer["open_setup"] = setup
+
+    def users(route):
+        if route.request.method != "POST":
+            return route.continue_()
+        made.append(route.request.url)
+        route.fulfill(status=201, content_type="application/json", body=json.dumps(answer))
+    page.route("**/api/v1/users", users)
+    page.evaluate("""() => {
+      window.__toasts = [];
+      const show = showToast;
+      showToast = (text, opts) => { window.__toasts.push({ text, opts: opts || {} }); show(text, opts); };
+    }""")
+    fill_owner(page, name=name)
+    stage["me"] = None
+    page.locator("#setup-form button[type=submit]").click()
+    assert wait_until(page, f"!({DIALOG_OPEN})", 10), "the card closes"
+    page.wait_for_selector(".room", timeout=10000)
+    assert len(made) == 1, f"the owner created once: {made}"
+    assert page.locator("#toast").is_visible(), "a toast"
+    return page, name
+
+
+@pytest.mark.parametrize("what", ["integration", "roles", "long", "nothing"])
+def test_the_owner_is_told_what_was_set_up(new_context, case, watch, guard, what):
+    """Where the creation's answer lists what was set up before the owner
+    and still works (open_setup), the toast says it after the owner's
+    creation, roles by their names, in the warn tone for 30 s, inside the
+    window however long the list, its Show under the text at phone width;
+    Show, by the keyboard, opens System settings → Integrations with the
+    card in view and its heading in focus where an integration is listed,
+    else the log with its title in focus (AP AccessEnds, D11, D13);
+    without it the toast says the creation alone, as before, with nothing
+    to show. Fails on the page before with what was set up: the page
+    dropped the creation's answer, and its toast said the creation alone,
+    as the case without it holds it."""
+    page, name = created_with(new_context, case, watch, guard, OPEN_SETUP[what])
+    done = page.evaluate("t('setup.done', {name: %s})" % json.dumps(name))
+    body = page.locator("#toast-body").inner_text()
+    asked = page.evaluate("window.__toasts")
+    assert len(asked) == 1, f"one toast: {asked}"
+    if what == "nothing":
+        assert body == done, f"the creation alone: {body}"
+        assert not page.evaluate("document.getElementById('toast').classList.contains('warn')"), "not in the warn tone"
+        assert page.locator("#toast-action").count() == 0, "nothing to show"
+        assert "ms" not in asked[0]["opts"], f"for the usual time: {asked}"
+        return
+    if what in TOLD:
+        assert body == done + " " + TOLD[what][case.lang], f"what was set up before: {body}"
+    assert page.evaluate("document.getElementById('toast').classList.contains('warn')"), "in the warn tone"
+    assert asked[0]["opts"].get("ms") == 30000 and asked[0]["opts"].get("tone") == "warn", f"for 30 s: {asked}"
+    action = page.locator("#toast-action")
+    assert action.is_visible() and action.inner_text() == SHOW[case.lang], "with Show"
+    assert page.locator("#toast-close").is_visible(), "and its close button"
+    assert scroll_width(page) <= case.width, "no horizontal scroll"
+    toast, close, show = page.evaluate(RECT, "#toast"), page.evaluate(RECT, "#toast-close"), page.evaluate(RECT, "#toast-action")
+    assert toast["top"] >= 0 and toast["bottom"] <= toast["vh"], f"the toast inside the window: {toast}"
+    assert close["top"] >= toast["top"] and close["bottom"] <= toast["bottom"], f"its × inside the toast's visible part: {close}, {toast}"
+    assert show["top"] >= toast["top"] and show["bottom"] <= toast["bottom"], f"its Show inside the toast's visible part: {show}, {toast}"
+    if case.width < 760:
+        # in the text's column, not beside it; below its end where the text is not scrolled
+        text = page.evaluate(RECT, "#toast .toast-text")
+        assert show["left"] >= text["left"] - 1 and show["right"] <= text["right"] + 1, f"Show under the text at phone width: {show}, {text}"
+        assert what == "long" or show["top"] >= text["bottom"] - 1, f"Show under the text at phone width: {show}, {text}"
+    if what == "long":
+        return
+    action.focus()
+    page.keyboard.press("Enter")
+    assert toast_hidden(page), "Show closes the toast"
+    if what == "integration":
+        assert wait_until(page, "MassimoParts.pages.shown() === 'system'", 5), "System settings shown"
+        assert wait_until(page, "!!document.activeElement && !!document.activeElement.closest('#sys-integrations')", 5), \
+            "the Integrations card's heading in focus"
+        # in view: its top in the window's upper third, its heading inside the window, once the scroll has settled
+        assert wait_until(page, """(() => { const c = document.getElementById('sys-integrations').getBoundingClientRect();
+          const h = document.activeElement.getBoundingClientRect();
+          return c.top >= 0 && c.top <= innerHeight / 3 && h.top >= 0 && h.bottom <= innerHeight; })()""", 5), \
+            f"the Integrations card in view: {page.evaluate(RECT, '#sys-integrations')}"
+    else:
+        assert wait_until(page, "MassimoParts.pages.shown() === 'log'", 5), "the log shown"
+        assert wait_until(page, "!!document.activeElement && document.activeElement.tagName === 'H2' && !!document.activeElement.closest('#logview')", 5), \
+            f"the log's title in focus: {page.evaluate('document.activeElement && document.activeElement.outerHTML.slice(0, 80)')}"
+
+
+def toast_hidden(page):
+    """Whether the page's toast is taken away within a few seconds."""
+    return wait_until(page, "document.getElementById('toast').classList.contains('hidden')", 5)
+
+
+def test_a_sign_out_takes_the_owners_toast_away(new_context, case, watch, guard):
+    """A sign-out within the toast's 30 s takes away what it says was set
+    up before the owner, so that the next user to sign in does not find
+    it (AP AccessEnds, Block 3). Fails on the page before: the toast
+    stayed, beside the sign-in card too."""
+    from helpers import sign_out
+    page, _ = created_with(new_context, case, watch, guard, OPEN_SETUP["integration"])
+    sign_out(page)
+    assert toast_hidden(page), "the toast taken away at the sign-out"

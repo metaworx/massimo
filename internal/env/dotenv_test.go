@@ -317,6 +317,32 @@ func TestTwoCasesTwoNames(t *testing.T) {
 	agrees(t, "a name in two cases", start, again, changed)
 }
 
+// Outside Windows a name the program knows, written in another case,
+// sets nothing, at a start as at a reload, and is a note that names it
+// in upper case, which massimo install reads too; a Cube's serial in
+// lower case is no other case of a name, and is set. Windows, which
+// takes the name in any case, sets it without a note, and install's
+// read finds it by its upper case, as the start does (AP
+// StartConfiguration, D53-A).
+func TestKnownNameInAnotherCase(t *testing.T) {
+	const lower, cube = "massimo_listen", "MASSIMO_CUBE_keq0000000_ADDRESS"
+	p := settingsFile(t, lower+"=:1\n"+cube+"=192.0.2.5\n")
+	start, again, changed := readThrice(t, p, "MASSIMO_LISTEN", lower, cube)
+	vars, lenient, err := ReadFileLenient(p)
+	want := []Note{{Lines: []int{1}, Name: "MASSIMO_LISTEN", Text: "line 1 sets MASSIMO_LISTEN in another case, ignored: names are upper case"}}
+	value := ""
+	if runtime.GOOS == "windows" {
+		want, value = nil, ":1"
+	}
+	if err != nil || start.values["MASSIMO_LISTEN"] != value || start.values[lower] != value || vars["MASSIMO_LISTEN"] != value ||
+		start.values[cube] != "192.0.2.5" || vars[NameKey(cube)] != "192.0.2.5" ||
+		!slices.EqualFunc(start.notes, want, sameNote) || !slices.EqualFunc(lenient, want, sameNote) {
+		t.Errorf("the start set %q, notes %v, install's read %q, notes %v, %v; want %q, the Cube's line, notes %v",
+			start.values, start.notes, vars, lenient, err, value, want)
+	}
+	agrees(t, "a known name in another case", start, again, changed)
+}
+
 // A UTF-8 byte order mark at the start of the file, which Windows'
 // editors and PowerShell write, is skipped, before a setting as before
 // a comment without "=", the template's first line.

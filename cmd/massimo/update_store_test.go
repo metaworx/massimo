@@ -6,6 +6,7 @@ package main
 import (
 	"context"
 	"database/sql"
+	"fmt"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -37,7 +38,9 @@ func TestMain(m *testing.M) {
 	}
 	code := m.Run()
 	if built.dir != "" {
-		os.RemoveAll(built.dir)
+		if err := removeBuilt(built.dir); err != nil {
+			fmt.Fprintf(os.Stderr, "the built massimo's directory %s stays: %v\n", built.dir, err)
+		}
 	}
 	os.Exit(code)
 }

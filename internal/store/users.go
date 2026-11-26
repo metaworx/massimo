@@ -357,18 +357,68 @@ func (s *Store) nameFree(ctx context.Context, q queryer, name string) error {
 // whose registration runs here, both halves (opaqueRecordFor): for the
 // command line, which has the password and the store at hand.
 func (s *Store) AddUserOpaque(ctx context.Context, u User, password string, by int64) (User, error) {
-	u, err := s.newUser(u)
+	u, c, err := s.opaqueCredential(ctx, u, password)
 	if err != nil {
 		return User{}, err
 	}
+	return s.addUser(ctx, u, c, by, false)
+}
+
+// opaqueCredential checks u as a user add does and registers its
+// password of version 2 here, both halves (opaqueRecordFor): the user
+// and the credential for addUser.
+func (s *Store) opaqueCredential(ctx context.Context, u User, password string) (User, credential, error) {
+	u, err := s.newUser(u)
+	if err != nil {
+		return User{}, credential{}, err
+	}
 	if err := s.addable(ctx, u); err != nil {
-		return User{}, err
+		return User{}, credential{}, err
 	}
 	record, err := s.opaqueRecordFor(ctx, u.Name, password)
 	if err != nil {
-		return User{}, err
+		return User{}, credential{}, err
 	}
-	return s.addUser(ctx, u, credential{record: record, ksf: OpaqueKSF}, by, false)
+	return u, credential{record: record, ksf: OpaqueKSF}, nil
+}
+
+// commandStep runs in AddCommandUser once the user is checked and its
+// password registered, before the transaction that writes it; nil but
+// in the tests, which add a user from another process there.
+var commandStep func()
+
+// AddCommandUser adds a user as the command line does: with a password
+// of version 2 registered here where one is given (AddUserOpaque), else
+// with keys only (AddUser). It reports whether the user is the store's
+// first regular user (CountUsers), counted in the transaction that
+// writes it, so that of a first owner another process makes at the same
+// moment, while the registration runs, and this user one alone is first
+// (AP AccessEnds, D12).
+func (s *Store) AddCommandUser(ctx context.Context, u User, password string, by int64) (User, bool, error) {
+	var c credential
+	var err error
+	if password != "" {
+		u, c, err = s.opaqueCredential(ctx, u, password)
+	} else {
+		u, err = s.newUser(u)
+	}
+	if err != nil {
+		return User{}, false, err
+	}
+	if commandStep != nil {
+		commandStep()
+	}
+	first := false
+	counted := func(tx *sql.Tx, _ int64) error {
+		n, err := countUsers(ctx, tx)
+		first = n == 1
+		return err
+	}
+	created, err := s.addUser(ctx, u, c, by, false, counted)
+	if err != nil {
+		return User{}, false, err
+	}
+	return created, first, nil
 }
 
 // SetPasswordOpaque sets a user's password of version 2, registered here

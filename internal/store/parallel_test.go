@@ -20,12 +20,13 @@ import (
 // measures what the whole process allocates.
 var serialTests = map[string]string{
 	// A package variable swapped while the test runs.
-	"TestEventsDropped":         "sets eventBuffer to 8",
-	"TestEventsPruneStops":      "sets pruneChunk and pruneStep",
-	"TestEventsPruneYields":     "sets pruneChunk and pruneStep",
-	"TestEventsPruned":          "sets pruneChunk to 7",
-	"TestNoHashForAKnownAnswer": "swaps argonKey",
-	"TestPasswordChecksBounded": "swaps argonKey",
+	"TestAddCommandUserCountsInItsTransaction": "sets commandStep",
+	"TestEventsDropped":                        "sets eventBuffer to 8",
+	"TestEventsPruneStops":                     "sets pruneChunk and pruneStep",
+	"TestEventsPruneYields":                    "sets pruneChunk and pruneStep",
+	"TestEventsPruned":                         "sets pruneChunk to 7",
+	"TestNoHashForAKnownAnswer":                "swaps argonKey",
+	"TestPasswordChecksBounded":                "swaps argonKey",
 
 	// The process's allocations (runtime.MemStats.TotalAlloc), which
 	// the tests beside it would add to.

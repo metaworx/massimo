@@ -443,12 +443,18 @@ func (s *Server) Start(addr string) (string, error) {
 // server. A test that brings the Cube up late holds its port this way:
 // a client's dial waits for the greeting meanwhile, and nothing else
 // takes the port, as it may between a listener closed and one opened.
-// A fake paused before Serve starts paused.
+// A fake paused before Serve starts paused; a fake closed before Serve
+// closes ln at once and serves nothing.
 func (s *Server) Serve(ln net.Listener) string {
 	if s.NTP == nil {
 		s.NTP = []string{"ntp.homematic.com", "ntp.homematic.com"}
 	}
 	s.mu.Lock()
+	if s.closed {
+		s.mu.Unlock()
+		ln.Close()
+		return ln.Addr().String()
+	}
 	s.ln = ln
 	if s.paused {
 		s.holdLocked()
@@ -556,14 +562,18 @@ func reset(conn net.Conn) {
 	conn.Close()
 }
 
-// Close stops the server and drops every client connection.
+// Close stops the server and drops every client connection. A fake
+// that never served, paused or not, has no listener to close.
 func (s *Server) Close() error {
 	s.mu.Lock()
 	s.closed = true // from here on, Pause and Resume do nothing
 	ln, hold := s.ln, s.hold
 	s.hold = nil
 	s.mu.Unlock()
-	err := ln.Close()
+	var err error
+	if ln != nil {
+		err = ln.Close()
+	}
 	if hold != nil {
 		hold.release()
 		err = nil // the pause closed the listener
