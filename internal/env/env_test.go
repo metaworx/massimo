@@ -6,6 +6,7 @@ package env
 import (
 	"io"
 	"net"
+	"os"
 	"runtime"
 	"strings"
 	"testing"
@@ -45,12 +46,38 @@ func TestSerials(t *testing.T) {
 	t.Setenv("MASSIMO_CUBE_KEQ0000001_ADDRESS", "10.0.0.1")
 	t.Setenv("MASSIMO_CUBE_KEQ0000003_ADDRESS", "")
 	t.Setenv("MASSIMO_CUBE_KEQ0000001_PROXY_SERIAL", "x")
-	sns, addrs := Serials(Address)
+	sns, addrs := Serials(Address, os.Environ())
 	if len(sns) != 2 || sns[0] != "KEQ0000001" || addrs["KEQ0000002"] != "10.0.0.2" {
 		t.Fatalf("serials %v %v", sns, addrs)
 	}
-	if sns, _ := Serials(Proxy); len(sns) != 0 {
+	if sns, _ := Serials(Proxy, os.Environ()); len(sns) != 0 {
 		t.Fatalf("_PROXY_SERIAL read as _PROXY: %v", sns)
+	}
+}
+
+// Serials, PerCubeValue and Lookup read the list they are given, for
+// massimo install a settings file's lines, and nothing of the process
+// environment (AP StartConfiguration, D47-A); Lookup finds a name in
+// another case on Windows alone, as os.Getenv does there.
+func TestCubeLinesFromTheListGiven(t *testing.T) {
+	t.Setenv("MASSIMO_CUBE_KEQ0000001_ADDRESS", "192.0.2.1")
+	t.Setenv(Address, "192.0.2.9")
+	list := []string{"MASSIMO_CUBE_KEQ0000000_ADDRESS=192.0.2.5", "massimo_cube_name=plain"}
+	if sns, addrs := Serials(Address, list); len(sns) != 1 || sns[0] != "KEQ0000000" || addrs["KEQ0000000"] != "192.0.2.5" {
+		t.Errorf("Serials: %v %v", sns, addrs)
+	}
+	if name, v := PerCubeValue(Address, "KEQ0000001", list); v != "" {
+		t.Errorf("PerCubeValue of the process's Cube: %s=%q", name, v)
+	}
+	if v := Lookup(Address, list); v != "" {
+		t.Errorf("Lookup of the process's address: %q", v)
+	}
+	want := ""
+	if runtime.GOOS == "windows" {
+		want = "plain"
+	}
+	if v := Lookup(Name, list); v != want {
+		t.Errorf("Lookup of a name in another case: %q, want %q", v, want)
 	}
 }
 
@@ -187,7 +214,7 @@ func TestRemoved(t *testing.T) {
 func TestLowerCaseSerial(t *testing.T) {
 	t.Setenv("MASSIMO_CUBE_keq0000000_ADDRESS", "192.0.2.5")
 	t.Setenv("MASSIMO_CUBE_keq0000000_IGNORE", "0abcde")
-	sns, addrs := Serials(Address)
+	sns, addrs := Serials(Address, os.Environ())
 	if len(sns) != 1 || sns[0] != "KEQ0000000" || addrs["KEQ0000000"] != "192.0.2.5" {
 		t.Fatalf("serials %v %v", sns, addrs)
 	}
@@ -207,7 +234,7 @@ func TestLowerCaseSerial(t *testing.T) {
 // (NameKey; AP StartConfiguration, D53-A).
 func TestSerialsOfANameInAnotherCase(t *testing.T) {
 	t.Setenv("massimo_cube_KEQ0000000_address", "192.0.2.5")
-	sns, addrs := Serials(Address)
+	sns, addrs := Serials(Address, os.Environ())
 	want := 0
 	if runtime.GOOS == "windows" {
 		want = 1
@@ -223,17 +250,17 @@ func TestSerialsOfANameInAnotherCase(t *testing.T) {
 // them, the upper-case name wins.
 func TestPerCubeValue(t *testing.T) {
 	t.Setenv("MASSIMO_CUBE_keq0000000_ADDRESS", "192.0.2.5")
-	if name, v := PerCubeValue(Address, "KEQ0000000"); name != "MASSIMO_CUBE_keq0000000_ADDRESS" || v != "192.0.2.5" {
+	if name, v := PerCubeValue(Address, "KEQ0000000", os.Environ()); name != "MASSIMO_CUBE_keq0000000_ADDRESS" || v != "192.0.2.5" {
 		t.Fatalf("PerCubeValue: %s=%q", name, v)
 	}
-	if name, v := PerCubeValue(Address, "KEQ0000001"); name != "MASSIMO_CUBE_KEQ0000001_ADDRESS" || v != "" {
+	if name, v := PerCubeValue(Address, "KEQ0000001", os.Environ()); name != "MASSIMO_CUBE_KEQ0000001_ADDRESS" || v != "" {
 		t.Fatalf("PerCubeValue of a Cube without one: %s=%q", name, v)
 	}
 	if runtime.GOOS == "windows" { // one variable in any case
 		return
 	}
 	t.Setenv("MASSIMO_CUBE_KEQ0000000_ADDRESS", "192.0.2.6")
-	if name, v := PerCubeValue(Address, "KEQ0000000"); name != "MASSIMO_CUBE_KEQ0000000_ADDRESS" || v != "192.0.2.6" {
+	if name, v := PerCubeValue(Address, "KEQ0000000", os.Environ()); name != "MASSIMO_CUBE_KEQ0000000_ADDRESS" || v != "192.0.2.6" {
 		t.Fatalf("PerCubeValue of two spellings: %s=%q", name, v)
 	}
 }

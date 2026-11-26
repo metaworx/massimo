@@ -15,10 +15,12 @@ import (
 	"fmt"
 	"io"
 	"io/fs"
+	"maps"
 	"net"
 	"os"
 	"os/exec"
 	"path/filepath"
+	"regexp"
 	"slices"
 	"strings"
 	"time"
@@ -99,8 +101,8 @@ type Options struct {
 	// Binary is the file installed as BinPath; "" is the running one.
 	Binary string
 	// Settings, when set, is copied as EnvPath if there is none yet; a
-	// file serve's start cannot read is refused before anything is
-	// written (checkSettingsFile).
+	// file serve's start cannot read, or a path that is not there, is
+	// refused before anything is written (checkSettingsFile).
 	Settings string
 	// NoUpdateHelper leaves out massimo-update.path and .service.
 	NoUpdateHelper bool
@@ -144,6 +146,13 @@ type Options struct {
 	// LocalAddrs lists this machine's addresses for the proxy check;
 	// nil asks the network interfaces.
 	LocalAddrs func() ([]net.IP, error)
+	// StartChecks runs serve's start's checks of its settings
+	// (cmd/massimo, startchecks.go) on vars, a settings file's values
+	// alone: what the start refuses, in its order. Install refuses a
+	// -settings file and -tls options the start refuses, every refusal
+	// named, before it writes anything, and warns of a kept settings
+	// file's; nil checks nothing.
+	StartChecks func(vars map[string]string) []StartRefusal
 }
 
 type installer struct {
@@ -154,6 +163,10 @@ type installer struct {
 	reboot  bool   // the reboot helper stays or comes (rebootWanted)
 	noted   bool   // the settings file's notes are said (readSettings)
 	copies  bool   // -settings is copied, or in a dry run would be (settingsCopy)
+	tlsKept bool   // the settings unread, what the units keep is said (keptHTTPS)
+	// svc is how the service starts serve, for the start's checks
+	// (warnRefused).
+	svc serviceStart
 }
 
 func newInstaller(o Options) *installer {
@@ -182,7 +195,7 @@ func newInstaller(o Options) *installer {
 			}
 		}
 	}
-	return &installer{Options: o, svcUser: User}
+	return &installer{Options: o, svcUser: User, svc: systemdStart()}
 }
 
 func (in *installer) path(p string) string { return filepath.Join(in.Root, p) }
@@ -232,10 +245,13 @@ func Install(o Options) error {
 			return err
 		}
 	}
-	if err := o.checkTLS(); err != nil {
+	if err := o.checkTLS(systemdStart()); err != nil {
 		return err
 	}
-	if err := o.checkSettingsFile(); err != nil {
+	if err := o.checkSettingsFile(systemdStart()); err != nil {
+		return err
+	}
+	if err := o.checkTLSFile(filepath.Join(o.Root, EnvPath)); err != nil {
 		return err
 	}
 	in := newInstaller(o)
@@ -325,10 +341,13 @@ func configure(o Options, m Manager) error {
 			return err
 		}
 	}
-	if err := o.checkTLS(); err != nil {
+	if err := o.checkTLS(systemdStart()); err != nil {
 		return err
 	}
-	if err := o.checkSettingsFile(); err != nil {
+	if err := o.checkSettingsFile(systemdStart()); err != nil {
+		return err
+	}
+	if err := o.checkTLSFile(filepath.Join(o.Root, EnvPath)); err != nil {
 		return err
 	}
 	// Only the Debian package ships an update helper, and only apt is
@@ -694,10 +713,12 @@ func (in *installer) settings() (bool, error) {
 	return startable, in.run("chown", "-h", in.svcUser+":"+in.svcUser, env)
 }
 
-// checkSettings warns about settings the service will trip over. A proxy
-// address must be one of this machine's (port 62910 is bound once per
-// address), or serve fails to bind and restarts every ten seconds; the
-// install adds no addresses, that is the network's owner's choice.
+// checkSettings warns about settings the service will trip over: what
+// its next start refuses (warnRefused), which a settings file the
+// install keeps may hold, the token missing, and a proxy address that is
+// none of this machine's: port 62910 is bound once per address, or serve
+// fails to bind and restarts every ten seconds; the install adds no
+// addresses, that is the network's owner's choice.
 func (in *installer) checkSettings() {
 	env := in.checkedFile(in.path(EnvPath))
 	if env == "" {
@@ -705,13 +726,21 @@ func (in *installer) checkSettings() {
 	}
 	vars, err := in.readSettings(env)
 	if err != nil {
-		fmt.Fprintf(in.Out, "warning: cannot check %s: %v\n", EnvPath, err)
+		name := EnvPath
+		if env != in.path(EnvPath) {
+			name = env
+		}
+		fmt.Fprintf(in.Out, "warning: %s: the next start refuses the file until it is fixed\n", fileError(name, env, err))
 		return
 	}
+	name := env
+	if env == in.path(EnvPath) {
+		name = EnvPath
+	}
+	in.warnRefused(name, vars)
 	if vars["MASSIMO_API_TOKEN"] == "" {
 		fmt.Fprintln(in.Out, "warning: no MASSIMO_API_TOKEN: until it has a user (massimo user add, or the web UI), every device on the local network may use it")
 	}
-	in.checkTLSSettings(vars)
 	lookup := in.LocalAddrs
 	if lookup == nil {
 		lookup = localAddrs
@@ -756,25 +785,202 @@ func localAddrs() ([]net.IP, error) {
 	return ips, nil
 }
 
-// checkSettingsFile refuses a -settings file that serve's start cannot
-// read, read as the start reads it (env.ReadFile), with the parser's
-// error and its line, before an install writes anything: the service
-// could not start on its copy. That is a line that is not KEY=VALUE, a
-// line too long to read, UTF-16 text, as PowerShell 5.1's > writes it
-// (env.ErrUTF16), and a file that cannot be read, such as a directory.
-// It refuses it also where a settings file is kept and it would not be
-// copied. Only the parser's refusals: a value the start's checks refuse
-// (cmd/massimo, startchecks.go) is copied. A file that is not there is
-// no refusal of the start, which reads no file then, and is left to the
-// copy, as before (settingsCopy).
-func (o Options) checkSettingsFile() error {
-	if o.Settings == "" {
+// checkSettingsFile refuses a -settings path that is not there, and a
+// file serve's start cannot read, read as the start reads it
+// (env.ReadFile), before an install writes anything: the path with the
+// system's error (os.ErrNotExist), the file with the parser's error and
+// its line, as the service could not start on its copy. That is a line
+// that is not KEY=VALUE, a line too long to read, UTF-16 text, as
+// PowerShell 5.1's > writes it (env.ErrUTF16), and a file that cannot be
+// read, such as a directory. Then it refuses what the start's checks
+// refuse (refusedByStart) of the file's values and the -tls options, as
+// the service svc starts with them: every refusal on a line of its own,
+// in one error that names both where both are given. It refuses them
+// also where a settings file is kept and the file would not be copied:
+// a wrong path is a mistake either way.
+func (o Options) checkSettingsFile(svc serviceStart) error {
+	var vars map[string]string
+	what, name := "", ""
+	if o.Settings != "" {
+		v, _, err := env.ReadFile(o.Settings)
+		if err != nil {
+			return fmt.Errorf("-settings: %w; nothing was written", err)
+		}
+		vars, what, name = v, "-settings: "+o.Settings, o.Settings
+	}
+	if m := o.tlsMode(); m != "" {
+		switch what {
+		case "":
+			what, name = "-tls "+m, "-tls "+m
+		default:
+			what += ", with -tls " + m
+		}
+	}
+	if what == "" {
 		return nil
 	}
-	if _, _, err := env.ReadFile(o.Settings); err != nil && !errors.Is(err, os.ErrNotExist) {
-		return fmt.Errorf("-settings: %w; nothing was written", err)
+	refused, unchecked := o.refusedByStart(vars, svc)
+	out := o.Out
+	if out == nil {
+		out = os.Stdout
+	}
+	warnUnchecked(out, name, unchecked)
+	if len(refused) > 0 {
+		return fmt.Errorf("%s: serve's start refuses:\n  %s\nnothing was written", what, strings.Join(refused, "\n  "))
 	}
 	return nil
+}
+
+// A StartRefusal is a refusal of serve's start's checks
+// (Options.StartChecks): the variables its check reads, and its error,
+// in the start's words.
+type StartRefusal struct {
+	Vars []string
+	Err  error
+}
+
+// A serviceStart is how the installed service starts serve, as far as
+// its settings go: the variables its own flags fix in place of the
+// settings file's (darwinFixed), and its working directory, where a
+// relative path of the settings resolves; "" where install does not
+// know it, on Windows, where the service manager picks it.
+type serviceStart struct {
+	fixed   map[string]string
+	workDir string
+}
+
+// unitWorkDir and plistWorkDir find the working directory in the
+// service's definition, massimo.service's and the LaunchDaemon's.
+var (
+	unitWorkDir  = regexp.MustCompile(`(?m)^WorkingDirectory=([^\r\n]+)`)
+	plistWorkDir = regexp.MustCompile(`<key>WorkingDirectory</key>\s*<string>([^<]*)</string>`)
+)
+
+// systemdStart is the start by massimo.service, a hand install's and the
+// Debian package's, which packaging/deb/unit.sh derives from it.
+func systemdStart() serviceStart {
+	return serviceStart{workDir: workDirOf("systemd/massimo.service", unitWorkDir)}
+}
+
+// launchdStart is the start by the LaunchDaemon, with its fixed flags.
+func launchdStart() serviceStart {
+	return serviceStart{fixed: darwinFixed, workDir: workDirOf("launchd/"+Label+".plist", plistWorkDir)}
+}
+
+// workDirOf is the working directory that re finds in the service's
+// definition name (packaging.Files), "" where it names none.
+func workDirOf(name string, re *regexp.Regexp) string {
+	b, err := fs.ReadFile(packaging.Files, name)
+	if err != nil {
+		return ""
+	}
+	if m := re.FindSubmatch(b); m != nil {
+		return strings.TrimSpace(string(m[1]))
+	}
+	return ""
+}
+
+// path is p, a path of the settings, where the service s opens it:
+// under root, a relative one at its working directory. ok is false for
+// a relative one where install does not know that directory.
+func (s serviceStart) path(root, p string) (_ string, ok bool) {
+	// A path of -root's, Linux's or macOS's, is absolute on any system.
+	if !filepath.IsAbs(p) && !strings.HasPrefix(p, "/") {
+		if s.workDir == "" {
+			return p, false
+		}
+		p = filepath.Join(s.workDir, p)
+	}
+	if root != "" {
+		p = filepath.Join(root, p)
+	}
+	return p, true
+}
+
+// pathVars are the settings that name a file the start opens or runs.
+var pathVars = []string{tlsCertVar, tlsKeyVar, acmeDNSHook}
+
+// refusedByStart is what serve's next start refuses of vars, a settings
+// file's values, by its own checks (StartChecks), as the service svc
+// starts with them (startValues): every refusal's error, in the start's
+// order; none where StartChecks is nil. unchecked are the paths whose
+// place install does not know, a relative one on Windows: the
+// refusals of a check that reads one are left to the start.
+func (o Options) refusedByStart(vars map[string]string, svc serviceStart) (refused, unchecked []string) {
+	if o.StartChecks == nil {
+		return nil, nil
+	}
+	values, unknown := o.startValues(vars, svc)
+	for _, r := range o.StartChecks(values) {
+		if !slices.ContainsFunc(r.Vars, func(k string) bool { return unknown[k] }) {
+			refused = append(refused, r.Err.Error())
+		}
+	}
+	for _, k := range pathVars {
+		if unknown[k] {
+			unchecked = append(unchecked, k+"="+values[k])
+		}
+	}
+	return refused, unchecked
+}
+
+// startValues are vars, a settings file's values, as serve's next start
+// by the service svc reads them after this install: the TLS variables of
+// -tls in place of the file's, as the install writes them into the file
+// (tlsSettings), files mode's naming the -tls-cert and -tls-key sources,
+// which are checked where they are, as they are copied from there; the
+// variables svc's flags fix in place of the file's; and every other path
+// (pathVars) where the service opens it (serviceStart.path), the hook of
+// -acme-dns-hook too. unknown are the paths whose place install does not
+// know.
+func (o Options) startValues(vars map[string]string, svc serviceStart) (values map[string]string, unknown map[string]bool) {
+	values, unknown = maps.Clone(vars), map[string]bool{}
+	if values == nil {
+		values = map[string]string{}
+	}
+	mode := o.tlsMode()
+	if mode != "" {
+		for _, k := range modeVars {
+			delete(values, k)
+		}
+		for _, kv := range o.tlsSettings(o.TLSCert, o.TLSKey) {
+			values[kv[0]] = kv[1]
+		}
+	}
+	for _, k := range pathVars {
+		v := values[k]
+		if v == "" || mode == "files" && k != acmeDNSHook {
+			continue
+		}
+		if p, ok := svc.path(o.Root, v); ok {
+			values[k] = p
+		} else {
+			unknown[k] = true
+		}
+	}
+	maps.Copy(values, svc.fixed)
+	return values, unknown
+}
+
+// warnRefused warns of what serve's next start refuses of the settings
+// file name, its values vars (refusedByStart), one line each, as the
+// notes on its lines are said, "warning: <name>: the next start refuses:
+// …"; the install goes on, so that an upgrade never fails on a settings
+// file it keeps (AP StartConfiguration, D49-A).
+func (in *installer) warnRefused(name string, vars map[string]string) {
+	refused, unchecked := in.refusedByStart(vars, in.svc)
+	for _, e := range refused {
+		fmt.Fprintf(in.Out, "warning: %s: the next start refuses: %s\n", name, e)
+	}
+	warnUnchecked(in.Out, name, unchecked)
+}
+
+// warnUnchecked says that the TLS settings of name are not checked, for
+// each path among them whose place install does not know (unchecked).
+func warnUnchecked(w io.Writer, name string, unchecked []string) {
+	for _, kv := range unchecked {
+		fmt.Fprintf(w, "warning: %s: %s is a relative path, which the service resolves from its own working directory: the TLS settings are not checked\n", name, kv)
+	}
 }
 
 // checkedFile is the settings file install's checks read for file, the

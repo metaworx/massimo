@@ -198,12 +198,17 @@ func storeState() string {
 	return fmt.Sprintf("%s, schema version %d, node %s", store.FileName, v, st.NodeID())
 }
 
+// plainLookup looks up the hosts of massimo config's tie of the plain
+// lines (serve.PlainRow): nil, the system's resolver, as serve's; the
+// tests' own, which answers without the network.
+var plainLookup serve.HostLookup
+
 // printStore prints, for each Cube serve would serve, every value of the
 // settings file's kind and where it comes from: the store (which wins),
 // or the file (a Cube the store does not know yet, added at serve's next
 // start), with the file's line where it differs.
 func printStore(w io.Writer) {
-	file, plain, err := serve.FileCubes(selectedSN)
+	file, plain, err := serve.FileCubes(selectedSN, os.Environ())
 	if err != nil {
 		fmt.Fprintf(w, "\nsettings file: %v\n", err)
 		return
@@ -215,9 +220,10 @@ func printStore(w io.Writer) {
 			plain.Serial = sn
 			file, plain = append(file, *plain), nil
 		} else if plain != nil {
-			if row, ok := serve.PlainRow(rows, *plain); ok {
+			if row, ok, _ := serve.PlainRow(context.Background(), rows, *plain, plainLookup); ok {
 				// serve ties the plain lines to the Cube at their
-				// address at its next start.
+				// address at its next start, by name or IP, with the
+				// same lookup; to none where several have its IP.
 				plain.Serial = row.Serial
 				file, plain = append(file, *plain), nil
 			}

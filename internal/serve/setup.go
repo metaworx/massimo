@@ -8,9 +8,12 @@ import (
 	"fmt"
 	"log/slog"
 	"net"
+	"net/netip"
 	"os"
+	"slices"
 	"sort"
 	"strings"
+	"time"
 
 	"go.metaworx.ch/massimo/internal/env"
 	"go.metaworx.ch/massimo/internal/protocol/cube"
@@ -43,9 +46,9 @@ type target struct {
 // beside the store's Cubes too, its listener on the plain
 // MASSIMO_CUBE_PROXY from the start; at the address of a Cube the store
 // has, the plain lines are that Cube's, compared with its row
-// (plainOfStore).
+// (plainOfStore), by name or IP (PlainRow).
 func setupCubes(ctx context.Context, st *store.Store, cfg Config, logger *slog.Logger) (setup, error) {
-	file, plain, err := FileCubes(cfg.Serial)
+	file, plain, err := FileCubes(cfg.Serial, os.Environ())
 	if err != nil {
 		return setup{}, err
 	}
@@ -67,7 +70,7 @@ func setupCubes(ctx context.Context, st *store.Store, cfg Config, logger *slog.L
 		if plain != nil {
 			sn, err := st.PlainSerial(ctx)
 			if err == nil && sn == "" {
-				sn, err = plainOfStore(ctx, st, *plain, logger)
+				sn, err = plainOfStore(ctx, st, *plain, cfg.lookupHost, logger)
 			}
 			if err != nil {
 				return setup{}, fmt.Errorf("serve: %w", err)
@@ -192,18 +195,25 @@ func setupCubes(ctx context.Context, st *store.Store, cfg Config, logger *slog.L
 }
 
 // plainOfStore ties the plain lines to the store's configured Cube at
-// the plain MASSIMO_CUBE_ADDRESS, where there is one (PlainRow): two
-// runtimes would dial one Cube, which serves one client, and the one
-// that loses never reports its serial. As where the plain Cube reports a
-// serial the store serves (server.PlainServedNote), the setting names
-// that Cube from now on, and its row wins over the plain lines. It
-// returns the serial, "" for none.
-func plainOfStore(ctx context.Context, st *store.Store, plain store.FileCube, logger *slog.Logger) (string, error) {
+// the plain MASSIMO_CUBE_ADDRESS, where there is one (PlainRow, with
+// lookup): two runtimes would dial one Cube, which serves one client,
+// and the one that loses never reports its serial. As where the plain
+// Cube reports a serial the store serves (server.PlainServedNote), the
+// setting names that Cube from now on, and its row wins over the plain
+// lines. It returns the serial, "" for none.
+func plainOfStore(ctx context.Context, st *store.Store, plain store.FileCube, lookup HostLookup, logger *slog.Logger) (string, error) {
 	rows, err := st.Cubes(ctx)
 	if err != nil {
 		return "", err
 	}
-	row, ok := PlainRow(rows, plain)
+	row, ok, several := PlainRow(ctx, rows, plain, lookup)
+	if len(several) > 0 {
+		var names []string
+		for _, r := range several {
+			names = append(names, r.Serial+" at "+r.Address)
+		}
+		logger.Warn(plainSeveralNote, "addr", plain.Values[store.FieldAddress].Value, "cubes", strings.Join(names, ", "))
+	}
 	if !ok {
 		return "", nil
 	}
@@ -214,19 +224,117 @@ func plainOfStore(ctx context.Context, st *store.Store, plain store.FileCube, lo
 	return row.Serial, nil
 }
 
+// plainSeveralNote is the start's warning where the plain
+// MASSIMO_CUBE_ADDRESS's host has the IP of several of the store's
+// Cubes at its port (PlainRow): it ties none of them.
+const plainSeveralNote = "the plain MASSIMO_CUBE_ADDRESS has the IP of several cubes the store serves: the plain lines are tied to none of them; write the plain address as one cube's IP"
+
+// A HostLookup looks up the IP addresses of a host name, as
+// net.Resolver.LookupHost does.
+type HostLookup func(ctx context.Context, host string) ([]string, error)
+
+// plainLookupTime bounds the lookups of PlainRow, all of them together
+// (D57-A): a resolver that does not answer delays the start by that
+// much at most.
+const plainLookupTime = 2 * time.Second
+
 // PlainRow returns the configured row whose address is the plain
 // MASSIMO_CUBE_ADDRESS's, the plain lines' Cube that serve ties them to
 // at its start (and massimo config shows as tied): the same host,
 // whatever its case and brackets, and the same port, the Cube's where
-// an address gives none. It reads and writes nothing.
-func PlainRow(rows []store.Cube, plain store.FileCube) (store.Cube, bool) {
+// an address gives none. Where no row's address is the plain one as
+// written, the plain host and the hosts of the rows at its port are
+// looked up, each name once, all within 2 s together, and the one row
+// whose host has an IP address of the plain host's is the plain lines'
+// Cube: a host name and an IP of one Cube. Where several rows have one,
+// none is, and they are returned in several, for the start's warning.
+// A lookup that fails or does not answer in time ties nothing. lookup
+// nil is the system's resolver. It writes nothing.
+func PlainRow(ctx context.Context, rows []store.Cube, plain store.FileCube, lookup HostLookup) (row store.Cube, ok bool, several []store.Cube) {
 	want := cubeEndpoint(plain.Values[store.FieldAddress].Value)
+	host, port, _ := net.SplitHostPort(want)
+	var atPort []store.Cube
 	for _, row := range rows {
-		if row.Configured && row.Address != "" && cubeEndpoint(row.Address) == want {
-			return row, true
+		if !row.Configured || row.Address == "" {
+			continue
+		}
+		got := cubeEndpoint(row.Address)
+		if got == want {
+			return row, true, nil
+		}
+		if _, p, _ := net.SplitHostPort(got); p == port {
+			atPort = append(atPort, row)
 		}
 	}
-	return store.Cube{}, false
+	if len(atPort) == 0 {
+		return store.Cube{}, false, nil
+	}
+	hosts := []string{host}
+	for _, row := range atPort {
+		h, _, _ := net.SplitHostPort(cubeEndpoint(row.Address))
+		hosts = append(hosts, h)
+	}
+	addrs := lookupHosts(ctx, lookup, hosts)
+	var tied []store.Cube
+	for _, row := range atPort {
+		h, _, _ := net.SplitHostPort(cubeEndpoint(row.Address))
+		if slices.ContainsFunc(addrs[h], func(a netip.Addr) bool { return slices.Contains(addrs[host], a) }) {
+			tied = append(tied, row)
+		}
+	}
+	if len(tied) == 1 {
+		return tied[0], true, nil
+	}
+	return store.Cube{}, false, tied
+}
+
+// lookupHosts returns the IP addresses of each host: an IP is its own,
+// and a name is looked up once, every name at the same time, all within
+// plainLookupTime; a name whose lookup failed or did not answer in time
+// has none. lookup nil is the system's resolver.
+func lookupHosts(ctx context.Context, lookup HostLookup, hosts []string) map[string][]netip.Addr {
+	if lookup == nil {
+		lookup = net.DefaultResolver.LookupHost
+	}
+	ctx, cancel := context.WithTimeout(ctx, plainLookupTime)
+	defer cancel()
+	type answer struct {
+		host  string
+		addrs []netip.Addr
+	}
+	answers := make(chan answer, len(hosts)) // a lookup that answers late does not block
+	out := map[string][]netip.Addr{}
+	asked := 0
+	for _, h := range hosts {
+		if _, seen := out[h]; seen {
+			continue
+		}
+		if a, err := netip.ParseAddr(h); err == nil {
+			out[h] = []netip.Addr{a.Unmap()}
+			continue
+		}
+		out[h], asked = nil, asked+1
+		go func() {
+			var addrs []netip.Addr
+			if list, err := lookup(ctx, h); err == nil {
+				for _, s := range list {
+					if a, err := netip.ParseAddr(s); err == nil {
+						addrs = append(addrs, a.Unmap())
+					}
+				}
+			}
+			answers <- answer{h, addrs}
+		}()
+	}
+	for ; asked > 0; asked-- {
+		select {
+		case a := <-answers:
+			out[a.host] = a.addrs
+		case <-ctx.Done():
+			return out
+		}
+	}
+	return out
 }
 
 // cubeEndpoint is a Cube's address as host:port to compare: the host in
@@ -262,18 +370,22 @@ func parseHidden(list []string) ([]cube.RFAddress, error) {
 	return out, nil
 }
 
-// FileCubes reads the settings file's Cubes from the environment by the
-// rule serve used before the store: every Cube with an _ADDRESS, and by
-// serial every one with a _NAME or a _PROXY but no _ADDRESS; without any
-// of those, the plain MASSIMO_CUBE_ADDRESS, with the serial selected
-// (-sn or MASSIMO_CUBE_SN) when one is given, else returned as plain.
-// The plain forms of _NAME, _PROXY and _PROXY_SERIAL apply only with a
-// single Cube; the plain _IGNORE applies to every Cube.
-func FileCubes(selected string) (cubes []store.FileCube, plain *store.FileCube, err error) {
+// FileCubes reads the settings file's Cubes from environ, KEY=VALUE
+// lines as os.Environ gives them, by the rule serve used before the
+// store: every Cube with an _ADDRESS, and by serial every one with a
+// _NAME or a _PROXY but no _ADDRESS; without any of those, the plain
+// MASSIMO_CUBE_ADDRESS, with the serial selected (-sn or
+// MASSIMO_CUBE_SN) when one is given, else returned as plain. The plain
+// forms of _NAME, _PROXY and _PROXY_SERIAL apply only with a single
+// Cube; the plain _IGNORE applies to every Cube. The start and a reload
+// pass the process's environment, which the settings file was loaded
+// into; massimo install a settings file's lines alone, so that its own
+// environment does not count (AP StartConfiguration, D47-A).
+func FileCubes(selected string, environ []string) (cubes []store.FileCube, plain *store.FileCube, err error) {
 	have := map[string]bool{}
 	var serials []string
 	for _, name := range []string{env.Address, env.Name, env.Proxy} {
-		sns, _ := env.Serials(name)
+		sns, _ := env.Serials(name, environ)
 		for _, sn := range sns {
 			if !have[sn] {
 				have[sn] = true
@@ -283,10 +395,10 @@ func FileCubes(selected string) (cubes []store.FileCube, plain *store.FileCube, 
 	}
 	sort.Strings(serials)
 	if len(serials) == 0 {
-		if os.Getenv(env.Address) == "" {
+		if env.Lookup(env.Address, environ) == "" {
 			return nil, nil, nil
 		}
-		fc, err := fileCube(strings.ToUpper(selected), true, true)
+		fc, err := fileCube(strings.ToUpper(selected), true, true, environ)
 		if err != nil {
 			return nil, nil, err
 		}
@@ -299,7 +411,7 @@ func FileCubes(selected string) (cubes []store.FileCube, plain *store.FileCube, 
 	for _, sn := range serials {
 		// The plain address is the one Cube's when MASSIMO_CUBE_SN (or
 		// -sn) names it, as env.Get reads it for the other commands.
-		fc, err := fileCube(sn, single, single && strings.EqualFold(sn, selected))
+		fc, err := fileCube(sn, single, single && strings.EqualFold(sn, selected), environ)
 		if err != nil {
 			return nil, nil, err
 		}
@@ -308,21 +420,21 @@ func FileCubes(selected string) (cubes []store.FileCube, plain *store.FileCube, 
 	return cubes, nil, nil
 }
 
-// fileCube reads one Cube's lines; sn "" is the plain forms only. The
-// plain MASSIMO_CUBE_ADDRESS counts only for plainCube: the Cube served
-// when no Cube has lines of its own, or the one Cube that has some when
-// MASSIMO_CUBE_SN names it.
-func fileCube(sn string, single, plainCube bool) (store.FileCube, error) {
+// fileCube reads one Cube's lines from environ (FileCubes); sn "" is the
+// plain forms only. The plain MASSIMO_CUBE_ADDRESS counts only for
+// plainCube: the Cube served when no Cube has lines of its own, or the
+// one Cube that has some when MASSIMO_CUBE_SN names it.
+func fileCube(sn string, single, plainCube bool, environ []string) (store.FileCube, error) {
 	fc := store.FileCube{Serial: sn, Values: map[string]store.FileValue{}}
 	line := func(field, name string, plainToo bool) {
 		if sn != "" {
-			if variable, v := env.PerCubeValue(name, sn); v != "" {
+			if variable, v := env.PerCubeValue(name, sn, environ); v != "" {
 				fc.Values[field] = store.FileValue{Variable: variable, Value: v}
 				return
 			}
 		}
 		if plainToo || sn == "" {
-			if v := os.Getenv(name); v != "" {
+			if v := env.Lookup(name, environ); v != "" {
 				fc.Values[field] = store.FileValue{Variable: name, Value: v}
 			}
 		}

@@ -28,7 +28,7 @@ import (
 // Each of the start's checks reads the variables its entry names and no
 // other, so that a reload runs it where one of them changed: the Cubes'
 // check, whose prefix stands for every Cube line, reads the selected
-// Cube through get and the lines from the environment itself.
+// Cube through get and the lines from the environment it is given.
 func TestStartChecksReadTheirVariables(t *testing.T) {
 	t.Parallel()
 	for _, c := range startChecks {
@@ -38,7 +38,7 @@ func TestStartChecksReadTheirVariables(t *testing.T) {
 				read = append(read, k)
 			}
 			return ""
-		})
+		}, nil)
 		slices.Sort(read)
 		if len(c.vars) == 1 && strings.HasSuffix(c.vars[0], "_") {
 			for _, k := range read {
@@ -173,12 +173,12 @@ func TestStartChecksCoverTheStart(t *testing.T) {
 		get := settingOf(fixedSettings(given))
 		first = -1
 		for i, c := range startChecks {
-			if c.check(get) != nil {
+			if c.check(get, os.Environ()) != nil {
 				first = i
 				break
 			}
 		}
-		for _, f := range startRefusals(get, nil) {
+		for _, f := range startRefusals(get, os.Environ(), nil) {
 			errs = append(errs, f.err)
 		}
 		return errs, first

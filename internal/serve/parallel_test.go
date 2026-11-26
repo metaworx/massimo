@@ -17,9 +17,9 @@ import (
 
 // serialTests are the tests that do not run in parallel, and why. serve
 // reads the settings file's Cubes from the process environment
-// (FileCubes), so a test of what it takes from there sets the
-// environment; making it parallel would take an environment of its own
-// in Config, which is the product's change, not the tests'.
+// (setupCubes, through FileCubes), so a test of what it takes from there
+// sets the environment; making it parallel would take an environment of
+// its own in Config, which is the product's change, not the tests'.
 var serialTests = map[string]string{
 	// Cube variables in the process environment (clearCubeEnv).
 	"TestOpenRunsAgainstFakeCube":             "sets a Cube's address",
@@ -32,6 +32,8 @@ var serialTests = map[string]string{
 	"TestServePlainCubeServedAlready":         "loads a settings file into the environment",
 	"TestServePlainCubeWithoutProxyBeside":    "sets Cube variables",
 	"TestServePlainCubeNotReachedThenAdded":   "loads a settings file into the environment",
+	"TestServePlainNameOfAStoredCube":         "sets Cube variables",
+	"TestServePlainNameOfSeveralCubes":        "sets Cube variables",
 	"TestServePlainProxyAlone":                "sets Cube variables",
 	"TestServePlainSeedCutShort":              "loads a settings file into the environment",
 	"TestServeRemovedCubeStaysRemoved":        "sets Cube variables",
