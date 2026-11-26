@@ -197,10 +197,16 @@ export async function loadSeen(refresh: boolean): Promise<void> {
   data.announce = f.announce || null;
 }
 
-/** loadLinkUsers reads the Massimo users an integration's user may be linked to: none of an integration; null where they may not be read. */
+/**
+ * loadLinkUsers reads the Massimo users an integration's user may be
+ * linked to, none of an integration, for a holder of users, guests or
+ * passwords; null for anyone else: a holder of integrations alone reads
+ * no user but its own and an integration's, in Users (AP AccessEnds,
+ * D46-A), and links none from here.
+ */
 async function loadLinkUsers(): Promise<void> {
   const read = ++newest.users;
-  if (!canManageUsersOf()) {
+  if (!(can("users") || can("guests") || can("passwords"))) {
     data.users = null;
     return;
   }

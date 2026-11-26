@@ -2144,8 +2144,12 @@ settings forms and have none of it.
   A role with the capability `pair` but not `cubes`, the manager's by default,
   sees the Cubes' panels with the pairing alone;
   putting a device into a room needs `structure`.
-- **Users** (with `users`, `passwords`, or `guests` for the guests alone):
+- **Users** (with `users`, `passwords`, `guests` for the regular guests alone,
+  or `integrations` for an integration's users, AP AccessEnds, D46-A):
   a user changes only users whose role has no capability its own lacks,
+  and a holder of `integrations` also changes an integration's user
+  whatever its role but one stored as owner,
+  giving it only a role it outranks (D47-A),
   so nobody but an owner changes an owner, whose panel says so,
   and with `passwords` alone (a manager's) a panel offers the password alone;
   a user's role choice offers the roles the server says may be given to it
@@ -2186,7 +2190,7 @@ settings forms and have none of it.
   a settings form of its own, with **Cancel**,
   **Remove**, and **Assign** to the user, at a provider,
   by an e-mail or by the user ID there.
-  **Add a user** opens the form for one;
+  **Add a user**, for a holder of `users` or `guests`, opens the form for one;
   its name is checked 2 seconds after the last keystroke and when the field is left:
   the letters a to z, digits and `. _ - @`, starting with a letter or a digit,
   at most 64 characters, capitals taken as lower case, and not a name in use.
@@ -2286,7 +2290,10 @@ settings forms and have none of it.
   same name proposed, with **Link**, the choice following what is stored
   until it is changed, without the marks of a settings form (UnsavedMarks D25):
   Link also takes a proposal the select already shows, so it cannot be off
-  while nothing is changed, and it is a command; and **Revoke**, which asks first.
+  while nothing is changed, and it is a command;
+  for a holder of `users`, `guests` or `passwords`, which reads the users to link to:
+  a holder of `integrations` alone sees who each acts as, without Link
+  (AP AccessEnds, D46-A, Users alone); and **Revoke**, which asks first.
   A request's maximum and what it was registered as before stay as chosen
   while the integrations are read again, until it is approved or refused.
   Under them the Home Assistant installations the server saw on the LAN,
@@ -2320,13 +2327,26 @@ settings forms and have none of it.
   a line saying it has no sign-in of its own in their place,
   and **Remove the password** where it holds one from before;
   its role, disabled, its display name and Remove stay,
-  and a key it holds from before is listed with Revoke.
-  Its role choice offers the roles within its integration's maximum
-  and **integration**, which it is given back (AP AccessEnds, D3, D5);
+  and a key it holds from before is listed with Revoke;
+  the integration's own user and its system user offer no Remove:
+  removing the integration in Integrations keeps them.
+  Its role choice offers, of the roles the caller outranks,
+  those within its integration's maximum,
+  and **integration**, which it is given back by a caller that outranks it
+  (AP AccessEnds, D3, D5, D47-A);
   a role stored beyond the maximum stays chosen and offered,
   with the line under it that the user acts within that maximum all the same,
+  as the server says (`may.beyond`), never under a role within it the caller
+  does not outrank,
   until another is saved, and so does a role chosen and not yet saved
   where the list read again no longer offers it (D4).
+  A holder of `integrations` without `users` or `passwords`
+  sees Users with every integration's user but one stored as owner, and itself,
+  each in its panel as above, its controls as the server says (`may`):
+  the display name, the roles it outranks within the maximum, disabled,
+  the end, Remove, and Revoke and Remove of what it holds from before;
+  not Remove the password, which needs `users` or `passwords`,
+  and no Add a user (AP AccessEnds, D46-A, D47-A).
   My profile of one, in with such a key, says the same line in place of the
   password, and offers no new key and no Link.
   The log's lines, a command's detail and its audit row name who

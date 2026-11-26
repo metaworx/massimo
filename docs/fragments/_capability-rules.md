@@ -20,3 +20,9 @@ A user changes only users whose role has no capability its own lacks,
 and gives only such roles: an owner changes everyone,
 nobody but an owner changes an owner or gives the role `owner`,
 and a role made with `users` but without, say, `restore` changes no manager.
+A holder of `integrations` changes an integration's user whatever its role,
+but one stored as `owner`, which stays an owner's alone,
+and gives it only a role it outranks
+that lies within the integration's maximum (AP AccessEnds, D47-A, D48-A):
+so the manager, which does not outrank `integration`,
+moves such a user off it, and an owner gives it back.

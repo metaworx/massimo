@@ -1271,9 +1271,16 @@ A user changes only users whose role has no capability its own lacks,
 and gives only such roles: an owner changes everyone,
 nobody but an owner changes an owner or gives the role `owner`,
 and a role made with `users` but without, say, `restore` changes no manager.
+A holder of `integrations` changes an integration's user whatever its role,
+but one stored as `owner`, which stays an owner's alone,
+and gives it only a role it outranks
+that lies within the integration's maximum (AP AccessEnds, D47-A, D48-A):
+so the manager, which does not outrank `integration`,
+moves such a user off it, and an owner gives it back.
 <!-- END GENERATED PARTIAL docs/fragments/_capability-rules.md -->
 
-The rule holds for `users`, `guests` and `passwords` alike
+The rule holds for `users`, `guests` and `passwords` alike,
+and for `integrations` in the role it gives
 (docs/api-v1.md, "Authentication").
 Both includes were decided on 2026-11-25 (AP StartConfiguration, D37),
 and on the same day that `reboot` does not include `update` (D40-A).
@@ -1343,6 +1350,12 @@ the time-limited share of design.md section 6 in its simplest form,
 with `users.expires_at` and `users.invited_by` in the schema.
 A holder of `guests` may only create,
 change and remove users whose role is `guest`; everything else needs `users`.
+It reaches regular guests alone, and a call through an integration,
+which holds `guests` where its maximum and its chain do,
+that integration's own users stored as `guest` alone, and creates none;
+an integration's users are changed by holders of `users`, by the rank rule,
+and of `integrations`, every one but one stored as `owner` (AP AccessEnds,
+D41-A4 and A5; docs/api-v1.md, "Users").
 
 The mapping is a table in `internal/server/auth.go` from route pattern to capability,
 checked in the `api()` wrapper after the token is resolved: the user's role,

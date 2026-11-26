@@ -30,7 +30,7 @@ import { enabled, keptOff, passwordLogin, passwordReveal, reads, roles, said, us
 import { reveal } from "../shared/password";
 import { can, canManageUsersOf, isMe, me } from "../shared/me";
 
-/** usersAdmin says what the signed-in user may do with users: everything, guests only, or nothing but its own user. */
+/** usersAdmin says what the signed-in user may do with users where the server's may says nothing, and so whether it adds one: everything, guests only, or nothing but its own user, which with passwords or integrations alone adds none. */
 export function usersAdmin(): "all" | "guests" | "self" {
   return can("users") ? "all" : can("guests") ? "guests" : "self";
 }

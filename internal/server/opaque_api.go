@@ -363,9 +363,12 @@ func (s *Server) mayRegister(r *http.Request, st *store.Store, name string) erro
 	case ok && (a.maySetPassword(u) || a.self):
 		return nil
 	case ok:
-		return a.rankFail(u.Role, "users")
-	case a.all || a.guests:
+		return a.manageFail(u, "users")
+	case a.mayAdd():
 		return nil
+	case a.guests:
+		// a call through an integration, which adds no user (AP AccessEnds, D41-A4)
+		return throughIntegration()
 	}
 	return fail(http.StatusNotFound, "no user %q", name)
 }

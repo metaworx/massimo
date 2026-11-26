@@ -869,19 +869,25 @@ func TestAssignableRolesOfAnIntegrationsUser(t *testing.T) {
 
 // A maximum beyond the role integration, which only the store holds,
 // offers no role beyond the role integration: the ceiling bounds the
-// choice as it bounds every call (AP AccessEnds, D3). A caller that may
-// manage an integration's user and give it none of the roles is told so
-// by an empty list, not by none at all.
+// choice as it bounds every call (AP AccessEnds, D3). The manager, which
+// manages an integration's users by integrations, is offered viewer
+// alone, the one role it outranks within that maximum (D47-A). A caller
+// that may manage an integration's user and give it none of the roles,
+// a holder of read and integrations alone, is told so by an empty list,
+// not by none at all.
 func TestAssignableRolesWithinTheCeiling(t *testing.T) {
 	t.Parallel()
 	r := startServer(t, withOptions(storeOptions(t, t.TempDir(), "secret")))
 	ts, st := r.ts, r.s.opts.Store
-	if _, err := st.AddRole(t.Context(), store.Role{Key: "keeper", Capabilities: []string{"read", "preferences", "users"}}, 0); err != nil {
-		t.Fatal(err)
+	for _, role := range []store.Role{{Key: "keeper", Capabilities: []string{"read", "preferences", "users"}}, {Key: "linker", Capabilities: []string{"read", "integrations"}}} {
+		if _, err := st.AddRole(t.Context(), role, 0); err != nil {
+			t.Fatal(err)
+		}
 	}
 	i, _ := registerHA(t, st, []string{"read", "preferences", "users"})
 	own, system := i.UUID+":", i.UUID+":system"
 	manager := userToken(t, st, "manager1", store.RoleManager)
+	linker := userToken(t, st, "linker1", "linker")
 	mays := func(token string) map[string]map[string]any {
 		t.Helper()
 		code, text := callAPI(t, ts, "GET", "/api/v1/users", token, "")
@@ -903,10 +909,480 @@ func TestAssignableRolesWithinTheCeiling(t *testing.T) {
 	if code, text := callAPI(t, ts, "PUT", "/api/v1/users/"+system, "secret", `{"role":"guest"}`); code != 200 {
 		t.Fatalf("%s given guest: %d %s", system, code, text)
 	}
-	// The manager may manage a guest, and give guest alone, which lies beyond this maximum.
-	m := mays(manager)[system]
+	// The manager manages it by integrations, and gives viewer alone: guest
+	// lies beyond this maximum, integration it does not outrank.
+	if m := mays(manager)[system]; m["manage"] != true || fmt.Sprint(m["roles"]) != "[viewer]" {
+		t.Errorf("the manager's may for %s: %v, want manage and roles [viewer]", system, m)
+	}
+	m := mays(linker)[system]
 	if roles, ok := m["roles"].([]any); m["manage"] != true || !ok || len(roles) != 0 {
-		t.Errorf("the manager's may for %s: %v, want manage and an empty roles", system, m)
+		t.Errorf("the holder of integrations' may for %s: %v, want manage and an empty roles", system, m)
+	}
+}
+
+// Who manages an integration's users (AP AccessEnds, D41-A4 and A5, D45
+// to D48): each holder against users made afresh for it, of the first
+// integration one stored as integration, one as guest and one as owner,
+// of the second one stored as guest, and a regular guest. For each, the
+// list shows those it may manage, a holder of users or passwords every
+// user, and says so in may.manage, the roles it may give in may.roles
+// and the user stored as owner beyond the maximum in may.beyond; a
+// display name, disabled, an end date, a role and the removal are taken
+// or refused, 403, and so are a password and a key of the regular guest
+// and a new guest; an integration's user gets neither a password nor a
+// key from anyone. A holder of users acts by rank; a holder of
+// integrations manages every integration's user but one stored as
+// owner, which stays an owner's alone, gives a role it outranks within
+// the maximum, revokes a key and removes an identity one holds from
+// before, and removes no password, which the manager does; a holder of
+// guests of no integration manages regular guests alone; a call through
+// an integration, at any level, for a linked user and with a key held
+// from before, manages its own integration's guests alone, makes no
+// user, registers no new name and has no rights of the linked user's
+// own name, which that user keeps, nor a key held from before of its
+// own; may.beyond holds for operator, beyond the maximum, and not for
+// viewer. Each refusal says why.
+func TestWhoManagesAnIntegrationsUsers(t *testing.T) {
+	t.Parallel()
+	r := startServer(t, withOptions(storeOptions(t, t.TempDir(), "secret")))
+	ts, st := r.ts, r.s.opts.Store
+	ctx := t.Context()
+	maxCaps := []string{"read", "preferences", "setpoint", "configure", "guests"}
+	a, keyA := registerHA(t, st, maxCaps)
+	b, keyB := registerHA(t, st, maxCaps)
+	for _, role := range []store.Role{
+		{Key: "keeper", Capabilities: []string{"read", "preferences", "setpoint", "configure", "users"}}, // outranks guest and viewer, not integration
+		{Key: "guester", Capabilities: []string{"read", "setpoint", "configure", "guests"}},
+		{Key: "linker", Capabilities: []string{"read", "preferences", "integrations"}}, // outranks viewer
+		{Key: "keepg", Capabilities: []string{"read", "users", "guests"}},              // outranks no guest
+	} {
+		if _, err := st.AddRole(ctx, role, 0); err != nil {
+			t.Fatal(err)
+		}
+	}
+	keeper := userToken(t, st, "keeper1", "keeper")
+	manager := userToken(t, st, "manager1", store.RoleManager)
+	guester := userToken(t, st, "guester1", "guester")
+	linker := userToken(t, st, "linker1", "linker")
+	keepg := userToken(t, st, "keepg1", "keepg")
+	seq := 0
+	subject := func() string {
+		seq++
+		return fmt.Sprintf("%032x", seq)
+	}
+	// An integration's user as its first call makes it, stored with role.
+	of := func(i store.Integration, role string) string {
+		t.Helper()
+		id, err := st.IntegrationUser(ctx, i, store.IntegrationSeen{Subject: subject(), Name: "someone", Level: LevelView})
+		if err != nil {
+			t.Fatal(err)
+		}
+		u, _, err := st.UserByID(ctx, id.RealUserID)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if _, err := st.UpdateUser(ctx, u.Name, func(c *store.User) error { c.Role = role; return nil }, 0); err != nil {
+			t.Fatal(err)
+		}
+		return u.Name
+	}
+	// The first integration's key for a user of its own, and for one linked to the manager.
+	actor, linked := subject(), subject()
+	meCaps(t, r.s, keyA, as(actor, LevelAdmin))
+	if _, err := st.IntegrationUser(ctx, a, store.IntegrationSeen{Subject: linked, Name: "manager", Level: LevelAdmin}); err != nil {
+		t.Fatal(err)
+	}
+	mgr, _, err := st.User(ctx, "manager1")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := st.LinkIntegrationUser(ctx, a.ID, linked, mgr.ID, 0); err != nil {
+		t.Fatal(err)
+	}
+	// A key one of the first integration's users holds from before.
+	held, err := st.AddUser(ctx, store.User{Name: "held", Role: store.RoleViewer}, "", 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, heldKey, err := st.AddToken(ctx, held.ID, store.TokenAPI, "from before", time.Time{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := st.AddProvider(ctx, store.AuthProvider{Key: "cloud", Name: "Cloud", Issuer: "https://idp.example.com", ClientID: "massimo"}, 0); err != nil {
+		t.Fatal(err)
+	}
+	heldID, err := st.AddSubjectIdentity(ctx, held.ID, "cloud", "sub-1", 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	asAnIntegrations(t, st, "held", a)
+	if _, err := st.UpdateUser(ctx, "held", func(c *store.User) error { c.Role = store.RoleIntegration; return nil }, 0); err != nil {
+		t.Fatal(err)
+	}
+
+	// The users each holder is checked against, in this order.
+	const (
+		ofRole    = iota // the first integration's, stored as integration
+		ofGuest          // the first integration's, stored as guest
+		ofOwner          // the first integration's, stored as owner
+		elseGuest        // the second integration's, stored as guest
+		regular          // a regular guest
+	)
+	kinds := []string{"its user of the role integration", "its guest", "its owner", "the second integration's guest", "a regular guest"}
+	all, none := []bool{true, true, true, true, true}, []bool{false, false, false, false, false}
+	ownGuest := []bool{false, true, false, false, false}
+	type holder struct {
+		name    string
+		token   string
+		header  map[string]string
+		manages []bool // per user: a display name, disabled, an end date and the removal taken
+		lists   []bool // per user: listed; manages where nil
+		gives   []bool // per user: viewer given to an integration's user, guest to the regular one
+		regular bool   // the regular guest's password and key, and a new guest, taken
+		// offers is may.roles of an integration's user it manages, and
+		// offersRegular of the regular guest, in any order; a user it lists
+		// and may not manage is offered none.
+		offers, offersRegular []string
+	}
+	roles, err := st.Roles(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var everyRegular []string // every role but integration, the owner's offer to a regular user
+	for _, r := range roles {
+		if r.Key != store.RoleIntegration {
+			everyRegular = append(everyRegular, r.Key)
+		}
+	}
+	guestOnly := []string{store.RoleGuest}
+	holders := []holder{
+		{name: "the owner", token: "secret", manages: all, gives: all, regular: true,
+			offers: []string{store.RoleGuest, store.RoleViewer, store.RoleIntegration, "guester"}, offersRegular: everyRegular},
+		{name: "a holder of users", token: keeper, manages: []bool{false, true, false, true, true}, lists: all, gives: []bool{false, true, false, true, true}, regular: true,
+			offers: []string{store.RoleGuest, store.RoleViewer}, offersRegular: []string{store.RoleGuest, store.RoleViewer, "keeper"}},
+		{name: "the manager", token: manager, manages: []bool{true, true, false, true, true}, lists: all, gives: []bool{true, true, false, true, true}, regular: true,
+			offers: []string{store.RoleGuest, store.RoleViewer, "guester"}, offersRegular: guestOnly},
+		{name: "a holder of integrations", token: linker, manages: []bool{true, true, false, true, false}, gives: []bool{true, true, false, true, false},
+			offers: []string{store.RoleViewer}},
+		{name: "a holder of guests", token: guester, manages: []bool{false, false, false, false, true}, gives: []bool{false, false, false, false, true}, regular: true,
+			offersRegular: guestOnly},
+		{name: "the integration's key", token: keyA, manages: ownGuest, gives: none, offers: guestOnly},
+		{name: "the integration's key at admin", token: keyA, header: as(actor, LevelAdmin), manages: ownGuest, gives: none, offers: guestOnly},
+		{name: "the second integration's key", token: keyB, manages: []bool{false, false, false, true, false}, gives: none, offers: guestOnly},
+		{name: "the integration's key for the manager", token: keyA, header: as(linked, LevelAdmin), manages: ownGuest, gives: none, offers: guestOnly},
+		{name: "a key held from before", token: heldKey, manages: ownGuest, gives: none, offers: guestOnly},
+	}
+	sameSet := func(a, b []string) bool {
+		a, b = slices.Clone(a), slices.Clone(b)
+		slices.Sort(a)
+		slices.Sort(b)
+		return slices.Equal(a, b)
+	}
+	code := func(h holder, method, path, body string) (int, string) {
+		t.Helper()
+		if h.header == nil {
+			return callAPI(t, ts, method, path, h.token, body)
+		}
+		resp, text := callWith(t, ts, method, path, h.token, body, h.header)
+		return resp.StatusCode, text
+	}
+	for n, h := range holders {
+		users := []string{of(a, store.RoleIntegration), of(a, store.RoleGuest), of(a, store.RoleOwner), of(b, store.RoleGuest), fmt.Sprintf("rg%d", n)}
+		if _, err := st.AddUser(ctx, store.User{Name: users[regular], Role: store.RoleGuest}, "", 0); err != nil {
+			t.Fatal(err)
+		}
+		lists := h.lists
+		if lists == nil {
+			lists = h.manages
+		}
+		got, text := code(h, "GET", "/api/v1/users", "")
+		var list []userView
+		if err := json.Unmarshal([]byte(text), &list); err != nil || got != 200 {
+			t.Errorf("%s: the users: %d %s", h.name, got, text)
+		}
+		listed := map[string]userView{}
+		for _, u := range list {
+			listed[u.Name] = u
+		}
+		for k, name := range users {
+			u, ok := listed[name]
+			if ok != lists[k] || ok && (u.May == nil || u.May.Manage != h.manages[k]) {
+				t.Errorf("%s, %s: listed %v with %+v, want listed %v and manage %v", h.name, kinds[k], ok, u.May, lists[k], h.manages[k])
+				continue
+			}
+			if !ok {
+				continue
+			}
+			offers := []string{}
+			switch {
+			case h.manages[k] && k == regular:
+				offers = h.offersRegular
+			case h.manages[k]:
+				offers = h.offers
+			}
+			// beyond: the user stored as owner alone lies beyond the role integration and the maximum
+			if !sameSet(u.May.Roles, offers) || u.May.Beyond != (k == ofOwner) {
+				t.Errorf("%s, %s: may.roles %v and beyond %v, want %v and %v", h.name, kinds[k], u.May.Roles, u.May.Beyond, offers, k == ofOwner)
+			}
+		}
+		want := func(what string, k int, taken bool, got int, text string) {
+			t.Helper()
+			if taken && got/100 != 2 || !taken && got != 403 {
+				t.Errorf("%s, %s, %s: %d %s, want taken %v", h.name, kinds[k], what, got, text, taken)
+			}
+		}
+		for k, name := range users {
+			path := "/api/v1/users/" + name
+			for _, body := range []string{`{"display_name":"Changed"}`, `{"disabled":true}`, `{"expires_at":"2030-01-01T00:00:00Z"}`} {
+				got, text := code(h, "PUT", path, body)
+				want(body, k, h.manages[k], got, text)
+			}
+			role := store.RoleViewer
+			if k == regular {
+				role = store.RoleGuest
+			}
+			got, text := code(h, "PUT", path, `{"role":"`+role+`"}`)
+			want("the role "+role, k, h.gives[k], got, text)
+			got, text = code(h, "PUT", path, `{"password":"a-pass-0042"}`)
+			want("a password", k, k == regular && h.regular, got, text)
+			got, text = code(h, "POST", path+"/tokens", `{"label":"planted"}`)
+			want("a key", k, k == regular && h.regular, got, text)
+			got, text = code(h, "DELETE", path, "")
+			want("the removal", k, h.manages[k], got, text)
+		}
+		got, text = code(h, "POST", "/api/v1/users", fmt.Sprintf(`{"name":"new%d","role":"guest"}`, n))
+		want("a new guest", regular, h.regular, got, text)
+	}
+
+	// What each refusal says.
+	refused := func(what string, h holder, method, path, body, msg string) {
+		t.Helper()
+		if got, text := code(h, method, path, body); got != 403 || errorOf(text) != msg {
+			t.Errorf("%s: %d %s, want 403 %q", what, got, text, msg)
+		}
+	}
+	guest, owner, other := of(a, store.RoleGuest), of(a, store.RoleOwner), of(b, store.RoleGuest)
+	if _, err := st.AddUser(ctx, store.User{Name: "rg", Role: store.RoleGuest}, "", 0); err != nil {
+		t.Fatal(err)
+	}
+	through := "a call through an integration changes its own integration's users alone"
+	refused("a holder of guests, an integration's guest", holders[4], "PUT", "/api/v1/users/"+guest, `{"disabled":true}`,
+		"the user "+guest+" is an integration's: its own integration, a holder of integrations or of users changes it")
+	refused("the integration's key, a regular guest", holders[5], "PUT", "/api/v1/users/rg", `{"disabled":true}`, through)
+	refused("the integration's key, a regular guest's password", holders[5], "PUT", "/api/v1/users/rg", `{"password":"a-pass-0042"}`, through)
+	refused("the integration's key, a new guest", holders[5], "POST", "/api/v1/users", `{"name":"new","role":"guest"}`, through)
+	refused("the second integration's key, the first's guest", holders[7], "PUT", "/api/v1/users/"+guest, `{"disabled":true}`, through)
+	refused("the key for the manager, a regular guest", holders[8], "DELETE", "/api/v1/users/rg", "", through)
+	refused("the key held from before, the second's guest", holders[9], "PUT", "/api/v1/users/"+other, `{"disabled":true}`, through)
+	for _, h := range holders[2:4] {
+		refused(h.name+", an integration's owner", h, "PUT", "/api/v1/users/"+owner, `{"disabled":true}`, "only an owner changes an owner")
+	}
+	// The manager gives viewer, and neither integration, which it does not
+	// outrank, nor owner, nor operator, which lies beyond the maximum.
+	user := of(a, store.RoleIntegration)
+	if got, text := code(holders[2], "PUT", "/api/v1/users/"+user, `{"role":"viewer"}`); got != 200 {
+		t.Errorf("the manager gives viewer: %d %s", got, text)
+	}
+	refused("the manager gives integration", holders[2], "PUT", "/api/v1/users/"+user, `{"role":"integration"}`, "the role integration has capabilities yours lacks")
+	refused("the manager gives owner", holders[2], "PUT", "/api/v1/users/"+user, `{"role":"owner"}`, "only an owner gives the role owner")
+	refused("the manager gives operator", holders[2], "PUT", "/api/v1/users/"+user, `{"role":"operator"}`, "the role operator lies beyond the maximum of its integration")
+	// A holder of users and guests that does not outrank guest is told the rank.
+	refused("a holder of users and guests, an integration's guest", holder{name: "keepg", token: keepg}, "PUT", "/api/v1/users/"+guest, `{"disabled":true}`,
+		"the role guest has capabilities yours lacks")
+	// A call through an integration registers no password for a new name, which it may not add.
+	refused("the integration's key, a new name's registration", holders[5], "POST", "/api/v1/users/newname/register", `{"request":"AAAA"}`, through)
+	// The own name is the linked user's alone, not the call's through the integration.
+	if got, text := code(holders[8], "PUT", "/api/v1/users/manager1", `{"display_name":"M"}`); got != 403 {
+		t.Errorf("the key for the manager, the manager's own name: %d %s", got, text)
+	}
+	if got, text := code(holders[2], "PUT", "/api/v1/users/manager1", `{"display_name":"M"}`); got != 200 {
+		t.Errorf("the manager, its own name: %d %s", got, text)
+	}
+	// A key one of the integration's users holds from before counts as a
+	// call through the integration: no rights of its own name either.
+	for _, c := range []struct{ method, path, body string }{
+		{"GET", "/api/v1/users/held", ""},
+		{"PUT", "/api/v1/users/held", `{"display_name":"H"}`},
+		{"GET", "/api/v1/users/held/tokens", ""},
+	} {
+		if got, text := code(holders[9], c.method, c.path, c.body); got != 403 {
+			t.Errorf("the key held from before, its own %s %s: %d %s", c.method, c.path, got, text)
+		}
+	}
+	// may.beyond of roles but owner: operator lies beyond this maximum, viewer within it.
+	beyondOf := map[string]bool{of(a, store.RoleOperator): true, of(a, store.RoleViewer): false}
+	var everyone []userView
+	if got, text := code(holders[0], "GET", "/api/v1/users", ""); json.Unmarshal([]byte(text), &everyone) != nil || got != 200 {
+		t.Fatalf("the users: %d %s", got, text)
+	}
+	for _, u := range everyone {
+		if want, ok := beyondOf[u.Name]; ok && (u.May == nil || u.May.Beyond != want) {
+			t.Errorf("%s stored as %s: may %+v, want beyond %v", u.Name, u.Role, u.May, want)
+		}
+	}
+	// An empty password removes one held from before: the manager, which
+	// holds passwords, may; a holder of integrations, which sets none, not.
+	if got, text := code(holders[3], "PUT", "/api/v1/users/"+guest, `{"password":""}`); got != 403 {
+		t.Errorf("a holder of integrations removes a password: %d %s", got, text)
+	}
+	if got, text := code(holders[2], "PUT", "/api/v1/users/"+guest, `{"password":""}`); got != 200 {
+		t.Errorf("the manager removes a password: %d %s", got, text)
+	}
+	// A holder of integrations lists and removes an identity an integration's user holds from before.
+	var ids []identityView
+	if got, text := code(holders[3], "GET", "/api/v1/users/held/identities", ""); json.Unmarshal([]byte(text), &ids) != nil || got != 200 || len(ids) != 1 {
+		t.Errorf("a holder of integrations, the held identities: %d %s", got, text)
+	}
+	if got, text := code(holders[3], "DELETE", "/api/v1/users/held/identities/"+strconv.FormatInt(heldID.ID, 10), ""); got != 200 {
+		t.Errorf("a holder of integrations removes the held identity: %d %s", got, text)
+	}
+	// A holder of integrations revokes a key an integration's user holds from before.
+	var keys []tokenView
+	if got, text := code(holders[3], "GET", "/api/v1/users/held/tokens", ""); json.Unmarshal([]byte(text), &keys) != nil || got != 200 || len(keys) != 1 {
+		t.Fatalf("a holder of integrations, the held keys: %d %s", got, text)
+	}
+	if got, text := code(holders[3], "DELETE", "/api/v1/users/held/tokens/"+strconv.FormatInt(keys[0].ID, 10), ""); got != 200 {
+		t.Errorf("a holder of integrations revokes the held key: %d %s", got, text)
+	}
+	if got, _ := code(holders[9], "GET", "/api/v1/cubes", ""); got != 401 {
+		t.Errorf("the held key after its revoke: %d", got)
+	}
+}
+
+// A call through an integration for its user linked to a Massimo user
+// acts with that user's role, but has none of the rights of that user's
+// own name (AP AccessEnds, D41-A4): at level view, which holds no guests,
+// every users route of the name is refused, and at admin for a user
+// linked to a manager, whose chain holds guests, so are its name, its
+// password and a key. The user itself, signed in with its own key, keeps
+// them: its name, its first password, its keys, its registration, its
+// identities and its links.
+func TestNoOwnNameThroughAnIntegration(t *testing.T) {
+	t.Parallel()
+	r := startServer(t, withOptions(storeOptions(t, t.TempDir(), "secret")))
+	ts, st := r.ts, r.s.opts.Store
+	ctx := t.Context()
+	i, key := registerHA(t, st, []string{"read", "preferences", "setpoint", "configure", "guests"})
+	lena := userToken(t, st, "lena", store.RoleViewer) // keys only
+	userToken(t, st, "mona", store.RoleManager)
+	if _, err := st.AddProvider(ctx, store.AuthProvider{Key: "cloud", Name: "Cloud", Issuer: "https://idp.example.com", ClientID: "massimo", Enabled: true}, 0); err != nil {
+		t.Fatal(err)
+	}
+	link := func(subject, name string) {
+		t.Helper()
+		if _, err := st.IntegrationUser(ctx, i, store.IntegrationSeen{Subject: subject, Name: name, Level: LevelView}); err != nil {
+			t.Fatal(err)
+		}
+		u, _, err := st.User(ctx, name)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if _, err := st.LinkIntegrationUser(ctx, i.ID, subject, u.ID, 0); err != nil {
+			t.Fatal(err)
+		}
+	}
+	link(haAnna, "lena")
+	link(haBruno, "mona")
+	through := func(level, subject, method, path, body string) (int, string) {
+		t.Helper()
+		resp, text := callWith(t, ts, method, path, key, body, as(subject, level))
+		return resp.StatusCode, text
+	}
+	base := "/api/v1/users/lena"
+	routes := []struct{ method, path, body string }{
+		{"GET", base, ""},
+		{"PUT", base, `{"display_name":"L"}`},
+		{"PUT", base, `{"password":"first-pass-0042"}`},
+		{"PUT", base, `{"record":"AAAA","ksf":"` + store.OpaqueKSF + `"}`},
+		{"DELETE", base, ""},
+		{"GET", base + "/tokens", ""},
+		{"POST", base + "/tokens", `{"label":"through"}`},
+		{"DELETE", base + "/tokens/1", ""},
+		{"POST", base + "/register", `{"request":"AAAA"}`},
+		{"GET", base + "/identities", ""},
+		{"POST", base + "/identities", `{"provider":"cloud","subject":"sub-1"}`},
+		{"PUT", base + "/identities/1", `{"subject":"sub-2"}`},
+		{"DELETE", base + "/identities/1", ""},
+		{"POST", base + "/identities/link/cloud", `{"redirect":"http://192.168.1.2:8099/"}`},
+		{"GET", base + "/identities/link/pending/abc", ""},
+		{"POST", base + "/identities/link/pending/abc", ""},
+		{"DELETE", base + "/identities/link/pending/abc", ""},
+	}
+	for _, c := range routes {
+		if got, text := through(LevelView, haAnna, c.method, c.path, c.body); got != 403 {
+			t.Errorf("through the integration at view, %s %s %s: %d %s", c.method, c.path, c.body, got, text)
+		}
+	}
+	for _, c := range []struct{ method, path, body string }{
+		{"PUT", "/api/v1/users/mona", `{"display_name":"M"}`},
+		{"PUT", "/api/v1/users/mona", `{"password":"first-pass-0042"}`},
+		{"POST", "/api/v1/users/mona/tokens", `{"label":"through"}`},
+	} {
+		if got, text := through(LevelAdmin, haBruno, c.method, c.path, c.body); got != 403 {
+			t.Errorf("through the integration at admin, %s %s %s: %d %s", c.method, c.path, c.body, got, text)
+		}
+	}
+	if u, _, _ := st.User(ctx, "lena"); u.HasPassword || u.DisplayName != "" {
+		t.Fatalf("lena changed through the integration: %+v", u)
+	}
+	// The user itself: each route past its own name's check, which a
+	// refusal of it would answer 403.
+	for _, c := range []struct {
+		method, path, body string
+		want               int
+	}{
+		{"GET", base, "", 200},
+		{"PUT", base, `{"display_name":"L"}`, 200},
+		{"PUT", base, `{"password":"first-pass-0042"}`, 200},
+		{"GET", base + "/tokens", "", 200},
+		{"POST", base + "/tokens", `{"label":"its own"}`, 201},
+		{"POST", base + "/register", `{"request":"AAAA"}`, 400},
+		{"GET", base + "/identities", "", 200},
+		{"DELETE", base + "/identities/999", "", 404},
+		{"GET", base + "/identities/link/pending/abc", "", 404},
+	} {
+		if got, text := callAPI(t, ts, c.method, c.path, lena, c.body); got != c.want {
+			t.Errorf("lena itself, %s %s %s: %d %s, want %d", c.method, c.path, c.body, got, text, c.want)
+		}
+	}
+}
+
+// An integration's own user, which holds its key, and its system user
+// stay, for the owner, the manager and a holder of integrations alone
+// (AP AccessEnds, D47-A): the refusal names the integration's own
+// removal, and a request from the same installation attached to the
+// integration still collects a key that works.
+func TestIntegrationsOwnUsersStay(t *testing.T) {
+	t.Parallel()
+	r := startServer(t, withOptions(storeOptions(t, t.TempDir(), "secret")))
+	ts, st := r.ts, r.s.opts.Store
+	ctx := t.Context()
+	i, _ := registerHA(t, st, []string{"read", "preferences"})
+	if _, err := st.AddRole(ctx, store.Role{Key: "linker", Capabilities: []string{"read", "integrations"}}, 0); err != nil {
+		t.Fatal(err)
+	}
+	callers := map[string]string{"the owner": "secret", "the manager": userToken(t, st, "manager1", store.RoleManager), "a holder of integrations": userToken(t, st, "linker1", "linker")}
+	for who, token := range callers {
+		for _, name := range []string{i.UUID + ":", i.UUID + ":system"} {
+			want := "the user " + name + " is the integration's own: remove the integration itself, DELETE /api/v1/integrations/" + i.UUID + ", which keeps it to be attached again"
+			if got, text := callAPI(t, ts, "DELETE", "/api/v1/users/"+name, token, ""); got != 403 || errorOf(text) != want {
+				t.Errorf("%s removes %s: %d %s", who, name, got, text)
+			}
+		}
+	}
+	req, err := st.AddIntegrationRequest(ctx, store.IntegrationRequest{Kind: store.KindHomeAssistant, Name: "Casa Leone", InstanceID: haInstance}, "GHIJKL")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got, text := callAPI(t, ts, "POST", "/api/v1/integrations/"+req.UUID+"/approve", "secret", `{"attach":"`+i.UUID+`"}`); got != 200 {
+		t.Fatalf("the request attached: %d %s", got, text)
+	}
+	again, _, err := st.CollectIntegrationKey(ctx, req.UUID, "GHIJKL")
+	if err != nil {
+		t.Fatalf("the key collected after the request attached: %v", err)
+	}
+	if got, text := callAPI(t, ts, "GET", "/api/v1/cubes", again, ""); got != 200 {
+		t.Fatalf("the key collected: %d %s", got, text)
 	}
 }
 
