@@ -308,7 +308,8 @@ does today and compares it with the store:
    and a lookup that fails or does not answer in time ties nothing;
    `massimo config` shows the tie the same way.
    Two runtimes would dial one Cube, which serves one client.
-   The log then says that the plain lines are that Cube's.
+   The log then says that the plain lines are that Cube's;
+   the start's line names its row's address beside the plain one.
 3. Keys and IVs came from `.env` by serial in every case,
    for the portal commands, which are gone since AP PortalDrop.
 4. `-addr` and `-sn` on the command line work as today for one run and write nothing.

@@ -173,7 +173,8 @@ func TestPlainRowLooksUpNamesAlone(t *testing.T) {
 }
 
 // At the start, the plain lines by a name of a stored Cube's IP are that
-// Cube's: one Cube served, the setting naming it, the note in the log.
+// Cube's: one Cube served, the setting naming it, the note in the log
+// with the row's address beside the plain one.
 // Tied before, the setting names it and nothing is looked up; a lookup
 // that fails leaves the two Cubes of today, and the start goes on.
 func TestServePlainNameOfAStoredCube(t *testing.T) {
@@ -197,7 +198,7 @@ func TestServePlainNameOfAStoredCube(t *testing.T) {
 	if err != nil || serr != nil || len(su.cubes) != 1 || su.cubes[0].Serial != "KEQ0000100" || sn != "KEQ0000100" {
 		t.Fatalf("not tied: cubes %+v, the setting %q: %v %v", su.cubes, sn, err, serr)
 	}
-	logs.Has(t, 0, "the note of the tie", testkit.Contains("serial=KEQ0000100", "addr=cube.example"))
+	logs.Has(t, 0, "the note of the tie, with the row's address", testkit.Msg(server.PlainServedNote, "serial", "KEQ0000100", "addr", "cube.example", "row_addr", "192.0.2.1:62910"))
 
 	again := &lookups{names: l.names}
 	su, err = setupCubes(ctx, st, Config{lookupHost: again.lookup}, quietLog())

@@ -200,7 +200,8 @@ func setupCubes(ctx context.Context, st *store.Store, cfg Config, logger *slog.L
 // and the one that loses never reports its serial. As where the plain
 // Cube reports a serial the store serves (server.PlainServedNote), the
 // setting names that Cube from now on, and its row wins over the plain
-// lines. It returns the serial, "" for none.
+// lines. The warning names the row's address beside the plain one, which
+// a tie by name does not show. It returns the serial, "" for none.
 func plainOfStore(ctx context.Context, st *store.Store, plain store.FileCube, lookup HostLookup, logger *slog.Logger) (string, error) {
 	rows, err := st.Cubes(ctx)
 	if err != nil {
@@ -220,7 +221,7 @@ func plainOfStore(ctx context.Context, st *store.Store, plain store.FileCube, lo
 	if err := st.SetSetting(ctx, store.PlainSerialKey, row.Serial); err != nil {
 		return "", err
 	}
-	logger.Warn(server.PlainServedNote, "serial", row.Serial, "addr", plain.Values[store.FieldAddress].Value)
+	logger.Warn(server.PlainServedNote, "serial", row.Serial, "addr", plain.Values[store.FieldAddress].Value, "row_addr", row.Address)
 	return row.Serial, nil
 }
 
