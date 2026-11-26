@@ -52,7 +52,11 @@ type ConfigVariable struct {
 
 // SecretVariable reports whether a variable's value is a secret, which
 // GET /api/v1/config does not show: a key, an IV, a token, a password.
+// The name is read in upper case on every system, as Windows reads it,
+// where MASSIMO_API_Token is the owner's key (AP StartConfiguration,
+// D53-A).
 func SecretVariable(name string) bool {
+	name = strings.ToUpper(name)
 	return strings.HasSuffix(name, "_KEY") || strings.HasSuffix(name, "_IV") || strings.HasSuffix(name, "_TOKEN") ||
 		strings.Contains(name, "PASSWORD") || strings.Contains(name, "SECRET")
 }

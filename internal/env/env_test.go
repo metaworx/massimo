@@ -202,6 +202,21 @@ func TestLowerCaseSerial(t *testing.T) {
 	}
 }
 
+// Serials reads a per-Cube name whose prefix is in another case on
+// Windows, which takes the name in any case, and not elsewhere
+// (NameKey; AP StartConfiguration, D53-A).
+func TestSerialsOfANameInAnotherCase(t *testing.T) {
+	t.Setenv("massimo_cube_KEQ0000000_address", "192.0.2.5")
+	sns, addrs := Serials(Address)
+	want := 0
+	if runtime.GOOS == "windows" {
+		want = 1
+	}
+	if len(sns) != want || want == 1 && (sns[0] != "KEQ0000000" || addrs["KEQ0000000"] != "192.0.2.5") {
+		t.Fatalf("serials %v %v on %s", sns, addrs, runtime.GOOS)
+	}
+}
+
 // PerCubeValue names the variable as it is set, for massimo config and
 // the store's file view, on Windows too, where os.Getenv finds it by
 // the upper-case name; where two spellings are set, as Linux can have
