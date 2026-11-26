@@ -32,6 +32,19 @@ The page fixture's default timeout and its waits, as every wait of
 helpers.py, last their seconds times UI_TEST_SCALE (helpers.scaled),
 which run.sh passes on and raises for its retry.
 
+UI_TEST_REPEAT=<n>, a whole number from 1, runs every collected test n
+times, its ids ending in 1of<n> to <n>of<n>; UI_TEST_SHUFFLE=<seed>, a
+whole number, orders the collected tests by the seed, which the run's
+header prints: the files in the order of a hash of the seed and each
+file's name, a file's tests together in that of the seed and each
+test's id, so that one file, a -k or a --last-failed keeps the order it
+had in the whole run, and the same seed with the same tests gives the
+same order. run.sh's workers (--dist loadfile, which hands out whole
+files) are handed the files in that order rather than the largest
+first, each running a file's tests in it; which worker takes which file
+still depends on when each is free. A bad value of either stops the
+run (AP SteadyTests, Block 8).
+
 The page has helpers.PAGE_KIT before its own scripts, which records
 what its event stream brings. The fixture reads answers the page's own
 reads with the server's data and what the test put in (helpers.Reads),
@@ -76,9 +89,11 @@ under the directory run.sh names with --output, tools/ui-test/results/,
 and the screenshot, the video and the trace of a failed test that run.sh
 runs once more under results/retry/.
 """
+import hashlib
 import io
 import json
 import os
+import re
 import sqlite3
 import ssl
 import time
@@ -152,11 +167,91 @@ def case(request):
     return Case(*request.param)
 
 
+# The times each test runs (UI_TEST_REPEAT, 1 where it is not set) and
+# the seed of the tests' order (UI_TEST_SHUFFLE, None where it is not
+# set), read once by pytest_configure.
+REPEAT = pytest.StashKey[int]()
+SHUFFLE = pytest.StashKey[int | None]()
+
+
+def env_number(name, least, what):
+    """The whole number the environment variable name holds, at least
+    least; None where it is not set or empty. Any other value stops the
+    run with what the variable takes, before any test runs."""
+    value = os.environ.get(name, "")
+    if value == "":
+        return None
+    if not re.fullmatch(r"[0-9]+", value) or int(value) < least:
+        raise pytest.UsageError(f"{name} is {what}, not {value!r}")
+    return int(value)
+
+
+def pytest_configure(config):
+    """UI_TEST_REPEAT and UI_TEST_SHUFFLE, read and checked once, in
+    pytest-xdist's controller first, so that a bad value stops the run
+    before its workers start."""
+    config.stash[REPEAT] = env_number("UI_TEST_REPEAT", 1, "a whole number from 1, the times each test runs") or 1
+    config.stash[SHUFFLE] = env_number("UI_TEST_SHUFFLE", 0, "a seed, a whole number such as 42")
+
+
+def pytest_report_header(config):
+    """The repeat and the seed in the run's header, so that a shuffled
+    run can be run again in the same order."""
+    lines = []
+    n = config.stash[REPEAT]
+    if n > 1:
+        lines.append(f"UI_TEST_REPEAT={n}: each test {n} times, its ids ending in 1of{n} to {n}of{n}")
+    seed = config.stash[SHUFFLE]
+    if seed is not None:
+        lines.append(f"UI_TEST_SHUFFLE={seed}: the files and each file's tests in the seed's order")
+    return lines
+
+
+@pytest.fixture
+def ui_test_repeat(request):
+    """The repeat a test runs as, from 1 (UI_TEST_REPEAT)."""
+    return request.param
+
+
+@pytest.hookimpl(trylast=True)
+def pytest_generate_tests(metafunc):
+    """Under UI_TEST_REPEAT=<n>, every test parametrized n times more,
+    after the case and the browser, so that each repeat has an id of its
+    own, 1of<n> to <n>of<n>, which --last-failed and xdist tell apart."""
+    n = metafunc.config.stash[REPEAT]
+    if n > 1:
+        metafunc.fixturenames.append("ui_test_repeat")
+        metafunc.parametrize("ui_test_repeat", range(1, n + 1), indirect=True, ids=lambda i: f"{i}of{n}")
+
+
+def shuffled(items, seed):
+    """The items in the seed's order: the files, as xdist's loadfile takes
+    them (a node id's part before ::), by a hash of the seed and the
+    file's name, each file's tests together, by one of the seed and the
+    test's id. An item's place depends on its own name alone, so that any
+    selection of the items keeps the order it has among them all."""
+    def rank(name):
+        return hashlib.sha256(f"{seed} {name}".encode()).digest()
+    return sorted(items, key=lambda item: (rank(item.nodeid.split("::", 1)[0]), rank(item.nodeid)))
+
+
 # The message of a mark cases that names no case, kept with its test.
 BAD_CASES = pytest.StashKey[str]()
 
 
+@pytest.hookimpl(trylast=True)
 def pytest_collection_modifyitems(config, items):
+    """Under UI_TEST_SHUFFLE, the collected tests in the seed's order
+    (shuffled), after pytest's own order, which moves a file's tests
+    without a browser behind all others (test_parts_guard.py), so that a
+    file's tests stay together; then the cases (deselect_cases)."""
+    seed = config.stash[SHUFFLE]
+    if seed is not None:
+        items[:] = shuffled(items, seed)
+    deselect_cases(config, items)
+
+
+def deselect_cases(config, items):
     """A test marked cases runs only in the cases the mark names, ids
     such as 1100-en: in the others it is deselected here, as the suite is
     collected, rather than skipped by a fixture after the autouse guard

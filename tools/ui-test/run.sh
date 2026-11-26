@@ -32,6 +32,12 @@
 # runs at four times it, since the trace slows the page as well: a
 # test's set-up, which loads the page, took up to 3.8 times as long with
 # the trace and the video as without them (2026-11-26).
+# UI_TEST_REPEAT and UI_TEST_SHUFFLE are conftest.py's: each test so
+# many times, and the tests in a seed's order; under a seed the workers
+# are handed the files in the order it gives them
+# (--no-loadscope-reorder), not the largest first. UI_TEST_JUNIT names a
+# file for the first pass's JUnit XML report (--junitxml), from the
+# caller's directory; the retry writes none (AP SteadyTests, Block 8).
 # `run.sh screenshots` (make ui-screenshots) starts one set and runs
 # screenshots.py instead, which takes the screenshot set into
 # docs/screenshots/.
@@ -100,7 +106,8 @@
 # Environment: UI_TEST_PYTHON (default tools/ui-test/.venv/bin/python
 # when present, else python3), UI_TEST_REQUIRED, UI_TEST_WORKERS (4),
 # UI_TEST_CASES (the cases to run, such as 390-en,390-de; all four),
-# UI_TEST_SCALE (1; the retry four times it), and
+# UI_TEST_SCALE (1; the retry four times it), UI_TEST_REPEAT,
+# UI_TEST_SHUFFLE, UI_TEST_JUNIT, and
 # set 0's ports: UI_TEST_CUBE_PORT (62919), UI_TEST_API_PORT (8119),
 # UI_TEST_DISCOVERY_PORT (23919), UI_TEST_CONTROL_PORT (the fake Cube's
 # control, UI_TEST_CUBE_PORT + 100), UI_TEST_DOWN_PORT (the second
@@ -145,6 +152,12 @@ if ! awk -v s="$scale" 'BEGIN { exit !(s ~ /^([0-9]+[.]?[0-9]*|[.][0-9]+)$/ && s
 fi
 retry_scale=$(awk -v s="$scale" 'BEGIN { print s * 4 }')
 export UI_TEST_SCALE="$scale"
+# the first pass's JUnit report, from the caller's directory
+junit=${UI_TEST_JUNIT:-}
+case "$junit" in
+	'' | /*) ;;
+	*) junit="$PWD/$junit" ;;
+esac
 if [ "$mode" = screenshots ]; then
 	workers=1
 elif [ "$workers" -gt 1 ] && ! "$py" -c 'import xdist' 2>/dev/null; then
@@ -306,6 +319,7 @@ while [ $n -lt "$workers" ]; do
 	n=$((n + 1))
 done
 if [ "$workers" -gt 1 ]; then
+	if [ -n "${UI_TEST_SHUFFLE:-}" ]; then set -- --no-loadscope-reorder "$@"; fi
 	set -- -n "$workers" --dist loadfile "$@"
 fi
 export UI_TEST_URL="http://127.0.0.1:$api_port/" UI_TEST_DOWN_URL="http://127.0.0.1:$down_port/" UI_TEST_TOKEN="$token" \
@@ -326,7 +340,7 @@ keep_logs() {
 }
 
 rc=0
-PYTEST_ADDOPTS="--durations=20 ${PYTEST_ADDOPTS:-}" "$py" -m pytest --output "$here/results" "$@" || rc=$?
+PYTEST_ADDOPTS="--durations=20 ${PYTEST_ADDOPTS:-}" "$py" -m pytest --output "$here/results" ${junit:+"--junitxml=$junit"} "$@" || rc=$?
 # Only failed tests (exit 1) run again: not an interrupted or empty run.
 [ $rc -eq 1 ] || exit $rc
 echo "ui-test: tests failed; they run once more, with the video and the trace (tools/ui-test/results/retry/), at UI_TEST_SCALE=$retry_scale" >&2

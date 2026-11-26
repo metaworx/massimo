@@ -73,6 +73,7 @@ tools/ui-test/run.sh smoke 'test_log.py::test_log_changes[1100-en-chromium]' -x
 UI_TEST_WORKERS=1 make ui-test                        # in one process
 KEEP=1 make ui-test                                   # the work directory kept
 UI_TEST_SCALE=2 make ui-test                          # every wait twice as long
+UI_TEST_REPEAT=3 UI_TEST_SHUFFLE=42 make ui-test      # each test 3 times, in seed 42's order
 PYTEST_ADDOPTS='test_parts_guard.py' make ui-test    # the parts' guard alone
 PYTEST_ADDOPTS='test_parts_guard.py -k rooms' make ui-test  # the guard of one region
 ```
@@ -81,7 +82,7 @@ PYTEST_ADDOPTS='test_parts_guard.py -k rooms' make ui-test  # the guard of one r
 `run.sh smoke` hands the arguments after it to pytest,
 whose working directory is `tools/ui-test/`, so files are named from there.
 A test's id carries its case: `1100-en`, `390-en`, `1100-de`, `390-de`,
-then the browser.
+then the browser, and under `UI_TEST_REPEAT` its repeat (below).
 
 pytest-playwright keeps a failed test's screenshot in `tools/ui-test/results/`,
 one directory per test (gitignored).
@@ -136,6 +137,30 @@ with them as without, a test's call twice as long at the median
 (1100-en, three files, 2026-11-26).
 A window that waits for nothing to come is not scaled
 (`docs/ui-testing.md`, section 9, "The scale").
+
+`UI_TEST_REPEAT=<n>` runs every test n times,
+each repeat a test of its own, its id ending in `1of<n>` to `<n>of<n>`
+(`test_scroll.py::test_slow_scroll_goes_down[1100-en-chromium-2of3]`),
+so that `--last-failed` and the workers tell them apart.
+`UI_TEST_SHUFFLE=<seed>` orders the tests by the seed,
+a whole number, which the run's header prints with the repeat:
+the files by a hash of the seed and each file's name,
+a file's tests together, by one of the seed and each test's id.
+A test's place depends on its own name alone,
+so the same seed with the same tests and cases gives the same order,
+and one file, a `-k` or the retry's `--last-failed`
+keeps the order it had in the whole run.
+The workers (`--dist loadfile`) are handed whole files
+in that order (`run.sh` passes `--no-loadscope-reorder`,
+which pytest-xdist 3.8 has; without it they take the largest file first),
+and each runs a file's tests in it;
+which worker takes which file still depends on when each is free.
+Without a seed the order is pytest's, the files' and their tests' own.
+A value that is not a whole number, or a repeat of 0, stops the run.
+No plugin is needed: `conftest.py` parametrizes and sorts the tests itself.
+`UI_TEST_JUNIT=<file>`, from the caller's directory,
+has the first pass write its JUnit XML report there (`--junitxml`);
+the retry writes none (AP SteadyTests, Block 8).
 
 The run's sets, its `massimo` and the servers' logs and stores
 are in its work directory,
