@@ -781,12 +781,12 @@ jobs:
   # checked against its certificate and refused against another one
   # (packaging/app-sign.sh), so that the release's signing path is proven
   # before a tag needs it. The image's JDK 17 and Android SDK, Gradle
-  # through the committed wrapper, nothing cached. It runs for a pull
-  # request whose What to test answered app=true and for a push to main,
-  # as LAN does, but for the merge of a pull request that found it not
-  # needed for the same code (app=unneeded). Block 1 adds make ui and
-  # make app-core-android before Gradle, here and in build.yml
-  # (GUIDELINES/project/CI.md, section 2).
+  # through the committed wrapper, its downloads from the job's cache.
+  # It runs for a pull request whose What to test answered app=true and
+  # for a push to main, as LAN does, but for the merge of a pull request
+  # that found it not needed for the same code (app=unneeded). Block 1
+  # adds make ui and make app-core-android before Gradle, here and in
+  # build.yml (GUIDELINES/project/CI.md, section 2).
   android:
     name: Android app
     needs: changes
@@ -797,6 +797,23 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           fetch-depth: 0 # the versionCode counts the commits since a tag
+
+      # Gradle's downloads and its wrapper from the job's own cache (AP
+      # SteadyTests, Block 9; packaging/app-gradle-cache.sh): fetched at
+      # every run, they met Maven Central's 429 Too Many Requests.
+      # Restored by every run, saved by a push to main, a new one each week
+      # and with each change to the build's Gradle files. Gradle's build
+      # cache is not in it; --no-build-cache below stays as it was.
+      - name: The Gradle cache's key
+        id: gradlecache
+        run: packaging/app-gradle-cache.sh android
+
+      - uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        id: gradlecache-restore
+        with:
+          path: ${{ steps.gradlecache.outputs.path }}
+          key: ${{ steps.gradlecache.outputs.key }}
+          restore-keys: ${{ steps.gradlecache.outputs.restore-keys }}
 
       - name: JDK 17 and the Android SDK
         run: |
@@ -867,6 +884,13 @@ jobs:
             exit 1
           fi
 
+      # Once every step passed, as the Go jobs save theirs.
+      - uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        if: steps.gradlecache.outputs.save == 'true' && steps.gradlecache-restore.outputs.cache-hit != 'true'
+        with:
+          path: ${{ steps.gradlecache.outputs.path }}
+          key: ${{ steps.gradlecache.outputs.key }}
+
   # The Android app's flows on an emulator (tools/app-emulator/README.md;
   # AP MobileApp, Block 18, D71-A): make app-emulator-test, the app's
   # instrumented tests against two servers on the runner built from this
@@ -901,6 +925,19 @@ jobs:
     timeout-minutes: 45
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      # Gradle's downloads and its wrapper, as in Android app, under a key
+      # of its own: its tasks fetch other artifacts.
+      - name: The Gradle cache's key
+        id: gradlecache
+        run: packaging/app-gradle-cache.sh emulator
+
+      - uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        id: gradlecache-restore
+        with:
+          path: ${{ steps.gradlecache.outputs.path }}
+          key: ${{ steps.gradlecache.outputs.key }}
+          restore-keys: ${{ steps.gradlecache.outputs.restore-keys }}
 
       - uses: actions/setup-go@d8cbb8045d7f43706b9177cceb36c1f91a6644d5 # v7.1.0
         with:
@@ -954,6 +991,13 @@ jobs:
           path: tools/app-emulator/results/
           if-no-files-found: warn
           retention-days: 7
+
+      # Once every step passed, as in Android app.
+      - uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        if: steps.gradlecache.outputs.save == 'true' && steps.gradlecache-restore.outputs.cache-hit != 'true'
+        with:
+          path: ${{ steps.gradlecache.outputs.path }}
+          key: ${{ steps.gradlecache.outputs.key }}
 
   # Fails on a vulnerability the code can reach (govulncheck exits 3),
   # for the platforms with code of their own.
