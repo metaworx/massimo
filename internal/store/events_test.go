@@ -1074,7 +1074,9 @@ func TestEventsPruneStops(t *testing.T) {
 
 // TestEventSize measures what a state event of the measured shape costs
 // in the file, the indexes included: 2000 of them written and the WAL
-// checkpointed. docs/store.md states the figure.
+// checkpointed. docs/store.md states the figure. The rows go through
+// writeEvents in the writer's batches of flushAt, without the writer, so
+// that the test measures the rows and does not wait for the writer.
 func TestEventSize(t *testing.T) {
 	t.Parallel()
 	dir := t.TempDir()
@@ -1094,16 +1096,21 @@ func TestEventSize(t *testing.T) {
 	at := time.Now().UTC()
 	const n = 2000
 	sample := 0
+	batch := make([]Event, 0, n)
 	for i := 0; i < n; i++ {
 		rf := fmt.Sprintf("0abc%02x", i%30)
 		data := fmt.Sprintf(`{"kind":"state","device":%q,"state":{"rf_address":%q,"type":"radiator_thermostat","name":"Radiator %d","room_id":%d,"serial":"KEQ00000%02d","reported":true,`+
 			`"state":{"mode":"auto","setpoint":21.5,"actual_temp":20.3,"valve_pct":%d,"battery_low":false,"error":false,"link_error":false},"last_seen":"2026-11-06T20:00:00.000Z"},`+
 			`"changes":{"valve_pct":{"from":20,"to":%d}},"time":"2026-11-06T20:00:%02d.123456789+01:00"}`, rf, rf, i%30, 1+i%8, i%30, i%100, i%100, i%60)
 		sample = len(data)
-		s.AddEvent(Event{CubeID: a.ID, Time: at.Add(time.Duration(i) * time.Second), Kind: "state", Source: "device", Device: rf,
+		batch = append(batch, Event{CubeID: a.ID, Time: at.Add(time.Duration(i) * time.Second), Kind: "state", Source: "device", Device: rf,
 			Serial: fmt.Sprintf("MEQ00000%02d", i%30), Data: json.RawMessage(data)})
 	}
-	flush(t, s)
+	for part := range slices.Chunk(batch, flushAt) {
+		if err := s.writeEvents(ctx, part); err != nil {
+			t.Fatal(err)
+		}
+	}
 	grown := size() - start
 	per := grown / n
 	t.Logf("a state event of %d bytes of JSON takes %d bytes in the file, indexes included (%d events, %d bytes)", sample, per, n, grown)

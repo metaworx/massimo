@@ -48,17 +48,17 @@ const (
 )
 
 // apply carries out a radio command the fake acknowledged, after
-// ApplyAfter when it is set.
+// ApplyAfter when it is set, and once a hold ends (HoldApply).
 func (s *Server) apply(m cube.Message) {
 	raw, err := base64.StdEncoding.DecodeString(strings.TrimSpace(m.Data))
 	if err != nil || len(raw) < 11 {
 		return
 	}
 	if s.ApplyAfter > 0 {
-		time.AfterFunc(s.ApplyAfter, func() { s.applyNow(raw) })
+		time.AfterFunc(s.ApplyAfter, func() { s.applyOrHold(raw) })
 		return
 	}
-	s.applyNow(raw)
+	s.applyOrHold(raw)
 }
 
 // applyNow changes the addressed devices' lines for one radio command.

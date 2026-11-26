@@ -79,6 +79,7 @@ type Server struct {
 	boosts   map[cube.RFAddress]*boost
 	removed  map[cube.RFAddress]bool // taken out with Remove, back with Restore
 	deaf     map[cube.RFAddress]bool // take no command, see SetDeaf
+	held     applyHold               // the apply held, see HoldApply
 	control  *http.Server            // the control's HTTP server, see Control
 	closed   bool                    // Close was called
 
