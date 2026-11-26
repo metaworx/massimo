@@ -178,7 +178,9 @@ def test_stream_ticket_waits_for_the_sign_in(page, case, watch):
     assert len(refusal.sent) == 1, f"no ticket asked for again while the sign-in is open: {len(refusal.sent)}"
     before = len(seen)
     sign_in_key(page)
-    back(page, seen, before)
+    # two tickets: the one that waited, sent again at once, whose stream the page's restart (afterLogin) then
+    # closes, and the restart's own (connectEvents), whose stream stays
+    back(page, seen, before + 1)
     assert page.evaluate("!!state.events && state.events.readyState === EventSource.OPEN"), "the stream is open"
 
 

@@ -959,6 +959,9 @@ def test_an_event_keeps_a_question_and_takes_back_one_whose_reboot_waits(page, c
         reads = counted(page, "**/api/v1/reboot")
         send(page, "change", {"action": "settings.update", "set": {"announce": "on"}})
         send(page, "reboot", {"by": "systemd"})
+        # the reboot's read waits behind the settings' read in the card's burst reader, so answered() alone,
+        # which waits for a request sent before its own, comes before it
+        assert wait_reads(page, reads, 1), f"the reboot read ({reads})"
         answered(page)
         assert len(reads) == 1, f"the reboot read ({reads})"
         frames(page)
@@ -1210,11 +1213,13 @@ def test_system_info_reads_again_at_a_resync_while_shown_only(page, case):
         show_view(page, "info")
         page.locator("#config-info summary").click()
         assert wait_until(page, "document.getElementById('info-client').textContent === '192.0.2.20'", 5), "the facts"
-        before = page.locator("#info-started").inner_text()
         n, k = len(facts), len(configs)
         box["started_at"] = "2026-11-13T09:30:00+01:00"
         send(page, "resync")
-        assert wait_until(page, "document.getElementById('info-started').textContent !== %s" % json.dumps(before), 5), "the new start"
+        # the new start's own data, its time in the age's data-at: the cell's text holds the age's exact time,
+        # hidden (Age), which inner_text leaves out and textContent does not, so the two never matched
+        at = str(page.evaluate("Date.parse('2026-11-13T09:30:00+01:00')"))
+        assert wait_until(page, "document.querySelector('#info-started .age')?.dataset.at === %s" % json.dumps(at), 5), "the new start"
         answered(page)
         assert len(facts) == n + 1 and len(configs) == k + 1, f"one read each ({len(facts) - n}, {len(configs) - k})"
         assert page.evaluate("document.getElementById('config-info').open"), "the fold open"
