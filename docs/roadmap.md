@@ -87,7 +87,12 @@ GUIDELINES/wip/HANDOVER.md is the context a session needs to work here.
     a request is in it, as the reboot stub did before `safe_route`;
     the fake Cube applying a set group (0x22) and a remove group (0x23)
     to a device's room in its C line, so that a device the UI suite puts
-    into a room shows no room mismatch across reconnects.
+    into a room shows no room mismatch across reconnects;
+    `keepAs` in internal/update ignoring its removal of the temporary file,
+    so that a `.tmp` it cannot remove shows as "file exists";
+    the server's warning of a tie by serial (`plainServedAlready`) giving
+    the plain address alone, not the stored Cube's;
+    `install`'s TLS check joining a stray `-root` onto a Windows drive path.
 13. **Housekeeping**:
     the `.env` copies and the release key in the Linux test box's session scratchpad,
     its SSH key on the Pi; the M7 reservations for the house Cube and the Pi;
