@@ -183,7 +183,8 @@ func TestApplyAutoAndVacation(t *testing.T) {
 // ends by itself with the mode and valve it had.
 func TestApplyBoost(t *testing.T) {
 	t.Parallel()
-	s := startRooms(t, &Server{BoostFor: 200 * time.Millisecond})
+	boost := testkit.Scale(200 * time.Millisecond) // outlasts the read right after the send on a slow runner too
+	s := startRooms(t, &Server{BoostFor: boost})
 	c := dial(t, s.ln.Addr().String())
 	c.send(must(cube.CmdSetTemperature(cube.Target{RFAddress: 0x0a0203, RoomID: 1, Room: true}, 20, cube.ModeBoost, cube.Until{})))
 	st := c.states()
@@ -206,7 +207,7 @@ func TestApplyBoost(t *testing.T) {
 	c.send(must(cube.CmdSetTemperature(cube.Target{RFAddress: 0x0a0204, RoomID: 2, Room: true}, 21, cube.ModeManual, cube.Until{})))
 	// No end to wait for: the boost's timer, stopped by the setpoint,
 	// leaves no trace.
-	time.Sleep(400 * time.Millisecond)
+	time.Sleep(2 * boost)
 	if st := c.states()[0x0a0204]; st.Mode != cube.ModeManual || *st.Setpoint != 21 || *st.ValvePct != 0 {
 		t.Fatalf("a setpoint after a boost: %+v", st)
 	}
@@ -295,7 +296,7 @@ func TestApplyProgramTemperaturesLock(t *testing.T) {
 // reply; a discarded command and a fake without Apply change nothing.
 func TestApplyDelayDiscardAndOff(t *testing.T) {
 	t.Parallel()
-	s := startRooms(t, &Server{ApplyAfter: 300 * time.Millisecond})
+	s := startRooms(t, &Server{ApplyAfter: testkit.Scale(300 * time.Millisecond)}) // outlasts the "not yet" read on a slow runner too
 	c := dial(t, s.ln.Addr().String())
 	room2 := cube.Target{RFAddress: 0x0a0204, RoomID: 2, Room: true}
 	c.send(must(cube.CmdSetTemperature(room2, 25, cube.ModeManual, cube.Until{})))
