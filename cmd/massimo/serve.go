@@ -111,7 +111,7 @@ func runServe(args []string) error {
 	fixed := fixedSettings(given)
 	// What the start refuses of its settings, before it opens anything,
 	// in the order and the words a reload names it in (startchecks.go).
-	if errs := startRefusals(settingOf(fixed), nil); len(errs) > 0 {
+	if errs := startRefusals(settingOf(fixed), os.Environ(), nil); len(errs) > 0 {
 		return fmt.Errorf("serve: %w", errs[0].err)
 	}
 	// The values the checks passed, parsed again: an error here is one

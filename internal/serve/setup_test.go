@@ -152,6 +152,26 @@ func connEnded(err error) bool {
 	return errors.Is(err, io.EOF) || errors.As(err, &op) && !op.Timeout()
 }
 
+// FileCubes reads the Cubes from the list it is given, the process
+// environment of the start and the reload, a settings file's lines for
+// massimo install, and from nothing else (AP StartConfiguration, D47-A):
+// a Cube's lines and the plain address of the list, and a bad _IGNORE
+// of the list refused.
+func TestFileCubesReadTheListGiven(t *testing.T) {
+	t.Parallel()
+	cubes, plain, err := FileCubes("", []string{env.PerCube(env.Address, "KEQ0000000") + "=192.0.2.5", env.PerCube(env.Name, "KEQ0000000") + "=Test"})
+	if err != nil || plain != nil || len(cubes) != 1 || cubes[0].Serial != "KEQ0000000" || cubes[0].Values[store.FieldAddress].Value != "192.0.2.5" || cubes[0].Values[store.FieldName].Value != "Test" {
+		t.Errorf("a Cube's lines: %+v, plain %+v, %v", cubes, plain, err)
+	}
+	if cubes, plain, err := FileCubes("", []string{env.Address + "=192.0.2.6"}); err != nil || len(cubes) != 0 || plain == nil || plain.Values[store.FieldAddress].Value != "192.0.2.6" {
+		t.Errorf("the plain address: %+v, plain %+v, %v", cubes, plain, err)
+	}
+	ignore := env.PerCube(env.Ignore, "KEQ0000000")
+	if _, _, err := FileCubes("", []string{env.PerCube(env.Address, "KEQ0000000") + "=192.0.2.5", ignore + "=zz"}); err == nil || !strings.HasPrefix(err.Error(), ignore+": ") {
+		t.Errorf("a bad hidden list: %v", err)
+	}
+}
+
 // A single Cube given only as MASSIMO_CUBE_ADDRESS, without a serial, is
 // served with its proxy; the serial comes from the Cube's greeting, and
 // the server then adds the Cube to the store, so the next start serves

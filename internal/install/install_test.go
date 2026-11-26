@@ -551,6 +551,27 @@ func TestSetEnvLines(t *testing.T) {
 	}
 }
 
+// setEnvLines matches a name by its key, as serve reads it
+// (env.NameKey): on Windows a line of the name in another case is
+// replaced, and one of a variable dropped goes, where a line appended
+// below it would be the one the start ignores; elsewhere such a line is
+// another variable's, which the start ignores, and stays (AP
+// StartConfiguration, D53-A).
+func TestSetEnvLinesByTheNamesKey(t *testing.T) {
+	p := filepath.Join(t.TempDir(), "env")
+	os.WriteFile(p, []byte("massimo_tls=off\nexport massimo_tls_http=:80\nMASSIMO_API_TOKEN=t\n"), 0o640)
+	if err := setEnvLines(p, [][2]string{{"MASSIMO_TLS", "files"}}, []string{"MASSIMO_TLS_HTTP"}); err != nil {
+		t.Fatal(err)
+	}
+	want := "massimo_tls=off\nexport massimo_tls_http=:80\nMASSIMO_API_TOKEN=t\nMASSIMO_TLS=files\n"
+	if runtime.GOOS == "windows" {
+		want = "MASSIMO_TLS=files\nMASSIMO_API_TOKEN=t\n"
+	}
+	if got := read(t, p); got != want {
+		t.Errorf("%q, want %q on %s", got, want, runtime.GOOS)
+	}
+}
+
 func TestInstallTLSFiles(t *testing.T) {
 	root, bin := setup(t)
 	src := t.TempDir()
@@ -651,17 +672,19 @@ func TestInstallTLSFiles(t *testing.T) {
 		t.Fatal("the ACME directory lost by an install without -tls")
 	}
 
-	// -tls acme with a DNS-01 hook: the variable set, the hook checked.
-	hook := filepath.Join(src, "hook.sh")
-	os.WriteFile(hook, []byte("#!/bin/sh\n"), 0o755)
+	// -tls acme with a DNS-01 hook: the variable set, the hook checked
+	// where the service runs it, under the root.
+	hook := "/usr/local/libexec/hook.sh"
+	os.MkdirAll(filepath.Join(root, filepath.Dir(hook)), 0o755)
+	os.WriteFile(filepath.Join(root, hook), []byte("#!/bin/sh\n"), 0o755)
 	if err := Install(Options{Root: root, Binary: bin, TLS: "acme", TLSNames: "*.example.net,example.net", ACMEDNSHook: hook, Out: &out, Run: rec.run}); err != nil {
 		t.Fatal(err)
 	}
 	if env = read(t, filepath.Join(root, EnvPath)); strings.Count(env, "MASSIMO_ACME_DNS_HOOK="+hook+"\n") != 1 || !strings.Contains(env, "MASSIMO_TLS_NAMES=*.example.net,example.net\n") {
 		t.Fatalf("settings after -acme-dns-hook:\n%s", env)
 	}
-	noExec := filepath.Join(src, "noexec.sh")
-	os.WriteFile(noExec, []byte("#!/bin/sh\n"), 0o644)
+	noExec := "/usr/local/libexec/noexec.sh"
+	os.WriteFile(filepath.Join(root, noExec), []byte("#!/bin/sh\n"), 0o644)
 
 	// Refused: a missing file, -tls off with files, acme without names, a
 	// hook that is not there, a hook with the port-80 helper, a directory
@@ -694,16 +717,16 @@ func TestInstallTLSFiles(t *testing.T) {
 	}
 }
 
-func TestTLSSettingsWarnings(t *testing.T) {
+// The settings' TLS is the update helper's too: its health URL is
+// https:// where the settings file has MASSIMO_TLS=files. What serve's
+// start refuses of the files is its checks' to say (StartChecks;
+// cmd/massimo, TestInstallKeptFileInTheStartsWords).
+func TestTLSSettingsSeenByTheHelper(t *testing.T) {
 	root, bin := setup(t)
 	settings := filepath.Join(t.TempDir(), ".env")
 	os.WriteFile(settings, []byte("MASSIMO_API_TOKEN=t\nMASSIMO_TLS=files\nMASSIMO_TLS_CERT=/etc/massimo/cert.pem\n"), 0o600)
-	var out bytes.Buffer
-	if err := Install(Options{Root: root, Binary: bin, Settings: settings, Out: &out, Run: (&recorder{}).run}); err != nil {
+	if err := Install(Options{Root: root, Binary: bin, Settings: settings, Out: &bytes.Buffer{}, Run: (&recorder{}).run}); err != nil {
 		t.Fatal(err)
-	}
-	if !strings.Contains(out.String(), "warning: MASSIMO_TLS_CERT=/etc/massimo/cert.pem") || !strings.Contains(out.String(), "warning: no MASSIMO_TLS_KEY") {
-		t.Fatalf("no warning about the TLS files:\n%s", out.String())
 	}
 	if !strings.Contains(read(t, filepath.Join(root, HealthDropIn)), "https://") {
 		t.Fatal("the settings' TLS not seen by the helper")
@@ -799,8 +822,9 @@ func TestReinstallWithoutHelperRemovesIt(t *testing.T) {
 // acme, starts after the switch; the owner's other lines stay.
 func TestInstallSwitchesTLSMode(t *testing.T) {
 	root, bin := setup(t)
-	hook := filepath.Join(t.TempDir(), "hook.sh")
-	os.WriteFile(hook, []byte("#!/bin/sh\n"), 0o755)
+	hook := "/usr/local/libexec/hook.sh" // where the service runs it, under the root
+	os.MkdirAll(filepath.Join(root, filepath.Dir(hook)), 0o755)
+	os.WriteFile(filepath.Join(root, hook), []byte("#!/bin/sh\n"), 0o755)
 	cert, key := filepath.Join(t.TempDir(), "c.pem"), filepath.Join(t.TempDir(), "k.pem")
 	os.WriteFile(cert, []byte("CERT"), 0o644)
 	os.WriteFile(key, []byte("KEY"), 0o600)
