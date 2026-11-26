@@ -337,18 +337,19 @@ async function settleSignIn(was, held, known) {
 // one turn, with the parts' forms, drafts and answers still on their way
 // (MassimoParts.signedOut), the settings that followed the user, where
 // they did (forgetUserSettings, app.js), the lines saying a write was not
-// sent (forgetNotSent, app.js), the House's panel, the stream and the
-// Cubes' data; the page shows the tiles. All of it before the signed-out
-// language's table is awaited, which comes last (UiParts D211), so that
-// nothing of the user who left is drawn, sent or read meanwhile, nor shown
-// (applyLanguage, after it, needs no page of the user's). Who is in is
-// read again after it.
+// sent (forgetNotSent, app.js), the House's panel, the stream, the
+// Cubes' data and the toast; the page shows the tiles. All of it before
+// the signed-out language's table is awaited, which comes last (UiParts
+// D211), so that nothing of the user who left is drawn, sent or read
+// meanwhile, nor shown (applyLanguage, after it, needs no page of the
+// user's). Who is in is read again after it.
 async function forgetSession(synced) {
   state.me = null;
   MassimoParts.signedOut(); // the session's number first, then every region's forgetting; who is in is null already (state.me is the parts' signal)
   const language = synced ? forgetUserSettings() : null; // applied at once, its language's table awaited below
   forgetNotSent();
   MassimoParts.rooms.closeHouse();
+  hideToast(); // components.js: nothing a toast says of the user who left stays
   closeEvents();
   clearCubeData(); // app.js: nothing of this session behind the sign-in; the poll stops
   MassimoParts.pages.showView("tiles", "replace");

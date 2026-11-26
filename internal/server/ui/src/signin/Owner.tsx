@@ -16,7 +16,9 @@
  * signs in at once, and turns through that, the app's keeping (UiParts
  * D213) and the read of who is in until the card has closed, so that no
  * second tap meets the form, and Skip for now and the app's Cancel are
- * off meanwhile; a toast then says it (FirstOwner D22). What a submit
+ * off meanwhile; a toast then says it (FirstOwner D22), and what the
+ * open server left that still works, where the creation's answer lists
+ * anything (AP AccessEnds, Block 3). What a submit
  * finds wrong is said alone, an earlier attempt's line cleared, and the
  * focus goes to the field to change: the name, Password where the rule
  * refuses it, before the two are compared, which the line under
@@ -47,7 +49,10 @@
  */
 
 import { useEffect, useLayoutEffect, useRef, useState } from "preact/hooks";
+import type { OpenSetup, UserCreated } from "../api";
+import { openSetupText } from "../model/opensetup";
 import { app, toServers } from "../shared/app";
+import { showCard } from "../shared/card";
 import { ResultLine } from "../shared/badge";
 import { hid } from "../shared/cls";
 import { useLang } from "../shared/lang";
@@ -56,9 +61,41 @@ import { busyProps, useBusy } from "../shared/question";
 import { UserNameField, useNameCheck, wordNameError } from "../shared/username";
 import { me } from "../shared/me";
 import { keptOpen } from "../shared/owner";
+import { showView } from "../shared/pages";
+import { session, stillSession } from "../shared/session";
 import { offer } from "./app";
 import { KeepOpen } from "./KeepOpen";
 import { ask, card, creationEnded, keepAsk, leaves, skip } from "./store";
+
+/**
+ * doneToast says that the owner name was created and signed in, and in the app where the login by fingerprint was not
+ * kept; where anything set up before the owner still works (open, the answer's open_setup), it says what, for the
+ * owner to check, in the warn tone for 30 s, with Show, which opens System settings → Integrations where an
+ * integration is listed, else the log, whose open_setup line says it too, the focus on the card's heading or the
+ * log's title (AP AccessEnds, D11, D13). A sign-out takes the toast away (login.js forgetSession), and its Show
+ * does nothing once the owner's session has ended.
+ */
+function doneToast(name: string, kept: boolean, open?: OpenSetup): void {
+  const text = t("setup.done", { name }) + (kept ? "" : " " + t("setup.notKept"));
+  const what = open ? openSetupText(open) : "";
+  if (!open || !what) {
+    showToast(text);
+    return;
+  }
+  const n = session();
+  const integrations = !!open.integrations?.length;
+  const show = () => {
+    if (!stillSession(n)) return;
+    if (!integrations) {
+      showView("log");
+      window.MassimoParts.log.focusHead(); // another region's title, through its part
+      return;
+    }
+    showView("system");
+    showCard("sys-integrations", true); // on a page just shown, as home.js showFound: a smooth scroll stops short
+  };
+  showToast(text + " " + t("setup.openSetup", { what }), { ms: 30000, tone: "warn", action: { label: t("setup.openSetupShow"), run: show } });
+}
 
 /** Owner is the first owner's place in the card: the form, and under it the row with Skip for now. */
 export function Owner() {
@@ -156,7 +193,7 @@ export function Owner() {
     create.run(async () => {
       let made = false;
       try {
-        await api("POST", "api/v1/users", { name: n, role: "owner", ...(await registerPassword(n, password)) });
+        const created = await api<UserCreated | null>("POST", "api/v1/users", { name: n, role: "owner", ...(await registerPassword(n, password)) });
         made = true;
         const session = await signIn(n, password);
         const put = setToken(session.token); // in the app, the session kept by the bridge before login.keep reads it (D68-A)
@@ -173,7 +210,7 @@ export function Owner() {
             kept = false;
           }
         }
-        if (a && (await finishSignIn(a))) showToast(t("setup.done", { name: n }) + (kept ? "" : " " + t("setup.notKept")));
+        if (a && (await finishSignIn(a))) doneToast(n, kept, created?.open_setup);
       } catch (e) {
         const err = e as Error & { status?: number };
         // the server has users now: refused for lack of a session (api() has turned the card already), the first owner

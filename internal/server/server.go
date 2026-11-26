@@ -108,6 +108,7 @@ import (
 	"go.metaworx.ch/massimo/internal/protocol/cube"
 	"go.metaworx.ch/massimo/internal/proxy"
 	"go.metaworx.ch/massimo/internal/push"
+	"go.metaworx.ch/massimo/internal/slogx"
 	"go.metaworx.ch/massimo/internal/store"
 	"go.metaworx.ch/massimo/internal/view"
 )
@@ -825,14 +826,17 @@ func nameUsers(ctx context.Context, n *store.Namer, ev *event) {
 	}
 }
 
-// partLog is the logger of a part the server starts: its source, and the
-// Cube it serves where it serves one.
-func (s *Server) partLog(source, serial string) *slog.Logger {
+// partLog is the logger of a part the server starts: its source, and,
+// where it serves the Cube of rt, that Cube's serial, read on each line,
+// so that a Cube whose serial is learned after the part started, one
+// given by its address alone (the plain MASSIMO_CUBE_ADDRESS's, -addr's
+// without -sn), has it on every line from then on.
+func (s *Server) partLog(source string, rt *runtime) *slog.Logger {
 	l := s.opts.Logger.With("source", source)
-	if serial != "" {
-		l = l.With("cube", serial)
+	if rt == nil {
+		return l
 	}
-	return l
+	return slogx.WithFunc(l, "cube", rt.cubeSerial)
 }
 
 // New creates a server; Run starts the Cube connections.
@@ -866,9 +870,12 @@ func New(opts Options) *Server {
 		s.notify = s.newNotify()
 		s.webPush = s.newWebPush()
 		s.refusals = newRefusalAudit(s.writeRefusal)
-		// MASSIMO_API_TOKEN becomes the owner's key, or follows the file (docs/store.md section 6).
-		if _, err := opts.Store.Bootstrap(context.Background(), opts.Token); err != nil {
+		// MASSIMO_API_TOKEN becomes the owner's key, or follows the file (docs/store.md section 6);
+		// an owner made from it is told what the open server left (AP AccessEnds, D14).
+		if res, err := opts.Store.Bootstrap(context.Background(), opts.Token); err != nil {
 			s.log.Error("store: bootstrap failed", "error", err)
+		} else if res.OwnerCreated {
+			s.tellOpenSetup(context.Background(), store.BootstrapUser, store.RoleOwner)
 		}
 		s.DropKeepOpen(context.Background())
 		s.warnIntegrationUsersOnly(context.Background())

@@ -386,7 +386,7 @@ func (s *Server) discoverOnce(ctx context.Context) ([]foundCube, error) {
 		}
 		rctx, cancel := context.WithCancel(ctx)
 		defer cancel()
-		r = proxy.NewResponder(s.partLog("proxy", ""))
+		r = proxy.NewResponder(s.partLog("proxy", nil))
 		go r.Serve(rctx, pc)
 	}
 	browsed := s.browseServers(ctx, wait)

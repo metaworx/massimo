@@ -9,6 +9,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"log/slog"
 	"net/http"
 	"slices"
 	"strconv"
@@ -17,6 +18,7 @@ import (
 	"time"
 
 	"go.metaworx.ch/massimo/internal/store"
+	"go.metaworx.ch/massimo/internal/testkit"
 )
 
 func decodeUserView(text string) userView {
@@ -407,6 +409,124 @@ func TestFirstOwner(t *testing.T) {
 		if localPeer(addr) != want {
 			t.Errorf("localPeer(%s) = %v", addr, !want)
 		}
+	}
+}
+
+// The first owner is told what was set up while the server was open and
+// still works (AP AccessEnds, Block 3; AP LooseEnds, D47-A): with an
+// integration requested, approved and its key collected, the role
+// viewer changed, a role added with its name and a capability turned
+// off, each without a credential, and a sign-in provider that creates
+// users, the owner's answer lists them, the log holds one open_setup
+// line at warn, which GET /api/v1/log/alerts lists for the owner, and
+// serve's log its Warn line; none of them holds the integration's key or
+// the password. The first owner of a clean open store gets neither.
+func TestFirstOwnerSaysWhatWasSetUp(t *testing.T) {
+	t.Parallel()
+	for _, setUp := range []bool{true, false} {
+		t.Run(fmt.Sprintf("set up %v", setUp), func(t *testing.T) {
+			t.Parallel()
+			r := startServer(t, withOptions(storeOptions(t, t.TempDir(), "")), withLog(nil), quiet())
+			ts, st := r.ts, r.st
+			ctx := t.Context()
+			var uuid, key string
+			if setUp {
+				body := `{"kind":"homeassistant","name":"Casa Leone","instance_id":"0123456789abcdef0123456789abcdef","url":"http://ha:8123","version":"2026.11.1"}`
+				code, text := callAPI(t, ts, "POST", "/api/v1/integrations/requests", "", body)
+				var req struct{ ID, Code string }
+				decodeInto(t, text, &req)
+				if code != 201 {
+					t.Fatalf("request: %d %s", code, text)
+				}
+				if code, text := callAPI(t, ts, "POST", "/api/v1/integrations/"+req.ID+"/approve", "", `{"max_caps":["read"]}`); code != 200 {
+					t.Fatalf("approve: %d %s", code, text)
+				}
+				code, text = callAPI(t, ts, "GET", "/api/v1/integrations/requests/"+req.ID+"?code="+req.Code, "", "")
+				var got struct{ Key string }
+				decodeInto(t, text, &got)
+				if code != 200 || got.Key == "" {
+					t.Fatalf("collect: %d %s", code, text)
+				}
+				for _, c := range []struct{ method, path, body string }{
+					{"PUT", "/api/v1/roles/viewer", `{"capabilities":["read","users"]}`},
+					{"POST", "/api/v1/roles", `{"key":"night","name":"Night shift","capabilities":["read"]}`},
+					{"PUT", "/api/v1/capabilities/update", `{"disabled":true}`},
+				} {
+					if code, text := callAPI(t, ts, c.method, c.path, "", c.body); code != 200 && code != 201 {
+						t.Fatalf("%s %s: %d %s", c.method, c.path, code, text)
+					}
+				}
+				// through the store: the API asks the issuer for its discovery, which no test reaches
+				if _, err := st.AddProvider(ctx, store.AuthProvider{Key: "cloud", Name: "Nextcloud", Issuer: "https://cloud.example.com", ClientID: "massimo",
+					ClientSecret: "provider-secret-1", AutoCreate: true, Enabled: true}, 0); err != nil {
+					t.Fatal(err)
+				}
+				uuid, key = req.ID, got.Key
+			}
+			m := r.log.Mark()
+			code, text := callAPI(t, ts, "POST", "/api/v1/users", "", `{"name":"root","password":"r-pass-001"}`)
+			if code != 201 {
+				t.Fatalf("the first owner: %d %s", code, text)
+			}
+			var answer struct {
+				Name      string         `json:"name"`
+				OpenSetup *openSetupView `json:"open_setup"`
+			}
+			decodeInto(t, text, &answer)
+			root, _, _ := st.User(ctx, "root")
+			_, owner, err := st.AddToken(ctx, root.ID, store.TokenAPI, "test", time.Time{})
+			if err != nil {
+				t.Fatal(err)
+			}
+			var lines []map[string]any
+			if code := getJSON(t, ts, owner, "/api/v1/log?kind=open_setup", &lines); code != 200 {
+				t.Fatalf("the log: %d", code)
+			}
+			var alerts logAlertsView
+			if code := getJSON(t, ts, owner, "/api/v1/log/alerts", &alerts); code != 200 {
+				t.Fatalf("the alerts: %d", code)
+			}
+			alerted := slices.ContainsFunc(alerts.Alerts, func(a logAlert) bool { return a.Kind == "open_setup" && a.Level == "warn" })
+			warned := r.log.Since(m, testkit.MsgAt(slog.LevelWarn, openSetupMessage))
+			if !setUp {
+				if answer.Name != "root" || answer.OpenSetup != nil || strings.Contains(text, "open_setup") || len(lines) != 0 || alerted || len(warned) != 0 {
+					t.Fatalf("a clean open store: %s; the log %v; alerted %v; %v", text, lines, alerted, warned)
+				}
+				return
+			}
+			want := fmt.Sprintf("[{%s Casa Leone}] [{cloud Nextcloud true}] [{viewer } {night Night shift}] [update]", uuid)
+			o := answer.OpenSetup
+			if o == nil || fmt.Sprintf("%v %v %v %v", o.Integrations, o.Providers, o.Roles, o.CapabilitiesOff) != want || answer.Name != "root" {
+				t.Fatalf("the answer: %s, want open_setup %s", text, want)
+			}
+			if len(lines) != 1 || lines[0]["level"] != "warn" || lines[0]["source"] != "system" {
+				t.Fatalf("the log's lines: %v", lines)
+			}
+			summary, _ := json.Marshal(lines[0]["summary"])
+			wantSummary := `{"capabilities_off":["update"],"integrations":[{"name":"Casa Leone","uuid":"` + uuid + `"}],` +
+				`"providers":[{"auto_create":true,"key":"cloud","name":"Nextcloud"}],"role":"owner","roles":[{"key":"viewer"},{"key":"night","name":"Night shift"}],"user":"root"}`
+			if string(summary) != wantSummary {
+				t.Fatalf("the line's summary %s, want %s", summary, wantSummary)
+			}
+			if !alerted {
+				t.Fatalf("no alert: %+v", alerts)
+			}
+			if len(warned) != 1 {
+				t.Fatalf("serve's log: %v", r.log.Since(m, nil))
+			}
+			for k, v := range map[string]string{"kind": "open_setup", "integrations": "Casa Leone", "providers": "cloud (creates users)", "roles": "viewer,night",
+				"capabilities_off": "update", "user": "root", "role": "owner"} {
+				if warned[0].Attrs[k] != v {
+					t.Errorf("serve's line: %s %q, want %q: %s", k, warned[0].Attrs[k], v, warned[0].Line)
+				}
+			}
+			raw, _ := json.Marshal(lines)
+			for _, secret := range []string{key, "r-pass-001", "provider-secret-1"} {
+				if strings.Contains(text, secret) || strings.Contains(string(raw), secret) || strings.Contains(warned[0].Line, secret) {
+					t.Fatalf("a secret said: %s; %s; %s", text, raw, warned[0].Line)
+				}
+			}
+		})
 	}
 }
 

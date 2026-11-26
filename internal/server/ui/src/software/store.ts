@@ -277,12 +277,13 @@ function followUpdate(): void {
 
 /**
  * readRefused reads GET /api/v1/restart under the session's number and
- * says whether the server's next start refuses the settings file: true
- * where its refused is not empty, which a holder of update without
- * restart reads as well, so that it is decided on refused, never on
- * available (StartConfiguration.D34-A); false where the read failed (a
- * 403 for a user with neither update nor restart, no answer); null where
- * the session changed meanwhile, its answer the user's who was.
+ * says whether the server's next start refuses the settings file. A
+ * holder of restart reads it, and so does one of update or reboot, which
+ * each include restart (AP StartConfiguration, D37). It answers true
+ * where the answer's refused is not empty; false where the read failed
+ * (a 403 for a user with none of the three, or where restart is disabled
+ * for every role; no answer); null where the session changed meanwhile,
+ * its answer the user's who was.
  */
 export async function readRefused(): Promise<boolean | null> {
   const n = session();
