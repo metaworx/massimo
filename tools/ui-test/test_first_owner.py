@@ -407,13 +407,14 @@ def test_the_owner_card_measures(new_context, case, watch, guard, app):
     the app with its switch and Cancel: in the middle where it fits the
     room the window leaves it, at its top with the page scrolling to its
     end where it is taller (assert_login_card_placed; AP PasswordRules,
-    D57-A); before a press of the dice and after one, whose row makes the
-    card taller, in the app at 390 px in French taller than its room; at
-    390 px in French,
-    Italian, Dutch and Polish as well, chosen in the card's ☰ (FirstOwner
-    D23: the owner's state at its own height). Fails on the page before:
-    no card; with the sign-in card's measure (assert_login_card_centred),
-    on the French card after a press in the app at 390 px."""
+    D57-A); before a press of the dice and after one, whose shown line
+    makes the card taller, in the app at 390 px taller than its room in
+    German and French, and in Dutch with the test machine's fonts; at 390
+    px in French, Italian, Dutch and Polish as well, chosen in the card's
+    ☰ (FirstOwner D23: the owner's state at its own height). Fails on the
+    page before: no card; with the sign-in card's measure
+    (assert_login_card_centred), on the French card after a press in the
+    app at 390 px."""
     page = start_page(new_context, guard, watch, OPEN, app=APP if app else None)
     owner_card(page)
     if app:
