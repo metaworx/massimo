@@ -163,6 +163,8 @@ the `-tls-cert` and `-tls-key` pair loaded where it is,
 a path of the file's and the hook of `-acme-dns-hook` checked as root sees them,
 a relative path at the service's `WorkingDirectory`, `/var/lib/massimo`,
 and on macOS the plist's `-log-process-format none` in place of that line.
+A relative `-acme-dns-hook` it refuses on every system,
+asking for the absolute path.
 It cannot check whether `_massimo` may read the key or run the DNS hook,
 the box's state at the start, such as a port already taken,
 or the self-signed pair only the start makes:
@@ -268,7 +270,8 @@ or the forward to `:8099`);
 with `-tls-http :80` the listen drop-in grants the capability for port 80 too.
 `massimo tls show` (as `_massimo`) prints what was issued.
 `-acme-dns-hook <script>` with `-tls acme -tls-names …` takes the DNS-01
-challenge instead of a port: the server runs
+challenge instead of a port, the script given by its absolute path,
+which install asks for: the server runs
 `<script> set _acme-challenge.<name> <value>` before the validation and
 `<script> clear …` after it,
 also after a set that failed, so a clear removes only the records of that value;

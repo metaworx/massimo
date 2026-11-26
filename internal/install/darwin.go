@@ -146,7 +146,7 @@ func InstallDarwin(o Options) error {
 			return err
 		}
 	}
-	if err := o.checkTLS(launchdStart()); err != nil {
+	if err := o.checkTLS(unixAbs); err != nil {
 		return err
 	}
 	if err := o.checkSettingsFile(launchdStart()); err != nil {

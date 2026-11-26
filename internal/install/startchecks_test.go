@@ -280,6 +280,50 @@ func TestInstallRefusesTLSOptionsTheStartRefuses(t *testing.T) {
 	}
 }
 
+// A relative -acme-dns-hook is refused, asking for the absolute path,
+// before the install writes, runs or says anything, by each entry point
+// (AP StartConfiguration, D66-A): the service runs the hook from its own
+// working directory, so that install's and the service's could each
+// name another file; a hook of that name is there in both, under the
+// root and where install runs, and is refused all the same. An absolute
+// hook under the root passes. Windows' is
+// TestInstallWindowsRefusesARelativeHook.
+func TestInstallRefusesARelativeHook(t *testing.T) {
+	t.Chdir(t.TempDir())
+	for _, k := range installKinds {
+		for _, hook := range []string{"hook.sh", "./hook.sh", "hooks/hook.sh"} {
+			var out bytes.Buffer
+			rec := &recorder{}
+			root, o, install := k.opts(t, rec, &out)
+			for _, dir := range []string{filepath.Join(root, StateDir), "."} {
+				p := filepath.Join(dir, filepath.FromSlash(hook))
+				os.MkdirAll(filepath.Dir(p), 0o755)
+				if err := os.WriteFile(p, []byte("#!/bin/sh\n"), 0o755); err != nil {
+					t.Fatal(err)
+				}
+			}
+			before := tree(t, root)
+			o.TLS, o.TLSNames, o.ACMEDNSHook = "acme", "massimo.example.net", hook
+			want := fmt.Sprintf("-acme-dns-hook %q: give the hook's absolute path", hook)
+			if err := install(o); err == nil || err.Error() != want {
+				t.Errorf("%s, %s: %v, want %s", k.what, hook, err, want)
+			}
+			if after := tree(t, root); !maps.Equal(after, before) || out.Len() != 0 || len(rec.cmds) != 0 {
+				t.Errorf("%s, %s: before the refusal wrote, said %q, ran %q", k.what, hook, out.String(), rec.cmds)
+			}
+		}
+
+		root, o, install := k.opts(t, &recorder{}, &bytes.Buffer{})
+		hook := "/usr/local/libexec/massimo-dns-hook"
+		os.MkdirAll(filepath.Join(root, filepath.Dir(hook)), 0o755)
+		os.WriteFile(filepath.Join(root, hook), []byte("#!/bin/sh\n"), 0o755)
+		o.TLS, o.TLSNames, o.ACMEDNSHook = "acme", "massimo.example.net", hook
+		if err := install(o); err != nil {
+			t.Errorf("%s, an absolute hook under the root: %v", k.what, err)
+		}
+	}
+}
+
 // -tls-http names itself in its error, not -listen.
 func TestInstallTLSHTTPNamesItself(t *testing.T) {
 	root, bin := setup(t)

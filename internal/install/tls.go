@@ -9,6 +9,7 @@ import (
 	"fmt"
 	"net/url"
 	"os"
+	"path/filepath"
 	"regexp"
 	"runtime"
 	"slices"
@@ -49,9 +50,12 @@ func (o Options) tlsMode() string {
 
 // checkTLS refuses TLS options that cannot be installed: those that do
 // not go together, or name a file that is not there, the hook of
-// -acme-dns-hook where the service svc runs it (serviceStart.path). What
-// serve's start refuses of them is checkSettingsFile's.
-func (o Options) checkTLS(svc serviceStart) error {
+// -acme-dns-hook under Root. A relative hook is refused on every
+// system, abs saying what is absolute on the installed one (AP
+// StartConfiguration, D66-A): the service runs the hook from its own
+// working directory, not install's, so install asks for the absolute
+// path. What serve's start refuses of them is checkSettingsFile's.
+func (o Options) checkTLS(abs func(string) bool) error {
 	switch o.tlsMode() {
 	case "":
 		return nil
@@ -96,9 +100,12 @@ func (o Options) checkTLS(svc serviceStart) error {
 			if o.TLSHTTP != "" {
 				return errors.New("-tls-http is for the HTTP-01 challenge; with -acme-dns-hook the DNS-01 challenge needs no port")
 			}
-			hook, ok := svc.path(o.Root, o.ACMEDNSHook)
-			if !ok {
-				hook = o.ACMEDNSHook
+			if !abs(o.ACMEDNSHook) {
+				return fmt.Errorf("-acme-dns-hook %q: give the hook's absolute path", o.ACMEDNSHook)
+			}
+			hook := o.ACMEDNSHook
+			if o.Root != "" {
+				hook = filepath.Join(o.Root, hook)
 			}
 			fi, err := os.Stat(hook)
 			if err != nil {
@@ -113,6 +120,11 @@ func (o Options) checkTLS(svc serviceStart) error {
 		return fmt.Errorf("-tls %q: want off, files, self-signed or acme", o.TLS)
 	}
 }
+
+// unixAbs says whether p is an absolute path of Linux's or macOS's,
+// which starts with "/", on any system, so that an install under -root
+// checks it as the box would.
+func unixAbs(p string) bool { return strings.HasPrefix(p, "/") }
 
 // modeVars are the TLS variables an install's -tls sets; it removes the
 // others, so that a variable of the mode before (-tls-http, a DNS hook,
