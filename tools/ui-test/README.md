@@ -1016,6 +1016,13 @@ Node is not needed.
   a test that waits for an event the server sends marks the stream before
   its action and waits with `stream.wait`,
   and finds the event's line by what the event names, not by `.first`.
+- `go test ./...` counts per test file its fixed pauses (`wait_for_timeout`),
+  its plain routes (`.route(`, not `safe_route`)
+  and its own definitions of a name `helpers.py` defines,
+  against the lists in `idioms/`, which may only fall:
+  a new one fails it, and so does one taken out,
+  until its line there is lowered in the same commit
+  (`docs/ui-testing.md`, section 9, "The old idioms counted").
 - A wait that returns whether it was met is asserted where it is called.
 - A test's own wait loop ends at `scaled(seconds)` of `helpers.py`,
   so that `UI_TEST_SCALE` stretches it as it does the kit's waits;

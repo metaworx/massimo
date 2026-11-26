@@ -1,4 +1,4 @@
-# Testing the web UI (v1.30.0)
+# Testing the web UI (v1.31.0)
 
 An evaluation of a Cypress suite for the web UI, against the alternatives:
 what the Playwright smoke test covers today and what it cannot do well,
@@ -992,6 +992,36 @@ the server's and the test's, in order,
   not by `.first` of its kind:
   the log holds the server's earlier lines of that kind,
   the four cases' among them (`test_log.py`).
+- **The old idioms counted** (`tools/ui-test/idioms/`, AP SteadyTests, Block 4):
+  a Go test, as `tools/identifiers` is, so that `go test ./...` fails a new use,
+  counts per test file three ways of doing what the kit does once:
+  a fixed pause (`.wait_for_timeout(`), which outlasts nothing on a slow runner
+  and waits for nothing in particular;
+  a plain route (`.route(` of a page or a context, not `safe_route`),
+  which races the page that closes with a request on its way;
+  and a file's own definition of a name `helpers.py` defines at its top level,
+  a function or a class, a copy that drifts from the kit's.
+  Each has its list beside the test, a test file and its count a line:
+  `wait_for_timeout.txt`, `page_route.txt` and `kit_names.txt`.
+  A count may fall and may not rise.
+  Above its listed one, none listed being 0, the test fails,
+  naming what to use instead and this section;
+  below it, the test fails too, asking for the line to be lowered to the new count
+  in the same commit, so that the count cannot rise back to it,
+  and taken out at 0; a line of a file that is gone is taken out.
+  So a list holds what the files had when the guard came,
+  120 fixed pauses in 34 files, 177 plain routes in 45 and no copy (2026-11-26),
+  and falls as files move onto the kit.
+  A helper several files need goes into `helpers.py` under a name of its own,
+  and a file's helper that only shares a name with one of the kit's takes another;
+  the files' copies went so before the guard came:
+  `loaded` of `test_cube_updates.py` and `test_header_updates.py` is `load_cubes`,
+  their `mark` the kit's, with `same_and_open`;
+  `stub_me`, `open_cube_panel`, `same_box` and `scrolled_to` are the kit's,
+  and `test_open_banner.py`'s `stub_me`, another thing, is `stub_mode`.
+  A constant is not counted: a test file's `ROOMS` or `STALE` is another thing
+  than the kit's of the same name.
+  `go test ./tools/ui-test/idioms` runs it alone.
 - **The server sets** keep the server's 10 s poll of the fake Cube,
   which brings no line of its own (the fake Cube's states do not change).
   Their fake Cube has every memory slot free (`-free-slots 50`,
