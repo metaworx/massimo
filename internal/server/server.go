@@ -866,9 +866,12 @@ func New(opts Options) *Server {
 		s.notify = s.newNotify()
 		s.webPush = s.newWebPush()
 		s.refusals = newRefusalAudit(s.writeRefusal)
-		// MASSIMO_API_TOKEN becomes the owner's key, or follows the file (docs/store.md section 6).
-		if _, err := opts.Store.Bootstrap(context.Background(), opts.Token); err != nil {
+		// MASSIMO_API_TOKEN becomes the owner's key, or follows the file (docs/store.md section 6);
+		// an owner made from it is told what the open server left (AP AccessEnds, D14).
+		if res, err := opts.Store.Bootstrap(context.Background(), opts.Token); err != nil {
 			s.log.Error("store: bootstrap failed", "error", err)
+		} else if res.OwnerCreated {
+			s.tellOpenSetup(context.Background(), store.BootstrapUser, store.RoleOwner)
 		}
 		s.DropKeepOpen(context.Background())
 		s.warnIntegrationUsersOnly(context.Background())

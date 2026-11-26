@@ -271,6 +271,109 @@ func TestUserCommandsLog(t *testing.T) {
 	}
 }
 
+// The first regular user user add makes, whatever its role, is told what
+// was set up before it, as the page's first owner is (AP AccessEnds,
+// D12): a second line of output, a part for each list, the integration's
+// name without its control and format characters, and the log's
+// open_setup line at warn, by the command line, naming the integration
+// and not its key; user list and user tokens print the name without them
+// too. Not on a clean store, nor for a second user.
+func TestUserAddSaysWhatWasSetUp(t *testing.T) {
+	clearCubeEnv(t)
+	ctx := context.Background()
+	for _, setUp := range []bool{true, false} {
+		dir := t.TempDir()
+		t.Setenv(env.DataVar, dir)
+		st, err := store.Open(dir, store.Options{Version: "test"})
+		if err != nil {
+			t.Fatal(err)
+		}
+		var key, uuid string
+		if setUp {
+			// a name with an escape sequence, as a request without a credential may report one
+			req, err := st.AddIntegrationRequest(ctx, store.IntegrationRequest{Kind: store.KindHomeAssistant, Name: "Casa \x1b[2J\u202eLe\u2066one\u2069", InstanceID: "0123456789abcdef0123456789abcdef"}, "ABCDEF")
+			if err != nil {
+				t.Fatal(err)
+			}
+			if _, err := st.ApproveIntegration(ctx, req.UUID, []string{"read"}, "", 0); err != nil {
+				t.Fatal(err)
+			}
+			uuid = req.UUID
+			if key, _, err = st.CollectIntegrationKey(ctx, req.UUID, "ABCDEF"); err != nil {
+				t.Fatal(err)
+			}
+			if _, err := st.AddProvider(ctx, store.AuthProvider{Key: "cloud", Issuer: "https://cloud.example.com", ClientID: "massimo", AutoCreate: true, Enabled: true}, 0); err != nil {
+				t.Fatal(err)
+			}
+			if _, err := st.AddProvider(ctx, store.AuthProvider{Key: "work", Issuer: "https://work.example.com", ClientID: "massimo", Enabled: true}, 0); err != nil {
+				t.Fatal(err)
+			}
+			if _, err := st.UpdateRole(ctx, store.RoleViewer, func(r *store.Role) error { r.Capabilities = append(r.Capabilities, "users"); return nil }, 0); err != nil {
+				t.Fatal(err)
+			}
+			if err := st.SetCapabilityDisabled(ctx, "update", true, 0); err != nil {
+				t.Fatal(err)
+			}
+		}
+		st.Close()
+		first, err := runUserWith(t, "a-long-secret-1\n", "add", "anna", "-role", "viewer", "-password-stdin")
+		if err != nil {
+			t.Fatal(err)
+		}
+		second, err := runUserWith(t, "", "add", "bob", "-no-password")
+		if err != nil {
+			t.Fatal(err)
+		}
+		lines := strings.Split(strings.TrimSpace(first), "\n")
+		const told = "still in effect from before this user: 1 integration (Casa [2JLeone); sign-in providers: cloud (creates users), work; " +
+			"roles added or changed: viewer; capabilities off: update; check them in System settings"
+		if setUp && (len(lines) != 2 || !strings.HasPrefix(lines[0], "user anna added with the role viewer") || lines[1] != told) ||
+			!setUp && len(lines) != 1 || strings.Count(second, "\n") != 1 {
+			t.Fatalf("set up %v: the first user's output %q, the second's %q", setUp, first, second)
+		}
+		ro, err := store.OpenReadOnly(dir, store.Options{})
+		if err != nil {
+			t.Fatal(err)
+		}
+		rows, err := ro.Events(ctx, store.EventQuery{Kind: "open_setup", Limit: 10})
+		ro.Close()
+		if err != nil {
+			t.Fatal(err)
+		}
+		if !setUp {
+			if len(rows) != 0 {
+				t.Fatalf("a clean store: %d open_setup lines", len(rows))
+			}
+			continue
+		}
+		if list, err := runUserWith(t, "", "list"); err != nil || strings.ContainsAny(list, "\x1b\u202e\u2066\u2069") || !strings.Contains(list, "Casa [2JLeone") {
+			t.Fatalf("user list: %q %v", list, err)
+		}
+		if tokens, err := runUserWith(t, "", "tokens", uuid+":"); err != nil || strings.ContainsAny(tokens, "\x1b\u202e\u2066\u2069") || !strings.Contains(tokens, "integration Casa [2JLeone") {
+			t.Fatalf("user tokens: %q %v", tokens, err)
+		}
+		if len(rows) != 1 || rows[0].Level != store.LevelWarn || rows[0].Source != "system" || rows[0].CubeID != 0 {
+			t.Fatalf("%d open_setup lines: %+v", len(rows), rows)
+		}
+		var ev struct {
+			Kind, Source, Level string
+			Summary             map[string]any
+		}
+		if err := json.Unmarshal(rows[0].Data, &ev); err != nil {
+			t.Fatal(err)
+		}
+		integs, _ := ev.Summary["integrations"].([]any)
+		var named any
+		if len(integs) == 1 {
+			named = integs[0].(map[string]any)["name"]
+		}
+		if ev.Kind != "open_setup" || ev.Level != "warn" || ev.Summary["user"] != "anna" || ev.Summary["role"] != "viewer" || ev.Summary["via"] != "cli" ||
+			named != "Casa \x1b[2J\u202eLe\u2066one\u2069" || strings.Contains(string(rows[0].Data), key) || strings.Contains(string(rows[0].Data), "a-long-secret-1") {
+			t.Fatalf("the line: %s", rows[0].Data)
+		}
+	}
+}
+
 // Help, and a command with wrong arguments, print the usage without
 // opening the store, which would create it with its keys: here in the
 // current directory, the data directory when no -data is given.

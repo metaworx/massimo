@@ -26,7 +26,7 @@ import type { LogEvent, LogLine } from "./lines";
 import { Log } from "./Log";
 import { logState } from "./state";
 import {
-  appendLogEvent, fillLogSelects, forgetLog, loadLog, logChoicesChanged, logCubeChanged, logCubesPolled, logLineMatches, logLoadUsers, logOfChoices,
+  appendLogEvent, fillLogSelects, focusHead, forgetLog, loadLog, logChoicesChanged, logCubeChanged, logCubesPolled, logLineMatches, logLoadUsers, logOfChoices,
   logPollSet, pollLog, pruneLogRange, renderLog,
 } from "./store";
 
@@ -77,6 +77,8 @@ const log = register("log", {
   mount(): void {
     mount();
   },
+  /** focusHead gives the log's title the focus in the drawing that follows (the first owner's toast's Show, signin/Owner.tsx). */
+  focusHead,
   /** event adds a live event of the stream (app.js connectEvents). */
   event(ev: LogEvent): void {
     appendLogEvent(ev);

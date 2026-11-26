@@ -181,6 +181,18 @@ those that are not an integration's, disabled ones included:
   naming whom and by whom.
   `POST /api/v1/users` from an address on the local network creates the first
   owner (see that route), and `massimo user add` does the same on the box.
+  The first regular user, made either way or from `MASSIMO_API_TOKEN`
+  at a start or a reload of the settings file,
+  is told once what was set up before it and still works, where anything was,
+  as a rule while the server was open, else left by an owner since removed
+  (AP AccessEnds, Block 3):
+  the integrations active with a key, or one still to be collected,
+  the sign-in providers enabled, the roles added or changed,
+  and the capabilities turned off, by name, never a key or a secret.
+  The log's `open_setup` line at `warn` says it,
+  an alert until a person marks it seen, with its line in the server's log,
+  `the first regular user was made; what was set up before it still works: check it`,
+  and the first owner's answer of `POST /api/v1/users` holds it as `open_setup`.
   The setting `auth.keep_open` says the server is kept open on purpose,
   so that the web UI does not ask for the first owner;
   it changes nothing about who is let in,
@@ -763,6 +775,10 @@ where two requests come at the same moment,
 the server counts the regular users again as it writes the owner,
 and the second is `409` with `the first owner exists already: sign in`;
 its registration (below) kept nothing, so nothing is left of it.
+Its answer holds `open_setup` where anything set up before it still works
+(Authentication):
+`integrations` (`uuid`, `name`), `providers` (`key`, `name`, `auto_create`),
+`roles` (`key`, `name`) and `capabilities_off`, each where it lists any.
 From then on the server is in users mode (Authentication).
 
 `GET /api/v1/users/{name}` is one user.
@@ -3968,7 +3984,7 @@ of the same Cube, or of the server for the server's own:
 | `error_watch` `back` or `lasting` | the same device's `error_watch` `clear` of the same `flag` |
 | `unconfirmed`, a room's setpoint or its re-send not confirmed, its re-send failed | an `unconfirmed` of the same `target` whose `outcome` is `resend_confirmed` |
 
-Any other, such as `proxy_discarded` and `proxy_delete_refused`,
+Any other, such as `proxy_discarded`, `proxy_delete_refused` and `open_setup`,
 is settled only by a person's mark.
 The alerts the signed-in user marked seen are left out:
 the preference `log.seen` (see "Preferences"),
@@ -4117,7 +4133,10 @@ or a settings file the next start refuses, held a due automatic update back:
 or `reload`; `previous`, the name the old file has now; `kept` and `removed`,
 the rotated files kept and those deleted; at `warn` with its `error` where a
 step failed),
-`restore_started` (`id`, `steps`, `radio_commands`).
+`restore_started` (`id`, `steps`, `radio_commands`),
+`open_setup` at `warn`, what was set up before the first regular user and still works
+(Authentication): the `user` and its `role`, the lists of `open_setup` where it holds any,
+and `via` `cli` where `massimo user add` made the user.
 A Cube's own: `address_changed` (`from`, `to`, for a Cube that follows discovery)
 and `cube_gone` (with `cube`, a Cube found before that no longer answers).
 `change`, source `config`: every request that changed something, once it

@@ -222,10 +222,11 @@ const toastState = { timer: null, action: null };
 // showToast shows a message at the page's foot (#toast) for ms
 // milliseconds, a newer one in the place of the one shown: its title in
 // bold where it has one, its text, its tone ("bad" for what failed, a red
-// edge) and an action, { label, run }, a button drawn for it alone that
-// runs it and closes the toast; × closes it at once. Notifications
-// (notify.js notifyToast) and the Cube search's outcome
-// (ui/src/header/send.ts discoverCubes) show here.
+// edge; "warn" for what to check, an orange one) and an action,
+// { label, run }, a button drawn for it alone that runs it and closes the
+// toast; × closes it at once. Notifications (notify.js notifyToast), the
+// Cube search's outcome (ui/src/header/send.ts discoverCubes) and the
+// first owner's creation (ui/src/signin/Owner.tsx) show here.
 function showToast(text, { title = "", ms = 10000, tone = "", action = null } = {}) {
   const toast = $("toast");
   if (!toast.dataset.wired) {
@@ -248,6 +249,7 @@ function showToast(text, { title = "", ms = 10000, tone = "", action = null } = 
     toast.insertBefore(b, $("toast-close"));
   }
   toast.classList.toggle("bad", tone === "bad");
+  toast.classList.toggle("warn", tone === "warn");
   toast.classList.remove("hidden");
   if (toastState.timer) clearTimeout(toastState.timer);
   toastState.timer = setTimeout(hideToast, ms);

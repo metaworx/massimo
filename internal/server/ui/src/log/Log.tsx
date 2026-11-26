@@ -86,16 +86,24 @@ function Older() {
 function Head() {
   useLook();
   const searchRef = useRef<HTMLInputElement>(null);
+  const titleRef = useRef<HTMLHeadingElement>(null);
   const toSearch = markFocus.value === "search";
+  const toTitle = markFocus.value === "head";
   // the focus handed on from the last Mark seen, in the drawing's own turn
   useLayoutEffect(() => {
     if (!toSearch) return;
     if (searchRef.current) searchRef.current.focus();
     markFocus.value = null; // taken, field or not
   }, [toSearch]);
+  // the focus asked for the title from another page (focusHead), in the drawing that shows it
+  useLayoutEffect(() => {
+    if (!toTitle) return;
+    if (titleRef.current) titleRef.current.focus();
+    markFocus.value = null;
+  }, [toTitle]);
   return (
     <header class="tile-head">
-      <h2>{t("log.title")}</h2>
+      <h2 ref={titleRef} tabIndex={-1}>{t("log.title")}</h2>
       <TextField row={false} id="log-filter" type="search" aria={t("log.filterAria")} placeholder={t("log.filter")} value={logState.filter} set={filterTyped} inputRef={searchRef} />
       <Select row={false} id="log-cubes" aria={t("log.cubesAria")} selectCls={cubesHidden() ? "hidden" : undefined} options={cubeOptions()} value={logState.cubes}
         onChange={(v) => {

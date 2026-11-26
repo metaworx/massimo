@@ -698,6 +698,44 @@ def test_log_server_lines(page, case, reads):
     show_view(page, "tiles")
 
 
+OPEN_SETUP_SAYS = {
+    "en": {"kind": "open server",
+           "owner": "First owner anna; still in effect from before this user: 1 integration: Kitchen; roles added or changed: Viewer, Night shift",
+           "cli": "First user bob, Viewer, by the command line; still in effect from before this user: 2 integrations: Kitchen, Garage"},
+    "de": {"kind": "offener Server",
+           "owner": "Erster Eigentümer anna; noch wirksam aus der Zeit vor diesem Benutzer: 1 Integration: Kitchen; "
+                    "hinzugefügte oder geänderte Rollen: Betrachter, Night shift",
+           "cli": "Erster Benutzer bob, Betrachter, über die Befehlszeile; noch wirksam aus der Zeit vor diesem Benutzer: 2 Integrationen: Kitchen, Garage"},
+}
+
+
+def test_log_open_setup_line(page, case, reads):
+    """The server's line of what was set up before its first regular user
+    (AP AccessEnds, Block 3) names the user, the owner or of another
+    role, by the command line right after it where massimo user add made
+    it, and what still works, a role by its name where it has one. Fails
+    on the page before: the log knew no such kind, and drew no line of
+    it."""
+    show_view(page, "log")
+    isolate_log(page, reads)
+    wait_log_live(page)
+    page.evaluate("""() => {
+      const kitchen = { uuid: "0a0b0c0d-0000-4000-8000-000000000001", name: "Kitchen" };
+      const garage = { uuid: "0a0b0c0d-0000-4000-8000-000000000002", name: "Garage" };
+      const send = (summary) => state.events.dispatchEvent(new MessageEvent("open_setup", { data: JSON.stringify({
+        kind: "open_setup", source: "system", level: "warn", time: new Date().toISOString(), summary }) }));
+      send({ user: "anna", role: "owner", integrations: [kitchen], roles: [{ key: "viewer" }, { key: "night", name: "Night shift" }] });
+      send({ user: "bob", role: "viewer", integrations: [kitchen, garage], via: "cli" });
+    }""")
+    assert wait_until(page, "document.querySelectorAll('#log-lines .log-line.kind-open_setup').length === 2", 5), "the two lines"
+    lines = page.locator("#log-lines .log-line.kind-open_setup")
+    texts = sorted(lines.locator(".log-text").all_inner_texts())
+    says = OPEN_SETUP_SAYS[case.lang]
+    assert texts == sorted([says["owner"], says["cli"]]), f"the lines: {texts}"
+    assert lines.first.locator(".log-kind").inner_text().strip() == says["kind"], "the kind's word"
+    show_view(page, "tiles")
+
+
 CHANGE_SAYS = {
     "en": "Cube changed KEQ0000000: name – → Upstairs, by Anna",
     "de": "Cube geändert KEQ0000000: Name – → Upstairs, durch Anna",

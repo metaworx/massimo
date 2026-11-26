@@ -16,6 +16,7 @@ import type { Device } from "../api";
 import { mismatchText, radiogramName, rfLabel, roomName } from "../model/device";
 import type { Loose, LogLine } from "./lines";
 import { type CubeRooms, logState } from "./state";
+import { openSetupText } from "../model/opensetup";
 import { confirmFieldName } from "../model/room";
 import { fmtSetpoint, TEMP_OFF } from "../shared/setpoint";
 
@@ -340,6 +341,8 @@ function logSummaryText(kind: string, s: Loose, serial: string): string {
       return t("log.sum.logRotated", { why: logWord("log.rotateWhy.", s.why), kept: num(s.kept) });
     case "restore_started":
       return t("log.sum.restoreStarted", { steps: num(s.steps) });
+    case "open_setup":
+      return logOpenSetupText(s);
     case "address_changed":
       return t("log.sum.addressChanged", { from: s.from || "–", to: s.to || "–" });
     case "change":
@@ -416,6 +419,19 @@ function logSummaryText(kind: string, s: Loose, serial: string): string {
       return t("log.sum.lockedOut", { remote: s.remote || "–", for: s.for || "–", after: logWord("log.lockedAfter.", s.after) });
   }
   return "";
+}
+
+/**
+ * logOpenSetupText is an open_setup line's text (AP AccessEnds, Block 3):
+ * the first regular user, the owner or of another role, by the command
+ * line where massimo user add made the user, and what was set up before
+ * it and still works (openSetupText).
+ */
+function logOpenSetupText(s: Loose): string {
+  const user = s.user || "–";
+  let who = !s.role || s.role === "owner" ? t("log.sum.openSetupOwner", { user }) : t("log.sum.openSetupUser", { user, role: roleLabel(s.role) });
+  if (s.via === "cli") who = t("log.viaCli", { text: who });
+  return t("log.sum.openSetup", { who, what: openSetupText(s) || "–" });
 }
 
 /**

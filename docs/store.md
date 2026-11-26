@@ -1357,6 +1357,19 @@ the roles and their sets are rows (section 5), seeded by the first migration.
   (AP FirstOwner, D15).
   `massimo user add` does the same from the command line (open decision 4 on
   whether the form should exist).
+  The first regular user, made by the form, by `massimo user add` whatever its
+  role, or from `MASSIMO_API_TOKEN`, is told once what was set up while there
+  was none, or left by an owner since removed, and still works
+  (`OpenSetup`, AP AccessEnds, Block 3):
+  the integrations active with a key, or one still to be collected
+  with the approval's code,
+  the sign-in providers enabled, the roles added or changed
+  (one that is not a default role, or a default one past its first version;
+  never owner or integration) and the capabilities turned off;
+  a request still waiting is not listed (AP AccessEnds, D15).
+  It is the log's `open_setup` line at warn, a log alert until a person marks it
+  seen, the form's toast and the command's second line
+  (docs/api-v1.md, "Authentication").
   The setting `auth.keep_open` (false by default) keeps such a server open
   on purpose: the web UI does not ask for the first owner
   (AP FirstOwner, D11), and nothing changes about who is let in.
@@ -1528,6 +1541,11 @@ so that a password or a key never goes to a store the server does not read
 Each change names the store it wrote,
 and a store other than the service's, where the service is installed,
 draws a warning.
+A `user add` that makes the store's first regular user prints a second line,
+what was set up before it and still works, where anything was,
+and writes the log's `open_setup` line by the command line (above);
+whether it is the first is counted in the transaction that writes it,
+so that of it and a first owner made at the same moment one alone is told.
 `user add` and `user passwd` set a password of version 2:
 both halves of the registration run in the command,
 with the server's keys from the data directory,
