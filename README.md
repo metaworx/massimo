@@ -1238,6 +1238,14 @@ With `MASSIMO_API_TOKEN` set, the first start of `serve` creates the user
 `owner` with the token as its API key, so the token keeps working;
 without it, the first owner is created with `user add <name> -role owner`
 or with the form the web UI offers on the local network while there are no users.
+The first regular user, made either way, whatever role `user add` gives it,
+or from the token, closes the open server and is told what was set up before it
+and still works, where anything was:
+`user add` prints it on a second line, a part for each list
+(`still in effect from before this user: 1 integration (Kitchen); roles added or changed: viewer; check them in System settings`),
+the web UI in its toast,
+and the log keeps it as a warning until it is marked seen
+(docs/api-v1.md, "Authentication").
 
 Users may also sign in through an OpenID Connect provider beside their password,
 such as Nextcloud, Google or Microsoft:

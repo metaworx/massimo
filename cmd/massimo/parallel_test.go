@@ -44,6 +44,7 @@ var serialTests = map[string]string{
 	"TestUserStoreDir":                      "changes the working directory (t.Chdir), swaps stderr, stdin and stdout",
 	"TestUserCommands":                      "sets MASSIMO_DATA, swaps stdin and stdout (runUserWith)",
 	"TestUserCommandsLog":                   "sets MASSIMO_DATA, swaps stdin and stdout (runUserWith)",
+	"TestUserAddSaysWhatWasSetUp":           "sets MASSIMO_DATA, swaps stdin and stdout (runUserWith)",
 	"TestUserListChain":                     "sets MASSIMO_DATA, swaps stdin and stdout (runUserWith)",
 	"TestUserPasswordRule":                  "sets MASSIMO_DATA, swaps stdin and stdout (runUserWith)",
 	"TestUserPasswordNames":                 "sets MASSIMO_DATA, swaps stdin and stdout (runUserWith)",
