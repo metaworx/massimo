@@ -173,7 +173,7 @@ func (s *Server) startRestore(w http.ResponseWriter, r *http.Request) error {
 				format = "yaml"
 			}
 			if _, err := rt.store.AddBackup(r.Context(), store.Backup{CubeID: rt.storeID.Load(), Reason: store.ReasonUpload, Format: format, Tool: src.file.Tool, UserID: user}, src.data); err != nil {
-				s.log.Warn("the file of the restore was not stored", "cube", rt.serial, "error", err)
+				s.log.Warn("the file of the restore was not stored", "cube", rt.cubeSerial(), "error", err)
 			}
 		}
 	}
