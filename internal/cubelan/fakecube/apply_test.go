@@ -332,6 +332,63 @@ func TestApplyDelayDiscardAndOff(t *testing.T) {
 	}
 }
 
+// A held apply changes nothing until its release, which applies what
+// came meanwhile in its order before it returns; holds nest, and a
+// release called twice releases once.
+func TestHoldApply(t *testing.T) {
+	t.Parallel()
+	s := startRooms(t, &Server{})
+	c := dial(t, s.ln.Addr().String())
+	room2 := cube.Target{RFAddress: 0x0a0204, RoomID: 2, Room: true}
+	release := s.HoldApply()
+	inner := s.HoldApply()
+	c.send(must(cube.CmdSetTemperature(room2, 25, cube.ModeManual, cube.Until{})))
+	c.send(must(cube.CmdSetTemperature(room2, 23, cube.ModeManual, cube.Until{})))
+	c.send(cube.CmdLockControls(cube.Target{RFAddress: 0x0a0205}, true))
+	if st := c.states(); st[0x0a0204].Mode != cube.ModeAuto || st[0x0a0205].PanelLocked {
+		t.Fatalf("applied while held: %+v %+v", st[0x0a0204], st[0x0a0205])
+	}
+	inner()
+	inner()
+	if st := c.states(); st[0x0a0204].Mode != cube.ModeAuto || st[0x0a0205].PanelLocked {
+		t.Fatalf("applied while the outer hold lasts: %+v %+v", st[0x0a0204], st[0x0a0205])
+	}
+	release()
+	st := c.states()
+	for _, rf := range []cube.RFAddress{0x0a0204, 0x0a0205, 0x0a0206} {
+		if st[rf].Mode != cube.ModeManual || *st[rf].Setpoint != 23 {
+			t.Errorf("%s after the release: %+v, want the later setpoint, 23", rf, st[rf])
+		}
+	}
+	if !st[0x0a0205].PanelLocked {
+		t.Error("the lock not applied at the release")
+	}
+	// Released, the fake applies at once again.
+	c.send(must(cube.CmdSetTemperature(room2, 19, cube.ModeManual, cube.Until{})))
+	if st := c.states()[0x0a0204]; *st.Setpoint != 19 {
+		t.Fatalf("after the hold: %+v", st)
+	}
+
+	// A command whose ApplyAfter runs out during the hold waits for the
+	// release too.
+	late := startRooms(t, &Server{ApplyAfter: 20 * time.Millisecond})
+	cl := dial(t, late.ln.Addr().String())
+	free := late.HoldApply()
+	cl.send(must(cube.CmdSetTemperature(room2, 25, cube.ModeManual, cube.Until{})))
+	testkit.Eventually(t, "the command due after ApplyAfter", func() bool {
+		late.held.mu.Lock()
+		defer late.held.mu.Unlock()
+		return len(late.held.held) == 1
+	})
+	if st := cl.states()[0x0a0204]; st.Mode != cube.ModeAuto {
+		t.Fatalf("due and applied while held: %+v", st)
+	}
+	free()
+	if st := cl.states()[0x0a0204]; st.Mode != cube.ModeManual || *st.Setpoint != 25 {
+		t.Fatalf("due during the hold, after the release: %+v", st)
+	}
+}
+
 // The control sets a device's report, takes it out of its room and puts
 // it back; over HTTP as well.
 func TestControl(t *testing.T) {
