@@ -1,4 +1,4 @@
-# Testing the web UI (v1.32.0)
+# Testing the web UI (v1.33.0)
 
 An evaluation of a Cypress suite for the web UI, against the alternatives:
 what the Playwright smoke test covers today and what it cannot do well,
@@ -1076,6 +1076,21 @@ the server's and the test's, in order,
   most of it the server's wait of a second before it connects again.
   So no earlier file's write, pairing or room list reaches a file,
   whichever worker runs it after whichever file.
+  Before the reset, and after a file's last test, no write is on its way
+  (`writes_shown`):
+  where the server still waits for a device to show a write
+  (a device's or a room's `confirmation`),
+  the fixture reads the Cube again (`POST …/refresh`),
+  whose greeting shows what the fake applied at once,
+  and waits until none is left, for 20 s, scaled;
+  one still on its way fails, naming the device or the room and the write's fields.
+  Without the poll a setpoint is shown only at a connect,
+  and a reset that came first would take it back:
+  the server would count it as not confirmed five minutes later
+  and send a room's setpoint again, into a later file.
+  No file of the suite left one (2026-11-26, 1100-en, 75 files);
+  a planted file that ended with a setpoint on its way
+  left it pending into the next file without the refresh, and none with it.
   Within a file the tests share the fake Cube, the four cases among them:
   a test that changes the fake still puts it back.
   What the server keeps in its store, users, settings, backups,

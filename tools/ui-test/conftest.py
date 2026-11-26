@@ -242,9 +242,10 @@ def watch():
     return Watch()
 
 
-def api_call(method, path, body=None, token=None):
+def api_call(method, path, body=None, token=None, timeout=5):
     """A request to the server's API from the test itself, with the test
-    token unless another is given; the answer's JSON, None for none."""
+    token unless another is given, answered within timeout seconds; the
+    answer's JSON, None for none."""
     tls = ssl.create_default_context()
     tls.check_hostname, tls.verify_mode = False, ssl.CERT_NONE
     headers = {"Authorization": "Bearer " + (token or TOKEN)}
@@ -253,7 +254,7 @@ def api_call(method, path, body=None, token=None):
         data = json.dumps(body).encode()
         headers["Content-Type"] = "application/json"
     req = urllib.request.Request(URL.rstrip("/") + "/" + path.lstrip("/"), method=method, headers=headers, data=data)
-    with urllib.request.urlopen(req, timeout=5, context=tls) as resp:
+    with urllib.request.urlopen(req, timeout=timeout, context=tls) as resp:
         text = resp.read()
     return json.loads(text) if text else None
 
@@ -267,6 +268,9 @@ CUBE = "KEQ0000100"
 # How long a reset may take, before the scale: the server connects again
 # a second after the drop (its backoff), and reads the greeting.
 RESET_SECONDS = 15
+# How long the writes a file left may take to show, before the scale: the
+# refresh that shows them reconnects to the Cube and reads its greeting.
+SHOWN_SECONDS = 20
 
 
 def newest_connected():
@@ -280,6 +284,53 @@ def cube_entry():
     """The set's Cube as GET /api/v1/cubes lists it; {} where it lists
     none."""
     return next((c for c in api_call("GET", "api/v1/cubes") or [] if c.get("serial") == CUBE), {})
+
+
+def writes_on_their_way():
+    """The writes to the set's Cube whose devices do not show them yet,
+    as the server keeps them (their confirmation, pending or
+    unconfirmed, docs/api-v1.md): a line per device and per room, naming
+    its fields; empty where there are none."""
+    out = []
+    for d in api_call("GET", f"api/v1/cubes/{CUBE}/devices") or []:
+        c = d.get("confirmation")
+        if c:
+            out.append(f"device {d.get('rf_address')} ({d.get('name') or 'unlisted'}): "
+                       f"{c.get('state')} {', '.join(c.get('fields') or [])}")
+    for r in api_call("GET", f"api/v1/cubes/{CUBE}/rooms") or []:
+        c = r.get("confirmation")
+        if c:
+            out.append(f"room {r.get('id')} ({r.get('name')}): {c.get('state')} {', '.join(c.get('fields') or [])}"
+                       f" of {', '.join(c.get('devices') or [])}")
+    return out
+
+
+def writes_shown():
+    """No write of a test is on its way when the fake Cube is reset:
+    without its poll the server reads the devices' states only at a
+    connect, so where one is on its way it reads the Cube again (POST
+    …/refresh), whose greeting shows what the fake applied at once, and
+    the server has none left. A reset that came first would take the
+    write back, and the server would count it as not confirmed five
+    minutes later and send a room's setpoint again, into a later file.
+    One still on its way after SHOWN_SECONDS, scaled, fails, naming the
+    device or the room and the write's fields."""
+    left = writes_on_their_way()
+    if not left:
+        return
+    limit = scaled(SHOWN_SECONDS)
+    try:
+        api_call("POST", f"api/v1/cubes/{CUBE}/refresh", {}, timeout=limit)
+    except (OSError, ValueError) as e:  # urllib's errors, a timeout among them
+        raise RuntimeError(f"the refresh to show the writes on their way before the fake Cube's reset failed ({e}): "
+                           f"{'; '.join(left)}") from e
+    deadline = time.monotonic() + limit
+    while left:
+        if time.monotonic() > deadline:
+            raise RuntimeError(f"a write still on its way before the fake Cube's reset, {limit:g} s after the refresh "
+                               f"that was to show it: {'; '.join(left)}")
+        time.sleep(0.05)
+        left = writes_on_their_way()
 
 
 def reset_cube():
@@ -311,14 +362,22 @@ def reset_cube():
 
 @pytest.fixture(scope="module", autouse=True)
 def known_cube():
-    """Each test file starts from the recorded Cube (AP SteadyTests,
-    Block 5): before its first test the worker's fake Cube is reset and
-    the server has read it again (reset_cube), so that no earlier
-    file's write, pairing or room list reaches it. Without the control
-    (UI_TEST_CONTROL_URL) or the token, as against a server started by
-    hand, nothing is reset."""
-    if CONTROL and TOKEN:
-        reset_cube()
+    """Each test file starts from the recorded Cube and leaves no write
+    on its way (AP SteadyTests, Block 5): before its first test the
+    worker's fake Cube is reset and the server has read it again
+    (reset_cube), so that no earlier file's write, pairing or room list
+    reaches it; before the reset, and after the file's last test, every
+    write the server waits for its devices to show is shown
+    (writes_shown), so that a failure names the file that left it.
+    Without the control (UI_TEST_CONTROL_URL) or the token, as against a
+    server started by hand, nothing is reset."""
+    if not (CONTROL and TOKEN):
+        yield
+        return
+    writes_shown()
+    reset_cube()
+    yield
+    writes_shown()
 
 
 def address_failures():
