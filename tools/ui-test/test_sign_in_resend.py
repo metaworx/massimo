@@ -19,11 +19,12 @@ and the stream is open, a write sent again would have been seen; where
 a read waited too, its second request is the moment the write would
 have gone with it."""
 import json
+import time
 
 import pytest
 
 from conftest import TOKEN, URL, api_call, clear_preferences
-from helpers import OPERATOR_PASSWORD, frames, open_personal_page, show_view, sign_out, wait_held, wait_until
+from helpers import OPERATOR_PASSWORD, frames, open_personal_page, scaled, show_view, sign_out, wait_held, wait_until
 from test_login import sign_in
 
 NOT_SENT = {"en": "not sent, since you were signed out: do it again once signed in",
@@ -60,13 +61,14 @@ class Refusal:
             route.continue_()
 
 
-def wait_count(page, sent, n, what):
-    """Waits until sent holds n requests, what naming them."""
-    for _ in range(25):
-        if len(sent) >= n:
-            return
+def wait_count(page, sent, n, what, seconds=5):
+    """Waits until sent holds n requests, for seconds (scaled), what
+    naming them."""
+    end = time.monotonic() + scaled(seconds)
+    while len(sent) < n:
+        if time.monotonic() >= end:
+            raise AssertionError(f"{what}: {len(sent)} request(s)")
         page.wait_for_timeout(200)
-    raise AssertionError(f"{what}: {len(sent)} request(s)")
 
 
 def ok(route):
@@ -83,14 +85,14 @@ def tickets(page):
 
 def back(page, seen, before):
     """Waits for the page's restart after the sign-in: a ticket asked for
-    after the before ones, and the stream open."""
+    after the before ones, and the stream open, for 10 s (scaled)."""
     assert wait_until(page, f"!({DIALOG_OPEN})", 10), "the sign-in closed"
     assert wait_until(page, "!document.body.classList.contains('signed-out')", 5), "the page is shown"
-    for _ in range(50):
-        if len(seen) > before and page.evaluate("state.eventsOpen"):
-            return
+    end = time.monotonic() + scaled(10)
+    while not (len(seen) > before and page.evaluate("state.eventsOpen")):
+        if time.monotonic() >= end:
+            raise AssertionError(f"the stream did not open again after the sign-in: {len(seen) - before} new ticket(s)")
         page.wait_for_timeout(200)
-    raise AssertionError(f"the stream did not open again after the sign-in: {len(seen) - before} new ticket(s)")
 
 
 def sign_in_key(page):

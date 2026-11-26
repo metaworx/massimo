@@ -16,7 +16,7 @@ import time
 import pytest
 
 from conftest import TOKEN, URL, api_call
-from helpers import frames, hold, mark, owner_page, replaced, safe_route, show_view, update_json, wait_held, wait_until
+from helpers import frames, hold, mark, owner_page, replaced, safe_route, scaled, show_view, update_json, wait_held, wait_until
 from test_admin_updates import across
 from test_unsaved import expire
 from test_reboot import RebootStub, iso, reboot_text
@@ -69,8 +69,9 @@ def as_next_user(page):
 
 
 def wait_reads(page, reads, n, seconds=5):
-    """Waits until reads has n entries, and the last answer has been drawn."""
-    end = time.time() + seconds
+    """Waits until reads has n entries, for seconds (scaled), and the
+    last answer has been drawn."""
+    end = time.time() + scaled(seconds)
     while len(reads) < n and time.time() < end:
         page.wait_for_timeout(50)
     frames(page)

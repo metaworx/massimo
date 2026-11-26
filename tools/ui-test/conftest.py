@@ -20,6 +20,9 @@ localStorage before the page loads, and `page` is the page loaded with
 its room tiles and its event stream open. The four cases share the one server of a worker,
 so a test that changes the server's store puts it back; the settings the page
 keeps on the server for the token's user are removed before every page.
+The page fixture's default timeout and its waits, as every wait of
+helpers.py, last their seconds times UI_TEST_SCALE (helpers.scaled),
+which run.sh passes on and raises for its retry.
 
 The page has helpers.PAGE_KIT before its own scripts, which records
 what its event stream brings. The fixture reads answers the page's own
@@ -78,7 +81,7 @@ if _WORKER.startswith("gw"):
 
 pytest.register_assert_rewrite("helpers")
 
-from helpers import PAGE_KIT, USED, Stream, reads_of, report_to, scroll_width, used_ticket_first, wait_until  # noqa: E402
+from helpers import PAGE_KIT, USED, Stream, reads_of, report_to, scaled, scroll_width, used_ticket_first, wait_until  # noqa: E402
 
 URL = os.environ.get("UI_TEST_URL", "http://127.0.0.1:8119/")
 TOKEN = os.environ.get("UI_TEST_TOKEN", "")
@@ -287,7 +290,8 @@ def page(context, case, watch, request):
     clock, under Playwright's clock. helpers.PAGE_KIT is in it before
     its own scripts, for the fixture stream, isolate_log and
     wait_log_live; what a route of safe_route's raises goes to the
-    guard."""
+    guard. Its default timeout and its waits take UI_TEST_SCALE
+    (helpers.scaled)."""
     clear_preferences()
     if TOKEN:
         context.add_init_script(f"localStorage.setItem('massimo.token', {TOKEN!r})")
@@ -296,7 +300,7 @@ def page(context, case, watch, request):
         context.clock.install()
     page = context.new_page()
     report_to(page, watch.problems)
-    page.set_default_timeout(5000)
+    page.set_default_timeout(scaled(5) * 1000)
     used = request.node.get_closest_marker("used_ticket") is not None
     if used:
         page.route("**/events/ticket", used_ticket_first(watch.refused))
@@ -314,7 +318,7 @@ def page(context, case, watch, request):
     page.on("console", on_console)
     page.on("pageerror", lambda e: watch.problems.append(f"page error: {e}"))
     page.goto(URL)
-    page.wait_for_selector(".room", timeout=10000)
+    page.wait_for_selector(".room", timeout=scaled(10) * 1000)
     if not used and not wait_until(page, "state.eventsOpen", 10):
         raise RuntimeError("the event stream did not open")
     return page
