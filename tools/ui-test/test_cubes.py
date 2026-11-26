@@ -8,18 +8,10 @@ as found, with its removed row to restore. Each test puts the server's store bac
 case uses the same server; nothing is sent to the fake Cube."""
 import json
 
-from helpers import (CUBES, assert_busy, busy_state, choose_cube, cube_item, hold, named_buttons, open_found, safe_route, scroll_width, show_view,
-                     wait_held, wait_until)
+from helpers import (CUBES, assert_busy, busy_state, choose_cube, cube_item, hold, named_buttons, open_cube_panel, open_found, safe_route, scroll_width,
+                     show_view, wait_held, wait_until)
 
 PANEL = ".cube-panel[data-serial='KEQ0000100']"
-
-
-def open_panel(page):
-    """System settings → Cubes with the fake Cube's panel open; its form."""
-    show_view(page, "system")
-    panel = page.locator(PANEL)
-    panel.locator(":scope > summary").click()
-    return panel, panel.locator("form.cube-form")
 
 
 def test_name_saved_and_taken_back(page, case):
@@ -47,7 +39,7 @@ def test_name_saved_and_taken_back(page, case):
 def test_hidden_devices(page, case):
     """The last room's devices hidden take its tile away, shown again
     bring it back."""
-    panel, form = open_panel(page)
+    panel, form = open_cube_panel(page)
     room = page.evaluate("(() => { const r = state.rooms[state.rooms.length - 1];"
                          " return { name: r.name, rfs: r.devices.map((d) => d.rf_address) }; })()")
     for rf in room["rfs"]:
@@ -112,7 +104,7 @@ def test_redraw_of_an_open_panel_loads_nothing(page, case):
     panel and asks for nothing again, so that no answer arriving later
     draws the pairing again under the user's typing; the test holds such
     a request until it has typed."""
-    panel, form = open_panel(page)
+    panel, form = open_cube_panel(page)
     assert wait_until(page, "!!document.querySelector(%r)" % (PANEL + " .pair-open"), 5), "the pairing is drawn"
     page.wait_for_timeout(500)  # the panel's own loads are in
     held = []
@@ -141,7 +133,7 @@ def test_hide_and_show_keep_what_is_typed(page, case):
     """Hide and Show again change the list of hidden devices in place:
     the name and the proxy address typed in the same form stay. Nothing
     is saved."""
-    panel, form = open_panel(page)
+    panel, form = open_cube_panel(page)
     rf = page.evaluate("state.rooms[0].devices[0].rf_address")
     form.locator("input[name=name]").fill("Typed, not saved")
     form.locator("input[name=proxy]").fill("127.0.0.1:62999")
@@ -163,7 +155,7 @@ def test_save_is_off_until_a_change_and_turns(page, case):
     settings, and also once a hidden device is added and shown again;
     held, it turns and a second click sends nothing. The PUT is answered
     with a stub, so the store keeps its name."""
-    panel, form = open_panel(page)
+    panel, form = open_cube_panel(page)
     save = form.locator("button[type=submit]")
     assert save.is_disabled(), "Save is off while nothing differs"
     form.locator("input[name=hide]").fill("0abcde")
@@ -287,7 +279,7 @@ def test_proxy_not_listening(page, case, reads):
                           "document.querySelector(\"%s .cube-top-line\").textContent.includes(%s)"
                           % (PANEL, PANEL, json.dumps(PROXY_BADGE[case.lang])), 5), "the panel's badge"
         assert PROXY_BADGE[case.lang] in page.locator("#sys-cubes .section-badges").inner_text(), "the card's badge"
-        panel, form = open_panel(page)
+        panel, form = open_cube_panel(page)
         notice = form.locator(".cube-proxy-state .notice")
         assert notice.count() == 1, "the notice under the proxy address"
         text = notice.inner_text()
@@ -332,7 +324,7 @@ def test_cube_found_elsewhere(page, case, reads):
                           % (PANEL, PANEL, json.dumps(ELSEWHERE_BADGE[case.lang])), 5), "the panel's badge"
         assert ELSEWHERE_COUNT[case.lang] in page.locator("#sys-cubes .section-badges").inner_text(), "the card's badge"
         assert ELSEWHERE_ITEM[case.lang] in page.locator(PANEL + " .cube-pill").text_content(), "the item in the Cube's pill"
-        panel, _ = open_panel(page)
+        panel, _ = open_cube_panel(page)
         notice = panel.locator(".cube-address-state .notice")
         assert notice.count() == 1, "the notice above the facts"
         text = notice.inner_text()
@@ -387,7 +379,7 @@ def test_cube_slots_low(page, case, reads):
             flag = page.locator(PANEL + " .cube-top-line .flag", has_text=badge).first
             assert SLOTS_TONE[lv] in (flag.get_attribute("class") or ""), f"the badge's tone at {lv}"
             if lv == "warn":
-                panel, _ = open_panel(page)
+                panel, _ = open_cube_panel(page)
             assert wait_until(page, "(document.querySelector(\"%s .cube-slots-state .notice\") || {}).textContent?.includes(%s)"
                               % (PANEL, json.dumps(SLOTS_TEXT[lv][case.lang])), 5), f"the notice at {lv}"
             notice = panel.locator(".cube-slots-state .notice")
@@ -420,7 +412,7 @@ def test_cube_link_stale(page, case, reads):
         assert wait_until(page, "!!document.querySelector(\"%s .cube-top-line\") && "
                           "document.querySelector(\"%s .cube-top-line\").textContent.includes(%s)"
                           % (PANEL, PANEL, json.dumps(STALE_BADGE[case.lang])), 5), "the panel's badge"
-        panel, _ = open_panel(page)
+        panel, _ = open_cube_panel(page)
         notice = panel.locator(".cube-link-state .notice")
         assert notice.count() == 1 and STALE[case.lang] in notice.inner_text(), "the notice above the facts"
         assert notice.locator(".notice-since").count() == 1, "since when"
@@ -450,7 +442,7 @@ def test_cube_in_another_network(page, case, reads):
     try:
         show_view(page, "system")
         page.evaluate("loadCubes()")
-        panel, _ = open_panel(page)
+        panel, _ = open_cube_panel(page)
         note = panel.locator(".cube-link-state .other-network")
         note.wait_for(state="visible")
         assert OTHER_NETWORK[case.lang] in note.inner_text() and "192.168.0.222" in note.inner_text(), "why, and the fallback address"
@@ -491,7 +483,7 @@ def test_cube_reboot(page, case, reads):
     try:
         show_view(page, "system")
         page.evaluate("loadCubes()")
-        panel, _ = open_panel(page)
+        panel, _ = open_cube_panel(page)
         btn = panel.locator(".cube-reboot-btn")
         assert btn.is_visible(), "the Reboot at the bottom of the panel"
         btn.click()
@@ -602,7 +594,7 @@ def test_cube_drafts_across_polls(page, case):
     name stored meanwhile by another client; a field being edited keeps
     the draft and says under it that the stored value changed, Take
     theirs taking it, Save then having nothing to send."""
-    panel, form = open_panel(page)
+    panel, form = open_cube_panel(page)
     name = form.locator("input[name=name]")
     proxy_serial = form.locator("input[name=proxy_serial]")
     before = page.evaluate("state.cubes.find((c) => c.serial === 'KEQ0000100').name || ''")
@@ -641,7 +633,7 @@ def test_card_badges_follow_the_poll(page, case, reads):
     def link(state):
         return {"state": state, "since": "2026-11-14T20:00:00+01:00", "until": "2026-11-14T20:45:00+01:00"}
     badges = page.locator("#sys-cubes .section-badges")
-    panel, _ = open_panel(page)
+    panel, _ = open_cube_panel(page)
     try:
         reads.cube("KEQ0000100", connected=False, link=link("held"))
         page.evaluate("loadCubes()")
@@ -670,7 +662,7 @@ def test_cube_facts_copy(page, case):
     """A Cube's facts: its serial, address and radio address each with a
     copy icon; the serial copies (D97-A, AP CopyFacts' component)."""
     page.context.grant_permissions(["clipboard-read", "clipboard-write"], origin=page.evaluate("location.origin"))
-    panel, _ = open_panel(page)
+    panel, _ = open_cube_panel(page)
     for fact in ("serial", "host", "radio"):
         assert panel.locator(f".cube-info [data-fact={fact}] .copy-icon").count() == 1, f"{fact} with its copy icon"
     page.evaluate("navigator.clipboard.writeText('')")

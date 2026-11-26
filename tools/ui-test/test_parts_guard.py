@@ -52,10 +52,10 @@ from typing import Callable
 
 import pytest
 
-from test_to_top import long_page, scrolled_to
+from test_to_top import long_page
 from test_users import INTEGRATION_USERS
 from helpers import (LOG_ALERT_A, LOG_ALERT_B, LOG_CMD, LOG_CMD_LINE, STATE_EVENTS_JS, RepairStub, StubLog, answered, log_lines, open_main_menu, reads_of,
-                     safe_route, show_view, stub_log_command, wait_until)
+                     safe_route, scrolled_to, show_view, stub_log_command, wait_until)
 
 # The cases the guard runs in (D176-D); in the others its tests are
 # deselected at collection (D9-A).

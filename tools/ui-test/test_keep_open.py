@@ -16,18 +16,11 @@ import json
 import pytest
 
 from conftest import URL
-from helpers import ApiReads, assert_login_card_placed, frames, scroll_width, show_view, wait_held, wait_until
+from helpers import LOGIN_BOX, ApiReads, assert_login_card_placed, frames, same_box, scroll_width, show_view, wait_held, wait_until
 from test_first_owner import APP, DIALOG_OPEN, IN_FIELD, OPEN, dice_pressed, each_language, owner_card, sent, start_page, turned, wrapped
 
-BOX = "(() => { const r = document.getElementById('login-dialog').getBoundingClientRect(); return [r.top, r.height]; })()"
 KEPT = dict(OPEN, kept_open=True)
 CONFIRM = "#keep-open-confirm"
-
-
-def same_box(page, before, what):
-    """The card where it was and as tall, within half a pixel."""
-    after = page.evaluate(BOX)
-    assert all(abs(a - b) <= 0.5 for a, b in zip(after, before)), f"{what}: the card moved, {before} → {after}"
 
 
 def keep_step(page):
@@ -97,7 +90,7 @@ def test_keep_open_asks_for_the_address(new_context, case, watch, guard):
     bodies = []
     put_route(page, bodies)
     page.locator("#setup-user").fill("owner")
-    before = page.evaluate(BOX)
+    before = page.evaluate(LOGIN_BOX)
     keep_step(page)
     same_box(page, before, "Keep it open…")
     assert page.locator("#setup-form").is_hidden(), "the form unseen"
@@ -415,7 +408,7 @@ def test_keep_open_measures(new_context, case, watch, guard, app):
     page.locator("#keep-open-back").click()
     page.locator("#setup-form").wait_for(state="visible")
     dice_pressed(page)
-    before = page.evaluate(BOX)
+    before = page.evaluate(LOGIN_BOX)
     keep_step(page)
     # the page at its start again, as the form was measured: Keep it open… is scrolled into view to be clicked
     page.evaluate("scrollTo({ top: 0, behavior: 'instant' })")
@@ -437,7 +430,7 @@ def test_the_server_named_on_the_owner_steps(new_context, case, watch, guard):
     line.wait_for(state="visible")
     assert page.evaluate("document.getElementById('login-title').nextElementSibling.id") == "login-server", "after the title"
     assert page.evaluate("document.getElementById('login-title').textContent === t('setup.title')"), "the form's title alone"
-    before = page.evaluate(BOX)
+    before = page.evaluate(LOGIN_BOX)
     keep_step(page)
     assert line.is_visible(), "on the confirmation too"
     assert page.evaluate("document.getElementById('login-title').textContent === t('keepOpen.title')"), "the confirmation's title alone"

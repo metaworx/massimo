@@ -186,6 +186,14 @@ def scroll_settled(page, seconds=3):
     })""", scaled(seconds) * 1000)
 
 
+def scrolled_to(page, y):
+    """Scrolls the window to y at once and waits until it rests there
+    (scroll_settled); the scroll it rests at."""
+    page.evaluate("(y) => window.scrollTo({top: y, behavior: 'instant'})", y)
+    assert scroll_settled(page), f"the page rests at {y}"
+    return page.evaluate("window.scrollY")
+
+
 # The ApiReads of each page, the first made for it (api_reads).
 _API_READS = weakref.WeakKeyDictionary()
 
@@ -287,6 +295,13 @@ def answered(page, held=(), seconds=5):
     reads = api_reads(page)
     assert reads.answered(seconds, held=held), \
         f"the page's reads answered within {scaled(seconds):g} s: still open {', '.join(reads.pending()) or 'none'}"
+
+
+def load_cubes(page):
+    """A load of the Cubes' list, as the poll makes it (loadCubes()), and
+    the reads it sets off answered (answered)."""
+    page.evaluate("loadCubes()")
+    answered(page)
 
 
 def scroll_width(page):
@@ -1067,6 +1082,18 @@ def assert_login_card_centred(page, what):
     controls_reached(look, look["innerHeight"], what)
 
 
+# The sign-in card's top and height, for a test that checks the card
+# stays where it was (same_box).
+LOGIN_BOX = "(() => { const r = document.getElementById('login-dialog').getBoundingClientRect(); return [r.top, r.height]; })()"
+
+
+def same_box(page, before, what):
+    """The sign-in card where it was and as tall (LOGIN_BOX, before taken
+    earlier), within half a pixel."""
+    after = page.evaluate(LOGIN_BOX)
+    assert all(abs(a - b) <= 0.5 for a, b in zip(after, before)), f"{what}: the card moved, {before} → {after}"
+
+
 def centred_across(m, what):
     """The card of LOGIN_CARD's measure m in the middle of the window's
     width, and its title's text in the middle of the card, each within
@@ -1152,6 +1179,17 @@ VIEWER = {"mode": "users", "user": {"name": "viewer1", "role": "viewer", "has_pa
           "role": {"key": "viewer"}, "capabilities": ["read", "preferences"], "token": {"kind": "session"}}
 
 
+def stub_me(page, capabilities):
+    """The page signed in with these capabilities: GET /api/v1/me answered
+    as VIEWER's with them (safe_route), and read (loadMe()); the owner's
+    token still answers the other reads. The route as routed; a test
+    takes it away with page.unroute("**/api/v1/me")."""
+    me = dict(VIEWER, capabilities=capabilities)
+    routed = safe_route(page, "**/api/v1/me", lambda route: route.fulfill(status=200, content_type="application/json", body=json.dumps(me)))
+    page.evaluate("loadMe()")
+    return routed
+
+
 # The pages of the main area: how a user opens each, and the section it
 # shows.
 VIEW_BUTTON = {"tiles": "#view-tiles"}
@@ -1181,6 +1219,23 @@ def show_view(page, view):
         page.locator(VIEW_BUTTON[view]).click()
     page.locator(VIEW_SECTION[view]).wait_for(state="visible")
 
+
+# The fake Cube's panel in System settings → Cubes.
+CUBE_PANEL = "#cubes-list .cube-panel[data-serial='KEQ0000100']"
+
+
+def open_cube_panel(page):
+    """System settings → Cubes with the fake Cube's panel open, opened by
+    its name in the summary where it is closed (a click elsewhere on the
+    summary may meet one of its controls); the panel and its form, shown."""
+    show_view(page, "system")
+    panel = page.locator(CUBE_PANEL)
+    if panel.get_attribute("open") is None:
+        panel.locator(":scope > summary .cube-head-who").click()
+    form = panel.locator("form.cube-form")
+    form.wait_for(state="visible")
+    return panel, form
+
 # --- the same element ----------------------------------------------------
 
 def mark(page, selectors):
@@ -1192,6 +1247,12 @@ def mark(page, selectors):
 def replaced(page, selectors):
     """The selectors whose element is not the one mark marked, or is gone."""
     return page.evaluate("(ss) => ss.filter((s) => { const e = document.querySelector(s); return !e || e.__mark !== s; })", selectors)
+
+
+def same_and_open(page, selector):
+    """Whether the element of selector, a details, is the one mark marked
+    and is open: a list that a load left in place and open."""
+    return page.evaluate("(s) => { const d = document.querySelector(s); return !!d && d.__mark === s && d.open; }", selector)
 
 
 def focus_in_turn(page, click, focused):

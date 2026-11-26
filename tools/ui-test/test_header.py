@@ -6,7 +6,7 @@ page 👤 opens, the page shown in the address, each page's own scroll
 position, and expert mode's line of the chosen Cube's radio budget."""
 import json
 
-from helpers import (CUBES, VIEWER, assert_busy, css_hidden, held_poll, hold, open_personal_page, scaled, scroll_settled, scroll_width,
+from helpers import (CUBES, VIEWER, assert_busy, css_hidden, held_poll, hold, open_personal_page, scaled, scroll_settled, scroll_width, scrolled_to,
                      settled, show_view, wait_held, wait_until)
 
 # The symbol a page button shows, drawn in an svg of its own outside the
@@ -421,13 +421,6 @@ SPACERS = """() => { for (const id of ['rooms', 'system']) {
   d.style.height = '2000px';
   document.getElementById(id).appendChild(d);
 } }"""
-
-
-def scrolled_to(page, y):
-    """Scrolls the window to y at once and waits until it rests there."""
-    page.evaluate("(y) => window.scrollTo({top: y, behavior: 'instant'})", y)
-    assert scroll_settled(page), f"the page rests at {y}"
-    return page.evaluate("window.scrollY")
 
 
 def test_each_page_keeps_its_scroll(page, case):

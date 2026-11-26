@@ -10,7 +10,7 @@ from helpers import wait_until
 SHOWN = "!document.getElementById('open-banner').classList.contains('hidden')"
 
 
-def stub_me(page, mode):
+def stub_mode(page, mode):
     """GET /api/v1/me answers as a server in the given mode would, to a
     caller that is not on the local network (no first-owner form)."""
     body = json.dumps({"mode": mode, "user": None, "role": None, "capabilities": [], "setup": False})
@@ -24,7 +24,7 @@ def test_open_server_banner(page):
     again."""
     banner = page.locator("#open-banner")
     assert banner.is_hidden(), "no banner on a server with users"
-    stub_me(page, "open")
+    stub_mode(page, "open")
     page.evaluate("loadMe()")
     assert wait_until(page, SHOWN, 5), "the banner on an open server"
     text = banner.inner_text()
@@ -32,7 +32,7 @@ def test_open_server_banner(page):
     header = page.locator("header.top").bounding_box()
     assert banner.bounding_box()["y"] >= header["y"] + header["height"] - 1, "under the header's rule"
     page.unroute("**/api/v1/me")
-    stub_me(page, "none")
+    stub_mode(page, "none")
     page.evaluate("loadMe()")
     assert wait_until(page, "document.getElementById('open-banner-text').textContent === t('open.textNoStore')", 5), \
         "the text for a server without a store"

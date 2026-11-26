@@ -243,6 +243,13 @@ a request the page no longer waits for, and reports to the guard any
 other error and a request it had to abort), `undo` (a cleanup's step
 that says what it could not undo) and `cleanup`
 (every step of a cleanup runs, the first error raised at the end).
+What several test files did alike is there too:
+`load_cubes` (a load of the Cubes' list, its reads answered),
+`same_and_open` (a list that `mark` marked, still the same and open),
+`stub_me` (the page signed in with given capabilities),
+`open_cube_panel` (the fake Cube's panel in System settings, open),
+`same_box` (the sign-in card where it was, by `LOGIN_BOX`)
+and `scrolled_to` (the window scrolled at once, and at rest).
 
 The four cases share the one server of a worker,
 so a test that changes the server's store puts it back;
