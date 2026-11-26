@@ -262,7 +262,7 @@ and the OpenAPI file carries each operation's as `x-capability`:
 | `backup` | download a backup, and the backups the server keeps | `GET …/backup`, `GET`/`POST …/backups`, `GET …/backups/{id}`, `GET …/backups/{id}/diff`, `GET /api/v1/backups/unserved` |
 | `restore` | plan and run a restore, delete a kept backup | `POST …/restore/plan`, `POST …/restore`, `DELETE …/backups/{id}` |
 | `repair` | the repairs of a Cube's rooms and devices: their communication errors reset, a device's configuration re-sent from its room, a device placed or listed where the Cube and its list disagree, a room's master named, a room re-linked; "unlink all and re-link" needs `structure` as well ("Repairs", below) | `GET`/`POST …/repair/…`; `GET`/`POST …/repair/unlink-relink` with `structure` as well |
-| `guests` | create, invite, change, disable and remove users whose role is `guest`, and give them an end date | the users routes, `GET`/`POST`/`PUT`/`DELETE /api/v1/users…`, for users whose role is `guest` |
+| `guests` | create, invite, change, disable and remove users whose role is `guest`, and give them an end date: regular ones, or for a call through an integration that integration's own, which makes no user ("Users", below) | the users routes, `GET`/`POST`/`PUT`/`DELETE /api/v1/users…`, for those users |
 | `users` | every user: create, role, disable, password, tokens, the identities they sign in with | `GET`/`POST /api/v1/users`, `GET`/`PUT`/`DELETE …/users/{name}`, `GET`/`POST …/users/{name}/tokens`, `DELETE …/users/{name}/tokens/{id}`, `POST …/users/{name}/register`, `GET`/`POST`/`PUT`/`DELETE …/users/{name}/identities…` |
 | `passwords` | set the password of a user (the manager's by default) | `GET /api/v1/users`, `GET …/users/{name}`, `PUT …/users/{name}` with a password, `POST …/users/{name}/register` |
 | `roles` | a role's capabilities and name, create and delete roles | `GET`/`POST /api/v1/roles`, `PUT`/`DELETE /api/v1/roles/{key}` |
@@ -276,7 +276,7 @@ and the OpenAPI file carries each operation's as `x-capability`:
 | `reboot` | reboot the computer the server runs on, where its owner switched that on; includes `restart`; seeded for no role | `GET`/`POST`/`DELETE /api/v1/reboot` |
 | `audit` | read the audit | `GET /api/v1/audit` |
 | `auth` | the OpenID Connect providers users sign in through; seeded for no role | `GET`/`POST /api/v1/providers`, `PUT`/`DELETE /api/v1/providers/{key}` |
-| `integrations` | the registered integrations: requests, approval, their maximum, their users and links ("Integrations", below) | `GET /api/v1/integrations`, `GET …/integrations/found`, `GET`/`PUT`/`DELETE …/integrations/{uuid}`, `POST …/integrations/{uuid}/approve`, `POST …/integrations/{uuid}/refuse`, `POST …/integrations/{uuid}/accept-instance`, `PUT …/integrations/{uuid}/users/{id}` |
+| `integrations` | the registered integrations: requests, approval, their maximum, their users and links ("Integrations", below); an integration's users but those stored as `owner`: their name, state, end date, keys and removal, and a role within their integration's maximum ("Users", below) | `GET /api/v1/integrations`, `GET …/integrations/found`, `GET`/`PUT`/`DELETE …/integrations/{uuid}`, `POST …/integrations/{uuid}/approve`, `POST …/integrations/{uuid}/refuse`, `POST …/integrations/{uuid}/accept-instance`, `PUT …/integrations/{uuid}/users/{id}`; the users routes for an integration's users |
 
 <!-- BEGIN GENERATED PARTIAL docs/fragments/_capability-rules.md - do not edit; run "GUIDELINES/shared/tools/sync-docs.sh" -->
 `update` and `reboot` each include `restart`, since each restarts the server:
@@ -297,19 +297,30 @@ A user changes only users whose role has no capability its own lacks,
 and gives only such roles: an owner changes everyone,
 nobody but an owner changes an owner or gives the role `owner`,
 and a role made with `users` but without, say, `restore` changes no manager.
+A holder of `integrations` changes an integration's user whatever its role,
+but one stored as `owner`, which stays an owner's alone,
+and gives it only a role it outranks
+that lies within the integration's maximum (AP AccessEnds, D47-A, D48-A):
+so the manager, which does not outrank `integration`,
+moves such a user off it, and an owner gives it back.
 <!-- END GENERATED PARTIAL docs/fragments/_capability-rules.md -->
 
 The users routes say what the caller may do with each user they list
-(`"may": {"manage": true, "password": true, "roles": ["guest", "viewer"]}`):
+(`"may": {"manage": true, "password": true, "roles": ["guest", "viewer"], "beyond": false}`):
 change it, set its password,
 and give it the roles of `roles`, in the roles' order,
 empty where it may give none;
 of those, for an integration's user only the roles within the role `integration`
 and its integration's maximum, and `integration` itself ("Integrations"),
 never `owner`.
+`beyond` says that an integration's user's role, as stored, lies beyond those,
+`false` for every other user:
+a role `roles` leaves out may lie within them and be one the caller does not outrank.
 So a holder of `users` without `roles` or `integrations` learns from it
 the keys of the roles it outranks and, for each integration's user,
 which of them lie within that integration's maximum.
+A holder of `integrations` may manage an integration's user but one stored as `owner`,
+and set no password of it ("Users", below).
 
 The default roles and their sets are those of docs/store.md section 6:
 `owner` has every capability and cannot be changed,
@@ -709,11 +720,25 @@ The session's token so never sits in a URL, a history or a proxy's log.
 `GET` and `POST /api/v1/users`; `GET`, `PUT` and `DELETE /api/v1/users/{name}`.
 The users of the store (docs/store.md section 6), each with one role.
 The routes need `users`; a holder of `guests` reaches them for users whose role
-is `guest`, and a user reaches its own name (see below).
+is `guest`, regular ones,
+or for a call through an integration that integration's own;
+a holder of `integrations` for an integration's users, whatever their role but `owner`;
+and a user reaches its own name (see below),
+but never through an integration:
+a call for an integration's user linked to a Massimo user
+has none of the rights of that user's own name.
+A call through an integration is one with its key
+or with a key one of its users holds from before ("Acting for an integration's users",
+below);
+another integration's key reaches none of its users,
+and a holder of `guests` that comes through no integration none of an integration's
+(AP AccessEnds, D41-A4 and A5).
 Every one answers `503` on a server without a store.
 
 `GET /api/v1/users` lists the users by name, as `GET /api/v1/me` shows a user;
-a `guests` holder sees the guests and itself.
+a holder of `users` or `passwords` sees every user,
+any other caller the users it may change, as above, and itself
+(AP AccessEnds, D45-A).
 Each user carries `display`, how it is shown:
 its `display_name`, else its `name`;
 an integration's user ("Integrations", below) by the chain
@@ -757,7 +782,9 @@ the name the app gives the server, not the host's own name (docs/ui.md).
 A `record` is not checked: the server never sees the password in it,
 so a client that registers by OPAQUE holds its users to the rule itself.
 A password set before the rule signs in as it is.
-A `guests` holder creates guests only (`403` otherwise).
+A `guests` holder creates guests only (`403` otherwise),
+and a call through an integration none:
+every user made here is a regular one.
 The answer is `201` with the user; a name in use is `409`, a bad name,
 an unknown role or an unknown field `400`,
 too many password checks at once `503` with `Retry-After`, as for the login.
@@ -789,9 +816,20 @@ A user changes its own `display_name` and, with `current_password`
 or a `proof` from the sign-in by OPAQUE, its own `password` or `record`;
 a user with keys only (`has_password` false) sets its first one without,
 as its key could as well make another key;
-the rest needs `users` (`guests` for a guest), a password `passwords` too,
+the rest needs `users` (`guests` for a guest it reaches, above),
+a password `passwords` too,
 each for a user the caller outranks ("Authentication");
+a holder of `integrations` changes an integration's user's `display_name`,
+`disabled` and `expires_at`, and removes it,
+whatever its role but `owner`,
+and gives it a `role` it outranks within the integration's maximum,
+any beyond it `403` (AP AccessEnds, D47-A, D48-A);
 the answer is the user with its `may`, as the list gives it.
+A refusal of an integration's rule says why:
+`a call through an integration changes its own integration's users alone`,
+`the user <name> is an integration's: its own integration, a holder of integrations or of users changes it`
+to a holder of `guests` of no integration,
+and `the role <key> lies beyond the maximum of its integration`.
 A `password` is held to the rule of `POST`,
 before anything of the request is written,
 and for an integration's user it is `403` before that, whatever its length;
@@ -824,6 +862,11 @@ of the removal in UTC (`-<id>` added where that is taken),
 which frees the name; `{"ok": true, "name": "anna"}`.
 The last enabled owner without an end date stays (`409`);
 a user cannot remove itself.
+An integration's own user, `<uuid>:`, which holds its key,
+and its user `<uuid>:system` stay (`403`), for every caller:
+`DELETE /api/v1/integrations/{uuid}` removes the integration itself
+and keeps both, so that a request from the same installation can be attached to it
+("Integrations", below).
 The user that holds the settings file's key, `MASSIMO_API_TOKEN`,
 stays too (`409`), as the key's revoke is refused (below, "Tokens"):
 the removal would revoke the key with the user's tokens,
@@ -873,7 +916,9 @@ a session ends itself with `POST /api/v1/logout`.
 A user's identities at the OpenID Connect providers
 ("Sign-in through OpenID Connect" above),
 with the rules of access of the users routes:
-`users`, or `guests` for a guest's;
+`users`, `guests` for a guest's it reaches,
+or `integrations` for an integration's user's, to list and remove alone
+("Acting for an integration's users", "No way in of its own");
 a user lists its own, removes its own and links its own,
 but assigns and changes none.
 
@@ -1119,9 +1164,28 @@ on a server with regular users: on an open server the header is not read
   and `integration` itself,
   which a user moved off it is given back, by the rank rule as any role;
   never `owner`, which holds every capability.
-  A role beyond them is taken all the same, and acts within them;
+  A role beyond them is taken all the same from a holder of `users`,
+  and acts within them,
+  and refused, `403`, to a holder of `integrations` (AP AccessEnds, D48-A);
   one stored so, or left beyond a maximum lowered later,
   is offered no more once another is given.
+- **Who manages them:** an owner;
+  a holder of `users`, by the rank rule;
+  a holder of `integrations`, every integration's user
+  but one stored as `owner`, which stays an owner's alone,
+  giving a role it outranks within the maximum;
+  and the integration's own calls, where their chain holds `guests`,
+  its users stored as `guest`, by the rank rule.
+  No other integration's key changes them,
+  nor a holder of `guests` that comes through no integration,
+  and no call through an integration changes or makes a regular user,
+  nor has the rights of the own name of the user it is linked to:
+  no key, password, record, identity, link, name or field of that user's
+  (AP AccessEnds, D41-A4 and A5);
+  that user changes them signed in itself.
+  Disabling one stops its calls, a linked one's too;
+  removing one does not, where it is linked: disable it, or unlink it.
+  Its own user and its system user are not removed ("Users", above).
 - **Without the header** the key acts as the integration itself:
   its role and its maximum (an integration's own polls and stream),
   within the role `integration` as every call through it.

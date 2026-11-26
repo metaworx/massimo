@@ -585,11 +585,19 @@ export interface User {
   /**
    * In the users routes' answers: what the caller may do with the user, change
    * it beyond its own name and password (manage) or set its password
-   * (password), and the roles it may give it (roles); absent elsewhere
+   * (password), the roles it may give it (roles), and whether its role as
+   * stored lies beyond its integration's maximum (beyond); absent elsewhere
    */
   may?: {
     manage: boolean;
     password: boolean;
+    /**
+     * An integration's user's role, as stored, lies beyond the role integration
+     * and its integration's maximum, within which it acts all the same; false
+     * for every other user. A role that roles leaves out may lie within them
+     * and be one the caller does not outrank
+     */
+    beyond: boolean;
     /**
      * The keys of the roles the caller may give the user, in the roles' order,
      * empty where it may give none; of those, for an integration's user only

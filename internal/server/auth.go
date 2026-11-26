@@ -78,8 +78,9 @@ var capabilities = []string{
 // repair by 0022): every capability but those that manage people,
 // sign-in and the integrations themselves, so that an integration can
 // never widen its own users. It bounds every call through an
-// integration (docs/api-v1.md, "Integrations"); guests are an
-// integration's to manage.
+// integration (docs/api-v1.md, "Integrations"); guests is an
+// integration's for its own users stored as guest (users_api.go,
+// guestOf).
 var integrationCeiling = []string{
 	"read", "preferences", "setpoint", "lock", "configure", "rename", "structure", "pair", "discover", "backup", "restore", "repair",
 	"guests", "cubes", "cubes.reboot", "settings", "update", "restart", "reboot", "audit",
@@ -956,14 +957,16 @@ func (s *Server) touch(ctx context.Context, tok store.Token, ip string, now time
 }
 
 // allowed reports whether a principal may call a route registered with
-// a capability. The users routes also admit a guests or passwords
-// holder and a user's own name, and the device route a structure
-// holder; the handlers narrow what those may do.
+// a capability. The users routes also admit a guests, passwords or
+// integrations holder (AP AccessEnds, D46-A) and a user's own name, but
+// not to a call through an integration (users_api.go, selfOf), and the
+// device route a structure holder; the handlers narrow what those may
+// do (users_api.go, access).
 func (s *Server) allowed(p *principal, capability string, r *http.Request) bool {
 	if capability == capAny || p.has(capability) {
 		return true
 	}
-	if capability == "users" && (p.has("guests") || p.has("passwords") || p.named() && strings.EqualFold(r.PathValue("name"), p.user.Name)) {
+	if capability == "users" && (p.has("guests") || p.has("passwords") || p.has("integrations") || selfOf(p, r.PathValue("name"))) {
 		return true
 	}
 	if capability == "rename" && r.Pattern == "PUT /api/v1/cubes/{sn}/devices/{rf}" && p.has("structure") {
