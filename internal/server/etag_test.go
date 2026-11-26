@@ -6,11 +6,11 @@ package server
 import (
 	"encoding/json"
 	"net/http"
+	"slices"
 	"strings"
 	"testing"
 	"time"
 
-	"go.metaworx.ch/massimo/internal/cubelan/fakecube"
 	"go.metaworx.ch/massimo/internal/testkit"
 	"go.metaworx.ch/massimo/internal/testkit/cubewatch"
 )
@@ -55,10 +55,15 @@ func putProgram(t *testing.T, url, ifMatch, body string) (int, map[string]any) {
 
 // A programme's tag covers the room: a write with an old tag is refused,
 // one with the current tag goes, a write still on its way counts, and a
-// member's own write changes the room's tag.
+// member's own write changes the room's tag. The write is on its way
+// while the fake Cube holds its apply, until the test releases it.
 func TestProgramTag(t *testing.T) {
 	t.Parallel()
-	r := startServer(t, storedRooms(), withFake(func(fc *fakecube.Server) { fc.ApplyAfter = 600 * time.Millisecond }), fastFollowUps(), quiet())
+	// The follow-up re-reads every 100 ms for a minute and ends at the
+	// first re-read that shows the write: only a held one waits longer.
+	r := startServer(t, storedRooms(), editOptions(func(o *Options) {
+		o.FollowUpDelays = slices.Repeat([]time.Duration{100 * time.Millisecond}, 600)
+	}), quiet())
 	fc, ts := r.fc, r.ts
 	base := ts.URL + "/api/v1/cubes/KEQ0000100/"
 	room, tag := programWith(t, base+"rooms/2/program")
@@ -81,6 +86,8 @@ func TestProgramTag(t *testing.T) {
 	if got := received.Since(sent, cubewatch.Type('s')); len(got) != 0 {
 		t.Fatalf("a refused write sent %v", got)
 	}
+	release := fc.HoldApply() // the room's thermostats asleep: the write stays on its way
+	t.Cleanup(release)
 	code, body := putProgram(t, base+"rooms/2/program", `W/"`+tag+`"`, monday)
 	if code != 200 || body["etag"] == tag || body["etag"] == "" {
 		t.Fatalf("the current tag: %d %v", code, body)
@@ -94,6 +101,7 @@ func TestProgramTag(t *testing.T) {
 	if code, _ := putProgram(t, base+"rooms/2/program", `"`+tag+`"`, monday); code != 412 {
 		t.Fatalf("a tag from before the write on its way: %d", code)
 	}
+	release() // they wake and take it
 	// Confirmed: the same tag, no longer pending.
 	testkit.Eventually(t, "the written programme confirmed", func() bool {
 		room, now = programWith(t, base+"rooms/2/program")
