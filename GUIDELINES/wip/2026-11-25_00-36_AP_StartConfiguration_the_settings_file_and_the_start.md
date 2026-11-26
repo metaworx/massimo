@@ -1,25 +1,23 @@
-# AP StartConfiguration v1.2: The settings file and the start
+# AP StartConfiguration v1.3: The settings file and the start
 
 ## TL;DR
 
-The settings file, the reload, the start and `massimo install` disagree
-in small ways that cost a lockout, a lost setting, a looping service or
-a leaked key.
-This plan gives them one parser and one set of rules, and has install
-refuse what the next start refuses.
+The settings file, the reload, the start and `massimo install` disagreed
+in ways that cost a lockout, a lost setting, a looping service or a
+leaked key.
+This plan gives them one parser and one set of rules; install refuses
+what the next start refuses.
 
-- `install -settings`, no file → refused before any write
-- a value the start refuses → install refuses it; a kept file's → a warning
-- a kept file install cannot read → its https drop-ins kept
-- Windows, a name in another case → its secret hidden; reload, config see it
-- capability tables → AP CapabilityTable (D55)
-- postinst, a byte order mark → skipped
-- the plain Cube's log lines → its serial, once learned
-- a hostname against the row's IP → tied, a lookup within 2 s
-- fakecube's `Close` → no panic; Windows test binaries → swept
-
-Blocks 1 to 13 are built and merged (#425, #427, #430, #440, #443);
-v1.2 adds Blocks 14 to 22, in five pull requests from `main`.
+- Blocks 1 to 22 → merged (#425, #427, #430, #440, #443, #458 to #462);
+  Block 18 → AP CapabilityTable (#457)
+- v1.3: the v1.2 run's findings → Blocks 23 to 28
+- unknown `MASSIMO_` name → its value hidden in config and the API
+- Linux, a Cube's name in another case in the environment → not read
+- `tls: tls:` → `tls:`; relative `-acme-dns-hook` → refused
+- plain tie → the row's address in its note; IPv6 zone → case kept
+- postinst, UTF-16 → no "binary file matches"
+- Blocks 23–27 → one pull request into `maint/0.17`; 28 → one into `main`
+- the four NOTEs → folded in
 
 ### Blocks
 
@@ -36,15 +34,21 @@ v1.2 adds Blocks 14 to 22, in five pull requests from `main`.
 11. PlainProxy: a plain Cube's proxy listens for it beside the store's Cubes (merged, #430)
 12. Include: `update` and `reboot` include `restart` (merged, #443)
 13. SettingsRefused: `install -settings` refuses a file serve refuses (merged, #440)
-14. SettingsThere: `install -settings` refuses a path that is not there, before any write
-15. SettingsValues: install runs the start's value checks; `-tls-http` names itself
-16. KeptUnread: a kept file install cannot read keeps its TLS drop-ins
-17. WindowsNames: a name in another case: its secret hidden, then seen by the reload and config
-18. Tables: carried to AP CapabilityTable
-19. PostinstBom: postinst skips a byte order mark before it compares
-20. PlainLogs: the plain Cube's log lines read its serial on each line
-21. PlainResolve: a hostname and an IP of one Cube tie the plain lines to its row
-22. TestKit: fakecube's `Close` before it served; the Windows test binaries swept
+14. SettingsThere: `install -settings` refuses a path that is not there, before any write (merged, #462)
+15. SettingsValues: install runs the start's value checks; `-tls-http` names itself (merged, #462)
+16. KeptUnread: a kept file install cannot read keeps its TLS drop-ins (merged, #462)
+17. WindowsNames: a name in another case: its secret hidden, then seen by the reload and config (merged, #458)
+18. Tables: carried to AP CapabilityTable (merged there, #457)
+19. PostinstBom: postinst skips a byte order mark before it compares (merged, #459)
+20. PlainLogs: the plain Cube's log lines read its serial on each line (merged, #461)
+21. PlainResolve: a hostname and an IP of one Cube tie the plain lines to its row (merged, #461)
+22. TestKit: fakecube's `Close` before it served; the Windows test binaries swept (merged, #460)
+23. ConfigSecrets: config and the API hide the value of a name Massimo does not know (`maint/0.17`)
+24. NameCase: `PerCubeValue` reads a Cube's name by its key, the serial in any case (`maint/0.17`)
+25. TlsWords: "tls: " said once; a relative `-acme-dns-hook` refused (`maint/0.17`)
+26. PlainTies: the tie's note names the row's address; an IPv6 zone keeps its case (`maint/0.17`)
+27. PostinstUtf16: postinst strips NUL bytes before its grep (`maint/0.17`)
+28. Hygiene: the backup's lines read `cubeSerial()`; the update's removal error named (`main`)
 
 ## Discussion
 
@@ -73,6 +77,17 @@ and `PLAN++`, for this revision with every other decision's option A,
 committed onto main, and its blocks built as pull requests from `main`,
 nothing merged.
 That session's answer carried D55 to its plan, AP CapabilityTable.
+The owner merged v1.2's five pull requests (#458 to #462).
+
+On 2026-11-26, at the cleanup gate:
+`PLAN D61 as a revision or new plan onto 0.17`, D61 being how to carry
+the v1.2 run's findings outside the plan.
+The owner also froze 0.17: it is on `maint/0.17`, its fixes target that
+branch and are merged upward into `main`, which carries 0.18.
+At the TL;DR gate: `D63 B incorporating its NOTES` and `PLAN++`, for this
+revision with every other decision's option A and its four NOTEs folded
+in, committed onto `maint/0.17`, and its blocks built as two pull
+requests (D69-A).
 
 ### What is decided
 
@@ -135,19 +150,25 @@ The owner, 2026-11-24:
 - **D25-A to D27-A, D31-A:** the three points outside the start had no plan,
   and are merged (#413).
 
-The owner, 2026-11-25, at the run's completion gate, on the points the run
-left open:
+The owner, 2026-11-25, at the run's completion gate, on the three points
+the v1.0 run left open:
 
-- **D36-A. The plain proxy of a Cube the store has:** the store's rule, as
-  built in Block 11: the plain lines are that Cube's, compared with its
-  row; the plain proxy is a difference with its button.
+- **D36-A. The plain proxy of a Cube the store has** (the run's point 1):
+  the store's rule, as built in Block 11: the plain lines are that Cube's,
+  compared with its row; the plain proxy is a difference with its button.
+  The run's option B, the row's empty proxy filled from the plain line at
+  the tie, was not taken.
 - **D37. Who may restart:** `reboot` and `update` each include `restart`,
   in the owner's words.
   Whether `reboot` also includes `update` was left open: an update may bring
   new or incompatible features, while a reboot is mainly for maintenance.
+  It settled the run's point 2, `reboot` reading `GET /api/v1/restart`:
+  a holder of `reboot` holds `restart` through it, so the reboot's question
+  shows what the next start refuses to every holder of `reboot`, unless
+  `restart` is disabled for every role (`docs/ui.md`).
 - **D38-B. `install -settings` with a file serve refuses** (a line that is
-  not `KEY=VALUE`): refused before any write, as UTF-16 is, in a pull
-  request of its own.
+  not `KEY=VALUE`; the run's point 3, built as copied with a warning):
+  refused before any write, as UTF-16 is, in a pull request of its own.
 
 And at the gate that offered this revision, with `PLAN++`:
 
@@ -240,15 +261,42 @@ option A, D55 aside:
   Block 22, the test kit.
   The blocks of one pull request share code and tests.
 
+The owner, 2026-11-26, at the cleanup gate and at the TL;DR gate, with
+`PLAN++`, each option A but D63:
+
+- **D61-A. The v1.2 run's findings outside the plan:** this plan's
+  Blocks 23 to 28, not entries of the roadmap.
+- **D62.** Moot, since the plan does not retire.
+- **D63-B. A revision, not a new plan,** with its NOTEs folded in.
+- **D64-A. Which line:** items 1 to 4 and 7 to 9 on `maint/0.17`, as
+  fixes of 0.17; items 5 and 6 on `main` only.
+- **D65-A. The value of a name Massimo does not know:** `massimo config`
+  and `GET /api/v1/config` hide it, for every such `MASSIMO_` name; the
+  name and its "typo?" still show.
+- **D66-A. A relative `-acme-dns-hook`:** install refuses it on every
+  system and asks for the absolute path.
+- **D67-A. postinst over a UTF-16 file:** it strips NUL bytes
+  (`tr -d '\000'`) before its grep.
+- **D68-A. Block 28 on `main`;** item 6 narrowed to the one removal whose
+  error hides the cause.
+- **D69-A. Where the commits go:**
+  - this revision's commit straight onto `maint/0.17`, since `commit-msg`
+    looks up a cited plan in the commit's own tree, and `maint/0.17`
+    merged upward into `main` at once;
+  - Blocks 23 to 27 as one pull request into `maint/0.17`, and Block 28
+    as one into `main`.
+- **D70-A. Block 23's fragment** goes under Security.
+
 ### Where it meets other plans
 
 - **AP Packaging** owns `packaging/env.template`; Block 1 adds one comment
   line to it.
-  Block 19 changes `packaging/deb/postinst`, which none of its blocks
-  touches (D56-A).
-- **AP CapabilityTable** takes the capability tables of `docs/api-v1.md`
+  Blocks 19 and 27 change `packaging/deb/postinst`, which none of its
+  blocks touches (D56-A).
+- **AP CapabilityTable** took the capability tables of `docs/api-v1.md`
   and `docs/store.md` §6, item 7 of v1.2's analysis (D55); Block 18 is
   carried to it.
+  It merged as #457 and retired.
 - **AP LogAlerts** owns the settle table, which Block 5 changes;
   AP RadioHealth names `logalerts.go`.
 - **AP UiParts** owns the parts' rules; Block 7 follows them in
@@ -259,7 +307,103 @@ option A, D55 aside:
   It has retired, with AP AutoUpdate.
 - **AP IntegrationUsers** owns the integrations' ceiling and maximum, which
   Block 12 reads; AP UiParts the role editor's part (`src/admin/`).
+- **AP MaintBranch** cut `maint/0.17` at 0.17's freeze (`make freeze`).
+  Fixes of 0.17 target it, and the session that merges into it merges it
+  upward into `main` at once (MaintBranch.D1-A).
+  Blocks 23 to 27 are such fixes (D64-A); Block 28 is `main`'s alone.
+- **AP SteadyTests** fixed `TestProxyFailingInTheAPI`, a finding of the
+  v1.2 run.
 - Whichever plan lands second in a shared file carries the other's change.
+
+### How the runs went
+
+Each block was built by an Opus sub-agent and read by an independent Opus
+second reader, two for Block 15; the builder fixed the reader's points,
+and the session verified each commit and made it.
+In v1.2 every test failed on its planted fault, the Windows ones through
+interop, and nothing reached real hardware.
+Where a block went differently from its plan, it says so under it,
+"As built".
+
+| Pull request | Blocks | Base |
+|--------------|--------|------|
+| #425 | 1 to 3, the parser | `main` |
+| #427 | 4 to 7, the reload and its signs | #425's branch |
+| #430 | 8 to 11, the start and Windows | #427's branch |
+| #440 | 13 | `main` |
+| #443 | 12 | `main`, merged in again after #440 |
+| #458 | 17 | `main` |
+| #462 | 14 to 16 | `main`, with #458's branch merged in |
+| #459 | 19, with D43's comment | `main` |
+| #461 | 20 and 21 | `main` |
+| #460 | 22 | `main` |
+
+The owner merged each, #458 before #462, all before the freeze, so
+`maint/0.17` carries them; Block 18 went with AP CapabilityTable (#457).
+
+- **A race in the settings file's watch,** older than this plan.
+  #430's first CI failed `TestServeLogsTheStartsNotes` on Linux: the test
+  fixes the file right after serve's start, and the watch never read it
+  again.
+  The watch took its first look at the file after the store's open, so an
+  edit between the start's read and that look was missed until the next
+  edit; on a slow box the window is seconds.
+  Fixed on #425's branch,
+  `fix(serve): An edit of the settings file made during the start is read again`:
+  the watch starts from the file's size and time taken just before the
+  start reads it (`startStamp`), so such an edit is read again, once;
+  `TestWatchSettingsFromTheStart` fails on the old first look; fragment
+  `CHANGELOG.d/Fixed/claude-watch-from-the-start.md`.
+  Merged into #427's branch, then #430's, never rebased.
+- **CI outside the pull requests,** each passing on its retry:
+  #425's `test_battery_words_in_the_problem_lists[390-de]`; #427's
+  Android job, which lost Google's Maven repository; #430's Windows job
+  in `internal/cubelan/fakecube`'s `TestPauseKeepsADeadSession`
+  (`pause_test.go:252: EOF`), and its UI tests
+  `test_confirm.py::test_unconfirmed_marks` and
+  `test_maint_updates.py::test_another_setting_changed_during_the_own_put_is_read_after_it`
+  (390-de).
+  #430 was green at its third attempt; in it `cmd/massimo`, the start's
+  guard with it, and `internal/env` passed on Windows with real Go.
+- **Not run in v1.2:** `make ui-test`, since the one UI change is a
+  comment, and `make lan-test`, since discovery is unchanged; each pull
+  request's CI ran its own jobs.
+- **The owner's Windows service** was not touched.
+  Its log, read by a reader, showed a Cube's polls unanswered from
+  21:47:45 on 2026-11-25, held until 22:32; not this plan's subject.
+
+What each run found outside the plan, and where it went:
+
+- **Built here:**
+  - from v1.0: postinst's byte order mark (Block 19);
+    `install -tls-http :80x` naming `-listen` (Block 15); on Windows, the
+    reloader seeing only names that start with `MASSIMO_` exactly, and a
+    reload that changes value and case keeping the old spelling
+    (Block 17, D54-A); the Windows test binary's directory left behind,
+    and `fakecube.Server.Close` panicking on a fake that never served
+    (Block 22); the plain Cube's loggers missing a serial learned later
+    (Block 20); a hostname against an IP not tied (Block 21);
+  - from v1.1: a `-settings` path that is not there failing only at the
+    copy (Block 14); install checking how the file parses, not its values
+    (Block 15); a kept file with a line too long or in UTF-16 dropping its
+    TLS drop-ins to http (Block 16).
+- **Elsewhere:**
+  - the Software card reading `available` where it should read `refused`
+    (v1.0): AP AutoUpdate, #445; D43's comment, in Block 19's pull
+    request;
+  - `docs/store.md` §6's capability table drifted from `docs/api-v1.md`'s
+    (v1.0), and its `update` row without `PUT /api/v1/update/answer`
+    (v1.1): AP CapabilityTable (D55, #457);
+  - AP AutoUpdate's plan describing `available` false for `update`
+    without `restart` (v1.1): gone with its retirement (D43);
+  - `TestProxyFailingInTheAPI` wanting `tries == 1` under `-race`, where
+    `quickRetry` retries every 5 ms (v1.2): AP SteadyTests,
+    `test(server): TestProxyFailingInTheAPI takes the proxy's tries as at least one`.
+- **Now Blocks 23 to 28:** the v1.2 run's other nine, items 1 to 9 of the
+  Analysis for v1.3 (D61-A).
+- **Not carried:** `TestNextVersion` fails on a Windows host whose `bash`
+  is WSL's (v1.2); CI's runner has Git Bash, and it is the release
+  script's test, not the start's.
 
 ## Analysis
 
@@ -382,14 +526,76 @@ What bears on the blocks:
 - **Item 13**, the Software card reading `refused`, was done (#445); only
   D43's comment is left.
 
+For v1.3, read on `maint/0.17` at
+`merge(MaintBranch/Blocks-1-3): Releases from a maintenance branch, migrations in blocks of 100`
+(#465), and checked again at
+`merge(SteadyTests/Blocks-1-2-3): Eight flakes of AccessEnds fixed at their cause`
+(#467).
+0.17 has no release yet; the newest is 0.16.0-alpha.1.
+So Blocks 11 and 21, the tie code of items 7 and 8, are in no release,
+while items 1 to 4 and 9 are in 0.16.0-alpha.1 already, item 4 in
+another form: install looked for a relative hook where install ran.
+
+1. **Secrets** (`internal/server/serverinfo_api.go:58`): `SecretVariable`
+   matches suffixes and two words, so `MASSIMO_API_TOKEN_OLD`,
+   `MASSIMO_TOKEN_2` and `MASSIMO_KEY_BACKUP` show their values: in
+   `GET /api/v1/config` (`getConfig`; `configView`,
+   `cmd/massimo/config.go:128`) and in `massimo config`
+   (`printVariables`, :74).
+   Each is a name Massimo does not know (`env.Known`), which both mark
+   "unknown" already.
+2. **`PerCubeValue`** (`internal/env/env.go:150`) compares the whole name
+   with `EqualFold`.
+   On Linux and macOS a `MASSIMO_CUBE_KEQ0000000_Name` from the process
+   environment is read by serve and the commands, while `Serials` gives
+   none and `Known` is false, so `massimo config` calls it unknown.
+   Block 17 set such a line aside in the file; the environment's passes.
+   Windows, whose `NameKey` is the upper case, is right as it is.
+3. **`certs.Load`** (`internal/certs/files.go:66`) wraps crypto/tls's
+   error in "tls: ", which crypto/tls says itself:
+   `tls: tls: private key does not match public key`, and install repeats
+   the start's words (Block 15).
+   A path error from `tls.LoadX509KeyPair` carries no "tls: ", and
+   `unwrapPath` (`selfsigned.go:104`) needs it under `%w`.
+4. **A relative `-acme-dns-hook`** (`internal/install/tls.go:99`):
+   `serviceStart.path` (`install.go:886`) looks for it under `-root` at
+   the service's working directory, `/var/lib/massimo`, so the refusal
+   names a path the user never typed.
+   On Windows, where install does not know the service's directory, it is
+   looked for in the current directory, and the start, which runs
+   elsewhere, refuses the hook later.
+5. **`rt.serial`** is read directly by eight log lines of
+   `internal/server/backups.go` (276 to 447) and by
+   `restore_api.go:176`.
+   `storeID` orders those reads, so there is no race, but every other
+   reader goes through `cubeSerial()`.
+6. **`internal/update/store.go`** ignores three removals (:86, :90, :96).
+   The one that matters: on Windows a failed `os.Remove(run)` of
+   `.massimo.run.exe` surfaces as `copyFile`'s "file exists", which hides
+   the cause; the other two are deferred cleanups.
+7. **`PlainServedNote`** (`internal/serve/setup.go:223`): after a tie by
+   name (Block 21) the Warn gives the plain address alone, not the row's
+   address it was tied to.
+8. **`cubeEndpoint`** (`setup.go:348`) lowercases the whole host, an IPv6
+   zone too, so `%Eth0` never ties to its row, and ties falsely to a row
+   at `%eth0`.
+9. **postinst** (`packaging/deb/postinst:26`): over a UTF-16 settings
+   file, grep writes "binary file matches" into apt's output.
+   `settings()` then gives nothing, unlike the template's
+   `MASSIMO_LOG=…`, so the box is started, and serve refuses the file.
+   Probed with GNU grep 3.11: after `tr -d '\000'`, a UTF-8 locale still
+   takes the UTF-16 mark's bytes for binary and says so; `LC_ALL=C` on
+   the grep does not, and the mark keeps the file unlike the template's,
+   so the decision stays.
+
 ## Implementation Plan
 
 A sub-agent on Opus builds each block without a commit, an independent
 second reader reads it, and the session verifies it and makes the commit.
-The three pull requests are stacked: the second's branch starts from the
-first's, the third's from the second's, each with `main` merged in before
-it is opened.
-The owner merges them, in order.
+v1.0's three pull requests were stacked: the second's branch started from
+the first's, the third's from the second's, each with `main` merged in
+before it was opened.
+The owner merges the pull requests.
 
 ### Block 1: Lines
 
@@ -415,6 +621,12 @@ The owner merges them, in order.
 first-line rule as today, the byte order mark kept, `MASSIMO_ENV_FILE`
 set); `go test ./internal/env ./cmd/massimo`.
 
+**As built:**
+
+- `MASSIMO_ENV_FILE` is matched in any case, as Windows takes the name.
+- A line holding a NUL byte is refused as UTF-16: PowerShell 5.1's `>>`
+  appends UTF-16LE without a mark to a UTF-8 file.
+
 ### Block 2: Notes
 
 - The notes of Block 1 told, the same text everywhere (D3-B):
@@ -434,6 +646,17 @@ set); `go test ./internal/env ./cmd/massimo`.
 **Verification:** the tests fail without the start's line and with the
 two kinds in one text; `go test ./cmd/massimo ./internal/server`.
 
+**As built:**
+
+- A name given twice is quoted only where it is a variable's name in
+  upper case: a bare secret given twice, `c2VjcmV0==`, splits into a
+  valid lower-case name, which stays unquoted.
+- `GET /api/v1/config` carries no notes: D3-B's "config" is
+  `massimo config`, and a name's lines reach System info through its
+  source.
+- The web UI's log says the start's line as "settings file read at the
+  start", a key in six languages.
+
 ### Block 3: Install
 
 - `internal/install` reads the settings file with env's parser (D7-A):
@@ -445,6 +668,18 @@ two kinds in one text; `go test ./cmd/massimo ./internal/server`.
 
 **Verification:** the tests fail with install's old reader;
 `go test ./internal/install`; the Windows build (`GOOS=windows go vet`).
+
+**As built:**
+
+- Install's checks read the file leniently, by env's rules: a line that
+  is not `KEY=VALUE` is skipped with a note.
+  A strict read would have rewritten a re-install's health drop-in to
+  http and dropped the `:80` capability, and a package upgrade, which
+  runs install, would have failed; D38-B later made `-settings` strict
+  (Block 13).
+- UTF-16 is refused before any write, also where nothing is copied.
+- `-tls` skips and keeps a byte order mark: after Block 1 its change was
+  lost behind the file's first line.
 
 ### Block 4: ApiReload
 
@@ -460,6 +695,9 @@ two kinds in one text; `go test ./cmd/massimo ./internal/server`.
 **Verification:** the new test fails with today's `apiReload`; the SIGHUP
 test fails with a delay planted between `SetToken` and `SetPendingRestart`
 before its fix, and passes after; `go test ./cmd/massimo`.
+
+**As built:** the SIGHUP test also awaits the store's checkpoint before
+the stop; Block 2's notes test scaled its wait twice, fixed here.
 
 ### Block 5: Settle
 
@@ -482,6 +720,10 @@ before its fix, and passes after; `go test ./cmd/massimo`.
 
 **Verification:** the test fails with the route on `restart` alone;
 `TestOpenAPICoversRoutes`; `go test ./internal/server`.
+
+**As built:** a caller without `restart` read `available: false`, with
+`blocked` naming the capability, the rest of the answer the same;
+Block 12 removed it, and this block's fragment with it.
 
 ### Block 7: Card
 
@@ -511,6 +753,10 @@ before its fix, and passes after; `go test ./cmd/massimo`.
 
 **Verification:** the guard fails on a text left as it was;
 `go test ./cmd/massimo ./internal/serve`.
+
+**As built:** the certificate code names `-data or MASSIMO_DATA` where it
+makes the data directory, under `-tls self-signed` and DNS-01; a store
+refused keeps its own text.
 
 ### Block 9: Helper
 
@@ -542,6 +788,14 @@ dir and the mtime of the service's `service.log` the same before and after;
 **Verification:** the guard and `./internal/env` through interop, as in
 Block 9; `make actionlint`; the pull request's Windows job runs.
 
+**As built:**
+
+- On Windows a name in two cases is one name, its first line winning, and
+  a reload lists a changed name in upper case, so that
+  `massimo_api_token=` applies at once.
+- The guard ran through interop with a stand-in `go.exe`, as Windows here
+  has no Go; #430's Windows job was its first run with real Go.
+
 ### Block 11: PlainProxy
 
 - Where both `MASSIMO_CUBE_ADDRESS` and `MASSIMO_CUBE_PROXY` are in the
@@ -559,6 +813,19 @@ Block 9; `make actionlint`; the pull request's Windows job runs.
 **Verification:** the tests fail with today's `setup.go`;
 `go test ./internal/serve ./internal/server ./cmd/massimo`;
 `make lan-test` where the change reaches the proxy's discovery answers.
+
+**As built:**
+
+- The plain Cube is tied by its address, `ProxyListener.CubeAddr`.
+- The listeners start before the runtimes, and a listener never starts
+  on a Cube being removed.
+- A plain address equal to a stored row's is tied to that row at the
+  start, the address alone too: it ends a double dial to a one-client
+  Cube. `massimo config` shares the matching.
+- A second round filled a stored row's empty proxy from the plain
+  `MASSIMO_CUBE_PROXY`; the reader showed that it breaks `docs/store.md`'s
+  precedence, where the store wins and a file line reaches a known row
+  only by the web UI's button, and the third round dropped it (D36-A).
 
 ### Block 12: Include
 
@@ -593,6 +860,20 @@ taken before the integration's bounds; `TestOpenAPICoversRoutes`;
 `go test ./internal/server ./internal/store`; `make ui-check`; the
 changed UI test files in the four cases.
 
+**As built:**
+
+- Block 6's fragment, `CHANGELOG.d/Changed/claude-restart-read-with-update.md`,
+  in no release and no longer true, is removed; the new one says what
+  changed since the release (COMMIT.md §5).
+- `store.Effective` returns the disabled list it already reads, and the
+  principal carries it, so the include needs no second query; it is taken
+  in `principal.has`, after every bound.
+- The integration's maximum has a UI test of its own beside the role
+  editor's.
+- `TestIncludeAfterTheIntegrationsBounds` holds a disabled `restart`
+  through an integration, by its key and acting for a user, which was
+  untested until the reader planted it.
+
 ### Block 13: SettingsRefused
 
 - `install -settings <file>` reads the file as serve's start does
@@ -609,6 +890,14 @@ changed UI test files in the four cases.
 
 **Verification:** the tests fail with today's `checkSettingsFile`;
 `go test ./internal/install ./cmd/massimo`; `GOOS=windows go vet ./...`.
+
+**As built:**
+
+- Its summary says "a file serve cannot read": install refuses only what
+  serve's parser refuses, and a value the start's own checks refuse was
+  still copied, until Block 15.
+- A directory as `-settings` is refused before any write too, with the
+  system's own error text.
 
 ### Block 14: SettingsThere
 
@@ -642,6 +931,13 @@ changed UI test files in the four cases.
 `internal/install`'s Windows test binary through interop, `ProgramData`
 in a temp dir; the tests fail on the exemption, planted through
 `-overlay`.
+
+**As built:**
+
+- It amends Block 13's unreleased bullet (COMMIT.md §5.2) instead of
+  adding `claude-install-settings-there.md`.
+- The check of "exists; kept it and did not copy" moved into
+  `TestInstallKeepsAFileServeRefuses`, for all three kinds.
 
 ### Block 15: SettingsValues
 
@@ -702,6 +998,27 @@ Windows test binaries of `internal/install` and `cmd/massimo` through
 interop, `ProgramData` in a temp dir; each test fails on its fault,
 planted through `-overlay`.
 
+**As built:**
+
+- A relative path is checked where the service opens it: the unit and
+  the plist set `WorkingDirectory=/var/lib/massimo`, so install checks it
+  there, under `-root`, where the plan left it to the start.
+  On Windows, the refusals of a TLS check that reads a relative path are
+  dropped, with a warning.
+- `-acme-dns-hook` is checked under `-root` (Block 25 refuses a relative
+  one).
+- Refusals are one per line; the `-tls` run of the start's checks moved
+  into `checkSettingsFile`, so that one refusal names both, and
+  `checkTLSSettings` is gone.
+- Windows parses its kept file (D50-A), and a `connectManager` seam tests
+  that this comes before the service manager.
+- #462 merges #458's branch, for `values()` by `NameKey`, without which a
+  Windows file's `massimo_hsts=-1` would pass install.
+  Its commit `fix(install): Windows: install reads the settings' names in any case, as the start does`
+  keys `Lookup` and `setEnvLines` by `NameKey`, and amends Block 17's
+  fragment.
+- The fragment names `-tls` options too.
+
 ### Block 16: KeptUnread
 
 - Where a kept settings file cannot be read, UTF-16 or a line too long,
@@ -730,6 +1047,12 @@ planted through `-overlay`.
 `MASSIMO_ENV_FILE=/dev/null go test ./internal/install`; `gofmt -l .`
 empty; `go vet ./...` for linux, windows and darwin; the tests fail on
 the nil fallback, planted through `-overlay`.
+
+**As built:** past D51-A, `-tls` over a kept file install cannot read is
+refused before any write; before, install appended UTF-8 lines to a
+UTF-16 file and installed units for TLS the file does not say.
+The warnings say what was kept, and to run install again once the file
+is fixed.
 
 ### Block 17: WindowsNames
 
@@ -785,6 +1108,22 @@ empty; `go vet ./...` for linux, windows and darwin; the Windows test
 binaries of `internal/env`, `internal/server` and `cmd/massimo` through
 interop; each test fails on its fault, planted through `-overlay`.
 
+**As built:**
+
+- The security commit also fixes `massimo config`'s own listing, whose
+  check was case-sensitive and knew only `_KEY`, `_IV` and `_TOKEN`: it
+  printed a name with PASSWORD or SECRET in it in clear, and on Windows
+  `MASSIMO_API_Token`.
+  `printVariables` now redacts by `SecretVariable`; the summary adds
+  "or massimo config", and the fragment names the holder of `settings`.
+- The second commit sets aside, on Linux and macOS, a known name in
+  another case with a note, as a duplicate is, rather than setting it.
+  So a Cube's line in another case in the file is no longer read through
+  `PerCubeValue`'s case-blind comparison; one from the process
+  environment still is (Block 24).
+  `values()` keys by `NameKey`, `Note.Name` is the upper case, and
+  `Removed` is checked on the key.
+
 ### Block 18: Tables
 
 Carried to AP CapabilityTable (D55), not built here.
@@ -818,6 +1157,10 @@ Carried to AP CapabilityTable (D55), not built here.
 planted in a copy of postinst; for the comment, `make ui` and
 `make ui-check`.
 
+**As built:** the fragment opens "The Debian package", as older bullets
+do. The hole was on `main` only, since #425: the released serve refused a
+file with a byte order mark at its start.
+
 ### Block 20: PlainLogs
 
 - `internal/slogx`: a handler that reads a Cube's serial on each record,
@@ -846,6 +1189,9 @@ planted in a copy of postinst; for the comment, `make ui` and
 and `-race` for `internal/server`; `gofmt -l .` empty; `go vet ./...` for
 linux, windows and darwin; each test fails on its fault, planted through
 `-overlay`.
+
+**As built:** the key was absent, not empty; the fragment also covers
+`-addr` without `-sn`, whose lines never had `cube=`.
 
 ### Block 21: PlainResolve
 
@@ -886,6 +1232,9 @@ linux, windows and darwin; each test fails on its fault, planted through
 linux, windows and darwin; each test fails on its fault, planted through
 `-overlay`.
 
+**As built:** it ties only where exactly one row matches; where several
+do, it ties none, with a Warn.
+
 ### Block 22: TestKit
 
 - First, `fix(fakecube)`: `fakecube.Server.Close` on a fake that never
@@ -918,6 +1267,234 @@ linux, windows and darwin; each test fails on its fault, planted through
 binary through interop; each test fails on its fault, planted through
 `-overlay`.
 
+**As built:**
+
+- `fix(fakecube)` also fixes a `Serve` after a `Close`, which served a
+  listener nothing closed.
+- `sweepBuilt` takes the time; `docs/testing.md` says how the directory
+  is removed and swept.
+- The test commit is `test(cli)`, not `test(cmd)`, and its summary no
+  longer says Windows.
+
+### Block 23: ConfigSecrets
+
+On `maint/0.17` (D64-A); Analysis for v1.3, item 1.
+
+- The value of every `MASSIMO_` name Massimo does not know
+  (`!env.Known(env.NameKey(k))`) is hidden as a secret's is (D65-A), in
+  the three places that show one:
+  - `getConfig` (`internal/server/serverinfo_api.go`): a variable marked
+    `unknown` gets `"secret": true` and no `value`, whatever gathered it;
+  - `configView` (`cmd/massimo/config.go`): the same, so that the web UI
+    shows it as it shows a secret, beside its "unknown" mark, with no UI
+    change;
+  - `printVariables`: redacted to its length (`redact`), as a secret's,
+    its "unknown name, typo?" note kept.
+- A known name keeps its rule: `SecretVariable` alone decides.
+- Tests, each with its planted fault, the check by name only
+  (`SecretVariable` alone):
+  - `TestStoreAndConfigViews`: an unknown variable with a value,
+    `MASSIMO_API_TOKEN_OLD`, answers `"secret": true` and no value;
+  - `TestConfigRedactsASecretInAnyCase`: `massimo config` and the view
+    show neither `MASSIMO_API_TOKEN_OLD`'s nor `MASSIMO_TYPO`'s value,
+    and still name both, with "typo?".
+- Docs: `docs/api-v1.md` (`GET /api/v1/config`: a name Massimo does not
+  know has `"unknown": true` and, as a secret, no `value`), the OpenAPI
+  file (`value`: absent for a secret and for an unknown name), and the
+  README where `massimo config` redacts secrets.
+- Fragment, under Security (D70-A): Block 17's
+  `CHANGELOG.d/Security/claude-secret-name-case.md` amended, since it is
+  unreleased and of the same area (COMMIT.md §5.2); a fragment of its own,
+  `CHANGELOG.d/Security/claude-config-unknown-values.md`, where a release
+  has carried it by then:
+
+  ```text
+  - `GET /api/v1/config` and `massimo config` hide a secret's value
+    whatever the case of its name, and the value of a name Massimo does
+    not know: `MASSIMO_API_Token` and `MASSIMO_API_TOKEN_OLD` showed it.
+  ```
+
+**Verification:** `make ui`;
+`MASSIMO_ENV_FILE=/dev/null go test ./internal/server ./cmd/massimo`;
+`make cross-check`; `gofmt -l .` empty; `go vet ./...` for linux,
+windows and darwin; each test fails on its fault, planted through
+`-overlay`.
+
+### Block 24: NameCase
+
+On `maint/0.17` (D64-A); Analysis for v1.3, item 2.
+
+- `env.PerCubeValue` (`internal/env/env.go`) compares a variable's name
+  by `NameKey`, and the serial in it alone in any case, as `Serials`
+  reads it: the exact name first, then the first whose serial is written
+  in another case.
+- On Linux and macOS a `MASSIMO_CUBE_KEQ0000000_Name` from the process
+  environment is then not read, as `Serials`, `Known` and
+  `massimo config` already say; a serial in lower case,
+  `MASSIMO_CUBE_keq0000000_NAME`, still is.
+  Windows, whose `NameKey` is the upper case, reads what it reads today.
+- Tests: `TestPerCubeValue` gains, on Linux and macOS, a name in another
+  case not read and a serial in lower case read; on Windows both read.
+  Planted fault: today's `EqualFold` on the whole name.
+- Docs: the README's settings-file paragraph, where a Cube's line in
+  another case is set aside: so is one set in the environment.
+- Fragment, under Fixed: Block 17's unreleased
+  `CHANGELOG.d/Fixed/claude-settings-name-case.md` amended (COMMIT.md
+  §5.2), so that it covers the environment's names too; a fragment of its
+  own, `CHANGELOG.d/Fixed/claude-cube-name-case.md`, where a release has
+  carried it by then:
+
+  ```text
+  - Windows: a setting named in another case, which the start applies, is
+    seen by a reload, `massimo config` and `install`; elsewhere it is
+    ignored, a file's line with a note, a Cube's from the environment too.
+  ```
+
+**Verification:** `make ui`; `MASSIMO_ENV_FILE=/dev/null go test
+./internal/env ./internal/serve ./cmd/massimo`; `make cross-check`;
+`gofmt -l .` empty; `go vet ./...` for linux, windows and darwin;
+`internal/env`'s Windows test binary through interop; the test fails on
+its fault, planted through `-overlay`.
+
+### Block 25: TlsWords
+
+On `maint/0.17` (D64-A); Analysis for v1.3, items 3 and 4.
+
+- First, `fix(certs)`: `certs.Load` wraps crypto/tls's error in "tls: "
+  only where it does not say "tls: " already, keeping `%w`, so that
+  `unwrapPath` still finds a path error under it.
+  The start and install (Block 15) then say
+  `tls: private key does not match public key`.
+  - Test: a mismatched pair and a key that is not one each say "tls: "
+    once; a missing file still unwraps to `os.ErrNotExist`.
+    Planted fault: the unconditional wrap.
+  - Fragment `CHANGELOG.d/Fixed/claude-certs-tls-once.md`:
+
+    ```text
+    - A TLS pair that does not match, or a key that is not one, is refused
+      with "tls: " once, by the start and by `massimo install`, where it
+      said "tls: tls: ".
+    ```
+
+- Then, `fix(install)`: `-acme-dns-hook` with a relative path is refused
+  before any write, on every system, asking for the absolute path
+  (D66-A), as `-acme-dns-hook "hook.sh": give the hook's absolute path`.
+  - `checkTLS` (`internal/install/tls.go`) no longer asks
+    `serviceStart.path` for the flag's hook; an absolute one is checked
+    under `-root` as now.
+  - A relative `MASSIMO_ACME_DNS_HOOK` in the settings file stays as
+    Block 15 checks it, where the service opens it.
+  - Tests: a hand install, a packaged box, macOS and Windows through
+    interop each refuse `-acme-dns-hook hook.sh` with nothing written,
+    and an absolute hook under `-root` still passes.
+    Planted fault: today's resolution through `serviceStart.path`.
+  - Docs: `packaging/README.md`'s DNS-01 paragraph and the README where
+    they name `-acme-dns-hook`: the path is absolute.
+  - Fragment `CHANGELOG.d/Fixed/claude-install-relative-hook.md`:
+
+    ```text
+    - `massimo install -acme-dns-hook` refuses a relative path and asks for
+      the absolute one, where it checked the hook where install ran, and
+      the service, which runs elsewhere, could not find it.
+    ```
+
+**Verification:** `make ui`; `MASSIMO_ENV_FILE=/dev/null go test
+./internal/certs ./internal/install ./internal/serve ./cmd/massimo`;
+`make cross-check`; `gofmt -l .` empty; `go vet ./...` for linux,
+windows and darwin; `internal/install`'s Windows test binary through
+interop, `ProgramData` in a temp dir; each test fails on its fault,
+planted through `-overlay`.
+
+### Block 26: PlainTies
+
+On `maint/0.17` (D64-A); Analysis for v1.3, items 7 and 8.
+
+- First, `fix(serve)`: after a tie (`plainOfStore`), the
+  `PlainServedNote` Warn carries the row's address beside the plain
+  `addr`, so that a tie by name says which address it was tied to.
+  - Test: `TestServePlainNameOfAStoredCube` finds the row's address in
+    the line. Planted fault: today's line.
+- Then, `fix(serve)`: `cubeEndpoint` lowercases the address and keeps an
+  IPv6 zone as written, so that `[fe80::1%Eth0]:62910` ties to a row at
+  `[FE80::1%Eth0]:62910` and not to one at `[fe80::1%eth0]:62910`.
+  - Tests: rows in `TestPlainRowByLookup` and
+    `TestServePlainAddressOfAStoredCube`, a zone in upper case tying and
+    the same zone in another case not.
+    Planted fault: the whole host lowercased.
+- Fragment: none.
+  The tie by address and by name is Block 11's and Block 21's, in no
+  release yet, and their bullet,
+  `CHANGELOG.d/Fixed/claude-plain-proxy-beside-store.md`, stays accurate
+  (COMMIT.md §5.2).
+  A user reads the Warn, but no bullet promised its fields; the Key
+  changes say so.
+
+**Verification:** `make ui`;
+`MASSIMO_ENV_FILE=/dev/null go test ./internal/serve ./cmd/massimo`;
+`make race`; `make cross-check`; `gofmt -l .` empty; `go vet ./...` for
+linux, windows and darwin; each test fails on its fault, planted through
+`-overlay`.
+
+### Block 27: PostinstUtf16
+
+On `maint/0.17` (D64-A); Analysis for v1.3, item 9.
+
+- `packaging/deb/postinst`: `settings()` strips NUL bytes with
+  `tr -d '\000'` before its grep (D67-A), and runs that grep under
+  `LC_ALL=C`.
+  In a UTF-8 locale, as apt often runs, the UTF-16 mark left after the
+  strip is still an encoding error, and GNU grep says "binary file
+  matches" all the same (the probe of item 9).
+- The start decision stays for a file with its UTF-16 mark, as
+  PowerShell's `>` and Notepad write it: the mark keeps its first line a
+  setting, the file differs from the template, and the service is
+  started as today, for serve's start to refuse UTF-16 in its own words.
+  A UTF-16 file without the mark then compares by its lines, as a UTF-8
+  file does, where today it always differs.
+- The comment over `settings()` says why.
+- Test: a case in `packaging/deb/test.sh`, "a UTF-16 settings file: no
+  binary match, started", run under `LC_ALL=C.UTF-8`.
+  Planted fault: no strip, in a copy of postinst.
+- Docs: none.
+- Fragment `CHANGELOG.d/Fixed/claude-postinst-utf16.md`:
+
+  ```text
+  - The Debian package's upgrade over a UTF-16 settings file no longer
+    writes "binary file matches" into apt's output.
+  ```
+
+**Verification:** `make deb-test`, which fails on the fault; no Go
+package is touched, so `make ui`, `make cross-check`, `gofmt -l .` and
+`go vet ./...` for linux, windows and darwin are the pull request's.
+
+### Block 28: Hygiene
+
+On `main` only (D64-A, D68-A); Analysis for v1.3, items 5 and 6.
+
+- First, `refactor(server)`: the eight log lines of
+  `internal/server/backups.go` and the one of `restore_api.go` read the
+  serial through `rt.cubeSerial()`, as every other reader does.
+  - No test: `make race` runs these paths.
+  - No fragment: nothing a user sees changes; the Key changes say so.
+- Then, `fix(update)`: `runBinary` (`internal/update/store.go`) returns
+  the error of the `os.Remove(run)` before the link, where it is not
+  `os.ErrNotExist`, so that a `.massimo.run.exe` that cannot be removed
+  is named as the cause, not hidden by `copyFile`'s "file exists"
+  (D68-A).
+  The two deferred removals stay, each commented as best effort.
+  - Test, Windows only: a non-empty directory named `.massimo.run.exe`
+    beside a kept binary: `StoreSchema`'s error names the removal.
+    Planted fault: the removal ignored.
+  - No fragment: an error's text in a case no box has met; the Key
+    changes say so.
+
+**Verification:** `make ui`;
+`MASSIMO_ENV_FILE=/dev/null go test ./internal/server ./internal/update`;
+`make race`; `make cross-check`; `gofmt -l .` empty; `go vet ./...` for
+linux, windows and darwin; `internal/update`'s Windows test binary
+through interop; the Windows test fails on its fault, planted through
+`-overlay`.
+
 ### The pull requests
 
 - **First** (Blocks 1–3), **second** (4–7), **third** (8–11), each
@@ -940,6 +1517,21 @@ binary through interop; each test fails on its fault, planted through
     `merge(StartConfiguration/Block-22): The fake Cube closes before it served; old Windows test binaries swept`.
 - Before each: `make ui`, `MASSIMO_ENV_FILE=/dev/null go test ./...`,
   `gofmt`, `go vet` for the three systems, `make cross`.
+- v1.3 (D69-A):
+  - this revision's commit straight onto `maint/0.17`, pushed; then
+    `maint/0.17` merged upward into `main` and pushed at once
+    (MaintBranch.D1-A);
+  - **Blocks 23 to 27**, one pull request into `maint/0.17`, its branch
+    from `origin/maint/0.17`, which it merges again before it opens:
+    `merge(StartConfiguration/Blocks-23-27): Unknown names' values hidden, and four fixes of the start's edges`;
+    once the owner has merged it, the session merges `maint/0.17` upward
+    into `main` and pushes it;
+  - **Block 28**, one pull request into `main`, its branch from
+    `origin/main`, after the upward merge of this revision:
+    `merge(StartConfiguration/Block-28): The backup's lines read cubeSerial(); a failed removal names its cause`;
+  - before each: `make ui`, `MASSIMO_ENV_FILE=/dev/null go test ./...`,
+    `gofmt`, `go vet` for the three systems, `make cross-check`, the
+    guidelines check over its range.
 
 ## Proposed commit messages
 
@@ -970,6 +1562,18 @@ binary through interop; each test fails on its fault, planted through
 - Block 21: `fix(serve): A hostname and an IP of one Cube tie the plain lines to its row`
 - Block 22: `fix(fakecube): A fake Cube closed before it served does not panic`
 - Block 22: `test(cmd): The Windows test binary's directory is removed with retries, and old ones are swept`
+- v1.3: `chore(aps): +StartConfiguration v1.3, -NOTE StartConfiguration, the four NOTEs folded in`
+- v1.3's upward merge: `merge: maint/0.17 into main, with StartConfiguration v1.3`
+- Block 23: `fix(security:config): massimo config and the API hide the value of a name Massimo does not know`
+- Block 24: `fix(env): Linux and macOS: a Cube's variable named in another case is not read from the environment`
+- Block 25: `fix(certs): A refused TLS pair or key says "tls: " once`
+- Block 25: `fix(install): install refuses a relative -acme-dns-hook and asks for the absolute path`
+- Block 26: `fix(serve): The plain lines' tie warning names the row's address beside the plain one`
+- Block 26: `fix(serve): An IPv6 zone keeps its case where the plain address is compared with a row's`
+- Block 27: `fix(packaging): postinst strips NUL bytes before its grep, so UTF-16 writes no binary match`
+- Blocks 23 to 27's upward merge: `merge: maint/0.17 into main, with StartConfiguration's Blocks 23 to 27`
+- Block 28: `refactor(server): The backup's and the restore's log lines read the serial through cubeSerial()`
+- Block 28: `fix(update): Windows: a run link that cannot be removed is named, not hidden by "file exists"`
 
 ## Change History
 
@@ -990,3 +1594,21 @@ binary through interop; each test fails on its fault, planted through
   D43's comment moved to Block 19's pull request.
   It rests on `wip/2026-11-25_18-42_ANALYSIS_StartConfiguration_v1_2_findings.md`.
   Blocks 1 to 13 are built and merged and stand as they are.
+- v1.3 (2026-11-26): Blocks 23 to 28, by `PLAN++`, from the owner's
+  "PLAN D61 as a revision or new plan onto 0.17" at the cleanup gate and
+  "D63 B incorporating its NOTES" at the TL;DR gate, after 0.17's freeze
+  onto `maint/0.17`; with D61-A, D63-B and D64-A to D70-A, D62 moot.
+  Blocks 23 to 27 go to `maint/0.17`, Block 28 to `main`, and the
+  revision is committed onto `maint/0.17` (D69-A).
+  Folds in four NOTEs, their files removed:
+  "NOTE StartConfiguration v1.0: how the run went",
+  "NOTE StartConfiguration v1.0: the watch after CI",
+  "NOTE StartConfiguration v1.1: how the run went" and
+  "NOTE StartConfiguration v1.2: how the run went".
+  Their pull requests, CI, watch race and findings are in the
+  Discussion's "How the runs went", their deviations under each block,
+  "As built", and the v1.0 run's open points under D36-A, D37 and D38-B.
+  Folding a NOTE of how a run went goes against AGENTS.md §5.4; the owner
+  asked for it, and a direct instruction of the owner's takes precedence
+  (AGENTS.md §2).
+  Blocks 1 to 22 are built and merged and stand as they are.
