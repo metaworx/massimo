@@ -6,8 +6,8 @@ page 👤 opens, the page shown in the address, each page's own scroll
 position, and expert mode's line of the chosen Cube's radio budget."""
 import json
 
-from helpers import (CUBES, VIEWER, assert_busy, css_hidden, held_poll, hold, open_personal_page, scroll_settled, scroll_width, show_view,
-                     wait_held, wait_until)
+from helpers import (CUBES, VIEWER, assert_busy, css_hidden, held_poll, hold, open_personal_page, scaled, scroll_settled, scroll_width,
+                     settled, show_view, wait_held, wait_until)
 
 # The symbol a page button shows, drawn in an svg of its own outside the
 # header, so that its size does not depend on whether the button is shown;
@@ -117,7 +117,8 @@ def shown(page, section):
 def test_the_address_names_the_page(page, case):
     """Each page puts its name into the address, Rooms none; back and
     forward move between the pages; a reload opens the page again, the
-    header in view."""
+    header in view. What a reload brings is waited for, not looked at
+    once after the page is shown: the page's start goes on after it."""
     show_view(page, "log")
     assert page.evaluate("location.hash") == "#log", "the log in the address"
     show_view(page, "system")
@@ -129,21 +130,23 @@ def test_the_address_names_the_page(page, case):
     page.go_back()
     assert wait_until(page, "!document.getElementById('logview').classList.contains('hidden')", 5), "back: the log"
     page.go_back()
-    assert wait_until(page, "location.hash === ''", 5) and shown(page, ".room"), "back: Rooms, without a page in the address"
+    assert wait_until(page, "location.hash === ''", 5) and settled(page, lambda: shown(page, ".room"), bool)[0], \
+        "back: Rooms, without a page in the address"
     page.go_forward()
     assert wait_until(page, "!document.getElementById('logview').classList.contains('hidden')", 5), "forward: the log"
     page.reload()
-    page.locator("#logview").wait_for(state="visible", timeout=10000)
-    assert page.evaluate("location.hash") == "#log" and page.evaluate("window.scrollY") == 0, "a reload opens the log again, the header in view"
+    page.locator("#logview").wait_for(state="visible", timeout=scaled(10) * 1000)
+    assert wait_until(page, "location.hash === '#log' && window.scrollY === 0", 5), "a reload opens the log again, the header in view"
     assert wait_until(page, "document.querySelectorAll('#logview .log-line').length > 0", 10), "with its lines"
     page.evaluate("history.replaceState(null, '', location.pathname + '#profile')")
     page.reload()
-    page.locator("#me").wait_for(state="visible", timeout=10000)
-    assert page.locator("#profile-display-name").is_visible(), "My profile's address opens the personal page, My profile loaded"
+    page.locator("#me").wait_for(state="visible", timeout=scaled(10) * 1000)
+    assert settled(page, lambda: shown(page, "#profile-display-name"), bool)[0], \
+        "My profile's address opens the personal page, My profile loaded"
     assert page.evaluate("location.hash") == "#profile", "and stays in the address"
     page.evaluate("history.replaceState(null, '', location.pathname + '#notify')")
     page.reload()
-    page.locator("#me").wait_for(state="visible", timeout=10000)
+    page.locator("#me").wait_for(state="visible", timeout=scaled(10) * 1000)
     assert wait_until(page, """(() => {
         const bar = document.querySelector('#me .page-bar').getBoundingClientRect().bottom;
         const y = document.getElementById('notify').getBoundingClientRect().top;

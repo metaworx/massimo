@@ -21,6 +21,8 @@ that says what it could not undo; held_poll holds the page's poll while
 a test measures what the page does by itself; pause_clock pauses
 Playwright's clock at the page's now. open_fold, close_fold and
 toggle_fold take a fold's toggle event before a test acts inside it.
+wait_started waits for the page's start, the page fixture's and
+owner_page's, and says on a timeout which read it waited for.
 
 Every wait of this kit, and the page fixture's, lasts its seconds times
 UI_TEST_SCALE (scaled), a positive number, 1 where it is not set: a
@@ -41,6 +43,7 @@ from datetime import datetime, timedelta, timezone
 from urllib.parse import parse_qs, urlparse
 
 from playwright.sync_api import Error
+from playwright.sync_api import TimeoutError as PlaywrightTimeout
 
 # The password of the operator that run.sh adds with massimo user add, in
 # every set: of 8 characters or more, as a new password is
@@ -207,6 +210,10 @@ class ApiReads:
 
     def _done(self, request):
         self.open.discard(request)
+
+    def pending(self):
+        """The reads without an answer, each as its method and URL, sorted."""
+        return sorted(f"{r.method} {r.url}" for r in self.open)
 
     def answered(self, seconds=5, quiet_ms=200):
         """Waits until every read has its answer and nothing more is drawn
@@ -1198,12 +1205,37 @@ def close_fold(page, sel, seconds=3):
         assert not toggle_fold(page, sel, seconds), f"the fold {sel} closes"
 
 
+# --- the page's start -----------------------------------------------------
+
+# How long the page's start may take, before the scale: longer than the
+# page's own limit of a read, API_WAIT_MS of app.js (20 s), so that a
+# read the server answers late is the page's to give up, which it says
+# on its message line, and not a wait of the test's that ends first.
+START_SECONDS = 30
+
+
+def wait_started(page, api, seconds=START_SECONDS):
+    """Waits until the page's start is over, its room tiles drawn, for
+    seconds (scaled): the page fixture's wait after its goto, and
+    owner_page's. api is an ApiReads made before the goto; on a timeout
+    an AssertionError names the API reads still open and the page's
+    message line, which say which read the start waited for."""
+    try:
+        page.wait_for_selector(".room", timeout=scaled(seconds) * 1000)
+    except PlaywrightTimeout:
+        line = page.evaluate("(() => { const m = document.getElementById('message'); "
+                             "return m && !m.classList.contains('hidden') ? m.textContent : ''; })()")
+        raise AssertionError(f"the page's start: no room tile within {scaled(seconds):g} s; "
+                             f"the API reads still open: {', '.join(api.pending()) or 'none'}; "
+                             f"the message line: {line or 'empty'}") from None
+
+
 # --- a page of its own ------------------------------------------------------
 
 def owner_page(new_context, guard, watch, url, token, clock=False):
     """A page of its own with the owner's key token at url, the tiles
-    shown and the stream open, as the fixture page has it: for a test
-    that signs out or meets a 401 (test_pairing_updates.py,
+    shown (wait_started) and the stream open, as the fixture page has
+    it: for a test that signs out or meets a 401 (test_pairing_updates.py,
     test_repair_updates.py); with clock, under Playwright's clock, its
     time flowing as the real one (page.clock.run_for moves it on), as the
     mark clock gives the fixture page."""
@@ -1216,8 +1248,9 @@ def owner_page(new_context, guard, watch, url, token, clock=False):
     guard.page = page
     page.set_default_timeout(scaled(5) * 1000)
     page.on("pageerror", lambda e: watch.problems.append(f"page error: {e}"))
+    api = ApiReads(page)
     page.goto(url)
-    page.wait_for_selector(".room", timeout=scaled(10) * 1000)
+    wait_started(page, api)
     assert wait_until(page, "state.eventsOpen", 10), "the stream is open"
     return page
 

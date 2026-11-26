@@ -1,4 +1,4 @@
-# Testing the web UI (v1.28.0)
+# Testing the web UI (v1.29.0)
 
 An evaluation of a Cypress suite for the web UI, against the alternatives:
 what the Playwright smoke test covers today and what it cannot do well,
@@ -939,6 +939,16 @@ the server's and the test's, in order,
   A test's own loop ends at `scaled(seconds)`,
   as `wait_count`, `back` and `wait_reads` do;
   a `timeout=` handed to Playwright is not scaled by itself.
+- **The page's start** (`wait_started`, AP SteadyTests, Block 3):
+  the page fixture and `owner_page` wait 30 s (scaled) for the room tiles,
+  longer than the page's own limit of a read (`API_WAIT_MS`, 20 s):
+  a read the server answers late is the page's to give up,
+  and the page then says so on its message line.
+  On a timeout the failure names the API reads still open (`ApiReads`)
+  and the message line, so that it says which read the start waited for.
+  What a reload brings is waited for too,
+  not looked at once when the page is shown:
+  the page's start goes on after it (`test_header.py`).
 - **Nothing came, against an end:**
   a check that an action brought nothing has an end of its own,
   not a fixed wait that a slow runner outlasts:

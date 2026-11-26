@@ -163,6 +163,10 @@ makes, sweeps and keeps it (`tools/workdir/README.md`; AP EmulatorRuns, D3-B).
   with `browser_context_args` set from `case`),
   the token put into `localStorage` before the page loads,
   the page loaded with its room tiles and its event stream open;
+  it waits 30 s for the tiles (`helpers.wait_started`, scaled),
+  longer than the page's own limit of a read, 20 s,
+  so that a late read fails as the page fails it;
+  on a timeout it names the API reads still open and the page's message line;
 - `watch`:
   what the page did, for a test or the guard to look at: the stream requests,
   the used ticket handed out, console and page errors,
@@ -993,6 +997,10 @@ Node is not needed.
 - A test's own wait loop ends at `scaled(seconds)` of `helpers.py`,
   so that `UI_TEST_SCALE` stretches it as it does the kit's waits;
   a window that waits for nothing to come does not take it.
+- What a reload or a click brings is waited for,
+  not looked at once right after another wait:
+  the page goes on after the moment the first wait saw
+  (`test_header.py`, the reload of the log).
 - "Nothing came" is checked against an end, not after a fixed wait:
   a read sent after the action through the same route,
   the page's state that says nothing waits,

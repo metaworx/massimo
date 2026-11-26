@@ -81,7 +81,8 @@ if _WORKER.startswith("gw"):
 
 pytest.register_assert_rewrite("helpers")
 
-from helpers import PAGE_KIT, USED, Stream, reads_of, report_to, scaled, scroll_width, used_ticket_first, wait_until  # noqa: E402
+from helpers import (PAGE_KIT, USED, ApiReads, Stream, reads_of, report_to, scaled, scroll_width, used_ticket_first,  # noqa: E402
+                     wait_started, wait_until)
 
 URL = os.environ.get("UI_TEST_URL", "http://127.0.0.1:8119/")
 TOKEN = os.environ.get("UI_TEST_TOKEN", "")
@@ -284,8 +285,10 @@ def clear_preferences():
 
 @pytest.fixture
 def page(context, case, watch, request):
-    """The page loaded, with the token, the room tiles shown and, unless
-    the test is marked used_ticket, the event stream open; the token's
+    """The page loaded, with the token, the room tiles shown
+    (helpers.wait_started: 30 s, longer than the page's own limit of a
+    read, a timeout naming the reads still open) and, unless the test is
+    marked used_ticket, the event stream open; the token's
     user without preferences on the server (clear_preferences); marked
     clock, under Playwright's clock. helpers.PAGE_KIT is in it before
     its own scripts, for the fixture stream, isolate_log and
@@ -317,8 +320,9 @@ def page(context, case, watch, request):
     page.on("request", lambda r: watch.streams.append(r.url) if "/events?" in r.url else None)
     page.on("console", on_console)
     page.on("pageerror", lambda e: watch.problems.append(f"page error: {e}"))
+    api = ApiReads(page)
     page.goto(URL)
-    page.wait_for_selector(".room", timeout=scaled(10) * 1000)
+    wait_started(page, api)
     if not used and not wait_until(page, "state.eventsOpen", 10):
         raise RuntimeError("the event stream did not open")
     return page
