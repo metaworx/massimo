@@ -198,11 +198,12 @@ func utf16Text(head []byte) bool {
 // (varName). On Windows a name in another case is the same name
 // (NameKey), as it is the same variable there; elsewhere a name the
 // program knows in upper case alone (Known) is ignored, a Cube's line
-// too, which PerCubeValue's comparison in any case read before, its
-// note naming it in upper case, a known variable's name (D53-A). A line without a name is ignored. A
-// MASSIMO_ENV_FILE line is ignored, in any case, as Windows takes the
-// name: the file File names stays the one the start read, where a
-// reload of another file would take its token as the owner's key.
+// too, as PerCubeValue ignores one in the environment, its note naming
+// it in upper case, a known variable's name (D53-A). A line without a
+// name is ignored. A MASSIMO_ENV_FILE line is ignored, in any case, as
+// Windows takes the name: the file File names stays the one the start
+// read, where a reload of another file would take its token as the
+// owner's key.
 func readFile(path string, lenient bool) ([]pair, []Note, error) {
 	f, err := os.Open(path)
 	if err != nil {

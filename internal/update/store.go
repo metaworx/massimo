@@ -74,7 +74,9 @@ func StoreSchema(ctx context.Context, bin, dir, owner string) (schema int, reads
 // stderr together; where this process is root, as the owner of the file
 // owner. On Windows, which runs a file by its extension, a kept binary
 // (massimo.exe.failed, massimo.exe.prev) runs through a link beside it
-// whose name ends in .exe, removed afterwards.
+// whose name ends in .exe, removed afterwards. A link an earlier run left
+// is removed first; where that fails, its error is returned, since the
+// copy's error (such as "file exists") would hide the cause.
 func runBinary(ctx context.Context, bin, owner string, args ...string) (string, error) {
 	if _, err := os.Stat(bin); err != nil {
 		return "", err
@@ -83,16 +85,21 @@ func runBinary(ctx context.Context, bin, owner string, args ...string) (string, 
 	if err != nil {
 		return "", err
 	}
+	// Best effort: a temporary directory left behind harms no run.
 	defer os.RemoveAll(dir)
 	run := bin
 	if runtime.GOOS == "windows" && !strings.EqualFold(filepath.Ext(bin), ".exe") {
 		run = filepath.Join(filepath.Dir(bin), ".massimo.run.exe")
-		os.Remove(run)
+		if err := os.Remove(run); err != nil && !errors.Is(err, os.ErrNotExist) {
+			return "", err
+		}
 		if err := os.Link(bin, run); err != nil {
 			if err := copyFile(bin, run); err != nil {
 				return "", err
 			}
 		}
+		// Best effort: the next run removes a link left behind, or
+		// names why it cannot.
 		defer os.Remove(run)
 	}
 	cmd := exec.CommandContext(ctx, run, args...)

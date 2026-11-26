@@ -681,7 +681,8 @@ Let's Encrypt allows five failed orders an hour per name,
 so experiments use its staging directory
 (`-acme-directory https://acme-staging-v02.api.letsencrypt.org/directory`,
 which `massimo install` takes too and writes into the settings).
-`-acme-dns-hook <script>` takes the DNS-01 challenge instead:
+`-acme-dns-hook <script>` takes the DNS-01 challenge instead,
+the script by its absolute path (`massimo install` refuses a relative one):
 the server asks the script to set and clear a TXT record under `_acme-challenge.<name>`,
 so no port has to be open, the name may point at the box's LAN address,
 and wildcards (`-tls-names '*.example.net,example.net'`) work;
@@ -1123,7 +1124,9 @@ Names are upper case, but for the serial in a Cube's line:
 on Windows the start takes `massimo_listen` as `MASSIMO_LISTEN`,
 and so do a reload and `massimo config`;
 on Linux and macOS such a line is set aside, a Cube's line too
-(`line 3 sets MASSIMO_LISTEN in another case, ignored: names are upper case`).
+(`line 3 sets MASSIMO_LISTEN in another case, ignored: names are upper case`),
+and a Cube's variable named in another case in the environment is not read,
+`MASSIMO_CUBE_KEQ0000000_Name` where `MASSIMO_CUBE_keq0000000_NAME` is.
 A UTF-8 byte order mark at the file's start is skipped,
 and UTF-16 text, as PowerShell 5.1's `>` or `>>` writes it, is refused:
 save it as UTF-8.
@@ -1166,7 +1169,7 @@ reads that file alone and keeps its data in `/var/lib/massimo`,
 from any directory, as `sudo sshd` reads sshd's own configuration;
 `-env`, `-no-env` or `MASSIMO_ENV_FILE` turns both off.
 Keep the file out of git; `massimo config` shows what is in effect,
-secrets redacted.
+secrets redacted, as is the value of a name it does not know.
 
 `serve` keeps the Cubes in its own store instead,
 `massimo.db` in the data directory (`-data <dir>` before the command name,
@@ -1206,7 +1209,8 @@ at the latest at a clean stop),
 `store migrate` creates or migrates it without starting `serve`,
 and `store info` prints its schema version, node and row counts
 (also in the web UI, System settings → Maintenance → Store, as
-`massimo config`'s settings are under Settings in effect, secrets left out).
+`massimo config`'s settings are under Settings in effect, secrets and the
+values of unknown names left out).
 The copy holds the database alone:
 `opaque.key` and `node.key` beside it are kept with it,
 since without `opaque.key` no password of `auth_version` 2 signs in

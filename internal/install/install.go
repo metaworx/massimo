@@ -245,7 +245,7 @@ func Install(o Options) error {
 			return err
 		}
 	}
-	if err := o.checkTLS(systemdStart()); err != nil {
+	if err := o.checkTLS(unixAbs); err != nil {
 		return err
 	}
 	if err := o.checkSettingsFile(systemdStart()); err != nil {
@@ -341,7 +341,7 @@ func configure(o Options, m Manager) error {
 			return err
 		}
 	}
-	if err := o.checkTLS(systemdStart()); err != nil {
+	if err := o.checkTLS(unixAbs); err != nil {
 		return err
 	}
 	if err := o.checkSettingsFile(systemdStart()); err != nil {

@@ -84,20 +84,51 @@ func TestConfigHidesASecretInAnyCase(t *testing.T) {
 // massimo config redacts a secret's value whatever the case of its name,
 // as GET /api/v1/config leaves it out: MASSIMO_API_Token, which Windows'
 // start takes as the owner's key, and a password's (AP
-// StartConfiguration, D53-A).
+// StartConfiguration, D53-A). Both hide the value of a name Massimo does
+// not know, which the rule by name misses where it holds a secret,
+// MASSIMO_API_TOKEN_OLD, and still name it with its "typo?" (D65-A).
 func TestConfigRedactsASecretInAnyCase(t *testing.T) {
 	unsetForTest(t, tokenVar)
 	t.Setenv("MASSIMO_API_Token", "placeholder-token-1")
 	t.Setenv("MASSIMO_SMTP_Password", "placeholder-value-2")
+	t.Setenv("MASSIMO_API_TOKEN_OLD", "placeholder-token-3")
+	t.Setenv("MASSIMO_TYPO", "placeholder-value-4")
+	unknown := map[string]bool{"MASSIMO_API_TOKEN_OLD": true, "MASSIMO_TYPO": true}
 	var out strings.Builder
 	printVariables(&out)
-	redacted := 0
+	redacted, typo := 0, 0
 	for _, line := range strings.Split(out.String(), "\n") {
-		if f := strings.Fields(line); len(f) > 1 && (f[0] == "MASSIMO_API_Token" || f[0] == "MASSIMO_SMTP_Password") && f[1] == "set" {
-			redacted++
+		f := strings.Fields(line)
+		if len(f) < 2 {
+			continue
+		}
+		switch {
+		case f[0] == "MASSIMO_API_Token" || f[0] == "MASSIMO_SMTP_Password":
+			if f[1] == "set" {
+				redacted++
+			}
+		case unknown[f[0]]:
+			if f[1] == "set" {
+				redacted++
+			}
+			if strings.HasSuffix(line, "<- unknown name, typo?") {
+				typo++
+			}
 		}
 	}
-	if strings.Contains(out.String(), "placeholder-") || redacted != 2 {
+	if strings.Contains(out.String(), "placeholder-") || redacted != 4 || typo != 2 {
 		t.Fatalf("massimo config's variables:\n%s", out.String())
+	}
+	listed := 0
+	for _, cv := range configView(":8099", "off").Variables {
+		if unknown[cv.Name] {
+			listed++
+			if !cv.Unknown || !cv.Secret || cv.Value != "" {
+				t.Errorf("GET /api/v1/config's %s: %+v", cv.Name, cv)
+			}
+		}
+	}
+	if listed != 2 {
+		t.Errorf("GET /api/v1/config lists %d of MASSIMO_API_TOKEN_OLD and MASSIMO_TYPO", listed)
 	}
 }

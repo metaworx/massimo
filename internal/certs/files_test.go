@@ -11,6 +11,7 @@ import (
 	"crypto/x509"
 	"crypto/x509/pkix"
 	"encoding/pem"
+	"errors"
 	"math/big"
 	"net"
 	"os"
@@ -145,5 +146,43 @@ func TestFilesRefusesMissingOrBad(t *testing.T) {
 	os.WriteFile(keyPath, []byte("garbage"), 0o600)
 	if _, err := OpenFiles(certPath, keyPath, nil); err == nil {
 		t.Fatal("bad key accepted")
+	}
+}
+
+// Load says "tls: " once: a pair that does not match and a key that is
+// not one are refused in crypto/tls's own words, which say it already;
+// a missing file, whose path error does not, gets it, and its error
+// still unwraps to os.ErrNotExist, which OpenSelfSigned reads as no
+// certificate yet (unwrapPath).
+func TestLoadSaysTLSOnce(t *testing.T) {
+	soon := time.Now().Add(time.Hour)
+	certA, keyA, _ := writePair(t, t.TempDir(), []string{"localhost"}, soon, time.Now())
+	_, keyB, _ := writePair(t, t.TempDir(), []string{"localhost"}, soon, time.Now())
+	notAKey := filepath.Join(t.TempDir(), "key.pem")
+	os.WriteFile(notAKey, []byte("garbage"), 0o600)
+	for _, c := range []struct{ what, key string }{
+		{"a pair that does not match", keyB},
+		{"a key that is not one", notAKey},
+		{"the certificate where the key goes", certA},
+	} {
+		_, tlsErr := tls.LoadX509KeyPair(certA, c.key)
+		if tlsErr == nil || !strings.HasPrefix(tlsErr.Error(), "tls: ") {
+			t.Fatalf("%s: crypto/tls says %v, want its own tls: error", c.what, tlsErr)
+		}
+		_, _, err := Load("files", certA, c.key)
+		if err == nil || err.Error() != tlsErr.Error() {
+			t.Errorf("%s: %v, want %v", c.what, err, tlsErr)
+		}
+	}
+	missing := filepath.Join(t.TempDir(), "missing.pem")
+	_, _, err := Load("files", certA, missing)
+	if err == nil || !strings.HasPrefix(err.Error(), "tls: ") || strings.Count(err.Error(), "tls: ") != 1 {
+		t.Errorf("a missing key: %v, want tls: once", err)
+	}
+	if !errors.Is(err, os.ErrNotExist) || !os.IsNotExist(unwrapPath(err)) {
+		t.Errorf("a missing key: %v does not unwrap to os.ErrNotExist", err)
+	}
+	if _, _, err := Load("files", certA, keyA); err != nil {
+		t.Errorf("a pair that matches: %v", err)
 	}
 }

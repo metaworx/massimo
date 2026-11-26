@@ -4871,8 +4871,10 @@ the log level and every `MASSIMO_*` variable in effect with where it came
 from (`environment` or the settings file, with its lines where the file
 gives the name more than once: `file, lines 3 and 4: the first wins`).
 A key's, an IV's, a token's or a password's value never leaves the server:
-such a variable has `"secret": true` and no `value`;
-a name Massimo does not know has `"unknown": true`.
+such a variable has `"secret": true` and no `value`.
+A name Massimo does not know has `"unknown": true`, and `"secret": true`
+with no `value`, since it may hold a secret under a name the rule misses,
+such as `MASSIMO_API_TOKEN_OLD`.
 `503` when the server has no store, or does not show its settings.
 
 ## The LAN proxy
