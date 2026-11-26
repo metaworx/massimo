@@ -21,9 +21,19 @@ that says what it could not undo; held_poll holds the page's poll while
 a test measures what the page does by itself; pause_clock pauses
 Playwright's clock at the page's now. open_fold, close_fold and
 toggle_fold take a fold's toggle event before a test acts inside it.
+wait_started waits for the page's start, the page fixture's and
+owner_page's, and says on a timeout which read it waited for.
+
+Every wait of this kit, and the page fixture's, lasts its seconds times
+UI_TEST_SCALE (scaled), a positive number, 1 where it is not set: a
+slow or loaded runner sets more, and run.sh's retry, which runs with the
+trace, raises it. A window that waits for nothing to come is not
+scaled: ApiReads.answered's quiet time, scroll_settled's still frames.
 """
 import contextlib
 import json
+import math
+import os
 import re
 import sys
 import time
@@ -33,6 +43,7 @@ from datetime import datetime, timedelta, timezone
 from urllib.parse import parse_qs, urlparse
 
 from playwright.sync_api import Error
+from playwright.sync_api import TimeoutError as PlaywrightTimeout
 
 # The password of the operator that run.sh adds with massimo user add, in
 # every set: of 8 characters or more, as a new password is
@@ -60,10 +71,36 @@ NAME_TAKEN = {"en": "There is already a user named {name}.", "de": "Es gibt scho
 NOT_A_SCHEME = {"en": "Not a Massimo colour scheme: unknown format", "de": "Kein Massimo-Farbschema: unbekanntes Format"}
 
 
+def parse_scale(v):
+    """UI_TEST_SCALE's value v as a number: 1 where it is empty, else a
+    positive number, as MASSIMO_TEST_SCALE is for the Go tests
+    (internal/testkit); anything else is refused, so that a typo does not
+    run every wait at a length nobody meant."""
+    if v == "":
+        return 1.0
+    try:
+        f = float(v)
+    except ValueError:
+        f = math.nan
+    if not f > 0 or math.isinf(f):
+        raise ValueError(f"UI_TEST_SCALE is a positive number, not {v!r}")
+    return f
+
+
+SCALE = parse_scale(os.environ.get("UI_TEST_SCALE", ""))
+
+
+def scaled(seconds):
+    """seconds times UI_TEST_SCALE: the time a wait gives what comes
+    within seconds on an unhurried machine. Not for a window that waits
+    for nothing to come, which a scale would only make longer."""
+    return seconds * SCALE
+
+
 def wait_until(page, expr, seconds):
-    """Polls a page expression from here: the page's CSP rules out
-    wait_for_function with a string."""
-    end = time.time() + seconds
+    """Polls a page expression from here, for seconds (scaled): the
+    page's CSP rules out wait_for_function with a string."""
+    end = time.time() + scaled(seconds)
     while time.time() < end:
         if page.evaluate(expr):
             return True
@@ -73,13 +110,13 @@ def wait_until(page, expr, seconds):
 
 def settled(page, look, ok, seconds=5):
     """Looks (look(), from here) until ok holds of what it saw, for
-    seconds at most, and returns whether it held and the last look: for
-    a check of what a test told the page's reads (Reads.device), which a
-    server's own event of the device draws over until keep's read brings
-    it back, and which takes several of Playwright's calls to look at; a
-    Playwright error of a look, an element drawn anew meanwhile, is a
-    look that does not hold."""
-    end = time.time() + seconds
+    seconds (scaled) at most, and returns whether it held and the last
+    look: for a check of what a test told the page's reads
+    (Reads.device), which a server's own event of the device draws over
+    until keep's read brings it back, and which takes several of
+    Playwright's calls to look at; a Playwright error of a look, an
+    element drawn anew meanwhile, is a look that does not hold."""
+    end = time.time() + scaled(seconds)
     while True:
         try:
             got = look()
@@ -124,11 +161,12 @@ def pause_clock(page, ahead_ms=50):
 
 def scroll_settled(page, seconds=3):
     """Waits until the page has not scrolled for ten animation frames;
-    false if it is still scrolling after so many seconds. Chromium runs a
-    smooth scroll on the compositor, and an instant scroll sent while it
-    ends can be undone by it: the page back where the smooth scroll was
-    going. Frames, not polls from here: two equal readings 200 ms apart
-    can be one pause of a starved renderer."""
+    false if it is still scrolling after so many seconds (scaled; the
+    ten frames are not). Chromium runs a smooth scroll on the compositor,
+    and an instant scroll sent while it ends can be undone by it: the
+    page back where the smooth scroll was going. Frames, not polls from
+    here: two equal readings 200 ms apart can be one pause of a starved
+    renderer."""
     return page.evaluate("""(ms) => new Promise((done) => {
         const end = performance.now() + ms;
         let last = window.scrollY, still = 0;
@@ -143,7 +181,7 @@ def scroll_settled(page, seconds=3):
             requestAnimationFrame(frame);
         };
         requestAnimationFrame(frame);
-    })""", seconds * 1000)
+    })""", scaled(seconds) * 1000)
 
 
 class ApiReads:
@@ -173,11 +211,15 @@ class ApiReads:
     def _done(self, request):
         self.open.discard(request)
 
+    def pending(self):
+        """The reads without an answer, each as its method and URL, sorted."""
+        return sorted(f"{r.method} {r.url}" for r in self.open)
+
     def answered(self, seconds=5, quiet_ms=200):
         """Waits until every read has its answer and nothing more is drawn
-        for quiet_ms (the page's height unchanged); false after so many
-        seconds."""
-        end = time.monotonic() + seconds
+        for quiet_ms (the page's height unchanged, not scaled: it waits for
+        nothing to come); false after so many seconds (scaled)."""
+        end = time.monotonic() + scaled(seconds)
         while time.monotonic() < end:
             if not self.open and self.page.evaluate("""(quiet) => new Promise((done) => {
                 const h = document.documentElement.scrollHeight;
@@ -260,8 +302,9 @@ def hold(page, pattern, method, held, sent):
 
 
 def wait_held(page, held, seconds=5, n=1):
-    """Waits until n held requests, one by default, have reached their route."""
-    end = time.time() + seconds
+    """Waits until n held requests, one by default, have reached their
+    route, for seconds (scaled)."""
+    end = time.time() + scaled(seconds)
     while len(held) < n and time.time() < end:
         page.wait_for_timeout(100)
     return len(held) >= n
@@ -737,10 +780,10 @@ class Stream:
     def wait(self, what, kind, match=None, mark=0, server=None, seconds=5):
         """The first event of kind since mark for which match(data) holds
         (any where match is None), trusted or dispatched by a test where
-        server says which (true for the server's), what naming it; on a
-        timeout an AssertionError with the events that came since the
-        mark."""
-        end = time.time() + seconds
+        server says which (true for the server's), what naming it, within
+        seconds (scaled); on a timeout an AssertionError with the events
+        that came since the mark."""
+        end = time.time() + scaled(seconds)
         cursor = mark
         while True:
             for e in self.since(cursor):
@@ -752,7 +795,7 @@ class Stream:
             self.page.wait_for_timeout(100)
         seen = self.since(mark)
         shown = ", ".join(describe_event(e) for e in seen[-20:])
-        raise AssertionError(f"{what}: no {kind} event within {seconds} s; {len(seen)} since the mark{': ' if seen else ''}{shown}")
+        raise AssertionError(f"{what}: no {kind} event within {scaled(seconds):g} s; {len(seen)} since the mark{': ' if seen else ''}{shown}")
 
 
 def describe_event(e):
@@ -776,11 +819,12 @@ LOG_PROBE = """() => {
 
 
 def wait_log_live(page, seconds=5):
-    """Waits until the log takes the stream's state events: the page
-    leaves a stream's first 1.5 s out of the log, the burst of states a
-    connection starts with, and again after a resync (app.js,
-    connectEvents). A probe, which the log never shows, is sent until
-    the page's state listener hands one on to the log."""
+    """Waits until the log takes the stream's state events, for seconds
+    (scaled, by wait_until): the page leaves a stream's first 1.5 s out
+    of the log, the burst of states a connection starts with, and again
+    after a resync (app.js, connectEvents). A probe, which the log never
+    shows, is sent until the page's state listener hands one on to the
+    log."""
     assert wait_until(page, LOG_PROBE, seconds), "the log takes the stream's state events (a stream's first 1.5 s are left out)"
 
 
@@ -1140,9 +1184,9 @@ FOLD_TOGGLE = """([sel, ms]) => new Promise((done, fail) => {
 
 def toggle_fold(page, sel, seconds=3):
     """The fold sel, a <details>, opened or closed by its summary, its
-    toggle event taken within seconds and the part drawn again (frames);
-    returns whether it is open."""
-    is_open = page.evaluate(FOLD_TOGGLE, [sel, int(seconds * 1000)])
+    toggle event taken within seconds (scaled) and the part drawn again
+    (frames); returns whether it is open."""
+    is_open = page.evaluate(FOLD_TOGGLE, [sel, int(scaled(seconds) * 1000)])
     frames(page)
     return is_open
 
@@ -1161,12 +1205,37 @@ def close_fold(page, sel, seconds=3):
         assert not toggle_fold(page, sel, seconds), f"the fold {sel} closes"
 
 
+# --- the page's start -----------------------------------------------------
+
+# How long the page's start may take, before the scale: longer than the
+# page's own limit of a read, API_WAIT_MS of app.js (20 s), so that a
+# read the server answers late is the page's to give up, which it says
+# on its message line, and not a wait of the test's that ends first.
+START_SECONDS = 30
+
+
+def wait_started(page, api, seconds=START_SECONDS):
+    """Waits until the page's start is over, its room tiles drawn, for
+    seconds (scaled): the page fixture's wait after its goto, and
+    owner_page's. api is an ApiReads made before the goto; on a timeout
+    an AssertionError names the API reads still open and the page's
+    message line, which say which read the start waited for."""
+    try:
+        page.wait_for_selector(".room", timeout=scaled(seconds) * 1000)
+    except PlaywrightTimeout:
+        line = page.evaluate("(() => { const m = document.getElementById('message'); "
+                             "return m && !m.classList.contains('hidden') ? m.textContent : ''; })()")
+        raise AssertionError(f"the page's start: no room tile within {scaled(seconds):g} s; "
+                             f"the API reads still open: {', '.join(api.pending()) or 'none'}; "
+                             f"the message line: {line or 'empty'}") from None
+
+
 # --- a page of its own ------------------------------------------------------
 
 def owner_page(new_context, guard, watch, url, token, clock=False):
     """A page of its own with the owner's key token at url, the tiles
-    shown and the stream open, as the fixture page has it: for a test
-    that signs out or meets a 401 (test_pairing_updates.py,
+    shown (wait_started) and the stream open, as the fixture page has
+    it: for a test that signs out or meets a 401 (test_pairing_updates.py,
     test_repair_updates.py); with clock, under Playwright's clock, its
     time flowing as the real one (page.clock.run_for moves it on), as the
     mark clock gives the fixture page."""
@@ -1177,10 +1246,11 @@ def owner_page(new_context, guard, watch, url, token, clock=False):
         ctx.clock.install()
     page = ctx.new_page()
     guard.page = page
-    page.set_default_timeout(5000)
+    page.set_default_timeout(scaled(5) * 1000)
     page.on("pageerror", lambda e: watch.problems.append(f"page error: {e}"))
+    api = ApiReads(page)
     page.goto(url)
-    page.wait_for_selector(".room", timeout=10000)
+    wait_started(page, api)
     assert wait_until(page, "state.eventsOpen", 10), "the stream is open"
     return page
 

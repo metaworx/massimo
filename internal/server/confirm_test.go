@@ -84,15 +84,19 @@ func openWrites(rt *runtime) int {
 }
 
 // A room command its members take is pending, then done once every
-// member shows it, with no line.
+// member shows it, with no line: pending while the fake Cube holds its
+// apply, done after the release.
 func TestRoomCommandConfirmed(t *testing.T) {
 	t.Parallel()
-	r := startServer(t, confirming(3*time.Second, 100*time.Millisecond))
+	r := startServer(t, confirming(testkit.Scale(3*time.Second), 0))
 	ts, rt := r.ts, r.rt
+	release := r.fc.HoldApply()
+	t.Cleanup(release)
 	code, out := do(t, ts, "PUT", confirmBase+"/rooms/2/setpoint", `{"mode":"manual","temp":22}`)
 	if code != 200 || out["confirmation"] != "pending" {
 		t.Fatalf("setpoint: %d %v", code, out)
 	}
+	release()
 	testkit.Eventually(t, "room 2 confirmed", func() bool { return confirmRoom(t, ts, 2).Confirmation == nil && openWrites(rt) == 0 })
 	if evs := unconfirmedEvents(t, ts, "not_confirmed"); len(evs) != 0 {
 		t.Fatalf("lines %+v", evs)
@@ -221,11 +225,14 @@ func TestProxyWriteConfirmed(t *testing.T) {
 }
 
 // A key lock and a display mode are confirmed by the L entry, and the
-// display write is no C line's to follow.
+// display write is no C line's to follow: pending while the fake Cube
+// holds its apply, confirmed after the release.
 func TestLockAndDisplayConfirmed(t *testing.T) {
 	t.Parallel()
-	r := startServer(t, confirming(3*time.Second, 100*time.Millisecond))
+	r := startServer(t, confirming(testkit.Scale(3*time.Second), 0))
 	ts, rt := r.ts, r.rt
+	release := r.fc.HoldApply()
+	t.Cleanup(release)
 	if code, out := do(t, ts, "PUT", confirmBase+"/devices/0a0204/lock", `{"locked":true}`); code != 200 || out["confirmation"] != "pending" {
 		t.Fatalf("lock: %d %v", code, out)
 	}
@@ -241,6 +248,7 @@ func TestLockAndDisplayConfirmed(t *testing.T) {
 	if c := confirmDevice(t, ts, "0a0201").Confirmation; c == nil || !reflect.DeepEqual(c.Fields, []string{"display_actual"}) {
 		t.Fatalf("display pending: %+v", c)
 	}
+	release()
 	testkit.Eventually(t, "both confirmed", func() bool { return openWrites(rt) == 0 })
 	if d := confirmDevice(t, ts, "0a0204"); d.Confirmation != nil || !d.State.PanelLocked {
 		t.Fatalf("locked: %+v", d)

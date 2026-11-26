@@ -26,6 +26,12 @@
 # that a run shows where its time went (AP TestSpeed, Block 3); the
 # retry, whose few tests carry the video and the trace, lists none of
 # its own.
+# UI_TEST_SCALE stretches every wait of the suite (helpers.py, scaled;
+# AP SteadyTests, Block 3): a positive number, 1 where it is not set,
+# passed on to pytest; a value that is not one stops the run. The retry
+# runs at four times it, since the trace slows the page as well: a
+# test's set-up, which loads the page, took up to 3.8 times as long with
+# the trace and the video as without them (2026-11-26).
 # `run.sh screenshots` (make ui-screenshots) starts one set and runs
 # screenshots.py instead, which takes the screenshot set into
 # docs/screenshots/.
@@ -84,7 +90,8 @@
 #
 # Environment: UI_TEST_PYTHON (default tools/ui-test/.venv/bin/python
 # when present, else python3), UI_TEST_REQUIRED, UI_TEST_WORKERS (4),
-# UI_TEST_CASES (the cases to run, such as 390-en,390-de; all four), and
+# UI_TEST_CASES (the cases to run, such as 390-en,390-de; all four),
+# UI_TEST_SCALE (1; the retry four times it), and
 # set 0's ports: UI_TEST_CUBE_PORT (62919), UI_TEST_API_PORT (8119),
 # UI_TEST_DISCOVERY_PORT (23919), UI_TEST_DOWN_PORT (the second server's,
 # UI_TEST_API_PORT + 1); set n takes the fake Cube's two ports + n and
@@ -119,6 +126,15 @@ workers=${UI_TEST_WORKERS:-4}
 case "$workers" in
 	'' | *[!0-9]* | 0*) echo "ui-test: UI_TEST_WORKERS is a number from 1, not '$workers'" >&2; exit 2 ;;
 esac
+# the scale of every wait, as helpers.py takes it: a positive number,
+# such as 2 or 1.5; the retry's, four times it
+scale=${UI_TEST_SCALE:-1}
+if ! awk -v s="$scale" 'BEGIN { exit !(s ~ /^([0-9]+[.]?[0-9]*|[.][0-9]+)$/ && s + 0 > 0) }'; then
+	echo "ui-test: UI_TEST_SCALE is a positive number, such as 2 or 1.5, not '$scale'" >&2
+	exit 2
+fi
+retry_scale=$(awk -v s="$scale" 'BEGIN { print s * 4 }')
+export UI_TEST_SCALE="$scale"
 if [ "$mode" = screenshots ]; then
 	workers=1
 elif [ "$workers" -gt 1 ] && ! "$py" -c 'import xdist' 2>/dev/null; then
@@ -300,8 +316,8 @@ rc=0
 PYTEST_ADDOPTS="--durations=20 ${PYTEST_ADDOPTS:-}" "$py" -m pytest --output "$here/results" "$@" || rc=$?
 # Only failed tests (exit 1) run again: not an interrupted or empty run.
 [ $rc -eq 1 ] || exit $rc
-echo "ui-test: tests failed; they run once more, with the video and the trace (tools/ui-test/results/retry/)" >&2
-if "$py" -m pytest --last-failed --last-failed-no-failures none --video retain-on-failure --tracing retain-on-failure \
+echo "ui-test: tests failed; they run once more, with the video and the trace (tools/ui-test/results/retry/), at UI_TEST_SCALE=$retry_scale" >&2
+if UI_TEST_SCALE="$retry_scale" "$py" -m pytest --last-failed --last-failed-no-failures none --video retain-on-failure --tracing retain-on-failure \
 	--output "$here/results/retry" "$@"; then
 	echo "ui-test: the failed tests passed the second time, and the run fails all the same: they are flaky" >&2
 else

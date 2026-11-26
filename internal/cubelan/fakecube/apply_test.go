@@ -183,7 +183,8 @@ func TestApplyAutoAndVacation(t *testing.T) {
 // ends by itself with the mode and valve it had.
 func TestApplyBoost(t *testing.T) {
 	t.Parallel()
-	s := startRooms(t, &Server{BoostFor: 200 * time.Millisecond})
+	boost := testkit.Scale(200 * time.Millisecond) // outlasts the read right after the send on a slow runner too
+	s := startRooms(t, &Server{BoostFor: boost})
 	c := dial(t, s.ln.Addr().String())
 	c.send(must(cube.CmdSetTemperature(cube.Target{RFAddress: 0x0a0203, RoomID: 1, Room: true}, 20, cube.ModeBoost, cube.Until{})))
 	st := c.states()
@@ -206,7 +207,7 @@ func TestApplyBoost(t *testing.T) {
 	c.send(must(cube.CmdSetTemperature(cube.Target{RFAddress: 0x0a0204, RoomID: 2, Room: true}, 21, cube.ModeManual, cube.Until{})))
 	// No end to wait for: the boost's timer, stopped by the setpoint,
 	// leaves no trace.
-	time.Sleep(400 * time.Millisecond)
+	time.Sleep(2 * boost)
 	if st := c.states()[0x0a0204]; st.Mode != cube.ModeManual || *st.Setpoint != 21 || *st.ValvePct != 0 {
 		t.Fatalf("a setpoint after a boost: %+v", st)
 	}
@@ -295,7 +296,7 @@ func TestApplyProgramTemperaturesLock(t *testing.T) {
 // reply; a discarded command and a fake without Apply change nothing.
 func TestApplyDelayDiscardAndOff(t *testing.T) {
 	t.Parallel()
-	s := startRooms(t, &Server{ApplyAfter: 300 * time.Millisecond})
+	s := startRooms(t, &Server{ApplyAfter: testkit.Scale(300 * time.Millisecond)}) // outlasts the "not yet" read on a slow runner too
 	c := dial(t, s.ln.Addr().String())
 	room2 := cube.Target{RFAddress: 0x0a0204, RoomID: 2, Room: true}
 	c.send(must(cube.CmdSetTemperature(room2, 25, cube.ModeManual, cube.Until{})))
@@ -329,6 +330,63 @@ func TestApplyDelayDiscardAndOff(t *testing.T) {
 	co.send(must(cube.CmdSetTemperature(room2, 25, cube.ModeManual, cube.Until{})))
 	if st := co.states()[0x0a0204]; st.Mode != cube.ModeAuto {
 		t.Fatalf("applied without Apply: %+v", st)
+	}
+}
+
+// A held apply changes nothing until its release, which applies what
+// came meanwhile in its order before it returns; holds nest, and a
+// release called twice releases once.
+func TestHoldApply(t *testing.T) {
+	t.Parallel()
+	s := startRooms(t, &Server{})
+	c := dial(t, s.ln.Addr().String())
+	room2 := cube.Target{RFAddress: 0x0a0204, RoomID: 2, Room: true}
+	release := s.HoldApply()
+	inner := s.HoldApply()
+	c.send(must(cube.CmdSetTemperature(room2, 25, cube.ModeManual, cube.Until{})))
+	c.send(must(cube.CmdSetTemperature(room2, 23, cube.ModeManual, cube.Until{})))
+	c.send(cube.CmdLockControls(cube.Target{RFAddress: 0x0a0205}, true))
+	if st := c.states(); st[0x0a0204].Mode != cube.ModeAuto || st[0x0a0205].PanelLocked {
+		t.Fatalf("applied while held: %+v %+v", st[0x0a0204], st[0x0a0205])
+	}
+	inner()
+	inner()
+	if st := c.states(); st[0x0a0204].Mode != cube.ModeAuto || st[0x0a0205].PanelLocked {
+		t.Fatalf("applied while the outer hold lasts: %+v %+v", st[0x0a0204], st[0x0a0205])
+	}
+	release()
+	st := c.states()
+	for _, rf := range []cube.RFAddress{0x0a0204, 0x0a0205, 0x0a0206} {
+		if st[rf].Mode != cube.ModeManual || *st[rf].Setpoint != 23 {
+			t.Errorf("%s after the release: %+v, want the later setpoint, 23", rf, st[rf])
+		}
+	}
+	if !st[0x0a0205].PanelLocked {
+		t.Error("the lock not applied at the release")
+	}
+	// Released, the fake applies at once again.
+	c.send(must(cube.CmdSetTemperature(room2, 19, cube.ModeManual, cube.Until{})))
+	if st := c.states()[0x0a0204]; *st.Setpoint != 19 {
+		t.Fatalf("after the hold: %+v", st)
+	}
+
+	// A command whose ApplyAfter runs out during the hold waits for the
+	// release too.
+	late := startRooms(t, &Server{ApplyAfter: 20 * time.Millisecond})
+	cl := dial(t, late.ln.Addr().String())
+	free := late.HoldApply()
+	cl.send(must(cube.CmdSetTemperature(room2, 25, cube.ModeManual, cube.Until{})))
+	testkit.Eventually(t, "the command due after ApplyAfter", func() bool {
+		late.held.mu.Lock()
+		defer late.held.mu.Unlock()
+		return len(late.held.held) == 1
+	})
+	if st := cl.states()[0x0a0204]; st.Mode != cube.ModeAuto {
+		t.Fatalf("due and applied while held: %+v", st)
+	}
+	free()
+	if st := cl.states()[0x0a0204]; st.Mode != cube.ModeManual || *st.Setpoint != 25 {
+		t.Fatalf("due during the hold, after the release: %+v", st)
 	}
 }
 

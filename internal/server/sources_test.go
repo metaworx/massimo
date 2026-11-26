@@ -11,7 +11,6 @@ import (
 	"strconv"
 	"strings"
 	"testing"
-	"time"
 
 	"go.metaworx.ch/massimo/internal/cubeio"
 	"go.metaworx.ch/massimo/internal/cubelan/fakecube"
@@ -203,11 +202,11 @@ func TestRoomConfigWithEveryThermostatDead(t *testing.T) {
 // death that changes the room's programme, which no one changed, leaves
 // it, and a write with it goes; that write changes it, so that a write
 // with the tag from before is 412, carrying the new one, sending nothing;
-// while the write is on its way (the fake Cube takes it 2 s later), the
+// while the write is on its way (the fake Cube holds its apply), the
 // room's programme shows the day written, pending, under the write's tag.
 func TestRoomProgramTagOfTheMembers(t *testing.T) {
 	t.Parallel()
-	r := startServer(t, storedRooms(), withFake(func(fc *fakecube.Server) { fc.ApplyAfter = 2 * time.Second }))
+	r := startServer(t, storedRooms())
 	url := r.ts.URL + "/api/v1/cubes/KEQ0000100/rooms/1/program"
 	prog, before := programWith(t, url)
 	if prog["source"] != "0a0202" {
@@ -226,6 +225,7 @@ func TestRoomProgramTagOfTheMembers(t *testing.T) {
 		t.Fatalf("a member's tag %s, the room's %s", member, after)
 	}
 	const monday = `[{"temp":17,"until":"06:00"},{"temp":21.5,"until":"22:00"},{"temp":17,"until":"24:00"}]`
+	r.fc.HoldApply() // the room's thermostats asleep to the test's end: the write stays on its way
 	code, body := putProgram(t, url, `"`+before+`"`, `{"monday":`+monday+`}`)
 	if code != 200 || body["etag"] == before {
 		t.Fatalf("the tag no one's change touched: %d %v", code, body)

@@ -1,4 +1,4 @@
-# Testing the web UI (v1.27.0)
+# Testing the web UI (v1.29.0)
 
 An evaluation of a Cypress suite for the web UI, against the alternatives:
 what the Playwright smoke test covers today and what it cannot do well,
@@ -920,6 +920,35 @@ the server's and the test's, in order,
   and fails the test on anything else, naming what it could not undo;
   `cleanup(*steps)` runs every step of a cleanup, one that fails among them,
   and raises the first error once all have run.
+- **The scale** (`scaled(seconds)`, `UI_TEST_SCALE`, AP SteadyTests, Block 3):
+  each wait of the kit lasts its seconds times `UI_TEST_SCALE`,
+  a positive number, 1 where it is not set,
+  as `MASSIMO_TEST_SCALE` does for the Go tests:
+  `wait_until`, `settled`, `wait_held`, `scroll_settled`, `Stream.wait`,
+  `ApiReads.answered`, `wait_log_live` and the folds' helpers,
+  and the page fixture's default timeout and its waits for the tiles and the stream.
+  So a call site gives the time a thing takes on an unhurried machine,
+  and a slow or loaded runner sets more.
+  `run.sh` refuses a scale that is not a positive number,
+  and its retry, which runs with the trace,
+  runs at four times the scale given:
+  with the trace, a test's set-up took up to 3.8 times as long (2026-11-26).
+  A window that waits for nothing to come is not scaled:
+  `ApiReads.answered`'s quiet time, `scroll_settled`'s still frames,
+  a fixed `wait_for_timeout`.
+  A test's own loop ends at `scaled(seconds)`,
+  as `wait_count`, `back` and `wait_reads` do;
+  a `timeout=` handed to Playwright is not scaled by itself.
+- **The page's start** (`wait_started`, AP SteadyTests, Block 3):
+  the page fixture and `owner_page` wait 30 s (scaled) for the room tiles,
+  longer than the page's own limit of a read (`API_WAIT_MS`, 20 s):
+  a read the server answers late is the page's to give up,
+  and the page then says so on its message line.
+  On a timeout the failure names the API reads still open (`ApiReads`)
+  and the message line, so that it says which read the start waited for.
+  What a reload brings is waited for too,
+  not looked at once when the page is shown:
+  the page's start goes on after it (`test_header.py`).
 - **Nothing came, against an end:**
   a check that an action brought nothing has an end of its own,
   not a fixed wait that a slow runner outlasts:
