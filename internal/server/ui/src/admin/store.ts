@@ -20,8 +20,8 @@ import type { Capability, LoginProvider, Provider, Role, User } from "../api";
 import type { Outcome } from "../shared/action";
 import { live, liveMap } from "../shared/live";
 
-/** The users (GET /api/v1/users), as the last load that went through gave them; loaded says that one did. */
-export const users = live({ list: [] as User[], loaded: false });
+/** The users (GET /api/v1/users), as the last load that went through gave them; loaded says that one did, failed that the newest failed. */
+export const users = live({ list: [] as User[], loaded: false, failed: false });
 
 /** The roles and the capabilities (GET /api/v1/roles), for the roles' list, the role choice and a provider's role; null where they may not be read. */
 export const roles = live({ list: null as Role[] | null, caps: [] as Capability[], loaded: false });
@@ -87,6 +87,7 @@ export function providerFormKey(key: string): string {
 export function forgetAdmin(): void {
   users.list = [];
   users.loaded = false;
+  users.failed = false;
   roles.list = null;
   roles.caps = [];
   roles.loaded = false;

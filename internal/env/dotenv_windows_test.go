@@ -11,7 +11,7 @@ import (
 )
 
 // On Windows a name in two cases is one variable, and so one name to
-// the settings file's read (nameKey): its first line wins, the later a
+// the settings file's read (NameKey): its first line wins, the later a
 // duplicate's note, at a start as at a reload, and a reload of the same
 // file changes nothing. A reload that finds the name in the other case,
 // either way, keeps it the file's; one that finds its value changed, or

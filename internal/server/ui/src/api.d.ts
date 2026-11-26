@@ -585,11 +585,21 @@ export interface User {
   /**
    * In the users routes' answers: what the caller may do with the user, change
    * it beyond its own name and password (manage) or set its password
-   * (password); absent elsewhere
+   * (password), and the roles it may give it (roles); absent elsewhere
    */
   may?: {
     manage: boolean;
     password: boolean;
+    /**
+     * The keys of the roles the caller may give the user, in the roles' order,
+     * empty where it may give none; of those, for an integration's user only
+     * the roles within the role integration and its integration's maximum, and
+     * integration itself, never owner. A holder of users without roles or
+     * integrations learns from it the keys of the roles it outranks and, for
+     * each integration's user, which of them lie within that integration's
+     * maximum
+     */
+    roles: string[];
   };
   /**
    * An integration's user, with its integration's uuid; in GET /api/v1/users
@@ -611,6 +621,48 @@ export interface User {
     /** Its chain, <the integration's name> › <its display name> */
     display?: string;
   }[];
+}
+
+export interface UserCreated extends User {
+  open_setup?: OpenSetup;
+}
+
+/**
+ * What was set up before the first regular user and still works, for the first
+ * owner to check, as a rule while the server was open, else left by an owner
+ * since removed: in the first owner's answer of POST /api/v1/users alone, where
+ * it holds anything; each list absent where empty. Names only, never a key or a
+ * secret
+ */
+export interface OpenSetup {
+  /**
+   * The integrations active with a live key, or one still to be collected with
+   * the approval's code; requests still waiting are not listed
+   */
+  integrations?: {
+    uuid: string;
+    /** The name the owner gave it, else the one it reports */
+    name: string;
+  }[];
+  /** The sign-in providers enabled */
+  providers?: {
+    key: string;
+    /** The name on its button; absent shows the key */
+    name?: string;
+    /** A sign-in without an identity creates the user */
+    auto_create?: boolean;
+  }[];
+  /**
+   * The roles added, and the default ones changed or disabled; never owner or
+   * integration
+   */
+  roles?: {
+    key: string;
+    /** The display name; absent shows the key's translated default */
+    name?: string;
+  }[];
+  /** The capabilities turned off for every role but owner */
+  capabilities_off?: string[];
 }
 
 export interface RoleRef {

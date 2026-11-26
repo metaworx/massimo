@@ -137,6 +137,11 @@ sed -i '1i # A comment of an older template.' /etc/massimo/env
 echo >>/etc/massimo/env
 reinstall inactive
 if restarted; then fail "started on an older template: $(cat /tmp/calls)"; fi
+# A template with a byte order mark, as an editor on Windows saves it:
+# still the template, as serve reads it, and not started.
+printf '\357\273\277' | cat - /tmp/env >/etc/massimo/env
+reinstall inactive
+if restarted; then fail "started on a template with a byte order mark: $(cat /tmp/calls)"; fi
 # A setting of its own: started.
 cp /tmp/env /etc/massimo/env
 echo 'MASSIMO_ANNOUNCE=off' >>/etc/massimo/env

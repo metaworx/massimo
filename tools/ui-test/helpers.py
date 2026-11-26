@@ -898,22 +898,114 @@ def sign_out(page):
     page.locator("#logout-btn").click()
 
 
+# The sign-in card's box and its title's middle, and the room the
+# signed-out page gives the card: the window's height less the body's
+# padding above and below it (style.css, body.signed-out), 868 px of the
+# suite's 900.
+LOGIN_CARD = """() => {
+  const card = document.getElementById('login-dialog').getBoundingClientRect();
+  const range = document.createRange();
+  range.selectNodeContents(document.getElementById('login-title'));
+  const title = range.getBoundingClientRect();
+  const body = getComputedStyle(document.body);
+  const pad = [parseFloat(body.paddingTop), parseFloat(body.paddingBottom)];
+  return {top: card.top, bottom: innerHeight - card.bottom, height: card.height, left: card.left,
+          right: document.documentElement.clientWidth - card.right, card: (card.left + card.right) / 2,
+          title: (title.left + title.right) / 2, pad, room: innerHeight - pad[0] - pad[1], scrollY};
+}"""
+
+# Where the card is, whether it shows all it holds (a card that cuts or
+# scrolls what overflows it does not), and each control of it shown: its
+# name, whether it lies inside the card's box, and its top and bottom in
+# the page, its scroll added.
+LOGIN_CARD_LOOK = """() => {
+  const card = document.getElementById('login-dialog');
+  const box = card.getBoundingClientRect();
+  const name = (e) => e.id || e.getAttribute('aria-label') || e.textContent.trim().slice(0, 40) || e.tagName;
+  const controls = [...card.querySelectorAll('button, input, select, textarea, summary, a[href], [role=button]')]
+    .filter((e) => e.checkVisibility({ visibilityProperty: true })).map((e) => {
+      const r = e.getBoundingClientRect();
+      return {name: name(e), top: r.top + scrollY, bottom: r.bottom + scrollY,
+              inside: r.top >= box.top - 0.5 && r.bottom <= box.bottom + 0.5 && r.left >= box.left - 0.5 && r.right <= box.right + 0.5};
+    });
+  return {top: box.top, bottom: box.bottom, left: box.left, innerHeight, scrollY, controls,
+          whole: card.scrollHeight <= card.clientHeight + 1, held: [card.scrollHeight, card.clientHeight]};
+}"""
+
+
+def controls_reached(look, reach, what):
+    """The card of LOGIN_CARD_LOOK's look showing all it holds, and each
+    of its controls inside its box and within the part of the page a
+    user's scroll reaches, from its start to reach, the page's bottom edge
+    at its end (the window's height where the page does not scroll): each
+    in view at some scroll, however tall the card."""
+    assert look["whole"], f"the card shows all it holds on {what}: its content and its box, {look['held']}"
+    cut = [c["name"] for c in look["controls"] if not c["inside"]]
+    assert not cut, f"each control of the card inside the card's box on {what}: {cut}"
+    out = [c["name"] for c in look["controls"] if c["top"] < -0.5 or c["bottom"] > reach + 0.5]
+    assert not out, f"each control of the card in view at some scroll on {what}: {out}, the page reached to {reach}"
+
+
 def assert_login_card_centred(page, what):
-    """The sign-in card, open, in the middle of the window, as much room
-    above it as below and left as right, and its title's text in the
-    middle of the card (AP MobileApp, Block 14: F27), each within 2 px."""
-    m = page.evaluate("""() => {
-      const card = document.getElementById('login-dialog').getBoundingClientRect();
-      const range = document.createRange();
-      range.selectNodeContents(document.getElementById('login-title'));
-      const title = range.getBoundingClientRect();
-      return {top: card.top, bottom: innerHeight - card.bottom, left: card.left, right: document.documentElement.clientWidth - card.right,
-              card: (card.left + card.right) / 2, title: (title.left + title.right) / 2, fits: card.height < innerHeight};
-    }""")
-    assert m["fits"], f"the card fits the window's height on {what}: {m}"
+    """The sign-in card, open, in the middle of the window: no taller than
+    the room the page gives it, the window less the body's padding above
+    and below (AP AccessEnds, D18), as much room above it as below and
+    left as right, its title's text in the middle of the card (AP
+    MobileApp, Block 14: F27), each within 2 px, and each of its controls
+    shown inside it and in view (controls_reached). The sign-in card's own
+    measure: one that grows taller than the room by accident fails here
+    (D16)."""
+    page.evaluate("scrollTo({ top: 0, behavior: 'instant' })")
+    m = page.evaluate(LOGIN_CARD)
+    assert m["height"] <= m["room"], f"the card fits the window's height on {what}: {m}"
     assert abs(m["top"] - m["bottom"]) <= 2, f"the card in the middle of the window's height on {what}: {m}"
+    centred_across(m, what)
+    look = page.evaluate(LOGIN_CARD_LOOK)
+    controls_reached(look, look["innerHeight"], what)
+
+
+def centred_across(m, what):
+    """The card of LOGIN_CARD's measure m in the middle of the window's
+    width, and its title's text in the middle of the card, each within
+    2 px."""
     assert abs(m["left"] - m["right"]) <= 2, f"the card in the middle of the window's width on {what}: {m}"
     assert abs(m["card"] - m["title"]) <= 2, f"the title in the middle of the card on {what}: {m}"
+
+
+def assert_login_card_placed(page, what):
+    """The sign-in card, open, where the signed-out page places it
+    (style.css; AP PasswordRules, D57-A): a card within the room, the
+    window less the body's padding above and below, in the middle of the
+    window as assert_login_card_centred has it; a taller one, from the page
+    at its start, its top at the body's padding, and at the page's end, as
+    the wheel scrolls it, its bottom inside the window (AP AccessEnds,
+    D17); either way each control of the card shown inside the card and in
+    view at some scroll (controls_reached), the card in the middle of the
+    window's width, its title in the middle of the card, and no horizontal
+    scroll. The page is left at its start. The first owner's card's
+    measure, which a press of the dice makes taller than the room the
+    window leaves it in the app at 390 px (D16)."""
+    page.evaluate("scrollTo({ top: 0, behavior: 'instant' })")
+    m = page.evaluate(LOGIN_CARD)
+    start = page.evaluate(LOGIN_CARD_LOOK)
+    if m["height"] <= m["room"]:
+        assert abs(m["top"] - m["bottom"]) <= 2, f"the card in the middle of the window's height on {what}: {m}"
+        reach = start["innerHeight"]
+    else:
+        assert abs(start["top"] - m["pad"][0]) <= 1, f"the card taller than its room starts at its top on {what}: {m}"
+        # to the page's end as a user scrolls, by the wheel over the card's own padding, which a page that cannot be
+        # scrolled does not move, where a script's scroll would; the scroll runs after the wheel's event, until the end
+        page.mouse.move(start["left"] + 8, start["innerHeight"] / 2)
+        page.mouse.wheel(0, page.evaluate("document.documentElement.scrollHeight"))
+        wait_until(page, "scrollY >= document.documentElement.scrollHeight - innerHeight - 1", 2)
+        assert scroll_settled(page), f"the page comes to rest at its end on {what}"
+        end = page.evaluate(LOGIN_CARD_LOOK)
+        page.evaluate("scrollTo({ top: 0, behavior: 'instant' })")
+        assert end["bottom"] <= end["innerHeight"], f"the page scrolls to the card's bottom on {what}: {m}, {end}"
+        reach = end["scrollY"] + end["innerHeight"]
+    controls_reached(start, reach, what)
+    centred_across(m, what)
+    assert page.evaluate("document.documentElement.scrollWidth <= innerWidth"), f"no horizontal scroll on {what}: {scroll_width(page)}"
 
 
 def assert_login_row(page, what):

@@ -461,6 +461,84 @@ func TestOpenWarningAtTheStart(t *testing.T) {
 	}
 }
 
+// The owner MASSIMO_API_TOKEN makes is told what was set up while the
+// server was open, as the first owner of the page is (AP AccessEnds,
+// D14): at the start, and at a reload of the settings file that brings
+// the token, serve's line, the log's open_setup line at warn and its
+// alert for the token's owner; not where the store has a regular user
+// already, so that the token only becomes that owner's key, nor where
+// nothing was set up.
+func TestTokenOwnerSaysWhatWasSetUp(t *testing.T) {
+	t.Parallel()
+	const token = "the-file-token-1"
+	for _, c := range []struct {
+		name                  string
+		integration, regular  bool
+		atStart, reload, says bool
+	}{
+		{name: "at the start", integration: true, atStart: true, says: true},
+		{name: "at a reload", integration: true, reload: true, says: true},
+		{name: "beside a regular user", integration: true, regular: true, atStart: true},
+		{name: "nothing set up", atStart: true},
+	} {
+		t.Run(c.name, func(t *testing.T) {
+			t.Parallel()
+			opts := storeOptions(t, t.TempDir(), "")
+			if c.atStart {
+				opts.Token = token
+			}
+			st := opts.Store
+			var key string
+			if c.integration {
+				_, key = registerHA(t, st, []string{"read"})
+			}
+			if c.regular {
+				userToken(t, st, "anna", store.RoleOwner)
+			}
+			r := startServer(t, withOptions(opts), withLog(nil), quiet())
+			if c.reload {
+				if n := r.log.Count(0, testkit.Msg(openSetupMessage)); n != 0 {
+					t.Fatalf("said at a start without the token: %v", r.log.Since(0, nil))
+				}
+				if err := r.s.SetToken(t.Context(), token); err != nil {
+					t.Fatal(err)
+				}
+			}
+			said := r.log.Since(0, testkit.MsgAt(slog.LevelWarn, openSetupMessage, "kind", "open_setup", "user", store.BootstrapUser, "role", store.RoleOwner))
+			if all := r.log.Count(0, testkit.Msg(openSetupMessage)); (len(said) == 1) != c.says || all != len(said) {
+				t.Fatalf("said %d times, %d as the owner's: %v", all, len(said), r.log.Since(0, nil))
+			}
+			var lines []map[string]any
+			if code := getJSON(t, r.ts, token, "/api/v1/log?kind=open_setup", &lines); code != 200 {
+				t.Fatalf("the log: %d", code)
+			}
+			var alerts logAlertsView
+			if code := getJSON(t, r.ts, token, "/api/v1/log/alerts", &alerts); code != 200 {
+				t.Fatalf("the alerts: %d", code)
+			}
+			alerted := slices.ContainsFunc(alerts.Alerts, func(a logAlert) bool { return a.Kind == "open_setup" && a.Level == "warn" })
+			if !c.says {
+				if len(lines) != 0 || alerted {
+					t.Fatalf("the log %v, alerted %v", lines, alerted)
+				}
+				return
+			}
+			summary, _ := json.Marshal(lines)
+			if len(lines) != 1 || lines[0]["level"] != "warn" || !alerted || !strings.Contains(string(summary), `"user":"owner"`) || !strings.Contains(string(summary), `"name":"Casa Leone"`) {
+				t.Fatalf("the log %s, alerted %v", summary, alerted)
+			}
+			if said[0].Attrs["integrations"] != "Casa Leone" {
+				t.Fatalf("serve's line: %s", said[0].Line)
+			}
+			for _, secret := range []string{key, token} {
+				if strings.Contains(said[0].Line, secret) || strings.Contains(string(summary), secret) {
+					t.Fatalf("a secret said: %s; %s", said[0].Line, summary)
+				}
+			}
+		})
+	}
+}
+
 // The removal of the last regular user turns the server open, and the
 // log warns, naming whom and by whom: an owner with an end date, alone
 // beside an integration's users, as the command line or an older

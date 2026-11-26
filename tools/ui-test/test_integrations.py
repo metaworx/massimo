@@ -10,8 +10,11 @@ import json
 import ssl
 import urllib.request
 
-from conftest import URL, api_call
-from helpers import cleanup, focus_in_turn, frames, hold, named_buttons, reads_of, safe_route, scroll_width, show_view, undo, wait_held, wait_until
+from conftest import TOKEN, URL, api_call
+from helpers import (OPERATOR_PASSWORD, ApiReads, cleanup, focus_in_turn, frames, hold, named_buttons, owner_page, reads_of, safe_route, scroll_width,
+                     show_view, undo, wait_held, wait_until)
+from test_admin_updates import out, stub_integrations
+from test_login import sign_in
 
 HEADER = "X-MassimoHA-On-Behalf-Of"
 
@@ -35,7 +38,9 @@ def test_register_and_link(page, case):
     integration that maximum; its user named like the operator is
     proposed for the link, Link links it, and the operator's panel then
     names it. After Approve the panel waits for the key and follows its
-    collection; an approval expired shows Register (v1.1, Block 8)."""
+    collection; an approval expired shows Register (v1.1, Block 8); the
+    Users head counts the integration's two users at once, without
+    System settings shown again (AP AccessEnds, D10)."""
     instance = ("%04d%s" % (case.width, case.lang)).encode().hex().ljust(32, "0")[:32]
     subject = ("a1%04d%s" % (case.width, case.lang)).encode().hex().ljust(32, "b")[:32]
     status, req = raw_call("POST", "api/v1/integrations/requests",
@@ -51,9 +56,14 @@ def test_register_and_link(page, case):
         assert panel.locator("summary .mono").inner_text() == req["code"], "the code in the panel's head"
         panel.get_by_role("checkbox", name=page.evaluate("t('cap.cubes.reboot')"), exact=True).uncheck(force=True)
         named_buttons(page, "System settings → Integrations, a request")
+        counted = "(n) => document.querySelector('#sys-users .section-badges').textContent === tn('roles.users', n)"
+        before = len(api_call("GET", "api/v1/users"))
+        assert wait_until(page, f"({counted})({before})", 5), "the Users head counts the users"
         panel.locator(".approve-integration").click()
         approved = page.locator(f".integration-panel[data-uuid='{uuid}']")
         approved.wait_for()
+        # AP AccessEnds, D10: the integration's own user and its system user
+        assert wait_until(page, f"({counted})({before + 2})", 5), "after Approve the Users head counts two more, System settings not shown again"
         sel = f".integration-panel[data-uuid='{uuid}']"
         page.locator(f"{sel} .integration-key-waiting").wait_for(state="attached")
         got = next(i for i in api_call("GET", "api/v1/integrations") if i["uuid"] == uuid)
@@ -468,4 +478,134 @@ def test_seen_on_the_lan_register(page, case):
     finally:
         show_view(page, "tiles")
         page.unroute("**/api/v1/integrations/found*", handle)
+
+
+USERS_COUNTED = "(n) => document.querySelector('#sys-users .section-badges').textContent === tn('roles.users', n)"
+
+
+def test_users_read_again_after_a_refusal_and_a_removal(page, case):
+    """A request refused and an integration removed (both stubbed, so
+    that nothing is registered): each time the Users head counts what
+    the users' read gives, without System settings shown again, and the
+    change's outcome is said while that read is still held (AP
+    AccessEnds, D10). Fails where the reload read the integrations alone,
+    and where the outcome waited for the users."""
+    guard_ig, guard_req = stub_integrations(page)
+    safe_route(page, f"**/api/v1/integrations/{guard_req}/refuse",
+               lambda route: route.fulfill(status=200, content_type="application/json", body='{"ok": true}'))
+    extra = {"n": 0}
+
+    def more(body):
+        # n users more than the server has, each a viewer of its own name
+        return body + [dict(body[0], name=f"zz-extra-{k}", display=f"zz-extra-{k}", role="viewer", integration=None) for k in range(extra["n"])]
+
+    reads_of(page).change("**/api/v1/users", more)
+    held = []
+    try:
+        show_view(page, "system")
+        before = len(api_call("GET", "api/v1/users"))
+        assert wait_until(page, f"({USERS_COUNTED})({before})", 5), "the Users head counts the users"
+        hold(page, "**/api/v1/users", "GET", held, [])
+        for what, sel, ask, said in (("refused", f".integration-request[data-uuid='{guard_req}']", ".refuse-integration", "integrations.refused"),
+                                     ("removed", f".integration-panel[data-uuid='{guard_ig}']", ".revoke-integration", "integrations.revoked")):
+            extra["n"] += 1
+            panel = page.locator(sel)
+            if page.evaluate("(s) => document.querySelector(s).tagName === 'DETAILS' && !document.querySelector(s).open", sel):
+                panel.locator("> summary").click()
+            panel.locator(ask).click()
+            panel.locator(".confirm-yes").click()
+            assert wait_held(page, held), f"{what}: the users read again"
+            words = page.evaluate(f"(n) => t({said!r}, {{name: n}})", "Guard request" if what == "refused" else "Guard home")
+            assert wait_until(page, f"(() => {{ const m = document.getElementById('integrations-msg'); "
+                                    f"return m.classList.contains('ok') && m.textContent === {json.dumps(words)}; }})()", 5), \
+                f"{what}: the outcome said while the users' read is held"
+            for route in held:
+                route.fallback()
+            held.clear()
+            assert wait_until(page, f"({USERS_COUNTED})({before + extra['n']})", 5), f"{what}: the Users head counts what the read gave"
+    finally:
+        for route in held:
+            route.fallback()
+        page.unroute("**/api/v1/users")
+    show_view(page, "tiles")
+
+
+def test_an_older_users_answer_writes_nothing(page, case):
+    """A request refused, the users' read that follows it held; an
+    integration removed, whose users' read answers; then the older
+    answer, which counts one user fewer, let go: the Users head still
+    counts what the newer read gave (AP AccessEnds, D10). Fails where
+    the users' read kept no number for its newest: the older answer
+    wrote its list over the newer."""
+    guard_ig, guard_req = stub_integrations(page)
+    safe_route(page, f"**/api/v1/integrations/{guard_req}/refuse",
+               lambda route: route.fulfill(status=200, content_type="application/json", body='{"ok": true}'))
+    extra = {"n": 0}
+
+    def more(body):
+        return body + [dict(body[0], name=f"zz-extra-{k}", display=f"zz-extra-{k}", role="viewer", integration=None) for k in range(extra["n"])]
+
+    reads_of(page).change("**/api/v1/users", more)
+    held = []
+    try:
+        show_view(page, "system")
+        before = len(api_call("GET", "api/v1/users"))
+        assert wait_until(page, f"({USERS_COUNTED})({before})", 5), "the Users head counts the users"
+        hold(page, "**/api/v1/users", "GET", held, [])
+        for n, (sel, ask) in enumerate(((f".integration-request[data-uuid='{guard_req}']", ".refuse-integration"),
+                                        (f".integration-panel[data-uuid='{guard_ig}']", ".revoke-integration")), 1):
+            panel = page.locator(sel)
+            if page.evaluate("(s) => document.querySelector(s).tagName === 'DETAILS' && !document.querySelector(s).open", sel):
+                panel.locator("> summary").click()
+            panel.locator(ask).click()
+            panel.locator(".confirm-yes").click()
+            assert wait_held(page, held, n=n), f"users read {n} held"
+        extra["n"] = 2
+        held[1].fallback()
+        assert wait_until(page, f"({USERS_COUNTED})({before + 2})", 5), "the newer read counted"
+        extra["n"] = 1
+        with page.expect_response(lambda r: r.request.method == "GET" and r.url.endswith("/api/v1/users")):
+            held[0].fallback()  # the older read answered
+        frames(page)
+        assert page.evaluate(f"({USERS_COUNTED})({before + 2})"), \
+            f"the head still counts the newer read: {page.locator('#sys-users .section-badges').inner_text()!r}"
+    finally:
+        page.unroute("**/api/v1/users")
+    show_view(page, "tiles")
+
+
+def test_a_sign_out_during_the_reload_reads_no_users(new_context, case, watch, guard):
+    """An integration's name saved (the integrations stubbed), the read
+    of the integrations that follows held, a sign-out, the read let go:
+    no read of the users goes out after the sign-out, neither then nor
+    once the operator, who may not manage users, signs in (AP
+    AccessEnds, D10). Fails where the reload asked who may manage users
+    after its await without the session's number: the users were read
+    with no key after the sign-out, and again with the operator's after
+    the sign-in."""
+    page = owner_page(new_context, guard, watch, URL, TOKEN)
+    guard_ig, _ = stub_integrations(page)
+    users = []
+    page.on("request", lambda r: users.append(r.headers.get("authorization", "")) if r.method == "GET" and r.url.endswith("/api/v1/users") else None)
+    show_view(page, "system")
+    panel = page.locator(f".integration-panel[data-uuid='{guard_ig}']")
+    panel.wait_for()
+    if not panel.evaluate("(d) => d.open"):
+        panel.locator("> summary").click()
+    page.locator(f"#integration-name-{guard_ig}").fill(f"Renamed {case.width} {case.lang}")
+    lists = []
+    hold(page, "**/api/v1/integrations", "GET", lists, [])
+    panel.locator(".integration-name button[type=submit]").click()
+    assert wait_held(page, lists), "the read that follows the save held"
+    reads = ApiReads(page)
+    mark = len(users)
+    out(page)
+    assert wait_until(page, "document.getElementById('login-dialog').open", 5), "signed out"
+    for route in lists:
+        route.fallback()
+    assert reads.answered(10), f"the page's reads answered: {reads.open}"
+    assert users[mark:] == [], f"no users read after the sign-out: {users[mark:]}"
+    sign_in(page, "operator", OPERATOR_PASSWORD)
+    assert reads.answered(10), f"the operator's reads answered: {reads.open}"
+    assert users[mark:] == [], f"none after the operator's sign-in: {users[mark:]}"
 

@@ -6,8 +6,10 @@ package main
 import (
 	"bufio"
 	"context"
+	"errors"
 	"fmt"
 	"io"
+	"io/fs"
 	"net"
 	"net/http"
 	"os"
@@ -48,7 +50,8 @@ type builtServe struct {
 var serveWait = testkit.For(10 * time.Second)
 
 // built is massimo built once for the tests that run it as a binary of
-// their own (builtBinary), in a directory TestMain removes after the run.
+// their own (builtBinary), in a directory TestMain removes after the run
+// (removeBuilt).
 var built struct {
 	once     sync.Once
 	dir, bin string
@@ -56,14 +59,31 @@ var built struct {
 	err      error
 }
 
+// builtPrefix opens the name of the directory builtBinary builds massimo
+// into, in the temp directory.
+const builtPrefix = "massimo-test-bin-"
+
+// builtStale is the age from which a directory of builtPrefix is one a
+// run left behind: a run killed or timed out before its TestMain, or one
+// whose TestMain could not remove it. A younger one may be another run's,
+// which still uses it.
+const builtStale = 24 * time.Hour
+
+// builtRemoveFor is how long removeBuilt tries: on Windows a file stays
+// until the last process that holds it open lets it go, a serve the
+// test's end killed or a virus scanner reading the binary.
+const builtRemoveFor = 5 * time.Second
+
 // builtBinary returns massimo built from this package, once for every
 // test that runs it: the tests run the one binary side by side, each
 // with a data directory and an API port of its own. On Windows it is
-// massimo.exe, a name Windows runs.
+// massimo.exe, a name Windows runs. Before the build it removes the
+// directories earlier runs left behind (sweepBuilt).
 func builtBinary(t *testing.T) string {
 	t.Helper()
 	built.once.Do(func() {
-		dir, err := os.MkdirTemp("", "massimo-test-bin-")
+		sweepBuilt(os.TempDir(), time.Now())
+		dir, err := os.MkdirTemp("", builtPrefix)
 		if err != nil {
 			built.err = fmt.Errorf("a directory for the binary: %w", err)
 			return
@@ -80,6 +100,42 @@ func builtBinary(t *testing.T) string {
 		t.Fatalf("%v\n%s", built.err, built.out)
 	}
 	return built.bin
+}
+
+// sweepBuilt removes the directories of builtPrefix in tmp last changed
+// more than builtStale before now, which a run leaves that was killed or
+// timed out before its TestMain, or whose TestMain could not remove its
+// own; a younger one stays, as another run may still use it. What it
+// cannot remove, a later run tries again.
+func sweepBuilt(tmp string, now time.Time) {
+	cutoff := now.Add(-builtStale)
+	entries, err := os.ReadDir(tmp)
+	if err != nil {
+		return
+	}
+	for _, e := range entries {
+		if !e.IsDir() || !strings.HasPrefix(e.Name(), builtPrefix) {
+			continue
+		}
+		if info, err := e.Info(); err == nil && info.ModTime().Before(cutoff) {
+			os.RemoveAll(filepath.Join(tmp, e.Name()))
+		}
+	}
+}
+
+// removeBuilt removes dir, the built binary's directory, and tries again
+// for builtRemoveFor while it cannot: on Windows a file another process
+// holds open stays until it is let go. A directory it still cannot remove
+// stays, until a later run's sweepBuilt.
+func removeBuilt(dir string) error {
+	deadline := time.Now().Add(builtRemoveFor)
+	for {
+		err := os.RemoveAll(dir)
+		if err == nil || time.Now().After(deadline) {
+			return err
+		}
+		time.Sleep(100 * time.Millisecond)
+	}
 }
 
 // startBuiltServe starts serve from the built massimo with args after its
@@ -307,4 +363,76 @@ func TestServeStopEndsEventStreams(t *testing.T) {
 	if err := events.Err(); err != nil {
 		t.Errorf("the stream was cut rather than ended: %v", err)
 	}
+}
+
+// builtBinary's sweep removes a directory of builtPrefix older than a
+// day, which a killed run left behind or its TestMain could not remove,
+// and keeps a younger one, which another run may still use, and an old
+// directory of another name.
+func TestBuiltBinarySweepsOldDirectories(t *testing.T) {
+	t.Parallel()
+	tmp := t.TempDir()
+	now := time.Now()
+	old, fresh := now.Add(-builtStale-time.Hour), now.Add(-time.Hour)
+	dirs := []struct {
+		name  string
+		mtime time.Time
+		kept  bool
+	}{
+		{builtPrefix + "old", old, false},
+		{builtPrefix + "fresh", fresh, true},
+		{"another-old", old, true},
+	}
+	for _, d := range dirs {
+		dir := filepath.Join(tmp, d.name)
+		if err := os.Mkdir(dir, 0o755); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(filepath.Join(dir, "massimo"), []byte("binary"), 0o755); err != nil {
+			t.Fatal(err)
+		}
+		// After the file, which sets the directory's time to now.
+		if err := os.Chtimes(dir, d.mtime, d.mtime); err != nil {
+			t.Fatal(err)
+		}
+	}
+	sweepBuilt(tmp, now)
+	for _, d := range dirs {
+		_, err := os.Stat(filepath.Join(tmp, d.name))
+		if kept := err == nil; kept != d.kept {
+			t.Errorf("%s, changed %s ago: kept %v, want %v (%v)", d.name, now.Sub(d.mtime).Round(time.Hour), kept, d.kept, err)
+		}
+	}
+}
+
+// On Windows a file held open cannot be removed until it is let go:
+// removeBuilt removes the built binary's directory once the file it
+// holds for 300 ms is closed, where a single RemoveAll fails.
+func TestRemoveBuiltWaitsForAHeldFile(t *testing.T) {
+	t.Parallel()
+	if runtime.GOOS != "windows" {
+		t.Skip("only Windows keeps a file held open from its removal")
+	}
+	dir := filepath.Join(t.TempDir(), builtPrefix+"held")
+	if err := os.Mkdir(dir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	f, err := os.Create(filepath.Join(dir, "massimo.exe"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { f.Close() })
+	if err := os.Remove(f.Name()); err == nil {
+		t.Fatal("a file held open was removed: the test holds nothing")
+	}
+	letGo := time.AfterFunc(300*time.Millisecond, func() { f.Close() })
+	t.Cleanup(func() { letGo.Stop() })
+	start := time.Now()
+	if err := removeBuilt(dir); err != nil {
+		t.Fatalf("removeBuilt: %v", err)
+	}
+	if _, err := os.Stat(dir); !errors.Is(err, fs.ErrNotExist) {
+		t.Fatalf("%s is still there: %v", dir, err)
+	}
+	t.Logf("removed %s after %s", dir, time.Since(start).Round(time.Millisecond))
 }

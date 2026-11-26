@@ -174,6 +174,155 @@ def test_an_integrations_user_has_no_way_in(page, case, reads):
     show_view(page, "tiles")
 
 
+def role_choice(panel):
+    """The keys a panel's role choice offers, in its order."""
+    return panel.locator("select[name='role'] option").evaluate_all("(os) => os.map((o) => o.value)")
+
+
+def test_an_integrations_role_choice_stays_within_its_maximum(page, case, reads):
+    """An integration's users (the list stubbed, the server's may.roles
+    guest and integration) are offered those roles alone; one stored as
+    owner, beyond its integration's maximum, is offered owner too,
+    chosen, with the line that it acts within the maximum all the same,
+    which goes while another role is chosen. The operator's own panel,
+    as the server answers it, still offers owner and offers no
+    integration, nor does Add a user (AP AccessEnds, D3 to D5). Fails
+    on the page before: every role offered."""
+    within = ["guest", "integration"]
+    stubbed = [dict(INTEGRATION_USERS[0], may=dict(INTEGRATION_USERS[0]["may"], roles=within)),
+               dict(INTEGRATION_USERS[1], role="owner", may=dict(INTEGRATION_USERS[1]["may"], roles=within))]
+    reads.change("**/api/v1/users", lambda body: body + stubbed)
+    held, routed = none_of_theirs(page)
+    try:
+        show_view(page, "system")
+        line = page.evaluate("t('users.roleAboveMax')")
+        own = page.locator(f".user-panel[data-name='{INTEGRATION}:']")
+        own.wait_for()
+        own.locator("> summary").click()
+        assert role_choice(own) == within, f"the integration's own user: {role_choice(own)}"
+        assert own.locator(f"[id='user-{INTEGRATION}:-role-hint']").count() == 0, "no line under a role within the maximum"
+        phone = page.locator(f".user-panel[data-name='{PHONE}']")
+        phone.locator("> summary").click()
+        select = phone.locator("select[name='role']")
+        assert role_choice(phone) == within + ["owner"], f"the stored owner kept: {role_choice(phone)}"
+        assert select.input_value() == "owner", "the stored owner chosen"
+        hint = phone.locator(f"[id='user-{PHONE}-role-hint']")
+        assert hint.is_visible() and hint.inner_text() == line, "the line under it"
+        assert select.get_attribute("aria-describedby") == f"user-{PHONE}-role-hint", "the choice described by the line"
+        select.select_option("guest")
+        hint.wait_for(state="detached")  # no line while a role within the maximum is chosen
+        select.select_option("owner")
+        hint.wait_for(state="visible")  # the line again with the stored owner chosen back
+        operator = page.locator(".user-panel[data-name='operator']")
+        operator.locator("> summary").click()
+        offered = role_choice(operator)
+        assert "owner" in offered and "integration" not in offered, f"the operator's own panel: {offered}"
+        page.locator("#user-add").click()
+        new = page.locator("#user-new-role")
+        new.wait_for()
+        offered = new.locator("option").evaluate_all("(os) => os.map((o) => o.value)")
+        assert "integration" not in offered and "viewer" in offered, f"Add a user: {offered}"
+        named_buttons(page, "System settings → Users, an integration's role choice")
+        assert scroll_width(page) <= case.width, "no horizontal scroll"
+        page.locator("#user-new .form-cancel").click()
+    finally:
+        page.unroute(held, routed)
+        reads.clear("**/api/v1/users")
+    show_view(page, "tiles")
+
+
+def none_of_theirs(page):
+    """The stubbed users' sessions, keys and identities, which an open
+    panel reads, answered with none; the pattern and its handler."""
+    pattern = f"**/api/v1/users/{INTEGRATION}*/**"
+    return pattern, safe_route(page, pattern, lambda route: route.fulfill(status=200, content_type="application/json", body="[]"))
+
+
+def test_a_chosen_role_stays_when_the_maximum_narrows(page, case, reads):
+    """An integration's user offered operator, guest, viewer and
+    integration (the list stubbed), operator chosen and not saved; the
+    list read again with may.roles narrowed to guest and integration, as
+    after a lower maximum: the choice still shows operator, with the line
+    that the user acts within its maximum all the same, and Save stays
+    on; the stored role chosen back, operator is offered no more (AP
+    AccessEnds, D4). Fails where the choice kept the stored role alone:
+    it showed nothing, while Save would send operator."""
+    roles = {"now": ["operator", "guest", "viewer", "integration"]}
+    reads.change("**/api/v1/users", lambda body: body + [dict(INTEGRATION_USERS[1], may=dict(INTEGRATION_USERS[1]["may"], roles=roles["now"]))])
+    pattern, routed = none_of_theirs(page)
+    try:
+        show_view(page, "system")
+        phone = page.locator(f".user-panel[data-name='{PHONE}']")
+        phone.wait_for()
+        phone.locator("> summary").click()
+        select = phone.locator("select[name='role']")
+        hint = phone.locator(f"[id='user-{PHONE}-role-hint']")
+        select.select_option("operator")
+        assert hint.count() == 0, "no line under a role within the maximum"
+        roles["now"] = ["guest", "integration"]
+        page.evaluate("() => MassimoParts.users.load()")  # the users read again, as a change in Integrations reads them
+        hint.wait_for(state="visible")
+        assert select.input_value() == "operator", f"the role chosen still shown: {select.input_value()!r}"
+        assert role_choice(phone) == ["guest", "integration", "operator"], f"and offered: {role_choice(phone)}"
+        assert hint.inner_text() == page.evaluate("t('users.roleAboveMax')"), "with the line"
+        assert phone.locator("form button[type=submit]").is_enabled(), "Save still on"
+        select.select_option("integration")
+        hint.wait_for(state="detached")
+        assert wait_until(page, f"[...document.querySelectorAll(\"[id='user-{PHONE}-role'] option\")].map((o) => o.value).join() === 'guest,integration'", 5), \
+            f"the stored role chosen back: operator offered no more ({role_choice(phone)})"
+    finally:
+        page.unroute(pattern, routed)
+        reads.clear("**/api/v1/users")
+    show_view(page, "tiles")
+
+
+def test_a_role_beyond_the_maximum_is_offered_no_more_once_saved(page, case, reads):
+    """An integration's user stored as owner, beyond its maximum (the
+    list stubbed, may.roles guest and integration, the PUT stubbed), given
+    guest by Save: guest is sent, the list read again gives it, and owner
+    is offered no more, nor the line (AP AccessEnds, D4). Fails on the
+    page before: every role offered, owner among them."""
+    stored = {"role": "owner"}
+    within = ["guest", "integration"]
+
+    def theirs():
+        return dict(INTEGRATION_USERS[1], role=stored["role"], may=dict(INTEGRATION_USERS[1]["may"], roles=within))
+
+    reads.change("**/api/v1/users", lambda body: body + [theirs()])
+    sent = []
+
+    def put(route):
+        if route.request.method != "PUT":
+            route.fallback()
+            return
+        sent.append(route.request.post_data_json)
+        stored["role"] = sent[-1].get("role", stored["role"])
+        route.fulfill(status=200, content_type="application/json", body=json.dumps(theirs()))
+
+    phone_path = re.compile(r"/api/v1/users/" + INTEGRATION + r"(%3A|:)" + "a" * 32 + r"$")
+    put_routed = safe_route(page, phone_path, put)
+    pattern, routed = none_of_theirs(page)
+    try:
+        show_view(page, "system")
+        phone = page.locator(f".user-panel[data-name='{PHONE}']")
+        phone.wait_for()
+        phone.locator("> summary").click()
+        assert role_choice(phone) == within + ["owner"], f"the stored owner kept: {role_choice(phone)}"
+        phone.locator("select[name='role']").select_option("guest")
+        phone.locator("form button[type=submit]").click()
+        assert wait_until(page, "document.getElementById('users-msg').classList.contains('ok')", 5), "saved"
+        assert sent == [{"role": "guest"}], f"guest sent: {sent}"
+        assert wait_until(page, f"[...document.querySelectorAll(\"[id='user-{PHONE}-role'] option\")].map((o) => o.value).join() === 'guest,integration'", 5), \
+            f"owner offered no more: {role_choice(phone)}"
+        assert phone.locator("select[name='role']").input_value() == "guest", "guest chosen, as stored"
+        assert phone.locator(f"[id='user-{PHONE}-role-hint']").count() == 0, "no line"
+    finally:
+        page.unroute(pattern, routed)
+        page.unroute(phone_path, put_routed)
+        reads.clear("**/api/v1/users")
+    show_view(page, "tiles")
+
+
 def test_profile_of_an_integrations_user(page, case, reads):
     """My profile of an integration's user, in with a key it holds from
     before (/me stubbed), says it has no sign-in of its own in place of

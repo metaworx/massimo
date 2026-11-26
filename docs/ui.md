@@ -136,21 +136,45 @@ drawn again, and a suggestion the rule refuses, one holding the user's name,
 is drawn again, at most 20 times,
 after which the line says that no suggestion could be made and the field keeps
 what it had.
-The line says that a password was suggested, never which,
+The rule's line says that a password was suggested, never which,
 written anew at each suggestion, so that a screen reader hears each.
-From the first press on, a row under the line offers **Words** or
+While the field holds the suggestion, a line right under the field, before
+the rule's line, shows it whole (AP PasswordRules, D58-A):
+the field shows about three and a half of five words at 390 px.
+It is in the page's font at 16 px, to be read and copied by hand, broken after a "-":
+twenty characters take one line, and five words one or two.
+With the test machine's fonts (CI's differ),
+a field of Add a user at 390 px gives twenty characters a second line,
+and the first owner's card and Users at 390 px give five words a third,
+each in a draw of less than one in 10^13 (the widest letter twenty times;
+the list's widest word five times, which the UI test draws).
+A screen reader does not hear it (`aria-hidden`), and a page's translation
+leaves it alone (`translate="no"`):
+the field, text while it holds the suggestion, gives the value,
+the rule's line says that it was suggested,
+and a line read out inside the live regions of My profile and Users would
+speak the password as it appears.
+From the first press on, a row under the rule's line offers **Words** or
 **Characters**, which suggests one of that kind and is remembered in this
 browser, and, while the field holds the suggestion, **Copy**, which copies it
 and says so (over plain HTTP by the browser's copy command, as every copy of
 the page);
-the row is not there before, so that a form keeps its height until the dice
-is used, and once there a key never takes it away, so that nothing under the
-field moves while one types; it goes with **Reset**, a save, or the fold or the
-card closed.
-It is 28 px tall: a first owner's card it makes taller than the window
-(in the app at 390 by 900 px, the French one) starts at its top and the page
-scrolls, and one that still fits stays in the middle and moves up by half
-the row, the dice with it.
+the shown line keeps its place from the first press on too, two lines tall,
+empty while the suggestion is not shown.
+Neither is there before, so that a form keeps its height until the dice
+is used, and once there a key never takes them away, so that nothing under the
+field moves between presses or while one types,
+but after one of those rarest draws, whose third line the first key gives back;
+they go with **Reset**, a save, the fold closed or the card's next opening,
+and the card's close empties the line, its fields keeping what they hold.
+Together they make a form 80 px taller at the first press (the line's place 52 px,
+the row 28 px):
+a first owner's card they make taller than the room the window leaves it
+(868 of 900 px) starts at its top and the page scrolls,
+in the app at 390 by 900 px in every language but English
+and in a browser at 390 px in French,
+and one that still fits stays in the middle and moves up by half of it,
+40 px, the dice with it.
 The list is fetched at the first press that needs it, once,
 and taken only as 7,776 lines, each a word of `a-z` with `-` inside, none twice;
 a fetch that fails, or a file of another form, says so in the line
@@ -285,6 +309,19 @@ the poll and the stream go on behind it.
 signed in and the card closed, Skip for now and Cancel off meanwhile,
 then a toast says so,
 and in the app that the login by fingerprint was not kept where it was not.
+Where the server's answer lists what was set up before the owner and still works,
+as a rule while the server was open
+(`open_setup`: an integration with its key, or one whose key may still be collected,
+a sign-in provider, a role added or changed, a capability turned off),
+the toast says that too, "Still in effect from before you: …", by name,
+in the warn tone, for 30 seconds,
+its **Show** under the text at phone width and beside it from 760 px,
+never taller than the window;
+Show opens System settings → Integrations with the card in view
+and its heading in focus where an integration is listed,
+else the log with its title in focus,
+whose line of it stays a warning until it is marked seen (AP AccessEnds, D11, D13).
+A sign-out takes the toast away, as any toast of the user who left.
 Where the server has users after all,
 another device having made the owner meanwhile,
 the card becomes the sign-in's, the password's way chosen,
@@ -1056,13 +1093,51 @@ Every room has a tile:
   from the eQ-3 manuals; an explanation shown stays shown when its tab is drawn again.
 
 The **House** tile, named after the chosen Cube with the cube before its name
-("All rooms of …" its tooltip), sets several rooms at once: ECO, AUTO,
-COMFORT or MANU with a temperature, permanently or until a date and time,
-ECO and COMFORT each room's own presets, as its tile's More has them;
-its **Send** is off while no room is ticked,
+("All rooms of …" its tooltip), sets several rooms at once in one form,
+opened by a button of its modes' row:
+ECO, AUTO, COMFORT, MANU, or **Holiday**, its case before it,
+outlined in the accent colour.
+The form's choice of the five sets what it offers and its defaults:
+
+| Choice | Temperature | Duration |
+|--------|-------------|----------|
+| ECO, COMFORT | none: each room's own preset, as its tile's More has them | Permanently or until a date |
+| AUTO | none | none |
+| MANU | a field, the first room's setpoint | Permanently or until a date |
+| Holiday | a field, OFF (4.5) | until a date alone, a week ahead at 06:00 |
+
+Another choice in the form gives its defaults
+to a temperature and an end the user has not changed,
+and keeps those the user typed or stepped;
+the date and time are shown only with **Until**,
+never while **Permanently** is chosen,
+and a field hidden is no part of what is sent.
+An end that has passed is refused at **Send**, the field marked and saying why;
+one the user typed that has passed by the next open is forgotten there,
+the choice's default instead.
+Holiday sends each room ticked its holiday,
+one room command after another,
+each room's outcome in the result line, as the other choices do.
+Its **Send** is off while no room is ticked,
 the rooms a choice of checkboxes with **All rooms** first.
-What its panel holds stays when the rooms load again and when it closes:
+What its form holds stays when the rooms load again and when it closes:
 the rooms ticked, the mode, the end typed.
+
+Under the modes' row, two rows give the house's lowest and highest:
+the thermometer with **IS**, the lowest and the highest measured temperature,
+and the gauge with **SET**, the lowest and the highest setpoint,
+OFF where it is,
+each short label a tip with its full term, as on a room's tile.
+They are taken from the rooms' virtual wall thermostats,
+a room without a value passed over, and name no room;
+a stale measured temperature is left out while any room has a fresh one,
+as the server leaves a stale thermostat out within a room,
+and with only stale ones they are shown, greyed as a tile greys them;
+a row without any value shows "–".
+On a phone the two rows stand one under the other,
+the lowest under the lowest and the highest under the highest;
+where there is room, on one line.
+A tap on a value does nothing.
 
 **Devices without a room** are listed at the end:
 a device just paired, or one the original software paired through the proxy
@@ -1187,7 +1262,12 @@ a restart, a reboot or an update asked for and its outcome,
 an automatic update asked for at night ("update v… → v… asked for automatically")
 or postponed because the radio stayed busy,
 or the next start refused the settings file, until its window closed,
-the backups, their prune and the log's, a restore started;
+the backups, their prune and the log's, a restore started,
+and, at the server's first regular user, what was set up before it
+and still works, a warning until a person marks it seen ("First owner anna;
+still in effect from before this user: 1 integration: Kitchen;
+roles added or changed: Viewer", "First user bob, Viewer, by the command line; …"
+where `massimo user add` made the user);
 and a Cube's new address or its leaving the LAN.
 A line someone asked for says by whom ("backup 12 taken (by hand), by Anna").
 Every change made through the web UI, the API or `massimo user` is a line
@@ -2044,7 +2124,9 @@ settings forms and have none of it.
   a user changes only users whose role has no capability its own lacks,
   so nobody but an owner changes an owner, whose panel says so,
   and with `passwords` alone (a manager's) a panel offers the password alone;
-  the role choice offers no owner but to an owner.
+  a user's role choice offers the roles the server says may be given to it
+  (`may.roles`, AP AccessEnds, D3), so no owner but to an owner,
+  and a new user's no `integration`, which no new user is given.
   Every user in a panel whose head shows the display name, the login apart
   from it and, at the right edge, the badges: **you** first, the role,
   the state and **keys only**;
@@ -2100,10 +2182,18 @@ settings forms and have none of it.
   and this page's fields lose theirs at once, the others' at their next look
   at the server.
   On a server without users (FirstOwner D14),
-  an integration's beside it or not (AP LooseEnds, D42),
-  the section says so instead,
+  an integration's beside it or not
+  (AP LooseEnds, D42; its list taken back by AP LooseEnds, D46),
+  the head says **No owner yet** in place of the count (AP AccessEnds, D8)
+  and the section says so instead, once its users are read or their read failed,
   with **Create the owner…**, which opens the sign-in card with its form,
-  and no password sign-in, no list and no Add a user;
+  and no password sign-in, no panels and no Add a user;
+  an integration's users are listed there,
+  each a row with the name it is shown by and its badges,
+  nothing to open or press,
+  since anyone on the local network may change them (D7);
+  the line above them says that they act through their integration alone,
+  and **Open Integrations** under them shows the card that manages them (D9);
   while the server is kept open (Keep it open… of the sign-in card),
   **Keep this server open without an owner** follows, on:
   turned off, it is saved at once and stays in sight, off, for that showing,
@@ -2148,6 +2238,13 @@ settings forms and have none of it.
   in the first minute, then every 15 s, until it has: then it says so;
   once that time has passed, **approval expired** as a badge, why, and
   **Register**.
+  After every change here Users is read again where it may be managed,
+  so that it lists an integration's users as approved, named and linked,
+  with the roles its maximum leaves them, without System settings shown again
+  (AP AccessEnds, D10);
+  the change's outcome does not wait for that read,
+  a sign-out before it starts leaves it unsent,
+  and of reads that overlap, the newest asked for is the one shown.
   Every integration in a panel, its name, **disabled**,
   **new installation** and **approval expired** as badges:
   its **Name** with **Save the name**, off while the name is as stored, and **Reset**,
@@ -2200,6 +2297,12 @@ settings forms and have none of it.
   and **Remove the password** where it holds one from before;
   its role, disabled, its display name and Remove stay,
   and a key it holds from before is listed with Revoke.
+  Its role choice offers the roles within its integration's maximum
+  and **integration**, which it is given back (AP AccessEnds, D3, D5);
+  a role stored beyond the maximum stays chosen and offered,
+  with the line under it that the user acts within that maximum all the same,
+  until another is saved, and so does a role chosen and not yet saved
+  where the list read again no longer offers it (D4).
   My profile of one, in with such a key, says the same line in place of the
   password, and offers no new key and no Link.
   The log's lines, a command's detail and its audit row name who
@@ -2656,7 +2759,7 @@ A region's root is drawn once into its place in the skeleton (`mounter` of `shar
 | the users, roles and providers | `admin/` | `#sys-users-body`, `#sys-roles-body`, `#sys-caps-body`, `#sys-providers-body` | `users.load` (My profile) |
 | the integrations | `integrations/` | `#sys-integrations-body` | — |
 | Backup and restore | `backups/` | `#backups-cubes`, `#cube-backup-body` | `backups.cubeChanged`, `backups.restoreEvent`, `backups.resynced` (app.js) |
-| the log | `log/` | `#logview` | `log.mount`, `log.event`, `log.render`, `log.load`, `log.poll`, `log.prune`, `log.cubesPolled`, `log.cubeChanged`, `log.selects`, `log.choicesChanged`, `log.loadAlerts`, `log.sign`, `log.kinds` (app.js); `log.state`, `log.alerts`, `log.matches`, `log.ofChoices`, `log.rangeStart`, `log.upperFirst` (the UI tests) |
+| the log | `log/` | `#logview` | `log.mount`, `log.event`, `log.render`, `log.load`, `log.poll`, `log.prune`, `log.cubesPolled`, `log.cubeChanged`, `log.selects`, `log.choicesChanged`, `log.loadAlerts`, `log.sign`, `log.kinds` (app.js); `log.focusHead` (the sign-in's first owner's toast); `log.state`, `log.alerts`, `log.matches`, `log.ofChoices`, `log.rangeStart`, `log.upperFirst` (the UI tests) |
 | Software update | `software/` | `#sys-software-body` | `software.load` (header.js) |
 | Maintenance | `maintenance/` | `#sys-maint-body` | — |
 | System info | `sysinfo/` | `#sys-info-body` | — |
@@ -2707,7 +2810,7 @@ which reads the written name alone), by the places the table names, each of them
 |---|---|---|
 | `state.cubes`, `state.found` | `loadCubes`, `addFound` (home.js, the stream's `cube_found`), `clearCubeData` | a signal: the header, the Cubes, Backup and restore, the log's choices, the House tile's name |
 | `state.serial`, `state.tz`, `state.serverDown`, `state.newVersion` | `state.serial` by `init` (the Cube stored), `loadCubes` and `selectCube`; `state.tz` by `loadTimeZone`; `state.serverDown` by `serverReached`, `state.newVersion` by `checkVersion` (header.js) | a signal |
-| `state.rooms` | `loadRooms`, `clearCubeData`; a room's `devices`, `vwt`, `ready`, `stale` by `updateDevice` (rooms.js) | the list a signal, each room a `live` item, so that a state event draws its tile alone; a reader across all rooms (the House tile, a room's copy, the log's names, `rfLabel`) reads the devices `untracked` and follows the list |
+| `state.rooms` | `loadRooms`, `clearCubeData`; a room's `devices`, `vwt`, `ready`, `stale` by `updateDevice` (rooms.js) | the list a signal, each room a `live` item, so that a state event draws its tile alone; a reader across all rooms (the House tile, a room's copy, the log's names, `rfLabel`) reads the devices `untracked` and follows the list; the House tile's lowest and highest read each room's `vwt`, in a part of their own |
 | `state.unlisted`, `state.roomsOf` | `loadRooms`, `clearCubeData`; `state.unlisted` also by `updateDevice` (rooms.js) | a signal |
 | `state.settings` | `loadSettings` (at the start and at every applying of the settings), `setSetting` | a `live` object, a signal per setting |
 | `state.device` | `loadSettings` (as this browser keeps them), `storeDeviceOverrides` | the settings kept for this device alone, a signal |
@@ -2932,7 +3035,9 @@ and a Cube's entry under the Cube;
 (`roomActualDevice`, `roomActual`), a stale device's warning (`staleText`),
 a holiday's end as the API takes it (`apiUntil`) and what a device has not shown
 of the writes to it (`confirmItem`, `confirmFieldsText`, `confirmFieldName`);
-a value's age it takes from `received` of `rooms.js`, as the rooms do.
+a value's age it takes from `received` of `rooms.js`, as the rooms do;
+`opensetup.ts` what an open server left to its first owner in words (`openSetupText`),
+for the first owner's toast and the log's `open_setup` line.
 
 ### The shared parts
 
@@ -2952,7 +3057,7 @@ a value's age it takes from `received` of `rooms.js`, as the rooms do.
 | `Dropdown` | `menu.tsx` | a menu that drops down (`dropdown`), with `arrows` its arrow keys (`menuArrows`) and with `focusCurrent` the focus on its current item when it opens (among `arrows`' items, else its list's buttons that are on); a click on any button of its list closes it, as `dropdown()` of `components.js` does for every menu of the page, but on one marked `data-keep-open` (`MenuItem`'s `keepOpen`) | `id`, `cls`, `summaryId`, `summaryCls`, `label` (without it the summary is named by its text), `title` (where the tooltip is not the label), `summary`, `listCls`, `arrows` (a selector of its items), `focusCurrent`, `busy` (the summary turning while a request sent from its list runs), `onClick`, `onOpen` (told each time it opens), `onClose` (told each time it closes), the items as children |
 | `MenuItem` | `menu.tsx` | a menu's button, its icon, label, the icons after it and a grey second line | `icon`, `blank`, `label`, `icons`, `sub` (the second line, a text or elements, there whenever given, empty too), `subCls` (its class), `cls`, `value` (its `data-value`), `current`, `disabled`, `busy`, `keepOpen` (a click on it leaves the menu open, for an item whose result shows in the list), `onClick`; `current` "page" for the entry of the page shown (☰'s), `id`, `title`, `aria` (its name for a screen reader), `labelId` and `after` (a mark at its end) where the page names them |
 | `Picker` | `menu.tsx` | a menu that chooses one item, its summary the chosen one | `id`, `cls`, `summaryId`, `summaryCls`, `entries` (an item `{ value, label, sub, icon, icons, disabled }`, `{ group }` or `{ separator: true }`), `value`, `onPick(value)`, `shown` (`{ icon, label, title, aria }`) |
-| `Tip` | `tip.tsx` | a button with a short label that shows a text in a small box under itself while open, its first letter a capital (the label's full term: a room tile's IS and SET), named by its label and then the text (`aria-labelledby`, the box's text in the name while hidden too: "IS measured temperature"); a popup (`usePopup`): one open at a time, and one with the menus, Escape closing it alone, the focus staying on the button, a click outside and a sign-out closing it; the box kept in the window (`placePopup`); the button says whether it is open (`aria-expanded`) and names the box as what it controls; no menu, it has no items and takes no focus | `text` (the box's text), `label` (the short label, after the children in the button), `labelCls` (its class), `cls` (the button's classes beside `tip-btn`), the button's content before the label as children (an icon) |
+| `Tip` | `tip.tsx` | a button with a short label that shows a text in a small box under itself while open, its first letter a capital (the label's full term: a room tile's IS and SET, the House tile's), named by its label and then the text (`aria-labelledby`, the box's text in the name while hidden too: "IS measured temperature"); a popup (`usePopup`): one open at a time, and one with the menus, Escape closing it alone, the focus staying on the button, a click outside and a sign-out closing it; the box kept in the window (`placePopup`); the button says whether it is open (`aria-expanded`) and names the box as what it controls; no menu, it has no items and takes no focus | `text` (the box's text), `label` (the short label, after the children in the button), `labelCls` (its class), `cls` (the button's classes beside `tip-btn`), the button's content before the label as children (an icon) |
 | `usePopup`, `placePopup`, `closePopups` | `popup.ts` | a box that its button opens beside itself (a `Tip`'s text, a room tile's SET list): one popup open at a time, and one with the menus: the click that opens it closes an open menu or popup, as every click outside one does (`dropdown`), and a menu that opens, by a click, the keyboard or the page's code, closes it, as does a click outside it and, with `leave`, the focus moving to an element outside it; Escape closes it and nothing else, seen first and stopped there (`stopPropagation`, marked as the menus' Escape is), `escaped` told whether the focus was in it; placed again at a resize; `placePopup` keeps its box 16 px inside the window's sides, and with the element that scrolls in it inside its height too, 16 px under what is pinned at the window's top (`pinned`, a sticky header's bottom, which the caller reads): upward where the room below is short and the box fits above, else downward, that element's height capped to the room below, 160 px at least where the window has room for that; `closePopups` closes it at a sign-out (`MassimoParts.signedOut`) | `usePopup(prefix, { within, place, escaped, leave })`, giving `{ id, open, toggle, close }`; `placePopup(box, scroll, pinned)`; `closePopups()` |
 | `actionRunner`, `fader` | `action.ts` | a request, a reload, and its outcome (`Outcome`, `{ text, ok }`) in the region's message line (`showResult`) or in a part's state that a `ResultLine` draws, a success fading where a fade is given; `fader` is that fade alone, for a result set by other means | `where()`, `set(res)`, `fade` (ms), `reload()`, `bound` (an answer after a sign-out reloads and says nothing, `session.ts`); gives `run(fn, ok, fail)`, `say(text, ok)`; `set`, `ms` |
 | `Icon` | `icon.tsx` | a symbol of the page (`iconEl`) | `symbol`, `cls`, `mark` (the symbol is a mark, which blinks where the style makes it), `useId` (its `use` element's id, where the page names it) |
@@ -2974,14 +3079,14 @@ a value's age it takes from `received` of `rooms.js`, as the rooms do.
 | `TextField` | `field.tsx` | a row with a text input that shows a stored text, from its draft, or a free text (a name offered) by `value` and `set`, or, with neither, a field not controlled that its caller reads through `inputRef` (the sign-in card's, UiParts D210); with `row={false}` the input alone, standing in a tile's head (the log's search), as plain as written: `aria` its name for a screen reader, no name, `autocomplete` or `spellcheck` of its own | `label`, `id`, `name`, `draft` and `show`, or `value` and `set`, or `inputRef` alone; `wide` (on by default), `unit`, `hint`, `help`, `cls`, `limit`, `placeholder`, `type` (`password` too, by `value` and `set` or not controlled, never a draft; `search`), `autocomplete`, `inputCls` (the input's class, `mono` for a key), `maxLength`, `pattern`, `required`, `disabled`, `inputRef`, `row`, `aria` |
 | `NumberField`, `numberNorm` | `field.tsx` | a number input that shows a stored number (`numberInput`), its draft the input's text, "" for none, or a free number (a time) by `value` and `set`; with `row={false}` the input alone, in a row of the caller's, which draws its notice (`Meanwhile`); how such a draft compares, as a number | `label`, `id`, `name`, `min`, `max`, `step`, `draft` and `show`, or `value` and `set`; `aria` (its name where no label names it), `disabled`, `inputMode` (the keyboard a phone offers: `numeric` for the reboot's delay), `inputRef`, `onChange` (told of the value as the field is left changed: My settings' poll, saved then), `row`, and a row's `wide`, `unit`, `hint`, `help`, `cls`, `limit`; `v` |
 | `Select` | `field.tsx` | a row with a select, its options (`SelectOption`) each kept while it is the same; with `row={false}` the select alone, in a row of the caller's, which draws its notice, or standing in a tile's head (the log's choices) | `label`, `id`, `name`, `options` (`[value, label, disabled]` or `{ group, options }`), `value` and `onChange`, or `draft` and `show`; `row`, `wide`, `unit`, `hint`, `hintId` (the hint's id, which the select names as its description: the update channel's note, which changes with the choice), `help`, `cls`, `disabled`, `before` (between the label with its help and the select: a drawing's preview), `after` (after the select in its row: the language's note of a machine translation); without a row `aria` (its name for a screen reader) and `selectCls` (its own class, `hidden` for a choice left out) |
-| `DateTime` | `field.tsx` | a date and time field (`datetime-local`), its value as the input takes it | `value`, `set`, `id`, `cls`, `step`, `required`, `disabled`, `inputRef` |
+| `DateTime` | `field.tsx` | a date and time field (`datetime-local`), its value as the input takes it; with a limit, the limit's line before it and the field marked while the value is refused, as a number field's | `value`, `set`, `id`, `cls`, `step`, `required`, `disabled`, `inputRef`, `limit` (needs `id`) |
 | `localOf`, `isoOf` | `time.ts` | a `DateTime`'s value and the API's time as each other, for a field that shows a stored end and sends it (a user's end); the draft compares the field's minute, all it holds | `iso`; `local` |
 | `fmtWhen` | `time.ts` | an API time as date and time in the page's language, the hour of 24 (a backup's time, a device's in Notifications) | `iso` |
 | `Switch` | `field.tsx` | a checkbox drawn as a switch (`switchEl`), in its own row with its help where asked (`fieldRow` without a label) | `name`, `label`, `checked` and `onChange`, or `draft` and `show`; `row`, `help`, `rowCls` (classes its own row adds, a capability's `needs-…`), `cls` (the switch's classes), `id`, `disabled`, `title`, `aria` (its name where `label` is empty, which draws no text: My settings' "only on this device"), `data` (the checkbox's `data-` attributes), `badge` (inside the switch after its label, a capability's state), children after the switch |
 | `Choices` | `choices.tsx` | a choice of several among a list: a group of switches under its heading, All and None as buttons where asked (the configuration's Copy tab), under a legend (an integration's maximum) or without a heading (a role's capabilities, Capabilities for every role), or of checkboxes, All a checkbox first (`look` `check`, the House panel), or of radio buttons in a row where one option alone is chosen (`look` `one`, a suggested password's Words or Characters); an option locked shows whether it is chosen and is off (the owner's set, a capability while its request runs), an option held shows chosen and is off whatever is chosen, its why in a badge, and All chooses it not (a capability another chosen one includes) | `title`, `legend` (a fieldset under it), `label` (the group's name for a screen reader), `id`, `cls` (a class the group adds, `cap-grid`, `integration-caps`), `options` (`[value, label, disabled, { title, badge, lock, held }]`, the last for switches alone, `held` the why), `chosen`, `set(chosen)`, `all` (`{ all, none }`, their labels, `none` left out for All alone), `empty` (said where there is no option), `look` (`switch`, the default, `check` or `one`, its group named `id`) |
 | `ChoiceGroup` | `choices.tsx` | the frame of a choice of several drawn as switches, which `Choices` is drawn with and a region uses where each switch is a part of its own (Capabilities for every role, each switch saved at once) | `id`, `cls`, `label` (the group's name for a screen reader), `legend` (a fieldset under it), `head`, the switches as children |
 | `Tabs` | `tabs.tsx` | a row of tabs: a tab list of buttons, each with its key in `data-tab`, the one shown active and selected, and what follows the list (a close button) | `cls` (the row's class), `listCls`, `label` (the list's name), `tabs` (`{ key, label, cls }`), `current`, `onPick(key)`, children after the list |
-| `Stepper` | `field.tsx` | a number field between − and +, the step within its range; its buttons are named for a temperature, half a degree less and more, and the first user of another unit adds their names | `value`, `set`, `min`, `max`, `step`, `id` and `cls` of the field, `hidden` (the whole kept in its place unseen), children after the + (a unit) |
+| `Stepper` | `field.tsx` | a number field between − and +, the step within its range; its buttons are named for a temperature, half a degree less and more, and the first user of another unit adds their names | `value`, `set`, `min`, `max`, `step`, `id` and `cls` of the field, `hidden` (the whole kept in its place unseen), `disabled` (the field and its buttons off, the field no part of its form's check: one hidden with a value off its step), children after the + (a unit) |
 | `useDraft`, `Meanwhile` | `field.tsx` | a field that shows stored data keeps a draft: untouched it follows, changed it says "changed meanwhile" with Take theirs (D59-A); with a place, a form's (`useForm`), the draft is kept there | `stored`, `norm`, `place`; gives `value`, `stored`, `set`, `changed`, `meanwhile`, `take`; `draft`, `show` |
 | `SaveButton` | `field.tsx` | a form's Save by its state, as `FormFooter` draws it, for a Save that stands elsewhere (the scheme editor's Save as, inline with the name) | `label`, `look`, `busy`, `off`, `type` (submit unless given), `onClick` |
 | `FormFooter` | `field.tsx` | a form's row of actions (`formFooter`); with `look`, Save shows the form's state | `submit`, `busy`, `off`, `cancel` (its button of the class `form-cancel`, as the plain footer's), `cancelLabel`, `reset` (Reset, of the class `form-reset`, one fixed class per footer button as Cancel's `form-cancel`, off while clean), `look` (a `FormLook` of `useForm`), `extra`, `after` (after the submit button: My profile's ⓘ) |
@@ -3013,7 +3118,7 @@ a value's age it takes from `received` of `rooms.js`, as the rooms do.
 | `FileButton` | `file.tsx` | a button that opens the browser's choice of a file of the types it accepts, the same file again too | `id` (the button's), `cls`, `label`, `accept`, `off`, `inputId` and `inputLabel` (the input's id and its name in the page's language: the Appearance card's Import…), `onFile(file)` |
 | `Adder` | `adder.tsx` | the end of a list that adds an item: the new item's form in its place while shown, the button that shows it hidden meanwhile, the focus in the form's first field when it comes, in the drawing's own turn, and back on the button when it goes (Users, Roles, Sign-in providers) | `id` (the button's), `formId` (the form's place), `label`, `shown`, `set(shown)`, the form as children |
 | `UserNameField`, `useNameCheck`, `wordNameError` | `username.tsx` | a new user's login name (Add a user, the first owner's form): checked 2 s after the last keystroke and when left, the store's rule and the names in use; a fixed name clears the line at once; the server's refusal worded alike | `label`, `id`, `msgId` (the line under it, which describes it), `value` and `set` (Add a user's), or neither, the field not controlled and read through `inputRef` (the first owner's, UiParts D210), `nc` (`useNameCheck(taken)`: `problem`, `say`, `check(v)`, `typed(v)`), `name` (the input's, Add a user's alone), `autocomplete`, `placeholder`, `inputRef`, `typed` (told of each keystroke and change event: the first owner's password line, whose rule takes the name) |
-| `PasswordInput`, `PasswordField`, `reveal` | `password.tsx` | a password's input with its eye, every password field's (AP MobileApp, D84-A): the button at the field's right end, inside its box, labelled Show password and Hide password, `aria-pressed`, that turns the type between `password` and `text`, the value, the caret and the `autocomplete` kept, the click keeping the focus in the field; hidden again at each change of `reset` (the card's openings, a fold's open state) and at the form's submit, in the capture before the form's handler, and when switched off, the type never turned inside a closed fold, but as it opens; no eye while `reveal`, the setting `auth.password_reveal` as `/healthz` says it (`MassimoParts.chrome.reveal`), is not `true`; the field in its row | `id`, `name`, `autocomplete`, `value` and `set`, or `inputRef`, `required`, `disabled`, `placeholder`, `reset`, `describedBy` (the line that describes it), `typed` (told of each keystroke and change event), `invalid`; the row's `label`, `hint`, `cls`, `rule` (the rule's context words: given, its line under the field, following the value, or the keystrokes, change events and the value at each refusal of a field not controlled, empty again at each change of `reset`), `refused` (the caller's count of the submits the rule refused: the line says so until the next key, the field marked invalid, while its value is still refused), `suggest` (with `rule`, the dice before the eye: a press fills the field with a suggestion, `shared/suggest.ts`, drawn again where the rule refuses it, a controlled field by `set`, one not controlled by its element and an input event, shows it as text while the field holds it, not after an edit, a change by the form, a submit or a new start, writes the line anew, and brings the row of Words or Characters, and Copy while the field holds the suggestion, under the line; a suggestion drawn while another press, a key, a submit, a change from outside (Reset, a save), a new start or a sign-out came, or after either field changed, fills nothing; the row, once there, stays through keys; the list not had says so, any other failure that no suggestion could be made), `also` (the form's other field: `set` filled with the suggestion, `get` what it holds) |
+| `PasswordInput`, `PasswordField`, `reveal` | `password.tsx` | a password's input with its eye, every password field's (AP MobileApp, D84-A): the button at the field's right end, inside its box, labelled Show password and Hide password, `aria-pressed`, that turns the type between `password` and `text`, the value, the caret and the `autocomplete` kept, the click keeping the focus in the field; hidden again at each change of `reset` (the card's openings, a fold's open state) and at the form's submit, in the capture before the form's handler, and when switched off, the type never turned inside a closed fold, but as it opens; no eye while `reveal`, the setting `auth.password_reveal` as `/healthz` says it (`MassimoParts.chrome.reveal`), is not `true`; the field in its row | `id`, `name`, `autocomplete`, `value` and `set`, or `inputRef`, `required`, `disabled`, `placeholder`, `reset`, `describedBy` (the line that describes it), `typed` (told of each keystroke and change event), `invalid`; the row's `label`, `hint`, `cls`, `rule` (the rule's context words: given, its line under the field, following the value, or the keystrokes, change events and the value at each refusal of a field not controlled, empty again at each change of `reset`), `refused` (the caller's count of the submits the rule refused: the line says so until the next key, the field marked invalid, while its value is still refused), `suggest` (with `rule`, the dice before the eye: a press fills the field with a suggestion, `shared/suggest.ts`, drawn again where the rule refuses it, a controlled field by `set`, one not controlled by its element and an input event, shows it as text while the field holds it, not after an edit, a change by the form, a submit or a new start, and whole in a line right under the field (`<id>-shown`, `aria-hidden`, `translate="no"`), writes the rule's line anew, and brings the row of Words or Characters, and Copy while the field holds the suggestion, under the rule's line; the shown line's place, two lines tall, and the row come with the first press, the place empty while the suggestion is not shown, the line emptied as the dialog the field is in closes; a suggestion drawn while another press, a key, a submit, a change from outside (Reset, a save), a new start or a sign-out came, or after either field changed, fills nothing; the row and the line's place, once there, stay through keys; the list not had says so, any other failure that no suggestion could be made), `also` (the form's other field: `set` filled with the suggestion, `get` what it holds) |
 | `NewPassword`, `newPasswordProblem` | `password.tsx` | a new password typed twice (My profile's Change password, the first owner's form), each field with its eye, the rule's line under the first, free fields of the caller's own state, never a draft, or fields not controlled, read through their refs (the first owner's, UiParts D210); the pair's one check, the rule first (its line says it, the focus then in the first field), then the mismatch, then none typed | `ids` (the two inputs'), `names` (their name attributes, My profile's alone), `label` (the first's), `value`, `set`, `again`, `setAgain` and `inputRef` (the first's), or instead `inputRefs` (the two inputs' refs), `required`, `reset`, `context` (the rule's words), `refused` (the submits the rule refused), `suggest` (the first field's dice, its suggestion filling the second too); `password`, `again`, `context` |
 | `passwordProblem`, `passwordRefusal`, `serverNames`, `hostWord`, `passwordSaid`, `PasswordRule` | `password.tsx` | the rule of a new password, as Go's `internal/password` holds it (AP PasswordRules, D7-A, D50-A): `too_short` below 8 code points, `too_long` above 64, then `context` where it contains a word of the names given, `massimo` or `maxcube` (each name and each run of letters in it, of 4 letters or more, compared lower-cased a code point at a time), `""` where it may be set, the answers of its `testdata/cases.json`, which the UI test gives it through `MassimoParts.passwordProblem`; `passwordRefusal`, the rule with the server's names beside the user's, which every form asks; `serverNames`, the first label of the page's host (`hostWord`, none for an IP address or `localhost`, as Go's `HostWord` answers the hosts of `cases.json` through `MassimoParts.hostWord`) and in the app the name it gives the server; a refusal's words, while typed or for a refused submit; the line under a new password's field (D6-A), drawn by `PasswordField`'s `rule`: the hint with an i while empty, the refusal with a warning's sign or a tick, a refused submit until the next key, what it says of a suggestion (shown, the list not loaded, none found), never the password, a status region written only when what it says changes, its place the tallest of its texts | `password`, `context`; `password`, `names`; `host`; `answer`, `refused`; `id`, `value`, `context`, `refused`, `note`, `fresh` (raised at each suggestion: the line emptied and written again) |
 | `suggestPassword`, `words`, `chars`, `wordList`, `suggestKind`, `chooseKind` | `suggest.ts` | a suggested password (AP PasswordRules, D14-A to D19-A): five words of EFF's long list joined by "-" or twenty characters of the 56 letters and digits without `0 O o 1 l I`, picked by `crypto.getRandomValues` without bias (a word's 32-bit number at or above floor(2^32 / 7776) × 7776, a character's byte at or above 224, drawn again), drawn again where the rule given refuses it, at most 20 times, null after; the list `/ui/words-en.txt` fetched once at the first suggestion of words, a fetch running shared, taken only as 7,776 lines of the list's form (`a-z`, `-` inside, none twice), one that fails a `ListError`, tried again at the next; the kind chosen, a signal kept in this browser (`massimo.suggest`); `MassimoParts.suggestPassword`, so that the UI test draws a thousand | `kind`, `refused(password)`; `list`; —; —; —; `kind` |
@@ -3201,7 +3306,8 @@ so that a state event of a device draws its room's tile alone;
 `store.ts` holds what a tile keeps (`newUI`,
 the live object `roomUI` gives the plain actions, which set it as before)
 and what the House tile's panel keeps (`house`: the mode, the duration,
-the temperature and the end typed, the rooms unticked, the last result),
+the temperature and the end, whether the user changed either,
+the rooms unticked, the last result),
 across its close too,
 and the timer of an open window's next state by the clock;
 `facts.ts` what the rooms alone read of a room and its devices
@@ -3213,6 +3319,10 @@ the room's notices among them, a device's badges in words);
 `configuration.ts` what the configuration keeps and sends,
 `House.tsx` the House tile, its temperature a `Stepper`, its end a `DateTime`,
 its mode and its duration a choice of radio buttons side by side of its own (`Segments`),
+the mode's choice giving the others their defaults (`choose`),
+its lowest and highest a part of their own (`Range`),
+which reads each room's virtual wall thermostat,
+so that a state event draws them alone, IS and SET each a `Tip`,
 its rooms a `Choices` of checkboxes with All,
 its Send and Cancel a `FormFooter`;
 `Unlisted.tsx` the devices without a room, each row a device's row with
@@ -3289,7 +3399,8 @@ a provider's role the roles.
 `index.tsx` draws each into its card's body, `#sys-users-body`, `#sys-roles-body`,
 `#sys-caps-body` and `#sys-providers-body`, reads it each time System settings is shown,
 and registers `users` (`load`),
-of which My profile calls `users.load` after a change made there;
+of which My profile calls `users.load` after a change made there,
+and Integrations after each of its changes (AP AccessEnds, D10);
 `store.ts` holds the lists as the last load that went through gave
 them, each panel's `open` by its item's key, each new item's form shown, the message
 lines' outcomes and `reads`, the users' change counter, at which an open user's panel
@@ -3298,7 +3409,9 @@ reads its sessions, keys and identities again, as every redraw of the plain list
 line for line as the plain scripts did, through an `actionRunner` per list;
 `Users.tsx`, `Roles.tsx` and `Providers.tsx` the parts,
 on a server without users the Users card a section of its own (`OpenServer` of `Users.tsx`):
-the line, Create the owner… (`askOwner` of `shared/owner.ts`, the focus given back to it),
+the line, an integration's users as rows with nothing to press (`OpenUsers`),
+with Open Integrations (`showCard`),
+Create the owner… (`askOwner` of `shared/owner.ts`, the focus given back to it),
 and while the server is kept open its switch,
 saved at once (`keepOpenOff` of `sendUsers.ts`),
 which stays in sight, off, for that showing (`keptOff` of `store.ts`),

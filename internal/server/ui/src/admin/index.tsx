@@ -7,10 +7,10 @@
  * System settings' lists as parts (AP UiParts, Block 10): Users, Roles,
  * Capabilities for every role and Sign-in providers, each drawn once
  * into its card's body and updated in place, read each time System
- * settings is shown and after each of its changes. The plain code calls
- * MassimoParts.users, for a change made in My profile
- * (profile/send.ts). Every part of the lists reads one store (store.ts),
- * since they read each other's data.
+ * settings is shown and after each of its changes. Other regions call
+ * MassimoParts.users, for a change made in My profile (profile/send.ts)
+ * or in Integrations (integrations/store.ts). Every part of the lists
+ * reads one store (store.ts), since they read each other's data.
  */
 
 import { mounter, register } from "../shared/region";
@@ -28,7 +28,7 @@ const mountUsers = mounter("sys-users-body", () => <UsersCard />);
 
 /** The functions the plain code calls, MassimoParts.users. */
 const users = register("users", {
-  /** load reads the users again and draws them, for a change made in My profile (profile/send.ts). */
+  /** load reads the users again and draws them, for a change made in My profile (profile/send.ts) or in Integrations (integrations/store.ts). */
   async load(): Promise<void> {
     mountUsers();
     await loadUsers();

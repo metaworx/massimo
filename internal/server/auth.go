@@ -63,9 +63,11 @@ const (
 	tokenQueryDeprecated = "@1793836800"
 )
 
-// capabilities lists every capability of docs/store.md section 6 in its
-// order. A route is registered with one of them; the roles' sets are
-// rows of the store, and what a capability includes is includes'.
+// capabilities lists every capability of the table in docs/api-v1.md
+// ("Authentication") in its order; TestCapabilityTableCoversRoutes
+// holds the table to it. A route is registered with one of them; the
+// roles' sets are rows of the store, and what a capability includes is
+// includes'.
 var capabilities = []string{
 	"read", "preferences", "setpoint", "lock", "configure", "rename", "structure", "pair", "discover", "backup", "restore", "repair",
 	"guests", "users", "passwords", "roles", "roles.disable", "capabilities", "cubes", "cubes.reboot", "settings", "update", "restart", "reboot", "audit",
@@ -312,8 +314,9 @@ func (s *Server) legacyToken() string {
 // SetToken applies a MASSIMO_API_TOKEN that the settings file gained,
 // changed or lost while the server runs, as a start would (docs/store.md
 // section 6): with a store it becomes an owner's key, or the first owner
-// with it, and a key the file's token was before is revoked; without a
-// store it is the one token. "" is none.
+// with it, who is told what the open server left (tellOpenSetup), and a
+// key the file's token was before is revoked; without a store it is the
+// one token. "" is none.
 func (s *Server) SetToken(ctx context.Context, token string) error {
 	s.tokenMu.Lock()
 	s.token = token
@@ -328,6 +331,9 @@ func (s *Server) SetToken(ctx context.Context, token string) error {
 		return err
 	}
 	s.log.Info("api token applied", "owner_created", res.OwnerCreated, "key_added", res.TokenAdded, "revoked", res.Revoked, "auth", s.AuthMode())
+	if res.OwnerCreated {
+		s.tellOpenSetup(ctx, store.BootstrapUser, store.RoleOwner)
+	}
 	return nil
 }
 

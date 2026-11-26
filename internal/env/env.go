@@ -180,13 +180,14 @@ func Own(name, sn string, single bool) string {
 
 // Serials lists, sorted and in upper case, the serial numbers that have
 // the per-Cube form of name set to a non-empty value, with those values;
-// a serial written in lower case in the name is the same Cube.
+// a serial written in lower case in the name is the same Cube, and on
+// Windows the name in any case (NameKey).
 func Serials(name string) (serials []string, values map[string]string) {
 	suffix := "_" + strings.TrimPrefix(name, Prefix)
 	values = map[string]string{}
 	for _, kv := range os.Environ() {
 		k, v, _ := strings.Cut(kv, "=")
-		mid, ok := strings.CutPrefix(k, Prefix)
+		mid, ok := strings.CutPrefix(NameKey(k), Prefix)
 		if !ok || v == "" {
 			continue
 		}

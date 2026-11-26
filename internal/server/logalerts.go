@@ -83,6 +83,9 @@ var settleRules = map[string]settleRule{
 	"proxy_warning":        {by: []string{"pairing_ended", "pairing_started", "proxy_pairing"}, match: pairingSettles},
 	"proxy_discarded":      {},
 	"proxy_delete_refused": {},
+	// what an open server left to its first regular user, said once
+	// (opensetup.go): until a person has seen it
+	"open_setup": {},
 	// a room's members that disagree, or a re-send of its state that
 	// failed: its members agreeing again; a member that does not follow
 	// its week programme: the member following it again, or out of auto

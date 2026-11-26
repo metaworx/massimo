@@ -29,7 +29,6 @@ import { type Changes, Identities } from "../shared/identities";
 import { Tokens } from "../shared/tokens";
 import { UserNameField, useNameCheck } from "../shared/username";
 import { PasswordField, passwordRefusal } from "../shared/password";
-import { useLang } from "../shared/lang";
 import { firstOwnerOf, isMe, me } from "../shared/me";
 import { askOwner, keptOpen } from "../shared/owner";
 import { adding, enabled, identityFormKey, identityUI, keptOff, passwordLogin, passwordReveal, reads, said, userFormKey, userUI, users } from "./store";
@@ -93,20 +92,22 @@ function badges(u: User) {
 const trim = (v: string) => v.trim();
 
 /**
- * UserForm is a user's settings: its display name, and for its manager
- * its role, whether it is disabled and a guest's end; a new password and,
- * for one's own without managing it, the current one; Remove, which asks
- * in place of the actions, Reset and Save. The fields that show what is
- * stored keep their drafts by the user's name; Save sends those that
- * differ from the user as the list last gave it. open is the panel's: a
- * password shown is hidden again as the panel closes or opens. An
- * integration's user gets no password, a line in its place: it acts
- * through its integration alone (AP LooseEnds, D1); one it holds from
- * before, its manager removes with Remove the password. A new password is
- * typed once (AP PasswordRules, D51-A) and held to the rule, its line
- * under it; a Save the rule refuses sends nothing and puts the focus in
- * it; left empty, the password stays as it is and is not checked. The
- * dice beside it suggests one (Block 4).
+ * UserForm is a user's settings: its display name, and for its manager its
+ * role, of those the server says it may give (an integration's user those
+ * within its integration's maximum, AP AccessEnds, D3; a stored role or
+ * one chosen beyond it kept, with a line under it, D4), whether it is
+ * disabled and a guest's end; a new password and, for one's own without
+ * managing it, the current one; Remove, which asks in place of the
+ * actions, Reset and Save. The fields that show what is stored keep their
+ * drafts by the user's name; Save sends those that differ from the user as
+ * the list last gave it. open is the panel's: a password shown is hidden
+ * again as the panel closes or opens. An integration's user gets no
+ * password, a line in its place: it acts through its integration alone
+ * (AP LooseEnds, D1); one it holds from before, its manager removes with
+ * Remove the password. A new password is typed once (AP PasswordRules,
+ * D51-A) and held to the rule, its line under it; a Save the rule refuses
+ * sends nothing and puts the focus in it; left empty, the password stays
+ * as it is and is not checked. The dice beside it suggests one (Block 4).
  */
 function UserForm({ u, off, open }: { u: User; off: boolean; open: boolean }) {
   useLook();
@@ -153,10 +154,13 @@ function UserForm({ u, off, open }: { u: User; off: boolean; open: boolean }) {
   const words = () => [u.name, u.display_name || "", display.value.trim()];
   const admin = "admin-only" + hid(!manage);
   const ofIntegration = !!u.integration;
+  // a role chosen beyond the maximum of the user's integration, the stored one or one chosen before the list was read again: offered all the same (AP AccessEnds, D4)
+  const beyond = ofIntegration && !!u.may && !(u.may.roles || []).includes(role.value);
   return (
     <form {...form.props} class={"user-form" + hid(off)} onSubmit={submit}>
       <TextField label={t("users.displayName")} id={id("display_name")} name="display_name" maxLength={64} draft={display} cls={hid(!manage && !self).trim() || undefined} />
-      <Select label={t("users.role")} id={id("role")} name="role" wide cls={admin} options={roleOptions(u.role)} draft={role} show={(k) => roleLabel(k)} />
+      <Select label={t("users.role")} id={id("role")} name="role" wide cls={admin} options={roleOptions(u.role, u, role.value)} draft={role} show={(k) => roleLabel(k)}
+        hint={beyond ? t("users.roleAboveMax") : undefined} hintId={id("role-hint")} />
       <Switch name="disabled" label={t("users.disabled")} rowCls={admin} draft={disabled} />
       <Field label={t("users.expires")} id={id("expires")} wide cls={admin} hint={t("users.expiresHint")} draft={expires}
         show={(v) => (v ? fmtShortTime(Date.parse(v)) : t("users.noEnd"))}>
@@ -323,21 +327,50 @@ function PasswordLogin() {
 }
 
 /**
- * OpenServer is the section on a server without users (AP FirstOwner,
- * D14, Block 4): a line that says so; Create the owner…, which opens the
- * sign-in card with the first owner's form where the owner can be created
- * from here, the focus back on it when the card is left; and while the
- * server is kept open the switch that undoes it (D5, D32): on; turned off
- * it is saved at once, and its row stays for this showing of the section,
- * off and no longer to be turned, with the line that the page asks for
- * the owner again at its next load, the focus on that line; turning it on
- * is the sign-in card's confirmation alone. Whether it is kept open is
- * shared/owner.ts keptOpen's answer, from who is in, read again after the
- * turning off (D44).
+ * OpenUsers are an integration's users on an open server (AP AccessEnds,
+ * D7): a row each, keyed by its name, with the name it is shown by and
+ * its badges, nothing to open or press, since anyone on the local network
+ * may change them there; then Open Integrations, the card that manages
+ * them. A regular user listed means the server is open no more, which the
+ * next read of who is in shows: none is drawn here.
+ */
+function OpenUsers({ list }: { list: User[] }) {
+  return (
+    <>
+      <ul id="users-open-list" class="users-open-list">
+        {list.map((u) => (
+          <li key={u.name} class="users-open-user">
+            <span class="panel-name">{userName(u)}</span>
+            <span class="panel-badges">{badges(u)}</span>
+          </li>
+        ))}
+      </ul>
+      <div class="actions">
+        <button type="button" id="users-open-integrations" onClick={() => showCard("sys-integrations")}>{t("users.openIntegrations")}</button>
+      </div>
+    </>
+  );
+}
+
+/**
+ * OpenServer is the section on a server without users (AP FirstOwner, D14,
+ * Block 4): once the users are read, or their read failed, a line that
+ * says so, which with an integration's users says that they act through it
+ * alone (AP AccessEnds, D9), and those users (OpenUsers); Create the
+ * owner…, which opens the sign-in card with the first owner's form where
+ * the owner can be created from here, the focus back on it when the card
+ * is left; and while the server is kept open the switch that undoes it
+ * (D5, D32): on; turned off it is saved at once, and its row stays for
+ * this showing of the section, off and no longer to be turned, with the
+ * line that the page asks for the owner again at its next load, the focus
+ * on that line; turning it on is the sign-in card's confirmation alone.
+ * Whether it is kept open is shared/owner.ts keptOpen's answer, from who
+ * is in, read again after the turning off (D44).
  */
 function OpenServer() {
-  useLang();
+  useLook();
   const m = me.value;
+  const listed = users.list.filter((u) => u.integration);
   const kept = keptOpen(m);
   const off = keptOff.showing && !kept; // kept open again from the card meanwhile: the switch is back, on
   const on = useSetAtOnce(kept);
@@ -349,7 +382,8 @@ function OpenServer() {
   }, [off]);
   return (
     <div id="users-open" class="users-open">
-      <p id="users-no-owner" class="muted small">{t("users.noOwner")}</p>
+      {(users.loaded || users.failed) && <p id="users-no-owner" class="muted small">{t(listed.length ? "users.noOwnerWithIntegrations" : "users.noOwner")}</p>}
+      {listed.length > 0 && <OpenUsers list={listed} />}
       <div class={"actions" + hid(!firstOwnerOf(m))}>
         <button ref={createRef} type="button" id="users-create-owner" class="primary" onClick={() => askOwner(createRef.current)}>{t("setup.ask")}</button>
       </div>
@@ -364,16 +398,24 @@ function OpenServer() {
   );
 }
 
-/** UsersCard is the section's body: the password sign-in, the users' panels, the form that adds one, and the message line; on a server without users its own section instead of the three (OpenServer), and the line. */
+/**
+ * UsersCard is the section's body: the password sign-in, the users'
+ * panels, the form that adds one, and the message line; on a server
+ * without users its own section instead of the three (OpenServer), and
+ * the line. The card's head counts the users, and on a server without
+ * users says that it has no owner yet, whatever the users (AP
+ * AccessEnds, D8).
+ */
 export function UsersCard() {
   useLook();
   const list = users.list;
-  const count = users.loaded ? tn("roles.users", list.length) : "";
-  // the card's head counts them, in the page's language, once they are read; nothing once forgotten
+  const open = me.value?.mode === "open";
+  const head = open ? t("users.noOwnerYet") : users.loaded ? tn("roles.users", list.length) : "";
+  // the card's head in the page's language, the count once they are read; nothing once forgotten
   useLayoutEffect(() => {
-    cardBadges("sys-users", count ? [{ text: count, kind: "mode" }] : []);
-  }, [count]);
-  if (me.value?.mode === "open") {
+    cardBadges("sys-users", head ? [{ text: head, kind: open ? "warn" : "mode" }] : []);
+  }, [head, open]);
+  if (open) {
     return (
       <>
         <OpenServer />

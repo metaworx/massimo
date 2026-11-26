@@ -713,6 +713,9 @@ paths:
         and contains neither the user's names nor the server's, nor
         massimo or maxcube, or it is 400 and nothing is written; a record
         is not checked, since the server never sees the password in it.
+        The first owner's answer holds open_setup where anything set up
+        before it still works, as a rule while the server was open, which
+        the log's open_setup line at warn says too.
       parameters: [{$ref: "#/components/parameters/idempotencyKey"}]
       requestBody:
         required: true
@@ -724,7 +727,7 @@ paths:
           description: The user
           content:
             application/json:
-              schema: {$ref: "#/components/schemas/User"}
+              schema: {$ref: "#/components/schemas/UserCreated"}
         "400": {$ref: "#/components/responses/BadRequest"}
         "401": {$ref: "#/components/responses/Unauthorized"}
         "403": {$ref: "#/components/responses/Forbidden"}
@@ -3465,7 +3468,10 @@ paths:
         alone); the server's own, source system:
         server_started, server_stopping, settings_read, restart, reboot,
         reboot_cancelled, update, update_result, update_postponed, backup, backup_deleted,
-        backups_pruned, log_pruned, audit_pruned, log_rotated, restore_started; a Cube's own:
+        backups_pruned, log_pruned, audit_pruned, log_rotated, restore_started,
+        open_setup (at warn: what was set up before the first regular user
+        and still works, with the user and its role in "summary", see
+        OpenSetup); a Cube's own:
         address_changed, cube_gone; a change made through the API, source
         config: change, with the action, target, set, changes and subject in
         "summary" and who in "by"; the queue's, source queue: command (a
@@ -4749,11 +4755,15 @@ components:
         last_login_at: {type: string, format: date-time}
         may:
           type: object
-          description: "In the users routes' answers: what the caller may do with the user, change it beyond its own name and password (manage) or set its password (password); absent elsewhere"
-          required: [manage, password]
+          description: "In the users routes' answers: what the caller may do with the user, change it beyond its own name and password (manage) or set its password (password), and the roles it may give it (roles); absent elsewhere"
+          required: [manage, password, roles]
           properties:
             manage: {type: boolean}
             password: {type: boolean}
+            roles:
+              type: array
+              description: "The keys of the roles the caller may give the user, in the roles' order, empty where it may give none; of those, for an integration's user only the roles within the role integration and its integration's maximum, and integration itself, never owner. A holder of users without roles or integrations learns from it the keys of the roles it outranks and, for each integration's user, which of them lie within that integration's maximum"
+              items: {type: string}
         integration:
           type: object
           description: "An integration's user, with its integration's uuid; in GET /api/v1/users id, name and linked_to for one of its users, absent for the integration's own"
@@ -4772,6 +4782,51 @@ components:
               id: {type: string}
               name: {type: string}
               display: {type: string, description: "Its chain, <the integration's name> › <its display name>"}
+    UserCreated:
+      allOf:
+        - {$ref: "#/components/schemas/User"}
+        - type: object
+          properties:
+            open_setup: {$ref: "#/components/schemas/OpenSetup"}
+    OpenSetup:
+      type: object
+      description: >-
+        What was set up before the first regular user and still works, for the first owner to check, as a rule while the
+        server was open, else left by an owner since removed: in the first owner's answer of POST /api/v1/users alone,
+        where it holds anything; each list absent where empty. Names only, never a key or a secret
+      properties:
+        integrations:
+          type: array
+          description: The integrations active with a live key, or one still to be collected with the approval's code; requests still waiting are not listed
+          items:
+            type: object
+            required: [uuid, name]
+            properties:
+              uuid: {type: string}
+              name: {type: string, description: "The name the owner gave it, else the one it reports"}
+        providers:
+          type: array
+          description: The sign-in providers enabled
+          items:
+            type: object
+            required: [key]
+            properties:
+              key: {type: string}
+              name: {type: string, description: The name on its button; absent shows the key}
+              auto_create: {type: boolean, description: A sign-in without an identity creates the user}
+        roles:
+          type: array
+          description: "The roles added, and the default ones changed or disabled; never owner or integration"
+          items:
+            type: object
+            required: [key]
+            properties:
+              key: {type: string}
+              name: {type: string, description: The display name; absent shows the key's translated default}
+        capabilities_off:
+          type: array
+          description: The capabilities turned off for every role but owner
+          items: {type: string}
     RoleRef:
       type: object
       properties:

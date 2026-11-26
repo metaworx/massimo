@@ -268,13 +268,54 @@ func (a access) maySetPassword(u store.User) bool {
 	return (a.all || a.passwords || a.guests && u.Role == store.RoleGuest) && a.ranks(u.Role)
 }
 
-// mayAssign says whether a principal may give a role: any it outranks
-// with users, guest alone with guests.
-func (a access) mayAssign(role string) bool {
-	if role == store.RoleIntegration {
-		return false // an integration's and its users' alone (integrations.go)
+// mayAssign says whether a principal may give user u a role: any it
+// outranks with users, guest alone with guests. The role integration is
+// an integration's and its users' alone (integrations.go): an
+// integration's user is given it back by the same rule where it was
+// given another (AP AccessEnds, D5), and no other user is given it.
+func (a access) mayAssign(role string, u store.User) bool {
+	if role == store.RoleIntegration && u.IntegrationID == 0 {
+		return false
 	}
 	return (a.all || a.guests && role == store.RoleGuest) && a.ranks(role)
+}
+
+// assignable are the keys of the roles the principal may give user u,
+// in the order of roles, the store's, a disabled one among them as the
+// users list shows it: none where it may not manage u; else those
+// mayAssign lets it give, and for an integration's user only those
+// within the role integration and maxCaps, its integration's maximum,
+// and integration itself (AP AccessEnds, D3): every call of such a user
+// is held there, whatever its role (principalFor), so a role beyond it
+// would promise what it never gives. The owner has no set, holding every
+// capability by code, and is within no maximum. It is never nil, so that
+// "none" is said as an empty list.
+func (a access) assignable(u store.User, roles []store.Role, maxCaps []string) []string {
+	out := []string{}
+	if !a.mayManage(u) {
+		return out
+	}
+	within := intersect(setOf(maxCaps), integrationCeiling)
+	for _, r := range roles {
+		if !a.mayAssign(r.Key, u) {
+			continue
+		}
+		if u.IntegrationID != 0 && r.Key != store.RoleIntegration && (r.Key == store.RoleOwner || !allIn(r.Capabilities, within)) {
+			continue
+		}
+		out = append(out, r.Key)
+	}
+	return out
+}
+
+// allIn reports whether every capability of caps is in set.
+func allIn(caps []string, set map[string]bool) bool {
+	for _, c := range caps {
+		if !set[c] {
+			return false
+		}
+	}
+	return true
 }
 
 // rankFail is the refusal of a user or role the principal does not
@@ -289,10 +330,10 @@ func (a access) rankFail(role, capability string) error {
 	return fail(http.StatusForbidden, "capability %q required", capability)
 }
 
-// assignFail is the refusal of a role the principal may not give.
-func (a access) assignFail(role string) error {
+// assignFail is the refusal of a role the principal may not give user u.
+func (a access) assignFail(role string, u store.User) error {
 	switch {
-	case role == store.RoleIntegration:
+	case role == store.RoleIntegration && u.IntegrationID == 0:
 		return fail(http.StatusForbidden, "the role integration is an integration's and its users' alone")
 	case !a.ranks(role) && role == store.RoleOwner:
 		return fail(http.StatusForbidden, "only an owner gives the role owner")
@@ -303,10 +344,32 @@ func (a access) assignFail(role string) error {
 }
 
 // userMay is what the caller may do with a user (userView.May): change
-// it, or set its password alone.
+// it, or set its password alone, and the roles it may give it.
 type userMay struct {
 	Manage   bool `json:"manage"`
 	Password bool `json:"password"`
+	// Roles are the keys of the roles the caller may give the user
+	// (assignable), empty where it may give none.
+	Roles []string `json:"roles"`
+}
+
+// mayOf is what the principal may do with u, self where u is its own
+// user, of the store's roles and u's integration's maximum.
+func (a access) mayOf(u store.User, self bool, roles []store.Role, maxCaps []string) *userMay {
+	return &userMay{Manage: a.mayManage(u), Password: a.maySetPassword(u) || self, Roles: a.assignable(u, roles, maxCaps)}
+}
+
+// maxOf is the maximum of user u's integration, none for a regular user
+// or one whose integration is gone.
+func maxOf(ctx context.Context, st *store.Store, u store.User) ([]string, error) {
+	if u.IntegrationID == 0 {
+		return nil, nil
+	}
+	i, ok, err := st.IntegrationByID(ctx, u.IntegrationID)
+	if err != nil || !ok {
+		return nil, err
+	}
+	return i.MaxCaps, nil
 }
 
 // viewUserOf is u as the users routes show it, its chain and its
@@ -327,7 +390,8 @@ func (s *Server) viewUserOf(r *http.Request, st *store.Store, n *store.Namer, u 
 }
 
 // listUsers handles GET /api/v1/users: every user with users, the
-// guests and the own user with guests alone.
+// guests and the own user with guests alone, each with what the caller
+// may do with it. The roles and the integrations are read once.
 func (s *Server) listUsers(w http.ResponseWriter, r *http.Request) error {
 	st, err := s.userStore()
 	if err != nil {
@@ -339,9 +403,21 @@ func (s *Server) listUsers(w http.ResponseWriter, r *http.Request) error {
 	if err != nil {
 		return userFail(err)
 	}
-	marks, links, err := integrationMarks(r.Context(), st, users)
+	roles, err := st.Roles(r.Context())
 	if err != nil {
 		return userFail(err)
+	}
+	integs, err := st.Integrations(r.Context())
+	if err != nil {
+		return userFail(err)
+	}
+	marks, links, err := integrationMarks(r.Context(), st, users, integs)
+	if err != nil {
+		return userFail(err)
+	}
+	maxima := map[int64][]string{}
+	for _, i := range integs {
+		maxima[i.ID] = i.MaxCaps
 	}
 	out := []userView{}
 	n := st.Namer()
@@ -350,7 +426,7 @@ func (s *Server) listUsers(w http.ResponseWriter, r *http.Request) error {
 		self := p.named() && u.ID == p.user.ID
 		if a.mayView(u) || self {
 			v := s.viewUserOf(r, st, n, u)
-			v.May = &userMay{Manage: a.mayManage(u), Password: a.maySetPassword(u) || self}
+			v.May = a.mayOf(u, self, roles, maxima[u.IntegrationID])
 			if m := marks[u.ID]; m != nil {
 				v.Integration = m
 			}
@@ -415,9 +491,9 @@ func (s *Server) postUser(w http.ResponseWriter, r *http.Request) error {
 		if u.Role == "" {
 			u.Role = store.RoleViewer
 		}
-		if a := s.accessOf(ctx, p, ""); !a.mayAssign(u.Role) {
+		if a := s.accessOf(ctx, p, ""); !a.mayAssign(u.Role, u) {
 			if !a.ranks(u.Role) || u.Role == store.RoleIntegration {
-				return a.assignFail(u.Role)
+				return a.assignFail(u.Role, u)
 			}
 			return fail(http.StatusForbidden, "capability %q required to create a user with the role %s", "users", u.Role)
 		}
@@ -458,13 +534,24 @@ func (s *Server) postUser(w http.ResponseWriter, r *http.Request) error {
 		return userFail(err)
 	}
 	auditSubject(r, userSubject(created))
+	out := userCreated{userView: s.viewUserOf(r, st, nil, created)}
 	if p.mode == modeOpen {
 		s.log.Info("first owner created", "user", created.Name, "remote", s.clientIP(r))
+		// the owner is written: a client gone now leaves the line to be said all the same
+		out.OpenSetup = s.tellOpenSetup(context.WithoutCancel(ctx), created.Name, created.Role)
 	} else {
 		s.log.Info("user added", "user", created.Name, "role", created.Role, "remote", s.clientIP(r))
 	}
-	writeJSON(w, http.StatusCreated, s.viewUserOf(r, st, nil, created))
+	writeJSON(w, http.StatusCreated, out)
 	return nil
+}
+
+// userCreated is the answer of POST /api/v1/users: the user, and for the
+// first owner what the open server left, where it left anything
+// (tellOpenSetup, AP AccessEnds, Block 3).
+type userCreated struct {
+	userView
+	OpenSetup *openSetupView `json:"open_setup,omitempty"`
 }
 
 // What a route needs of the user of its path (targetUser).
@@ -544,8 +631,18 @@ func (s *Server) putUser(w http.ResponseWriter, r *http.Request) error {
 	if !manage && (req.Role != nil || req.Disabled != nil || len(req.ExpiresAt) > 0 || req.DisplayName != nil && !a.self) {
 		return a.rankFail(u.Role, "users")
 	}
-	if req.Role != nil && !a.mayAssign(*req.Role) {
-		return a.assignFail(*req.Role)
+	if req.Role != nil && !a.mayAssign(*req.Role, u) {
+		return a.assignFail(*req.Role, u)
+	}
+	// What the answer's may names, read before anything is written or a
+	// proof used up; neither changes with this request.
+	roles, err := st.Roles(ctx)
+	if err != nil {
+		return userFail(err)
+	}
+	maxCaps, err := maxOf(ctx, st, u)
+	if err != nil {
+		return userFail(err)
 	}
 	setsPassword := req.Password != nil || req.Record != nil
 	if req.Password != nil && *req.Password != "" || req.Record != nil {
@@ -640,7 +737,7 @@ func (s *Server) putUser(w http.ResponseWriter, r *http.Request) error {
 	s.log.Info("user changed", "user", s.logUserName(r.Context(), u), "remote", s.clientIP(r))
 	auditSubject(r, userSubject(u))
 	v := s.viewUserOf(r, st, nil, u)
-	v.May = &userMay{Manage: a.mayManage(u), Password: a.maySetPassword(u) || a.self}
+	v.May = a.mayOf(u, a.self, roles, maxCaps)
 	writeJSON(w, http.StatusOK, v)
 	return nil
 }

@@ -300,8 +300,14 @@ does today and compares it with the store:
    The server sets it when the plain Cube first reports its serial,
    and the start when a configured row's address is the plain address
    (the same host whatever its case, the same port,
-   `62910` where one gives none):
-   two runtimes would dial one Cube, which serves one client.
+   `62910` where one gives none),
+   or, where no row's is as written, when a row at the same port has a host
+   with an IP address of the plain host's: a host name and an IP of one Cube.
+   Where several rows have one, none is tied, and the log names them.
+   The start looks each name up once, all of them within 2 s,
+   and a lookup that fails or does not answer in time ties nothing;
+   `massimo config` shows the tie the same way.
+   Two runtimes would dial one Cube, which serves one client.
    The log then says that the plain lines are that Cube's.
 3. Keys and IVs came from `.env` by serial in every case,
    for the portal commands, which are gone since AP PortalDrop.
@@ -367,7 +373,7 @@ CREATE UNIQUE INDEX roles_key ON roles (key) WHERE deleted_at IS NULL;
 
 CREATE TABLE role_capabilities (
     role_id    INTEGER NOT NULL REFERENCES roles (id) ON DELETE CASCADE,
-    capability TEXT    NOT NULL,              -- a key from the table in section 6
+    capability TEXT    NOT NULL,              -- a capability's key (section 6)
     PRIMARY KEY (role_id, capability)
 );
 
@@ -1192,47 +1198,37 @@ A role can be disabled, which is the `roles.disable` capability;
 a disabled role's users keep their login and are refused everything,
 and the page says why.
 
-The capabilities, what each allows, and the routes it guards:
+The capabilities, what each allows and the routes it guards
+are the table of docs/api-v1.md ("Authentication"),
+held to the routes the server registers by a test
+(`TestCapabilityTableCoversRoutes` in `internal/server/openapi_test.go`).
+`integrations` came with migration 0021, `repair` with 0022.
 
-| Capability | Allows | Routes |
-|---|---|---|
-| `read` | see everything of the Cubes and one's own user: rooms, devices, configuration, programmes, the log and the stream, the pairing and restore state, a command's outcome, the server's log and its alerts, the system's facts, the update state | `GET /api/v1/cubes`, `…/cubes/{sn}`, `…/rooms`, `…/devices`, `…/devices/{rf}`, `…/devices/{rf}/program`, `…/rooms/{id}/config`, `…/rooms/{id}/program`, `…/log`, `…/events`, `POST …/events/ticket`, `GET …/pairing`, `GET …/restore`, `GET /api/v1/commands/{id}`, `GET /api/v1/log`, `GET /api/v1/log/alerts`, `GET /api/v1/system`, `GET /api/v1/push/vapid`, `GET /api/v1/update`; `GET /api/v1/me` and one's own preferences (`GET /api/v1/me/preferences`) for any signed-in user |
-| `preferences` | keep one's own settings and colour schemes on the server, so that they follow the user across browsers, and be notified; without it they stay in the browser | `PUT`/`DELETE /api/v1/me/preferences/{key}`, `GET`/`POST /api/v1/me/push`, `DELETE /api/v1/me/push/{id}` |
-| `setpoint` | set temperatures and modes | `PUT …/devices/{rf}/setpoint`, `PUT …/rooms/{id}/setpoint` |
-| `lock` | lock and unlock the thermostats' buttons | `PUT …/devices/{rf}/lock` |
-| `configure` | temperatures, device settings, week programmes, and new batteries marked | `PUT …/rooms/{id}/config`, `PUT …/devices/{rf}/config`, `PUT …/rooms/{id}/program`, `PUT …/devices/{rf}/program`, the copy of a room's settings in `PUT …/devices/{rf}`, `POST …/devices/{rf}/battery` |
-| `rename` | room and device names | `PUT …/rooms/{id}`, `PUT …/devices/{rf}` with `name` |
-| `structure` | move devices, delete rooms, remove devices | `PUT …/devices/{rf}` with `room_id`, `DELETE …/rooms/{id}`, `DELETE …/devices/{rf}` |
-| `pair` | put the Cube into pairing mode and stop it | `POST …/pairing`, `DELETE …/pairing` |
-| `discover` | search for Cubes on the LAN | `POST /api/v1/cubes/discover` |
-| `backup` | download a backup, and the backups the server keeps | `GET …/backup`, `GET`/`POST …/backups`, `GET …/backups/{id}` and its `diff`, `GET /api/v1/backups/unserved` |
-| `restore` | plan and run a restore, delete a kept backup | `POST …/restore/plan`, `POST …/restore`, `DELETE …/backups/{id}` |
-| `repair` | the repairs of a Cube's rooms and devices: their communication errors reset, a device's configuration re-sent from its room, a device placed or listed where the Cube and its list disagree, a room's master named, a room re-linked; "unlink all and re-link" needs `structure` as well (migration 0022; docs/api-v1.md, "Repairs") | `GET`/`POST …/repair/…` |
-| `guests` | create, invite, disable and remove users whose role is `guest`, with an end date | the users routes, limited to guests |
-| `users` | every user: create, role, disable, password reset, tokens, the identities they sign in with | `GET`/`POST /api/v1/users`, `…/users/{name}`, `…/users/{name}/tokens`, `…/users/{name}/identities…`, `POST …/users/{name}/register` |
-| `passwords` | set the password of a user | `GET /api/v1/users`, `PUT …/users/{name}` with a password, `POST …/users/{name}/register` |
-| `roles` | change a role's capabilities, rename a role, create and delete roles | `GET`/`POST /api/v1/roles`, `PUT`/`DELETE /api/v1/roles/{key}` |
-| `roles.disable` | disable and enable a role | `PUT /api/v1/roles/{key}/disabled` |
-| `capabilities` | disable and enable a capability | `GET /api/v1/capabilities`, `PUT /api/v1/capabilities/{key}` |
-| `cubes` | add, configure and remove Cubes | `POST /api/v1/cubes`, `PUT`/`DELETE /api/v1/cubes/{sn}` |
-| `cubes.reboot` | reboot a Cube, which drops the radiograms it has not delivered | `POST /api/v1/cubes/{sn}/reboot` |
-| `settings` | the server's settings, its store and the settings in effect | `GET`/`PUT /api/v1/settings`, `GET /api/v1/store`, `GET /api/v1/config` |
-| `update` | start a software update and answer the automatic update's question; includes `restart` | `POST /api/v1/update`, `PUT /api/v1/update/answer` |
-| `restart` | restart the server, read its settings file again, and read a Cube again at once | `GET`/`POST /api/v1/restart`, `POST /api/v1/reload`, `POST /api/v1/cubes/{sn}/refresh` |
-| `reboot` | reboot the computer the server runs on, where its owner switched that on; includes `restart` | `GET`/`POST`/`DELETE /api/v1/reboot` |
-| `audit` | read the audit | `GET /api/v1/audit` |
-| `auth` | the OpenID Connect providers users sign in through; seeded for no role | `GET`/`POST /api/v1/providers`, `PUT`/`DELETE /api/v1/providers/{key}` |
-| `integrations` | the registered integrations: requests, approval, their maximum, their users and links (migration 0021) | `GET /api/v1/integrations`, `…/integrations/found`, `GET`/`PUT`/`DELETE …/integrations/{uuid}`, its `approve`, `refuse` and `accept-instance`, `PUT …/integrations/{uuid}/users/{id}` |
-
-`update` and `reboot` each include `restart`, since each restarts the server
-(2026-11-25, AP StartConfiguration, D37):
-their holder passes every check of `restart`.
+<!-- BEGIN GENERATED PARTIAL docs/fragments/_capability-rules.md - do not edit; run "GUIDELINES/shared/tools/sync-docs.sh" -->
+`update` and `reboot` each include `restart`, since each restarts the server:
+their holder passes every check of `restart` as a holder of `restart` does,
+and `GET /api/v1/me` lists `restart` beside them.
 The include is taken at the check, on the set the bounds leave
-(the role's set less the disabled capabilities,
-an integration's ceiling and maximum, a call's level),
-so a disabled `restart` stays off for their holders too;
-nothing stored changes, no role's rows and no migration.
-`reboot` does not include `update` (D40-A).
+(the role's set less the capabilities disabled for every role,
+an integration's ceiling and maximum, a call's level):
+an integration whose maximum holds `update` and not `restart` restarts the server,
+a call of it at `control`, which leaves no `update`, does not,
+and `restart` disabled for every role is disabled for their holders too.
+Nothing stored changes, and no migration runs:
+`GET /api/v1/roles` shows each role's set as saved,
+and the rule below compares the stored sets.
+`reboot` does not include `update`, nor `update` `reboot`.
+
+A user changes only users whose role has no capability its own lacks,
+and gives only such roles: an owner changes everyone,
+nobody but an owner changes an owner or gives the role `owner`,
+and a role made with `users` but without, say, `restore` changes no manager.
+<!-- END GENERATED PARTIAL docs/fragments/_capability-rules.md -->
+
+The rule holds for `users`, `guests` and `passwords` alike
+(docs/api-v1.md, "Authentication").
+Both includes were decided on 2026-11-25 (AP StartConfiguration, D37),
+and on the same day that `reboot` does not include `update` (D40-A).
 
 The default roles, as seeded.
 `owner` has every capability.
@@ -1290,12 +1286,6 @@ that is one row of the seed.
 a guest has it not, so a guest's settings stay on its devices,
 where the defaults apply anyway (decided 2026-11-06),
 and an integration's users keep theirs if it ever shows them a page.
-A user changes only users whose role has no capability its own lacks,
-and gives only such roles: an owner changes everyone,
-nobody but an owner changes an owner or gives the role `owner`,
-and a role made with `users` but without, say, `restore` changes no manager.
-The rule holds for `users`, `guests` and `passwords` alike
-(docs/api-v1.md, "Authentication").
 
 Guests are users with the role `guest`,
 created by a holder of `guests` with an invitation (a one-time code or link;
@@ -1317,7 +1307,7 @@ the OpenAPI file documents the capability per operation.
 The two routes whose capability depends on the body (`PUT …/devices/{rf}`:
 `name` is `rename`,
 `room_id` is `structure`) are checked in the handler after decoding,
-and the table lists both.
+and the table of docs/api-v1.md names the route in both rows.
 The list of capabilities is Go code, not a table,
 because a capability is a line in the route table;
 the roles and their sets are rows (section 5), seeded by the first migration.
@@ -1373,6 +1363,19 @@ the roles and their sets are rows (section 5), seeded by the first migration.
   (AP FirstOwner, D15).
   `massimo user add` does the same from the command line (open decision 4 on
   whether the form should exist).
+  The first regular user, made by the form, by `massimo user add` whatever its
+  role, or from `MASSIMO_API_TOKEN`, is told once what was set up while there
+  was none, or left by an owner since removed, and still works
+  (`OpenSetup`, AP AccessEnds, Block 3):
+  the integrations active with a key, or one still to be collected
+  with the approval's code,
+  the sign-in providers enabled, the roles added or changed
+  (one that is not a default role, or a default one past its first version;
+  never owner or integration) and the capabilities turned off;
+  a request still waiting is not listed (AP AccessEnds, D15).
+  It is the log's `open_setup` line at warn, a log alert until a person marks it
+  seen, the form's toast and the command's second line
+  (docs/api-v1.md, "Authentication").
   The setting `auth.keep_open` (false by default) keeps such a server open
   on purpose: the web UI does not ask for the first owner
   (AP FirstOwner, D11), and nothing changes about who is let in.
@@ -1544,6 +1547,11 @@ so that a password or a key never goes to a store the server does not read
 Each change names the store it wrote,
 and a store other than the service's, where the service is installed,
 draws a warning.
+A `user add` that makes the store's first regular user prints a second line,
+what was set up before it and still works, where anything was,
+and writes the log's `open_setup` line by the command line (above);
+whether it is the first is counted in the transaction that writes it,
+so that of it and a first owner made at the same moment one alone is told.
 `user add` and `user passwd` set a password of version 2:
 both halves of the registration run in the command,
 with the server's keys from the data directory,

@@ -1109,6 +1109,11 @@ A name given twice takes its first line, at a start as at a reload,
 and `massimo config` names its lines;
 on Windows a name in two cases is given twice,
 as `MASSIMO_X` and `massimo_x` are one variable there.
+Names are upper case, but for the serial in a Cube's line:
+on Windows the start takes `massimo_listen` as `MASSIMO_LISTEN`,
+and so do a reload and `massimo config`;
+on Linux and macOS such a line is set aside, a Cube's line too
+(`line 3 sets MASSIMO_LISTEN in another case, ignored: names are upper case`).
 A UTF-8 byte order mark at the file's start is skipped,
 and UTF-16 text, as PowerShell 5.1's `>` or `>>` writes it, is refused:
 save it as UTF-8.
@@ -1238,6 +1243,14 @@ With `MASSIMO_API_TOKEN` set, the first start of `serve` creates the user
 `owner` with the token as its API key, so the token keeps working;
 without it, the first owner is created with `user add <name> -role owner`
 or with the form the web UI offers on the local network while there are no users.
+The first regular user, made either way, whatever role `user add` gives it,
+or from the token, closes the open server and is told what was set up before it
+and still works, where anything was:
+`user add` prints it on a second line, a part for each list
+(`still in effect from before this user: 1 integration (Kitchen); roles added or changed: viewer; check them in System settings`),
+the web UI in its toast,
+and the log keeps it as a warning until it is marked seen
+(docs/api-v1.md, "Authentication").
 
 Users may also sign in through an OpenID Connect provider beside their password,
 such as Nextcloud, Google or Microsoft:
@@ -1283,8 +1296,12 @@ A Cube added in the web UI beside it is another Cube,
 with a proxy only on an address of its own.
 Where that is the plain Cube itself, `serve` serves it once:
 a plain address equal to its address, the Cube's port where one gives none,
+or a host name and an IP of it, either way round, at that port,
 ties the plain lines to it at the start,
 and so does the serial the plain Cube reports.
+The start looks the names up for 2 s at most, and only until the tie is saved;
+a name with the IPs of several Cubes ties none, and the log names them.
+`massimo config` shows the same tie.
 The plain lines are then that Cube's, compared with its row, whose values win,
 as for its other lines in the file:
 a plain `MASSIMO_CUBE_PROXY` that differs from the row, an empty one included,

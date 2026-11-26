@@ -118,12 +118,17 @@ func watchSettings(ctx context.Context, path string, applied fileStamp, every ti
 	}
 }
 
-// settings are the variables serve reads, as the process has them.
+// settings are the variables serve reads, as the process has them, each
+// by its key (env.NameKey): on Windows a name in any case, as the start
+// reads it there, in upper case, so that a reload compares it whatever
+// its spelling, which Windows keeps once set (AP StartConfiguration,
+// D53-A, D54-A).
 func settings() map[string]string {
 	out := map[string]string{}
 	for _, kv := range os.Environ() {
-		if k, v, _ := strings.Cut(kv, "="); strings.HasPrefix(k, "MASSIMO_") && env.Known(k) {
-			out[k] = v
+		k, v, _ := strings.Cut(kv, "=")
+		if key := env.NameKey(k); strings.HasPrefix(key, "MASSIMO_") && env.Known(key) {
+			out[key] = v
 		}
 	}
 	return out

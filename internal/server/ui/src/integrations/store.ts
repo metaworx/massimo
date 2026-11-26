@@ -14,12 +14,13 @@
  * changed, accepting a new installation, revoked, a user linked; and the
  * reading of an approved integration again until its key is collected.
  * A change reads the integrations again and says how it went under the
- * section; an integration gone from a load that went through forgets its
- * forms and its panel's state; an answer after a sign-out is dropped
- * (shared/session.ts), and so is one that a later read of its kind was
- * asked after: the list, the users, the LAN's answer and each open
- * panel's integration show the newest asked for of their reads, whatever
- * order the answers come in. A newer read that fails leaves what was
+ * section, which does not wait for System settings' users, read again
+ * where they may be managed; an integration gone from a load that went
+ * through forgets its forms and its panel's state; an answer after a
+ * sign-out is dropped (shared/session.ts), and so is one that a later
+ * read of its kind was asked after: the list, the users, the LAN's answer
+ * and each open panel's integration show the newest asked for of their
+ * reads, whatever order the answers come in. A newer read that fails leaves what was
  * shown as it was, the older answer dropped all the same, until the next
  * read.
  */
@@ -234,12 +235,25 @@ export async function loadRequestsSwitch(): Promise<void> {
   }
 }
 
-/** The section's runner: its message under the section, the integrations read again after a change. */
+/**
+ * The section's runner: its message under the section, the integrations
+ * read again after a change, and System settings' users, another region,
+ * where who is in may manage them (AP AccessEnds, D10): an approval adds
+ * an integration's users, a name or a link changes how they are shown, a
+ * maximum the roles they may be given. The users are read in the same
+ * session alone, and the change's outcome does not wait for them: a read
+ * that fails leaves their list as it was until the next, the change
+ * taken all the same.
+ */
 const runner = actionRunner({
   set: (res) => {
     said.value = res;
   },
-  reload: loadIntegrations,
+  reload: async () => {
+    const n = session();
+    await loadIntegrations();
+    if (stillSession(n) && canManageUsersOf()) window.MassimoParts.users.load().catch(() => undefined);
+  },
   bound: true,
 });
 

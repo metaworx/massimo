@@ -23,8 +23,9 @@ import (
 	"go.metaworx.ch/massimo/internal/store"
 )
 
-// runConfig prints the MASSIMO_* settings in effect. Keys, IVs and
-// tokens are redacted to their length, so the output can be pasted into
+// runConfig prints the MASSIMO_* settings in effect. A secret's value
+// (server.SecretVariable, a name in any case) is redacted to its length,
+// as GET /api/v1/config leaves it out, so the output can be pasted into
 // a bug report; a Cube key or IV left over from the portal commands is
 // named as ignored (env.Removed). The notes on the settings file follow
 // the settings, as they name lines by their numbers and never a value.
@@ -56,33 +57,33 @@ func runConfig(args []string) error {
 	fmt.Printf("proxy serial:  %s\n", orNone(cubeEnv(env.ProxySerial)))
 	fmt.Printf("name:          %s\n", orNone(cubeEnv(env.Name)))
 	printTLS(os.Stdout)
+	printVariables(os.Stdout)
+	printNotes(os.Stdout, startNotes)
+	printStore(os.Stdout)
+	return nil
+}
 
-	var names []string
-	for _, kv := range os.Environ() {
-		if k, _, _ := strings.Cut(kv, "="); strings.HasPrefix(k, "MASSIMO_") {
-			names = append(names, k)
-		}
-	}
-	sort.Strings(names)
-	fmt.Println("\nvariables:")
-	for _, k := range names {
+// printVariables prints every MASSIMO_* variable in effect, a line
+// each, with where it came from, a secret's value redacted to its length
+// (server.SecretVariable), and a note on a name the program ignores or
+// does not know (massimoNames).
+func printVariables(w io.Writer) {
+	fmt.Fprintln(w, "\nvariables:")
+	for _, k := range massimoNames() {
 		v := os.Getenv(k)
-		if strings.HasSuffix(k, "_KEY") || strings.HasSuffix(k, "_IV") || strings.HasSuffix(k, "_TOKEN") {
+		if server.SecretVariable(k) {
 			v = redact(v)
 		}
 		src := env.Source(k)
 		note := ""
-		switch {
-		case env.Removed(k):
+		switch key := env.NameKey(k); {
+		case env.Removed(key):
 			note = "   <- ignored: the portal commands were removed (archive/portal)"
-		case !env.Known(k):
+		case !env.Known(key):
 			note = "   <- unknown name, typo?"
 		}
-		fmt.Printf("  %-40s %-45s (%s)%s\n", k, v, src, note)
+		fmt.Fprintf(w, "  %-40s %-45s (%s)%s\n", k, v, src, note)
 	}
-	printNotes(os.Stdout, startNotes)
-	printStore(os.Stdout)
-	return nil
 }
 
 // printNotes prints the notes on the settings file as the start read it,
@@ -97,6 +98,21 @@ func printNotes(w io.Writer, notes []env.Note) {
 	}
 }
 
+// massimoNames are the MASSIMO_* variables in effect, sorted, each named
+// as the environment holds it, which on Windows may be in any case: the
+// start reads such a name there (env.NameKey; AP StartConfiguration,
+// D53-A).
+func massimoNames() []string {
+	var names []string
+	for _, kv := range os.Environ() {
+		if k, _, _ := strings.Cut(kv, "="); strings.HasPrefix(env.NameKey(k), "MASSIMO_") {
+			names = append(names, k)
+		}
+	}
+	sort.Strings(names)
+	return names
+}
+
 // configView is what massimo config shows, for GET /api/v1/config
 // (System settings → Maintenance): the settings file, the data
 // directory, the address serve listens on, its TLS mode, the log level
@@ -107,15 +123,8 @@ func configView(listen, tls string) server.ConfigView {
 	file := env.File()
 	_, err := os.Stat(file)
 	v := server.ConfigView{File: file, FileFound: err == nil, DataDir: dataDir(), Listen: listen, TLS: tls, LogLevel: logLevelState()}
-	var names []string
-	for _, kv := range os.Environ() {
-		if k, _, _ := strings.Cut(kv, "="); strings.HasPrefix(k, "MASSIMO_") {
-			names = append(names, k)
-		}
-	}
-	sort.Strings(names)
-	for _, k := range names {
-		cv := server.ConfigVariable{Name: k, Source: env.Source(k), Unknown: !env.Known(k)}
+	for _, k := range massimoNames() {
+		cv := server.ConfigVariable{Name: k, Source: env.Source(k), Unknown: !env.Known(env.NameKey(k))}
 		if server.SecretVariable(k) {
 			cv.Secret = true
 		} else {
@@ -189,6 +198,11 @@ func storeState() string {
 	return fmt.Sprintf("%s, schema version %d, node %s", store.FileName, v, st.NodeID())
 }
 
+// plainLookup looks up the hosts of massimo config's tie of the plain
+// lines (serve.PlainRow): nil, the system's resolver, as serve's; the
+// tests' own, which answers without the network.
+var plainLookup serve.HostLookup
+
 // printStore prints, for each Cube serve would serve, every value of the
 // settings file's kind and where it comes from: the store (which wins),
 // or the file (a Cube the store does not know yet, added at serve's next
@@ -206,9 +220,10 @@ func printStore(w io.Writer) {
 			plain.Serial = sn
 			file, plain = append(file, *plain), nil
 		} else if plain != nil {
-			if row, ok := serve.PlainRow(rows, *plain); ok {
+			if row, ok, _ := serve.PlainRow(context.Background(), rows, *plain, plainLookup); ok {
 				// serve ties the plain lines to the Cube at their
-				// address at its next start.
+				// address at its next start, by name or IP, with the
+				// same lookup; to none where several have its IP.
 				plain.Serial = row.Serial
 				file, plain = append(file, *plain), nil
 			}

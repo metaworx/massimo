@@ -1189,9 +1189,9 @@ button.subtle { color: var(--muted); }
 }
 /* The label in the text's colour while its tip is open, and under a
    pointer that hovers, not after a tap on a touch screen. */
-.temp-tag[aria-expanded="true"] .temp-label { color: var(--fg); }
+.temp-tag[aria-expanded="true"] .temp-label, .range-tag[aria-expanded="true"] .temp-label { color: var(--fg); }
 @media (hover: hover) {
-  .temp-tag:hover .temp-label { color: var(--fg); }
+  .temp-tag:hover .temp-label, .range-tag:hover .temp-label { color: var(--fg); }
 }
 /* The numbers' size follows the row's width, 100cqi inside its padding
    (the row is their size container): 2.3rem where there is room, else
@@ -1557,6 +1557,46 @@ html.blink-first .server-icon.state-new use.mark, html.blink-first .server-icon.
   gap: 8px;
   padding: 12px 14px;
 }
+/* The House tile's Holiday (rooms/House.tsx): its case before its text,
+   outlined in the accent colour, on a line of its own where the modes
+   leave it no room. */
+.house-modes .house-holiday { display: inline-flex; align-items: center; gap: 6px; border-color: var(--accent); }
+.house-holiday .ni { width: 18px; height: 18px; flex: none; }
+/* The House tile's lowest and highest (rooms/House.tsx Range), under a
+   rule below its modes: IS's and SET's tags (shared/tip.tsx), each its
+   icon and short label in a row, then the lowest, a dash and the
+   highest. On a phone the two rows are one grid, whose columns hold
+   both, so that the lowest stands under the lowest and the highest under
+   the highest; where there is room, they stand on one line. */
+.house-range {
+  display: grid;
+  grid-template-columns: repeat(4, auto);
+  justify-content: start;
+  align-items: center;
+  gap: 6px 8px;
+  padding: 10px 14px 12px;
+  border-top: 1px solid var(--line);
+}
+.range-row { display: contents; }
+@media (min-width: 481px) {
+  .house-range { display: flex; flex-wrap: wrap; gap: 6px 2rem; }
+  .range-row { display: inline-flex; align-items: center; gap: 8px; }
+}
+.range-tag {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  min-width: 0;
+  padding: 0;
+  border: 0;
+  border-radius: 4px;
+  background: none;
+  color: inherit;
+}
+.range-val { min-width: 4.3ch; font-size: 1.05rem; font-weight: 600; font-variant-numeric: tabular-nums; }
+/* Only stale measured temperatures, greyed as a tile's (.temp-val.stale). */
+.range-val.stale { color: var(--muted); }
+.range-dash { color: var(--muted); }
 
 .tile-result {
   margin: 0;
@@ -1743,9 +1783,10 @@ button.pw-eye:focus-visible { outline-offset: -2px; }
 button.pw-eye .ni { width: 20px; height: 20px; }
 /* a new password's dice (AP PasswordRules, D19-A): beside the eye, before
    it, or at the field's end where there is no eye; the text kept clear of
-   both, two buttons at 390 px leaving the field room for its words; and the
-   row under the rule's line that comes with the first press, Words or
-   Characters and Copy */
+   both, two buttons at 390 px leaving the field room for its words; the
+   line right under the field that shows the suggestion whole (D58-A), and
+   the row under the rule's line, Words or Characters and Copy, both coming
+   with the first press */
 .pw-box.has-dice > input { padding-right: 42px; }
 .pw-box.has-dice.has-eye > input { padding-right: 80px; }
 button.pw-dice { position: absolute; top: 2px; right: 2px; bottom: 2px; display: inline-flex; align-items: center; justify-content: center; width: 38px; padding: 0; border: 0; border-radius: 6px; background: none; color: var(--muted); }
@@ -1753,6 +1794,14 @@ button.pw-dice { position: absolute; top: 2px; right: 2px; bottom: 2px; display:
 button.pw-dice:hover, button.pw-dice:focus-visible { color: var(--accent); }
 button.pw-dice:focus-visible { outline-offset: -2px; }
 button.pw-dice .ni { width: 20px; height: 20px; }
+/* the suggestion whole (PasswordField): the field's whole width, the
+   body's font at 16 px, readable to copy by hand, broken after a "-", a
+   word too long for the line broken rather than past the field; its place
+   two lines tall, held while it is empty, so that nothing under it moves
+   between presses or while one types (AP AccessEnds, D19-A, D21-A), but
+   after the rarest draws at a phone's width, whose five words take a
+   third line, which the first key gives back */
+.pw-shown { flex-basis: 100%; min-width: 0; min-height: calc(2em * 1.45); margin: 2px 0 0; font-size: 1rem; line-height: 1.45; overflow-wrap: anywhere; }
 .pw-suggest { display: flex; flex-basis: 100%; flex-wrap: wrap; align-items: center; gap: 4px 16px; margin-top: 4px; }
 .pw-suggest .checks.one label { flex-direction: row; margin: 0; font-weight: inherit; }
 .pw-suggest .pw-copy { margin-left: auto; color: var(--accent); }
@@ -2274,16 +2323,24 @@ massimo-week-program { display: contents; }
 .notify-device > p { flex: 1 1 100%; margin: 0; }
 
 /* The page's toast at its foot (components.js showToast): a notification
-   while the page is open, the Cube search's outcome */
+   while the page is open, the Cube search's outcome, the first owner
+   created and what was set up before it; its action under the text at
+   phone width, beside it from 760 px; never taller than the window, its
+   text scrolled inside it between × at its top and the action at its
+   bottom */
 .toast {
   position: fixed;
   right: 16px;
   bottom: 16px;
   z-index: 50;
-  display: flex;
-  align-items: flex-start;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: start;
   gap: 8px;
   max-width: min(380px, calc(100vw - 32px));
+  max-height: calc(100vh - 32px);
+  max-height: calc(100dvh - 32px);
+  overflow-y: auto;
   padding: 10px 8px 10px 12px;
   border: 1px solid var(--line);
   border-left: 4px solid var(--accent);
@@ -2293,10 +2350,18 @@ massimo-week-program { display: contents; }
   box-shadow: 0 4px 16px rgba(0, 0, 0, 0.2);
 }
 .toast.bad { border-left-color: var(--bad); }
-.toast-text { flex: 1 1 auto; min-width: 0; margin: 0; overflow-wrap: anywhere; }
+.toast.warn { border-left-color: var(--warn-mark); }
+.toast-text { grid-column: 1; grid-row: 1; min-width: 0; margin: 0; overflow-wrap: anywhere; }
 .toast-title { display: block; }
-/* its action (components.js showToast): Show for the Cubes a search found */
-.toast-action { flex: none; align-self: center; padding: 4px 10px; color: var(--accent); border-color: var(--accent); font-weight: 600; }
+.toast-close { grid-column: 2; grid-row: 1; position: sticky; top: 0; }
+/* its action (components.js showToast): Show for the Cubes a search found,
+   and for what was set up before the first owner */
+.toast-action { grid-column: 1; grid-row: 2; justify-self: end; position: sticky; bottom: 0; padding: 4px 10px; color: var(--accent); border-color: var(--accent);
+  background: var(--card); font-weight: 600; }
+@media (min-width: 760px) {
+  .toast-action { grid-column: 2; grid-row: 1; align-self: center; }
+  .toast-action + .toast-close { grid-column: 3; }
+}
 
 /* the repairs of a room, a device or a Cube (ui/src/shared/repair.tsx): a box under the
    tile, the device's row or the panel's actions, a repair per block */
@@ -2344,3 +2409,17 @@ massimo-week-program { display: contents; }
 .users-open { display: flex; flex-direction: column; gap: 8px; }
 .users-open > p { margin: 0; }
 .users-kept-open { padding-top: 8px; border-top: 1px solid var(--line); }
+/* an integration's users there, a row each with nothing to open: the
+   name and the badges as a panel's head shows them, wrapping on a phone */
+.users-open-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 8px; }
+.users-open-user {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 10px;
+  padding: 8px 12px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: var(--card);
+  overflow-wrap: anywhere;
+}
