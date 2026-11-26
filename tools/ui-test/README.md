@@ -161,6 +161,9 @@ makes, sweeps and keeps it (`tools/workdir/README.md`; AP EmulatorRuns, D3-B).
 - the marker `clock`: Playwright's clock installed before the page's scripts,
   its time flowing as the real one, which the test moves on (`page.clock.run_for`,
   `page.clock.fast_forward`);
+  a test sets the page's wall time with `page.clock.set_system_time`
+  and an aware `datetime`, which moves `Date` alone and runs no timer
+  (a float would be taken as seconds and multiplied by 1000, as with `pause_at`);
   a test pauses it with `helpers.pause_clock(page)` alone,
   at the page's now and 50 ms on
   (and further on where that is past once the call arrives, as under a trace):
@@ -174,6 +177,10 @@ makes, sweeps and keeps it (`tools/workdir/README.md`; AP EmulatorRuns, D3-B).
   a test module that calls `clock.pause_at` itself fails its collection
   with the helper's name (`conftest.py`),
   where the call is written `….clock.pause_at(`, not through another name for the clock;
+- the mark `browser_context_args`, pytest-playwright's own:
+  the test's context gets those arguments on top of the case's viewport and locale,
+  `timezone_id` for a page in a zone of the test's own
+  (`test_room_updates.py`, in `Europe/Zurich`);
 - `failed_checks_forgotten` (autouse): after a test that opened a context
   without the token (`new_context`), one request with the token forgets the
   failed token checks its pages counted against 127.0.0.1;
@@ -287,6 +294,15 @@ hence `failed_checks_forgotten`.
   in the House panel a room unticked and the focus on its checkbox stay
   through a reload of the rooms.
   Seventeen of them failed on the page before the move.
+  With them are the House tile's tests: its name, the Cube's;
+  its form's one choice (AP RoomsPage v1.0, Block 7), what each choice
+  offers and its defaults, the date hidden while Permanently,
+  a typed temperature and end kept, a past end forgotten;
+  its lowest and highest; a room renamed or removed followed;
+  and tomorrow morning, the default end of the House form's Until and of
+  a room's holiday form, on the evening before the spring change of the
+  clocks and just after midnight on the day of the autumn one,
+  the page in `Europe/Zurich` under Playwright's clock.
 - `test_pairing_updates.py`, a Cube's pairing as a part (AP UiParts, Block 9),
   `GET …/pairing` answered as running with a device that joined:
   the joined device's form, its name and room, the countdown and Stop

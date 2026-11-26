@@ -604,9 +604,12 @@ function localDateTimeValue(d) {
   return d.getFullYear() + "-" + pad(d.getMonth() + 1) + "-" + pad(d.getDate()) + "T" + pad(d.getHours()) + ":" + pad(d.getMinutes());
 }
 
-// tomorrowMorning is the default "until" of a temporary setting.
+// tomorrowMorning is the default "until" of a temporary setting: tomorrow
+// at 06:00, the next day by the calendar rather than 24 hours on, since
+// the day of a change of the clocks has 23 or 25 hours.
 function tomorrowMorning() {
-  const d = new Date(Date.now() + 24 * 3600 * 1000);
+  const d = new Date();
+  d.setDate(d.getDate() + 1);
   d.setHours(6, 0, 0, 0);
   return localDateTimeValue(d);
 }
