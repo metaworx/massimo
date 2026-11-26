@@ -38,6 +38,7 @@ import pytest
 from conftest import TOKEN, URL, api_call
 from helpers import OPERATOR_PASSWORD, frames, named_buttons, open_fold, scroll_width, show_view, toggle_fold, wait_held, wait_until
 from test_first_owner import OPEN, owner_card, start_page, stub_creation
+from test_copy import COPY_STATUS
 from test_login import sign_in
 from test_password_eye import STATE, eye_of, fresh_page, reopen, say_reveal
 from test_password_rule import REAL_REGISTER, SAME_LINE, STUB_REGISTER, WATCH_LINE, line, words
@@ -773,7 +774,7 @@ def copied_here(page, sel, v, what, clipboard=True):
     so: "Copied" above it (the class copied, its data-copied) and in the
     status region #copy-status, the focus on it still; with clipboard,
     the browser's clipboard holds v."""
-    assert wait_until(page, "document.getElementById('copy-status').textContent === t('copy.done')", 3), f"{what}: said in the status region"
+    assert wait_until(page, COPY_STATUS + " === t('copy.done')", 3), f"{what}: said in the status region"
     el = page.locator(sel)
     assert "copied" in (el.get_attribute("class") or "").split() and el.get_attribute("data-copied") == words(page, "copy.done"), \
         f"{what}: Copied shows on it: {el.get_attribute('class')!r}"
@@ -831,7 +832,7 @@ def test_copy(page, case):
     try:
         page.locator(line).click()
         copied_here(page, line, v, "without the clipboard, a click on the line", clipboard=False)
-        page.evaluate("document.getElementById('copy-status').textContent = ''")
+        page.evaluate("() => { const s = document.getElementById('copy-status'); if (s) s.textContent = ''; }")
         page.locator(icon).focus()
         page.keyboard.press("Enter")
         copied_here(page, icon, v, "without the clipboard, Enter on the icon", clipboard=False)
