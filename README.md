@@ -1398,18 +1398,20 @@ and so it does with `VERSION=` or `RELEASE=`:
 those are the build's, `make build-release`,
 which `make release` was until 2026-11-12.
 
-A release is made on `main`, checked out, clean and equal to `origin/main`.
+A release is made on `main`, or on a line's maintenance branch (below),
+checked out, clean and equal to its `origin` copy.
 `make release <flavour>` cuts `CHANGELOG.md`'s `[Unreleased]` into the release's
 section with `GUIDELINES/shared/tools/changelog.sh`,
-commits it on `main` as `chore(release): vX.Y.Z-beta.N`, and tags that commit,
+commits it on that branch as `chore(release): vX.Y.Z-beta.N`,
+and tags that commit,
 signed, with the section as the tag's message,
 so the tag carries the release notes, and the GitHub release shows them.
-It then pushes `main` and the tag together or not at all;
+It then pushes the branch and the tag together or not at all;
 CI's run of the tag waits for the whole suite before it releases
 (`GUIDELINES/project/CI.md`, "Releases"),
 and moves `release/<flavour>` once the release is out,
 so that the branch names what that flavour's boxes are offered.
-It refuses when `main`'s head is released already,
+It refuses when the branch's head is released already,
 when `changelog.sh check` finds something,
 and when `[Unreleased]` holds no bullet.
 The release commit also carries `app/version.json`, the Android app's version
@@ -1419,6 +1421,34 @@ and `changelog.sh check` holds to the changelog's newest release
 `make release <flavour> DRY=1` shows what it would cut, tag and push,
 and does none of it;
 `ASSISTED_BY=agent:model` gives an agent's release commit its `Assisted-by` trailer.
+
+At a line's feature freeze, `make freeze <x.y>`
+(also `make freeze FREEZE=<x.y>`)
+cuts the maintenance branch `maint/<x.y>` at `origin/main` and pushes it;
+it refuses where that branch exists, where the name is not two numbers (`0.17`),
+and where a release of a later line is out,
+and `DRY=1` shows the push instead.
+From then on `main` takes the next line's features,
+and `maint/<x.y>` the line's completions and fixes:
+a pull request for x.y alone targets `maint/<x.y>`,
+and every x.y release is cut there with `make release <flavour>`,
+which counts the tags of x.y and the lines before it
+(`BUMP=minor` starts a line that has no release yet,
+`BUMP=patch` is a fix of its stable release).
+On `main`, `make release` refuses a version of a frozen line.
+Whoever merged into `maint/<x.y>`, or released there,
+merges it upward into `main` straight away, with a `merge:` commit,
+so that `main` holds every fix.
+CI tests a push to `maint/<x.y>` as one to `main`,
+but the `devel` and `nightly` builds and the site stay `main`'s.
+An old maintenance branch releases nothing after the next freeze:
+`release/<flavour>` only moves forward.
+The store's migrations are numbered in blocks of 100:
+the line keeps numbering in its block,
+and `main`'s next migration starts at the next hundred,
+which `make freeze` prints;
+a fix `main` needs as well gets a guarded copy at the top of `main`'s block
+(docs/store.md, "Migrations").
 
 Every release has a flavour, from the least stable to the most:
 `devel`, every commit of `main` whose tests passed;

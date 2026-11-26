@@ -50,7 +50,7 @@ export SOURCE_DATE_EPOCH ?= $(shell git log -1 --format=%ct 2>/dev/null || date 
 # The container the package test runs in (make deb-test).
 DEB_IMAGE ?= debian:trixie-slim
 
-.PHONY: all ui ui-check api-types credits build test vet race test-armv6 fuzz store-bench ui-test ui-screenshots ui-brand lan-test app-emulator-test actionlint windows linux linux-arm64 linux-armv7 linux-armv6 darwin darwin-amd64 darwin-arm64 cross cross-check deb-unit packages debver version deb-test deb-systemd-test apt-test site build-release release release-files clean clean-tests distclean release-alpha release-beta release-rc release-stable
+.PHONY: all ui ui-check api-types credits build test vet race test-armv6 fuzz store-bench ui-test ui-screenshots ui-brand lan-test app-emulator-test actionlint windows linux linux-arm64 linux-armv7 linux-armv6 darwin darwin-amd64 darwin-arm64 cross cross-check deb-unit packages debver version deb-test deb-systemd-test apt-test site build-release release release-files clean clean-tests distclean release-alpha release-beta release-rc release-stable freeze
 
 # Development happens on main; a release is a tag on main, or on the
 # maintenance branch maint/<x.y> of its line once that line is frozen
@@ -199,6 +199,67 @@ release-alpha release-beta release-rc release-stable:
 	@f='$(@:release-%=%)'; flag='$(if $(filter command line,$(origin FLAVOUR)),$(FLAVOUR))'; \
 	if [ -n "$$flag" ] && [ "$$flag" != "$$f" ]; then echo "release: $$f or FLAVOUR=$$flag, not both" >&2; exit 2; fi; \
 	$(MAKE) --no-print-directory release FLAVOUR=$$f
+
+# make freeze <x.y>, or make freeze FREEZE=<x.y>, is the feature freeze of
+# the line x.y (AP MaintBranch, D2-A): it cuts the maintenance branch
+# maint/<x.y> at origin/main and pushes it. Completions and fixes for x.y
+# then target maint/<x.y>, every x.y release is cut there (make release),
+# and it is merged upward into main, which opens for the next line. The
+# line is two numbers, as 0.17; it fetches main and the version tags as
+# make release does, and refuses where origin has maint/<x.y> already and
+# where a version tag of a later line exists. It then prints where main's
+# next store migration starts: the next multiple of 100 above the last
+# migration origin/main holds (internal/store/migrations/NNNN_<name>.sql;
+# docs/store.md, "Migrations"), so that the line's fixes keep the numbers
+# below it. DRY=1 prints the push instead of making it.
+ifeq ($(firstword $(MAKECMDGOALS)),freeze)
+FREEZE_WORDS := $(wordlist 2,$(words $(MAKECMDGOALS)),$(MAKECMDGOALS))
+# make freeze 0.17: the word is a goal of its own, which does nothing;
+# freeze reads it. A word of digits and dots alone, so that no other
+# target's recipe is replaced; freeze refuses any other word.
+FREEZE_LINES := $(foreach w,$(FREEZE_WORDS),$(if $(subst .,,$(subst 0,,$(subst 1,,$(subst 2,,$(subst 3,,$(subst 4,,$(subst 5,,$(subst 6,,$(subst 7,,$(subst 8,,$(subst 9,,$(w)))))))))))),,$(w)))
+ifneq ($(FREEZE_LINES),)
+$(FREEZE_LINES):
+	@:
+endif
+endif
+freeze:
+	@words='$(FREEZE_WORDS)'; flag='$(if $(filter command line,$(origin FREEZE)),$(FREEZE))'; \
+	set -- $$words; \
+	if [ $$# -gt 1 ]; then echo "freeze: one line, not $$words" >&2; exit 2; fi; \
+	word=$${1:-}; \
+	if [ -n "$$word" ] && [ -n "$$flag" ] && [ "$$word" != "$$flag" ]; then \
+		echo "freeze: $$word or FREEZE=$$flag, not both" >&2; exit 2; fi; \
+	line=$${word:-$$flag}; \
+	if [ -z "$$line" ]; then echo "freeze: make freeze <x.y> cuts maint/<x.y> at origin/main" >&2; exit 2; fi; \
+	printf '%s\n' "$$line" | grep -Eqx '(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)' || { \
+		echo "freeze: $$line is no line: two numbers, x.y, as 0.17" >&2; exit 2; }; \
+	branch=maint/$$line; \
+	git fetch --quiet origin '+refs/heads/main:refs/remotes/origin/main' 'refs/tags/v*:refs/tags/v*' || { \
+		echo "freeze: git fetch origin main 'refs/tags/v*:refs/tags/v*' failed; run it to see why" >&2; exit 1; }; \
+	sha=$$(git rev-parse refs/remotes/origin/main) || exit 1; \
+	git ls-remote --exit-code --heads origin "refs/heads/$$branch" >/dev/null; rc=$$?; \
+	case $$rc in \
+		0) echo "freeze: origin has $$branch already; a line is frozen once" >&2; exit 1 ;; \
+		2) ;; \
+		*) echo "freeze: git ls-remote origin failed; run it to see why" >&2; exit 1 ;; \
+	esac; \
+	later=$$(git tag -l 'v[0-9]*.[0-9]*.[0-9]*' | awk -F. -v x="$${line%.*}" -v y="$${line#*.}" \
+		'/^v[0-9]+\.[0-9]+\.[0-9]+(-[a-z][a-z0-9]*\.[0-9]+)?$$/ { a = substr($$1, 2) + 0; if (a > x || (a == x && $$2 + 0 > y)) print }' | head -n 1); \
+	if [ -n "$$later" ]; then \
+		echo "freeze: $$later is out, of a line after $$line; a line is frozen before the next one is released" >&2; exit 1; fi; \
+	last=$$(git ls-tree --name-only "$$sha" internal/store/migrations/ | sed -nE 's|^internal/store/migrations/([0-9]+)_[^/]*\.sql$$|\1|p' | sort -n | tail -n 1); \
+	n=$$(printf '%s\n' "$${last:-0}" | sed -E 's/^0+([0-9])/\1/'); \
+	first=$$(printf '%04d' $$(( (n / 100 + 1) * 100 ))); \
+	if [ -n "$(DRY)" ]; then \
+		echo "freeze: would run: git push origin $$sha:refs/heads/$$branch"; \
+	else \
+		git push --quiet origin "$$sha:refs/heads/$$branch" || { \
+			echo "freeze: the push of $$branch failed; nothing frozen" >&2; exit 1; }; \
+		echo "freeze: $$branch is origin/main ($$sha)"; \
+	fi; \
+	echo "freeze: completions and fixes for $$line target $$branch, and every $$line release is cut there (make release); merge it upward into main after each"; \
+	echo "freeze: main's next store migration is $$first, the last being $${last:-none} (docs/store.md, \"Migrations\")"
 
 all: test build
 
