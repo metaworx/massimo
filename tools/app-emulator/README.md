@@ -79,10 +79,19 @@ the first one on a machine also fetches the test libraries.
    and the device's log kept from the moment `adb` sees it,
    so that a boot that stalls leaves both.
 3. While it boots, the two servers and the app's debug and test APKs built.
-4. Once it has booted (within `APP_EMU_BOOT_TIMEOUT`, 300 s,
+4. Once it has booted (within `APP_EMU_BOOT_TIMEOUT`, 420 s, as CI sets it,
    counted from the builds' end, so that a slow first build takes none of it):
-   its animations and autofill off, the screen kept on,
-   the PIN `1111` set (`adb shell locksettings set-pin`),
+   the error dialogs off first (`hide_error_dialogs`, below, "The ports"),
+   its animations and autofill off, the screen kept on;
+   then, within the same time, the end of its first setup awaited,
+   as the system and SystemUI see it, on two looks in a row at least 3 s apart:
+   `user_setup_complete` and `device_provisioned` are 1,
+   which the emulator's setup app sets as it ends,
+   SystemUI's own dump has the device provisioned and the setup complete,
+   and its keyguard has the SIM ready;
+   where that does not come, the run stops,
+   saying the step it waited for and what `adb` last said of it;
+   then the PIN `1111` set (`adb shell locksettings set-pin`),
    which a fingerprint needs,
    the lock screen taken away before it and, with the PIN, after it;
    `adb reverse` for both servers' ports,
@@ -90,9 +99,10 @@ the first one on a machine also fetches the test libraries.
    the helper started (below).
 5. A guard started that keeps the lock screen away while Gradle runs,
    looking every five seconds, the PIN typed where it shows:
-   on a busy host the boot can show it again minutes after the PIN was set,
-   and the enrollment then runs under it, finding nothing of Settings;
-   `keyguard.log` says each change it saw.
+   a SystemUI that stopped answering and was started again shows it anew,
+   and an enrollment run under it finds nothing of Settings;
+   `keyguard.log` says each change it saw,
+   SystemUI's pid among them, so that a SystemUI started again shows there.
    It reads the window manager's policy and the activities' keyguard state alone,
    since `dumpsys window`'s whole dump opens with the last ANR's copy of the state.
 6. The finger enrolled by `EnrollTest` alone (below, "The fingerprint");
@@ -199,19 +209,50 @@ On a 16-core host, two runs started together booted their emulators
 in about 165 s each at a light load (a load average of about 2)
 and in about 335 s each with the host's load near 20,
 against 80 to 111 s for one alone.
-A busy host also makes the enrollment fail.
-In every run the lock screen comes back a while after the PIN is set,
-as the emulator's first setup ends, and the run takes it away;
-where SystemUI has stopped answering by then and is left running behind
-its "isn't responding" dialog,
+A busy host also slows SystemUI, which draws the lock screen.
+It can see the end of the first setup and the SIM up to two minutes after the system,
+about 4 to 116 s after the settings in the runs,
+the longest in a SystemUI started again,
+and where the PIN was set before then,
+the lock screen comes back as it does, under the enrollment.
+It can also stop answering for long enough to be declared not responding;
+with the error dialogs on and no lock screen showing just then,
+the system leaves it running behind its "isn't responding" dialog,
 no PIN typed reaches the lock screen,
 and Settings' enrollment ends under it.
-Of eight runs, four failed so, three of them started two at once,
-each while other programs' tests kept the load average at 10 or more;
-the same code passed on the same ports at a lower load.
-So `APP_EMU_BOOT_TIMEOUT`, 300 s from the builds' end,
-can be tight on a busy host,
-and two runs at once want a host with cores to spare.
+Before D5-A, four of eight runs failed so,
+three of them started two at once,
+each while other programs' tests kept the load average at 10 or more.
+So the run sets the PIN only once SystemUI too has seen the setup end,
+as "What it does" says above,
+after which the lock screen does not come back by itself while that SystemUI runs,
+and turns the error dialogs off (`settings put global hide_error_dialogs 1`):
+the system then kills a SystemUI that stops answering and starts it again.
+During the wait for the setup, in each run of two at once,
+SystemUI was killed twice: for its ANR,
+then, started again, for its content providers' timeout,
+which the setting plays no part in;
+the wait went on with the new SystemUI.
+After the PIN it costs more.
+A SystemUI started again, after its ANR or a restart of the system,
+shows the lock screen at its start and again at its first SIM events,
+and an enrollment or a prompt going on ends with the old one:
+Settings is stopped, and `Fingers.enroll` waits out its 240 s;
+the guard's PIN then only clears the screen.
+In the runs, SystemUI's ANRs came within 75 s of its start alone,
+mostly before the setup's end.
+An app in front that stops answering is killed so too.
+The app goes with its instrumentation ("Test instrumentation process crashed"),
+which the run names after a failure (below, "The results"),
+and Settings so ends the enrollment;
+the run names the app's lines alone,
+so Settings', SystemUI's and the other apps' ANRs are in `logcat.txt` only.
+`Rig.quiet` presses the dialog's Wait at a test's start alone,
+so it never offered Wait to an ANR in the middle of a test,
+and it now matters only where the setting was refused.
+`APP_EMU_BOOT_TIMEOUT`, 420 s from the builds' end,
+counts the wait for the setup too and can be tight on a busy host;
+two runs at once want a host with cores to spare.
 
 ## The fingerprint
 
@@ -379,6 +420,9 @@ as Google's SDK repository lists them
 (`repository2-3.xml`, `sys-img/google_apis/sys-img2-3.xml`).
 A pin moves by a decision, its values together;
 `TestPinsHoldTogether` (`scripts_test.go`) checks that they fit.
+A move of the image also rechecks the three texts that `setup_ended` looks for,
+in `run.sh`:
+they are Android 14 SystemUI's dump wording (above, "What it does", step 4).
 
 The image's WebView is the one it was built with, and it never updates,
 as the image has no Play Store:

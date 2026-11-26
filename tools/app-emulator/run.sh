@@ -18,9 +18,10 @@
 # without a window, audio or snapshots, its data wiped, so that every
 # run starts as a new phone, the device's log kept from the moment adb
 # sees it; while it boots, the servers and the app's two APKs built; once
-# it has booted, its animations and autofill off, the screen kept on and
-# the PIN set, which a fingerprint needs, the lock screen away before and
-# after it;
+# it has booted, its error dialogs, animations and autofill off and the
+# screen kept on; once its first setup has ended, as the system and
+# SystemUI see it, the PIN set, which a fingerprint needs, the lock screen
+# away before and after it;
 # adb reverse for both servers' ports, the owner's key written to a file
 # on the emulator, the helper started; a guard that keeps the lock
 # screen away while Gradle runs (keyguard.log); the finger enrolled by
@@ -67,10 +68,19 @@
 # and lets them go within about a second: nothing else the run starts
 # holds them. Two runs at once share the host: on a 16-core host they
 # booted in about 165 s each at a load average near 2 and 335 s near 20,
-# against 80 to 111 s for one alone, and on a host that busy the
-# enrollment can fail under a lock screen that comes back (README.md,
-# "The ports"): APP_EMU_BOOT_TIMEOUT can be tight there, and a busy
-# host is best avoided.
+# against 80 to 111 s for one alone. On a host that busy SystemUI can
+# see the first setup's end a minute or two after the system does, and
+# can stop answering: the PIN waits for SystemUI, since a PIN set before
+# brings the lock screen back under the enrollment, and the error dialogs
+# are off, so that the system starts a SystemUI that stops answering
+# again rather than leave it behind its "isn't responding" dialog
+# (AP EmulatorRuns, D5-A; README.md, "The ports"). The lock screen then
+# stays away while that SystemUI runs: one started again after the PIN,
+# after its ANR or a restart of the system, shows it at its start and at
+# its first SIM events, and an enrollment or a prompt going on ends with
+# it, which the guard's PIN does not bring back; in the runs SystemUI's
+# ANRs came within 75 s of its start alone, mostly before the setup's end.
+# APP_EMU_BOOT_TIMEOUT, which counts that wait too, can be tight there.
 #
 # The AVD, the servers' stores and the binaries are in the run's work
 # directory, massimo-app-emulator.XXXXXX under TMPDIR (default /tmp),
@@ -86,7 +96,8 @@
 # APP_EMU_SDK (the SDK holding the emulator and the image, default
 # ANDROID_HOME); APP_EMU_PORT (the emulator's console port, even, 5554
 # to 5682, default the slot's, 5584 - 2k); APP_EMU_BOOT_TIMEOUT (seconds
-# the boot may take once the builds are done, default 300);
+# the boot and the first setup's end may take once the builds are done,
+# default 420, as CI sets it);
 # APP_EMU_STRICT (1: a test skipped or not run fails the run, as under
 # CI=true; 0 or empty: it is said only); APP_EMU_CLASS (a test class, or
 # a class#method, as the instrumentation's -e class takes it);
@@ -125,7 +136,7 @@ fi
 
 out="$here/results"
 # The ports, serial among them, come from the slot (slot_take, below).
-boot_s=${APP_EMU_BOOT_TIMEOUT:-300}
+boot_s=${APP_EMU_BOOT_TIMEOUT:-420}
 avd=massimo-test
 user=tester
 # not the user's name in it, which a new password may not hold
@@ -264,6 +275,34 @@ booted() {
 	timeout 10 "$adb" -s "$serial" shell getprop sys.boot_completed </dev/null 2>/dev/null | tr -d '\r' || true
 }
 
+# setup_ended says whether the emulator's first setup has ended, as the
+# system and SystemUI see it, and sets setup_wait to the step it waits
+# for and setup_said to what adb last said of it: user_setup_complete
+# (secure) and device_provisioned (global) are 1, which the setup's app
+# sets as it ends; SystemUI's DeviceProvisionedController has the device
+# provisioned and the user's setup complete; and its
+# KeyguardUpdateMonitor has the SIM ready (state 5), which comes with the
+# radio's start. A busy SystemUI can see the last two a minute or two
+# after the settings, and a PIN set before then brings the lock screen
+# back as it does (AP EmulatorRuns, D5-A). The three texts are Android
+# 14 SystemUI's dump wording (README.md, "Pins"). Each adb that hangs is
+# given 15 s.
+setup_ended() {
+	local s
+	setup_wait="user_setup_complete and device_provisioned"
+	s=$(timeout 15 "$adb" -s "$serial" shell 'settings get secure user_setup_complete; settings get global device_provisioned' </dev/null 2>/dev/null | tr -d '\r' | tr '\n' ' ' || true)
+	setup_said=${s% }
+	[ "$s" = "1 1 " ] || return 1
+	setup_wait="SystemUI's view of the setup"
+	s=$(timeout 15 "$adb" -s "$serial" shell dumpsys activity service com.android.systemui/.SystemUIService DeviceProvisionedControllerImpl </dev/null 2>/dev/null | tr -d '\r' || true)
+	setup_said=$(grep -E 'Device provisioned|User setup complete' <<<"$s" | sed 's/^ *//' | paste -s -d ';' - | sed 's/;/; /g' || true)
+	grep -q -F 'Device provisioned: true' <<<"$s" && grep -q -F 'User setup complete: {0=true}' <<<"$s" || return 1
+	setup_wait="SystemUI's view of the SIM"
+	s=$(timeout 15 "$adb" -s "$serial" shell dumpsys activity service com.android.systemui/.SystemUIService KeyguardUpdateMonitor </dev/null 2>/dev/null || true)
+	setup_said=$(grep -o -E 'SimData\{[^}]*\}' <<<"$s" | paste -s -d ';' - | sed 's/;/; /g' || true)
+	grep -q -F 'SimData{state=5,' <<<"$s"
+}
+
 # keyguard prints whether the emulator's lock screen shows, true or
 # false, "" while adb cannot say: true where the window manager's policy
 # (isKeyguardShowing) or the activities' (KeyguardController,
@@ -285,22 +324,35 @@ wakefulness() {
 	timeout 10 "$adb" -s "$serial" shell dumpsys power </dev/null 2>/dev/null | tr -d '\r' | sed -n 's/.*mWakefulness=\([A-Za-z]*\).*/\1/p' | head -n 1 || true
 }
 
+# sysui prints SystemUI's pid on the emulator, "" while adb cannot say;
+# an adb that hangs is given 10 s.
+sysui() {
+	timeout 10 "$adb" -s "$serial" shell pidof com.android.systemui </dev/null 2>/dev/null | tr -d '\r' || true
+}
+
 # guard keeps the lock screen away while the Gradle runs run, looking
 # every 5 s, and says each change of what it sees (the power state,
-# whether the lock screen shows) with the time, for keyguard.log: a busy
-# host's boot showed it again minutes after run.sh had taken it away and
-# set the PIN, under the enrollment.
+# whether the lock screen shows, SystemUI's pid, which a SystemUI started
+# again changes) with the time, for keyguard.log. With the PIN set once
+# the first setup has ended, as SystemUI sees it, the lock screen stays
+# away while that SystemUI runs. One started again after the PIN, after
+# its ANR or a restart of the system, shows the lock screen at its start
+# and again at its first SIM events; the guard types the PIN, which
+# clears the screen, but an enrollment or a prompt going on has ended
+# with the old SystemUI (Settings stopped, Fingers.enroll waiting out its
+# 240 s).
 guard() {
-	local seen="" now
+	local seen="" now k
 	trap 'exit 0' TERM
 	while :; do
-		now="$(wakefulness) $(keyguard)"
+		k=$(keyguard)
+		now="$(wakefulness) $k SystemUI $(sysui)"
 		if [ "$now" != "$seen" ]; then
 			echo "$(date +%T) $now"
 			seen=$now
 		fi
-		case "$now" in
-		*true) unlocked pin || echo "$(date +%T) the lock screen stays" ;;
+		case "$k" in
+		true) unlocked pin || echo "$(date +%T) the lock screen stays" ;;
 		esac
 		sleep 5
 	done
@@ -309,10 +361,12 @@ guard() {
 # unlocked takes the lock screen away where it shows, and fails where it
 # still shows after 120 s: woken and dismissed every few seconds, and with
 # pin as its argument the PIN typed after a dismiss, three times at most.
-# On a busy host the boot can show the lock screen still as run.sh sets
-# the PIN, SystemUI slow to take the dismiss, and Settings' enrollment
-# then runs under it, where UiAutomator finds nothing of Settings and the
-# run waits out its four minutes.
+# On a busy host SystemUI can take the dismiss late, so it is sent again;
+# a SystemUI that has stopped answering is killed and started again by
+# the system (hide_error_dialogs, after the boot), and its new lock
+# screen takes the PIN. Settings' enrollment run under a lock screen
+# finds nothing of Settings with UiAutomator, and the run waits out its
+# four minutes.
 unlocked() {
 	local until=$((SECONDS + 120)) typed=0 said=""
 	while [ "$(keyguard)" = true ]; do
@@ -428,7 +482,7 @@ step env -C "$root/app/android" ./gradlew --no-daemon --console=plain -q :app:as
 # the boot's time counted from here, so that a slow first build, which
 # fetches Gradle's libraries, takes none of it
 built=$SECONDS
-echo "app-emulator: built $((built - started)) s after the emulator's start; its boot may take $boot_s s more"
+echo "app-emulator: built $((built - started)) s after the emulator's start; its boot and its first setup may take $boot_s s more"
 until [ "$(booted)" = 1 ]; do
 	kill -0 "$emu_pid" 2>/dev/null || die "the emulator stopped as it booted; its log: $out/emulator.log, the device's: $out/logcat.txt"
 	[ $((SECONDS - built)) -lt "$boot_s" ] || die "the emulator did not boot within $boot_s s of the builds' end, $((SECONDS - started)) s after its start; its log: $out/emulator.log, the device's: $out/logcat.txt"
@@ -439,7 +493,19 @@ until [ -n "$(timeout 10 "$adb" -s "$serial" shell pm path android </dev/null 2>
 	sleep 2
 done
 echo "app-emulator: booted $((SECONDS - started)) s after its start"
+booted_at=$SECONDS
 
+# no "isn't responding" dialog, and first, since SystemUI's ANR at its
+# start came about half a minute after the boot: the system kills the
+# app it would show one for, and SystemUI, which is persistent, it starts
+# again, its lock screen with it once the PIN is set, rather than leave
+# it running behind the dialog. The app in front that stops answering is killed with its
+# instrumentation ("Test instrumentation process crashed"), which deaths
+# shows, and Settings so ends the enrollment; deaths reads the app's
+# lines alone, so Settings', SystemUI's and the other apps' ANRs are in
+# the device's log only. Rig.quiet's Wait, at a test's start, now matters
+# only where the setting is refused.
+adbs shell settings put global hide_error_dialogs 1 || echo "app-emulator: warning: the error dialogs stay on, so a SystemUI that stops answering stays behind one" >&2
 for s in window_animation_scale transition_animation_scale animator_duration_scale; do
 	adbs shell settings put global "$s" 0 || echo "app-emulator: warning: the animations stay on ($s)" >&2
 done
@@ -448,6 +514,27 @@ adbs shell svc power stayon true || echo "app-emulator: warning: the screen may 
 adbs shell settings put secure autofill_service null || echo "app-emulator: warning: autofill stays on" >&2
 adbs shell input keyevent KEYCODE_WAKEUP || true
 adbs shell wm dismiss-keyguard || true
+# the PIN once the first setup has ended, as SystemUI sees it too: a PIN
+# set before brings the lock screen back as SystemUI catches up, which on
+# a busy host is under the enrollment. It has ended where two looks in a
+# row, 3 s apart, say so: SystemUI posts the lock screen's return a moment
+# after it has the SIM, and one killed just after it answered starts
+# again without it.
+setup_wait="" setup_said="" ended=0 ended_at=""
+while :; do
+	if setup_ended; then
+		ended=$((ended + 1))
+		[ -n "$ended_at" ] || ended_at=$SECONDS
+	else
+		ended=0 ended_at=""
+	fi
+	[ "$ended" -lt 2 ] || break
+	kill -0 "$emu_pid" 2>/dev/null || die "the emulator stopped before its first setup ended; its log: $out/emulator.log, the device's: $out/logcat.txt"
+	# a first look that passed has its second one
+	[ "$ended" -eq 1 ] || [ $((SECONDS - built)) -lt "$boot_s" ] || die "the emulator's first setup did not end within APP_EMU_BOOT_TIMEOUT, $boot_s s of the builds' end, $((SECONDS - booted_at)) s after its boot: it waited for $setup_wait (adb said '$setup_said'); the device's log: $out/logcat.txt"
+	sleep 3
+done
+echo "app-emulator: its first setup ended $((ended_at - booted_at)) s after its boot, as the system and SystemUI see it, and the second look agreed $((SECONDS - ended_at)) s later"
 # the lock screen away before the PIN, and again after it
 unlocked || die "the emulator's lock screen stays 120 s, before its PIN is set; the device's log: $out/logcat.txt"
 adbs shell locksettings set-pin "$pin" >/dev/null || die "the emulator's PIN was not set"
