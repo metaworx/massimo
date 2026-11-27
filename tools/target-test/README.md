@@ -22,12 +22,13 @@ each on a port of the loopback that Docker picks,
 so that two runs side by side do not collide:
 
 - **samba**:
-  Debian's samba (`Dockerfile`), a standalone server with one share,
+  Debian's samba (`Dockerfile`, on `debian:trixie-slim` pinned by its digest),
+  a standalone server with one share,
   `backups`, for the user `samba.sh` makes at the start (`smb.conf`);
   no guest, every message signed, the share's traffic encrypted (SMB 3),
   as a NAS can be set to ask;
 - **minio**:
-  MinIO, the community's fork `pgsty/minio`, pinned at a release,
+  MinIO, the community's fork `pgsty/minio`, pinned at a release by its digest,
   since MinIO publishes no image of its own any more;
   its region is `eu-test-1`, not AWS's default,
   so that a signature for another region is refused.
