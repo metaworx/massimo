@@ -1450,7 +1450,17 @@ html.blink-first .server-icon.state-new use.mark, html.blink-first .server-icon.
    does not need, as a plain cell's name does (.device-vals, below). */
 .device-vals > .cell.aged.end { grid-template-columns: 1fr auto auto auto; }
 .device-vals .cell.aged .age { display: contents; }
-.device-vals .cell.aged .age-text { grid-column: 1; grid-row: 2; line-height: 1.2; }
+/* How old grows all day, and from two digits on ("≥ 17 Min.") it
+   widened its cell and pushed the right column out of a narrow row. It
+   counts for nothing in the cell's width (contain) and takes the width
+   the value's line gives it, across the cell. In expert mode, in the
+   name's column beside the time, it takes room the row has to spare,
+   never the value's line's (min-content: the row's tracks start from
+   each cell's line, not from nothing), and wraps between its words
+   where there is none. */
+.device-vals .cell.aged .age-text { grid-column: 1 / -1; grid-row: 2; line-height: 1.2; contain: inline-size; white-space: normal; }
+body.expert .device-vals .cell.aged { min-width: min-content; }
+body.expert .device-vals .cell.aged .age-text { grid-column: 1; contain: none; }
 .device-vals .cell.aged .age-exact { grid-column: 2 / -1; grid-row: 2; line-height: 1.2; white-space: nowrap; }
 .device-vals .age .age-exact::before { content: none; }
 .device-sub .device-seen { flex-basis: 100%; }

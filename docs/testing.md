@@ -136,6 +136,20 @@ Where the length is what the test checks,
 such as the second a late Cube gets (`TestSearchWaitsForALateAnswer`),
 the test keeps the product's.
 
+**A client's timeout against a local fake** is such a deadline
+where the fake's answer is to come:
+`internal/update`'s `shortAnswerWait` is 250 ms, scaled,
+since a slow runner's answers take longer.
+Where the timeout is what the test checks,
+it is given to the call the test checks alone:
+`TestDownloadOutlastsTheClientTimeout` reads the release with a client without one,
+and only its download gets the client's 250 ms, which it outlasts;
+the release's first answers took longer than that once on Windows.
+A Cube client's `ReplyTimeout` is a deadline for the fake's answers too,
+but the tests that shorten it wait it out where the fake is silent,
+and check the loss it brings against the poll's interval, which is not scaled:
+they keep the length they give.
+
 A test that waits longer than it needs to shows in CI:
 the jobs Vet and test, Race and Test (armv6, QEMU)
 name their 20 slowest tests and their 10 slowest packages in the run's summary
@@ -170,6 +184,11 @@ release() // they wake and take it
   so `t.Cleanup(release)` beside the test's own call is safe.
 - **A test that never releases** keeps the write on its way to its end,
   as `TestRoomProgramTagOfTheMembers` does.
+- **A helper that checks a write's answer** holds the apply over its own
+  call and releases it as it returns, as the drift rig's `setRoom2` does:
+  a rig that polls often, as that one every 50 ms,
+  shows the devices' new state to a slow handler before it judges the write,
+  which it then finds confirmed, not pending.
 - **`ApplyAfter` stays** for a test of the delay itself,
   as `TestApplyDelayDiscardAndOff`.
 
@@ -182,7 +201,44 @@ The follow-up ends at the first re-read that shows the write,
 so only a held write waits for more.
 A write the L entry confirms, such as a setpoint, needs no re-read,
 but its deadline (`confirmWithin`) counts from the answer,
-and takes the scale, as in `TestRoomCommandConfirmed`.
+and takes the scale, as in `TestRoomCommandConfirmed`,
+or the test sets it ("A write's deadline").
+
+## A write's deadline
+
+A write that a device does not show is judged at its deadline,
+`confirmWithin` after the Cube's answer (`confirm.go`):
+its warning, and for a room setpoint of the API's its re-send (`resend.go`).
+A test of what comes then does not race that window either:
+it would have to check all it checks while the write is pending,
+and make each newer write, before the window ran out.
+It gives its writes a deadline they never reach, an hour,
+and sets the moment itself:
+
+```go
+r := startServer(t, confirming(time.Hour, 0)) // the drift rig: resendOptions(time.Hour, …)
+// the write, and what the test checks while it is pending
+r.dueNow(2) // room 2's write is due: the follow-up judges it at once
+// the wait for its warning, its re-send
+```
+
+- **`r.dueNow(room)`** (`confirm_test.go`) makes the deadline of the room's
+  open write now and wakes the follow-up, which judges it at once.
+  It waits for a write to the room whose deadline is still to come:
+  called again after a warning, it makes the re-send's own write due,
+  once the re-send has gone.
+- **Before the call** the test waits for what the deadline is to find,
+  such as the members that hear showing the write,
+  since the deadline judges what the Cube's snapshot shows at that moment.
+- **The queue's hold** (`engine.Options.SlotWait`) is no write's deadline,
+  and nothing ends it early.
+  A test of a re-send behind it checks the hold's length as the product's:
+  the re-send's line comes the hold's wait after the hold's line,
+  as in `TestUnconfirmedRoomCommandResentBehindTheHold`,
+  not that nothing came by a moment the test happens to read.
+  A test that must act during the hold, as
+  `TestUnconfirmedRoomCommandNotResent`'s "superseded behind the hold",
+  still has the hold's wait to do it in.
 
 ## The race detector
 
@@ -264,6 +320,10 @@ A feed that ended (`w.End`) fails a wait at once, with its reason.
   often an item of the same watch, `w.Seen(m, isPoll)`.
 - **"At least n"** is `w.AwaitN`, not an `Eventually` on a `Count`,
   whose failure would not say what came.
+- **A count of tries** a retry loop makes is counted from the change too,
+  where the test changes what the tries meet:
+  `TestProxyRetriedUntilTheAddressIsThere` counts the listens since its error changed,
+  since the slot's own count reaches any number before the change.
 - **Once the action is over** - the process ended, the call returned
   with its log written - nothing of it is on its way any more:
   `w.Has` checks that an item came, `w.HasNot` that none did, at once.
@@ -284,6 +344,9 @@ their tests import the kit, and an import back would be a cycle.
 The fake Cube's lines are watched in `internal/testkit/cubewatch`,
 a test-only package too,
 through the fake Cube's hook `OnReceive`, which changes nothing the fake does.
+The fake receives each line as it reads it,
+also while it is silent (`SetSilent`), when it holds every answer:
+a wait for a command written behind a poll the silence holds sees it come.
 `cubewatch` does not import the Cube client,
 so that the client's tests can use it;
 the client's events are a `testkit.ChanWatch`.
@@ -610,6 +673,13 @@ so such a test starts the store's clock days back and lets it catch up
 with the real time rather than run ahead of it
 (`TestKeyIdle` of `internal/server`: an ended token is told from a guess by
 the server's clock).
+
+`storekit.Raw(t, st)` opens a second connection to the file of `st`,
+past the store, as another process holds one,
+waiting for a lock as the store does, and closes it at the test's end:
+for a test that writes what the store never writes,
+such as a row an older version left,
+or that holds the file's lock while the store works.
 
 - **The template** is a store that `store.Open` makes in a temporary directory,
   at the version `test`, the first time a test asks for it:

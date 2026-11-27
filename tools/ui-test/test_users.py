@@ -164,8 +164,9 @@ def test_an_integrations_user_has_no_way_in(page, case, reads):
                 row.wait_for()
                 assert row.locator(".revoke-token").count() == 1, "the held key's Revoke"
                 assert row.locator(".change-key").count() == 0, "no Change… on an integration's key"
-                with page.expect_request(lambda r: r.method == "PUT" and phone_path.search(r.url)):
-                    panel.locator(".remove-password").click()
+                panel.locator(".remove-password").click()
+                # the route's own list: Playwright's request event of the PUT comes before the route has run
+                assert wait_held(page, sent), "the removal is sent"
                 assert sent == [{"password": ""}], f"the removal sends an empty password: {sent}"
             assert panel.locator(".remove-user").count() == 1, f"{name}: still removable"
             panel.locator("> summary").click()
