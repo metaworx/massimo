@@ -2237,5 +2237,11 @@
   "serverbackup.field.webdav.url": "Adres URL folderu",
   "serverbackup.field.webdav.user": "Użytkownik",
   "serverbackup.field.webdav.password": "Hasło",
-  "serverbackup.warn.webdav.url": "Nieszyfrowane http: hasło jest przesyłane jawnym tekstem, choć kopie zapasowe pozostają zaszyfrowane. Użyj https, jeśli serwer to umożliwia."
+  "serverbackup.warn.webdav.url": "Nieszyfrowane http: hasło jest przesyłane jawnym tekstem, choć kopie zapasowe pozostają zaszyfrowane. Użyj https, jeśli serwer to umożliwia.",
+  "serverbackup.kind.sftp": "SFTP (SSH)",
+  "serverbackup.field.sftp.host": "Host",
+  "serverbackup.field.sftp.port": "Port",
+  "serverbackup.field.sftp.user": "Użytkownik",
+  "serverbackup.field.sftp.path": "Katalog na hoście",
+  "serverbackup.field.sftp.host_key": "Klucz hosta (odcisk SHA256)"
 }

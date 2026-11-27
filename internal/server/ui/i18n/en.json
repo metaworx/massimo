@@ -2164,5 +2164,11 @@
   "serverbackup.field.webdav.url": "Folder URL",
   "serverbackup.field.webdav.user": "User",
   "serverbackup.field.webdav.password": "Password",
-  "serverbackup.warn.webdav.url": "Plain http: the password travels in clear, though the backups stay encrypted. Use https where the server offers it."
+  "serverbackup.warn.webdav.url": "Plain http: the password travels in clear, though the backups stay encrypted. Use https where the server offers it.",
+  "serverbackup.kind.sftp": "SFTP (SSH)",
+  "serverbackup.field.sftp.host": "Host",
+  "serverbackup.field.sftp.port": "Port",
+  "serverbackup.field.sftp.user": "User",
+  "serverbackup.field.sftp.path": "Directory on the host",
+  "serverbackup.field.sftp.host_key": "Host key (SHA256 fingerprint)"
 }

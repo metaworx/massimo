@@ -2164,5 +2164,11 @@
   "serverbackup.field.webdav.url": "URL des Ordners",
   "serverbackup.field.webdav.user": "Benutzer",
   "serverbackup.field.webdav.password": "Passwort",
-  "serverbackup.warn.webdav.url": "Unverschlüsseltes http: Das Passwort wird im Klartext übertragen, die Backups bleiben verschlüsselt. Verwende https, wo der Server es anbietet."
+  "serverbackup.warn.webdav.url": "Unverschlüsseltes http: Das Passwort wird im Klartext übertragen, die Backups bleiben verschlüsselt. Verwende https, wo der Server es anbietet.",
+  "serverbackup.kind.sftp": "SFTP (SSH)",
+  "serverbackup.field.sftp.host": "Host",
+  "serverbackup.field.sftp.port": "Port",
+  "serverbackup.field.sftp.user": "Benutzer",
+  "serverbackup.field.sftp.path": "Verzeichnis auf dem Host",
+  "serverbackup.field.sftp.host_key": "Host-Schlüssel (SHA256-Fingerabdruck)"
 }

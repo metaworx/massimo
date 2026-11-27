@@ -2166,5 +2166,11 @@
   "serverbackup.field.webdav.url": "URL della cartella",
   "serverbackup.field.webdav.user": "Utente",
   "serverbackup.field.webdav.password": "Password",
-  "serverbackup.warn.webdav.url": "http non cifrato: la password viaggia in chiaro, anche se i backup restano cifrati. Usa https se il server lo offre."
+  "serverbackup.warn.webdav.url": "http non cifrato: la password viaggia in chiaro, anche se i backup restano cifrati. Usa https se il server lo offre.",
+  "serverbackup.kind.sftp": "SFTP (SSH)",
+  "serverbackup.field.sftp.host": "Host",
+  "serverbackup.field.sftp.port": "Porta",
+  "serverbackup.field.sftp.user": "Utente",
+  "serverbackup.field.sftp.path": "Cartella sull'host",
+  "serverbackup.field.sftp.host_key": "Chiave dell'host (impronta SHA256)"
 }

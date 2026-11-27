@@ -4376,6 +4376,8 @@ paths:
                   found: {type: integer}
                   skipped: {type: array, items: {type: string}}
                   scan_error: {type: string}
+                  host_key: {type: string, description: "An SFTP host's key, SHA256:…, where the scan stopped at it: to compare with the host's and confirm as the target's host_key"}
+                  pinned_host_key: {type: string, description: The host_key confirmed, where the host's differs from it}
         "400": {$ref: "#/components/responses/BadRequest"}
         "401": {$ref: "#/components/responses/Unauthorized"}
         "403": {$ref: "#/components/responses/Forbidden"}
@@ -4405,7 +4407,7 @@ paths:
     put:
       summary: Change a target
       x-capability: backup.server
-      description: The fields given change, the others stay; secret replaces the secret, "" removes it. The kind does not change.
+      description: The fields given change, the others stay; secret replaces the secret, "" removes it, and of a kind that makes its secret (sftp) makes a new one. The kind does not change.
       parameters: [{$ref: "#/components/parameters/serverBackupTargetUUID"}]
       requestBody:
         required: true
@@ -4453,7 +4455,7 @@ paths:
       parameters: [{$ref: "#/components/parameters/serverBackupTargetUUID"}]
       responses:
         "200":
-          description: Whether the test passed, and why not
+          description: Whether the test passed, and why not; an SFTP host's key to confirm
           content:
             application/json:
               schema:
@@ -4461,6 +4463,8 @@ paths:
                 properties:
                   ok: {type: boolean}
                   error: {type: string}
+                  host_key: {type: string, description: "An SFTP host's key, SHA256:…, not confirmed or not the one confirmed: to compare with the host's and confirm as the target's host_key"}
+                  pinned_host_key: {type: string, description: The host_key confirmed, where the host's differs from it}
         "401": {$ref: "#/components/responses/Unauthorized"}
         "403": {$ref: "#/components/responses/Forbidden"}
         "404": {$ref: "#/components/responses/NotFound"}
@@ -6506,6 +6510,7 @@ components:
             config: {type: object, additionalProperties: {type: string}, description: The kind's fields but its secret}
             has_secret: {type: boolean}
             secret_lost: {type: boolean, description: Its sealed secret does not open; enter it again}
+            public_key: {type: string, description: "Of a secret the server made, its public part: an SFTP target's key line, ssh-ed25519 AAAA… massimo-server-backup, for the user's authorized_keys on the host"}
             retention: {$ref: "#/components/schemas/ServerBackupPolicy"}
             created_at: {type: string, format: date-time}
             updated_at: {type: string, format: date-time}
@@ -6515,7 +6520,7 @@ components:
         name: {type: string, maxLength: 64}
         kind: {type: string, description: A kind of GET …/kinds; fixed once added}
         config: {type: object, additionalProperties: {type: string}}
-        secret: {type: string, description: 'The kind''s secret field; "" removes it, left out keeps it'}
+        secret: {type: string, description: 'The kind''s secret field; "" removes it, left out keeps it. A kind that makes its secret (sftp) takes none, and "" makes a new one'}
         takes: {type: string, enum: [every, daily, weekly, monthly], description: every where left out}
         retention: {$ref: "#/components/schemas/ServerBackupPolicy"}
         enabled: {type: boolean, description: true where left out}

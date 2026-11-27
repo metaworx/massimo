@@ -6,6 +6,7 @@ require (
 	filippo.io/age v1.3.2
 	github.com/bytemare/opaque v0.18.0
 	github.com/google/uuid v1.6.0
+	github.com/pkg/sftp v1.13.13
 	golang.org/x/crypto v0.59.0
 	golang.org/x/net v0.63.0
 	golang.org/x/sys v0.50.0
@@ -25,6 +26,7 @@ require (
 	github.com/bytemare/secp256k1 v0.3.0 // indirect
 	github.com/dustin/go-humanize v1.1.0 // indirect
 	github.com/gtank/ristretto255 v0.2.0 // indirect
+	github.com/kr/fs v0.1.0 // indirect
 	github.com/mattn/go-isatty v0.0.24 // indirect
 	github.com/ncruces/go-strftime v1.1.0 // indirect
 	github.com/remyoudompheng/bigfft v0.0.0-20230129092748-24d4a6f8daec // indirect

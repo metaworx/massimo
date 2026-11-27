@@ -63,6 +63,14 @@ type Kind struct {
 	// field of type path is absolute by then: the server takes a
 	// relative one as relative to the data directory.
 	New func(cfg map[string]string, secret []byte) (Target, error)
+	// MakeSecret, where set, makes the kind's secret, which nobody
+	// enters: the server calls it for a target added, and for one whose
+	// secret is set to "" (a new one). Public then derives what of a
+	// secret may be shown, which the target's view carries: an SSH
+	// key's public line. A kind that makes its secret has no secret
+	// field.
+	MakeSecret func() (string, error)
+	Public     func(secret string) (string, error)
 }
 
 // Field is one field of a kind's form.
@@ -100,8 +108,9 @@ var (
 
 // Register adds a kind; each target file registers its own in init.
 // A kind of a name taken, a field of no known type, two fields of one
-// key, two secret fields, or a choice without choices is a mistake of
-// the code, and panics.
+// key, two secret fields, a choice without choices, or MakeSecret
+// without Public or beside a secret field is a mistake of the code, and
+// panics.
 func Register(k Kind) {
 	if err := k.valid(); err != nil {
 		panic(err)
@@ -148,8 +157,13 @@ func (k Kind) valid() error {
 			secrets++
 		}
 	}
-	if secrets > 1 {
+	switch {
+	case secrets > 1:
 		return fmt.Errorf("serverbackup: kind %s: more than one secret field", k.Name)
+	case (k.MakeSecret == nil) != (k.Public == nil):
+		return fmt.Errorf("serverbackup: kind %s: MakeSecret and Public go together", k.Name)
+	case k.MakeSecret != nil && secrets > 0:
+		return fmt.Errorf("serverbackup: kind %s: makes its secret, and has a secret field", k.Name)
 	}
 	return nil
 }

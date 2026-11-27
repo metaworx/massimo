@@ -2166,5 +2166,11 @@
   "serverbackup.field.webdav.url": "URL du dossier",
   "serverbackup.field.webdav.user": "Utilisateur",
   "serverbackup.field.webdav.password": "Mot de passe",
-  "serverbackup.warn.webdav.url": "http non chiffré : le mot de passe circule en clair, même si les sauvegardes restent chiffrées. Utilisez https si le serveur le propose."
+  "serverbackup.warn.webdav.url": "http non chiffré : le mot de passe circule en clair, même si les sauvegardes restent chiffrées. Utilisez https si le serveur le propose.",
+  "serverbackup.kind.sftp": "SFTP (SSH)",
+  "serverbackup.field.sftp.host": "Hôte",
+  "serverbackup.field.sftp.port": "Port",
+  "serverbackup.field.sftp.user": "Utilisateur",
+  "serverbackup.field.sftp.path": "Répertoire sur l'hôte",
+  "serverbackup.field.sftp.host_key": "Clé de l'hôte (empreinte SHA256)"
 }

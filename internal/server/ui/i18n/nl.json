@@ -2165,5 +2165,11 @@
   "serverbackup.field.webdav.url": "URL van de map",
   "serverbackup.field.webdav.user": "Gebruiker",
   "serverbackup.field.webdav.password": "Wachtwoord",
-  "serverbackup.warn.webdav.url": "Onversleuteld http: het wachtwoord gaat leesbaar over het netwerk, al blijven de back-ups versleuteld. Gebruik https als de server het aanbiedt."
+  "serverbackup.warn.webdav.url": "Onversleuteld http: het wachtwoord gaat leesbaar over het netwerk, al blijven de back-ups versleuteld. Gebruik https als de server het aanbiedt.",
+  "serverbackup.kind.sftp": "SFTP (SSH)",
+  "serverbackup.field.sftp.host": "Host",
+  "serverbackup.field.sftp.port": "Poort",
+  "serverbackup.field.sftp.user": "Gebruiker",
+  "serverbackup.field.sftp.path": "Map op de host",
+  "serverbackup.field.sftp.host_key": "Hostsleutel (SHA256-vingerafdruk)"
 }

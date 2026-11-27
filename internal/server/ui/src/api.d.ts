@@ -2363,6 +2363,12 @@ export interface ServerBackupTarget extends ServerBackupTargetState {
   has_secret?: boolean;
   /** Its sealed secret does not open; enter it again */
   secret_lost?: boolean;
+  /**
+   * Of a secret the server made, its public part: an SFTP target's key line,
+   * ssh-ed25519 AAAA… massimo-server-backup, for the user's authorized_keys
+   * on the host
+   */
+  public_key?: string;
   retention?: ServerBackupPolicy;
   /** @format date-time */
   created_at?: string;
@@ -2375,7 +2381,10 @@ export interface ServerBackupTargetRequest {
   /** A kind of GET …/kinds; fixed once added */
   kind?: string;
   config?: Record<string, string>;
-  /** The kind's secret field; "" removes it, left out keeps it */
+  /**
+   * The kind's secret field; "" removes it, left out keeps it. A kind that
+   * makes its secret (sftp) takes none, and "" makes a new one
+   */
   secret?: string;
   /** every where left out */
   takes?: "every" | "daily" | "weekly" | "monthly";

@@ -2177,6 +2177,57 @@ A holder of `backup.retry` retries at once what failed: as the schedule made it,
 pruning no more than the schedule would, and revealing nothing,
 the file being encrypted (D13-A).
 
+#### The SFTP target
+
+The kind `sftp` (D8-A) reaches a directory on a host that speaks SSH,
+in-process, with `golang.org/x/crypto/ssh` and `github.com/pkg/sftp`
+(`internal/serverbackup/sftp.go`);
+NAS boxes and storage boxes speak it, and OpenSSH's `scp` runs over it.
+
+| Field | What it holds |
+|-------|---------------|
+| `host` | the host's name or address |
+| `port` | 22 by default |
+| `user` | the user it logs in as |
+| `path` | the directory, relative to the user's login directory where not absolute, that directory where empty; made where missing |
+| `host_key` | the host's key, confirmed: its fingerprint, `SHA256:…`, or its public key line |
+
+- **Its key**, an Ed25519 pair of its own,
+  is made by the server when the target is added (`Kind.MakeSecret`):
+  the private part, in OpenSSH's form, is the target's secret,
+  sealed as the others are and never answered;
+  the public line, `ssh-ed25519 AAAA… massimo-server-backup`,
+  is the target's `public_key`,
+  for the user's `~/.ssh/authorized_keys` on the host.
+  Nobody enters the secret: `"secret": ""` makes a new pair,
+  also for a target whose key no longer opens (`secret_lost`).
+- **A host whose key is not confirmed** is offered nothing,
+  and nothing is written:
+  the connection stops at the host's key (`serverbackup.HostKeyError`),
+  and the add's scan and the target's test answer its fingerprint.
+  The owner compares it with the host's own,
+  `ssh-keygen -lf /etc/ssh/ssh_host_ed25519_key.pub` on the host,
+  and confirms it as `host_key`.
+  A key that changed is refused with both fingerprints, every time,
+  until the owner confirms the new one.
+  Ed25519 is asked for first, then ECDSA, then RSA signed with SHA-2;
+  a key line in `host_key` asks for its own kind alone.
+- **A copy** goes to a hidden temporary name beside its own,
+  `.<name>.<random>.part`, mode 0600 where the host takes it, and is renamed:
+  in one step by `posix-rename@openssh.com` where the host offers it,
+  else by removing the name first, which SFTP's own rename does not replace.
+  A copy broken off leaves nothing under its name;
+  a temporary file a broken line left is removed by the next copy after a day,
+  and the hidden files of other programs stay.
+  A copy is read by ranges, so a scan reads the manifests alone.
+- **Each job** opens a connection of its own, with timeouts:
+  30 seconds to connect, 45 up to the SFTP session,
+  and 2 minutes without a byte from the host,
+  which a keepalive every 30 seconds keeps from striking a connection merely idle.
+  An error names `user@host:port` and what refused:
+  the host's key, the target's key with where its line goes,
+  or the host's SFTP status.
+
 ## 8. Migration of an installed box
 
 The Pi runs `massimo serve` as a systemd service with `/etc/massimo/env`,
