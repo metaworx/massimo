@@ -15,9 +15,11 @@ import (
 	"bytes"
 	"context"
 	"crypto/hmac"
+	"crypto/md5"
 	"crypto/rand"
 	"crypto/sha256"
 	"crypto/tls"
+	"encoding/base64"
 	"encoding/hex"
 	"encoding/xml"
 	"errors"
@@ -234,8 +236,9 @@ func (s *S3) String() string {
 // nothing under name, and Put writes name directly rather than by a
 // temporary name as the other targets do. A backup larger than the
 // 5 GiB one PUT takes is refused; fewer or more bytes than size are
-// refused before the last byte goes. The body is not hashed ahead
-// (UNSIGNED-PAYLOAD): the catalogue's check reads a copy back.
+// refused before the last byte goes. The body is signed unhashed
+// (UNSIGNED-PAYLOAD), and carries its Content-MD5 (contentMD5), which a
+// bucket with object lock asks of every PUT.
 func (s *S3) Put(ctx context.Context, name string, r io.Reader, size int64) error {
 	if err := CheckName(name); err != nil {
 		return err
@@ -250,10 +253,18 @@ func (s *S3) Put(ctx context.Context, name string, r io.Reader, size int64) erro
 	return s.put(ctx, s.prefix+name, "application/zip", r, size)
 }
 
-// put stores r, size bytes, under key.
+// put stores r, size bytes, under key, with its Content-MD5 where r
+// can seek (contentMD5).
 func (s *S3) put(ctx context.Context, key, contentType string, r io.Reader, size int64) error {
 	h := http.Header{}
 	h.Set("Content-Type", contentType)
+	sum, err := contentMD5(ctx, r, size)
+	if err != nil {
+		return fmt.Errorf("%s: PUT %s: %w", s, key, err)
+	}
+	if sum != "" {
+		h.Set("Content-MD5", sum)
+	}
 	resp, err := s.do(ctx, s3Call{method: http.MethodPut, key: key, header: h, body: r, size: size})
 	if err != nil {
 		return fmt.Errorf("%s: PUT %s: %w", s, key, err)
@@ -263,6 +274,39 @@ func (s *S3) put(ctx context.Context, key, contentType string, r io.Reader, size
 		return s.answer(http.MethodPut, key, resp)
 	}
 	return nil
+}
+
+// contentMD5 is the Content-MD5 of the size bytes r holds, read once
+// ahead and r sought back to where it was: a bucket with object lock
+// refuses a PUT without it (or a checksum of AWS's newer kind), and the
+// store checks the body by it. A reader that cannot seek goes without
+// one ("") and so cannot be put into such a bucket; the catalogue's
+// always can, a file on the box or a copy on another target read by
+// ranges, which is read twice then. Fewer or more bytes than size are
+// refused here already.
+func contentMD5(ctx context.Context, r io.Reader, size int64) (string, error) {
+	sk, ok := r.(io.Seeker)
+	if !ok {
+		return "", nil
+	}
+	start, err := sk.Seek(0, io.SeekCurrent)
+	if err != nil {
+		return "", nil
+	}
+	h := md5.New()
+	n, err := io.Copy(h, io.LimitReader(ctxReader{ctx: ctx, r: r}, size+1))
+	if _, serr := sk.Seek(start, io.SeekStart); err == nil && serr != nil {
+		err = serr
+	}
+	switch {
+	case err != nil:
+		return "", err
+	case n > size:
+		return "", errors.New("more bytes than the size given")
+	case n < size:
+		return "", fmt.Errorf("%d bytes short of the size given: %w", size-n, io.ErrUnexpectedEOF)
+	}
+	return base64.StdEncoding.EncodeToString(h.Sum(nil)), nil
 }
 
 // Open returns name for ranged reads, with its size: each read a GET

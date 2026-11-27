@@ -2309,7 +2309,11 @@ all with Go's standard library:
   S3 has no rename and needs none, since a `PUT` is atomic,
   and one broken off or refused leaves nothing.
   One `PUT` takes at most 5 GiB, so a larger backup is refused with its size.
-  The body is sent unsigned (`UNSIGNED-PAYLOAD`), since it is read once;
+  The body is sent unsigned (`UNSIGNED-PAYLOAD`),
+  with its `Content-MD5`, read once ahead from the file on the box
+  (or from the copy on another target a push reads, which is read twice),
+  since a bucket with object lock takes no `PUT` without it,
+  AWS's rule, and the store checks the body by it;
   TLS carries it, and the check reads the copy back with its hash.
 - A copy is read by ranges, each a `GET` with `Range`,
   and with `If-Match` on the version `HEAD` found,
@@ -2340,7 +2344,9 @@ all with Go's standard library:
   a copy deleted by hand stays, the request answering `409` with why.
 - `TestS3Live` runs the target against a real store,
   where `MASSIMO_TARGET_TEST_S3_ENDPOINT`, `_BUCKET`, `_REGION`, `_KEY`
-  and `_SECRET` are set, as `make target-test` sets them for its MinIO.
+  and `_SECRET` are set, as `make target-test` sets them for its MinIO,
+  and against a bucket with object lock and a default retention too,
+  `_LOCK_BUCKET`.
 
 ## 8. Migration of an installed box
 

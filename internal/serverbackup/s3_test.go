@@ -108,7 +108,10 @@ type fakeS3 struct {
 	mu      sync.Mutex
 	objects map[string]fakeObject
 	locked  map[string]bool
-	calls   []string
+	// lockBucket is a bucket with object lock and a default retention,
+	// which takes a PUT only with its Content-MD5 or a checksum.
+	lockBucket bool
+	calls      []string
 	// refuse answers a request before the fake does, where it returns
 	// a status.
 	refuse func(r *http.Request, key string) (status int, code, message string)
@@ -355,6 +358,18 @@ func (f *fakeS3) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		}
 		if int64(len(data)) != r.ContentLength {
 			fakeFail(w, r, 400, "IncompleteBody", "fewer bytes than the Content-Length", "")
+			return
+		}
+		f.mu.Lock()
+		lockBucket := f.lockBucket
+		f.mu.Unlock()
+		sum := md5.Sum(data)
+		switch v := r.Header.Get("Content-MD5"); {
+		case v != "" && v != base64.StdEncoding.EncodeToString(sum[:]):
+			fakeFail(w, r, 400, "BadDigest", "The Content-MD5 you specified did not match what we received.", "")
+			return
+		case v == "" && lockBucket && r.Header.Get("X-Amz-Checksum-Sha256") == "":
+			fakeFail(w, r, 400, "InvalidRequest", "Content-MD5 OR x-amz-checksum- HTTP header is required for Put Object requests with Object Lock parameters", "")
 			return
 		}
 		f.put(key, data)
@@ -623,6 +638,42 @@ func TestS3PutRefusals(t *testing.T) {
 	}
 	if keys := f.keys(); len(keys) != 0 {
 		t.Fatalf("left behind: %v", keys)
+	}
+}
+
+// A bucket with object lock and a default retention takes a PUT only
+// with its Content-MD5, AWS's rule and MinIO's: a copy and the check's
+// probe carry it, read from where the reader stands and checked by the
+// store; a reader that cannot seek goes without, which such a bucket
+// refuses.
+func TestS3PutContentMD5(t *testing.T) {
+	t.Parallel()
+	ctx := context.Background()
+	f, srv := newFakeS3(t)
+	f.set(func(f *fakeS3) { f.lockBucket = true })
+	s := s3Target(t, srv, nil)
+	if err := s.Check(ctx); err != nil {
+		t.Fatalf("the check: %v", err)
+	}
+	data := bytes.Repeat([]byte("massimo"), 100<<10)
+	if err := s.Put(ctx, "a.zip", bytes.NewReader(data), int64(len(data))); err != nil {
+		t.Fatal(err)
+	}
+	r := bytes.NewReader(append([]byte("skip"), data...))
+	r.Seek(4, io.SeekStart)
+	if err := s.Put(ctx, "b.zip", r, int64(len(data))); err != nil {
+		t.Fatalf("a reader read from its middle: %v", err)
+	}
+	f.mu.Lock()
+	a, b := f.objects["massimo/a.zip"].data, f.objects["massimo/b.zip"].data
+	f.mu.Unlock()
+	if !bytes.Equal(a, data) || !bytes.Equal(b, data) {
+		t.Fatal("the bucket holds other bytes")
+	}
+	err := s.Put(ctx, "c.zip", io.MultiReader(bytes.NewReader(data)), int64(len(data)))
+	var e *s3Error
+	if !errors.As(err, &e) || e.Code != "InvalidRequest" {
+		t.Fatalf("a reader that cannot seek: %v", err)
 	}
 }
 
@@ -994,4 +1045,45 @@ func TestS3Live(t *testing.T) {
 	if list, err := s.List(ctx); err != nil || len(list) != 0 {
 		t.Fatalf("left behind %+v %v", list, err)
 	}
+
+	// A bucket with object lock and a default retention takes a PUT only
+	// with its Content-MD5, as AWS asks (MinIO does not ask, but checks
+	// one given): the check's probe and a backup go there, the backup is
+	// found by its manifest, and a body that is not the digest's is
+	// refused.
+	t.Run("object lock", func(t *testing.T) {
+		if env("LOCK_BUCKET") == "" {
+			t.Skip("MASSIMO_TARGET_TEST_S3_LOCK_BUCKET is not set (make target-test)")
+		}
+		l, err := NewS3(map[string]string{"endpoint": env("ENDPOINT"), "region": env("REGION"), "bucket": env("LOCK_BUCKET"), "prefix": prefix,
+			"path_style": "true", "access_key": env("KEY")}, []byte(env("SECRET")))
+		if err != nil {
+			t.Fatal(err)
+		}
+		if err := l.Check(ctx); err != nil {
+			t.Fatalf("the check: %v", err)
+		}
+		if err := l.Put(ctx, FileName(m), bytes.NewReader(backup), int64(len(backup))); err != nil {
+			t.Fatal(err)
+		}
+		found, _, err := Scan(ctx, l)
+		if err != nil || len(found) != 1 || found[0].Manifest.UUID != m.UUID {
+			t.Fatalf("scan %+v %v", found, err)
+		}
+		if err := l.Delete(ctx, FileName(m)); err != nil && !errors.Is(err, ErrRetained) {
+			t.Fatal(err)
+		}
+		h := http.Header{}
+		h.Set("Content-MD5", base64.StdEncoding.EncodeToString(make([]byte, md5.Size)))
+		resp, err := l.do(ctx, s3Call{method: http.MethodPut, key: l.prefix + "bad.zip", header: h, body: strings.NewReader("abc"), size: 3})
+		if err != nil {
+			t.Fatal(err)
+		}
+		err = l.answer(http.MethodPut, "bad.zip", resp)
+		resp.Body.Close()
+		var e *s3Error
+		if !errors.As(err, &e) || e.Code != "BadDigest" {
+			t.Fatalf("a body not of its Content-MD5: %v", err)
+		}
+	})
 }
