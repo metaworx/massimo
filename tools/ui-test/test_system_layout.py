@@ -4,7 +4,7 @@
 their order, the sections menu and no row of
 section buttons, folding kept in the browser, back to top, the columns
 where there is room, and a Cube's panel in two columns."""
-from helpers import ApiReads, named_buttons, scroll_settled, scroll_width, show_view, wait_until
+from helpers import ApiReads, boxes, named_buttons, scroll_settled, scroll_width, show_view, wait_until
 
 CARDS = ["sys-cubes", "sys-users", "sys-providers", "sys-integrations", "sys-roles", "sys-caps"]
 # Maintenance's page (AP GlobalMenu, Block 4; AP ServerBackup, Blocks 3 and 4: the two backup cards together)
@@ -61,9 +61,9 @@ def test_maintenance_page_cards(page, case):
     toc = menu.locator(".toc-link")
     assert [toc.nth(i).get_attribute("data-target") for i in range(toc.count())] == MAINT_CARDS, "an item per card"
     page.keyboard.press("Escape")
-    width = page.locator("#maint-page").bounding_box()["width"]
-    for card in MAINT_CARDS:
-        assert page.locator("#" + card).bounding_box()["width"] >= width - 2, f"{card} as wide as the page"
+    page_box, *cards = boxes(page, "#maint-page", *("#" + card for card in MAINT_CARDS))
+    for card, b in zip(MAINT_CARDS, cards):
+        assert b["width"] >= page_box["width"] - 2, f"{card} as wide as the page: {b['width']} of {page_box['width']}"
     assert page.locator("#system #sys-software, #system #sys-maint, #system #sys-server-backups, #system #sys-backup").count() == 0, \
         "none in System settings"
     assert scroll_width(page) <= case.width, "no horizontal scroll on Maintenance"

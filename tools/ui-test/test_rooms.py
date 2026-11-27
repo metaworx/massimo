@@ -18,7 +18,7 @@ Block 4).
 import json
 import re
 
-from helpers import ECO_BUTTON, OPEN, STALE, named_buttons, scroll_width, settled, wait_until
+from helpers import ECO_BUTTON, OPEN, STALE, named_buttons, scroll_width, settled, wait_held, wait_until
 from test_new_batteries import Device
 from test_room_more import open_list
 
@@ -418,6 +418,83 @@ def test_stale_and_expert(page, case, reads):
     tile.locator(".room-name-btn").click()
 
 
+# A room's open device list as it is laid out, by each row shown with an
+# aged value (its radio address): where the row ends, where the last value
+# of its right column ends, where anything of its values does, and each
+# cell with an age: its width, its age's text, whether that shows whole
+# inside the cell, and how far its exact time starts from its value, where
+# expert mode shows it.
+AGED_ROWS = """(sel) => {
+  const box = (el) => el.getBoundingClientRect();
+  const r1 = (v) => Math.round(v * 10) / 10;
+  const ends = (el) => r1(Math.max(...[...el.querySelectorAll('*')].map(box).filter((b) => b.width > 0).map((b) => b.right)));
+  const rows = {};
+  for (const row of document.querySelectorAll(sel + ' .devices .device')) {
+    const vals = row.querySelector('.device-vals');
+    if (!box(row).width || !vals || !vals.querySelector('.cell.aged')) continue;
+    const cells = [...vals.querySelectorAll(':scope > .cell:not(.wide)')];
+    const right = cells.filter((c, i) => i % 2 === 1 && c.querySelector('.num').textContent !== '');
+    rows[row.dataset.rf] = { edge: r1(box(row).right), end: ends(right[right.length - 1]), out: ends(vals),
+      aged: [...vals.querySelectorAll(':scope > .cell.aged')].map((c) => {
+        const a = c.querySelector('.age-text'), x = c.querySelector('.age-exact');
+        return { width: r1(box(c).width), text: a.textContent,
+                 whole: a.scrollWidth <= a.clientWidth + 1 && box(a).right <= box(c).right + 0.5,
+                 under: x && box(x).width ? r1(box(x).left - box(c.querySelector('.num')).left) : null };
+      }) };
+  }
+  return rows;
+}"""
+
+# How old the values are told, in seconds, and whether they were already
+# there when the server connected ("≥", as the server's own are): now, then
+# a two-digit age, which the server's reach once a run has lasted ten
+# minutes, and the longest of each unit, minutes, hours, and days to three
+# digits.
+AGES = [(0, False), (17.5 * 60, True), (59.5 * 60, True), (47.5 * 3600, True), (999.5 * 86400, True)]
+
+
+def test_an_age_does_not_widen_its_cell(page, case, reads):
+    """How old a value is grows all day, and once it has two digits
+    ("≥ 17 Min.") it widened its cell, so that the device list's right
+    column left the row in German in a tile of three columns at 1100 px,
+    narrower than a phone's (AP SteadyTests v1.1, Block 14). Told two
+    digits and the longest of each unit, every aged cell of the room's
+    open device list is as wide as with "now", the right column's values
+    end at the row's edge, nothing of the values leaves the row, and each
+    age shows whole inside its cell, under the value's name. In expert
+    mode, beside the exact time under the value, an age may take room the
+    row has to spare, and wraps where there is none: the values still end
+    at the row's edge and the age shows whole."""
+    rid = page.evaluate("state.rooms.find(roomThermostat).id")
+    sel = '.room[data-id="%s"]' % rid
+    tile = page.locator(sel)
+    tile.locator(".room-name-btn").click()
+    page.wait_for_selector(sel + " .device .device-vals .cell.aged", timeout=5000)
+    try:
+        for expert in (False, True):
+            page.evaluate("(x) => { state.settings.expert = x; applySettings(); }", expert)
+            widths = None
+            for seconds, already in AGES:
+                want = reads.age(rid, seconds, already)
+                ok, rows = settled(page, lambda: page.evaluate(AGED_ROWS, sel),
+                                   lambda g: bool(g) and all(c["text"] == want for r in g.values() for c in r["aged"]))
+                assert ok, f"expert {expert}: every age says {want!r}: {rows}"
+                got = {rf: [c["width"] for c in r["aged"]] for rf, r in rows.items()}
+                widths = widths or got
+                assert expert or got.keys() == widths.keys() and all(
+                    abs(a - b) <= 0.5 for rf in got for a, b in zip(got[rf], widths[rf])), \
+                    f"{want!r} widens no cell: {got}, with {widths} as now"
+                for rf, r in rows.items():
+                    assert abs(r["edge"] - r["end"]) <= 2 and r["out"] <= r["edge"] + 2, \
+                        f"expert {expert}, {want!r}: the values of {rf} end at the row's edge: {r}"
+                    assert all(c["whole"] for c in r["aged"]), f"expert {expert}: {want!r} whole in its cell: {r}"
+                    assert all((c["under"] is not None and abs(c["under"]) <= 1) == expert for c in r["aged"]), \
+                        f"expert {expert}, {want!r}: in expert mode the exact time under the value: {r}"
+    finally:
+        page.evaluate("() => { state.settings.expert = false; applySettings(); }")
+        tile.locator(".room-name-btn").click()
+
+
 def test_eco_button(page, case):
     """The greeting's eco button, typed eco_switch by the API: its row in
     the device list carries the leaf and its type's name, in expert mode
@@ -497,8 +574,7 @@ def test_a_switch_point_takes_a_full_time(page, case):
         assert "dirty" in tile.locator(".prog-days .day.editing").get_attribute("class") and \
             tile.locator(".prog-reset-day").is_enabled(), "the day is marked as changed in place"
         tile.locator(".config-body button[type=submit]").click()
-        page.wait_for_timeout(500)
-        assert sent, "Send right after the time sends it"
+        assert wait_held(page, sent), "Send right after the time sends it"
         points = next(iter(sent[0].values()))
         assert points[0]["until"] == "01:15", f"the time sent: {points}"
     finally:
@@ -708,17 +784,20 @@ def test_mismatch_marks(page, case, reads):
     assert tile.locator(".device .mismatch-badge").count() == 0, "the device's badges gone with the findings"
 
 
-def test_an_age_moves_on_with_the_minute(page, case):
+def test_an_age_moves_on_with_the_minute(page, case, reads):
     """A value's age in a tile's device list follows the page's minute,
     a signal of the parts (MassimoParts.minute), where a plain timer wrote
     into the parts' ages before: an hour on, it says so at the next
-    minute."""
+    minute. The values told 17 minutes old (Reads.age), not as old as the
+    run: from two days on an hour more says the same."""
     tile = page.locator(".room").first
+    was = reads.age(int(tile.get_attribute("data-id")), 17.5 * 60, already=True)
     tile.locator(".room-name-btn").click()
     age = tile.locator(".device-vals .age .age-text").first
     try:
         age.wait_for()
-        was = age.inner_text()
+        assert wait_until(page, "document.querySelector('.room .device-vals .age .age-text').textContent === %s" % json.dumps(was), 5), \
+            f"the values {was!r} old"
         page.evaluate("""() => {
           window.__realNow = Date.now;
           Date.now = () => window.__realNow() + 3600e3;

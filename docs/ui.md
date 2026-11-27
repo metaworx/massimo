@@ -991,6 +991,10 @@ Every room has a tile:
   a value's age on the line under its name;
   in expert mode also the exact time, under the value on the same line,
   and when the device was last heard from.
+  An age never widens its value's cell, however long it has grown ("≥ 17 min",
+  "≥ 999 days"): it takes the width the value's line gives it.
+  In expert mode, beside the exact time, it takes room the row has to spare,
+  never the values', and wraps between its words where there is none.
   Expert mode lists the room's virtual wall thermostat after the devices,
   a house with a thermometer its icon,
   with the devices its temperature comes from, by serial, and its two settings:
@@ -1561,7 +1565,13 @@ as the settings' ⓘ do:
   the key that is the settings file's `MASSIMO_API_TOKEN` (`from_settings`)
   says **from the settings file: change or remove it there** in place of Revoke,
   which the server refuses for it (D86-A);
-  **Create key** shows the new key once.
+  **Create key** shows the new key once,
+  and it copies as the page's other strings do (AP KeyLife, D1-A):
+  a tap or a click on it, or Enter or Space, copies the key,
+  **Copied** showing above it and said in the page's status region;
+  its copy icon does the same, right after the key's last line.
+  Both are named **Copy the key**, not by the key,
+  so that neither a screen reader nor the tooltip says it again.
   In the app the list is read once the app has revoked what the last sign-in
   revoked there, the keys and sessions of the phone's left valid (D67-A),
   so that none of them is listed.
@@ -2189,6 +2199,7 @@ settings forms and have none of it.
   as under My profile;
   and **Create key**, which shows the new key once: from the read that follows it
   until the next, in that panel alone, kept nowhere;
+  it copies with its copy icon, as under My profile;
   where a sign-in provider is enabled, the user's identities at the providers,
   each with its e-mail, or its user ID there,
   and whether it is bound or waits for its first sign-in,
@@ -3197,6 +3208,22 @@ The event stream and what the page sends as it is left (`keepalive`) have none,
 and neither has what goes as a file (`apiRaw`):
 a backup's download, a server backup's download and upload,
 and a restore's plan and its run.
+A refusal of the server is said in the page's language (AP ErrorCodes):
+the error `apiRequest` and `apiRaw` throw (`refusalError`)
+has as its message the text of the answer's `code` in the page's tables (`err.<code>`),
+with its `params` filled in,
+a room and a device by the names the page has for them
+where the request was for the chosen Cube;
+the server's English `error` where English has no text for the code,
+or the answer no code;
+the status line where it has no `error` either.
+So every line that shows an error's message shows it in the page's language,
+and the error keeps the answer's `status`, `data`, `code` and `params`.
+`refusalText` of `app.js` gives the same text for a refusal kept with a result,
+which is no thrown error;
+it is text, set as text, never markup.
+A refusal shows where the user acted, on its tile's or its card's line, as before:
+a code makes no toast of it (D5-A).
 A part gives the focus in the handler of the user's action, or in a layout effect,
 in the drawing that shows the thing, never in an effect, which runs a frame later,
 when a user may be typing elsewhere;
@@ -3340,7 +3367,7 @@ for the first owner's toast and the log's `open_setup` line.
 | `Brand`, `BrandName` | `brand.tsx` | Massimo's logo and small mark from the sprite (`brandMarks` of `components.js`, which draws them over the skeleton's `data-brand`), of which the place's style shows one, hidden from screen readers: ☰'s first row; `BrandName`, the big name under the logo, the first owner's form and the sign-in's card | |
 | `page`, `isShown`, `showView`, `onView`, `mayShow`, `setAddress`, `definePages`, `pagesPart` | `pages.ts` | the page of the main area shown, a signal: a drawing that reads `page.value` follows it, `isShown` asks at that moment and follows nothing (a handler, a reader, a timer), so that no request is sent again at a change of page; showing a page puts it into the address, as a new entry of the history or in place of the current one, and brings each page back at the scroll it was left at; `onView` runs at each showing, on the `viewshown` event; `mayShow` says who may open which, reading who is in; a page with an address of its own (the log's, `ui/src/log/index.tsx`) hands it over with `ownAddress`, a card's region what the card's address holds after its `?` with `readCardAddress` (My profile's key to mark), told of every address read, null for another, before the page is shown; the page's chrome hands over the pages at the start (`definePages`, `chrome/pages.ts`), the log puts its choices into the address in place (`setAddress`), and the plain code calls these as `MassimoParts.pages` (`pagesPart`) | `view`, `address`, `card`; `card`, `read(q)` |
 | `userPath`, `Run`, `loadTokens`, `revokeToken`, `revokeOwn`, `createKey`, `loadIdentities`, `addIdentity`, `changeIdentity`, `removeIdentity` | `account.ts` | what a user's sessions, keys and identities read and send (`…/users/{name}/tokens`, `…/identities`), for System settings → Users and My profile alike; a change through the caller's runner (`Run`), which reloads what it shows and says how it went in its own line; Revoke of the token in use signs out | `name`, `rest`; `run`, `name`, and what each sends |
-| `Tokens` | `tokens.tsx` | a user's sessions and keys (a user's panel, My profile): each with its id and Revoke, the settings file's key (`from_settings`) saying so in Revoke's place, "this device" and "its key" by `own`, in the app "this device's key" by the app's status (`app.ts`), Create key and the key just made, shown once by the read that follows and kept in the part's own state alone; read when its place opens and again at each change of the caller's counter while open, in the app once the last sign-in's revoke is done (`signInRevoked`); an answer after a sign-out dropped; the API key the caller names tinted (`token-marked`), and the caller told of each read drawn with that row (My profile's key of its address) | `u`, `off`, `open`, `reads` (the caller's counter), `run`, `say` (the caller's message line), `labelId` (the new key's field's id), `help` (the group's ⓘ after Create key, My profile's), `marked` (the id of the API key marked), `drawn(row)` (told of each read drawn, with the row marked or null), `listOnly` (the list with Revoke, no new key: an integration's user's) |
+| `Tokens` | `tokens.tsx` | a user's sessions and keys (a user's panel, My profile): each with its id and Revoke, the settings file's key (`from_settings`) saying so in Revoke's place, "this device" and "its key" by `own`, in the app "this device's key" by the app's status (`app.ts`), Create key and the key just made, shown once by the read that follows and kept in the part's own state alone, a `Copy` of it with its icon, keyed by the key, both named Copy the key, not by the key (AP KeyLife, D1-A); read when its place opens and again at each change of the caller's counter while open, in the app once the last sign-in's revoke is done (`signInRevoked`); an answer after a sign-out dropped; the API key the caller names tinted (`token-marked`), and the caller told of each read drawn with that row (My profile's key of its address) | `u`, `off`, `open`, `reads` (the caller's counter), `run`, `say` (the caller's message line), `labelId` (the new key's field's id), `help` (the group's ⓘ after Create key, My profile's), `marked` (the id of the API key marked), `drawn(row)` (told of each read drawn, with the row marked or null), `listOnly` (the list with Revoke, no new key: an integration's user's) |
 | `Identities`, `Changes` | `identities.tsx` | a user's identities at the sign-in providers (a user's panel, My profile): each with what the provider said and Remove; with `changes`, Change of one no sign-in used, a settings form kept by its key, the forms of identities gone or made unchangeable forgotten, and all of them where the box goes off; with `assign`, Assign; `after` what follows the list once read (My profile's Link buttons); `quiet` draws nothing while the list is empty and the caller offers nothing after it (`offer`: My profile's Link buttons, none in the app, where the rows are still named from every provider) | `u`, `off`, `open`, `reads`, `providers` (the enabled ones), `run`, `say`, `title`, `none`, `cls`, `changes` (`key(id)`, `under`, `ui(key)`, `forget(key)`, `show(key)`: the caller's forms and how one is brought into sight), `assign`, `after(list)`, `quiet`, `offer` |
 | `FileButton` | `file.tsx` | a button that opens the browser's choice of a file of the types it accepts, the same file again too | `id` (the button's), `cls`, `label`, `accept`, `off`, `inputId` and `inputLabel` (the input's id and its name in the page's language: the Appearance card's Import…), `onFile(file)` |
 | `saveResponse`, `saveText` | `save.ts` | a file the browser saves: an answer of `apiRaw` under the name its `Content-Disposition` gives (a Cube's backup, the server's), and a text the page holds (a key made for the server's backups), through `downloadBlob` of `components.js` | `resp`, `fallback`, `still` (whether the file is still wanted once it has come: the session it was asked in); `name`, `text` |
@@ -3354,7 +3381,7 @@ for the first owner's toast and the log's `open_setup` line.
 | `toServerSettings`, `toAppSettings` | `app.ts` | to this server's settings and to the app's on the app's own page (`appServerSettings` and `appAppSettings` of `login.js`, contract version 5): ☰'s two entries after Select server | |
 | `app`, `readApp`, `appKeyId`, `signInRevoked` | `app.ts` | the app's status of the login by fingerprint, a signal read again at each opening of the sign-in, a fingerprint refused, the first owner's form and My profile shown (`login.status`), null in a browser; its key of this device's id, 0 for none; the ids of what the last sign-in's `setToken` revoked, `[]` in a browser (`tokenAnswer` of `login.js`) | `st` (the status) |
 | `KvList`, `CountList` | `kv.tsx` | a list of facts, a name and its value each, every fact given, the caller leaving out those it does not show; a list of counts by name, sorted, in columns | `facts` (`[name, value, mono]`); `counts` |
-| `Copy`, `CopyIcon`, `CopyPair` | `copy.tsx` | a text that copies itself, a copy icon (`copyEl`, `copyIcon`); something with its copy icon after it, a text or a link (an address served: an integration's, System info's) | `text`, `value` (what it copies, where it is not the text), `label` (named "Copy …"), `name` (its whole name in its place: the server's version, a suggested password's Copy the password), `icon`, `quiet` (the text hidden from a screen reader inside it, the name alone told, given only with `name`: a suggested password), `cls`, `id`; `get`, `label`; `get`, `label`, what it follows as children |
+| `Copy`, `CopyIcon`, `CopyPair` | `copy.tsx` | a text that copies itself, a copy icon (`copyEl`, `copyIcon`); something with its copy icon after it, a text or a link (an address served: an integration's, System info's) | `text`, `value` (what it copies, where it is not the text), `label` (named "Copy …"), `name` (its whole name in its place: the server's version, a suggested password's Copy the password, the key just made's Copy the key), `icon`, `quiet` (the text hidden from a screen reader inside it, the name alone told, given only with `name`: a suggested password), `cls`, `id`; `get`, `label`; `get`, `label`, what it follows as children |
 | `Link` | `link.tsx` | a link in a tab of its own, the text alone for a url that is not http(s) | `url`, `text`, `cls` |
 | `DeviceIds` | `device.tsx` | a device's serial and radio address | `serial`, `rf`, `always` |
 | `fmtSetpoint`, `TEMP_OFF` | `setpoint.tsx` | a setpoint as the devices' displays show it, OFF for 4.5 °C without a unit, else as `fmtTemp` gives it, no ON for 30.5 °C, in every text that shows one (a tile's SET, a device row, More, a write's result, the log's "OFF (4.5 °C)"); the number fields keep 4.5; `fmtSetpoint` of `app.js` is the plain scripts' | `v`, `unit` |

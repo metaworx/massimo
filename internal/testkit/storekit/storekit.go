@@ -18,8 +18,10 @@
 package storekit
 
 import (
+	"database/sql"
 	"fmt"
 	"log/slog"
+	"path/filepath"
 	"testing"
 
 	"go.metaworx.ch/massimo/internal/store"
@@ -56,6 +58,20 @@ func Open(t testing.TB, dir string) *store.Store {
 	}
 	t.Cleanup(func() { st.Close() })
 	return st
+}
+
+// Raw opens a second connection to the file of st, past the store, as
+// another process holds one: for a test that writes what the store never
+// writes, or holds the file's lock while the store works. It waits for a
+// lock as the store does, and is closed at the test's end.
+func Raw(t testing.TB, st *store.Store) *sql.DB {
+	t.Helper()
+	db, err := sql.Open("sqlite", "file:"+filepath.ToSlash(st.File())+"?_pragma=busy_timeout(5000)")
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { db.Close() })
+	return db
 }
 
 // template is the template's file, made once per test binary.
