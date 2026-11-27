@@ -7,7 +7,8 @@ where there is room, and a Cube's panel in two columns."""
 from helpers import ApiReads, named_buttons, scroll_settled, scroll_width, show_view, wait_until
 
 CARDS = ["sys-cubes", "sys-users", "sys-providers", "sys-integrations", "sys-roles", "sys-caps"]
-MAINT_CARDS = ["sys-software", "sys-maint", "sys-backup"]  # Maintenance's page (AP GlobalMenu, Block 4; AP ServerBackup, Block 3)
+# Maintenance's page (AP GlobalMenu, Block 4; AP ServerBackup, Blocks 3 and 4: the two backup cards together)
+MAINT_CARDS = ["sys-software", "sys-maint", "sys-server-backups", "sys-backup"]
 
 
 def card_ids(page):
@@ -49,12 +50,12 @@ def test_cards_and_contents(page, case):
 
 
 def test_maintenance_page_cards(page, case):
-    """Maintenance's page holds Software update, Maintenance and Cube
-    backups, as wide as the page, each with an item in its sections menu;
-    System settings has none of them."""
+    """Maintenance's page holds Software update, Maintenance, Server
+    backups and Cube backups, as wide as the page, each with an item in
+    its sections menu; System settings has none of them."""
     show_view(page, "maint")
     got = page.evaluate("[...document.querySelectorAll('#maint-page .section-card')].map((c) => c.id)")
-    assert got == MAINT_CARDS, f"Software update, then Maintenance, then Cube backups: {got}"
+    assert got == MAINT_CARDS, f"Software update, then Maintenance, then the server's and the Cubes' backups: {got}"
     menu = page.locator("#maint-page .sec-menu")
     menu.locator("summary").click()
     toc = menu.locator(".toc-link")
@@ -63,7 +64,8 @@ def test_maintenance_page_cards(page, case):
     width = page.locator("#maint-page").bounding_box()["width"]
     for card in MAINT_CARDS:
         assert page.locator("#" + card).bounding_box()["width"] >= width - 2, f"{card} as wide as the page"
-    assert page.locator("#system #sys-software, #system #sys-maint, #system #sys-backup").count() == 0, "none in System settings"
+    assert page.locator("#system #sys-software, #system #sys-maint, #system #sys-server-backups, #system #sys-backup").count() == 0, \
+        "none in System settings"
     assert scroll_width(page) <= case.width, "no horizontal scroll on Maintenance"
 
 

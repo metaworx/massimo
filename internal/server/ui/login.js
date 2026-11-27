@@ -48,9 +48,11 @@ function canManageUsers() {
 // hasSystem reports whether the signed-in user sees System settings or
 // Maintenance: one of the capabilities of their cards, Cubes, users,
 // roles, the Cubes' backups, and the software's update, the server's
-// restart and the computer's reboot.
+// restart, the computer's reboot, the Maintenance card's settings and the
+// server's backups.
 function hasSystem() {
-  return ["cubes", "pair", "backup", "roles", "capabilities", "auth", "integrations", "update", "restart", "reboot"].some(hasCap) || canManageUsers();
+  return ["cubes", "pair", "backup", "roles", "capabilities", "auth", "integrations", "update", "restart", "reboot", "settings", "backup.server",
+    "backup.retry"].some(hasCap) || canManageUsers();
 }
 
 // hasSettingsPage reports whether the signed-in user may open System

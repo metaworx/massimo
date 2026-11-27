@@ -26,6 +26,7 @@ import type { BackupList, RestorePlan, StoredBackup, UnservedCube } from "../api
 import type { Outcome } from "../shared/action";
 import { live, liveMap } from "../shared/live";
 import { cubePath } from "../shared/path";
+import { saveResponse } from "../shared/save";
 import { session, stillSession } from "../shared/session";
 import { fmtWhen } from "../shared/time";
 import { can } from "../shared/me";
@@ -178,12 +179,6 @@ export function refreshBackups(serial: string): Promise<void> {
  */
 export function readUnloaded(serial: string): void {
   if (serial && !of(serial).loaded && !reading.has(serial)) void refreshBackups(serial);
-}
-
-/** saveResponse saves an answer as a file, named as the server says. */
-async function saveResponse(resp: Response, fallback: string): Promise<void> {
-  const m = /filename=([^;]+)/.exec(resp.headers.get("Content-Disposition") || "");
-  downloadBlob(m ? m[1].trim() : fallback, await resp.blob());
 }
 
 /** downloadNow saves the Cube as it is now, in the box's format. */

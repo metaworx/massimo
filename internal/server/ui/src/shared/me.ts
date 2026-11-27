@@ -9,7 +9,8 @@
  * read of who is in, and null from a sign-out until the next read; the
  * token the page is signed in with beside it. What who is in may do, the
  * rules of login.js line for line (can, canManageUsersOf, systemOf,
- * settingsPageOf, isMe): a part's drawing that asks one follows who is
+ * settingsPageOf, isMe), and whether who is in passes a route of the
+ * owner's alone (ownerOf): a part's drawing that asks one follows who is
  * in, a handler asks at that moment. A user's sessions say by
  * it which is "this device" and which key it was made from (System
  * settings → Users and My profile alike), and My profile and the
@@ -96,9 +97,28 @@ export function canManageUsersOf(m: Me | null = me.value): boolean {
   return can("users", m) || can("guests", m) || can("passwords", m) || can("integrations", m);
 }
 
-/** systemOf reports whether who is in sees System settings or Maintenance: a capability of one of their cards, Maintenance's Cube backups among them (hasSystem of login.js). */
+/**
+ * systemOf reports whether who is in sees System settings or Maintenance:
+ * a capability of one of their cards, Maintenance's among them: settings
+ * for the Maintenance card's settings, and the server's backups
+ * (backup.server, backup.retry) and the Cubes' (backup) (hasSystem of
+ * login.js).
+ */
 export function systemOf(m: Me | null = me.value): boolean {
-  return ["cubes", "pair", "backup", "roles", "capabilities", "auth", "integrations", "update", "restart", "reboot"].some((c) => can(c, m)) || canManageUsersOf(m);
+  return ["cubes", "pair", "backup", "roles", "capabilities", "auth", "integrations", "update", "restart", "reboot", "settings", "backup.server", "backup.retry"]
+    .some((c) => can(c, m)) || canManageUsersOf(m);
+}
+
+/**
+ * ownerOf reports whether who is in passes a route of the owner's alone
+ * (capOwner of internal/server/auth.go): outside users mode, and with
+ * nobody known, everyone does; in users mode a user of the role owner,
+ * not through an integration's key. The server backups' keys are the
+ * owner's (AP ServerBackup, D4-A).
+ */
+export function ownerOf(m: Me | null = me.value): boolean {
+  if (!m || m.mode !== "users") return true;
+  return m.role?.key === "owner" && !m.integration;
 }
 
 /** settingsPageOf reports whether who is in may open System settings: a capability of one of its cards, not of Maintenance's alone (backup, update, restart, reboot; hasSettingsPage of login.js). */

@@ -731,6 +731,43 @@ def maint_question(page):
     page.locator("#reboot-delay").wait_for(state="visible")
 
 
+# Server backups as on a box with a key, a target and a backup: the test
+# server has none, and the guard makes none; each GET of the card's
+# three lists is answered with one constant answer, so that the data stay
+# as they were.
+SB_TARGET = "00000000-0000-7000-8000-000000000011"
+SB_BACKUP = "00000000-0000-7000-8000-000000000021"
+SB_TARGET_STUB = {"uuid": SB_TARGET, "name": "local", "kind": "local", "takes": "every", "enabled": True, "last_success": "2026-11-15T03:30:00Z",
+                  "behind": False, "config": {"path": "backups"}, "has_secret": False, "retention": {"daily": 7, "weekly": 4, "monthly": 6},
+                  "created_at": "2026-11-01T03:30:00Z", "updated_at": "2026-11-01T03:30:00Z"}
+SB_LIST_STUB = {"backups": [{"uuid": SB_BACKUP, "time": "2026-11-15T03:30:00Z", "trigger": "scheduled", "state": "made", "size": 3407872,
+                             "this_box": True, "pinned_until": None, "tries": 0, "next_try": None,
+                             "copies": [{"target": SB_TARGET, "target_name": "local", "state": "there", "pulled": False,
+                                         "pushed_at": "2026-11-15T03:30:00Z", "checked_at": None, "tries": 0, "next_try": None}]}],
+                "targets": [{k: SB_TARGET_STUB[k] for k in ("uuid", "name", "kind", "takes", "enabled", "last_success", "behind")}],
+                "keys": 1, "time": "03:30", "next_run": "2026-11-16T03:30:00Z"}
+SB_KEYS_STUB = [{"uuid": "00000000-0000-7000-8000-000000000031", "label": "laptop", "recipient": "age1" + "q" * 58, "fingerprint": "SHA256:" + "A" * 43,
+                 "kind": "x25519", "pending": False, "created_at": "2026-11-01T03:30:00Z", "expires_at": None}]
+
+
+def server_backups(page):
+    """Maintenance's Server backups with its lists stubbed (SB_LIST_STUB):
+    the backup's fold and the target's panel open, the new key's form
+    shown; the guard types into the target's form and the key's."""
+    constant(page, "**/api/v1/server-backups", SB_LIST_STUB)
+    constant(page, "**/api/v1/server-backup-targets", [SB_TARGET_STUB])
+    constant(page, "**/api/v1/server-backup-keys", SB_KEYS_STUB)
+    show_view(page, "maint")
+    fold = page.locator(f".sb-backup[data-uuid='{SB_BACKUP}']")
+    fold.wait_for(timeout=10000)
+    fold.locator(":scope > summary").click()
+    page.locator(f".sb-target[data-uuid='{SB_TARGET}'] > summary").click()
+    page.locator(f".sb-target[data-uuid='{SB_TARGET}'] form input[name=name]").wait_for(state="visible")
+    page.locator("#sb-key-add").click()
+    page.locator("#sb-key-label").wait_for(state="visible")
+    settle(page)
+
+
 def info(page):
     show_view(page, "info")
     page.locator("#store-info-sum").click()
@@ -1013,6 +1050,12 @@ REGIONS = (
         View("Maintenance", maint),
         View("the restart asking, a delay typed for the reboot", maint_question),
     ), sources=("the page shown again: maint", "the stream's events: resync change reboot reboot_cancelled settings_read")),
+    # Server backups (AP ServerBackup, Block 4), a part from the start: a
+    # forward guard that a backup's fold, a target's panel with its form
+    # typed and the new key's form stay through its reads.
+    Region("server-backups", ("#sys-server-backups-body",), (
+        View("a backup's fold, a target's panel and the new key's form open", server_backups),
+    ), sources=("the page shown again: maint", "the stream's events: resync server_backup")),
     Region("system-info", ("#sys-info-body",), (View("System info, its folds open, a licence among them", info),), sources=("the page shown again: info", "the stream's events: resync settings_read change.cube")),
     # the settings applied again, as when the user's arrive from the server at a sign-in, are one of SOURCES
     Region("my-settings", ("#prefs-rows", "#prefs-sec > p"), (View("My settings", personal("prefs")),)),

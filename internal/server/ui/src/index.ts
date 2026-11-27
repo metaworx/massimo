@@ -39,6 +39,7 @@ import { signedOut as signinSignedOut } from "./signin";
 import type { SignInPart } from "./signin";
 import { serverEvent as softwareEvent, signedOut as softwareSignedOut } from "./software";
 import { serverEvent as maintenanceEvent, signedOut as maintenanceSignedOut } from "./maintenance";
+import { serverEvent as serverBackupsEvent, signedOut as serverBackupsSignedOut } from "./serverbackups";
 import { serverEvent as sysinfoEvent, signedOut as sysinfoSignedOut } from "./sysinfo";
 import type { ServerEvent } from "./model/event";
 import type { SoftwarePart } from "./software";
@@ -74,7 +75,9 @@ export interface MassimoParts {
    * update's reading while the helper works, its question and the
    * channel's setting (software/), and Maintenance's following of a
    * restart or a reboot, its questions, the delay typed and its settings
-   * (maintenance/), and System info with its readings and its clock
+   * (maintenance/), and the server's backups with a key made's secret
+   * part, the targets' forms and the folds (serverbackups/), and System
+   * info with its readings and its clock
    * (sysinfo/), and who was in (shared/me.ts) with My profile's user, its
    * link shown and its messages (profile/), the passwords typed there
    * going with its part, and the scheme editor with its draft (prefs/),
@@ -89,7 +92,7 @@ export interface MassimoParts {
   /** Whether the number a plain load took is still the session's: an answer after a sign-out does nothing (UiParts D212). */
   stillSession(n: number): boolean;
   /**
-   * A server's event of the stream (app.js connectEvents): Software update, Maintenance and System info read
+   * A server's event of the stream (app.js connectEvents): Software update, Maintenance, Server backups and System info read
    * again what it says has changed while their page is shown, and a
    * Cube's log shown loads again at a resync (log/).
    */
@@ -144,6 +147,7 @@ register("serverEvent", (ev: ServerEvent) => {
   logEvent(ev);
   softwareEvent(ev);
   maintenanceEvent(ev);
+  serverBackupsEvent(ev);
   sysinfoEvent(ev);
 });
 register("session", session);
@@ -159,6 +163,7 @@ register("signedOut", () => {
   backupsSignedOut();
   softwareSignedOut();
   maintenanceSignedOut();
+  serverBackupsSignedOut();
   sysinfoSignedOut();
   profileSignedOut();
   prefsSignedOut();

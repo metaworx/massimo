@@ -7,7 +7,9 @@
  * 👤 → Notifications as a part, drawn once into its card and updated in
  * place: why the signed-in user has none, or this browser's state with
  * the name of this device and Turn on or Turn off; a row per kind with
- * its switch and its delay or threshold, each saved a second after the
+ * its switch and its delay or threshold, a kind told only to a holder of
+ * a capability offered to them alone (a server backup that failed, to a
+ * holder of backup.retry), each saved a second after the
  * last change, a value out of bounds marked on its field with the range
  * before it and not sent until the field holds one inside; the user's
  * devices with Remove; and the line under the lists. Each rule is saved
@@ -21,11 +23,11 @@ import { Badge, Notice, ResultLine } from "../shared/badge";
 import { hid } from "../shared/cls";
 import { type Limit, NumberField, Switch, TextField, useDraft } from "../shared/field";
 import { useLang } from "../shared/lang";
-import { me } from "../shared/me";
+import { can, me } from "../shared/me";
 import { BusyButton } from "../shared/question";
 import { fmtWhen } from "../shared/time";
 import { removeDevice, rules, saveRules, shown, thisBrowser, turnOff, turnOn, unavailable, unsupported } from "./send";
-import { AFTER, BELOW, KINDS, notify, said } from "./store";
+import { AFTER, BELOW, KINDS, NEEDS, notify, said } from "./store";
 
 /**
  * Value is a rule's delay (after_min, whole minutes) or threshold
@@ -124,7 +126,7 @@ export function NotifyCard() {
       <div id="notify-body" class={"notify" + hid(!!none)}>
         {!none && <ThisDevice />}
         <h3 class="notify-group">{t("notify.events")}</h3>
-        <div id="notify-rules">{!none && KINDS.map(([kind]) => <RuleRow key={kind} kind={kind} />)}</div>
+        <div id="notify-rules">{!none && KINDS.filter(([kind]) => !NEEDS[kind] || can(NEEDS[kind])).map(([kind]) => <RuleRow key={kind} kind={kind} />)}</div>
         <h3 class="notify-group">{t("notify.devices")}</h3>
         <div id="notify-devices">
           {!none && !notify.subs.length && <p class="muted small">{t("notify.noDevices")}</p>}

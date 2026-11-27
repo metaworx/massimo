@@ -35,16 +35,21 @@ WALK = ("system", "maint", "info", "me", "cube", "tiles") * 2
 # BackupWatch D6-A System settings also reads the Cubes not served
 # that keep backups, backups/unserved, at each showing; since AP
 # ServerBackup's Block 3 Maintenance reads the Cubes' backups,
-# Cube backups being its card.
+# Cube backups being its card; since its Block 4 the server's backups,
+# their targets and their keys, Server backups being its card, and at
+# its first showing the kinds of target, which change only with the
+# server.
+SERVER_BACKUPS = {"server-backups": 1, "server-backup-keys": 1, "server-backup-targets": 1}
 READS = (
     ("system", {"integrations": 1, "integrations/found": 1, "login/providers": 1, "providers": 1, "roles": 1, "settings": 2, "users": 2}),
-    ("maint", {"backups/unserved": 1, "cubes/KEQ0000100/backups": 1, "reboot": 1, "restart": 1, "settings": 2, "update": 1}),
+    ("maint", {"backups/unserved": 1, "cubes/KEQ0000100/backups": 1, "reboot": 1, "restart": 1, "settings": 2, "update": 1, **SERVER_BACKUPS,
+               "server-backup-targets/kinds": 1}),
     ("info", {"config": 1, "store": 1, "system": 1}),
     ("me", {"login/providers": 1, "me/preferences": 1, "me/push": 1, "users/owner": 1, "users/owner/identities": 1, "users/owner/tokens": 1}),
     ("cube", {"cubes/KEQ0000100/backups": 1, "cubes/KEQ0000100/devices": 1, "cubes/KEQ0000100/pairing": 1}),
     ("tiles", {}),
     ("system", {"integrations": 1, "integrations/found": 1, "login/providers": 1, "providers": 1, "roles": 1, "settings": 2, "users": 2}),
-    ("maint", {"backups/unserved": 1, "cubes/KEQ0000100/backups": 1, "reboot": 1, "restart": 1, "settings": 2, "update": 1}),
+    ("maint", {"backups/unserved": 1, "cubes/KEQ0000100/backups": 1, "reboot": 1, "restart": 1, "settings": 2, "update": 1, **SERVER_BACKUPS}),
     ("info", {"config": 1, "store": 1, "system": 1}),
     ("me", {"login/providers": 1, "me/preferences": 1, "me/push": 1, "users/owner": 1, "users/owner/identities": 1, "users/owner/tokens": 1}),
     ("cube", {"cubes/KEQ0000100/backups": 1, "cubes/KEQ0000100/pairing": 1}),

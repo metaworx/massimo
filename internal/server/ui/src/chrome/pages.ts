@@ -9,7 +9,8 @@
  * before), handed to the pages' store (shared/pages.ts definePages) as the
  * chrome starts: each page's view, its address, the elements it shows, and
  * who may open it (System settings with one of its capabilities,
- * Maintenance with one of those or backup, update, restart or reboot,
+ * Maintenance with one of those or backup, update, restart, reboot,
+ * settings, backup.server or backup.retry,
  * Software update being for all of them, the Cube's settings with cubes or with
  * pair, its pairing alone, System info with read); the personal page's
  * cards with addresses of their own (those of the pages they were), My
@@ -57,7 +58,7 @@ export const MENU_PAGES: MenuPage[] = [
   { view: "log", id: "menu-log", icon: "icon-log", key: "nav.logTitle", needs: "", forms: [] },
   { view: "cube", id: "menu-cube", icon: "icon-cube3d", key: "nav.cubeTitle", needs: "needs-cubes-or-pair", forms: ["cube"] },
   { view: "system", id: "menu-system", icon: "icon-cog", key: "nav.settingsTitle", needs: "needs-system", forms: ["users", "roles", "providers", "integrations"] },
-  { view: "maint", id: "menu-maint", icon: "icon-tool", key: "nav.maintTitle", needs: "needs-maint", forms: [] },
+  { view: "maint", id: "menu-maint", icon: "icon-tool", key: "nav.maintTitle", needs: "needs-maint", forms: ["serverbackups"] },
   { view: "info", id: "menu-info", icon: "icon-info", key: "nav.infoTitle", needs: "needs-read", forms: [] },
   { view: "me", id: "menu-me", icon: "icon-user", key: "nav.userTitle", needs: "", forms: ["profile", "scheme"] },
 ];

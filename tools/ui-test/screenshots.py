@@ -25,8 +25,9 @@ byte for byte on one machine, on every run:
   runs and gets the same answers;
 - the version (the log's line of the server's start too), the Software
   section's answer, the fake Cube's address (which has run.sh's port),
-  System info's machine and a Cube found on the LAN are fixed answers
-  of the routes below;
+  System info's machine, a Cube found on the LAN and the server's
+  backups with their targets and keys are fixed answers of the routes
+  below;
   the found Cube is listed from the Cube choice's shot on;
 - reduced motion, one device pixel per CSS pixel, and the screenshots
   taken with animations stopped and the caret hidden;
@@ -106,6 +107,35 @@ SYSTEM = {"version": VERSION, "os_name": "Debian GNU/Linux 13 (trixie)", "arch":
 # Its reboot as on a box with the helper and the owner's switch: the
 # server of the run is in a terminal, which reboots nothing.
 REBOOT = {"available": True, "by": "systemd"}
+# Maintenance's Server backups as on a box with a key and a target on a
+# NAS beside the local one: the run's store has none, and a backup made
+# would differ in its uuid, its size and its hash on every run.
+SB_LOCAL = "00000000-0000-7000-8000-000000000011"
+SB_NAS = "00000000-0000-7000-8000-000000000012"
+SB_TARGETS = [
+    {"uuid": SB_LOCAL, "name": "local", "kind": "local", "takes": "every", "enabled": True, "last_success": SERVER_TIME, "behind": False,
+     "config": {"path": "backups"}, "has_secret": False, "retention": {"daily": 7, "weekly": 4, "monthly": 6},
+     "created_at": "2026-10-01T03:30:00+02:00", "updated_at": "2026-10-01T03:30:00+02:00"},
+    {"uuid": SB_NAS, "name": "NAS", "kind": "local", "takes": "weekly", "enabled": True, "last_success": "2026-11-02T03:30:00+01:00",
+     "behind": False, "config": {"path": "/mnt/nas/massimo"}, "has_secret": False, "retention": {"weekly": 8, "monthly": 12},
+     "created_at": "2026-10-01T03:30:00+02:00", "updated_at": "2026-10-01T03:30:00+02:00"}]
+SB_STATES = [{k: t[k] for k in ("uuid", "name", "kind", "takes", "enabled", "last_success", "behind")} for t in SB_TARGETS]
+SB_BACKUPS = {"backups": [
+    {"uuid": "00000000-0000-7000-8000-000000000021", "time": "2026-11-03T03:30:00+01:00", "trigger": "scheduled", "state": "made",
+     "size": 3407872, "this_box": True, "version": "v0.0.0-screenshots", "pinned_until": None, "tries": 0, "next_try": None,
+     "copies": [{"target": SB_LOCAL, "target_name": "local", "state": "there", "pulled": False, "pushed_at": "2026-11-03T03:30:00+01:00",
+                 "checked_at": None, "tries": 0, "next_try": None}]},
+    {"uuid": "00000000-0000-7000-8000-000000000022", "time": "2026-11-02T03:30:00+01:00", "trigger": "scheduled", "state": "made",
+     "size": 3399680, "this_box": True, "version": "v0.0.0-screenshots", "pinned_until": None, "tries": 0, "next_try": None,
+     "copies": [{"target": SB_LOCAL, "target_name": "local", "state": "there", "pulled": False, "pushed_at": "2026-11-02T03:30:00+01:00",
+                 "checked_at": None, "tries": 0, "next_try": None},
+                {"target": SB_NAS, "target_name": "NAS", "state": "there", "pulled": False, "pushed_at": "2026-11-02T03:30:00+01:00",
+                 "checked_at": None, "tries": 0, "next_try": None}]}],
+    "targets": SB_STATES, "keys": 1, "time": "03:30", "next_run": "2026-11-04T03:30:00+01:00"}
+SB_KEYS = [{"uuid": "00000000-0000-7000-8000-000000000031", "label": "laptop", "recipient": "age1" + "q" * 58,
+            "fingerprint": "SHA256:" + "A" * 43, "kind": "x25519", "pending": False, "created_at": "2026-10-01T03:30:00+02:00",
+            "expires_at": None}]
+SB_ANSWERS = {"/api/v1/server-backups": SB_BACKUPS, "/api/v1/server-backup-targets": SB_TARGETS, "/api/v1/server-backup-keys": SB_KEYS}
 
 # The frame of the header's own shots: the header where the window shows
 # it, at the top, as it stays there compacted (snap).
@@ -131,7 +161,7 @@ PAGES = {
     "appearance": "#prefs .appearance",
     "cube-settings": "#cube-page",                  # Cube settings, the chosen Cube's panel
     "system": "#system",                            # System settings
-    "maintenance": "#maint-page",                   # Maintenance: Software update, its card and Cube backups
+    "maintenance": "#maint-page",                   # Maintenance: Software update, its card, Server backups and Cube backups
     "system-info": "#info-page",                    # System info, a page of its own
     "cube-found": "header.top",                     # the Cube choice, the found Cubes' sign in its pill
     "cubes": "#system .cubes-settings",
@@ -211,6 +241,9 @@ class Answers:
             # The backup history depends on when the run started; the set
             # shows a fixed one.
             return route.fulfill(status=200, content_type="application/json", body=json.dumps(BACKUPS))
+        if path in SB_ANSWERS and req.method == "GET":
+            # the server's backups, a fixed set (SB_BACKUPS)
+            return route.fulfill(status=200, content_type="application/json", body=json.dumps(SB_ANSWERS[path]))
         if path.startswith("/api/v1/me/preferences"):
             # Each shot keeps the settings of its own context: the server
             # keeps none for it, so that one shot's mode is not the next's.

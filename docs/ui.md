@@ -1713,7 +1713,7 @@ also while no page is open.
   and, off by default, a device that sends no news, a device paired,
   a new Cube on the network and a new version of Massimo;
   and, on by default, a backup of the server that fails, which only a user
-  who sees the server's backups (`backup.retry`) is told.
+  who sees the server's backups (`backup.retry`) is told and offered.
   A change is saved a second after the last one,
   at once where you sign out within that second;
   a delay is 1 to 1440 minutes, the threshold −10 to 20 °C,
@@ -2376,11 +2376,12 @@ settings forms and have none of it.
 ## Maintenance
 
 ☰ → **Maintenance** keeps the server itself going,
-in three cards as wide as the page, **Software update**, **Maintenance**
-and **Cube backups**,
+in four cards as wide as the page, **Software update**, **Maintenance**,
+**Server backups** and **Cube backups**, the two backup cards together,
 under the page's row with **Sections** at its right end, as System settings has.
 It is for every role that has System settings, Software update being for all of them,
-and for one with `backup`, `update`, `restart` or `reboot` alone;
+and for one with `backup`, `update`, `restart`, `reboot`, `settings`,
+`backup.server` or `backup.retry` alone;
 a viewer has no such entry in ☰.
 The server's sign, when it says an update is out, opens it at Software update.
 
@@ -2634,6 +2635,81 @@ The server's sign, when it says an update is out, opens it at Software update.
   An event's read of the settings or of the reboot waits
   while this page's own request of them is under way and is made once when it has ended,
   and its answer shows nothing where one was made meanwhile.
+- **Server backups** (with `backup.retry`, which `backup.server` includes;
+  `docs/api-v1.md`, "Server backups"):
+  the server's own store and the files beside it, encrypted for the keys set,
+  made each night and copied to the targets.
+  At its top, while no key is set, a note that server backups are off until one is,
+  the server making none, and to the owner that one is added under Keys;
+  once one is, when the server backs itself up, at `serverbackup.time` on its own clock.
+  With `backup.server` beside it **Upload a backup…**, a file made elsewhere,
+  taken to the local target and kept until it is deleted,
+  and **Back up now**, off while no key is set, which makes one for every target
+  that takes it and says when, and on which target a copy failed and why.
+  The card's head says **off** while no key is set, counts the backups and the failures,
+  a backup or a copy, and says **behind** where a target is.
+  - **Backups**: a fold per backup, newest first,
+    its head when it was made, why (scheduled, by hand, before an update,
+    before a restore, uploaded), its size, and its marks:
+    failed, a copy failed, pinned or pinned until a date, made by another box.
+    Inside, who asked, the version that made it, its label,
+    a failed one's error and next try,
+    and a row per target with its copy: there, not there, missing,
+    or failed with the error and the next try, and pulled where it was;
+    with `backup.server`, **Push** on a target without it,
+    **Pull** to this box from another target, and **Delete**, which asks in the row,
+    naming the backup's going with its last copy;
+    under them **Download**, **Check** (each copy read back for its size and hash,
+    without the key), **Pin** or **Unpin**,
+    and with `backup.retry` **Retry** where something of it failed.
+    A holder of `backup.retry` alone sees the backups, their copies and the targets'
+    state, with **Retry**, and nothing more.
+    Each action says how it went under its backup.
+  - **Targets**: with `backup.server` a panel per target,
+    its name, its kind and its marks (off, behind: no copy for two of its periods,
+    its secret lost), then what it takes, what it keeps and its last copy;
+    its form is drawn from what the server says of the target's kind
+    (`GET /api/v1/server-backup-targets/kinds`): a text, a path of this box
+    (under the data directory where relative), a number, a switch or a choice,
+    and a secret as a password field that never shows what is stored,
+    saying whether one is kept, written only, sent where one is typed;
+    while a field's value matches the `warn` the server gives it (plain `http:`
+    to a WebDAV target), its note `serverbackup.warn.<kind>.<key>` stands under it,
+    amber with its mark, and Save stays on;
+    then **Takes** (every backup, or the first of each day, week or month),
+    **Keeps** (the last so many, and so many daily, weekly, monthly and yearly,
+    7 days, 4 weeks and 6 months for a new one), and whether copies go to it.
+    A local target says that a backup on the same disk does not survive the disk.
+    The form keeps its changes as a settings form does, with its disk in the card's pill
+    and ☰'s, **Test**, which has the server reach the target and write to it,
+    **Remove**, which asks, the files staying, Reset and Save.
+    **Add a target** chooses the kind first; added, the target is read for the backups
+    it holds, and the line says how many it found.
+    A kind's name and its fields' names are the texts `serverbackup.kind.<kind>`
+    and `serverbackup.field.<kind>.<key>`; a kind added later needs no form of its own.
+    A holder of `backup.retry` alone sees each target's name, kind, marks and line.
+  - **Keys** (with `backup.server`, which reads them; the owner alone changes them):
+    a row per key, its label, its kind (post-quantum, classic or SSH),
+    its fingerprint and a copy of its public key, long for a post-quantum one,
+    and the owner's **Remove**, which asks.
+    The owner's **Add a key** takes a label and asks how:
+    **Make a post-quantum key**, which lasts against a quantum computer,
+    its public key about 2000 characters, or **Make a classic key**, short,
+    beside an `ssh-ed25519` key (AP ServerBackup, D17-C),
+    the kind of the keys set offered first;
+    or **Paste a public key of my own**, `age1pq1…`, `age1…` or `ssh-ed25519`.
+    A key made is shown once, as text with its copy and with **Save as a file**,
+    while this page holds it, a sign-out forgetting it;
+    its row says until when it waits, an hour, encrypting nothing meanwhile,
+    and asks for its last six characters, which **Confirm** sends.
+    A key of the other kind than those set is refused with why:
+    age puts no two kinds of key into one file.
+  The card is read each time Maintenance is shown (the list; the targets, the keys
+  and, once, the kinds with `backup.server`) and after each of its actions;
+  while Maintenance is shown, a `server_backup` event of the server's jobs reads
+  the list and the targets again, not while an action of this page runs,
+  and a `resync` reads it all.
+  A fold, a panel, a question and what is typed stay through a read.
 - **Cube backups** (with `backup`):
   a fold per Cube, the cube, its name and serial, its sign,
   and how many backups the server keeps of it in its head, a single Cube's open;
@@ -2763,7 +2839,7 @@ with its frames from `ui/partials/`, in the order `uiPartials` in
 `internal/server/ui.go` lists them, and serves the result at `/`:
 the header, My settings' notes, System settings' section cards
 (in two markers, before and in the cards that flow in two columns),
-Maintenance's cards, the server's own first and Cube backups last,
+Maintenance's cards, the server's own first, then Server backups and Cube backups,
 System info's card, the Cube page,
 the devices without a room and the toast.
 A frame that would be one element, the place a part draws into,
@@ -2815,6 +2891,7 @@ A region's root is drawn once into its place in the skeleton (`mounter` of `shar
 | the log | `log/` | `#logview` | `log.mount`, `log.event`, `log.render`, `log.load`, `log.poll`, `log.prune`, `log.cubesPolled`, `log.cubeChanged`, `log.selects`, `log.choicesChanged`, `log.loadAlerts`, `log.sign`, `log.kinds` (app.js); `log.focusHead` (the sign-in's first owner's toast); `log.state`, `log.alerts`, `log.matches`, `log.ofChoices`, `log.rangeStart`, `log.upperFirst` (the UI tests) |
 | Software update | `software/` | `#sys-software-body` | `software.load` (header.js) |
 | Maintenance | `maintenance/` | `#sys-maint-body` | — |
+| Server backups | `serverbackups/` | `#sys-server-backups-body` | — |
 | System info | `sysinfo/` | `#sys-info-body` | — |
 | My settings | `prefs/` | `#prefs-rows`, `#appearance` | — |
 | Notifications | `notify/` | `#notify-sec` | `notify.render`, `notify.save`, `notify.takeSave`, `notify.sendNow` (app.js, login.js) |
@@ -2883,7 +2960,8 @@ raised once a minute by `minuteTick` (`MassimoParts.minute`, the UI tests' handl
 which `Age` reads and at which the log drops the lines its time range no longer holds.
 Who is in is `shared/me.ts`' (`me`, and the rules `can`, `isMe`,
 `canManageUsersOf`, `systemOf`, `settingsPageOf`, line for line with login.js'
-`hasCap` and its like, which the plain scripts keep): a part's drawing that asks
+`hasCap` and its like, which the plain scripts keep, and `ownerOf`, the routes of the
+owner's alone): a part's drawing that asks
 follows who is in, a handler asks at that moment (UiParts D214).
 The language is `lang` of `shared/lang.ts`, empty until the page's language has loaded,
 and the icons chosen `useIcons` of `shared/look.ts`;
@@ -3023,10 +3101,15 @@ the look for an update, also as an update is started, 75 seconds,
 the server's look taking up to 30 under a lock another look may hold as long;
 the look for integrations on the LAN and the end of a sign-in through a provider
 45 seconds;
+a job of the server's backups, which has no limit of its own and waits for the one
+that runs (a backup made, copied, checked or retried, a copy deleted,
+a target added and read), a quarter of an hour, and a target's test 75 seconds,
+the server's taking up to one minute;
 the stream's ticket the 20 seconds of every other request.
 The event stream and what the page sends as it is left (`keepalive`) have none,
 and neither has what goes as a file (`apiRaw`):
-a backup's download, and a restore's plan and its run.
+a backup's download, a server backup's download and upload,
+and a restore's plan and its run.
 A part gives the focus in the handler of the user's action, or in a layout effect,
 in the drawing that shows the thing, never in an effect, which runs a frame later,
 when a user may be typing elsewhere;
@@ -3158,6 +3241,7 @@ for the first owner's toast and the log's `open_setup` line.
 | `session`, `stillSession`, `newSession` | `session.ts` | the session's number, raised by `MassimoParts.signedOut` before anything is forgotten: a store takes it before an await and drops the answer, its message and its next timer where it changed; `actionRunner`'s `bound` does so for a runner, and a plain load takes it as `MassimoParts.session()` | –; `n`; – |
 | `me`, `own` | `me.ts` | who the page is signed in as, `state.me` underneath (`shared/data.ts`), which `applyCaps` of `login.js` writes at every read of it, null from a sign-out on; the token it is signed in with, by which a user's sessions say "this device" and "its key" | — |
 | `can`, `isMe`, `canManageUsersOf`, `systemOf`, `settingsPageOf`, `profileOf` | `me.ts` | what who is in may do, the rules of `login.js` (`hasCap`, `isSelf`, `canManageUsers`, `hasSystem`, `hasSettingsPage`) line for line, and whether My profile is there for them (a user alone), nobody known answering as `hasCap` does: a drawing that asks follows who is in, a handler asks at that moment | `c` or `name`, and `m` (who is in by default) |
+| `ownerOf` | `me.ts` | whether who is in passes a route of the owner's alone (`capOwner` of `auth.go`): everyone outside users mode, else a user of the role owner not through an integration's key; the server backups' keys | `m` (who is in by default) |
 | `keptOpen`, `askOwner`, `takeAsker` | `owner.ts` | the ways to the first owner: whether the server is kept open, from who is in, for every place that asks; askOwner opens the sign-in card with the first owner's form and keeps the control that asked, which the card gives the focus back to (the banner, ☰, Users) | `m`, `from` |
 | `firstOwnerOf` | `me.ts` | whether the first owner can be created from here: an open server, which has a store, where who is in says `setup`; the sign-in card asks for the owner by it where the server is not kept open | `m` |
 | `whoOf`, `Who` | `me.ts` | who is in in the page's words, for the personal page's row, ☰'s Sign out and Personal settings' tooltip and the question before a sign-out alike: the row's line, Sign out or Forget key (none on an open server) with its icon, the name for the tooltip, and whether My profile is there | `me` |
@@ -3169,6 +3253,7 @@ for the first owner's toast and the log's `open_setup` line.
 | `Tokens` | `tokens.tsx` | a user's sessions and keys (a user's panel, My profile): each with its id and Revoke, the settings file's key (`from_settings`) saying so in Revoke's place, "this device" and "its key" by `own`, in the app "this device's key" by the app's status (`app.ts`), Create key and the key just made, shown once by the read that follows and kept in the part's own state alone; read when its place opens and again at each change of the caller's counter while open, in the app once the last sign-in's revoke is done (`signInRevoked`); an answer after a sign-out dropped; the API key the caller names tinted (`token-marked`), and the caller told of each read drawn with that row (My profile's key of its address) | `u`, `off`, `open`, `reads` (the caller's counter), `run`, `say` (the caller's message line), `labelId` (the new key's field's id), `help` (the group's ⓘ after Create key, My profile's), `marked` (the id of the API key marked), `drawn(row)` (told of each read drawn, with the row marked or null), `listOnly` (the list with Revoke, no new key: an integration's user's) |
 | `Identities`, `Changes` | `identities.tsx` | a user's identities at the sign-in providers (a user's panel, My profile): each with what the provider said and Remove; with `changes`, Change of one no sign-in used, a settings form kept by its key, the forms of identities gone or made unchangeable forgotten, and all of them where the box goes off; with `assign`, Assign; `after` what follows the list once read (My profile's Link buttons); `quiet` draws nothing while the list is empty and the caller offers nothing after it (`offer`: My profile's Link buttons, none in the app, where the rows are still named from every provider) | `u`, `off`, `open`, `reads`, `providers` (the enabled ones), `run`, `say`, `title`, `none`, `cls`, `changes` (`key(id)`, `under`, `ui(key)`, `forget(key)`, `show(key)`: the caller's forms and how one is brought into sight), `assign`, `after(list)`, `quiet`, `offer` |
 | `FileButton` | `file.tsx` | a button that opens the browser's choice of a file of the types it accepts, the same file again too | `id` (the button's), `cls`, `label`, `accept`, `off`, `inputId` and `inputLabel` (the input's id and its name in the page's language: the Appearance card's Import…), `onFile(file)` |
+| `saveResponse`, `saveText` | `save.ts` | a file the browser saves: an answer of `apiRaw` under the name its `Content-Disposition` gives (a Cube's backup, the server's), and a text the page holds (a key made for the server's backups), through `downloadBlob` of `components.js` | `resp`, `fallback`; `name`, `text` |
 | `Adder` | `adder.tsx` | the end of a list that adds an item: the new item's form in its place while shown, the button that shows it hidden meanwhile, the focus in the form's first field when it comes, in the drawing's own turn, and back on the button when it goes (Users, Roles, Sign-in providers) | `id` (the button's), `formId` (the form's place), `label`, `shown`, `set(shown)`, the form as children |
 | `UserNameField`, `useNameCheck`, `wordNameError` | `username.tsx` | a new user's login name (Add a user, the first owner's form): checked 2 s after the last keystroke and when left, the store's rule and the names in use; a fixed name clears the line at once; the server's refusal worded alike | `label`, `id`, `msgId` (the line under it, which describes it), `value` and `set` (Add a user's), or neither, the field not controlled and read through `inputRef` (the first owner's, UiParts D210), `nc` (`useNameCheck(taken)`: `problem`, `say`, `check(v)`, `typed(v)`), `name` (the input's, Add a user's alone), `autocomplete`, `placeholder`, `inputRef`, `typed` (told of each keystroke and change event: the first owner's password line, whose rule takes the name) |
 | `PasswordInput`, `PasswordField`, `reveal` | `password.tsx` | a password's input with its eye, every password field's (AP MobileApp, D84-A): the button at the field's right end, inside its box, labelled Show password and Hide password, `aria-pressed`, that turns the type between `password` and `text`, the value, the caret and the `autocomplete` kept, the click keeping the focus in the field; hidden again at each change of `reset` (the card's openings, a fold's open state) and at the form's submit, in the capture before the form's handler, and when switched off, the type never turned inside a closed fold, but as it opens; no eye while `reveal`, the setting `auth.password_reveal` as `/healthz` says it (`MassimoParts.chrome.reveal`), is not `true`; the field in its row | `id`, `name`, `autocomplete`, `value` and `set`, or `inputRef`, `required`, `disabled`, `placeholder`, `reset`, `describedBy` (the line that describes it), `typed` (told of each keystroke and change event), `invalid`; the row's `label`, `hint`, `cls`, `rule` (the rule's context words: given, its line under the field, following the value, or the keystrokes, change events and the value at each refusal of a field not controlled, empty again at each change of `reset`), `refused` (the caller's count of the submits the rule refused: the line says so until the next key, the field marked invalid, while its value is still refused), `suggest` (with `rule`, the dice before the eye, labelled by what its next press gives, Suggest five words or Suggest twenty characters: a press fills the field with a suggestion, `shared/suggest.ts`, five words at the first press and at each new start, then twenty characters and five words by turns, each press turning it whatever it fills and a key leaving it, drawn again where the rule refuses it, a controlled field by `set`, one not controlled by its element and an input event, shows it as text while the field holds it, not after an edit, a change by the form, a submit or a new start, and whole in a line right under the field (`<id>-shown`, `translate="no"`), a `Copy` of it with its icon, `quiet`, keyed by the suggestion, both named Copy the password, and writes the rule's line anew; the shown line's place, two lines tall, comes with the first press, empty while the suggestion is not shown, the line emptied as the dialog the field is in closes; a suggestion drawn while another press, a key, a submit, a change from outside (Reset, a save), a new start or a sign-out came, or after either field changed, fills nothing; the line's place, once there, stays through keys; the list not had says so, any other failure that no suggestion could be made), `also` (the form's other field: `set` filled with the suggestion, `get` what it holds) |
