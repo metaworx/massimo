@@ -2071,6 +2071,9 @@ runs the jobs on it, for `serve` and for `massimo store` alike:
   its fields, the card's form, and how to make one; `local` first, WebDAV, SFTP,
   SMB and S3 after), with its fields as JSON and its one secret field sealed
   with its `uuid` as the additional data, what it takes and its retention.
+  A change to the fields of a kind with a secret field brings the secret again,
+  since they say where it goes: else a user who may change targets,
+  but never sees a secret, could send it to a server of their own.
   A target added is scanned: the backups it holds are added by their manifests,
   read with ranged reads and without the key, so that a new box sees them at once;
   a copy no longer there is `missing`.

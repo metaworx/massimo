@@ -22,6 +22,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"maps"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -1016,7 +1017,13 @@ type targetRequest struct {
 }
 
 // apply checks the request and writes it into t, a target of kind k.
+// Of a kind with a secret field, a change to the config that keeps the
+// secret is refused: the config says where the secret goes (a WebDAV
+// server's URL, an SMB host), so that one who may change a target but
+// never sees its secret could otherwise send it to a server of their
+// own. The secret comes again with the change.
 func (req targetRequest) apply(k serverbackup.Kind, t *store.ServerBackupTarget) error {
+	before := t.Config
 	if req.Name != nil {
 		t.Name = strings.TrimSpace(*req.Name)
 	}
@@ -1047,6 +1054,9 @@ func (req targetRequest) apply(k serverbackup.Kind, t *store.ServerBackupTarget)
 	if err != nil {
 		return fail(http.StatusBadRequest, "%v", err)
 	}
+	if f, ok := k.Secret(); ok && req.Secret == nil && t.Secret != "" && !sameConfig(k, before, cfg) {
+		return fail(http.StatusBadRequest, `the settings of a %s target say where its %s goes: send it again, in "secret", with a change to them`, k.Name, f.Key)
+	}
 	t.Config = cfg
 	if req.Takes != nil {
 		if !serverbackup.Takes(*req.Takes).Valid() {
@@ -1064,6 +1074,15 @@ func (req targetRequest) apply(k serverbackup.Kind, t *store.ServerBackupTarget)
 		t.Enabled = *req.Enabled
 	}
 	return nil
+}
+
+// sameConfig reports whether a target's config before, as stored, is
+// cfg, checked: both as the kind reads them, its defaults filled in.
+func sameConfig(k serverbackup.Kind, before, cfg map[string]string) bool {
+	if read, err := k.Check(before, true); err == nil {
+		before = read
+	}
+	return maps.Equal(before, cfg)
 }
 
 // answerTarget writes a target with its state.

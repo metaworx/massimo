@@ -4412,7 +4412,7 @@ paths:
     put:
       summary: Change a target
       x-capability: backup.server
-      description: The fields given change, the others stay; secret replaces the secret, "" removes it, and of a kind that makes its secret (sftp) makes a new one. The kind does not change.
+      description: The fields given change, the others stay; secret replaces the secret, "" removes it, and of a kind that makes its secret (sftp) makes a new one. Of a kind with a secret field, a change to config needs secret in the same request (400 without), since the config says where the secret goes. The kind does not change.
       parameters: [{$ref: "#/components/parameters/serverBackupTargetUUID"}]
       requestBody:
         required: true

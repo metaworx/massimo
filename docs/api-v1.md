@@ -5077,6 +5077,9 @@ a name unique without regard to case (`409`), and scans it at once:
 added to the catalogue by their manifests, read without the key.
 `PUT …/server-backup-targets/{uuid}` changes what it is given,
 `secret` replaced, `""` removing it, left out kept;
+of a kind with a secret field, a change to `config` keeps no secret:
+the config says where the secret goes, so the secret comes again with it,
+or the change is refused with `400`;
 `DELETE` removes the target and its copies from the catalogue, the files staying;
 `POST …/{uuid}/test` reaches and writes to it, `{"ok": false, "error": "…"}` where not.
 A target's list (`GET /api/v1/server-backup-targets`) shows its fields,
