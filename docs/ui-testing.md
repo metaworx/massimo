@@ -1,4 +1,4 @@
-# Testing the web UI (v1.37.0)
+# Testing the web UI (v1.38.0)
 
 An evaluation of a Cypress suite for the web UI, against the alternatives:
 what the Playwright smoke test covers today and what it cannot do well,
@@ -1110,7 +1110,8 @@ the server's and the test's, in order,
   Within a file the tests share the fake Cube, the four cases among them:
   a test that changes the fake still puts it back.
   What the server keeps in its store, users, settings, backups,
-  the reset does not touch.
+  the reset does not touch:
+  a file leaves them as it found them, which a check after its last test holds (below).
 - **A test that needs a read asks for it:**
   where a test needs the server to read what the fake Cube now holds,
   a write the fake applied, it asks:
@@ -1179,3 +1180,44 @@ the server's and the test's, in order,
   as is anything else it makes (below).
   74 tests in 23 files left one (1100-en, 2026-11-27),
   each a sign-in it checks, a sign-out late or a page after a 401 among them.
+- **A test file leaves the server as it found it**
+  (`server_as_found`, `server_left`, `LEFT_FOR_GOOD` of `conftest.py`,
+  AP SteadyTests, Block 11, D11-A):
+  the four cases and the files of a worker share its server,
+  so what one file left met whichever file ran next there,
+  a test's repeat among them.
+  After the fake Cube's reset, before a file's first test,
+  `known_cube` notes what the API shows of the server:
+  its users, but those of an integration that is disabled,
+  with their sessions and keys and their identities;
+  the roles, by their capabilities, whether disabled and their names;
+  the providers; the integrations and the requests waiting, but those disabled;
+  the settings' stored values; the Cubes configured;
+  the token's user's push subscriptions;
+  and whether the set's Cube pairs,
+  since a pairing left running ends by its timer, in a later file, with a `pairing_ended` event.
+  After the file's last test, beside the check of the writes on their way,
+  it reads them again,
+  and a file where they differ fails at its last test's tear-down,
+  naming each: added, removed, or changed, with what it was and is.
+  A test undoes what it made, in its `finally`, with `undo` and `cleanup`,
+  and the kit what several do alike:
+  `ended_sessions` the sessions, `clear_preferences` the token's user's preferences.
+  What no API takes back is not counted, each in `LEFT_FOR_GOOD` with its reason:
+  - the log's lines;
+  - the log's warnings, which `clear_preferences` marks seen before every page (above);
+  - an integration registered, disabled at its end, with its users and its role's count of them:
+    a test registers it with an installation of its own (`own_id`, above);
+  - a Cube a search found, which stays found while it answers a search,
+    as the fake Cube does at every one:
+    a test that needs none found tells its page's reads (`configured_only`);
+  - the token's user's preferences, which the page fixture removes before every page.
+  The sweep that made the list ran the whole suite once,
+  1100-en shuffled by the soak's seed 45895569993,
+  with a probe of the same reads before and after every test (2026-11-27):
+  74 tests left a session, ten a warning, three a disabled integration,
+  one a found Cube, and none a user, a setting, a role, a provider,
+  an identity, a Cube configured, a push subscription or a running pairing.
+  A planted file that adds a user and leaves it fails at its tear-down,
+  naming the user.
+  The second server of a set, of a Cube that is not connected, is not checked.

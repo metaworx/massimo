@@ -294,7 +294,10 @@ What several test files did alike is there too:
 and `scrolled_to` (the window scrolled at once, and at rest).
 
 The four cases share the one server of a worker,
-so a test that changes the server's store puts it back;
+so a test that changes the server's store puts it back,
+and a file that leaves it otherwise than it found it fails at its last
+test's tear-down, naming what it left (`known_cube`, `server_left`;
+`docs/ui-testing.md`, section 9);
 what a test stores in the browser goes with its context.
 So do the files of a worker, in whatever order the scheduler gives them,
 and the API's lockout is the server's too:

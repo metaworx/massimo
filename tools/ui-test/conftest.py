@@ -14,7 +14,10 @@ the module): the worker's fake Cube goes back to the greeting it started
 with, and the server has connected to it again and read it, before the
 file's first test. The servers run without their poll of the Cube (run.sh,
 -poll 0), so nothing of the server's own reaches the fake between a
-test's steps.
+test's steps. A file also leaves the server as it found it: one that
+leaves a user, an integration, a setting or the like otherwise fails at
+its last test's tear-down, naming what it left (server_left), but for
+what no API takes back (LEFT_FOR_GOOD, with its reasons).
 
 Every test runs four times, at 1100 and 390 px wide and in English and
 German, the language from the browser context's locale (`case`, with the
@@ -102,6 +105,8 @@ import sqlite3
 import ssl
 import time
 import tokenize
+import urllib.error
+import urllib.parse
 import urllib.request
 
 import pytest
@@ -459,6 +464,83 @@ def reset_cube():
         time.sleep(0.05)
 
 
+# What a test file may leave on the worker's server without failing the
+# check of what it left (server_left), each with its reason (AP
+# SteadyTests, Block 11, D11-A): no API takes it back, or the kit does
+# before every page. server_as_found reads none of it.
+LEFT_FOR_GOOD = {
+    "the log's lines": "the server keeps every line it logs; no API removes one",
+    "the log's warnings": "a warning stays until a later event settles it or a person marks it seen, a login_failed until a "
+                          "sign-in of the same name (docs/api-v1.md, GET /api/v1/log/alerts); clear_preferences marks every "
+                          "one present seen before every page",
+    "an integration registered, disabled, with its users and its role's count of them": "DELETE …/integrations/{uuid} "
+                          "revokes its key and disables it, its users, links and maximum kept for a request from the same "
+                          "installation, and no route removes them: a test registers it with an installation of its own "
+                          "(helpers.own_id), so that its next run makes another rather than join it",
+    "a Cube found by a search": "a Cube the server found stays found while it answers a search, which the fake Cube does at "
+                                "every one, and no API forgets it; a test that needs none found tells its page's reads "
+                                "(helpers.configured_only)",
+    "the token's user's preferences": "the page fixture removes them before every page (clear_preferences)",
+}
+
+
+def server_as_found():
+    """What the API shows of the worker's server that a test file may
+    leave changed, by kind, each entry by its key with what the check
+    compares of it: the users, but an integration's that is disabled,
+    with their sessions and keys and their identities; the roles; the
+    providers; the integrations and the requests waiting, but those
+    disabled; the settings' stored values; the Cubes configured; the
+    token's user's push subscriptions; and whether the set's Cube pairs.
+    What LEFT_FOR_GOOD names is left out."""
+    integrations = api_call("GET", "api/v1/integrations") or []
+    disabled = {i["uuid"] for i in integrations if i.get("state") == "disabled"}
+    found = {"user": {}, "session or key": {}, "identity": {}}
+    for u in api_call("GET", "api/v1/users") or []:
+        mine = (u.get("integration") or {}).get("uuid")
+        if mine in disabled:
+            continue
+        name = u["name"]
+        found["user"][name] = ", ".join(f"{k} {u.get(k)}" for k in ("role", "display_name", "disabled", "has_password", "auth_version",
+                                                                   "expires_at"))
+        for t in api_call("GET", f"api/v1/users/{_quoted(name)}/tokens") or []:
+            found["session or key"][f"{name} #{t['id']}"] = f"{t.get('kind')} {t.get('label', '')}".strip()
+        if not mine:
+            for i in api_call("GET", f"api/v1/users/{_quoted(name)}/identities") or []:
+                found["identity"][f"{name} #{i['id']}"] = f"{i.get('provider')} {i.get('email') or i.get('subject') or ''}".strip()
+    found["role"] = {r["key"]: f"capabilities {', '.join(r.get('capabilities') or [])}, disabled {r.get('disabled')}, name {r.get('name', '')}"
+                     for r in (api_call("GET", "api/v1/roles") or {}).get("roles", [])}
+    found["provider"] = {p["key"]: json.dumps({k: v for k, v in p.items() if k not in ("created_at", "updated_at")}, sort_keys=True)
+                         for p in api_call("GET", "api/v1/providers") or []}
+    found["integration"] = {i["uuid"]: f"{i.get('state')} {i.get('name')}, max {', '.join(i.get('max_caps') or [])}"
+                            for i in integrations if i["uuid"] not in disabled}
+    found["setting"] = {k: json.dumps(v.get("value")) for k, v in (api_call("GET", "api/v1/settings") or {}).items()}
+    found["Cube"] = {c["serial"]: f"{c.get('name')} at {c.get('address')}" for c in api_call("GET", "api/v1/cubes") or [] if c.get("configured")}
+    push = api_call("GET", "api/v1/me/push") or []
+    found["push subscription"] = {str(p.get("id")): str(p.get("label", "")) for p in (push if isinstance(push, list) else [])}
+    try:  # a pairing left running ends by its timer, in a later file, with a pairing_ended event
+        found["pairing"] = {CUBE: "running" if (api_call("GET", f"api/v1/cubes/{CUBE}/pairing") or {}).get("active") else "off"}
+    except urllib.error.HTTPError as e:
+        found["pairing"] = {CUBE: f"not read (HTTP {e.code})"}
+    return found
+
+
+def server_left(before):
+    """Fails, naming each, where the worker's server shows otherwise than
+    before, a server_as_found of the file's start: what the file added,
+    removed or changed, with what it was and is."""
+    after = server_as_found()
+    left = []
+    for kind in before:
+        b, a = before[kind], after.get(kind, {})
+        left += [f"{kind} {k} added ({a[k]})" for k in sorted(a.keys() - b.keys())]
+        left += [f"{kind} {k} removed ({b[k]})" for k in sorted(b.keys() - a.keys())]
+        left += [f"{kind} {k} changed from {b[k]} to {a[k]}" for k in sorted(a.keys() & b.keys()) if a[k] != b[k]]
+    if left:
+        raise RuntimeError("the file leaves the server otherwise than it found it: " + "; ".join(left)
+                           + " (what no API takes back is not counted: conftest.py, LEFT_FOR_GOOD)")
+
+
 @pytest.fixture(scope="module", autouse=True)
 def known_cube():
     """Each test file starts from the recorded Cube and leaves no write
@@ -467,16 +549,23 @@ def known_cube():
     (reset_cube), so that no earlier file's write, pairing or room list
     reaches it; before the reset, and after the file's last test, every
     write the server waits for its devices to show is shown
-    (writes_shown), so that a failure names the file that left it.
+    (writes_shown), so that a failure names the file that left it. It
+    also leaves the server as it found it (AP SteadyTests, Block 11,
+    D11-A): what the API shows of the server's users, integrations,
+    settings and the rest (server_as_found) is noted after the reset,
+    and after the file's last test the file fails, at that test's
+    tear-down, where it shows otherwise, naming what the file left
+    (server_left); LEFT_FOR_GOOD lists what is not counted, and why.
     Without the control (UI_TEST_CONTROL_URL) or the token, as against a
-    server started by hand, nothing is reset."""
+    server started by hand, nothing is reset or checked."""
     if not (CONTROL and TOKEN):
         yield
         return
     writes_shown()
     reset_cube()
+    found = server_as_found()
     yield
-    writes_shown()
+    cleanup(writes_shown, lambda: server_left(found))
 
 
 def address_failures():
