@@ -4,8 +4,11 @@
 package main
 
 import (
+	"archive/zip"
 	"bytes"
 	"context"
+	"errors"
+	"io"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -16,6 +19,46 @@ import (
 	"go.metaworx.ch/massimo/internal/store"
 	"go.metaworx.ch/massimo/internal/testkit/storekit"
 )
+
+// relabelled writes the backup at path again, its manifest's text from
+// changed to to, as a zip tool would, and returns the new file.
+func relabelled(t *testing.T, path, from, to string) string {
+	t.Helper()
+	zr, err := zip.OpenReader(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer zr.Close()
+	var buf bytes.Buffer
+	zw := zip.NewWriter(&buf)
+	for _, f := range zr.File {
+		rc, err := f.Open()
+		if err != nil {
+			t.Fatal(err)
+		}
+		b, err := io.ReadAll(rc)
+		rc.Close()
+		if err != nil {
+			t.Fatal(err)
+		}
+		if f.Name == serverbackup.ManifestName {
+			b = bytes.Replace(b, []byte(from), []byte(to), 1)
+		}
+		w, err := zw.CreateHeader(&zip.FileHeader{Name: f.Name, Method: zip.Store})
+		if err != nil {
+			t.Fatal(err)
+		}
+		w.Write(b)
+	}
+	if err := zw.Close(); err != nil {
+		t.Fatal(err)
+	}
+	p := filepath.Join(t.TempDir(), "changed.zip")
+	if err := os.WriteFile(p, buf.Bytes(), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	return p
+}
 
 // noUsage is the usage of the store commands' tests, which print none.
 func noUsage() {}
@@ -126,6 +169,13 @@ func TestStoreInspectAndDecrypt(t *testing.T) {
 	if err := storeInspect([]string{keyFile}, noUsage, dir, &out); err == nil {
 		t.Fatal("a key file inspected as a backup")
 	}
+	// A manifest changed after it was signed: nothing of it is shown.
+	changed := relabelled(t, backup, "by hand", "By hand")
+	out.Reset()
+	if err := storeInspect([]string{changed}, noUsage, dir, &out); !errors.Is(err, serverbackup.ErrBadSignature) ||
+		strings.Contains(out.String(), "By hand") || strings.Contains(out.String(), m.UUID) || !strings.Contains(out.String(), "signature:   bad") {
+		t.Fatalf("a changed manifest: %v\n%s", err, out.String())
+	}
 	if err := storeInspect(nil, noUsage, dir, &out); err == nil {
 		t.Fatal("no file")
 	}
@@ -133,22 +183,34 @@ func TestStoreInspectAndDecrypt(t *testing.T) {
 	opened := filepath.Join(t.TempDir(), "opened")
 	out.Reset()
 	for _, args := range [][]string{{backup, "-key", keyFile}, {"-out", opened, backup}, {backup, "-key", backup, "-out", opened}} {
-		if err := storeDecrypt(args, noUsage, &out); err == nil {
+		if err := storeDecrypt(args, noUsage, dir, &out, &errOut); err == nil {
 			t.Errorf("%v: opened", args)
 		}
 	}
 	if _, err := os.Stat(opened); err == nil {
 		t.Fatal("a failed decrypt left its directory")
 	}
-	if err := storeDecrypt([]string{backup, "-key", keyFile, "-out", opened}, noUsage, &out); err != nil {
+	errOut.Reset()
+	if err := storeDecrypt([]string{backup, "-key", keyFile, "-out", opened}, noUsage, dir, &out, &errOut); err != nil {
 		t.Fatal(err)
 	}
-	if !strings.Contains(out.String(), "opened the backup "+m.UUID) {
-		t.Fatalf("printed %q", out.String())
+	if !strings.Contains(out.String(), "opened the backup "+m.UUID) || !strings.Contains(out.String(), "signature:   good, by this box ("+m.Node.Fingerprint+")") || errOut.Len() > 0 {
+		t.Fatalf("printed %q and %q", out.String(), errOut.String())
 	}
-	for _, name := range []string{store.FileName, store.OpaqueKeyFileName, store.KeyFileName} {
+	for _, name := range []string{store.FileName, store.OpaqueKeyFileName, store.KeyFileName, "files.json"} {
 		if _, err := os.Stat(filepath.Join(opened, name)); err != nil {
 			t.Error(err)
 		}
+	}
+
+	// Opened on a box whose node.key is another's: a warning.
+	other := t.TempDir()
+	storekit.Open(t, other)
+	out.Reset()
+	if err := storeDecrypt([]string{backup, "-key", keyFile, "-out", filepath.Join(t.TempDir(), "elsewhere")}, noUsage, other, &out, &errOut); err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(out.String(), "signature:   good, by another box ("+m.Node.Fingerprint+")") || !strings.Contains(errOut.String(), "warning: the backup was made by the box "+m.Node.Fingerprint) {
+		t.Fatalf("printed %q and %q", out.String(), errOut.String())
 	}
 }

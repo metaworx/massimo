@@ -1227,7 +1227,8 @@ without, the secret key goes to standard output.
 `store inspect <file>` prints a backup's manifest, which box signed it
 and whether its payload is intact, without the key;
 `store decrypt <file> -key key.txt -out <dir>` opens it into an empty directory,
-as `age -d -i key.txt` does with its `payload.age`.
+as `age -d -i key.txt` does with its `payload.age`,
+and says which box made it.
 The details are in docs/store.md, "Server backups".
 
 `massimo user` manages the users of the store from the box (docs/api-v1.md,

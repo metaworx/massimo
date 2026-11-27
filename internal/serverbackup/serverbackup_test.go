@@ -89,12 +89,12 @@ func keyOf(t *testing.T, kind Kind, label string) (Recipient, []age.Identity) {
 }
 
 // sideFiles writes an env file and two TLS files.
-func sideFiles(t *testing.T) (envFile string, tls []string) {
+func sideFiles(t *testing.T) (envFile string, tls []TLSFile) {
 	t.Helper()
 	d := t.TempDir()
 	envFile = filepath.Join(d, "env")
-	tls = []string{filepath.Join(d, "cert.pem"), filepath.Join(d, "key.pem")}
-	for p, s := range map[string]string{envFile: "MASSIMO_LISTEN=:8080\n", tls[0]: "a certificate\n", tls[1]: "a key\n"} {
+	tls = []TLSFile{{RoleTLSCert, filepath.Join(d, "cert.pem")}, {RoleTLSKey, filepath.Join(d, "key.pem")}}
+	for p, s := range map[string]string{envFile: "MASSIMO_LISTEN=:8080\n", tls[0].Path: "a certificate\n", tls[1].Path: "a key\n"} {
 		if err := os.WriteFile(p, []byte(s), 0o600); err != nil {
 			t.Fatal(err)
 		}
@@ -124,19 +124,20 @@ func readFile(t *testing.T, path string) (Manifest, Signature, error) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	return ReadManifest(bytes.NewReader(b), int64(len(b)))
+	m, sig, _, err := ReadManifest(bytes.NewReader(b), int64(len(b)))
+	return m, sig, err
 }
 
 // openFile opens a backup's file into a new directory, returned.
-func openFile(t *testing.T, path string, ids []age.Identity) (string, Manifest, error) {
+func openFile(t *testing.T, path string, ids []age.Identity) (string, Opened, error) {
 	t.Helper()
 	b, err := os.ReadFile(path)
 	if err != nil {
 		t.Fatal(err)
 	}
 	dir := filepath.Join(t.TempDir(), "opened")
-	m, err := Open(bytes.NewReader(b), int64(len(b)), ids, dir)
-	return dir, m, err
+	o, err := Open(bytes.NewReader(b), int64(len(b)), ids, dir)
+	return dir, o, err
 }
 
 // noTemporaries fails where the data directory or out's directory keeps
@@ -205,22 +206,39 @@ func TestRoundTrip(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			if opened.UUID != m.UUID {
-				t.Fatalf("opened %s, made %s", opened.UUID, m.UUID)
+			if opened.Manifest.UUID != m.UUID || opened.Signature.Verdict(st.NodePublicKey()) != ThisBox {
+				t.Fatalf("opened %s (%v), made %s", opened.Manifest.UUID, opened.Signature.Verdict(st.NodePublicKey()), m.UUID)
 			}
-			want := map[string]string{
-				store.OpaqueKeyFileName: store.OpaqueKeyPath(st.Dir()),
-				store.KeyFileName:       store.KeyPath(st.Dir()),
-				EnvName:                 envFile,
-				"tls/cert.pem":          tls[0],
-				"tls/key.pem":           tls[1],
+			abs := func(p string) string { a, _ := filepath.Abs(p); return a }
+			want := map[string]InnerFile{
+				store.FileName:          {store.FileName, RoleStore, abs(store.Path(st.Dir()))},
+				store.OpaqueKeyFileName: {store.OpaqueKeyFileName, RoleOpaqueKey, abs(store.OpaqueKeyPath(st.Dir()))},
+				store.KeyFileName:       {store.KeyFileName, RoleNodeKey, abs(store.KeyPath(st.Dir()))},
+				EnvName:                 {EnvName, RoleEnv, abs(envFile)},
+				"tls/cert.pem":          {"tls/cert.pem", RoleTLSCert, abs(tls[0].Path)},
+				"tls/key.pem":           {"tls/key.pem", RoleTLSKey, abs(tls[1].Path)},
 			}
-			for name, src := range want {
-				a, _ := os.ReadFile(src)
-				g, err := os.ReadFile(filepath.Join(dir, filepath.FromSlash(name)))
-				if err != nil || !bytes.Equal(a, g) {
-					t.Errorf("%s: %v", name, err)
+			if len(opened.Files) != len(want) {
+				t.Fatalf("files.json: %+v", opened.Files)
+			}
+			for _, f := range opened.Files {
+				if want[f.Name] != f {
+					t.Errorf("files.json: %+v, not %+v", f, want[f.Name])
 				}
+				if f.Role == RoleStore {
+					continue
+				}
+				a, _ := os.ReadFile(f.Source)
+				g, err := os.ReadFile(filepath.Join(dir, filepath.FromSlash(f.Name)))
+				if err != nil || !bytes.Equal(a, g) {
+					t.Errorf("%s: %v", f.Name, err)
+				}
+			}
+			if _, err := os.Stat(filepath.Join(dir, FilesName)); err != nil {
+				t.Error(err)
+			}
+			if left, _ := filepath.Glob(filepath.Join(dir, ".*")); len(left) > 0 {
+				t.Errorf("left in the directory: %v", left)
 			}
 			if runtime.GOOS != "windows" {
 				for _, name := range []string{store.FileName, store.KeyFileName, "tls/key.pem"} {
@@ -287,7 +305,7 @@ func TestAgeOpensThePayload(t *testing.T) {
 			t.Errorf("%s is not deflated", f.Name)
 		}
 	}
-	if strings.Join(names, ",") != "massimo.db,opaque.key,node.key" {
+	if strings.Join(names, ",") != "files.json,massimo.db,opaque.key,node.key" {
 		t.Fatalf("the payload's files: %v", names)
 	}
 }
@@ -449,7 +467,7 @@ func TestChangesRefused(t *testing.T) {
 		}
 		return c
 	})
-	if _, _, err := readFile(t, newer); err == nil || !strings.Contains(err.Error(), "update first") {
+	if _, _, err := readFile(t, newer); !errors.Is(err, ErrNewerFormat) || !strings.Contains(err.Error(), "update first") {
 		t.Fatalf("a newer format: %v", err)
 	}
 	extra := rebuild(t, out, func(name string, c []byte) []byte { return c })
@@ -488,9 +506,20 @@ func TestManifestReadWithoutThePayload(t *testing.T) {
 		t.Fatalf("a payload of %d bytes proves nothing", m.Payload.Size)
 	}
 	rr := &recordingReader{r: bytes.NewReader(b)}
-	got, sig, err := ReadManifest(rr, int64(len(b)))
+	got, sig, raw, err := ReadManifest(rr, int64(len(b)))
 	if err != nil || got.UUID != m.UUID || !sig.Valid {
 		t.Fatalf("%+v %+v %v", got, sig, err)
+	}
+	// The raw manifest is the signed bytes, checked again as kept.
+	if !bytes.HasPrefix(raw.Manifest, []byte("{\n  \"format\": 1,")) {
+		t.Fatalf("raw manifest %q", raw.Manifest)
+	}
+	if again, sig2, err := ParseManifest(raw); err != nil || again.UUID != m.UUID || sig2.Verdict(st.NodePublicKey()) != ThisBox {
+		t.Fatalf("again: %+v %+v %v", again, sig2, err)
+	}
+	raw.Manifest = bytes.Replace(raw.Manifest, []byte(`"manual"`), []byte(`"scheduled"`), 1)
+	if _, sig2, err := ParseManifest(raw); err != nil || sig2.Valid {
+		t.Fatalf("a changed raw manifest: %+v %v", sig2, err)
 	}
 	for _, rg := range rr.ranges {
 		if rg[0] < off+m.Payload.Size-2048 && rg[1] > off {
@@ -606,21 +635,23 @@ func TestParseRecipient(t *testing.T) {
 }
 
 // Write refuses the trigger of an upload, a label with a control
-// character or too long, and two TLS files of one name.
+// character or too long, a version that is not printable, a TLS file
+// without a TLS role or that is not there; two TLS files of one name are
+// two files of the payload.
 func TestWriteRefusals(t *testing.T) {
 	st := testStore(t)
-	r, _ := keyOf(t, KindX25519, "")
+	r, ids := keyOf(t, KindX25519, "")
 	_, tls := sideFiles(t)
-	dup := filepath.Join(t.TempDir(), "cert.pem")
-	os.WriteFile(dup, nil, 0o600)
 	for name, in := range map[string]Inputs{
-		"uploaded":      {Trigger: TriggerUploaded},
-		"no trigger":    {},
-		"control":       {Trigger: TriggerManual, Label: "a\x1b[2Jb"},
-		"bidi":          {Trigger: TriggerManual, Label: "a‮b"},
-		"long":          {Trigger: TriggerManual, Label: strings.Repeat("ä", MaxLabel+1)},
-		"two of a name": {Trigger: TriggerManual, TLSFiles: []string{tls[0], dup}},
-		"no TLS file":   {Trigger: TriggerManual, TLSFiles: []string{filepath.Join(t.TempDir(), "gone.pem")}},
+		"uploaded":       {Trigger: TriggerUploaded},
+		"no trigger":     {},
+		"control":        {Trigger: TriggerManual, Label: "a\x1b[2Jb"},
+		"bidi":           {Trigger: TriggerManual, Label: "a‮b"},
+		"long":           {Trigger: TriggerManual, Label: strings.Repeat("ä", MaxLabel+1)},
+		"version":        {Trigger: TriggerManual, Version: "v1\n"},
+		"not a TLS role": {Trigger: TriggerManual, TLSFiles: []TLSFile{{RoleStore, tls[0].Path}}},
+		"no TLS file":    {Trigger: TriggerManual, TLSFiles: []TLSFile{{RoleTLSCert, filepath.Join(t.TempDir(), "gone.pem")}}},
+		"a device name":  {Trigger: TriggerManual, TLSFiles: []TLSFile{{RoleTLSCert, filepath.Join(t.TempDir(), "NUL.pem")}}},
 	} {
 		in.Store = st
 		out := filepath.Join(t.TempDir(), "backup.zip")
@@ -632,6 +663,18 @@ func TestWriteRefusals(t *testing.T) {
 		}
 		noTemporaries(t, st, out)
 	}
+	// Two TLS files of one name: the second numbered.
+	dup := filepath.Join(t.TempDir(), "cert.pem")
+	os.WriteFile(dup, []byte("another certificate\n"), 0o600)
+	path, _ := write(t, st, Inputs{TLSFiles: []TLSFile{tls[0], {RoleACMECert, dup}}}, r)
+	dir, o, err := openFile(t, path, ids)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if b, _ := os.ReadFile(filepath.Join(dir, "tls", "2-cert.pem")); string(b) != "another certificate\n" || o.Files[len(o.Files)-1].Role != RoleACMECert {
+		t.Fatalf("the second cert.pem: %q, %+v", b, o.Files)
+	}
+
 	// A recipient's label is in plain too.
 	bad := r
 	bad.Label = "a\nb"

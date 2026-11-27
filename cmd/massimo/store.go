@@ -5,6 +5,7 @@ package main
 
 import (
 	"context"
+	"crypto/ed25519"
 	"errors"
 	"flag"
 	"fmt"
@@ -179,7 +180,7 @@ func runStore(args []string) error {
 	case "inspect":
 		return storeInspect(args[1:], usage, dir, os.Stdout)
 	case "decrypt":
-		return storeDecrypt(args[1:], usage, os.Stdout)
+		return storeDecrypt(args[1:], usage, dir, os.Stdout, os.Stderr)
 	case "help", "-h", "--help":
 		usage()
 	default:
@@ -296,27 +297,39 @@ func storeInspect(args []string, usage func(), dir string, stdout io.Writer) err
 		return fmt.Errorf("store inspect: %w", err)
 	}
 	defer f.Close()
-	m, sig, err := serverbackup.ReadManifest(f, size)
+	m, sig, _, err := serverbackup.ReadManifest(f, size)
 	if err != nil {
 		return fmt.Errorf("store inspect: %s: %w", rest[0], err)
 	}
 	local, lerr := store.ReadNodePublicKey(dir)
-	printManifest(stdout, rest[0], m)
-	switch v := sig.Verdict(local); {
-	case v == serverbackup.Bad:
-		fmt.Fprintln(stdout, "signature:   bad: the manifest was changed since it was made")
+	if sig.Verdict(local) == serverbackup.Bad {
+		// Nothing of a manifest its signature does not verify is shown.
+		fmt.Fprintf(stdout, "file:        %s\n", rest[0])
+		fmt.Fprintln(stdout, signatureLine(sig, local, lerr))
 		return fmt.Errorf("store inspect: %w", serverbackup.ErrBadSignature)
-	case v == serverbackup.OtherBox && lerr != nil:
-		fmt.Fprintf(stdout, "signature:   good, by the box %s (this box's node.key was not read: whether it is this one is not known)\n", sig.Fingerprint)
-	default:
-		fmt.Fprintf(stdout, "signature:   good, by %s (%s)\n", v, sig.Fingerprint)
 	}
+	printManifest(stdout, rest[0], m)
+	fmt.Fprintln(stdout, signatureLine(sig, local, lerr))
 	if _, _, err := serverbackup.Verify(f, size); err != nil {
 		fmt.Fprintln(stdout, "payload:     not the one the manifest names")
 		return fmt.Errorf("store inspect: %w", err)
 	}
 	fmt.Fprintln(stdout, "payload:     as the manifest names it")
 	return nil
+}
+
+// signatureLine is store inspect's and store decrypt's line of who
+// signed a backup, this box being the one whose node key is local; lerr
+// is why it could not be read.
+func signatureLine(sig serverbackup.Signature, local ed25519.PublicKey, lerr error) string {
+	switch v := sig.Verdict(local); {
+	case v == serverbackup.Bad:
+		return "signature:   bad: the manifest was changed since it was made"
+	case v == serverbackup.OtherBox && lerr != nil:
+		return fmt.Sprintf("signature:   good, by the box %s (this box's node.key was not read: whether it is this one is not known)", sig.Fingerprint)
+	default:
+		return fmt.Sprintf("signature:   good, by %s (%s)", v, sig.Fingerprint)
+	}
 }
 
 // openSized opens path and returns its size.
@@ -363,8 +376,10 @@ func printManifest(w io.Writer, path string, m serverbackup.Manifest) {
 }
 
 // storeDecrypt is massimo store decrypt <file> -key <file> -out <dir>:
-// the backup opened with the secret key into an empty or new directory.
-func storeDecrypt(args []string, usage func(), stdout io.Writer) error {
+// the backup opened with the secret key into an empty or new directory,
+// and who signed it, this box being the one whose node.key is in dir; a
+// warning where that was another box.
+func storeDecrypt(args []string, usage func(), dir string, stdout, stderr io.Writer) error {
 	set := flag.NewFlagSet("store decrypt", flag.ContinueOnError)
 	set.Usage = usage
 	keyFile := set.String("key", "", "the secret key's file")
@@ -390,10 +405,15 @@ func storeDecrypt(args []string, usage func(), stdout io.Writer) error {
 		return fmt.Errorf("store decrypt: %w", err)
 	}
 	defer f.Close()
-	m, err := serverbackup.Open(f, size, ids, *out)
+	o, err := serverbackup.Open(f, size, ids, *out)
 	if err != nil {
 		return fmt.Errorf("store decrypt: %s: %w", rest[0], err)
 	}
-	fmt.Fprintf(stdout, "opened the backup %s of %s into %s\n", m.UUID, m.Created.Format(time.RFC3339), *out)
+	local, lerr := store.ReadNodePublicKey(dir)
+	fmt.Fprintf(stdout, "opened the backup %s of %s into %s\n", o.Manifest.UUID, o.Manifest.Created.Format(time.RFC3339), *out)
+	fmt.Fprintln(stdout, signatureLine(o.Signature, local, lerr))
+	if o.Signature.Verdict(local) == serverbackup.OtherBox {
+		fmt.Fprintf(stderr, "store decrypt: warning: the backup was made by the box %s, not by this one as far as its node.key tells; check that it is the box you meant\n", o.Signature.Fingerprint)
+	}
 	return nil
 }

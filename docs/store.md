@@ -1825,7 +1825,7 @@ It is one zip, stored without compression, of three files in this order:
 | File | What it is |
 |------|------------|
 | `manifest.json` | plain: what the backup is, without a name of a Cube, a room or a user |
-| `payload.age` | an [age](https://age-encryption.org/v1) file for the owner's recipients (`filippo.io/age`), of a deflated zip: `massimo.db`, `opaque.key`, `node.key`, `env` (the env file `serve` reads, where it has one) and `tls/<name>` (the TLS files) |
+| `payload.age` | an [age](https://age-encryption.org/v1) file for the owner's recipients (`filippo.io/age`), of a deflated zip: `files.json`, `massimo.db`, `opaque.key`, `node.key`, `env` (the env file `serve` reads, where it has one) and `tls/<name>` (the TLS files) |
 | `manifest.sig` | the Ed25519 signature of `manifest.json`'s bytes by `node.key`, in base64 |
 
 The manifest is found through the zip's central directory,
@@ -1838,7 +1838,14 @@ goes to a temporary directory in the data directory;
 the payload is encrypted into a temporary `payload.age` and hashed as it is written;
 the snapshot is removed, the manifest signed,
 and the archive written whole (`internal/safefile`), mode 0600.
-The temporary files are removed whatever happens.
+When the backup ends, failing or not, its temporary files are gone,
+and so is the file's name where it failed.
+A crash leaves them:
+the temporary directory, `.serverbackup-*` in the data directory,
+holds the snapshot in plain until the next backup removes it,
+once it is older than six hours;
+the file's name, empty, and safefile's temporary file beside it
+hold nothing of the store in plain.
 It needs about twice the store free in the data directory
 and the store's size where the file goes;
 with less, it is refused with the numbers before anything is written.
@@ -1861,6 +1868,31 @@ The manifest's fields, format 1:
 | `recipients` | for each recipient its `label`, `kind` (`pq`, `x25519` or `ssh-ed25519`) and `fingerprint` |
 | `payload` | `size` and `sha256` (hex) of `payload.age`, the encrypted file |
 
+A manifest whose text is not one Massimo writes is refused as no backup,
+signed or not:
+a label or a recipient's label with a control character,
+another trigger, a uuid that is not one, a version that is not printable,
+a fingerprint or a hash that is not one.
+
+`files.json`, first in the payload, names each other file of it once,
+with its `role` and its `source`, where it was on the box that made it,
+so that a restore puts each back:
+
+| Role | File |
+|------|------|
+| `store` | `massimo.db`, the snapshot |
+| `opaque-key`, `node-key` | `opaque.key`, `node.key` |
+| `env` | `env`, the env file `serve` reads |
+| `tls-cert`, `tls-key` | `tls/<name>`, the files `MASSIMO_TLS_CERT` and `MASSIMO_TLS_KEY` name |
+| `acme-account`, `acme-cert`, `acme-key`, `acme-…` | `tls/<name>`, the files of `tls/acme/` |
+
+Two TLS files of one name are `tls/<name>` and `tls/2-<name>`.
+A name the payload holds is one of these,
+checked for every system it may be opened on:
+nothing outside the directory,
+no Windows device name such as `CON` or `nul.txt`,
+no trailing dot or space.
+
 The signature says who made a backup:
 this box, another box with its fingerprint, or bad.
 It is checked with the public key the manifest names,
@@ -1868,6 +1900,12 @@ so it proves that nothing was changed since that box made it,
 not that a box is to be trusted.
 A bad signature, or a payload whose size or hash differs from the manifest's,
 is refused before the payload is opened.
+Opening reads the payload from the file once:
+it is copied into the directory it is opened into while it is hashed,
+and decrypted from that copy, so that what is opened is what was hashed,
+whatever a target answers a second time.
+Each file is written no longer than its size,
+and sizes the free space cannot take are refused first.
 A fingerprint is `SHA256:` and the unpadded base64 of a SHA-256:
 of the node's 32-byte public key;
 of an `ssh-ed25519` key's wire form, as `ssh-keygen -l` shows it;
@@ -1895,8 +1933,11 @@ On the command line:
 - `massimo store inspect <file>` prints the manifest,
   who signed it (this box being the one whose `node.key` is in the data directory),
   and whether the payload is the one the manifest names; it needs no key.
+  Of a manifest whose signature does not verify it prints nothing.
 - `massimo store decrypt <file> -key <file> -out <dir>` checks the signature and the hash,
-  then writes the payload's files into an empty or new directory, mode 0600.
+  then writes the payload's files, `files.json` among them,
+  into an empty or new directory, mode 0600.
+  It prints who signed the backup, and warns where that was another box.
   The key is an age key file or an OpenSSH `ssh-ed25519` private key without a passphrase.
 
 A backup opens without Massimo too, with `unzip` and age:

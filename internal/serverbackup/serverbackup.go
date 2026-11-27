@@ -8,20 +8,22 @@
 //   - manifest.json, plain: what the backup is, without a name of a
 //     Cube, a room or a user (Manifest);
 //   - payload.age, an age file (filippo.io/age) for the owner's
-//     recipients, of a deflated zip with a snapshot of the store
-//     (massimo.db), opaque.key, node.key, the env file serve reads (env)
-//     and the TLS files (tls/<name>);
+//     recipients, of a deflated zip with files.json, which names the
+//     other files' roles and where they were (files.go), a snapshot of
+//     the store (massimo.db), opaque.key, node.key, the env file serve
+//     reads (env) and the TLS files (tls/<name>);
 //   - manifest.sig, manifest.json signed by node.key, in base64.
 //
-// The manifest is read, and the payload's size and hash checked, without
-// the key (ReadManifest, Verify), so a target lists its backups by
-// ranged reads; only the owner's identity opens the payload (Open), with
-// Massimo or with age -d anywhere. The server keeps the recipients, never
-// an identity (ParseRecipient, GenerateKey).
+// The manifest is read, its text checked, and the payload's size and
+// hash checked, without the key (ReadManifest, Verify), so a target
+// lists its backups by ranged reads; only the owner's identity opens
+// the payload (Open), with Massimo or with age -d anywhere. The server
+// keeps the recipients, never an identity (ParseRecipient, GenerateKey).
 package serverbackup
 
 import (
 	"archive/zip"
+	"bytes"
 	"context"
 	"crypto/sha256"
 	"encoding/base64"
@@ -150,13 +152,15 @@ type Inputs struct {
 	// EnvFile is the env file serve reads; "", a path that does not
 	// exist and one that is not a regular file (/dev/null) are none.
 	EnvFile string
-	// TLSFiles are the TLS files, each in the payload as tls/<its name>.
-	TLSFiles []string
+	// TLSFiles are the TLS files with their roles, each in the payload
+	// as tls/<its name>, a number before it where two share one.
+	TLSFiles []TLSFile
 	Trigger  Trigger
 	// Label is the owner's text for the backup, at most MaxLabel
 	// characters, in plain in the manifest.
 	Label string
-	// Version is Massimo's version.
+	// Version is Massimo's version, printable ASCII of at most
+	// maxVersion bytes; "" is "unknown".
 	Version string
 	// Time is when the backup is made; zero is now.
 	Time time.Time
@@ -168,18 +172,40 @@ const MaxLabel = 100
 // maxTLSFiles bounds the TLS files of a payload.
 const maxTLSFiles = 256
 
-// freeSpace is diskFree, replaced by the tests.
-var freeSpace = diskFree
+// maxVersion bounds the manifest's version.
+const maxVersion = 128
+
+// tempPrefix begins the names of Write's temporary directories in the
+// data directory, and staleAfter is the age at which a later Write
+// removes one, the leftover of a crash: no backup runs that long.
+const (
+	tempPrefix = ".serverbackup-"
+	staleAfter = 6 * time.Hour
+)
+
+// The seams the tests replace: the free space of a directory, and the
+// filling of the archive's temporary file.
+var (
+	freeSpace   = diskFree
+	archiveFill = fillArchive
+)
 
 // Write makes a server backup of in for the recipients at out, which
 // must not exist: a snapshot of the store into a temporary directory in
 // the data directory, the inner zip deflated and encrypted with age into
 // a temporary payload.age while it is hashed, the manifest signed, then
-// the outer zip, written whole (internal/safefile) with mode 0600. The
-// temporary files are removed whatever happens, and out where it fails.
-// About twice the store must be free in the data directory, and once
-// the store where out is; less is refused with the numbers.
+// the outer zip, written whole (internal/safefile) with mode 0600.
+// When Write returns, its temporary files are gone, and so is out where
+// it failed. A crash leaves them: the temporary directory, which holds
+// the unencrypted snapshot, is removed by the next Write once older than
+// staleAfter; out, empty, and safefile's temporary file beside it hold
+// no part of the store in plain. About twice the store must be free in
+// the data directory, and once the store where out is; less is refused
+// with the numbers.
 func Write(ctx context.Context, in Inputs, recipients []Recipient, out string) (Manifest, error) {
+	if in.Version == "" {
+		in.Version = "unknown"
+	}
 	if err := in.check(); err != nil {
 		return Manifest{}, err
 	}
@@ -196,6 +222,7 @@ func Write(ctx context.Context, in Inputs, recipients []Recipient, out string) (
 		return Manifest{}, errors.New("serverbackup: the store has no node key; open it with store.Open")
 	}
 	dir := in.Store.Dir()
+	removeStale(dir, time.Now())
 	if err := checkSpace(dir, filepath.Dir(out)); err != nil {
 		return Manifest{}, err
 	}
@@ -209,7 +236,7 @@ func Write(ctx context.Context, in Inputs, recipients []Recipient, out string) (
 		return Manifest{}, fmt.Errorf("serverbackup: %w", err)
 	}
 
-	tmp, err := os.MkdirTemp(dir, ".serverbackup-*")
+	tmp, err := os.MkdirTemp(dir, tempPrefix+"*")
 	if err != nil {
 		return Manifest{}, fmt.Errorf("serverbackup: %w", err)
 	}
@@ -263,10 +290,41 @@ func (in Inputs) check() error {
 		return errors.New("serverbackup: no store")
 	case !in.Trigger.Valid() || in.Trigger == TriggerUploaded:
 		return fmt.Errorf("serverbackup: trigger %q", in.Trigger)
+	case !validVersion(in.Version):
+		return errors.New("serverbackup: the version is not printable ASCII of at most 128 bytes")
 	case len(in.TLSFiles) > maxTLSFiles:
 		return fmt.Errorf("serverbackup: %d TLS files, at most %d", len(in.TLSFiles), maxTLSFiles)
 	}
+	for _, f := range in.TLSFiles {
+		if !f.Role.TLS() {
+			return fmt.Errorf("serverbackup: the TLS file %s has the role %q", f.Path, f.Role)
+		}
+	}
 	return CheckLabel(in.Label)
+}
+
+// validVersion reports whether v is printable ASCII of 1 to maxVersion
+// bytes, as Massimo's versions are.
+func validVersion(v string) bool {
+	return v != "" && len(v) <= maxVersion && strings.IndexFunc(v, func(r rune) bool { return r < 0x20 || r > 0x7e }) < 0
+}
+
+// removeStale removes the temporary directories of Write in dir that are
+// older than staleAfter: what a crash left, the unencrypted snapshot
+// among it. A running Write's are younger.
+func removeStale(dir string, now time.Time) {
+	entries, err := os.ReadDir(dir)
+	if err != nil {
+		return
+	}
+	for _, e := range entries {
+		if !strings.HasPrefix(e.Name(), tempPrefix) {
+			continue
+		}
+		if fi, err := e.Info(); err == nil && now.Sub(fi.ModTime()) > staleAfter {
+			os.RemoveAll(filepath.Join(dir, e.Name()))
+		}
+	}
 }
 
 // CheckLabel refuses a label of more than MaxLabel characters, or one
@@ -321,37 +379,52 @@ func bytesText(n int64) string {
 }
 
 // writePayload writes payload.age at path: the inner zip, deflated, with
-// the snapshot, the key files, the env file and the TLS files, encrypted
-// for the recipients and hashed as it is written.
+// files.json first, then the snapshot, the key files, the env file and
+// the TLS files, encrypted for the recipients and hashed as it is
+// written.
 func writePayload(ctx context.Context, path, snapPath string, in Inputs, recipients []Recipient, created time.Time) (Files, Payload, error) {
 	var files Files
-	type entry struct{ name, path string }
+	type entry struct {
+		InnerFile
+		path string // what is read: the snapshot for the store
+	}
 	dir := in.Store.Dir()
 	entries := []entry{
-		{store.FileName, snapPath},
-		{store.OpaqueKeyFileName, store.OpaqueKeyPath(dir)},
-		{store.KeyFileName, store.KeyPath(dir)},
+		{InnerFile{store.FileName, RoleStore, absPath(store.Path(dir))}, snapPath},
+		{InnerFile{store.OpaqueKeyFileName, RoleOpaqueKey, absPath(store.OpaqueKeyPath(dir))}, store.OpaqueKeyPath(dir)},
+		{InnerFile{store.KeyFileName, RoleNodeKey, absPath(store.KeyPath(dir))}, store.KeyPath(dir)},
 	}
 	if in.EnvFile != "" {
 		fi, err := os.Stat(in.EnvFile)
 		switch {
 		case err == nil && fi.Mode().IsRegular():
-			entries = append(entries, entry{EnvName, in.EnvFile})
+			entries = append(entries, entry{InnerFile{EnvName, RoleEnv, absPath(in.EnvFile)}, in.EnvFile})
 			files.Env = true
 		case err != nil && !errors.Is(err, fs.ErrNotExist):
 			return files, Payload{}, fmt.Errorf("serverbackup: the env file: %w", err)
 		}
 	}
-	seen := map[string]bool{}
-	for _, p := range in.TLSFiles {
-		name := filepath.Base(p)
-		if !validTLSName(name) || seen[name] {
-			return files, Payload{}, fmt.Errorf("serverbackup: TLS file %s: a name the payload cannot take twice or at all", p)
+	taken := map[string]bool{}
+	for _, t := range in.TLSFiles {
+		name, err := tlsName(t.Path, taken)
+		if err != nil {
+			return files, Payload{}, err
 		}
-		seen[name] = true
-		entries = append(entries, entry{TLSDir + "/" + name, p})
+		taken[name] = true
+		entries = append(entries, entry{InnerFile{name, t.Role, absPath(t.Path)}, t.Path})
 	}
 	files.TLS = len(in.TLSFiles)
+	var list filesList
+	for _, e := range entries {
+		if !plainText(e.Source, maxSource) {
+			return files, Payload{}, fmt.Errorf("serverbackup: the path of %s is not one files.json carries", e.Name)
+		}
+		list.Files = append(list.Files, e.InnerFile)
+	}
+	listJSON, err := json.MarshalIndent(list, "", "  ")
+	if err != nil {
+		return files, Payload{}, fmt.Errorf("serverbackup: %s: %w", FilesName, err)
+	}
 
 	ars := make([]age.Recipient, len(recipients))
 	for i, r := range recipients {
@@ -369,11 +442,20 @@ func writePayload(ctx context.Context, path, snapPath string, in Inputs, recipie
 		return files, Payload{}, fmt.Errorf("serverbackup: encrypt: %w", err)
 	}
 	zw := zip.NewWriter(aw)
+	if err := addFile(zw, FilesName, bytes.NewReader(append(listJSON, '\n')), created); err != nil {
+		return files, Payload{}, err
+	}
 	for _, e := range entries {
 		if err := ctx.Err(); err != nil {
 			return files, Payload{}, fmt.Errorf("serverbackup: %w", err)
 		}
-		if err := addFile(zw, e.name, e.path, created); err != nil {
+		src, err := os.Open(e.path)
+		if err != nil {
+			return files, Payload{}, fmt.Errorf("serverbackup: %w", err)
+		}
+		err = addFile(zw, e.Name, src, created)
+		src.Close()
+		if err != nil {
 			return files, Payload{}, err
 		}
 	}
@@ -389,13 +471,16 @@ func writePayload(ctx context.Context, path, snapPath string, in Inputs, recipie
 	return files, Payload{Size: cw.n, SHA256: hex.EncodeToString(h.Sum(nil))}, nil
 }
 
-// addFile deflates the file at path into zw as name.
-func addFile(zw *zip.Writer, name, path string, modified time.Time) error {
-	src, err := os.Open(path)
-	if err != nil {
-		return fmt.Errorf("serverbackup: %w", err)
+// absPath is p made absolute, or p where that fails.
+func absPath(p string) string {
+	if a, err := filepath.Abs(p); err == nil {
+		return a
 	}
-	defer src.Close()
+	return p
+}
+
+// addFile deflates what src holds into zw as name.
+func addFile(zw *zip.Writer, name string, src io.Reader, modified time.Time) error {
 	hdr := &zip.FileHeader{Name: name, Method: zip.Deflate, Modified: modified}
 	hdr.SetMode(0o600)
 	w, err := zw.CreateHeader(hdr)
@@ -410,7 +495,8 @@ func addFile(zw *zip.Writer, name, path string, modified time.Time) error {
 
 // writeArchive writes the outer zip at out, which must not exist: the
 // name is taken first, empty, then filled whole through a temporary file
-// beside it, as the store's copies are, and removed where that fails.
+// beside it, as the store's copies are; where that fails, safefile
+// removes its temporary file and writeArchive the name.
 func writeArchive(out string, manifest []byte, payloadPath string, sig []byte, modified time.Time) error {
 	f, err := os.OpenFile(out, os.O_RDWR|os.O_CREATE|os.O_EXCL, 0o600)
 	if err != nil {
@@ -418,7 +504,7 @@ func writeArchive(out string, manifest []byte, payloadPath string, sig []byte, m
 	}
 	f.Close()
 	err = safefile.Replace(out, safefile.Options{Mode: 0o600}, func(tmp string) error {
-		return fillArchive(tmp, manifest, payloadPath, sig, modified)
+		return archiveFill(tmp, manifest, payloadPath, sig, modified)
 	})
 	if err != nil {
 		os.Remove(out)
@@ -475,17 +561,4 @@ func (c *countWriter) Write(p []byte) (int, error) {
 	n, err := c.w.Write(p)
 	c.n += int64(n)
 	return n, err
-}
-
-// hashOf returns the hex SHA-256 of r's n bytes.
-func hashOf(r io.Reader, n int64) (string, error) {
-	h := sha256.New()
-	m, err := io.Copy(h, io.LimitReader(r, n+1))
-	if err != nil {
-		return "", err
-	}
-	if m != n {
-		return "", fmt.Errorf("%d bytes, not %d", m, n)
-	}
-	return hex.EncodeToString(h.Sum(nil)), nil
 }
