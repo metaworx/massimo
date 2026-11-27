@@ -350,7 +350,8 @@ a page before its sign-in, or a scanner behind a proxy not in
 `-trusted-proxies`, does not lock the address out.
 Nor does a token the server issued and that has ended:
 a session revoked, logged out or past its end, a revoked key,
-a session whose key was revoked, or the token of a removed user
+a session whose key was revoked or is past its end,
+or the token of a removed user
 is answered `401` with the words of a wrong token, and counts as none,
 since a guessed token never matches one that was issued:
 a client that sends again a session that ended,
@@ -537,7 +538,9 @@ or by itself (below).
 
 `DELETE /api/v1/me/token` revokes the token that makes the call,
 whatever it is: a session, or an API key and the sessions made from it,
-`{"ok": true, "id": 4}` with the token's id (AP MobileApp, D80-B).
+with the keys it made and theirs ("Tokens", below),
+`{"ok": true, "id": 4, "heirs": [7]}` with the token's id and the heirs' ids,
+`[]` for none (AP MobileApp, D80-B; AP KeyLife, D5-A).
 It is one call for any token, without the user's name or the token's id:
 the apps revoke a kept key with the key alone so,
 and an integration may revoke its own key.
@@ -593,13 +596,17 @@ The session names its key: `key_id` in the token list and in `GET /api/v1/me`.
 The key's next session ends the earlier one, so a phone holds one live
 session per key,
 and revoking the key (`DELETE /api/v1/users/{name}/tokens/{id}`) ends the
-session at its next request.
+session at its next request, as the key's end does:
+a session counts only while its key is neither revoked nor past its end
+(AP KeyLife, Block 2).
+A key made with that session as the bearer is no heir of the key
+("Tokens", below).
 A password set by someone else ends the sessions and leaves the keys,
 as it does for every key.
 
 A wrong key is `401` and counts toward the address's lockout,
 as every failed token check does;
-a revoked one is `401` and does not,
+a revoked one, or one past its end, is `401` and does not,
 as no token that ended does (Authentication above);
 a session as the bearer is `400`;
 a disabled user, a guest past its end date, a disabled role
@@ -856,6 +863,7 @@ or given an end date (`409`): an owner with one does not count,
 nor does an integration's user, whatever its role.
 
 `DELETE /api/v1/users/{name}` removes a user: its sessions and keys are revoked,
+with the keys its keys made ("Tokens", below),
 its preferences removed,
 and its row stays for the audit under the name `<name>-del-YYYYMMDD-HHNN`
 of the removal in UTC (`-<id>` added where that is taken),
@@ -881,10 +889,14 @@ the key is changed or removed in the settings file first
 A user's sessions and API keys, as `GET /api/v1/me` shows the one presented;
 the same rules of access as the user.
 
-`GET` lists the live ones, oldest first, without their secrets;
+`GET` lists the live ones, oldest first, without their secrets:
+a key not revoked, and a session not revoked, not past its end,
+and, made from a key, only while the key is neither revoked nor past its end;
 the key that is the settings file's `MASSIMO_API_TOKEN` carries `"from_settings": true`,
 found by the hash of the file's token, not by its label
-(AP MobileApp v1.4, D86-A).
+(AP MobileApp v1.4, D86-A);
+a key made with another key as the bearer carries that key's id as `made_by`,
+absent for every other token.
 `POST` with `{"label": "Loxone"}` creates an API key, which never expires,
 and answers `201` with the key once;
 an integration's user gets none (`403`, "Acting for an integration's users"):
@@ -897,13 +909,30 @@ The key is kept nowhere but in this answer:
 the command of the request keeps the answer without `token`,
 and a retry with its `Idempotency-Key` answers `201` without it too.
 
-`DELETE …/tokens/{id}` revokes a session or a key by the `id` of the list;
+`DELETE …/tokens/{id}` revokes a session or a key by the `id` of the list,
+`{"ok": true, "id": 4, "heirs": [7, 9]}`;
 a token of another user is `404`.
 The settings file's key is `409`, as `DELETE /api/v1/me/token` answers it:
 it is changed or removed in the settings file,
 since the next start would not add it back, its hash being taken.
 A session made from a key (`POST /api/v1/login/key`) carries the key's id
-as `key_id`; revoking the key revokes that session with it.
+as `key_id`; revoking the key revokes that session with it,
+and the key's end ends it.
+
+A key made by a `POST` whose bearer is an API key is that key's heir
+(AP KeyLife v1.0, Block 2, D5-A), whichever user it is made for:
+`made_by` names the key.
+A key made by a session is no heir,
+a session of a sign-in or one made from a key by `POST /api/v1/login/key`,
+nor is one made by `massimo user token`, by the settings file's bootstrap
+or at an integration's collection of its key.
+A revoke takes the heirs, and theirs, with their sessions:
+`DELETE …/tokens/{id}`, `DELETE /api/v1/me/token`, a user's removal,
+and the bootstrap's revoke of a key that is no longer the settings file's.
+The answers of the two `DELETE`s name them in `heirs`, by id, `[]` for none,
+and so do their log lines and their change lines (in the `subject`);
+a removal's and the bootstrap's log lines say them too.
+A key's end takes none: an heir lives past it, and only a revoke reaches it.
 A token revokes itself the same way, as its own bearer:
 a key with `DELETE …/tokens/{id}` and its own id,
 or any token with `DELETE /api/v1/me/token`, which needs neither the name nor the id;

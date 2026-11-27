@@ -707,7 +707,20 @@ export interface Token {
    * through the API; absent on any other
    */
   from_settings?: boolean;
+  /**
+   * The API key that made this key, as the bearer of its POST
+   * /api/v1/users/{name}/tokens (AP KeyLife, D5-A); absent for a key made by a
+   * session, the command line, the bootstrap or an integration's approval, and
+   * for a session. A revoke of that key revokes this one
+   */
+  made_by?: number;
 }
+
+/**
+ * The ids of the keys a revoke took with the token, the keys it made and theirs
+ * (made_by), oldest first; [] for none
+ */
+export type TokenHeirs = number[];
 
 export interface Me {
   /** How the server authenticates */

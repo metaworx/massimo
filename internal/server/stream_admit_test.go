@@ -4,6 +4,7 @@
 package server
 
 import (
+	"encoding/json"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -37,8 +38,9 @@ func isKeepAlive(e testkit.Event) bool { return e.Kind == "" && e.Comment == "ke
 
 // An event stream asks at each keep-alive whether its caller would be
 // let in now: one opened on an open server ends once a user exists, one
-// opened with a key ends once the key is revoked, and one whose caller
-// is still allowed goes on.
+// opened with a key ends once the key is revoked, one opened with a
+// key's session once the key is past its end, and one whose caller is
+// still allowed goes on.
 func TestStreamEndsWhenItsCallerIsNotLetIn(t *testing.T) {
 	t.Parallel()
 	r := startServer(t, withOptions(storeOptions(t, t.TempDir(), "")))
@@ -60,13 +62,38 @@ func TestStreamEndsWhenItsCallerIsNotLetIn(t *testing.T) {
 	if err != nil || len(toks) != 1 {
 		t.Fatalf("the viewer's tokens: %v %v", toks, err)
 	}
-	if err := st.RevokeToken(t.Context(), toks[0].ID); err != nil {
+	if _, err := st.RevokeToken(t.Context(), toks[0].ID); err != nil {
 		t.Fatal(err)
 	}
 	testkit.Eventually(t, "the end of the stream of a revoked key", revoked.Ended)
 	// Counted from the revoked stream's end: keep-alives that came before
 	// the revocation say nothing of it.
 	stays.AwaitN(t, stays.Mark(), "three keep-alives for a caller still allowed, after the revocation", 3, isKeepAlive)
+
+	// One opened with a session made from a key ends once the key is past
+	// its end (AP KeyLife, Block 2).
+	key := userToken(t, st, "viewer2", store.RoleViewer)
+	code, text := callAPI(t, ts, "POST", "/api/v1/login/key", key, "")
+	var made struct {
+		Token string `json:"token"`
+	}
+	if err := json.Unmarshal([]byte(text), &made); err != nil || code != 200 || made.Token == "" {
+		t.Fatalf("a session from the key: %d %s %v", code, text, err)
+	}
+	ofKey := openStream(t, ts, made.Token)
+	ofKey.Await(t, 0, "a keep-alive of the key's session", isKeepAlive)
+	keyID := int64(0)
+	toks, err = st.Tokens(t.Context(), mustUser(t, st, "viewer2").ID)
+	for _, tk := range toks {
+		if tk.Kind == store.TokenAPI {
+			keyID = tk.ID
+		}
+	}
+	if err != nil || keyID == 0 {
+		t.Fatalf("the key of viewer2: %+v %v", toks, err)
+	}
+	endToken(t, st, keyID)
+	testkit.Eventually(t, "the end of the stream of a key's session at the key's end", ofKey.Ended)
 }
 
 func mustUser(t *testing.T, st *store.Store, name string) store.User {

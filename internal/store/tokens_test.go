@@ -6,6 +6,7 @@ package store
 import (
 	"context"
 	"errors"
+	"fmt"
 	"testing"
 	"time"
 )
@@ -70,10 +71,10 @@ func TestTokens(t *testing.T) {
 	if _, ok, _ := s.TokenByHash(ctx, HashToken(keySecret)); !ok {
 		t.Fatal("api key revoked with the sessions")
 	}
-	if err := s.RevokeToken(ctx, sess.ID); !errors.Is(err, ErrNoToken) {
+	if _, err := s.RevokeToken(ctx, sess.ID); !errors.Is(err, ErrNoToken) {
 		t.Fatalf("revoke twice: %v", err)
 	}
-	if err := s.RevokeToken(ctx, key.ID); err != nil {
+	if _, err := s.RevokeToken(ctx, key.ID); err != nil {
 		t.Fatal(err)
 	}
 	if list, _ := s.Tokens(ctx, anna.ID); len(list) != 0 {
@@ -140,7 +141,7 @@ func TestKeySessions(t *testing.T) {
 
 	// Revoking the key ends its session; the other key and the
 	// sign-in's session stay.
-	if err := s.RevokeToken(ctx, key.ID); err != nil {
+	if _, err := s.RevokeToken(ctx, key.ID); err != nil {
 		t.Fatal(err)
 	}
 	if got, ok, _ := s.Token(ctx, second.ID); !ok || got.DeletedAt.IsZero() {
@@ -171,6 +172,251 @@ func TestKeySessions(t *testing.T) {
 	}
 	if list, _ := s.Tokens(ctx, anna.ID); len(list) != 1 || list[0].ID != plain.ID {
 		t.Fatalf("live tokens after the older binary %+v (third %d)", list, third.ID)
+	}
+
+	// A key past its end takes its session with it (AP KeyLife, Block 2):
+	// the session, alive by its own end, is refused, has ended, is not
+	// listed, is not sent to, and the key makes no other. The key itself
+	// is refused too, and stays listed, to be revoked.
+	ending, endingSecret, _ := s.AddToken(ctx, anna.ID, TokenAPI, "phone with an end", clock.Add(30*time.Minute))
+	fourth, fourthSecret, err := s.AddKeySession(ctx, ending.ID, "phone", end)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, _, err := s.AddPushSubscription(ctx, PushSubscription{UserID: anna.ID, TokenID: fourth.ID, Endpoint: "https://push.example.net/b", P256dh: "k", Auth: "a"}); err != nil {
+		t.Fatal(err)
+	}
+	clock = clock.Add(30 * time.Minute) // the key's end; the session's own lies 30 days on, the sign-in's half an hour
+	if _, ok, _ := s.TokenByHash(ctx, HashToken(fourthSecret)); ok {
+		t.Error("the session of a key past its end was found")
+	}
+	if _, ok, _ := s.TokenByHash(ctx, HashToken(endingSecret)); ok {
+		t.Error("a key past its end was found")
+	}
+	if got, err := s.TokenEnded(ctx, HashToken(fourthSecret), clock); err != nil || !got {
+		t.Errorf("the session of a key past its end has not ended: %v %v", got, err)
+	}
+	list, _ = s.Tokens(ctx, anna.ID)
+	if len(list) != 2 || list[0].ID != plain.ID || list[1].ID != ending.ID {
+		t.Errorf("live tokens with a key past its end %+v (its session %d)", list, fourth.ID)
+	}
+	if subs, _ := s.PushSubscriptions(ctx, 0); len(subs) != 0 {
+		t.Errorf("the session of a key past its end is sent to: %+v", subs)
+	}
+	if _, _, err := s.AddKeySession(ctx, ending.ID, "", end); !errors.Is(err, ErrNoToken) {
+		t.Errorf("a key past its end made a session: %v", err)
+	}
+}
+
+// TokenAlive gives a token by its id under the rule TokenByHash holds
+// to (AP KeyLife, Block 2): not revoked, not past its end, its user not
+// removed, and a session made from a key only while the key is neither
+// revoked nor past its end.
+func TestTokenAlive(t *testing.T) {
+	t.Parallel()
+	clock := time.Date(2026, 11, 27, 12, 0, 0, 0, time.UTC)
+	s, err := Open(copied(t), Options{Logger: quiet(), Now: func() time.Time { return clock }})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer s.Close()
+	ctx := context.Background()
+	anna, _ := s.AddUser(ctx, User{Name: "anna", Role: RoleOperator}, "pw", 0)
+	bob, _ := s.AddUser(ctx, User{Name: "bob", Role: RoleOperator}, "pw", 0)
+	month := clock.Add(30 * 24 * time.Hour)
+	alive := func(what string, id int64, want bool) {
+		t.Helper()
+		got, ok, err := s.TokenAlive(ctx, id)
+		if err != nil || ok != want || (ok && got.ID != id) {
+			t.Errorf("%s: alive %v %+v %v, want %v", what, ok, got, err, want)
+		}
+	}
+
+	session, _, _ := s.AddToken(ctx, anna.ID, TokenSession, "Firefox", month)
+	key, _, _ := s.AddToken(ctx, anna.ID, TokenAPI, "Loxone", zeroTime)
+	ofKey, _, _ := s.AddKeySession(ctx, key.ID, "phone", month)
+	alive("a session", session.ID, true)
+	alive("a key", key.ID, true)
+	alive("a key's session", ofKey.ID, true)
+	alive("no token", 9999, false)
+
+	revoked, _, _ := s.AddToken(ctx, anna.ID, TokenSession, "Firefox", month)
+	if _, err := s.RevokeToken(ctx, revoked.ID); err != nil {
+		t.Fatal(err)
+	}
+	alive("a revoked session", revoked.ID, false)
+	past, _, _ := s.AddToken(ctx, anna.ID, TokenSession, "Firefox", clock)
+	alive("a session at its end", past.ID, false)
+
+	revokedKey, _, _ := s.AddToken(ctx, anna.ID, TokenAPI, "phone", zeroTime)
+	ofRevoked, _, _ := s.AddKeySession(ctx, revokedKey.ID, "phone", month)
+	if _, err := s.db.ExecContext(ctx, `UPDATE tokens SET deleted_at = ? WHERE id = ?`, s.nowText(), revokedKey.ID); err != nil {
+		t.Fatal(err)
+	}
+	alive("the session of a key an older binary revoked", ofRevoked.ID, false)
+
+	endingKey, _, _ := s.AddToken(ctx, anna.ID, TokenAPI, "phone", clock.Add(time.Minute))
+	ofEnding, _, _ := s.AddKeySession(ctx, endingKey.ID, "phone", month)
+	alive("the session of a key before its end", ofEnding.ID, true)
+	clock = clock.Add(time.Minute)
+	alive("a key at its end", endingKey.ID, false)
+	alive("the session of a key at its end", ofEnding.ID, false)
+
+	bobs, _, _ := s.AddToken(ctx, bob.ID, TokenAPI, "k", zeroTime)
+	if err := s.DeleteUser(ctx, "bob", 0); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := s.db.ExecContext(ctx, `UPDATE tokens SET deleted_at = NULL WHERE id = ?`, bobs.ID); err != nil {
+		t.Fatal(err)
+	}
+	alive("the key of a removed user, the key itself not revoked", bobs.ID, false)
+	alive("a session, after the others", session.ID, true)
+}
+
+// A key made by a key names it (made_by, migration 0100), and a revoke
+// takes the keys it made, and theirs, of any user, with their sessions
+// and what those subscribed to push (AP KeyLife, Block 2, D5-A, D8-A);
+// the makers are followed from key to key in any state, so a key past
+// its end, or one an older binary revoked alone, passes the revoke on.
+// A key's end takes none of them, and nor does a key made by no key.
+func TestKeyHeirs(t *testing.T) {
+	t.Parallel()
+	clock := time.Date(2026, 11, 27, 12, 0, 0, 0, time.UTC)
+	s, err := Open(copied(t), Options{Logger: quiet(), Now: func() time.Time { return clock }})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer s.Close()
+	ctx := context.Background()
+	anna, _ := s.AddUser(ctx, User{Name: "anna", Role: RoleManager}, "pw", 0)
+	bob, _ := s.AddUser(ctx, User{Name: "bob", Role: RoleOperator}, "pw", 0)
+	month := clock.Add(30 * 24 * time.Hour)
+	key := func(u User, label string, madeBy int64) (Token, string) {
+		t.Helper()
+		tok, secret, err := s.AddKey(ctx, u.ID, KeyOptions{Label: label, MadeBy: madeBy})
+		if err != nil || tok.Kind != TokenAPI || tok.Label != label || tok.MadeBy != madeBy || !tok.ExpiresAt.IsZero() || len(secret) != 64 {
+			t.Fatalf("key %s: %+v %v", label, tok, err)
+		}
+		if got, _, _ := s.Token(ctx, tok.ID); got.MadeBy != madeBy {
+			t.Fatalf("key %s read again: made by %d, want %d", label, got.MadeBy, madeBy)
+		}
+		return tok, secret
+	}
+	alive := func(what, secret string, want bool) {
+		t.Helper()
+		if _, ok, _ := s.TokenByHash(ctx, HashToken(secret)); ok != want {
+			t.Errorf("%s: alive %v, want %v", what, ok, want)
+		}
+	}
+
+	root, rootSecret := key(anna, "root", 0)
+	child, childSecret := key(anna, "child", root.ID)
+	sibling, siblingSecret := key(anna, "sibling", root.ID)
+	grandchild, grandchildSecret := key(bob, "grandchild, another user's", child.ID)
+	great, greatSecret := key(bob, "great-grandchild", grandchild.ID)
+	_, otherSecret := key(anna, "other", 0)
+	session, sessionSecret, err := s.AddKeySession(ctx, grandchild.ID, "phone", month)
+	if err != nil || session.MadeBy != 0 {
+		t.Fatalf("a key's session: %+v %v", session, err)
+	}
+	sub, _, err := s.AddPushSubscription(ctx, PushSubscription{UserID: bob.ID, TokenID: session.ID, Endpoint: "https://push.example.net/c", P256dh: "k", Auth: "a"})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// The child ends by its end date: its heirs stay, and pass the
+	// revoke on all the same.
+	if _, err := s.db.ExecContext(ctx, `UPDATE tokens SET expires_at = ? WHERE id = ?`, formatTime(clock), child.ID); err != nil {
+		t.Fatal(err)
+	}
+	alive("a key past its end", childSecret, false)
+	alive("the heir of a key past its end", grandchildSecret, true)
+	alive("the session of that heir", sessionSecret, true)
+
+	heirs, err := s.RevokeToken(ctx, root.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if want := []int64{child.ID, sibling.ID, grandchild.ID, great.ID}; fmt.Sprint(heirs) != fmt.Sprint(want) {
+		t.Errorf("heirs %v, want %v", heirs, want)
+	}
+	for what, secret := range map[string]string{"the root": rootSecret, "its child": childSecret, "its sibling": siblingSecret,
+		"the grandchild": grandchildSecret, "the great-grandchild": greatSecret, "the grandchild's session": sessionSecret} {
+		alive(what+" after the root's revoke", secret, false)
+		if ended, _ := s.TokenEnded(ctx, HashToken(secret), clock); !ended {
+			t.Errorf("%s after the root's revoke has not ended", what)
+		}
+	}
+	if got, _, _ := s.Token(ctx, child.ID); got.DeletedAt.IsZero() {
+		t.Error("the child past its end not revoked")
+	}
+	if _, ok, _ := s.PushSubscription(ctx, sub.ID); ok {
+		t.Error("the heir's session's subscription stayed")
+	}
+	alive("a key no key made", otherSecret, true)
+	if heirs, err := s.RevokeToken(ctx, root.ID); !errors.Is(err, ErrNoToken) || heirs != nil {
+		t.Errorf("a revoke again: %v %v", heirs, err)
+	}
+
+	// A key that made none has no heirs; one an older binary revoked
+	// alone passes the revoke on to the keys it made.
+	lone, _ := key(anna, "lone", 0)
+	if heirs, err := s.RevokeToken(ctx, lone.ID); err != nil || heirs == nil || len(heirs) != 0 {
+		t.Errorf("a key without heirs: %v %v", heirs, err)
+	}
+	first, _ := key(anna, "first", 0)
+	second, _ := key(anna, "second", first.ID)
+	third, thirdSecret := key(bob, "third", second.ID)
+	if _, err := s.db.ExecContext(ctx, `UPDATE tokens SET deleted_at = ? WHERE id = ?`, s.nowText(), second.ID); err != nil {
+		t.Fatal(err)
+	}
+	alive("the heir of a key an older binary revoked", thirdSecret, true)
+	if heirs, err := s.RevokeToken(ctx, first.ID); err != nil || fmt.Sprint(heirs) != fmt.Sprint([]int64{third.ID}) {
+		t.Errorf("through a key revoked before: %v %v", heirs, err)
+	}
+	alive("the heir of a key an older binary revoked, after its maker's revoke", thirdSecret, false)
+
+	// A user's removal revokes its keys, and their heirs with them.
+	carol, _ := s.AddUser(ctx, User{Name: "carol", Role: RoleManager}, "pw", 0)
+	carols, _ := key(carol, "carol's", 0)
+	_, bobsOfCarol := key(bob, "made with carol's key", carols.ID)
+	_, bobsOwn := key(bob, "bob's own", 0)
+	if err := s.DeleteUser(ctx, "carol", 0); err != nil {
+		t.Fatal(err)
+	}
+	alive("the heir of a removed user's key", bobsOfCarol, false)
+	alive("a key of the heir's user beside it", bobsOwn, true)
+}
+
+// The bootstrap's revoke of a key that is no longer the settings file's
+// is a revoke: the keys it made go with it (AP KeyLife, D8-A), and the
+// result counts them.
+func TestBootstrapRevokeTakesHeirs(t *testing.T) {
+	t.Parallel()
+	s := open(t, t.TempDir())
+	ctx := context.Background()
+	if res, err := s.Bootstrap(ctx, "file-one"); err != nil || !res.OwnerCreated {
+		t.Fatalf("bootstrap: %+v %v", res, err)
+	}
+	owner, _, _ := s.User(ctx, BootstrapUser)
+	file, ok, err := s.TokenByHash(ctx, HashToken("file-one"))
+	if err != nil || !ok {
+		t.Fatalf("the file's key: %v %v", ok, err)
+	}
+	heir, heirSecret, err := s.AddKey(ctx, owner.ID, KeyOptions{Label: "made with the file's key", MadeBy: file.ID})
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, otherSecret, _ := s.AddKey(ctx, owner.ID, KeyOptions{Label: "made by a session"})
+	res, err := s.Bootstrap(ctx, "file-two")
+	if err != nil || res.Revoked != 1 || res.Heirs != 1 || !res.TokenAdded {
+		t.Fatalf("the file's token changed: %+v %v", res, err)
+	}
+	if _, ok, _ := s.TokenByHash(ctx, HashToken(heirSecret)); ok {
+		t.Errorf("the heir %d of the file's old key lives", heir.ID)
+	}
+	if _, ok, _ := s.TokenByHash(ctx, HashToken(otherSecret)); !ok {
+		t.Error("a key no key made went with the file's old key")
 	}
 }
 
@@ -206,13 +452,13 @@ func TestTokenEnded(t *testing.T) {
 	ended("a hash no token has", "nope", false)
 
 	loggedOut, loggedOutSecret, _ := s.AddToken(ctx, anna.ID, TokenSession, "Firefox", end)
-	if err := s.RevokeToken(ctx, loggedOut.ID); err != nil {
+	if _, err := s.RevokeToken(ctx, loggedOut.ID); err != nil {
 		t.Fatal(err)
 	}
 	ended("a session logged out", loggedOutSecret, true)
 	revokedKey, revokedKeySecret, _ := s.AddToken(ctx, anna.ID, TokenAPI, "phone, login by fingerprint", zeroTime)
 	_, keySession, _ := s.AddKeySession(ctx, revokedKey.ID, "phone", end)
-	if err := s.RevokeToken(ctx, revokedKey.ID); err != nil {
+	if _, err := s.RevokeToken(ctx, revokedKey.ID); err != nil {
 		t.Fatal(err)
 	}
 	ended("a revoked key", revokedKeySecret, true)

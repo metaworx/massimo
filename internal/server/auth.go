@@ -331,7 +331,7 @@ func (s *Server) SetToken(ctx context.Context, token string) error {
 	if err != nil {
 		return err
 	}
-	s.log.Info("api token applied", "owner_created", res.OwnerCreated, "key_added", res.TokenAdded, "revoked", res.Revoked, "auth", s.AuthMode())
+	s.log.Info("api token applied", "owner_created", res.OwnerCreated, "key_added", res.TokenAdded, "revoked", res.Revoked, "heirs", res.Heirs, "auth", s.AuthMode())
 	if res.OwnerCreated {
 		s.tellOpenSetup(ctx, store.BootstrapUser, store.RoleOwner)
 	}
@@ -789,8 +789,8 @@ const errTooManyTickets = ticketError("too many stream tickets outstanding")
 var errBadToken = errors.New("missing or wrong token")
 
 // errEndedToken is a token the server issued that has ended: revoked,
-// logged out, expired, or a session whose key was revoked
-// (store.TokenEnded). It is refused as errBadToken is, with its words,
+// logged out, expired, or a session whose key was revoked or is past its
+// end (store.TokenEnded). It is refused as errBadToken is, with its words,
 // but is no guess, and does not count toward the lockout (AP MobileApp
 // v1.4, D64-A).
 var errEndedToken = fmt.Errorf("%w: ended", errBadToken)
@@ -825,14 +825,13 @@ func (s *Server) resolve(ctx context.Context, mode authMode, secret, ip string) 
 		return nil, errBadToken
 	}
 	hash := store.HashToken(secret)
+	// A live token alone, its own end and its key's in the rule
+	// (store.TokenByHash, AP KeyLife, Block 2).
 	tok, ok, err := s.opts.Store.TokenByHash(ctx, hash)
 	if err != nil {
 		return nil, err
 	}
 	now := time.Now()
-	if ok && tok.Expired(now) {
-		return nil, errEndedToken
-	}
 	if !ok {
 		return nil, s.unknownToken(ctx, hash, now)
 	}
@@ -908,10 +907,12 @@ func (s *Server) principalFor(ctx context.Context, tok store.Token, now time.Tim
 
 // stillAdmitted reports whether the caller an event stream was opened
 // for would be let in now: an open server still open, the one token of a
-// server without a store unchanged, a user's token neither revoked nor
-// expired, its user and role still allowed and holding read. A store
-// that cannot be read ends the stream, as authorize fails closed. The
-// stream asks at each keep-alive (server.go, events).
+// server without a store unchanged, a user's token alive (neither
+// revoked nor past its end, and a session made from a key only while the
+// key is neither: store.TokenAlive), its user and role still allowed and
+// holding read. A store that cannot be read ends the stream, as
+// authorize fails closed. The stream asks at each keep-alive (server.go,
+// events).
 func (s *Server) stillAdmitted(ctx context.Context, p *principal) bool {
 	if p == nil {
 		return false
@@ -926,18 +927,11 @@ func (s *Server) stillAdmitted(ctx context.Context, p *principal) bool {
 	if mode != modeUsers {
 		return false
 	}
-	now := time.Now()
-	tok, ok, err := s.opts.Store.Token(ctx, p.token.ID)
-	if err != nil || !ok || !tok.DeletedAt.IsZero() || tok.Expired(now) {
+	tok, ok, err := s.opts.Store.TokenAlive(ctx, p.token.ID)
+	if err != nil || !ok {
 		return false
 	}
-	if tok.ParentID != 0 {
-		// A session made from a key lives while the key does.
-		if key, ok, err := s.opts.Store.Token(ctx, tok.ParentID); err != nil || !ok || !key.DeletedAt.IsZero() {
-			return false
-		}
-	}
-	np, err := s.principalFor(ctx, tok, now)
+	np, err := s.principalFor(ctx, tok, time.Now())
 	return err == nil && np.has("read")
 }
 

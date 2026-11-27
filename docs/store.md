@@ -414,10 +414,12 @@ CREATE TABLE tokens (
     last_used_at   TEXT,
     last_used_from TEXT    NOT NULL DEFAULT '',  -- the client's address
     deleted_at     TEXT,                         -- revoked; revoked_at until migration 0024 (D7)
-    parent_id      INTEGER                       -- migration 0025: the key a session was made from; NULL for a sign-in's and for a key
+    parent_id      INTEGER,                      -- migration 0025: the key a session was made from; NULL for a sign-in's and for a key
+    made_by        INTEGER                       -- migration 0100: the API key that made a key; NULL for every other token
 );
 CREATE INDEX tokens_user ON tokens (user_id);
 CREATE INDEX tokens_parent ON tokens (parent_id) WHERE parent_id IS NOT NULL;  -- migration 0025
+CREATE INDEX tokens_made_by ON tokens (made_by) WHERE made_by IS NOT NULL;  -- migration 0100
 
 CREATE TABLE settings (
     key        TEXT    NOT NULL,   -- 'stale_after', 'poll_interval', 'log.keep_days', 'backups.keep_days_auto', …
@@ -1056,6 +1058,20 @@ names another reference in `ref`, and this binary's next start deletes it.
 Its down part, `0026_backup_pending.down.sql`, drops the table;
 it loses the windows of a pending backup, and only that,
 which the binary of 25 begins again at its first look.
+`0100_token_maker.sql`, the first of `main`'s block
+("Two lines of releases", below;
+AP KeyLife v1.0, Block 2, D5-A), adds `tokens.made_by` and its index,
+additively, keeping `min_reader` 24:
+the API key that made a key, where the bearer of its making was that key
+(section 6, "Keys made by keys").
+A binary for 24 to 26 writes its tokens without the column,
+so a key it makes has no maker,
+and its revoke of a key leaves the keys that key made,
+which a revoke by this binary of the key's own maker still reaches,
+the makers being followed through a revoked key.
+The column has no foreign key, so that its down part,
+`0100_token_maker.down.sql`, can drop it and the index;
+it loses which key made a key, and only that.
 On a store of 500 000 log rows (149 MB, a tenth with a user) a desktop took
 2.0 s for the raise, its copy `massimo.db.before-24` included, and 2.2 s for the
 down part, its copy included (`TestRaiseTimes` with
@@ -1396,7 +1412,8 @@ the roles and their sets are rows (section 5), seeded by the first migration.
   (every five seconds it looks, and on SIGHUP),
   a `MASSIMO_API_TOKEN` whose hash is not in `tokens` is
   added to the owner's keys with the same label,
-  and one that was removed from the file is revoked.
+  and one that was removed from the file is revoked,
+  with the keys it made ("Keys made by keys", below; AP KeyLife, D8-A).
   The file stays the way to recover an owner who lost the password:
   put a token into the file, log in with it, set a password.
   The API does not revoke the file's key,
@@ -1513,10 +1530,44 @@ empty for a session of a sign-in and for a key.
 and what they subscribed to push;
 the key's next session revokes its earlier one, in the same transaction,
 so a key has one live session at a time;
-and a session counts only while its key does (`TokenByHash`, `Tokens`),
+and a session counts only while its key does,
+neither revoked nor past its end (AP KeyLife, Block 2),
 which also ends one whose key a binary before 0025 revoked.
+That is one rule, `alive` in `internal/store/tokens.go`,
+of a token not revoked, not past its own end, its user not removed,
+and of a session made from a key only while the key is neither revoked nor
+past its end,
+wherever a token is let in, counted or sent to:
+`TokenByHash` and `TokenAlive` give a token under it,
+`TokenEnded` says a token the store issued is not,
+`Tokens` lists the sessions under it and the keys while not revoked,
+a key past its end staying listed, to be revoked,
+`PushSubscriptions` sends to a session's devices under it,
+and `AddKeySession` makes a session from a key under it alone.
 A password set by someone else ends the sessions, those made from keys
 among them, and leaves the keys.
+
+### Keys made by keys
+
+Any key of a user makes keys, for its user and for those its user manages,
+so a key that leaked could make more keys, which its revoke would leave
+(AP KeyLife v1.0, Block 2, D5-A).
+A key made by `POST /api/v1/users/{name}/tokens` whose bearer is an API key
+names that key in `tokens.made_by` (migration 0100), its heir;
+a key made by a session, of a sign-in or made from a key by
+`POST /api/v1/login/key`, by `massimo user token`, by the bootstrap
+or at an integration's collection of its key names none.
+`RevokeToken` revokes, in its transaction, the heirs of the token it revokes,
+followed through `made_by` from key to key in any state,
+so that a key past its end, or one an older binary revoked alone,
+passes the revoke on to the keys it made,
+with their sessions and what those subscribed to push,
+and returns the heirs it revoked, by id;
+`DeleteUser` revokes the heirs of the user's tokens with them,
+and the bootstrap's revoke of a key that is no longer the settings file's
+takes them too (D8-A), its log line saying how many.
+A key's end, by its end date, takes none:
+an heir lives past its maker's end, and only a revoke reaches it.
 
 ### The sign-in by OPAQUE
 

@@ -369,7 +369,8 @@ paths:
       x-capability: any
       description: |
         The bearer is revoked, whatever it is: a session, or an API key
-        and the sessions made from it (POST /api/v1/login/key). One call
+        and the sessions made from it (POST /api/v1/login/key), with the
+        keys it made and theirs (heirs; AP KeyLife, D5-A). One call
         for any token, without the user's name or the token's id, as the
         apps revoke a kept key with the key alone. Audited as
         token.revoke. A caller without a token of a user, on an open
@@ -390,6 +391,7 @@ paths:
                 properties:
                   ok: {type: boolean}
                   id: {type: integer, description: "The token's id, as the user's token list had it"}
+                  heirs: {$ref: "#/components/schemas/TokenHeirs"}
         "400":
           description: No token of a user to revoke, or a call on a user's behalf
           content:
@@ -805,7 +807,7 @@ paths:
       summary: Remove a user
       x-capability: users
       description: >-
-        The user's tokens are revoked; its row stays for the audit. The last enabled owner without an end date stays
+        The user's tokens are revoked, with the keys its keys made (made_by); its row stays for the audit. The last enabled owner without an end date stays
         (409), and so does the user that holds the settings file's MASSIMO_API_TOKEN (409), whose key the next start
         would not add back: it is changed or removed in the settings file first. An integration's own user (<uuid>:)
         and its system user stay too (403): DELETE /api/v1/integrations/{uuid} removes the integration and keeps both.
@@ -920,7 +922,9 @@ paths:
       summary: Revoke a session or an API key
       x-capability: users
       description: |
-        A session made from a key goes with the key. The settings file's
+        A session made from a key goes with the key, and so do the keys
+        the key made with itself as the bearer, and theirs (heirs; AP
+        KeyLife, D5-A), with their sessions. The settings file's
         token (MASSIMO_API_TOKEN, from_settings in the list) is 409, as
         DELETE /api/v1/me/token answers it: it is changed or removed in
         the settings file, since the next start would not add it back.
@@ -938,6 +942,7 @@ paths:
                 properties:
                   ok: {type: boolean}
                   id: {type: integer}
+                  heirs: {$ref: "#/components/schemas/TokenHeirs"}
         "400": {$ref: "#/components/responses/BadRequest"}
         "401": {$ref: "#/components/responses/Unauthorized"}
         "403": {$ref: "#/components/responses/Forbidden"}
@@ -4863,6 +4868,11 @@ components:
         last_used_from: {type: string, description: The client's address}
         key_id: {type: integer, description: "The key a session was made from (POST /api/v1/login/key); absent for a session of a sign-in and for a key"}
         from_settings: {type: boolean, description: "In a user's token list, true on the key that is the settings file's MASSIMO_API_TOKEN, which is changed or removed there and not revoked through the API; absent on any other"}
+        made_by: {type: integer, description: "The API key that made this key, as the bearer of its POST /api/v1/users/{name}/tokens (AP KeyLife, D5-A); absent for a key made by a session, the command line, the bootstrap or an integration's approval, and for a session. A revoke of that key revokes this one"}
+    TokenHeirs:
+      type: array
+      description: "The ids of the keys a revoke took with the token, the keys it made and theirs (made_by), oldest first; [] for none"
+      items: {type: integer}
     Me:
       type: object
       properties:

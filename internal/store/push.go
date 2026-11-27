@@ -97,12 +97,15 @@ func (s *Store) PushSubscription(ctx context.Context, id int64) (PushSubscriptio
 }
 
 // PushSubscriptions lists a user's subscriptions, oldest first; with
-// userID 0, every subscription that may be sent to: its token neither
-// revoked nor expired, its user neither removed, disabled nor expired.
+// userID 0, every subscription that may be sent to: its token alive (the
+// rule of tokens.go: neither revoked nor past its end, its user not
+// removed, and a session made from a key only while the key is neither
+// revoked nor past its end), its user neither disabled nor expired.
 func (s *Store) PushSubscriptions(ctx context.Context, userID int64) ([]PushSubscription, error) {
-	q := `SELECT ` + pushColumns + `, t.deleted_at, t.expires_at, u.deleted_at, u.disabled, u.expires_at
-		FROM push_subscriptions p JOIN tokens t ON t.id = p.token_id JOIN users u ON u.id = p.user_id`
-	args := []any{}
+	now := s.now()
+	q := `SELECT ` + pushColumns + `, ` + alive + `, u.disabled, u.expires_at
+		FROM push_subscriptions p JOIN tokens t ON t.id = p.token_id JOIN users u ON u.id = p.user_id LEFT JOIN tokens k ON k.id = t.parent_id`
+	args := aliveArgs(now)
 	if userID != 0 {
 		q += ` WHERE p.user_id = ?`
 		args = append(args, userID)
@@ -112,18 +115,17 @@ func (s *Store) PushSubscriptions(ctx context.Context, userID int64) ([]PushSubs
 		return nil, fmt.Errorf("store: push subscriptions: %w", err)
 	}
 	defer rows.Close()
-	now := s.now()
 	out := []PushSubscription{}
 	for rows.Next() {
 		var p PushSubscription
-		var created, ok, revoked, tokenEnd, deleted, userEnd sql.NullString
-		var disabled bool
+		var created, ok, userEnd sql.NullString
+		var tokenAlive, disabled bool
 		if err := rows.Scan(&p.ID, &p.UUID, &p.UserID, &p.TokenID, &p.Endpoint, &p.P256dh, &p.Auth, &p.Label, &created, &ok, &p.Failures,
-			&revoked, &tokenEnd, &deleted, &disabled, &userEnd); err != nil {
+			&tokenAlive, &disabled, &userEnd); err != nil {
 			return nil, fmt.Errorf("store: push subscriptions: %w", err)
 		}
 		p.CreatedAt, p.LastOKAt = parseTime(created), parseTime(ok)
-		live := !revoked.Valid && !deleted.Valid && !disabled && !ended(parseTime(tokenEnd), now) && !ended(parseTime(userEnd), now)
+		live := tokenAlive && !disabled && !ended(parseTime(userEnd), now)
 		if userID != 0 || live {
 			out = append(out, p)
 		}

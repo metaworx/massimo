@@ -6,8 +6,10 @@
  *
  * A user's sessions and API keys, wherever they are drawn: in a user's
  * panel of System settings → Users and in My profile. Each with its
- * kind, its id, label, the key a session was made from, when and from
- * where it was last used, and Revoke; of one's own user the token the
+ * kind, its id, label, the key a session was made from, the key a key
+ * was made by (made_by, AP KeyLife, D5-A), when and from where it was
+ * last used, and Revoke, whose message names the keys that went with it;
+ * of one's own user the token the
  * page is signed in with says "this device" and the key that session was
  * made of "its key", and Revoke on "this device" signs out; in the app the
  * key the phone keeps for the server (its status' key_id, shared/app.ts)
@@ -48,7 +50,8 @@ import { session, stillSession } from "./session";
 
 /**
  * TokenRow is one session or key, with its id and Revoke; labels names a
- * session's key by the list's labels; marked tints it (token-marked). Of
+ * session's key and a key's maker by the list's labels, else by its id;
+ * marked tints it (token-marked). Of
  * one's own user, the token the page is signed in with says "this
  * device", the key that session was made of "its key"; in the app the key
  * the phone keeps, of the id deviceKey, says "this device's key" in its
@@ -77,6 +80,7 @@ function TokenRow({ u, tk, labels, run, marked, deviceKey }: {
       {tag && <Badge kind="ok" text={t(tag)} />}
       <span class="token-label">{tk.label || ""}</span>
       <span class={"muted small token-key" + hid(!tk.key_id)}>{tk.key_id ? t("users.fromKey", { label: labels.get(tk.key_id) || "#" + tk.key_id }) : ""}</span>
+      <span class={"muted small token-maker" + hid(!tk.made_by)}>{tk.made_by ? t("users.madeBy", { label: labels.get(tk.made_by) || "#" + tk.made_by }) : ""}</span>
       <span class="muted small token-used">
         {tk.last_used_at ? <>{t("users.lastUsed", { from: tk.last_used_from || "?" }) + " "}<Age at={tk.last_used_at} plain /></> : t("users.neverUsed")}
       </span>

@@ -13,14 +13,16 @@
  * read is the caller's to drop where its answer comes too late.
  */
 
-import type { Identity, Token } from "../api";
+import type { Identity, Token, TokenHeirs } from "../api";
+import type { OkText } from "./action";
 
 /**
  * Run sends fn's request for the user of the login name name through the
  * caller's runner: it reloads what the caller shows, says ok or that it
- * failed and why, and resolves to whether the request was taken.
+ * failed and why, and resolves to whether the request was taken; ok may
+ * be made once the request is done (OkText).
  */
-export type Run = (name: string, fn: () => Promise<unknown>, ok: string) => Promise<boolean>;
+export type Run = (name: string, fn: () => Promise<unknown>, ok: OkText) => Promise<boolean>;
 
 /** userPath is a user's path in the API, rest after it. */
 export function userPath(name: string, rest = ""): string {
@@ -32,9 +34,17 @@ export async function loadTokens(name: string): Promise<Token[]> {
   return (await api<Token[]>("GET", userPath(name, "/tokens"))) || [];
 }
 
-/** revokeToken revokes one of a user's sessions or keys (DELETE). */
+/**
+ * revokeToken revokes one of a user's sessions or keys (DELETE), a key's
+ * heirs with it, the keys it made and theirs, which its message names
+ * by id (AP KeyLife, D5-A).
+ */
 export function revokeToken(run: Run, name: string, tk: Token): Promise<boolean> {
-  return run(name, () => api("DELETE", userPath(name, "/tokens/" + tk.id)), t("users.revoked", { id: tk.id }));
+  let heirs: TokenHeirs = [];
+  return run(name, async () => {
+    const res = await api<{ heirs?: TokenHeirs }>("DELETE", userPath(name, "/tokens/" + tk.id));
+    heirs = (res && res.heirs) || [];
+  }, () => (heirs.length ? t("users.revokedWithHeirs", { id: tk.id, ids: heirs.join(", ") }) : t("users.revoked", { id: tk.id })));
 }
 
 /**

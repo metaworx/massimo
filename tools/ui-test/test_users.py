@@ -454,6 +454,45 @@ def test_a_key_session_names_its_key(page, case):
     show_view(page, "tiles")
 
 
+MADE_BY = {"en": "made by the API key {label}", "de": "erstellt mit dem API-Schlüssel {label}"}
+REVOKED_WITH_HEIRS = {"en": "Token {id} revoked, with the keys it made: {ids}.",
+                      "de": "Token {id} widerrufen, mit den Schlüsseln, die damit erstellt wurden: {ids}."}
+
+
+def test_a_key_made_by_a_key_names_its_maker(page, case):
+    """A key made with another API key as the bearer (AP KeyLife, Block 2,
+    D5-A) says in its row which key made it, by the maker's label where
+    the list holds the maker, else by its id: the maker itself was made
+    with the suite's token, the owner's settings-file key, which the
+    operator's list does not hold. Revoking the maker says which keys
+    went with it, and they are listed no more."""
+    prefix = f"ui-test-heirs-{case.width}-{case.lang}-"
+    revoke_keys(prefix)
+    file_key = api_call("GET", "api/v1/me")["token"]["id"]
+    maker = api_call("POST", "api/v1/users/operator/tokens", {"label": prefix + "maker"})
+    heir = api_call("POST", "api/v1/users/operator/tokens", {"label": prefix + "heir"}, token=maker["token"])
+    try:
+        show_view(page, "system")
+        panel = page.locator(".user-panel[data-name='operator']")
+        panel.wait_for()
+        panel.locator("summary").click()
+        heir_row = panel.locator(f".user-tokens li[data-id='{heir['id']}']")
+        heir_row.wait_for(timeout=5000)
+        maker_row = panel.locator(f".user-tokens li[data-id='{maker['id']}']")
+        assert heir_row.locator(".token-maker").inner_text() == MADE_BY[case.lang].format(label=prefix + "maker"), "the heir names its maker by its label"
+        assert maker_row.locator(".token-maker").inner_text() == MADE_BY[case.lang].format(label="#%d" % file_key), "the maker names its own by its id"
+        assert scroll_width(page) <= case.width, "no horizontal scroll"
+        maker_row.locator(".revoke-token").click()
+        said = REVOKED_WITH_HEIRS[case.lang].format(id=maker["id"], ids=heir["id"])
+        assert wait_until(page, "document.getElementById('users-msg').textContent.includes(%r)" % said, 5), \
+            f"the users' line names the heirs: {page.locator('#users-msg').text_content()}"
+        assert wait_until(page, "!document.querySelector(%r)" % f".user-panel[data-name='operator'] .user-tokens li[data-id='{heir['id']}']", 5), \
+            "the heir is listed no more"
+    finally:
+        revoke_keys(prefix)
+    show_view(page, "tiles")
+
+
 TOKEN_ID = {"en": "id {id}", "de": "ID {id}"}
 
 

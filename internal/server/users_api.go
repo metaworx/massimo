@@ -996,7 +996,10 @@ func (s *Server) listTokens(w http.ResponseWriter, r *http.Request) error {
 }
 
 // postToken handles POST /api/v1/users/{name}/tokens: a new API key,
-// shown once.
+// shown once. Where the bearer is an API key, the new key names it as
+// its maker, and a revoke of that key revokes it (AP KeyLife, D5-A); a
+// key made by a session of any kind, one made from a key by
+// POST /api/v1/login/key among them, names none.
 func (s *Server) postToken(w http.ResponseWriter, r *http.Request) error {
 	st, err := s.userStore()
 	if err != nil {
@@ -1019,21 +1022,30 @@ func (s *Server) postToken(w http.ResponseWriter, r *http.Request) error {
 	if err := noWayIn(u); err != nil {
 		return err
 	}
-	tok, secret, err := st.AddToken(r.Context(), u.ID, store.TokenAPI, req.Label, time.Time{})
+	opts := store.KeyOptions{Label: req.Label}
+	if p := principalOf(r); p.named() && p.token.Kind == store.TokenAPI {
+		opts.MadeBy = p.token.ID
+	}
+	tok, secret, err := st.AddKey(r.Context(), u.ID, opts)
 	if err != nil {
 		return userFail(err)
 	}
 	auditTarget(r, "token:"+strconv.FormatInt(tok.ID, 10))
 	auditSubject(r, tokenSubject(tok, u))
-	s.log.Info("api key created", "user", s.logUserName(r.Context(), u), "label", req.Label, "remote", s.clientIP(r))
+	line := []any{"user", s.logUserName(r.Context(), u), "label", req.Label, "remote", s.clientIP(r)}
+	if opts.MadeBy != 0 {
+		line = append(line, "made_by", opts.MadeBy)
+	}
+	s.log.Info("api key created", line...)
 	v := viewToken(tok)
 	writeJSON(w, http.StatusCreated, map[string]any{"token": secret, "id": v.ID, "kind": v.Kind, "label": v.Label, "created_at": v.CreatedAt})
 	return nil
 }
 
 // deleteToken handles DELETE /api/v1/users/{name}/tokens/{id}: the
-// session or key is revoked. The settings file's key is 409, as
-// DELETE /api/v1/me/token answers it (settingsKey).
+// session or key is revoked, a key's heirs with it, which its answer, its
+// log line and its change line name (revoked). The settings file's key
+// is 409, as DELETE /api/v1/me/token answers it (settingsKey).
 func (s *Server) deleteToken(w http.ResponseWriter, r *http.Request) error {
 	st, err := s.userStore()
 	if err != nil {
@@ -1061,11 +1073,25 @@ func (s *Server) deleteToken(w http.ResponseWriter, r *http.Request) error {
 	if held && id == file.ID {
 		return fail(http.StatusConflict, settingsKeyKept)
 	}
-	if err := st.RevokeToken(r.Context(), id); err != nil {
+	heirs, err := st.RevokeToken(r.Context(), id)
+	if err != nil {
 		return userFail(err)
 	}
-	s.log.Info("token revoked", "user", s.logUserName(r.Context(), u), "token", id, "kind", tok.Kind, "remote", s.clientIP(r))
-	auditSubject(r, tokenSubject(tok, u))
-	writeJSON(w, http.StatusOK, map[string]any{"ok": true, "id": id})
+	s.revoked(w, r, tok, u, heirs, "user", s.logUserName(r.Context(), u), "token", id, "kind", tok.Kind, "remote", s.clientIP(r))
 	return nil
+}
+
+// revoked answers a revoke of tok, a token of u, that took heirs with it
+// (store.RevokeToken): {"ok", "id", "heirs"}, the heirs [] for none, and
+// its Info line of line's attributes, the heirs added where it took any;
+// the change line's subject names them too (AP KeyLife, D5-A).
+func (s *Server) revoked(w http.ResponseWriter, r *http.Request, tok store.Token, u store.User, heirs []int64, line ...any) {
+	subject := tokenSubject(tok, u)
+	if len(heirs) > 0 {
+		line = append(line, "heirs", heirs)
+		subject["heirs"] = heirs
+	}
+	s.log.Info("token revoked", line...)
+	auditSubject(r, subject)
+	writeJSON(w, http.StatusOK, map[string]any{"ok": true, "id": tok.ID, "heirs": heirs})
 }

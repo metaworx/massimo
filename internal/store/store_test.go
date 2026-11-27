@@ -87,10 +87,12 @@ func TestOpenMigratesAnEmptyFile(t *testing.T) {
 	if s2.Created() || logged.Count(m, nil) != 0 {
 		t.Fatalf("second open: created %v, log %v", s2.Created(), logged.Since(m, nil))
 	}
+	// One row per migration: the numbers come in blocks of 100 (docs/store.md,
+	// "Two lines of releases"), so there are fewer than the last one's.
 	var rows int
 	s2.db.QueryRow(`SELECT count(*) FROM schema_version`).Scan(&rows)
-	if rows != SchemaVersion() {
-		t.Fatalf("%d schema_version rows", rows)
+	if ms, err := loadMigrations(embeddedMigrations()); err != nil || rows != len(ms) {
+		t.Fatalf("%d schema_version rows, %d migrations: %v", rows, len(ms), err)
 	}
 }
 

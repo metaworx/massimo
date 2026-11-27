@@ -28,6 +28,7 @@ type BootstrapResult struct {
 	TokenAdded   bool // the token was added to an owner's keys
 	Revoked      int  // tokens with the label whose secret is not the token any more
 	Moved        bool // the token's key was taken from an integration's user (heldByIntegration)
+	Heirs        int  // the keys the revoked tokens made, and theirs, revoked with them (AP KeyLife, D8-A)
 }
 
 // Bootstrap applies MASSIMO_API_TOKEN (token, "" for none) to the
@@ -36,10 +37,11 @@ type BootstrapResult struct {
 // the token as its API key; with regular users, a token whose hash is
 // unknown is added to the first enabled owner that is not an
 // integration's, and a key with the token's label that is not the token
-// any more is revoked. The token's key that an older start gave to an
-// integration's user with the role owner moves to that owner, the one
-// made or the first regular one (AP LooseEnds, D1): such a user holds no
-// key of its own, and the file's token is the owner's way in.
+// any more is revoked, with the keys it made (AP KeyLife, D8-A). The
+// token's key that an older start gave to an integration's user with the
+// role owner moves to that owner, the one made or the first regular one
+// (AP LooseEnds, D1): such a user holds no key of its own, and the
+// file's token is the owner's way in.
 func (s *Store) Bootstrap(ctx context.Context, token string) (BootstrapResult, error) {
 	var res BootstrapResult
 	if err := s.writable(); err != nil {
@@ -104,11 +106,15 @@ func (s *Store) Bootstrap(ctx context.Context, token string) (BootstrapResult, e
 	for _, k := range keys {
 		// The label is a content column, so it is read here, not in SQL.
 		if k.label == BootstrapLabel && k.hash != hash {
-			if err := s.RevokeToken(ctx, k.id); err != nil {
+			// A revoke, so the keys it made go with it (AP KeyLife, D8-A):
+			// the file is how the owner ends a token that may have leaked.
+			heirs, err := s.RevokeToken(ctx, k.id)
+			if err != nil {
 				return res, err
 			}
 			res.Revoked++
-			s.log.Info("api token revoked: not MASSIMO_API_TOKEN any more", "token", k.id)
+			res.Heirs += len(heirs)
+			s.log.Info("api token revoked: not MASSIMO_API_TOKEN any more", "token", k.id, "heirs", len(heirs))
 			continue
 		}
 		if hash != "" && k.hash == hash && k.id != held {

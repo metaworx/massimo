@@ -477,7 +477,7 @@ func TestBackupPendingMigration(t *testing.T) {
 	at25 := t.TempDir()
 	migrateOnly(t, at25, migrationsUpTo(t, 25), clock)
 	dir := copyStore(t, at25)
-	migrateOnly(t, dir, nil, clock)
+	migrateOnly(t, dir, migrationsUpTo(t, 26), clock) // 0026 alone, whatever came after it
 	s := newStore(dir, Options{Logger: quiet(), Now: clock})
 	if err := s.open(false); err != nil {
 		t.Fatal(err)

@@ -59,6 +59,16 @@ func userToken(t *testing.T, st *store.Store, name, role string) string {
 	return secret
 }
 
+// endToken puts a token's end a second into the past, as a key's end
+// date does once it has passed (AP KeyLife, Block 2): TouchToken moves a
+// token's end to the one it is given, with a use at the same moment.
+func endToken(t *testing.T, st *store.Store, id int64) {
+	t.Helper()
+	if err := st.TouchToken(t.Context(), id, "", time.Now().Add(-time.Second)); err != nil {
+		t.Fatal(err)
+	}
+}
+
 // callAPI sends a request with a token and a body and returns the status
 // and the body; the event stream's body is not read.
 func callAPI(t *testing.T, ts *httptest.Server, method, path, token, body string) (int, string) {
