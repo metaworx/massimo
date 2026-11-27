@@ -1670,9 +1670,16 @@ its heirs live on, an end being no revoke (D5-A).
 The end is a state read at each check, as the idle end is (D6-A):
 the date moved later, or removed, brings the key back, its session with it.
 Who may move it is the server's question:
-the key's user or who manages it, never the key itself as the bearer (D4-A),
-and never the settings file's key (D3-A);
-the bootstrap clears any end date the file's key has.
+the key's user or who manages it, never the key itself as the bearer (D4-A).
+The settings file's key never ends by a date (D3-A):
+the bootstrap clears the end date of the key it takes in as the file's,
+a key made with one and then put into the file among them,
+and the end-date part of `alive`, as its idle part, passes over the file's hash,
+for the key and for a session made from it,
+so that an end date left in its row, by a binary before that, ends nothing;
+`SetTokenLife` refuses that key (`ErrSettingsKey`),
+and the server finds it by `KeyByHash`, its hash among the keys not revoked,
+whatever else of its life, so that it refuses every change of it.
 
 ### The sign-in by OPAQUE
 

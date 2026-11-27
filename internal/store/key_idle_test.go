@@ -331,6 +331,7 @@ func TestKeyEndRule(t *testing.T) {
 		{what: "a key past its end date before it was unused too long", kind: TokenAPI, days: 7, created: now.Add(-30 * day), used: cut.Add(-day), end: cut.Add(-2 * day), ended: EndedExpired},
 		{what: "a key ended unused on the day its end date came", kind: TokenAPI, days: 7, created: now.Add(-30 * day), used: cut.Add(-day), end: cut.Add(-day).Add(7 * day), ended: EndedExpired},
 		{what: "a revoked key", kind: TokenAPI, created: now.Add(-day), revoked: true, ended: EndedRevoked},
+		{what: "the settings file's key past an end date its row holds", kind: TokenAPI, days: 7, ofFile: true, created: now.Add(-30 * day), end: now.Add(-day)},
 	} {
 		if c.days > 0 {
 			if err := s.SetSetting(ctx, KeyIdleDaysKey, c.days); err != nil {
@@ -341,6 +342,10 @@ func TestKeyEndRule(t *testing.T) {
 		}
 		hash := HashToken(fmt.Sprintf("placeholder-%d", n))
 		if c.ofFile {
+			// one row of the file's hash at a time: the hash is unique
+			if _, err := s.db.ExecContext(ctx, `DELETE FROM tokens WHERE hash = ?`, file); err != nil {
+				t.Fatal(err)
+			}
 			hash = file
 		}
 		var used, end, revoked any

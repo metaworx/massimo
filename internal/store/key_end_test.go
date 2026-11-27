@@ -192,3 +192,84 @@ func TestKeyEnd(t *testing.T) {
 		t.Errorf("no key given an end date: %v", err)
 	}
 }
+
+// The settings file's key never ends by a date (AP KeyLife, Block 4,
+// D3-A): a key made with an end date and then put into the file loses it
+// at the bootstrap and lives past it; a row of the file's key that holds
+// an end date all the same, as an older binary may leave it, is passed
+// over by the rule, for the key and for a session made from it, and
+// listed as living; SetTokenLife refuses the file's key whatever it
+// changes.
+func TestSettingsKeyNeverEnds(t *testing.T) {
+	t.Parallel()
+	t0 := time.Date(2026, 11, 27, 12, 0, 0, 0, time.UTC)
+	clock := t0
+	s, err := Open(copied(t), Options{Logger: quiet(), Now: func() time.Time { return clock }})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer s.Close()
+	ctx := context.Background()
+	day := 24 * time.Hour
+	owner, _ := s.AddUser(ctx, User{Name: "owner", Role: RoleOwner}, "", 0)
+	key, secret, err := s.AddKey(ctx, owner.ID, KeyOptions{Label: "laptop", Expires: t0.Add(2 * day)})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := s.Bootstrap(ctx, secret); err != nil {
+		t.Fatal(err)
+	}
+	if got, _, _ := s.Token(ctx, key.ID); !got.ExpiresAt.IsZero() {
+		t.Errorf("the bootstrap kept the end date of the key it took in: %v", got.ExpiresAt)
+	}
+	alive := func(what, secret string) {
+		t.Helper()
+		if _, ok, err := s.TokenByHash(ctx, HashToken(secret)); err != nil || !ok {
+			t.Errorf("%s: alive %v %v, want true", what, ok, err)
+		}
+		if got, err := s.TokenEnded(ctx, HashToken(secret), clock); err != nil || got {
+			t.Errorf("%s: ended %v %v, want false", what, got, err)
+		}
+	}
+	clock = t0.Add(3 * day)
+	alive("the settings file's key past the end date it was made with", secret)
+
+	// Its row holding an end date all the same.
+	if _, err := s.db.ExecContext(ctx, `UPDATE tokens SET expires_at = ? WHERE id = ?`, formatTime(t0.Add(day)), key.ID); err != nil {
+		t.Fatal(err)
+	}
+	alive("the settings file's key past an end date its row holds", secret)
+	session, sessionSecret, err := s.AddKeySession(ctx, key.ID, "phone", clock.Add(30*day))
+	if err != nil {
+		t.Errorf("a session of the settings file's key past an end date its row holds: %v", err)
+	} else {
+		alive("a session of the settings file's key past an end date its row holds", sessionSecret)
+		if _, ok, err := s.TokenAlive(ctx, session.ID); err != nil || !ok {
+			t.Errorf("TokenAlive of that session: %v %v", ok, err)
+		}
+	}
+	list, err := s.Tokens(ctx, owner.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, tk := range list {
+		if tk.ID == key.ID && (!tk.SettingsKey || tk.Ended != "" || !tk.EndsAt.IsZero()) {
+			t.Errorf("the settings file's key listed: settings key %v, ended %q, ends at %v", tk.SettingsKey, tk.Ended, tk.EndsAt)
+		}
+	}
+
+	// SetTokenLife refuses it, and changes nothing.
+	later, yes := clock.Add(day), true
+	var none time.Time
+	for _, c := range []struct {
+		what string
+		life TokenLife
+	}{{"an end date", TokenLife{Expires: &later}}, {"no end", TokenLife{Expires: &none}}, {"kept from the idle limit", TokenLife{IdleExempt: &yes}}} {
+		if _, err := s.SetTokenLife(ctx, key.ID, c.life); !errors.Is(err, ErrSettingsKey) {
+			t.Errorf("the settings file's key given %s: %v, want ErrSettingsKey", c.what, err)
+		}
+	}
+	if got, _, _ := s.Token(ctx, key.ID); got.IdleExempt || !got.ExpiresAt.Equal(t0.Add(day)) {
+		t.Errorf("a refused change of the settings file's key changed it: %+v", got)
+	}
+}

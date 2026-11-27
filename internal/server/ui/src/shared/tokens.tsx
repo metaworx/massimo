@@ -42,7 +42,9 @@
  * the key's user or who manages it, D4-A) a key's row has Change… with
  * that field and No end, on an integration's key too, the switch there
  * for who keeps alone, and never on the settings file's key nor the key
- * the page is signed in with. Moved from System settings' users (AP
+ * the page is signed in with; a date half typed in Ends, which reads as
+ * empty, makes no key and changes no end, the message line saying why.
+ * Moved from System settings' users (AP
  * UiParts, Block 13), its texts the users.… keys both places use.
  */
 
@@ -90,6 +92,16 @@ function KeyLife({ tk }: { tk: Token }) {
 }
 
 /**
+ * halfTyped says whether a date field holds a date half typed: its value
+ * is then "", as an empty field's, and only the browser's badInput tells
+ * the two apart (AP KeyLife, Block 4), so that a part typed is never sent
+ * as no end date.
+ */
+function halfTyped(input: HTMLInputElement | null): boolean {
+  return !!input && input.validity.badInput;
+}
+
+/**
  * KeyChange is Change… of an API key's life (AP KeyLife, Blocks 3 and
  * 4): where keeps, the switch Keep while unused, its draft against the
  * key's idle_exempt; where ends, the field Ends, its draft against the
@@ -98,12 +110,25 @@ function KeyLife({ tk }: { tk: Token }) {
  * (setTokenLife) and closes the form once it is taken, and Cancel, which
  * closes it; done closes it, giving the focus back to Change…. The form's
  * first control takes the focus as it comes, in its layout effect. id is
- * the end field's.
+ * the end field's. A date half typed reads as empty, as one emptied by No
+ * end does, but is no choice of none: the form checks it itself
+ * (halfTyped, the browser's check off), and Save then sends nothing, says
+ * so through say and puts the focus back in the field.
  */
-function KeyChange({ u, tk, run, done, keeps, ends, id }: { u: User; tk: Token; run: Run; done: () => void; keeps: boolean; ends: boolean; id: string }) {
+function KeyChange({ u, tk, run, done, keeps, ends, id, say }: {
+  u: User;
+  tk: Token;
+  run: Run;
+  done: () => void;
+  keeps: boolean;
+  ends: boolean;
+  id: string;
+  say: (text: string, ok: boolean) => void;
+}) {
   useLang();
   const keep = useDraft(!!tk.idle_exempt);
   const end = useDraft(localOf(tk.expires_at));
+  const endRef = useRef<HTMLInputElement>(null);
   const busy = useBusy();
   const form = useRef<HTMLFormElement>(null);
   // the form comes where Change… was pressed: the focus on its first control
@@ -113,7 +138,13 @@ function KeyChange({ u, tk, run, done, keeps, ends, id }: { u: User; tk: Token; 
   const changed = (keeps && keep.changed) || (ends && end.changed);
   const submit = (ev: Event) => {
     ev.preventDefault();
-    if (busy.busy || !changed) return;
+    if (busy.busy) return;
+    if (ends && halfTyped(endRef.current)) {
+      say(t("users.keyEndBad"), false);
+      endRef.current?.focus();
+      return;
+    }
+    if (!changed) return;
     const life: TokenLife = {};
     if (keeps && keep.changed) life.idle_exempt = keep.value;
     if (ends && end.changed) life.expires_at = isoOf(end.value);
@@ -121,14 +152,19 @@ function KeyChange({ u, tk, run, done, keeps, ends, id }: { u: User; tk: Token; 
       if (ok) done();
     });
   };
+  // No end empties the field whole, a part typed there included, which the draft alone would leave
+  const noEnd = () => {
+    if (endRef.current) endRef.current.value = "";
+    end.set("");
+  };
   return (
-    <form ref={form} class="token-change" onSubmit={submit}>
+    <form ref={form} class="token-change" noValidate onSubmit={submit}>
       {keeps && <Switch label={t("users.keepUnused")} name="idle_exempt" draft={keep} cls="token-keep" />}
       {ends && (
         <Field label={t("users.keyEndsField")} id={id} cls="token-end-field">
           <span class="inline field-control">
-            <DateTime id={id} cls="token-end-input" step={60} value={end.value} set={end.set} />
-            <button type="button" class="token-no-end" onClick={() => end.set("")}>{t("users.keyNoEnd")}</button>
+            <DateTime id={id} cls="token-end-input" step={60} value={end.value} set={end.set} inputRef={endRef} />
+            <button type="button" class="token-no-end" onClick={noEnd}>{t("users.keyNoEnd")}</button>
           </span>
         </Field>
       )}
@@ -151,9 +187,10 @@ function KeyChange({ u, tk, run, done, keeps, ends, id }: { u: User; tk: Token; 
  * ends, but the settings file's key and the key the page is signed in
  * with, a key changing nothing of its own life (AP KeyLife, D4-A); Cancel
  * and a Save taken give the focus back to Change…. idBase is the start of
- * the ids of its fields.
+ * the ids of its fields; say is the caller's message line, for what
+ * Change… refuses itself.
  */
-function TokenRow({ u, tk, labels, run, marked, deviceKey, keeps, ends, idBase }: {
+function TokenRow({ u, tk, labels, run, marked, deviceKey, keeps, ends, idBase, say }: {
   u: User;
   tk: Token;
   labels: Map<number, string>;
@@ -163,6 +200,7 @@ function TokenRow({ u, tk, labels, run, marked, deviceKey, keeps, ends, idBase }
   keeps: boolean;
   ends: boolean;
   idBase: string;
+  say: (text: string, ok: boolean) => void;
 }) {
   const [changing, setChanging] = useState(false);
   const changeRef = useRef<HTMLButtonElement>(null);
@@ -208,7 +246,7 @@ function TokenRow({ u, tk, labels, run, marked, deviceKey, keeps, ends, idBase }
               run={() => (current ? revokeOwn(u.name, tk) : revokeToken(run, u.name, tk))} />
           </span>
         )}
-      {changeable && changing && <KeyChange u={u} tk={tk} run={run} keeps={keeps} ends={ends} id={idBase + "-end-" + tk.id} done={() => {
+      {changeable && changing && <KeyChange u={u} tk={tk} run={run} keeps={keeps} ends={ends} id={idBase + "-end-" + tk.id} say={say} done={() => {
         back.current = true;
         setChanging(false);
       }} />}
@@ -262,6 +300,7 @@ export function Tokens({ u, off, open, reads, run, say, labelId, help, marked, d
   const [label, setLabel] = useState("");
   const [keep, setKeep] = useState(false);
   const [end, setEnd] = useState("");
+  const endRef = useRef<HTMLInputElement>(null);
   const ul = useRef<HTMLUListElement>(null);
   // read when its place opens and at every change of the caller's counter while it is open; the key just made shown by this read alone
   // biome-ignore lint/correctness/useExhaustiveDependencies: reads is the caller's change counter, which asks for the read again by its change alone.
@@ -298,6 +337,12 @@ export function Tokens({ u, off, open, reads, run, say, labelId, help, marked, d
       say(t("users.keyLabelNeeded"), false);
       return;
     }
+    // a date half typed reads as empty: it makes no key, rather than one without an end date
+    if (halfTyped(endRef.current)) {
+      say(t("users.keyEndBad"), false);
+      endRef.current?.focus();
+      return;
+    }
     if (await createKey(run, u.name, l, (key) => { made.current = key; }, keeps && keep, isoOf(end))) {
       setLabel("");
       setKeep(false);
@@ -312,7 +357,7 @@ export function Tokens({ u, off, open, reads, run, say, labelId, help, marked, d
         {list && !list.length && <li class="muted small">{t("users.tokensNone")}</li>}
         {(list || []).map((tk) => (
           <TokenRow key={tk.id} u={u} tk={tk} labels={labels} run={run} marked={tk.kind === "api" && tk.id === marked} deviceKey={deviceKey} keeps={keeps && !listOnly}
-            ends={ends} idBase={labelId} />
+            ends={ends} idBase={labelId} say={say} />
         ))}
       </ul>
       {!listOnly && (
@@ -324,7 +369,7 @@ export function Tokens({ u, off, open, reads, run, say, labelId, help, marked, d
           <TextField label={t("users.newKey")} id={labelId} name="label" maxLength={64} placeholder={t("users.keyLabel")} value={label} set={setLabel} />
           {keeps && <Switch label={t("users.keepUnused")} id={labelId + "-keep"} name="idle_exempt" cls="key-keep" checked={keep} onChange={setKeep} />}
           <Field label={t("users.keyEndsField")} id={labelId + "-end"} cls="key-end" hint={t("users.keyEndsHint")} hintId={labelId + "-end-hint"}>
-            <DateTime id={labelId + "-end"} cls="field-control" step={60} value={end} set={setEnd} />
+            <DateTime id={labelId + "-end"} cls="field-control" step={60} value={end} set={setEnd} inputRef={endRef} />
           </Field>
           <div class="actions">
             <span class="actions-right">

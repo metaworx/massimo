@@ -952,6 +952,86 @@ def test_a_keys_end_line(page, case, reads):
     show_view(page, "tiles")
 
 
+# a datetime field half typed: it reads as empty, as one emptied on purpose does
+HALF = "(el) => el.validity.badInput && el.value === ''"
+FOCUSED = "document.activeElement && document.activeElement.matches(%r)"
+
+
+def test_a_half_typed_end_makes_no_key(page, case):
+    """At Create key, a date half typed in Ends, which reads as empty, makes
+    no key (AP KeyLife, Block 4): the users' line says that the date is not
+    complete and the focus goes back into the field. On the page before, it
+    made a key without an end date."""
+    prefix = f"ui-test-halfmake-{case.width}-{case.lang}-"
+    revoke_keys(prefix)
+    posts = []
+    page.on("request", lambda r: posts.append(r.post_data_json) if r.method == "POST" and r.url.endswith("/users/operator/tokens") else None)
+    said = "document.getElementById('users-msg').textContent.includes(%r)" % page.evaluate("t('users.keyEndBad')")
+    try:
+        show_view(page, "system")
+        panel = page.locator(".user-panel[data-name='operator']")
+        panel.wait_for()
+        panel.locator("summary").click()
+        field = panel.locator("#user-key-label-operator-end")
+        field.wait_for()
+        field.focus()
+        page.keyboard.type("02")
+        assert field.evaluate(HALF), "Create key's date half typed"
+        panel.locator("input[name=label]").fill(prefix + "half")
+        panel.locator(".create-key").click()
+        assert wait_until(page, said, 5), f"the users' line: {page.locator('#users-msg').text_content()}"
+        assert wait_until(page, FOCUSED % "#user-key-label-operator-end", 3), "the focus in Create key's field"
+        assert posts == [], f"a date half typed makes no key: {posts}"
+    finally:
+        revoke_keys(prefix)
+    show_view(page, "tiles")
+
+
+def test_a_half_typed_end_is_refused(page, case):
+    """In Change… of a key with an end date, a date half typed, which reads
+    as empty as No end does, is no choice of none (AP KeyLife, Block 4):
+    Save sends nothing, the users' line says that the date is not complete
+    and the focus goes back into the field, the key's end kept; No end then
+    empties the field, and Save sends null. On the page before, the
+    browser's own check of the form held the save, with its bubble alone."""
+    prefix = f"ui-test-halfend-{case.width}-{case.lang}-"
+    revoke_keys(prefix)
+    dated = api_call("POST", "api/v1/users/operator/tokens", {"label": prefix + "dated", "expires_at": "2031-02-03T11:30:00Z"})
+    puts = []
+    page.on("request", lambda r: puts.append(r.post_data_json) if r.method == "PUT" and "/users/operator/tokens/" in r.url else None)
+    said = "document.getElementById('users-msg').textContent.includes(%r)" % page.evaluate("t('users.keyEndBad')")
+    try:
+        show_view(page, "system")
+        panel = page.locator(".user-panel[data-name='operator']")
+        panel.wait_for()
+        panel.locator("summary").click()
+        row = panel.locator(f".user-tokens li[data-id='{dated['id']}']")
+        row.wait_for(timeout=5000)
+        row.locator(".change-key").click()
+        form = row.locator("form.token-change")
+        form.wait_for()
+        end = form.locator(".token-end-input")
+        assert end.input_value() != "", "Change… shows the key's end"
+        end.focus()
+        page.keyboard.press("Backspace")
+        assert end.evaluate(HALF), "a part of the date cleared: half typed, reading as empty"
+        save = form.locator("button[type=submit]")
+        save.click()
+        assert wait_until(page, said, 5), f"the users' line: {page.locator('#users-msg').text_content()}"
+        assert wait_until(page, FOCUSED % f"li[data-id='{dated['id']}'] .token-end-input", 3), "the focus back in the field"
+        assert puts == [], f"a date half typed sends nothing: {puts}"
+        stored = [tk for tk in api_call("GET", "api/v1/users/operator/tokens") if tk["id"] == dated["id"]]
+        assert stored and stored[0].get("expires_at") == "2031-02-03T11:30:00Z", f"the key's end kept: {stored}"
+        form.locator(".token-no-end").click()
+        assert end.evaluate("(el) => !el.validity.badInput && el.value === ''"), "No end empties the field whole"
+        with page.expect_request(lambda r: r.method == "PUT" and "/users/operator/tokens/" in r.url):
+            save.click()
+        assert puts == [{"expires_at": None}], f"No end sends null: {puts}"
+    finally:
+        revoke_keys(prefix)
+    show_view(page, "tiles")
+
+
 NO_ANSWER = {"en": "no answer from the server; it may have been done all the same",
              "de": "keine Antwort vom Server; es wurde vielleicht trotzdem ausgeführt"}
 

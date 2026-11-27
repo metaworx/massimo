@@ -46,6 +46,11 @@ var ErrNoToken = errors.New("store: no such token")
 // later, never at once nor in the past.
 var ErrEndPassed = errors.New("store: the end date has passed")
 
+// ErrSettingsKey is the error of a change to the life of the settings
+// file's key (AP KeyLife, D3-A): it never ends, by the idle limit nor by
+// a date, and is changed in the file.
+var ErrSettingsKey = errors.New("store: the key is the settings file's MASSIMO_API_TOKEN: its life is the file's")
+
 // Token is one row of tokens, without the hash.
 type Token struct {
 	ID           int64
@@ -131,16 +136,28 @@ const tokenColumns = `t.id, t.uuid, t.user_id, t.kind, t.label, t.created_at, t.
 const tokenJoins = ` FROM tokens t LEFT JOIN users u ON u.id = t.user_id LEFT JOIN tokens k ON k.id = t.parent_id`
 
 // alive is the rule of a live token t, joined as tokenJoins joins it
-// (AP KeyLife, Blocks 2 and 3): not revoked, not past its own end, not
-// ended unused (idleAliveT), its user there and not removed, and for a
-// session made from a key, the key there, not revoked, not past its end
-// and not ended unused; so a session whose key a binary before migration
-// 0025 revoked is refused all the same. It is never NULL, so NOT alive
-// is its opposite. It takes lifeRule.args. TokenByHash, TokenAlive,
-// TokenEnded, Tokens, PushSubscriptions and AddKeySession hold to it, and
-// lifeRule.apply is its form in Go for a token's own row.
-const alive = `(t.deleted_at IS NULL AND (t.expires_at IS NULL OR t.expires_at > ?) AND ` + idleAliveT + ` AND u.id IS NOT NULL AND u.deleted_at IS NULL
-	AND (t.parent_id IS NULL OR (k.id IS NOT NULL AND k.deleted_at IS NULL AND (k.expires_at IS NULL OR k.expires_at > ?) AND ` + idleAliveK + `)))`
+// (AP KeyLife, Blocks 2 to 4): not revoked, not past its own end
+// (endAliveT), not ended unused (idleAliveT), its user there and not
+// removed, and for a session made from a key, the key there, not
+// revoked, not past its end and not ended unused; so a session whose key
+// a binary before migration 0025 revoked is refused all the same. It is
+// never NULL, so NOT alive is its opposite. It takes lifeRule.args.
+// TokenByHash, TokenAlive, TokenEnded, Tokens, PushSubscriptions and
+// AddKeySession hold to it, and lifeRule.apply is its form in Go for a
+// token's own row.
+const alive = `(t.deleted_at IS NULL AND ` + endAliveT + ` AND ` + idleAliveT + ` AND u.id IS NOT NULL AND u.deleted_at IS NULL
+	AND (t.parent_id IS NULL OR (k.id IS NOT NULL AND k.deleted_at IS NULL AND ` + endAliveK + ` AND ` + idleAliveK + `)))`
+
+// endAliveT and endAliveK are the end-date part of alive, for the token t
+// and the key k a session was made from: no end, an end after the time
+// of the check, or the settings file's key (its hash, AP KeyLife, D3-A),
+// which never ends whatever its row holds, as an end date that the
+// bootstrap clears may be left there by a binary before that. Each takes
+// the time of the check and the file's hash.
+const (
+	endAliveT = `(t.expires_at IS NULL OR t.expires_at > ? OR t.hash = ?)`
+	endAliveK = `(k.expires_at IS NULL OR k.expires_at > ? OR k.hash = ?)`
+)
 
 // idleAliveT and idleAliveK are the idle part of alive, for the token t
 // and the key k a session was made from (AP KeyLife, Block 3): a token
@@ -181,21 +198,22 @@ func (s *Store) rule(ctx context.Context, now time.Time) (lifeRule, error) {
 	return r, nil
 }
 
-// args are alive's arguments under r: the time of the check, then the
-// idle part's, for t and again for k.
+// args are alive's arguments under r: the end-date part's, then the idle
+// part's, for t and again for k.
 func (r lifeRule) args() []any {
 	at, cutoff := formatTime(r.now), ""
 	if r.idle > 0 {
 		cutoff = formatTime(r.now.Add(-r.idle))
 	}
-	return []any{at, r.file, cutoff, cutoff, at, r.file, cutoff, cutoff}
+	return []any{at, r.file, r.file, cutoff, cutoff, at, r.file, r.file, cutoff, cutoff}
 }
 
 // apply gives t, a token as its row has it, its life under r, by the
 // rule alive's own parts in Go (TestKeyEndRule holds the two to each
 // other): SettingsKey, IdleEndsAt, EndsAt, and Ended, revoked first,
 // then whichever of its end date and its idle end came first, the end
-// date where both came at once. Its user and the key a session was made
+// date where both came at once; the settings file's key has neither,
+// whatever its row holds (D3-A). Its user and the key a session was made
 // from are the SQL's alone.
 func (r lifeRule) apply(t *Token) {
 	t.SettingsKey = r.file != "" && t.hash == r.file
@@ -207,14 +225,18 @@ func (r lifeRule) apply(t *Token) {
 		}
 		t.IdleEndsAt = from.Add(r.idle)
 	}
-	t.EndsAt = t.ExpiresAt
+	end := t.ExpiresAt
+	if t.SettingsKey {
+		end = time.Time{}
+	}
+	t.EndsAt = end
 	if !t.IdleEndsAt.IsZero() && (t.EndsAt.IsZero() || t.IdleEndsAt.Before(t.EndsAt)) {
 		t.EndsAt = t.IdleEndsAt
 	}
 	switch {
 	case !t.DeletedAt.IsZero():
 		t.Ended = EndedRevoked
-	case ended(t.EndsAt, r.now) && t.EndsAt.Equal(t.ExpiresAt):
+	case ended(t.EndsAt, r.now) && t.EndsAt.Equal(end):
 		t.Ended = EndedExpired
 	case ended(t.EndsAt, r.now):
 		t.Ended = EndedIdle
@@ -367,6 +389,28 @@ func (s *Store) Token(ctx context.Context, id int64) (Token, bool, error) {
 // (AP KeyLife, D6-A).
 func (s *Store) TokenByHash(ctx context.Context, hash string) (Token, bool, error) {
 	return s.liveToken(ctx, `t.hash = ?`, hash)
+}
+
+// KeyByHash finds the API key of a hash that is not revoked, whatever
+// else of its life (ended by a date or unused, its user disabled or
+// removed), with its life under the rule at the store's now; ok is false
+// for none. The server finds the settings file's key by it (settingsKey),
+// so that what it refuses for that key holds in every state of it (AP
+// KeyLife, D3-A).
+func (s *Store) KeyByHash(ctx context.Context, hash string) (Token, bool, error) {
+	r, err := s.rule(ctx, s.now())
+	if err != nil {
+		return Token{}, false, err
+	}
+	t, err := scanToken(s.db.QueryRowContext(ctx, `SELECT `+tokenColumns+` FROM tokens t WHERE t.hash = ? AND t.kind = ? AND t.deleted_at IS NULL`, hash, TokenAPI))
+	if errors.Is(err, sql.ErrNoRows) {
+		return Token{}, false, nil
+	}
+	if err != nil {
+		return Token{}, false, fmt.Errorf("store: key: %w", err)
+	}
+	r.apply(&t)
+	return t, true, nil
 }
 
 // TokenAlive returns a token by identifier while it lives, under the rule
@@ -637,10 +681,12 @@ type TokenLife struct {
 // not, since a key kept from the idle limit, or whose end date is moved
 // later or removed, lives again (AP KeyLife, D6-A), and returns it with
 // its life under the rule at the store's now. ErrNoToken where there is
-// no such key: none, a session or revoked; ErrIntegrationUser where an
-// integration's key is to be kept from the idle limit; ErrEndPassed where
-// the end date given has passed, and nothing is changed. Who may change
-// it is the caller's question (the server's, D4-A, D7-A).
+// no such key: none, a session or revoked; ErrSettingsKey where it is the
+// settings file's key, by the hash Bootstrap last applied, whose life is
+// the file's (D3-A); ErrIntegrationUser where an integration's key is to
+// be kept from the idle limit; ErrEndPassed where the end date given has
+// passed. A refusal changes nothing. Who may change it is the caller's
+// question (the server's, D4-A, D7-A).
 func (s *Store) SetTokenLife(ctx context.Context, id int64, life TokenLife) (Token, error) {
 	if err := s.writable(); err != nil {
 		return Token{}, err
@@ -649,13 +695,17 @@ func (s *Store) SetTokenLife(ctx context.Context, id int64, life TokenLife) (Tok
 		return Token{}, fmt.Errorf("%w: %s", ErrEndPassed, formatTime(*life.Expires))
 	}
 	var integration sql.NullInt64
-	err := s.db.QueryRowContext(ctx, `SELECT u.integration_id FROM tokens t JOIN users u ON u.id = t.user_id WHERE t.id = ? AND t.kind = ? AND t.deleted_at IS NULL`,
-		id, TokenAPI).Scan(&integration)
+	var hash string
+	err := s.db.QueryRowContext(ctx, `SELECT u.integration_id, t.hash FROM tokens t JOIN users u ON u.id = t.user_id WHERE t.id = ? AND t.kind = ? AND t.deleted_at IS NULL`,
+		id, TokenAPI).Scan(&integration, &hash)
 	if errors.Is(err, sql.ErrNoRows) {
 		return Token{}, fmt.Errorf("%w: key %d", ErrNoToken, id)
 	}
 	if err != nil {
 		return Token{}, fmt.Errorf("store: token %d: %w", id, err)
+	}
+	if file := s.settingsHash(); file != "" && hash == file {
+		return Token{}, fmt.Errorf("%w: key %d", ErrSettingsKey, id)
 	}
 	if life.IdleExempt != nil && *life.IdleExempt && integration.Valid {
 		return Token{}, fmt.Errorf("%w: its key %d is held to the idle limit", ErrIntegrationUser, id)

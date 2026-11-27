@@ -112,8 +112,9 @@ func (s *Store) Bootstrap(ctx context.Context, token string) (BootstrapResult, e
 			known = true
 			// A key the bootstrap takes in has no maker (AP KeyLife, D5-A),
 			// so that the revoke of the file's old key below, which may
-			// have made it, leaves it.
-			if _, err := s.db.ExecContext(ctx, `UPDATE tokens SET made_by = NULL, origin = ?, version = version + 1 WHERE id = ? AND made_by IS NOT NULL`, s.nodeID, k.id); err != nil {
+			// have made it, leaves it; and no end date (D3-A), which the
+			// rule passes over for it all the same (alive).
+			if _, err := s.db.ExecContext(ctx, `UPDATE tokens SET made_by = NULL, expires_at = NULL, origin = ?, version = version + 1 WHERE id = ? AND (made_by IS NOT NULL OR expires_at IS NOT NULL)`, s.nodeID, k.id); err != nil {
 				return res, fmt.Errorf("store: bootstrap: %w", err)
 			}
 		}

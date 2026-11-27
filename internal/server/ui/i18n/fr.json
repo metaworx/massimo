@@ -1786,6 +1786,7 @@
   "users.keyEndsField": "Fin",
   "users.keyEndsHint": "Vide : pas de date de fin. Ensuite, la clé est refusée, avec sa session.",
   "users.keyNoEnd": "Pas de fin",
+  "users.keyEndBad": "La date de fin est incomplète : complétez-la, ou videz-la pour aucune fin.",
   "users.newKey": "Nouvelle clé API",
   "users.keyLabel": "à quoi sert la clé",
   "users.keyLabelNeeded": "Dites à quoi sert la clé.",

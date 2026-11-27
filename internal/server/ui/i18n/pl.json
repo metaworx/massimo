@@ -1837,6 +1837,7 @@
   "users.keyEndsField": "Koniec",
   "users.keyEndsHint": "Puste: bez daty końca. Od tej chwili klucz jest odrzucany, wraz z jego sesją.",
   "users.keyNoEnd": "Bez końca",
+  "users.keyEndBad": "Data końca jest niepełna: uzupełnij ją albo wyczyść, aby klucz nie miał końca.",
   "users.newKey": "Nowy klucz API",
   "users.keyLabel": "do czego służy klucz",
   "users.keyLabelNeeded": "Podaj, do czego służy klucz.",

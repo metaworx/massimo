@@ -250,3 +250,117 @@ func TestKeyEndWho(t *testing.T) {
 	}
 	put("a session made from that key", made.Token, store.BootstrapUser, ownKey.ID, soon(24), 200, "")
 }
+
+// The settings file's key never ends by a date (AP KeyLife, Block 4,
+// D3-A): the owner makes a key with an end date and puts its secret into
+// the settings file (SetToken, as a reading of the file does); past that
+// date the key still lets the owner in, and the list shows it from the
+// settings file, living, without an end date. A row of it that holds an
+// end date all the same, as an older binary may leave it, changes
+// nothing of that, and its PUT, with an end, without one or with the
+// exclusion, and its DELETE stay 409; the next reading of the file clears
+// that end date from its row. The store's clock starts ten days back, as
+// in TestKeyEndDate.
+func TestSettingsKeyEndDate(t *testing.T) {
+	t.Parallel()
+	day := 24 * time.Hour
+	clock := testkit.NewClock(time.Now().UTC().Add(-10 * day).Truncate(time.Second))
+	r := startServer(t, quiet(), withOptions(storeOptionsAt(t, t.TempDir(), "secret", clock.Now)))
+	ts, st := r.ts, r.s.opts.Store
+	ctx := t.Context()
+	other := userToken(t, st, "olga", store.RoleOwner)
+	path := "/api/v1/users/" + store.BootstrapUser + "/tokens"
+	code, text := callAPI(t, ts, "POST", path, "secret", `{"label":"laptop","expires_at":"`+clock.Now().Add(2*day).Format(time.RFC3339)+`"}`)
+	var made struct {
+		Token string `json:"token"`
+		ID    int64  `json:"id"`
+	}
+	if err := json.Unmarshal([]byte(text), &made); err != nil || code != 201 {
+		t.Fatalf("the key with an end date: %d %s %v", code, text, err)
+	}
+	if err := r.s.SetToken(ctx, made.Token); err != nil {
+		t.Fatal(err)
+	}
+	clock.Add(3 * day)
+	key := path + "/" + strconv.FormatInt(made.ID, 10)
+	check := func(what string) {
+		t.Helper()
+		if code, text := callAPI(t, ts, "GET", "/api/v1/cubes", made.Token, ""); code != 200 {
+			t.Errorf("%s: the settings file's key %d %s, want 200", what, code, text)
+		}
+		if k := tokensOf(t, r, other, store.BootstrapUser)[made.ID]; !k.FromSettings || k.Ended != "" {
+			t.Errorf("%s: listed %+v, want from the settings file and living", what, k)
+		}
+		for _, body := range []string{`{"expires_at":null}`, `{"expires_at":"` + clock.Now().Add(day).Format(time.RFC3339) + `"}`, `{"idle_exempt":true}`} {
+			if code, text := callAPI(t, ts, "PUT", key, other, body); code != 409 || !strings.Contains(errorOf(text), "settings file") {
+				t.Errorf("%s: PUT %s: %d %s, want 409", what, body, code, text)
+			}
+		}
+		if code, text := callAPI(t, ts, "DELETE", key, other, ""); code != 409 {
+			t.Errorf("%s: DELETE: %d %s, want 409", what, code, text)
+		}
+	}
+	check("past the end date it was made with")
+	if k := tokensOf(t, r, other, store.BootstrapUser)[made.ID]; k.ExpiresAt != nil {
+		t.Errorf("the settings file's key keeps the end date it was made with: %+v", k)
+	}
+
+	// Its row holding an end date all the same, past.
+	if err := st.TouchToken(ctx, made.ID, "", clock.Now().Add(-time.Hour)); err != nil {
+		t.Fatal(err)
+	}
+	check("its row holding an end date that has passed")
+	if err := r.s.SetToken(ctx, made.Token); err != nil {
+		t.Fatal(err)
+	}
+	if got, _, _ := st.Token(ctx, made.ID); !got.ExpiresAt.IsZero() {
+		t.Errorf("the next reading of the file left the end date in its row: %v", got.ExpiresAt)
+	}
+}
+
+// A time that reads as the zero time, the year 1 in UTC, is neither an
+// end date nor "none" (AP KeyLife, Block 4): expires_at of an API key's
+// POST and PUT and of a user's POST and PUT is 400 and changes nothing,
+// where it read as null before.
+func TestYearOneIsNoEnd(t *testing.T) {
+	t.Parallel()
+	r := startServer(t, quiet(), withOptions(storeOptions(t, t.TempDir(), "secret")))
+	ts, st := r.ts, r.s.opts.Store
+	ctx := t.Context()
+	end := time.Now().Add(48 * time.Hour).UTC().Truncate(time.Second)
+	if _, err := st.AddUser(ctx, store.User{Name: "gina", Role: store.RoleGuest, ExpiresAt: end}, "", 0); err != nil {
+		t.Fatal(err)
+	}
+	owner, ok, _ := st.User(ctx, store.BootstrapUser)
+	if !ok {
+		t.Fatal("no owner")
+	}
+	key, _, err := st.AddKey(ctx, owner.ID, store.KeyOptions{Label: "laptop", Expires: end})
+	if err != nil {
+		t.Fatal(err)
+	}
+	const zero = `"0001-01-01T00:00:00Z"`
+	before := len(tokensOf(t, r, "secret", store.BootstrapUser))
+	for _, c := range []struct{ what, method, path, body string }{
+		{"a key made", "POST", "/api/v1/users/" + store.BootstrapUser + "/tokens", `{"label":"year one","expires_at":` + zero + `}`},
+		{"a key moved", "PUT", "/api/v1/users/" + store.BootstrapUser + "/tokens/" + strconv.FormatInt(key.ID, 10), `{"expires_at":` + zero + `}`},
+		{"a user made", "POST", "/api/v1/users", `{"name":"yuri","role":"guest","expires_at":` + zero + `}`},
+		{"a user changed", "PUT", "/api/v1/users/gina", `{"expires_at":` + zero + `}`},
+	} {
+		if code, text := callAPI(t, ts, c.method, c.path, "secret", c.body); code != 400 || !strings.Contains(errorOf(text), "expires_at") {
+			t.Errorf("%s with the year 1: %d %s, want 400", c.what, code, text)
+		}
+	}
+	if n := len(tokensOf(t, r, "secret", store.BootstrapUser)); n != before {
+		t.Errorf("a key was made with the year 1: %d tokens, %d before", n, before)
+	}
+	if k := tokensOf(t, r, "secret", store.BootstrapUser)[key.ID]; k.ExpiresAt == nil || !k.ExpiresAt.Equal(end) {
+		t.Errorf("the key's end after the year 1: %+v", k)
+	}
+	if _, ok, _ := st.User(ctx, "yuri"); ok {
+		t.Error("a user was made with the year 1")
+	}
+	if u, _, _ := st.User(ctx, "gina"); !u.ExpiresAt.Equal(end) {
+		t.Errorf("the user's end after the year 1: %v, want %v", u.ExpiresAt, end)
+	}
+}

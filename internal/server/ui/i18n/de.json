@@ -1784,6 +1784,7 @@
   "users.keyEndsField": "Ende",
   "users.keyEndsHint": "Leer: kein Enddatum. Ab dann wird der Schlüssel abgewiesen, mit seiner Sitzung.",
   "users.keyNoEnd": "Kein Ende",
+  "users.keyEndBad": "Das Enddatum ist unvollständig: vervollständige es oder leere es für kein Ende.",
   "users.newKey": "Neuer API-Schlüssel",
   "users.keyLabel": "wofür der Schlüssel ist",
   "users.keyLabelNeeded": "Sag, wofür der Schlüssel ist.",

@@ -84,7 +84,8 @@ func (req userRequest) expiresAt() (t time.Time, set bool, err error) {
 // expiresOf reads an end date, expires_at of a user's or an API key's
 // body, decoded apart so that a null is told from an absent field: an
 // RFC 3339 time (set), null (set, the zero time: no end), or absent (not
-// set); anything else is 400.
+// set); anything else is 400, and so is a time that reads as the zero
+// time (0001-01-01T00:00:00Z), which would else be taken for null.
 func expiresOf(raw json.RawMessage) (t time.Time, set bool, err error) {
 	if len(raw) == 0 {
 		return time.Time{}, false, nil
@@ -99,6 +100,9 @@ func expiresOf(raw json.RawMessage) (t time.Time, set bool, err error) {
 	t, err = time.Parse(time.RFC3339, s)
 	if err != nil {
 		return time.Time{}, false, fail(http.StatusBadRequest, "expires_at: %v", err)
+	}
+	if t.IsZero() {
+		return time.Time{}, false, fail(http.StatusBadRequest, "expires_at: %s is no end date: want a time such as 2026-12-24T18:00:00Z, or null for none", s)
 	}
 	return t, true, nil
 }
@@ -1205,6 +1209,9 @@ func (s *Server) putToken(w http.ResponseWriter, r *http.Request) error {
 	auditTarget(r, "token:"+strconv.FormatInt(id, 10))
 	auditSubject(r, tokenSubject(tok, u))
 	got, err := st.SetTokenLife(r.Context(), id, life)
+	if errors.Is(err, store.ErrSettingsKey) {
+		return fail(http.StatusConflict, settingsKeyKept) // the file read again since the check above
+	}
 	if err != nil {
 		return userFail(endFail(err))
 	}

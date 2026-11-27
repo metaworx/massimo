@@ -1784,6 +1784,7 @@
   "users.keyEndsField": "Ends",
   "users.keyEndsHint": "Empty: no end date. From then on the key is refused, its session with it.",
   "users.keyNoEnd": "No end",
+  "users.keyEndBad": "The end date is not complete: complete it, or empty it for no end.",
   "users.newKey": "New API key",
   "users.keyLabel": "what the key is for",
   "users.keyLabelNeeded": "Say what the key is for.",

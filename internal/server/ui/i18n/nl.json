@@ -1785,6 +1785,7 @@
   "users.keyEndsField": "Einde",
   "users.keyEndsHint": "Leeg: geen einddatum. Daarna wordt de sleutel geweigerd, met zijn sessie.",
   "users.keyNoEnd": "Geen einde",
+  "users.keyEndBad": "De einddatum is onvolledig: vul hem aan, of maak hem leeg voor geen einde.",
   "users.newKey": "Nieuwe API-sleutel",
   "users.keyLabel": "waar de sleutel voor is",
   "users.keyLabelNeeded": "Zeg waar de sleutel voor is.",

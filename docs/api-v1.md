@@ -821,7 +821,9 @@ From then on the server is in users mode (Authentication).
 `GET /api/v1/users/{name}` is one user.
 `PUT /api/v1/users/{name}` changes any of `display_name`, `role`, `disabled`,
 `expires_at` (`null` clears it) and `password`;
-absent fields stay, an unknown one is `400`.
+absent fields stay, an unknown one is `400`,
+and so is an `expires_at` that reads as the zero time (`0001-01-01T00:00:00Z`),
+here and at `POST`, rather than clearing the end.
 A user changes its own `display_name` and, with `current_password`
 or a `proof` from the sign-in by OPAQUE, its own `password` or `record`;
 a user with keys only (`has_password` false) sets its first one without,
@@ -1004,13 +1006,20 @@ an integration's key's that of a holder of `users` or `integrations`,
 on its row in the integration's user's panel;
 the integration registers again once its key ended.
 A time that has passed, or now, is `400` and changes nothing:
-a key ends now by its revoke.
-The settings file's key takes none (`409`, D3-A):
+a key ends now by its revoke;
+so is one that reads as the zero time (`0001-01-01T00:00:00Z`),
+which is neither an end date nor none, here as for a user's `expires_at`.
+The settings file's key takes none (`409`, D3-A), in any state of it:
 an ended one would lock the owner out,
 since the bootstrap adds it back only where its hash is unknown.
+A key that becomes the settings file's loses its end date at the bootstrap,
+and the file's key never ends by one, whatever its row holds.
 The bearer that very key is `403` (D4-A):
-an end date that the key could move would renew itself,
-which is the idle limit again.
+a request whose bearer is the key never moves that key's end date.
+That alone does not stop the end date from being moved later:
+a session made from the key is not the key and may move it,
+and so may the key's user, signed in or with another of its keys,
+an end date that who manages the user set included.
 A user or a key with no right to the user is `403`, as for its other fields.
 The change is audited as `token.update`,
 its change line from and to (`null` for none).
