@@ -14,6 +14,7 @@ import (
 	"cmp"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"net/http"
 	"slices"
 	"sort"
@@ -301,7 +302,8 @@ func (s *Server) putSettings(w http.ResponseWriter, r *http.Request) error {
 			}
 			var v string
 			if json.Unmarshal(raw, &v) != nil || !slices.Contains(announceValues, v) {
-				return fail(http.StatusBadRequest, "%s: want one of %s, or null for auto", k, strings.Join(announceValues, ", "))
+				choices := strings.Join(announceValues, ", ")
+				return refuseSaying(http.StatusBadRequest, fmt.Sprintf("%s: want one of %s, or null for auto", k, choices), codeSettingChoiceBad, k, choices)
 			}
 			writes = append(writes, write{key: k, name: &v})
 			continue
@@ -313,7 +315,8 @@ func (s *Server) putSettings(w http.ResponseWriter, r *http.Request) error {
 			}
 			var name string
 			if json.Unmarshal(raw, &name) != nil || !slices.Contains(update.Flavours, name) {
-				return fail(http.StatusBadRequest, "%s: want one of %s, or null for the build's flavour", k, strings.Join(update.Flavours, ", "))
+				choices := strings.Join(update.Flavours, ", ")
+				return refuseSaying(http.StatusBadRequest, fmt.Sprintf("%s: want one of %s, or null for the build's flavour", k, choices), codeSettingChoiceBad, k, choices)
 			}
 			writes = append(writes, write{key: k, name: &name})
 			continue
@@ -328,7 +331,8 @@ func (s *Server) putSettings(w http.ResponseWriter, r *http.Request) error {
 				return fail(http.StatusBadRequest, "%s: want a string", k)
 			}
 			if k == store.UpdateAutoKey && v != store.UpdateAutoOff && v != store.UpdateAutoNight {
-				return fail(http.StatusBadRequest, "%s: want %s or %s, or null for %s", k, store.UpdateAutoOff, store.UpdateAutoNight, store.UpdateAutoOff)
+				msg := fmt.Sprintf("%s: want %s or %s, or null for %s", k, store.UpdateAutoOff, store.UpdateAutoNight, store.UpdateAutoOff)
+				return refuseSaying(http.StatusBadRequest, msg, codeSettingChoiceBad, k, store.UpdateAutoOff+", "+store.UpdateAutoNight)
 			}
 			if _, _, err := parseWindow(v); k == store.UpdateWindowKey && err != nil {
 				return fail(http.StatusBadRequest, "%s: %v", k, err)
@@ -368,7 +372,7 @@ func (s *Server) putSettings(w http.ResponseWriter, r *http.Request) error {
 				return fail(http.StatusBadRequest, "%s: want true or false", k)
 			}
 			if k == store.KeepOpenKey && on && s.authMode(r.Context()) != modeOpen {
-				return fail(http.StatusConflict, "%s counts only on a server without users: this one has users", k)
+				return refuse(http.StatusConflict, codeSettingKeepOpenUsers, k)
 			}
 			writes = append(writes, write{key: k, on: &on})
 			continue
@@ -442,7 +446,7 @@ func (s *Server) putSettings(w http.ResponseWriter, r *http.Request) error {
 			// The count of the users in the write's transaction: a first
 			// user made since the check above wins.
 			if err = st.SetKeepOpen(r.Context(), *wr.on, by); errors.Is(err, store.ErrHasUsers) {
-				return fail(http.StatusConflict, "%s counts only on a server without users: this one has users", wr.key)
+				return refuse(http.StatusConflict, codeSettingKeepOpenUsers, wr.key)
 			}
 		case wr.duration != nil:
 			err = st.SetSettingBy(r.Context(), wr.key, fmtDuration(*wr.duration), by)
@@ -575,11 +579,10 @@ func parseSettingDuration(d durationSetting, text string) (time.Duration, error)
 		return 0, nil
 	}
 	if v < d.min || v > d.max {
-		off := ""
 		if d.zero {
-			off = ", or 0 for off"
+			return 0, refuse(http.StatusBadRequest, codeSettingDurationRangeOff, d.key, text, fmtDuration(d.min), fmtDuration(d.max))
 		}
-		return 0, fail(http.StatusBadRequest, "%s %s: between %s and %s%s", d.key, text, fmtDuration(d.min), fmtDuration(d.max), off)
+		return 0, refuse(http.StatusBadRequest, codeSettingDurationRange, d.key, text, fmtDuration(d.min), fmtDuration(d.max))
 	}
 	return v, nil
 }

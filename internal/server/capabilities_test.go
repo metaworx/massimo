@@ -222,7 +222,7 @@ func TestRolesAgainstRoutes(t *testing.T) {
 			if !want && !refused {
 				t.Errorf("%s: %s %s answered %d %s, want 403 for %q", role, r.method, r.path, code, text, r.capability)
 			}
-			if !want && errorOf(text) != `capability "`+r.capability+`" required` {
+			if !want && (errorOf(text) != `capability "`+r.capability+`" required` || answerCode(text) != "capability_required") {
 				t.Errorf("%s: %s %s: message %q", role, r.method, r.path, text)
 			}
 		}
@@ -253,7 +253,7 @@ func TestMoveNeedsStructure(t *testing.T) {
 		{"namer", namer, `{"name":"x","room_id":6}`, "structure"},
 	} {
 		code, text := callAPI(t, ts, "PUT", path, c.token, c.body)
-		if c.want == "" && code == 403 || c.want != "" && (code != 403 || errorOf(text) != `capability "`+c.want+`" required`) {
+		if c.want == "" && code == 403 || c.want != "" && !isRefusal(code, text, 403, "capability_required", `{"capability":"`+c.want+`"}`, `capability "`+c.want+`" required`) {
 			t.Errorf("%s with %s: %d %s, want refused for %q", c.who, c.body, code, text, c.want)
 		}
 	}
@@ -274,7 +274,7 @@ func TestCopyNeedsConfigure(t *testing.T) {
 	st.AddRole(t.Context(), store.Role{Key: "mover", Capabilities: []string{"read", "structure"}}, 0)
 	mover := userToken(t, st, "mover", "mover")
 	path := "/api/v1/cubes/KEQ0000100/devices/0a010d"
-	if code, text := callAPI(t, ts, "PUT", path, mover, `{"room_id":1}`); code != 403 || errorOf(text) != `capability "configure" required` {
+	if code, text := callAPI(t, ts, "PUT", path, mover, `{"room_id":1}`); !isRefusal(code, text, 403, "capability_required", `{"capability":"configure"}`, `capability "configure" required`) {
 		t.Fatalf("a move with the copy and without configure: %d %s", code, text)
 	}
 	if got := cubewatch.Lines(fc).Since(0, cubewatch.Except('l')); len(got) != 0 {

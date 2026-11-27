@@ -50,7 +50,7 @@ func TestPreferencesRoutes(t *testing.T) {
 	}
 	for _, role := range []string{store.RoleGuest} {
 		tok := userToken(t, st, "u-"+role, role)
-		if code, text := callAPI(t, ts, "PUT", prefs+"/ui", tok, `{"poll":20}`); code != 403 || errorOf(text) != `capability "preferences" required` {
+		if code, text := callAPI(t, ts, "PUT", prefs+"/ui", tok, `{"poll":20}`); !isRefusal(code, text, 403, "capability_required", `{"capability":"preferences"}`, `capability "preferences" required`) {
 			t.Errorf("%s's put: %d %s", role, code, text)
 		}
 		if code, _ := callAPI(t, ts, "DELETE", prefs+"/ui", tok, ""); code != 403 {

@@ -38,7 +38,8 @@ func refusesWayIn(t *testing.T, s *Server, addr, token, name string) {
 		{"PUT", base + "/identities/1", `{"email":"anna@example.com"}`},
 		{"POST", base + "/identities/link/cloud", `{"redirect":"http://192.168.1.2:8099/"}`},
 	} {
-		if rec := sendFrom(s, c.method, c.path, addr, token, c.body); rec.Code != 403 || !strings.Contains(errorOf(rec.Body.String()), noWayInText) {
+		if rec := sendFrom(s, c.method, c.path, addr, token, c.body); rec.Code != 403 || !strings.Contains(errorOf(rec.Body.String()), noWayInText) ||
+			answerRefusal(rec.Body.String()).Code != "user_integration_no_way_in" || string(answerRefusal(rec.Body.String()).Params) != `{"user":"`+name+`"}` {
 			t.Errorf("%s %s %s: %d %s", c.method, c.path, c.body, rec.Code, rec.Body.String())
 		}
 	}
@@ -149,13 +150,14 @@ func TestHeldCredentialsOfAnIntegrationsUser(t *testing.T) {
 	if code != 200 || len(me.Capabilities) != 1 || me.Capabilities[0] != "read" {
 		t.Fatalf("/me with the held key: %d %s", code, text)
 	}
-	if rec := sendFrom(s, "DELETE", "/api/v1/users/anna", lan, heldKey, ""); rec.Code != 403 || !strings.Contains(errorOf(rec.Body.String()), `capability "users" required`) {
+	if rec := sendFrom(s, "DELETE", "/api/v1/users/anna", lan, heldKey, ""); !isRefusal(rec.Code, rec.Body.String(), 403, "capability_required", `{"capability":"users"}`, `capability "users" required`) {
 		t.Fatalf("the held key of an owner's role removes anna: %d %s", rec.Code, rec.Body.String())
 	}
-	if rec := sendFrom(s, "POST", "/api/v1/login/key", lan, heldKey, ""); rec.Code != 403 || !strings.Contains(errorOf(rec.Body.String()), noWayInText) {
+	if rec := sendFrom(s, "POST", "/api/v1/login/key", lan, heldKey, ""); rec.Code != 403 || !strings.Contains(errorOf(rec.Body.String()), noWayInText) || answerCode(rec.Body.String()) != "user_integration_no_way_in" {
 		t.Fatalf("a session from the held key: %d %s", rec.Code, rec.Body.String())
 	}
-	if rec := sendFrom(s, "POST", "/api/v1/login", lan, "", `{"user":"held","password":"correct horse"}`); rec.Code != 403 || !strings.Contains(errorOf(rec.Body.String()), noWayInText) {
+	if rec := sendFrom(s, "POST", "/api/v1/login", lan, "", `{"user":"held","password":"correct horse"}`); rec.Code != 403 || !strings.Contains(errorOf(rec.Body.String()), noWayInText) ||
+		answerCode(rec.Body.String()) != "user_integration_no_way_in" {
 		t.Fatalf("the held password: %d %s", rec.Code, rec.Body.String())
 	}
 	run := f.signIn(t, ts, "cloud", map[string]any{"email": "held@example.com", "email_verified": true})
