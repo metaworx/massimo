@@ -63,9 +63,15 @@ func (r *driftRig) flag(rf cube.RFAddress) {
 	})
 }
 
-// setRoom2 sets room 2 to manual at temp through the API.
+// setRoom2 sets room 2 to manual at temp through the API, and checks
+// that the write is on its way: the fake Cube's apply is held over the
+// PUT, since the rig's poll would otherwise show the members' new state
+// to a slow handler before it judged the write, which it would find
+// confirmed ("A write on its way", docs/testing.md).
 func (r *driftRig) setRoom2(temp string) {
 	r.t.Helper()
+	release := r.fc.HoldApply()
+	defer release() // the members that hear take it
 	if code, out := do(r.t, r.ts, "PUT", room2, `{"mode":"manual","temp":`+temp+`}`); code != 200 || out["confirmation"] != "pending" {
 		r.t.Fatalf("room setpoint %s: %d %v", temp, code, out)
 	}

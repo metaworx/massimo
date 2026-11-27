@@ -170,6 +170,11 @@ release() // they wake and take it
   so `t.Cleanup(release)` beside the test's own call is safe.
 - **A test that never releases** keeps the write on its way to its end,
   as `TestRoomProgramTagOfTheMembers` does.
+- **A helper that checks a write's answer** holds the apply over its own
+  call and releases it as it returns, as the drift rig's `setRoom2` does:
+  a rig that polls often, as that one every 50 ms,
+  shows the devices' new state to a slow handler before it judges the write,
+  which it then finds confirmed, not pending.
 - **`ApplyAfter` stays** for a test of the delay itself,
   as `TestApplyDelayDiscardAndOff`.
 
