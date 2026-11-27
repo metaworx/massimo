@@ -965,7 +965,7 @@ func TestRetriesWithoutAnAnswer(t *testing.T) {
 }
 
 // A list that never answers is given up after three attempts, and the
-// error says why.
+// error says why, naming the wait as the scale made it.
 func TestNoAnswerGivesUp(t *testing.T) {
 	fastRetries(t)
 	shortAnswerWait(t)
@@ -975,7 +975,7 @@ func TestNoAnswerGivesUp(t *testing.T) {
 	gh.hangFirst(list, 4)
 	c := &Client{API: gh.srv.URL, Repo: Repo, HTTP: gh.srv.Client(), Key: pub}
 	_, err := c.Latest(context.Background(), "alpha")
-	if err == nil || !strings.Contains(err.Error(), "no answer within 250ms (3 attempts)") || gh.count(list) != 3 {
+	if err == nil || !strings.Contains(err.Error(), fmt.Sprintf("no answer within %v (3 attempts)", answerWait)) || gh.count(list) != 3 {
 		t.Fatalf("got %v after %d requests", err, gh.count(list))
 	}
 }
