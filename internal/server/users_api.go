@@ -1027,6 +1027,11 @@ func (s *Server) postToken(w http.ResponseWriter, r *http.Request) error {
 		opts.MadeBy = p.token.ID
 	}
 	tok, secret, err := st.AddKey(r.Context(), u.ID, opts)
+	if opts.MadeBy != 0 && errors.Is(err, store.ErrNoToken) {
+		// The bearer, let in a moment before, was revoked or ended since:
+		// no key is made, as none would have been made after it.
+		return fail(http.StatusUnauthorized, "%v", errEndedToken)
+	}
 	if err != nil {
 		return userFail(err)
 	}

@@ -420,6 +420,143 @@ func TestBootstrapRevokeTakesHeirs(t *testing.T) {
 	}
 }
 
+// A key made with the settings file's key and then put into the file is
+// no heir once the bootstrap takes it: a key the bootstrap brings in has
+// no maker (AP KeyLife, D5-A). The revoke of the file's old key leaves it,
+// and the next start finds it as the file's.
+func TestBootstrapTakesAKeyTheOldOneMade(t *testing.T) {
+	t.Parallel()
+	s := open(t, t.TempDir())
+	ctx := context.Background()
+	if res, err := s.Bootstrap(ctx, "file-one"); err != nil || !res.OwnerCreated {
+		t.Fatalf("bootstrap: %+v %v", res, err)
+	}
+	owner, _, _ := s.User(ctx, BootstrapUser)
+	file, _, _ := s.TokenByHash(ctx, HashToken("file-one"))
+	_, keySecret, err := s.AddKey(ctx, owner.ID, KeyOptions{Label: "laptop", MadeBy: file.ID})
+	if err != nil {
+		t.Fatal(err)
+	}
+	res, err := s.Bootstrap(ctx, keySecret)
+	if err != nil || res.Revoked != 1 || res.Heirs != 0 || res.TokenAdded {
+		t.Errorf("the key put into the file: %+v %v", res, err)
+	}
+	if got, ok, _ := s.TokenByHash(ctx, HashToken(keySecret)); !ok || got.MadeBy != 0 {
+		t.Errorf("the file's new key: %+v %v, want it live and of no maker", got, ok)
+	}
+	if res, err := s.Bootstrap(ctx, keySecret); err != nil || res.Revoked != 0 || res.TokenAdded {
+		t.Errorf("the next start: %+v %v", res, err)
+	}
+}
+
+// The settings file's key goes with no other key's revoke, whoever made
+// it (MobileApp.D86-A, D89-A): the revoke of its maker and the removal of
+// its maker's user pass over it, and so over the keys it made.
+func TestHeirsPassOverTheFilesKey(t *testing.T) {
+	t.Parallel()
+	s := open(t, t.TempDir())
+	ctx := context.Background()
+	olga, _ := s.AddUser(ctx, User{Name: "olga", Role: RoleOwner}, "", 0)
+	anna, _ := s.AddUser(ctx, User{Name: "anna", Role: RoleManager}, "", 0)
+	maker, _, _ := s.AddKey(ctx, anna.ID, KeyOptions{Label: "maker"})
+	file, fileSecret, _ := s.AddKey(ctx, olga.ID, KeyOptions{Label: "to be the file's", MadeBy: maker.ID})
+	_, ofFileSecret, _ := s.AddKey(ctx, olga.ID, KeyOptions{Label: "made with the file's", MadeBy: file.ID})
+	if _, err := s.Bootstrap(ctx, fileSecret); err != nil {
+		t.Fatal(err)
+	}
+	// Whatever brought it there, the file's key named its maker.
+	madeBy := func(id int64) {
+		t.Helper()
+		if _, err := s.db.ExecContext(ctx, `UPDATE tokens SET made_by = ? WHERE id = ?`, id, file.ID); err != nil {
+			t.Fatal(err)
+		}
+	}
+	alive := func(what, secret string) {
+		t.Helper()
+		if _, ok, _ := s.TokenByHash(ctx, HashToken(secret)); !ok {
+			t.Errorf("%s went", what)
+		}
+	}
+	madeBy(maker.ID)
+	heirs, err := s.RevokeToken(ctx, maker.ID)
+	if err != nil || len(heirs) != 0 {
+		t.Errorf("the revoke of the file's key's maker: heirs %v %v", heirs, err)
+	}
+	alive("the file's key, at its maker's revoke", fileSecret)
+	alive("a key the file's key made, at the revoke of the file's key's maker", ofFileSecret)
+	other, _, _ := s.AddKey(ctx, anna.ID, KeyOptions{Label: "another maker"})
+	madeBy(other.ID)
+	if err := s.DeleteUser(ctx, "anna", 0); err != nil {
+		t.Fatal(err)
+	}
+	alive("the file's key, at its maker's user's removal", fileSecret)
+}
+
+// The bootstrap's revoke of the file's old key takes an heir of it that
+// carries the file's label too, which the loop then finds revoked: it
+// goes on, and the file's new token is added (AP KeyLife, D8-A).
+func TestBootstrapRevokeTakesAnHeirOfTheFilesLabel(t *testing.T) {
+	t.Parallel()
+	s := open(t, t.TempDir())
+	ctx := context.Background()
+	if _, err := s.Bootstrap(ctx, "file-one"); err != nil {
+		t.Fatal(err)
+	}
+	owner, _, _ := s.User(ctx, BootstrapUser)
+	file, _, _ := s.TokenByHash(ctx, HashToken("file-one"))
+	_, heirSecret, err := s.AddKey(ctx, owner.ID, KeyOptions{Label: BootstrapLabel, MadeBy: file.ID})
+	if err != nil {
+		t.Fatal(err)
+	}
+	res, err := s.Bootstrap(ctx, "file-two")
+	if err != nil || !res.TokenAdded || res.Revoked != 1 || res.Heirs != 1 {
+		t.Fatalf("the file's token changed: %+v %v", res, err)
+	}
+	if _, ok, _ := s.TokenByHash(ctx, HashToken("file-two")); !ok {
+		t.Error("the file's new token was not added")
+	}
+	if _, ok, _ := s.TokenByHash(ctx, HashToken(heirSecret)); ok {
+		t.Error("the heir of the file's label lives")
+	}
+}
+
+// A key is made with a maker only while the maker lives (AP KeyLife,
+// D5-A): a request that passed the check of its bearer before the
+// bearer's revoke, and makes its key after it, makes none, so that no
+// live key names a revoked maker that no later revoke would reach.
+func TestAddKeyNeedsALiveMaker(t *testing.T) {
+	t.Parallel()
+	clock := time.Date(2026, 11, 27, 12, 0, 0, 0, time.UTC)
+	s, err := Open(copied(t), Options{Logger: quiet(), Now: func() time.Time { return clock }})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer s.Close()
+	ctx := context.Background()
+	anna, _ := s.AddUser(ctx, User{Name: "anna", Role: RoleManager}, "", 0)
+	revoked, _, _ := s.AddKey(ctx, anna.ID, KeyOptions{Label: "revoked"})
+	if _, err := s.RevokeToken(ctx, revoked.ID); err != nil {
+		t.Fatal(err)
+	}
+	ending, _, _ := s.AddToken(ctx, anna.ID, TokenAPI, "ending", clock.Add(time.Minute))
+	clock = clock.Add(time.Minute)
+	for what, maker := range map[string]int64{"a revoked maker": revoked.ID, "a maker past its end": ending.ID, "no maker that exists": 9999} {
+		if tok, _, err := s.AddKey(ctx, anna.ID, KeyOptions{Label: "late", MadeBy: maker}); !errors.Is(err, ErrNoToken) {
+			t.Errorf("%s: %+v %v", what, tok, err)
+		}
+	}
+	live, _, _ := s.AddKey(ctx, anna.ID, KeyOptions{Label: "live"})
+	if tok, _, err := s.AddKey(ctx, anna.ID, KeyOptions{Label: "made with a live one", MadeBy: live.ID}); err != nil || tok.MadeBy != live.ID {
+		t.Errorf("a live maker: %+v %v", tok, err)
+	}
+	list, _ := s.Tokens(ctx, anna.ID)
+	for _, tk := range list {
+		if tk.Label == "late" {
+			t.Errorf("a key of an ended maker was made: %+v", tk)
+		}
+	}
+}
+
 // TokenEnded tells a token the store issued and that ended, which the
 // server refuses without counting it toward the lockout (AP MobileApp
 // v1.4, D64-A), from a live one and from a hash no token has: revoked,

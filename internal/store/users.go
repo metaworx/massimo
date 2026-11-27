@@ -706,7 +706,7 @@ func (s *Store) DeleteUser(ctx context.Context, name string, by int64) error {
 	}
 	// The keys its tokens made, and theirs, of any user (AP KeyLife, D5-A):
 	// its tokens are revoked, so their heirs go with them.
-	heirs, err := revokeHeirs(ctx, tx, `SELECT id FROM tokens WHERE user_id = ? AND deleted_at IS NULL`, []any{u.ID}, now, s.nodeID)
+	heirs, err := s.revokeHeirs(ctx, tx, `SELECT id FROM tokens WHERE user_id = ? AND deleted_at IS NULL`, []any{u.ID}, now)
 	if err != nil {
 		return fmt.Errorf("store: user %s: %w", u.Name, err)
 	}

@@ -925,13 +925,19 @@ A key made by a `POST` whose bearer is an API key is that key's heir
 A key made by a session is no heir,
 a session of a sign-in or one made from a key by `POST /api/v1/login/key`,
 nor is one made by `massimo user token`, by the settings file's bootstrap
-or at an integration's collection of its key.
+or at an integration's collection of its key;
+a key put into the settings file loses its maker at the next reading of the file.
+A `POST` whose bearer key was revoked or ended after the request was let in
+makes no key and is `401`.
 A revoke takes the heirs, and theirs, with their sessions:
 `DELETE …/tokens/{id}`, `DELETE /api/v1/me/token`, a user's removal,
 and the bootstrap's revoke of a key that is no longer the settings file's.
 The answers of the two `DELETE`s name them in `heirs`, by id, `[]` for none,
 and so do their log lines and their change lines (in the `subject`);
 a removal's and the bootstrap's log lines say them too.
+The settings file's key is never an heir, nor are the keys it made:
+the revoke of the key that made it and its maker's user's removal pass over it,
+as its own revoke is `409`.
 A key's end takes none: an heir lives past it, and only a revoke reaches it.
 A token revokes itself the same way, as its own bearer:
 a key with `DELETE …/tokens/{id}` and its own id,

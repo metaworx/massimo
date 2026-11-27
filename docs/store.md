@@ -1069,6 +1069,18 @@ so a key it makes has no maker,
 and its revoke of a key leaves the keys that key made,
 which a revoke by this binary of the key's own maker still reaches,
 the makers being followed through a revoked key.
+It keeps `min_reader` by the rules below:
+it adds a nullable column and an index, and changes the meaning of no column.
+What such a binary does not do, revoke the heirs and refuse a session whose key
+is past its end, is its code's, not the file's:
+`expires_at` and `parent_id` mean what they meant,
+and a binary that runs reads them its own way,
+as one for 24 left the sessions of a key it revoked (0025).
+A raise would make every rollback to the 0.17 line a downgrade of the file,
+and would protect nothing a file can carry:
+the heirs a rollback's revoke leaves are reached again by this binary's
+revoke of their maker's maker,
+and no key has an end before AP KeyLife's Block 4.
 The column has no foreign key, so that its down part,
 `0100_token_maker.down.sql`, can drop it and the index;
 it loses which key made a key, and only that.
@@ -1557,6 +1569,14 @@ names that key in `tokens.made_by` (migration 0100), its heir;
 a key made by a session, of a sign-in or made from a key by
 `POST /api/v1/login/key`, by `massimo user token`, by the bootstrap
 or at an integration's collection of its key names none.
+A key the bootstrap takes in as the settings file's has no maker either:
+the bootstrap clears `made_by` of the file's key it finds,
+before it revokes the file's old key, which may have made it.
+A key is made with a maker only while the maker is alive,
+the check and the insert one statement (`AddKey`, else `ErrNoToken`, a `401`):
+a request whose bearer was let in before its revoke,
+and makes its key after it, makes none,
+so that no live key names a revoked maker that no later revoke reaches.
 `RevokeToken` revokes, in its transaction, the heirs of the token it revokes,
 followed through `made_by` from key to key in any state,
 so that a key past its end, or one an older binary revoked alone,
@@ -1565,7 +1585,16 @@ with their sessions and what those subscribed to push,
 and returns the heirs it revoked, by id;
 `DeleteUser` revokes the heirs of the user's tokens with them,
 and the bootstrap's revoke of a key that is no longer the settings file's
-takes them too (D8-A), its log line saying how many.
+takes them too (D8-A), its log line saying how many;
+a key of the file's label that a revoke before it in the same bootstrap took
+is passed over, and the file's new token is added all the same.
+The settings file's key is never an heir:
+the store keeps in memory the hash `Bootstrap` last applied,
+at the start and at each reading of the file,
+and a revoke's heirs pass over that key and the keys it made,
+whoever made it, as the API revokes it neither by a revoke nor with its user
+(MobileApp.D86-A, D89-A);
+`massimo user`, which runs no bootstrap, knows no such hash.
 A key's end, by its end date, takes none:
 an heir lives past its maker's end, and only a revoke reaches it.
 

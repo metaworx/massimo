@@ -169,3 +169,30 @@ func TestKeyHeirs(t *testing.T) {
 	alive("the heir of a removed user's key", ofCarols.Token, false)
 	alive("a key of the heir's user beside it", ginasOwn.Token, true)
 }
+
+// A key made with the settings file's key as the bearer, then put into
+// the file, is the file's key at the reload (SetToken), no heir of the
+// key it replaces: it lets the owner in, at that reload and the next.
+func TestSettingsFileTakesAKeyItsOldKeyMade(t *testing.T) {
+	t.Parallel()
+	r := startServer(t, quiet(), withOptions(storeOptions(t, t.TempDir(), "secret")))
+	ts, s := r.ts, r.s
+	code, text := callAPI(t, ts, "POST", "/api/v1/users/owner/tokens", "secret", `{"label":"laptop"}`)
+	var made struct {
+		Token string `json:"token"`
+	}
+	if err := json.Unmarshal([]byte(text), &made); err != nil || code != 201 || made.Token == "" {
+		t.Fatalf("a key made with the file's key: %d %s %v", code, text, err)
+	}
+	for _, at := range []string{"the reload", "the next reload"} {
+		if err := s.SetToken(t.Context(), made.Token); err != nil {
+			t.Fatalf("%s: %v", at, err)
+		}
+		if code, text := callAPI(t, ts, "GET", "/api/v1/me", made.Token, ""); code != 200 {
+			t.Fatalf("the file's new key after %s: %d %s", at, code, text)
+		}
+	}
+	if code, _ := callAPI(t, ts, "GET", "/api/v1/me", "secret", ""); code != 401 {
+		t.Fatalf("the file's old key after the reloads: %d", code)
+	}
+}

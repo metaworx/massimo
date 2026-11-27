@@ -162,7 +162,11 @@ func (s *Store) AddTokenHash(ctx context.Context, userID int64, kind, label, has
 }
 
 // addTokenHash is AddTokenHash, with the key that made it, 0 for none
-// (KeyOptions.MadeBy), and addToken's ofIntegration.
+// (KeyOptions.MadeBy), and addToken's ofIntegration. A maker that is no
+// live API key under the rule alive is ErrNoToken, and nothing is made:
+// the check and the insert are one statement, so that a request whose
+// bearer was let in before its revoke, and makes its key after it, leaves
+// no live key naming a revoked maker that no later revoke would reach.
 func (s *Store) addTokenHash(ctx context.Context, userID int64, kind, label, hash string, expires time.Time, madeBy int64, ofIntegration bool) (Token, error) {
 	if err := s.writable(); err != nil {
 		return Token{}, err
@@ -175,10 +179,14 @@ func (s *Store) addTokenHash(ctx context.Context, userID int64, kind, label, has
 			return Token{}, err
 		}
 	}
-	res, err := s.db.ExecContext(ctx, `INSERT INTO tokens (uuid, user_id, kind, hash, label, created_at, expires_at, origin, made_by) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-		newUUID(), userID, kind, hash, label, s.nowText(), nullTime(expires), s.nodeID, nullID(madeBy))
+	args := append([]any{newUUID(), userID, kind, hash, label, s.nowText(), nullTime(expires), s.nodeID, nullID(madeBy), madeBy, madeBy, TokenAPI}, aliveArgs(s.now())...)
+	res, err := s.db.ExecContext(ctx, `INSERT INTO tokens (uuid, user_id, kind, hash, label, created_at, expires_at, origin, made_by)
+		SELECT ?, ?, ?, ?, ?, ?, ?, ?, ? WHERE ? = 0 OR EXISTS (SELECT 1`+tokenJoins+` WHERE t.id = ? AND t.kind = ? AND `+alive+`)`, args...)
 	if err != nil {
 		return Token{}, fmt.Errorf("store: add token: %w", err)
+	}
+	if n, _ := res.RowsAffected(); n == 0 {
+		return Token{}, fmt.Errorf("%w: the maker %d is no live API key", ErrNoToken, madeBy)
 	}
 	id, _ := res.LastInsertId()
 	t, _, err := s.Token(ctx, id)
@@ -300,7 +308,7 @@ func (s *Store) RevokeToken(ctx context.Context, id int64) ([]int64, error) {
 	if err := removePushSubscriptions(ctx, tx, 0, id); err != nil {
 		return nil, fmt.Errorf("store: token %d: %w", id, err)
 	}
-	heirs, err := revokeHeirs(ctx, tx, `?`, []any{id}, now, s.nodeID)
+	heirs, err := s.revokeHeirs(ctx, tx, `?`, []any{id}, now)
 	if err != nil {
 		return nil, fmt.Errorf("store: token %d: %w", id, err)
 	}
@@ -315,12 +323,17 @@ func (s *Store) RevokeToken(ctx context.Context, id int64) ([]int64, error) {
 // and theirs, followed from key to key in any state, so that a key past
 // its end, or one a binary before migration 0100 revoked alone, passes
 // the revoke on (AP KeyLife, D5-A); each not revoked yet is revoked with
-// its sessions and what they and it subscribed to push. It returns those
-// it revoked, oldest first, [] for none.
-func revokeHeirs(ctx context.Context, tx *sql.Tx, roots string, args []any, now, node string) ([]int64, error) {
-	rows, err := tx.QueryContext(ctx, `WITH RECURSIVE heirs(id) AS (SELECT id FROM tokens WHERE made_by IN (`+roots+`)
-		UNION SELECT t.id FROM tokens t JOIN heirs h ON t.made_by = h.id)
-		SELECT t.id FROM tokens t JOIN heirs h ON h.id = t.id WHERE t.deleted_at IS NULL ORDER BY t.id`, args...)
+// its sessions and what they and it subscribed to push. The settings
+// file's key, by the hash Bootstrap last applied, is passed over, and so
+// are the keys it made: whoever made it, it goes with no other key's
+// revoke nor its maker's user's removal, as the API revokes it neither
+// (MobileApp.D86-A, D89-A). It returns those it revoked, oldest first,
+// [] for none.
+func (s *Store) revokeHeirs(ctx context.Context, tx *sql.Tx, roots string, args []any, now string) ([]int64, error) {
+	file := s.settingsHash()
+	rows, err := tx.QueryContext(ctx, `WITH RECURSIVE heirs(id) AS (SELECT id FROM tokens WHERE made_by IN (`+roots+`) AND hash <> ?
+		UNION SELECT t.id FROM tokens t JOIN heirs h ON t.made_by = h.id WHERE t.hash <> ?)
+		SELECT t.id FROM tokens t JOIN heirs h ON h.id = t.id WHERE t.deleted_at IS NULL ORDER BY t.id`, append(args, file, file)...)
 	if err != nil {
 		return nil, fmt.Errorf("heirs: %w", err)
 	}
@@ -338,10 +351,10 @@ func revokeHeirs(ctx context.Context, tx *sql.Tx, roots string, args []any, now,
 		return nil, fmt.Errorf("heirs: %w", err)
 	}
 	for _, id := range heirs {
-		if _, err := tx.ExecContext(ctx, `UPDATE tokens SET deleted_at = ?, origin = ?, version = version + 1 WHERE id = ? AND deleted_at IS NULL`, now, node, id); err != nil {
+		if _, err := tx.ExecContext(ctx, `UPDATE tokens SET deleted_at = ?, origin = ?, version = version + 1 WHERE id = ? AND deleted_at IS NULL`, now, s.nodeID, id); err != nil {
 			return nil, fmt.Errorf("heir %d: %w", id, err)
 		}
-		if err := revokeSessionsOf(ctx, tx, id, now, node); err != nil {
+		if err := revokeSessionsOf(ctx, tx, id, now, s.nodeID); err != nil {
 			return nil, fmt.Errorf("heir %d: %w", id, err)
 		}
 		if err := removePushSubscriptions(ctx, tx, 0, id); err != nil {
@@ -349,6 +362,16 @@ func revokeHeirs(ctx context.Context, tx *sql.Tx, roots string, args []any, now,
 		}
 	}
 	return heirs, nil
+}
+
+// settingsHash is the hash of the settings file's token that Bootstrap
+// last applied, "" for none and before it ran (the command line runs it
+// never).
+func (s *Store) settingsHash() string {
+	if h := s.fileHash.Load(); h != nil {
+		return *h
+	}
+	return ""
 }
 
 // revokeSessionsOf revokes the live sessions made from the key keyID,

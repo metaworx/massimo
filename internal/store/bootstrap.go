@@ -36,8 +36,10 @@ type BootstrapResult struct {
 // users beside it or not) and a token, the user owner is created with
 // the token as its API key; with regular users, a token whose hash is
 // unknown is added to the first enabled owner that is not an
-// integration's, and a key with the token's label that is not the token
-// any more is revoked, with the keys it made (AP KeyLife, D8-A). The
+// integration's, a known one loses its maker, and a key with the token's
+// label that is not the token any more is revoked, with the keys it made
+// (AP KeyLife, D8-A); the store keeps the token's hash in memory, so
+// that no revoke takes that key as an heir (revokeHeirs). The
 // token's key that an older start gave to an integration's user with the
 // role owner moves to that owner, the one made or the first regular one
 // (AP LooseEnds, D1): such a user holds no key of its own, and the
@@ -56,6 +58,7 @@ func (s *Store) Bootstrap(ctx context.Context, token string) (BootstrapResult, e
 	if token != "" {
 		hash = HashToken(token)
 	}
+	s.fileHash.Store(&hash)
 	held, holder, err := s.heldByIntegration(ctx, hash)
 	if err != nil {
 		return res, err
@@ -104,21 +107,31 @@ func (s *Store) Bootstrap(ctx context.Context, token string) (BootstrapResult, e
 	}
 	known := false
 	for _, k := range keys {
+		if hash != "" && k.hash == hash && k.id != held {
+			known = true
+			// A key the bootstrap takes in has no maker (AP KeyLife, D5-A),
+			// so that the revoke of the file's old key below, which may
+			// have made it, leaves it.
+			if _, err := s.db.ExecContext(ctx, `UPDATE tokens SET made_by = NULL, origin = ?, version = version + 1 WHERE id = ? AND made_by IS NOT NULL`, s.nodeID, k.id); err != nil {
+				return res, fmt.Errorf("store: bootstrap: %w", err)
+			}
+		}
+	}
+	for _, k := range keys {
 		// The label is a content column, so it is read here, not in SQL.
 		if k.label == BootstrapLabel && k.hash != hash {
 			// A revoke, so the keys it made go with it (AP KeyLife, D8-A):
 			// the file is how the owner ends a token that may have leaked.
 			heirs, err := s.RevokeToken(ctx, k.id)
+			if errors.Is(err, ErrNoToken) {
+				continue // an heir of a key revoked before it in this loop
+			}
 			if err != nil {
 				return res, err
 			}
 			res.Revoked++
 			res.Heirs += len(heirs)
 			s.log.Info("api token revoked: not MASSIMO_API_TOKEN any more", "token", k.id, "heirs", len(heirs))
-			continue
-		}
-		if hash != "" && k.hash == hash && k.id != held {
-			known = true
 		}
 	}
 	if hash == "" || known {
@@ -189,7 +202,7 @@ func (s *Store) keyIn(ctx context.Context, tx *sql.Tx, held, owner int64, hash s
 		}
 		return nil
 	}
-	if _, err := tx.ExecContext(ctx, `UPDATE tokens SET user_id = ?, kind = ?, label = ?, expires_at = NULL, deleted_at = NULL, origin = ?, version = version + 1 WHERE id = ?`,
+	if _, err := tx.ExecContext(ctx, `UPDATE tokens SET user_id = ?, kind = ?, label = ?, expires_at = NULL, deleted_at = NULL, made_by = NULL, origin = ?, version = version + 1 WHERE id = ?`,
 		owner, TokenAPI, BootstrapLabel, s.nodeID, held); err != nil {
 		return fmt.Errorf("store: bootstrap: %w", err)
 	}
