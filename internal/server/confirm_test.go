@@ -4,6 +4,7 @@
 package server
 
 import (
+	"fmt"
 	"net/http/httptest"
 	"reflect"
 	"testing"
@@ -83,6 +84,33 @@ func openWrites(rt *runtime) int {
 	return len(rt.confirms.writes)
 }
 
+// dueNow makes the deadline of room's open write now and wakes the
+// follow-up, which judges it at once: a test of what comes at a write's
+// deadline gives its writes one it never reaches (confirmWithin of an
+// hour) and sets the moment itself, once it has checked what holds while
+// the write is pending ("A write's deadline", docs/testing.md). It waits
+// for a write to the room whose deadline is still to come, such as a
+// re-send's once the write before it is past its own.
+func (r *rig) dueNow(room uint8) {
+	r.t.Helper()
+	c := &r.rt.confirms
+	testkit.Eventually(r.t, fmt.Sprintf("a write to room %d before its deadline", room), func() bool {
+		c.mu.Lock()
+		defer c.mu.Unlock()
+		now, found := time.Now(), false
+		for _, w := range c.writes {
+			if w.room == room && !w.late && !w.byConfig {
+				w.due, found = now, true
+			}
+		}
+		return found
+	})
+	select {
+	case r.rt.follow.wake <- struct{}{}:
+	default: // a wake is pending already
+	}
+}
+
 // A room command its members take is pending, then done once every
 // member shows it, with no line: pending while the fake Cube holds its
 // apply, done after the release.
@@ -107,10 +135,10 @@ func TestRoomCommandConfirmed(t *testing.T) {
 // then not confirmed at the deadline: one warning names it, what it
 // shows and its flags; once the command's re-send is not confirmed
 // either (resend.go), the room and the device say so until it shows it,
-// which a line at info says.
+// which a line at info says. The test sets each deadline (dueNow).
 func TestRoomCommandNotConfirmed(t *testing.T) {
 	t.Parallel()
-	r := startServer(t, confirming(600*time.Millisecond, 0))
+	r := startServer(t, confirming(time.Hour, 0))
 	fc, ts := r.fc, r.ts
 	fc.SetDeaf(0x0a0205, true)
 	on := true
@@ -129,6 +157,11 @@ func TestRoomCommandNotConfirmed(t *testing.T) {
 		t.Fatalf("pending room: %+v", c)
 	}
 
+	testkit.Eventually(t, "the members that hear showing it", func() bool {
+		c := confirmRoom(t, ts, 2).Confirmation
+		return c != nil && reflect.DeepEqual(c.Devices, []string{"0a0205"})
+	})
+	r.dueNow(2)
 	ev := waitUnconfirmed(t, ts, "not_confirmed")
 	if ev.Level != "warn" || ev.Source != "device" || ev.Device != "" || ev.Summary["write"] != "setpoint" || ev.Summary["target"] != "room:2" ||
 		ev.Summary["room"] != float64(2) || ev.Summary["source"] != "api" || ev.Summary["confirmed"] != float64(2) {
@@ -142,6 +175,7 @@ func TestRoomCommandNotConfirmed(t *testing.T) {
 	if !reflect.DeepEqual(ev.Summary["devices"], want) {
 		t.Fatalf("devices %v", ev.Summary["devices"])
 	}
+	r.dueNow(2) // the re-send's
 	waitUnconfirmed(t, ts, "resend_not_confirmed")
 	c := confirmRoom(t, ts, 2).Confirmation
 	if c == nil || c.State != "unconfirmed" || !reflect.DeepEqual(c.Devices, []string{"0a0205"}) || !reflect.DeepEqual(c.Fields, []string{"mode", "setpoint"}) {
@@ -171,10 +205,10 @@ func TestRoomCommandNotConfirmed(t *testing.T) {
 // A newer setpoint of a room replaces the one before it: one write open,
 // one warning, for the newer, at its deadline, and no second one up to
 // the report of its re-send (resend.go), not confirmed either, which the
-// room then says.
+// room then says. The test sets each deadline (dueNow).
 func TestNewerWriteReplaces(t *testing.T) {
 	t.Parallel()
-	r := startServer(t, confirming(600*time.Millisecond, 0))
+	r := startServer(t, confirming(time.Hour, 0))
 	fc, ts, rt := r.fc, r.ts, r.rt
 	fc.SetDeaf(0x0a0205, true)
 	for _, body := range []string{`{"mode":"manual","temp":22}`, `{"mode":"manual","temp":23}`} {
@@ -185,10 +219,12 @@ func TestNewerWriteReplaces(t *testing.T) {
 	if n := openWrites(rt); n != 1 {
 		t.Fatalf("%d writes open", n)
 	}
+	r.dueNow(2)
 	ev, next := logAfter(t, logStart(ts), "the warning", unconfirmedOf("not_confirmed"))
 	if e := ev.Summary["expected"].(map[string]any); e["setpoint"] != float64(23) {
 		t.Fatalf("expected %v", e)
 	}
+	r.dueNow(2) // the re-send's
 	logAfter(t, next, "the re-send's report", unconfirmedOf("resend_not_confirmed"))
 	if c := confirmRoom(t, ts, 2).Confirmation; c == nil || c.State != "unconfirmed" {
 		t.Fatalf("room after the re-send's report: %+v", c)

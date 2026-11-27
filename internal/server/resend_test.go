@@ -163,22 +163,26 @@ func TestUnconfirmedRoomCommandResent(t *testing.T) {
 
 // A re-send waits behind the queue's hold; every member showing it, an
 // Info says so and settles the Warn. The room checks send nothing to
-// the room for the rest of the day.
+// the room for the rest of the day. The member hears again before the
+// test sets the write's deadline (dueNow), and the re-send's line comes
+// the hold's wait after the hold began, whenever the test reads it.
 func TestUnconfirmedRoomCommandResentBehindTheHold(t *testing.T) {
 	t.Parallel()
-	r := startDrift(t, nil, resendOptions(400*time.Millisecond, 1500*time.Millisecond))
+	const slotWait = 500 * time.Millisecond
+	r := startDrift(t, nil, resendOptions(time.Hour, slotWait))
 	r.fc.SetDeaf(0x0a0205, true)
 	r.fc.SetFreeSlots(2) // the write's answer: 2 free, so that its re-send waits
 	sent, m := r.lines.Mark(), logMark(t, r.ts)
 	r.setRoom2("22")
-	r.waitOutcome("not_confirmed", 1)
-	logAfter(t, m, "the queue's hold", logLine("hold", ""))
-	if got := r.radioSince(sent); len(got) != 1 {
-		t.Fatalf("sent before the hold ended: %v", got)
-	}
 	r.fc.SetDeaf(0x0a0205, false) // the member hears again
-	r.fc.SetFreeSlots(49)
-	r.waitOutcome("resent", 1)
+	r.fc.SetFreeSlots(49)         // in the next answer, the re-send's
+	r.dueNow(2)
+	r.waitOutcome("not_confirmed", 1)
+	hold, _ := logAfter(t, m, "the queue's hold", logLine("hold", ""))
+	resent := r.waitOutcome("resent", 1)
+	if waited := resent.Time.Sub(hold.Time); waited < slotWait {
+		t.Fatalf("the re-send %v after the hold began, want the hold's %v", waited, slotWait)
+	}
 	ok := r.waitOutcome("resend_confirmed", 1)
 	if ok.Level != "info" || ok.Summary["target"] != "room:2" || ok.Summary["confirmed"] != float64(3) {
 		t.Fatalf("the Info: %+v", ok)
@@ -266,13 +270,14 @@ func TestUnconfirmedRoomCommandNotResent(t *testing.T) {
 	t.Parallel()
 	t.Run("superseded", func(t *testing.T) {
 		t.Parallel()
-		r := startDrift(t, nil, resendOptions(400*time.Millisecond, 0))
+		r := startDrift(t, nil, resendOptions(time.Hour, 0))
 		r.fc.SetDeaf(0x0a0205, true)
 		sent := r.lines.Mark()
 		r.setRoom2("22")
 		if code, out := do(t, r.ts, "PUT", "/api/v1/cubes/KEQ0000100/devices/0a0204/setpoint", `{"mode":"manual","temp":19}`); code != 200 {
 			t.Fatalf("device setpoint: %d %v", code, out)
 		}
+		r.dueNow(2) // the room's deadline after the newer write, however late it came
 		r.waitOutcome("not_confirmed", 1)
 		if ev := r.waitOutcome("not_resent", 1); ev.Summary["why"] != whySuperseded || ev.Summary["target"] != "room:2" {
 			t.Fatalf("not re-sent: %+v", ev)
@@ -310,16 +315,17 @@ func TestUnconfirmedRoomCommandNotResent(t *testing.T) {
 	})
 	t.Run("busy", func(t *testing.T) {
 		t.Parallel()
-		r := startDrift(t, nil, resendOptions(400*time.Millisecond, 2*time.Second))
+		r := startDrift(t, nil, resendOptions(time.Hour, time.Hour))
 		r.fc.SetDeaf(0x0a0205, true)
 		r.fc.SetFreeSlots(2)
 		r.setRoom2("22")
-		// A command of Massimo's to the room that waits behind the hold.
-		other := r.rt.queue.Enqueue(engine.Command{Key: "test:room:2", Priority: engine.PriorityLow, Lines: []cube.Message{setpointLine2(t)}})
+		// A command of Massimo's to the room that waits behind the hold,
+		// until the server stops, and the deadline while it waits.
+		r.rt.queue.Enqueue(engine.Command{Key: "test:room:2", Priority: engine.PriorityLow, Lines: []cube.Message{setpointLine2(t)}})
+		r.dueNow(2)
 		if ev := r.waitOutcome("not_resent", 1); ev.Summary["why"] != whyBusy {
 			t.Fatalf("not re-sent: %+v", ev)
 		}
-		other.Wait(context.Background())
 	})
 	t.Run("boost", func(t *testing.T) {
 		t.Parallel()

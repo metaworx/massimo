@@ -182,7 +182,44 @@ The follow-up ends at the first re-read that shows the write,
 so only a held write waits for more.
 A write the L entry confirms, such as a setpoint, needs no re-read,
 but its deadline (`confirmWithin`) counts from the answer,
-and takes the scale, as in `TestRoomCommandConfirmed`.
+and takes the scale, as in `TestRoomCommandConfirmed`,
+or the test sets it ("A write's deadline").
+
+## A write's deadline
+
+A write that a device does not show is judged at its deadline,
+`confirmWithin` after the Cube's answer (`confirm.go`):
+its warning, and for a room setpoint of the API's its re-send (`resend.go`).
+A test of what comes then does not race that window either:
+it would have to check all it checks while the write is pending,
+and make each newer write, before the window ran out.
+It gives its writes a deadline they never reach, an hour,
+and sets the moment itself:
+
+```go
+r := startServer(t, confirming(time.Hour, 0)) // the drift rig: resendOptions(time.Hour, …)
+// the write, and what the test checks while it is pending
+r.dueNow(2) // room 2's write is due: the follow-up judges it at once
+// the wait for its warning, its re-send
+```
+
+- **`r.dueNow(room)`** (`confirm_test.go`) makes the deadline of the room's
+  open write now and wakes the follow-up, which judges it at once.
+  It waits for a write to the room whose deadline is still to come:
+  called again after a warning, it makes the re-send's own write due,
+  once the re-send has gone.
+- **Before the call** the test waits for what the deadline is to find,
+  such as the members that hear showing the write,
+  since the deadline judges what the Cube's snapshot shows at that moment.
+- **The queue's hold** (`engine.Options.SlotWait`) is no write's deadline,
+  and nothing ends it early.
+  A test of a re-send behind it checks the hold's length as the product's:
+  the re-send's line comes the hold's wait after the hold's line,
+  as in `TestUnconfirmedRoomCommandResentBehindTheHold`,
+  not that nothing came by a moment the test happens to read.
+  A test that must act during the hold, as
+  `TestUnconfirmedRoomCommandNotResent`'s "superseded behind the hold",
+  still has the hold's wait to do it in.
 
 ## The race detector
 
