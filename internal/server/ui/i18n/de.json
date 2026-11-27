@@ -2170,5 +2170,13 @@
   "serverbackup.field.sftp.port": "Port",
   "serverbackup.field.sftp.user": "Benutzer",
   "serverbackup.field.sftp.path": "Verzeichnis auf dem Host",
-  "serverbackup.field.sftp.host_key": "Host-Schlüssel (SHA256-Fingerabdruck)"
+  "serverbackup.field.sftp.host_key": "Host-Schlüssel (SHA256-Fingerabdruck)",
+  "serverbackup.kind.smb": "SMB-Freigabe (Windows, NAS)",
+  "serverbackup.field.smb.host": "Server (Name oder Adresse)",
+  "serverbackup.field.smb.port": "Port",
+  "serverbackup.field.smb.share": "Freigabe",
+  "serverbackup.field.smb.path": "Ordner in der Freigabe",
+  "serverbackup.field.smb.user": "Benutzer",
+  "serverbackup.field.smb.password": "Passwort",
+  "serverbackup.field.smb.domain": "Domäne oder Arbeitsgruppe"
 }

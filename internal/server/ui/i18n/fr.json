@@ -2172,5 +2172,13 @@
   "serverbackup.field.sftp.port": "Port",
   "serverbackup.field.sftp.user": "Utilisateur",
   "serverbackup.field.sftp.path": "Répertoire sur l'hôte",
-  "serverbackup.field.sftp.host_key": "Clé de l'hôte (empreinte SHA256)"
+  "serverbackup.field.sftp.host_key": "Clé de l'hôte (empreinte SHA256)",
+  "serverbackup.kind.smb": "Partage SMB (Windows, NAS)",
+  "serverbackup.field.smb.host": "Serveur (nom ou adresse)",
+  "serverbackup.field.smb.port": "Port",
+  "serverbackup.field.smb.share": "Partage",
+  "serverbackup.field.smb.path": "Dossier dans le partage",
+  "serverbackup.field.smb.user": "Utilisateur",
+  "serverbackup.field.smb.password": "Mot de passe",
+  "serverbackup.field.smb.domain": "Domaine ou groupe de travail"
 }

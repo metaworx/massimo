@@ -2243,5 +2243,13 @@
   "serverbackup.field.sftp.port": "Port",
   "serverbackup.field.sftp.user": "Użytkownik",
   "serverbackup.field.sftp.path": "Katalog na hoście",
-  "serverbackup.field.sftp.host_key": "Klucz hosta (odcisk SHA256)"
+  "serverbackup.field.sftp.host_key": "Klucz hosta (odcisk SHA256)",
+  "serverbackup.kind.smb": "Udział SMB (Windows, NAS)",
+  "serverbackup.field.smb.host": "Serwer (nazwa lub adres)",
+  "serverbackup.field.smb.port": "Port",
+  "serverbackup.field.smb.share": "Udział",
+  "serverbackup.field.smb.path": "Folder w udziale",
+  "serverbackup.field.smb.user": "Użytkownik",
+  "serverbackup.field.smb.password": "Hasło",
+  "serverbackup.field.smb.domain": "Domena lub grupa robocza"
 }

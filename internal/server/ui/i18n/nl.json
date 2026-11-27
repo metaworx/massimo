@@ -2171,5 +2171,13 @@
   "serverbackup.field.sftp.port": "Poort",
   "serverbackup.field.sftp.user": "Gebruiker",
   "serverbackup.field.sftp.path": "Map op de host",
-  "serverbackup.field.sftp.host_key": "Hostsleutel (SHA256-vingerafdruk)"
+  "serverbackup.field.sftp.host_key": "Hostsleutel (SHA256-vingerafdruk)",
+  "serverbackup.kind.smb": "SMB-share (Windows, NAS)",
+  "serverbackup.field.smb.host": "Server (naam of adres)",
+  "serverbackup.field.smb.port": "Poort",
+  "serverbackup.field.smb.share": "Share",
+  "serverbackup.field.smb.path": "Map in de share",
+  "serverbackup.field.smb.user": "Gebruiker",
+  "serverbackup.field.smb.password": "Wachtwoord",
+  "serverbackup.field.smb.domain": "Domein of werkgroep"
 }

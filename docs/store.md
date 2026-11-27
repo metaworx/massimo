@@ -2228,6 +2228,54 @@ NAS boxes and storage boxes speak it, and OpenSSH's `scp` runs over it.
   the host's key, the target's key with where its line goes,
   or the host's SFTP status.
 
+#### The SMB target
+
+An SMB target, of kind `smb`, is a folder of a share on a NAS,
+a Windows computer or Samba (`internal/serverbackup/smb.go`).
+It is reached in-process over SMB 2 and 3,
+with `github.com/cloudsoda/go-smb2`, the same on every platform:
+no share is mounted on the box,
+so Windows' service account needs no rights on one.
+
+| Field | What it holds |
+|-------|---------------|
+| `host` | the server's name or address, without `smb://` or `\\` |
+| `port` | 445 by default |
+| `share` | the share's name, without `/` or `\` |
+| `path` | a folder in the share, its parts separated by `/` or `\`, the share's root where empty; made where it is missing |
+| `user` | the user it signs in as; `DOMAIN\user`, with no `domain` given, is taken as both |
+| `password` | the user's password, the target's secret |
+| `domain` | the domain or workgroup, where the server asks for one |
+
+- It signs in by NTLM with the user and the password,
+  and signs every message,
+  which also refuses a server that would take a wrong password for its guest.
+- It offers SMB 3.1.1 with AES-GCM and AES-CCM,
+  and encrypts where the server asks for it:
+  Samba's `server smb encrypt = required`,
+  Windows' `Set-SmbShare -EncryptData $true`.
+  A copy is encrypted by age in any case;
+  the share's encryption hides the names and the listing on the network too.
+- Each call connects, signs in, mounts the share and logs off again;
+  a copy opened for ranged reads keeps its connection until it is closed.
+  Each request to the server has a minute,
+  the connection with its sign-in among them:
+  one that takes longer ends the connection, and its error says so.
+- A copy is written to a hidden temporary name beside its own,
+  `.<name>.<random>.part`, in writes of 1 MiB,
+  then flushed, closed and renamed over the name,
+  so that a copy broken off leaves nothing under the name;
+  the temporary file is removed where the put fails,
+  and one a crash left by the next put,
+  once the server's clock says it is a day old.
+- The card's Test makes the folder where it is missing,
+  and writes, reads back and deletes a small file in it:
+  a target that cannot delete cannot prune.
+- An error names the target as `//host/share/path` and what the server answered,
+  "The attempted logon is invalid" for a refused password,
+  "{Network Name Not Found}" for a share that is not there;
+  it never holds the password.
+
 ## 8. Migration of an installed box
 
 The Pi runs `massimo serve` as a systemd service with `/etc/massimo/env`,
