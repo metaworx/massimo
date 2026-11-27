@@ -148,24 +148,25 @@ func (s *Server) startRestore(w http.ResponseWriter, r *http.Request) error {
 		return fail(http.StatusBadRequest, "plan=<hash> from POST …/restore/plan is required")
 	}
 	if run := rt.restoring(); run != nil {
-		return s.refuseRestore(rt, http.StatusConflict, "a restore is already running (%s)", run.ID)
+		return s.refuseRestore(rt, refuseSaying(http.StatusConflict, fmt.Sprintf("a restore is already running (%s)", run.ID), codeRestoreRunning))
 	}
 	v, p, src, err := s.makeRestorePlan(w, r, rt)
 	if err != nil {
 		return err
 	}
 	if v.Plan != want {
-		return s.refuseRestore(rt, http.StatusConflict, "the plan has changed since it was made (%s, now %s); plan again", want, v.Plan)
+		return s.refuseRestore(rt, refuseSaying(http.StatusConflict,
+			fmt.Sprintf("the plan has changed since it was made (%s, now %s); plan again", want, v.Plan), codeRestorePlanChanged))
 	}
 	if v.RadioCommands > 0 && v.Budget.DutyCyclePct > maxRestoreDutyPct {
-		return s.refuseRestore(rt, http.StatusConflict, "radio duty cycle at %d %%, above %d %%; wait for it to fall", v.Budget.DutyCyclePct, maxRestoreDutyPct)
+		return s.refuseRestore(rt, refuse(http.StatusConflict, codeRestoreDutyCycle, v.Budget.DutyCyclePct, maxRestoreDutyPct))
 	}
 	// A Cube with a row in the store keeps its configuration before the
 	// restore, and the file the restore was sent (docs/store.md 9 (e)).
 	if rt.store != nil && rt.storeID.Load() != 0 {
 		user := userIDOf(r)
 		if _, _, err := s.takeBackup(r.Context(), rt, store.ReasonBeforeRestore, user, ""); err != nil {
-			return s.refuseRestore(rt, http.StatusServiceUnavailable, "the backup before the restore was not stored: %v", err)
+			return s.refuseRestore(rt, fail(http.StatusServiceUnavailable, "the backup before the restore was not stored: %v", err))
 		}
 		if src.data != nil {
 			format := "json"
@@ -179,7 +180,7 @@ func (s *Server) startRestore(w http.ResponseWriter, r *http.Request) error {
 	}
 	run := &restoreRun{ID: restoreID(), State: "running", Plan: v.Plan, Started: time.Now(), Steps: v.Steps, RadioCommands: v.RadioCommands}
 	if !rt.startRestore(run) {
-		return s.refuseRestore(rt, http.StatusConflict, "a restore is already running")
+		return s.refuseRestore(rt, refuse(http.StatusConflict, codeRestoreRunning))
 	}
 	s.emitBy(rt, systemEvent("restore_started", userIDOf(r), map[string]any{"id": run.ID, "steps": len(p.Steps), "radio_commands": v.RadioCommands,
 		"duty_pct": v.Budget.DutyCyclePct}))
@@ -222,9 +223,8 @@ func (s *Server) getRestore(w http.ResponseWriter, r *http.Request) error {
 	return nil
 }
 
-// refuseRestore logs a refused restore and returns its error.
-func (s *Server) refuseRestore(rt *runtime, status int, format string, args ...any) error {
-	err := fail(status, format, args...)
+// refuseRestore logs a refused restore and returns its error, err.
+func (s *Server) refuseRestore(rt *runtime, err error) error {
 	s.log.Warn("restore refused", "cube", rt.cubeSerial(), "reason", err.Error())
 	return err
 }
@@ -280,13 +280,13 @@ func (s *Server) makeRestorePlan(w http.ResponseWriter, r *http.Request, rt *run
 	snap := rt.client.Snapshot()
 	h := snap.Hello()
 	if h == nil || !rt.client.Connected() {
-		return restorePlan{}, nil, nil, fail(http.StatusServiceUnavailable, "cube not connected")
+		return restorePlan{}, nil, nil, refuseSaying(http.StatusServiceUnavailable, "cube not connected", codeCubeNotConnected)
 	}
 	if f.Cube.Serial == "" {
-		return restorePlan{}, nil, nil, s.refuseRestore(rt, http.StatusBadRequest, "the backup names no cube; this is cube %s", h.Serial)
+		return restorePlan{}, nil, nil, s.refuseRestore(rt, refuse(http.StatusBadRequest, codeRestoreBackupNoCube, h.Serial))
 	}
 	if !strings.EqualFold(f.Cube.Serial, h.Serial) {
-		return restorePlan{}, nil, nil, s.refuseRestore(rt, http.StatusBadRequest, "the backup is from cube %s, this is cube %s", f.Cube.Serial, h.Serial)
+		return restorePlan{}, nil, nil, s.refuseRestore(rt, refuse(http.StatusBadRequest, codeRestoreBackupOfOther, f.Cube.Serial, h.Serial))
 	}
 	opts.Hidden, opts.ShowHidden = rt.config().Hidden, rt.showHidden
 	cur := backup.Current{Snapshot: snap}
@@ -327,13 +327,13 @@ func readBackup(w http.ResponseWriter, r *http.Request) (*backup.File, []byte, b
 	if err != nil {
 		var tooLarge *http.MaxBytesError
 		if errors.As(err, &tooLarge) {
-			return nil, nil, false, fail(http.StatusRequestEntityTooLarge, "backup larger than %d bytes", maxBackupBytes)
+			return nil, nil, false, refuse(http.StatusRequestEntityTooLarge, codeRestoreFileTooLarge, maxBackupBytes)
 		}
 		return nil, nil, false, fail(http.StatusBadRequest, "reading the body: %v", err)
 	}
 	trimmed := bytes.TrimSpace(data)
 	if len(trimmed) == 0 {
-		return nil, nil, false, fail(http.StatusBadRequest, "the body must be a backup file, JSON or YAML")
+		return nil, nil, false, refuse(http.StatusBadRequest, codeRestoreFileEmpty)
 	}
 	yaml := isYAML(r.Header.Get("Content-Type")) || trimmed[0] != '{'
 	f, err := backup.Unmarshal(data, yaml)

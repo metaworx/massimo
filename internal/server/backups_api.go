@@ -126,7 +126,7 @@ func (s *Server) unservedHistory(r *http.Request, notFound error) (history, erro
 // notServed is the error of a backup taken or a restore asked for a
 // Cube the store keeps a row of and no runtime serves.
 func notServed(serial string) error {
-	return fail(http.StatusConflict, "cube %s is not served, so it takes no backup and no restore; its stored backups can still be listed, downloaded, compared and deleted", serial)
+	return refuse(http.StatusConflict, codeCubeNotServed, serial)
 }
 
 // servedCube returns the request's Cube for a route that needs it
@@ -300,7 +300,7 @@ func (s *Server) getStoredBackup(w http.ResponseWriter, r *http.Request) error {
 		return fail(http.StatusInternalServerError, "%v", err)
 	}
 	if !ok {
-		return fail(http.StatusNotFound, "no backup %d of cube %s", id, h.serial)
+		return refuse(http.StatusNotFound, codeBackupUnknown, id, h.serial)
 	}
 	format := r.URL.Query().Get("format")
 	switch format {
@@ -363,7 +363,7 @@ func (s *Server) deleteBackup(w http.ResponseWriter, r *http.Request) error {
 		return fail(http.StatusInternalServerError, "%v", err)
 	}
 	if !ok {
-		return fail(http.StatusNotFound, "no backup %d of cube %s", id, h.serial)
+		return refuse(http.StatusNotFound, codeBackupUnknown, id, h.serial)
 	}
 	s.emitHistory(h, systemEvent("backup_deleted", userIDOf(r), map[string]any{"id": id}))
 	w.WriteHeader(http.StatusNoContent)
@@ -377,7 +377,7 @@ func (s *Server) storedFile(r *http.Request, h history, id int64) (*backup.File,
 		return nil, fail(http.StatusInternalServerError, "%v", err)
 	}
 	if !ok {
-		return nil, fail(http.StatusNotFound, "no backup %d of cube %s", id, h.serial)
+		return nil, refuse(http.StatusNotFound, codeBackupUnknown, id, h.serial)
 	}
 	body, ok, err := h.st.BackupBody(r.Context(), h.cubeID, id)
 	if err != nil || !ok {

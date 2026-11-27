@@ -365,7 +365,7 @@ func (lq logQuery) beyond(newest int64) error {
 // of a Cube that has since gained its row in the store. 409, after which
 // the client reads the log again.
 func afterBeyond(after int64) error {
-	return fail(http.StatusConflict, "after %d is beyond the log's newest line: reload the log", after)
+	return refuse(http.StatusConflict, codeLogAfterBeyond, after)
 }
 
 // logUser finds the row of a page's user, by login name; none reports a
