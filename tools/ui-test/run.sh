@@ -39,7 +39,8 @@
 # file for the first pass's JUnit XML report (--junitxml), from the
 # caller's directory, which the UI soak reads for its summary
 # (.github/workflows/ui-soak.yml, AP SteadyTests, Block 8); the retry
-# writes none.
+# writes its own beside it, the name's .xml turned into .retry.xml, so
+# that the summary says what the retry did with each failure (Block 11).
 # `run.sh screenshots` (make ui-screenshots) starts one set and runs
 # screenshots.py instead, which takes the screenshot set into
 # docs/screenshots/.
@@ -347,7 +348,7 @@ PYTEST_ADDOPTS="--durations=20 ${PYTEST_ADDOPTS:-}" "$py" -m pytest --output "$h
 [ $rc -eq 1 ] || exit $rc
 echo "ui-test: tests failed; they run once more, with the video and the trace (tools/ui-test/results/retry/), at UI_TEST_SCALE=$retry_scale" >&2
 if UI_TEST_SCALE="$retry_scale" "$py" -m pytest --last-failed --last-failed-no-failures none --video retain-on-failure --tracing retain-on-failure \
-	--output "$here/results/retry" "$@"; then
+	--output "$here/results/retry" ${junit:+"--junitxml=${junit%.xml}.retry.xml"} "$@"; then
 	echo "ui-test: the failed tests passed the second time, and the run fails all the same: they are flaky" >&2
 else
 	echo "ui-test: tests failed again; their videos and traces are in tools/ui-test/results/retry/" >&2

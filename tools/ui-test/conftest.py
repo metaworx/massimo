@@ -331,7 +331,12 @@ def pytest_collect_file(file_path, parent):
 @pytest.hookimpl(tryfirst=True)
 def pytest_runtest_setup(item):
     """A test whose mark cases names no case fails, before its fixtures
-    load a page, with what the mark names."""
+    load a page, with what the mark names. Under pytest-xdist each test
+    carries its worker, gw<n>, whose server set it runs against, as the
+    property worker of its JUnit report, which the soak's summary names
+    (soak_summary.py; AP SteadyTests, Block 11)."""
+    if _WORKER:
+        item.user_properties.append(("worker", _WORKER))
     if BAD_CASES in item.stash:
         pytest.fail(item.stash[BAD_CASES], pytrace=False)
 

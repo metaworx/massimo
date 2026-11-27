@@ -1,4 +1,4 @@
-# Massimo — CI Conventions (v1.76.0)
+# Massimo — CI Conventions (v1.77.0)
 
 What CI does in this project, for whoever has to change it.
 `/AGENTS.md` names this file as the canonical owner of CI conventions,
@@ -634,10 +634,16 @@ A test that leans on the one before it, on a file that ran before on its worker,
 or on a window a loaded runner overruns,
 then fails in some of its repeats.
 Each job's summary lists the tests that failed in at least one repeat,
-each with its case, how many of its runs failed and the first failure's message,
+each with its case, how many of its runs failed,
+each failed run's worker and what the retry did with it, on which worker,
+and the first failure's message,
 and the line that runs the case again in the same order
 (`tools/ui-test/soak_summary.py`,
-from the first pass's JUnit report, `UI_TEST_JUNIT`);
+from the first pass's JUnit report, `UI_TEST_JUNIT`,
+and the retry's beside it, `ui-soak-junit.retry.xml`);
+a test that fails on one worker alone met what an earlier file left on its server,
+and a retry that passed may only have landed on another
+(AP SteadyTests, Block 11);
 a job is red where a test failed once,
 whatever its run once more with the trace did,
 whose screenshots, videos, traces and the servers' logs it uploads
