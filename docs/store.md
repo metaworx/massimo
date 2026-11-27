@@ -2085,41 +2085,6 @@ runs the jobs on it, for `serve` and for `massimo store` alike:
   A copy is put by a temporary name and renamed, so that one broken off leaves
   nothing under the name.
 
-#### WebDAV
-
-A target of the kind `webdav` is a folder on a WebDAV server,
-such as Nextcloud with an app password, a Synology box or a storage box,
-reached with the standard library alone (`internal/serverbackup/webdav.go`):
-
-| Field | What it holds |
-|-------|---------------|
-| `url` | the folder: `https://` where the URL names no scheme, `http://` only where it says so, which the card warns of, since the password then travels in clear; without a user, a password, a query or a fragment in it |
-| `user` | the user it signs in as, by basic authentication, without a colon |
-| `password` | the secret, sealed; an app password where the server has them |
-
-- A copy is put (`PUT`) to a hidden name beside its own,
-  `.<name>.<random>.tmp`, and moved (`MOVE`, `Overwrite: F`) to its name,
-  so that a put broken off leaves nothing under the name;
-  its temporary file is deleted, or by a later put once it is a day old.
-  A put asks `Expect: 100-continue`,
-  so that a refusal, a quota spent among them, comes before the file is sent.
-- A file of the name that is there already is not replaced:
-  of the same size it is taken for the copy (a move whose answer was lost),
-  of another the put fails and says so.
-- A folder missing is made (`MKCOL`), its parents too.
-- The backups are listed with `PROPFIND` at depth 1
-  and read with ranged `GET`s of 4 MiB at least,
-  so that reads that follow one another come from one request.
-- The card's Test makes the folder where it is missing,
-  puts a small file as a copy is put, reads it back and deletes it.
-- A redirect is not followed, the password would go along:
-  the error names where it points, to be put in the target.
-- The client waits 30 s for a connection and for TLS,
-  5 minutes for an answer once the request is sent,
-  and gives a transfer up once no byte moved for 2 minutes.
-- An error names the server, the request, the file and the HTTP status
-  with what it means (`401`, `403`, `413`, `423`, `507`), never the password.
-
 #### The schedule
 
 - One schedule makes each backup once (D11-A), daily at `serverbackup.time`,
@@ -2179,6 +2144,41 @@ each takes the lock `.serverbackup.lock` in it (flock, LockFileEx).
 A holder of `backup.retry` retries at once what failed: as the schedule made it,
 pruning no more than the schedule would, and revealing nothing,
 the file being encrypted (D13-A).
+
+#### WebDAV
+
+A target of the kind `webdav` is a folder on a WebDAV server,
+such as Nextcloud with an app password, a Synology box or a storage box,
+reached with the standard library alone (`internal/serverbackup/webdav.go`):
+
+| Field | What it holds |
+|-------|---------------|
+| `url` | the folder: `https://` where the URL names no scheme, `http://` only where it says so, which the card warns of, since the password then travels in clear; without a user, a password, a query or a fragment in it |
+| `user` | the user it signs in as, by basic authentication, without a colon |
+| `password` | the secret, sealed; an app password where the server has them |
+
+- A copy is put (`PUT`) to a hidden name beside its own,
+  `.<name>.<random>.tmp`, and moved (`MOVE`, `Overwrite: F`) to its name,
+  so that a put broken off leaves nothing under the name;
+  its temporary file is deleted, or by a later put once it is a day old.
+  A put asks `Expect: 100-continue`,
+  so that a refusal, a quota spent among them, comes before the file is sent.
+- A file of the name that is there already is not replaced:
+  of the same size it is taken for the copy (a move whose answer was lost),
+  of another the put fails and says so.
+- A folder missing is made (`MKCOL`), its parents too.
+- The backups are listed with `PROPFIND` at depth 1
+  and read with ranged `GET`s of 4 MiB at least,
+  so that reads that follow one another come from one request.
+- The card's Test makes the folder where it is missing,
+  puts a small file as a copy is put, reads it back and deletes it.
+- A redirect is not followed, the password would go along:
+  the error names where it points, to be put in the target.
+- The client waits 30 s for a connection and for TLS,
+  5 minutes for an answer once the request is sent,
+  and gives a transfer up once no byte moved for 2 minutes.
+- An error names the server, the request, the file and the HTTP status
+  with what it means (`401`, `403`, `413`, `423`, `507`), never the password.
 
 #### The SFTP target
 
