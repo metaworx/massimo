@@ -251,6 +251,72 @@ def test_last_updates(page):
     page.unroute("**/api/v1/update*")
 
 
+def test_update_backup_line(page):
+    """Where an update is out, a line under the version says that the
+    server takes a backup of itself first, or, without a key, that the
+    update goes on without one; where the last update's backup failed it
+    says why, and Update without a backup asks as Update does, saying that
+    no backup is taken first, and sends no_backup. The last updates name
+    the backup each took first, or that it took none."""
+    show_view(page, "maint")
+    body = json.loads(update_json("up-to-date", "v0.0.1-test", True))
+    body["backup"] = {"state": "ready"}
+    posts = []
+
+    def handle(route):
+        if route.request.method == "POST":
+            posts.append(json.loads(route.request.post_data or "null"))
+            route.fulfill(status=202, content_type="application/json",
+                          body=json.dumps({"ok": True, "requested": "v0.0.1-test", "channel": "alpha"}))
+            return
+        route.fulfill(status=200, content_type="application/json", body=json.dumps(body))
+
+    def line_is(key, **values):
+        text = page.evaluate("([k, v]) => t(k, v)", [key, values])
+        assert wait_until(page, "document.getElementById('update-backup').textContent === %s" % json.dumps(text), 5), \
+            "the line says %s: %r" % (key, page.locator("#update-backup").text_content())
+
+    page.route("**/api/v1/update*", handle)
+    page.locator("#update-check").click()
+    line_is("update.backup.ready")
+    assert not page.locator("#update-no-backup").is_visible(), "no Update without a backup while the backup works"
+
+    body["backup"] = {"state": "no_key"}
+    page.locator("#update-check").click()
+    line_is("update.backup.noKey")
+    assert not page.locator("#update-no-backup").is_visible(), "none without a key either"
+
+    body["backup"] = {"state": "failed", "error": "no space left on device", "at": "2026-11-27T10:00:00Z"}
+    body["history"] = [
+        {"at": "2026-11-20T12:00:00Z", "from": "v0.0.0-test", "to": "v0.0.1-test", "channel": "alpha", "auto": True,
+         "backup": "01a21e07-8cd9-72f9-a4b2-54277e08f80e", "reached": "v0.0.1-test", "reached_at": "2026-11-20T12:01:00Z"},
+        {"at": "2026-11-10T12:00:00Z", "from": "v0.0.0-test", "to": "v0.0.0-test", "backup_skipped": "no_key",
+         "reached": "v0.0.0-test", "reached_at": "2026-11-10T12:01:00Z"},
+    ]
+    page.locator("#update-check").click()
+    line_is("update.backup.failed", error="no space left on device")
+    without = page.locator("#update-no-backup")
+    without.wait_for(state="visible")
+    assert without.text_content() == page.evaluate("t('update.withoutBackup')"), "the button's text"
+    texts = page.locator("#update-history-list li").all_text_contents()
+    backup = page.evaluate("t('update.history.backup', {id: '54277e08f80e'})")
+    no_key = page.evaluate("t('update.history.noKey')")
+    assert len(texts) == 2 and texts[0].endswith(" · " + backup) and texts[1].endswith(" · " + no_key), \
+        "the last updates name their backups: %r" % texts
+
+    without.click()
+    box = page.locator(".update .confirm-box")
+    box.wait_for()
+    assert page.evaluate("t('update.confirmNoBackup')") in box.inner_text(), "the question says no backup is taken: %r" % box.inner_text()
+    assert box.locator(".confirm-yes").text_content() == page.evaluate("t('update.withoutBackup')"), "Yes says it"
+    assert not posts, "nothing sent before Yes"
+    box.locator(".confirm-yes").click()
+    assert wait_until(page, "document.getElementById('update-helper').textContent === %s"
+                      % json.dumps(page.evaluate("t('update.requested', {version: 'v0.0.1-test'})")), 5), "requested"
+    assert posts == [{"no_backup": True}], "Update without a backup sends no_backup: %r" % posts
+    page.unroute("**/api/v1/update*")
+
+
 def auto_routes(page, blocked=None, waits=None):
     """Stubs GET /api/v1/update with an update out, the automatic update
     as the settings stand and its next try, and the settings update.channel,

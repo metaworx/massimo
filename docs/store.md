@@ -2452,6 +2452,25 @@ under the jobs' lock, with the store held alone, which a `serve` that has it ope
 refuses (`store.ErrInUse`); `-plan` prints what it would do and changes nothing,
 a file uploaded for it removed again where the server did not hold it.
 
+#### Before an update
+
+Every update the server starts, by hand, at night or as Install now,
+first takes a backup, trigger `before-update`,
+to the local targets alone and pinned for 30 days,
+as the server and under whoever holds `update`, with no backup capability;
+its `uuid` goes into the update's history (`update.history`) and its log line.
+Without a key the update goes on, and says so.
+A backup that fails stops the update, which says why,
+and leaves no row, as no backup by hand does;
+Update without a backup goes on without one,
+`no_backup`, an audit row of its own.
+`massimo update` by hand has a running `serve` take it,
+with `MASSIMO_API_TOKEN` (`POST /api/v1/update/backup`),
+or makes it on the store where none answers,
+but never as root on a store that is another user's:
+it stops instead, and `-no-backup` installs without one.
+The update helper takes none: the server that wrote its request took it.
+
 ## 8. Migration of an installed box
 
 The Pi runs `massimo serve` as a systemd service with `/etc/massimo/env`,

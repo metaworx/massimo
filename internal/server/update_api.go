@@ -9,13 +9,16 @@ package server
 // update helper to install it (internal/update): through a request file
 // that a systemd path unit (packaging/systemd) or launchd
 // (packaging/launchd) watches, and on Windows by starting the helper
-// itself (Start). The server only checks and asks; the helper replaces
-// the binary, or, where the Debian package owns it, has apt upgrade it
-// (packaging/deb).
+// itself (Start), having taken a backup of the server first
+// (update_backup.go). The server only checks, backs itself up and asks;
+// the helper replaces the binary, or, where the Debian package owns it,
+// has apt upgrade it (packaging/deb).
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
+	"io"
 	"net/http"
 	"os"
 	goruntime "runtime"
@@ -108,6 +111,9 @@ type updateCheck struct {
 	channel string // the channel checked
 	releaseCheck
 	held updateHold
+	// backup is the last update's backup that failed (update_backup.go),
+	// under its own lock: mu is held through a release check.
+	backup updateBackupFailure
 }
 
 // updateHold is a version the update helper answered up-to-date for,
@@ -375,6 +381,9 @@ type updateView struct {
 	Auto *autoView `json:"auto,omitempty"`
 	// History is the last updates, newest first (update_history.go).
 	History []updateEntry `json:"history"`
+	// Backup is the backup an update takes first (update_backup.go);
+	// absent without a store.
+	Backup *updateBackupView `json:"backup,omitempty"`
 }
 
 func (s *Server) updateState(ctx context.Context, refresh bool) updateView {
@@ -426,6 +435,7 @@ func (s *Server) updateRelease(ctx context.Context, refresh bool) (updateView, *
 	if v.History = s.updateHistory(ctx); v.History == nil {
 		v.History = []updateEntry{}
 	}
+	v.Backup = s.updateBackupState(ctx)
 	return v, found
 }
 
@@ -443,8 +453,20 @@ func (s *Server) getUpdate(w http.ResponseWriter, r *http.Request) error {
 	return nil
 }
 
+// startUpdate handles POST /api/v1/update, {} or {"no_backup": true}:
+// the update, its backup first unless no_backup asks for none, which is
+// an audit row of its own (update.no_backup).
 func (s *Server) startUpdate(w http.ResponseWriter, r *http.Request) error {
-	v, err := s.beginUpdate(r.Context(), userIDOf(r), false)
+	var req struct {
+		NoBackup bool `json:"no_backup"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil && !errors.Is(err, io.EOF) {
+		return fail(http.StatusBadRequest, "bad body: %v (want {} or {\"no_backup\": true})", err)
+	}
+	if req.NoBackup {
+		auditAction(r, "update.no_backup")
+	}
+	v, err := s.beginUpdate(r.Context(), userIDOf(r), false, req.NoBackup)
 	if err != nil {
 		return err
 	}
@@ -455,10 +477,12 @@ func (s *Server) startUpdate(w http.ResponseWriter, r *http.Request) error {
 // beginUpdate asks the update helper to install the newest release, for
 // POST /api/v1/update (userID, 0 for the owner's key) and for the night's
 // automatic update (auto, nobody's): the checks, one request at a time,
-// the channel kept, the request, the helper started where the server
-// starts it (Windows, brew), the history's entry and the log's line. Its
-// errors are fail's, which POST answers as they are.
-func (s *Server) beginUpdate(ctx context.Context, userID int64, auto bool) (updateView, error) {
+// the server's backup unless noBackup (backupForUpdate), the channel
+// kept, the request, the helper started where the server starts it
+// (Windows, brew), the history's entry and the log's line. A backup that
+// fails stops it before the request. Its errors are fail's, which POST
+// answers as they are.
+func (s *Server) beginUpdate(ctx context.Context, userID int64, auto, noBackup bool) (updateView, error) {
 	// Replacing the binary is never open to an unauthenticated API, even
 	// where reading and setting temperatures are.
 	if why := s.updateBlocked(ctx); why != "" {
@@ -490,19 +514,47 @@ func (s *Server) beginUpdate(ctx context.Context, userID int64, auto bool) (upda
 	// may not have written its first state yet. Refused here, this POST
 	// writes no request, which a path unit (PathExists) would take for a
 	// second run and which the Windows starter's guard leaves behind.
-	if path := s.opts.Update.Status; path != "" {
-		if st, err := update.ReadStatus(path); err == nil && st.Running() {
-			return v, fail(http.StatusConflict, "an update is already running (%s)", st.State)
+	running := func() error {
+		if path := s.opts.Update.Status; path != "" {
+			if st, err := update.ReadStatus(path); err == nil && st.Running() {
+				return fail(http.StatusConflict, "an update is already running (%s)", st.State)
+			}
 		}
+		return nil
+	}
+	if err := running(); err != nil {
+		return v, err
+	}
+	summary := map[string]any{"from": v.Current, "to": v.Latest, "channel": v.Channel}
+	if auto {
+		summary["auto"] = true
+	}
+	// The server's backup before the helper is asked, which the request
+	// file alone does: a backup that fails stops the update here.
+	taken, err := s.backupForUpdate(ctx, userID, noBackup)
+	if err != nil {
+		s.noteBackupFailure(err)
+		failed := systemEvent("update", userID, summary)
+		failed.Level, failed.Error = "error", "the backup before the update failed: "+err.Error()
+		s.logServer(failed)
+		return v, updateBackupFailed(err)
+	}
+	switch {
+	case taken.uuid != "":
+		summary["backup"] = taken.uuid
+	case taken.skipped != "":
+		summary["backup_skipped"] = taken.skipped
+	}
+	// and the helper's status once more: a backup takes a while, in which
+	// the helper a POST of the moment before started may have written its
+	// first state
+	if err := running(); err != nil {
+		return v, err
 	}
 	s.keepChannel(ctx, v.Channel, rel)
 	asked := time.Now()
 	if err := update.WriteRequest(s.opts.Update.Request, v.Channel); err != nil {
 		return v, fail(http.StatusInternalServerError, "asking the update helper: %v", err)
-	}
-	summary := map[string]any{"from": v.Current, "to": v.Latest, "channel": v.Channel}
-	if auto {
-		summary["auto"] = true
 	}
 	if start := s.opts.Update.Start; start != nil {
 		switch err := start(); {
@@ -519,7 +571,8 @@ func (s *Server) beginUpdate(ctx context.Context, userID int64, auto bool) (upda
 		}
 	}
 	s.noteStop("update")
-	s.noteUpdateStart(ctx, asked, userID, v.Current, v.Latest, v.Channel, v.Helper, auto)
+	s.noteBackupFailure(nil)
+	s.noteUpdateStart(ctx, asked, userID, v.Current, v.Latest, v.Channel, v.Helper, auto, taken)
 	s.logServer(systemEvent("update", userID, summary))
 	return v, nil
 }

@@ -15,7 +15,9 @@ package server
 // version would start; a window that closes while either held it back
 // says so in the log (update_postponed). The try is beginUpdate's, as
 // POST /api/v1/update's, but nobody's and marked auto in the history and
-// the log; on Windows it starts the helper as POST does. Nothing runs
+// the log, a backup of the server first as POST takes it (update_backup.go),
+// whose failure ends the night's try; on Windows it starts the helper as
+// POST does. Nothing runs
 // where POST would be refused: an open server, no helper, a package
 // manager without one, a version held back.
 
@@ -242,7 +244,7 @@ func (s *Server) nightTick(ctx context.Context, now time.Time, checked bool) {
 		return
 	}
 	a.busy = ""
-	if _, err := s.beginUpdate(ctx, 0, true); err != nil {
+	if _, err := s.beginUpdate(ctx, 0, true, false); err != nil {
 		s.log.Warn("automatic update not started; the next night tries again", "version", v.Latest, "error", err)
 	}
 }

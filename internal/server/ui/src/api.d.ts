@@ -1294,6 +1294,25 @@ export interface UpdateInfo {
   };
   /** The last ten updates, newest first; empty without a store */
   history: UpdateEntry[];
+  /**
+   * The backup of the server an update takes first; absent without a store, or
+   * with one opened read-only
+   */
+  backup?: {
+    /**
+     * ready: an update takes one, local and pinned for 30 days; no_key: no key
+     * is set, and an update goes on without one; failed: the last update's
+     * backup failed, and no update has started since
+     */
+    state: "ready" | "no_key" | "failed";
+    /** Why it failed, for failed */
+    error?: string;
+    /**
+     * When it failed, for failed
+     * @format date-time
+     */
+    at?: string;
+  };
 }
 
 /**
@@ -1342,6 +1361,13 @@ export interface UpdateEntry {
    * started where the helper did not restart the server, else at the next start
    */
   result?: "failed" | "rolled-back" | "up-to-date";
+  /** The uuid of the server's backup the update took first */
+  backup?: string;
+  /**
+   * Why it took none: asked, Update without a backup (no_backup); no_key, no
+   * key was set
+   */
+  backup_skipped?: "asked" | "no_key";
 }
 
 /** The update helper's last run */

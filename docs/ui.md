@@ -2425,6 +2425,16 @@ The server's sign, when it says an update is out, opens it at Software update.
   On a box with the update helper installed (packaging/README.md, "Updating"),
   **Update** (with `update`) installs it and restarts the server.
   If the new version does not come up, the old one is put back.
+  Before it installs, the server takes a backup of itself, kept 30 days,
+  which a line under the version says where an update is out (`docs/store.md`,
+  "Before an update");
+  without a key for the server's backups,
+  the line says that an update goes on without one.
+  Where the backup failed, the update does not start:
+  the line says why,
+  and **Update without a backup** (with `update`) asks as Update does,
+  its question saying that no backup is taken first;
+  Update tries the backup again.
   While the server's next start refuses the settings file,
   Update's question ends with the sentence that the server stays down
   until the file is fixed, as the restart's and the reboot's do:
@@ -2454,8 +2464,9 @@ The server's sign, when it says an update is out, opens it at Software update.
   **Last updates** lists the last three under the version lines,
   the date first, then the version with its channel in brackets,
   then who started it, "automatically" for one the server started at night,
-  or "outside Massimo" with apt or brew where Massimo did not start it:
-  "24.11.2026, 15:53 · v0.16.0-alpha.1 (devel) · by Anna".
+  or "outside Massimo" with apt or brew where Massimo did not start it,
+  then the server's backup it took first, or that it took none:
+  "24.11.2026, 15:53 · v0.16.0-alpha.1 (devel) · by Anna · backup 54277e08f80e first".
   The version is the one reached, the one apt chose where it is another,
   or the one asked for with "under way" while the update runs;
   the channel is the one the update asked for,

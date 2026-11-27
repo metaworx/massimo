@@ -3736,14 +3736,27 @@ paths:
         "403": {$ref: "#/components/responses/Forbidden"}
         "429": {$ref: "#/components/responses/LockedOut"}
     post:
-      summary: Ask the update helper to install the newest release
+      summary: Ask the update helper to install the newest release, a backup of the server first
       x-capability: update
       description: |
         Needs a configured API token even where the other routes are open.
-        The helper (massimo-update.service, root) verifies the release
-        signature and checksum, replaces the binary, restarts the server and
-        rolls back if the new version does not come up.
+        The server first takes a backup of itself to its local targets,
+        pinned for 30 days, its id in the history's entry; without a key it
+        goes on, and a backup that fails stops the update (GET's backup
+        says failed). no_backup goes on without one, audited as
+        update.no_backup. The helper (massimo-update.service, root)
+        verifies the release signature and checksum, replaces the binary,
+        restarts the server and rolls back if the new version does not
+        come up.
       parameters: [{$ref: "#/components/parameters/idempotencyKey"}]
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                no_backup: {type: boolean, description: "Update without a backup: no backup of the server first"}
       responses:
         "202":
           description: Requested; follow the progress with GET
@@ -3755,6 +3768,7 @@ paths:
                   ok: {type: boolean}
                   requested: {type: string, description: The release tag that is newest now}
                   channel: {type: string}
+        "400": {$ref: "#/components/responses/BadRequest"}
         "401": {$ref: "#/components/responses/Unauthorized"}
         "429": {$ref: "#/components/responses/LockedOut"}
         "403":
@@ -3763,7 +3777,12 @@ paths:
             application/json:
               schema: {$ref: "#/components/schemas/Error"}
         "409":
-          description: Up to date, no release on the channel, or an update is running
+          description: Up to date, no release on the channel, an update is running, or the backup first found no local target switched on
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/Error"}
+        "500":
+          description: The backup of the server first failed, and the update did not start; or the helper could not be asked or started
           content:
             application/json:
               schema: {$ref: "#/components/schemas/Error"}
@@ -3831,6 +3850,49 @@ paths:
         "429": {$ref: "#/components/responses/LockedOut"}
         "503":
           description: The server has no store
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/Error"}
+  /api/v1/update/backup:
+    post:
+      summary: Take the backup of the server an update takes first, alone
+      x-capability: update
+      description: |
+        For massimo update by hand, which then installs the release
+        itself: the backup POST /api/v1/update takes first, to the local
+        targets, pinned for 30 days, its trigger before-update. Audited as
+        update.backup.
+      parameters: [{$ref: "#/components/parameters/idempotencyKey"}]
+      responses:
+        "200":
+          description: No key is set; the update goes on without a backup
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [skipped]
+                properties:
+                  skipped: {type: string, enum: [no_key]}
+        "201":
+          description: The backup made and the steps that copied and pruned it
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/ServerBackupResult"}
+        "401": {$ref: "#/components/responses/Unauthorized"}
+        "403": {$ref: "#/components/responses/Forbidden"}
+        "409":
+          description: No local target is switched on
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/Error"}
+        "429": {$ref: "#/components/responses/LockedOut"}
+        "500":
+          description: The backup failed; the update is not to go on
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/Error"}
+        "503":
+          description: The server has no store, or one opened read-only
           content:
             application/json:
               schema: {$ref: "#/components/schemas/Error"}
@@ -6007,6 +6069,14 @@ components:
           type: array
           description: The last ten updates, newest first; empty without a store
           items: {$ref: "#/components/schemas/UpdateEntry"}
+        backup:
+          type: object
+          description: "The backup of the server an update takes first; absent without a store, or with one opened read-only"
+          required: [state]
+          properties:
+            state: {type: string, enum: [ready, no_key, failed], description: "ready: an update takes one, local and pinned for 30 days; no_key: no key is set, and an update goes on without one; failed: the last update's backup failed, and no update has started since"}
+            error: {type: string, description: "Why it failed, for failed"}
+            at: {type: string, format: date-time, description: "When it failed, for failed"}
     UpdateEntry:
       type: object
       description: "An update: started in Massimo (by, to), or found at a start (outside); completed by the next start with another version"
@@ -6027,6 +6097,8 @@ components:
         reached_at: {type: string, format: date-time}
         auto: {type: boolean, description: "The server started it itself, at night; by is absent then"}
         result: {type: string, enum: [failed, rolled-back, up-to-date], description: "The update helper's outcome where the box did not stay on a new version, rolled-back after reached ran: taken at the next read or the next update started where the helper did not restart the server, else at the next start"}
+        backup: {type: string, description: "The uuid of the server's backup the update took first"}
+        backup_skipped: {type: string, enum: [asked, no_key], description: "Why it took none: asked, Update without a backup (no_backup); no_key, no key was set"}
     UpdateStatus:
       type: object
       description: The update helper's last run

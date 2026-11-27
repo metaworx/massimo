@@ -11,7 +11,7 @@ package server
 // its version, which the night installs as it would unanswered; Skip
 // holds its version back from the night, and the question with it, until
 // a newer release is out; Install now starts the update at once, as POST
-// /api/v1/update does, and keeps nothing. A person may still install a
+// /api/v1/update does, its backup of the server first, and keeps nothing. A person may still install a
 // skipped version with Update.
 
 import (
@@ -102,7 +102,7 @@ func (s *Server) putUpdateAnswer(w http.ResponseWriter, r *http.Request) error {
 		return fail(http.StatusConflict, "%q is not the version offered (%s)", req.Version, offered)
 	}
 	if req.Answer == answerNow {
-		v, err := s.beginUpdate(ctx, userIDOf(r), false)
+		v, err := s.beginUpdate(ctx, userIDOf(r), false, false)
 		if err != nil {
 			return err
 		}

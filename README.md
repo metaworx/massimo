@@ -301,6 +301,11 @@ sudo massimo install -remove              # -purge: the settings, state, logs an
 ([Versions](#versions)) and puts the old
 binary back when the restarted server does not report the new version
 (`-rollback` goes back by hand);
+before it installs, the running server takes a backup of itself, kept 30 days,
+which needs `MASSIMO_API_TOKEN` in the environment ([docs/store.md](docs/store.md),
+"Before an update"):
+without a key for the server's backups it goes on,
+where the backup fails it stops, and `-no-backup` installs without one;
 the button under System settings → Software in the web UI asks the helper to do the same,
 which needs `MASSIMO_API_TOKEN`.
 Running `install` again from a newer binary replaces the binary and the units
@@ -1251,6 +1256,8 @@ These five go through this box's running `serve`, with `MASSIMO_API_TOKEN`,
 found by the address it publishes in the data directory (`serve.api`)
 and proved by its node, and act on the store otherwise,
 one job at a time with serve's; a restore through `serve` restarts it.
+Every update first takes one to the local targets, kept 30 days:
+the web UI's, the night's and `massimo update`'s, which `-no-backup` skips.
 The details are in docs/store.md, "Server backups", and the API's in
 docs/api-v1.md, "Server backups".
 

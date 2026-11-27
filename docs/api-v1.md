@@ -271,7 +271,7 @@ and the OpenAPI file carries each operation's as `x-capability`:
 | `cubes` | add, configure and remove Cubes | `POST /api/v1/cubes`, `PUT`/`DELETE /api/v1/cubes/{sn}` |
 | `cubes.reboot` | reboot a Cube, which drops the radiograms it has not delivered; seeded for no role | `POST /api/v1/cubes/{sn}/reboot` |
 | `settings` | the server's settings, its store and the settings in effect | `GET`/`PUT /api/v1/settings`, `GET /api/v1/store`, `GET /api/v1/config` |
-| `update` | start a software update and answer the automatic update's question; includes `restart` | `POST /api/v1/update`, `PUT /api/v1/update/answer` |
+| `update` | start a software update, its backup of the server first, take that backup alone, and answer the automatic update's question; includes `restart` | `POST /api/v1/update`, `POST /api/v1/update/backup`, `PUT /api/v1/update/answer` |
 | `restart` | restart the server through the service manager that runs it, read its settings file again, and read a Cube again at once | `GET`/`POST /api/v1/restart`, `POST /api/v1/reload`, `POST /api/v1/cubes/{sn}/refresh` |
 | `reboot` | reboot the computer the server runs on, where its owner switched that on; includes `restart`; seeded for no role | `GET`/`POST`/`DELETE /api/v1/reboot` |
 | `audit` | read the audit | `GET /api/v1/audit` |
@@ -1537,8 +1537,9 @@ Needs `audit`, which only `owner` has by default; `503` without a store.
 Every route but the `GET`s and the stream ticket leaves a row:
 `action` names what was asked (`setpoint`, `device.lock`, `device.update`,
 `room.rename`, `room.config`, `room.program`, `room.delete`, `update.answer`,
-`pairing.start`, `restore.start`, `cube.add`, `settings.update`, `login`,
-`login.failed`, `logout`, `user.add`, `token.add`, `role.update`,
+`update.no_backup` (an update started without its backup), `pairing.start`,
+`restore.start`, `cube.add`, `settings.update`, `login`, `login.failed`,
+`logout`, `user.add`, `token.add`, `role.update`,
 `capability.disable`, …), `cube` the Cube of the route, `target` the device,
 room, user, role, token or Cube concerned, `user` and `token_id` who asked
 (absent without authentication, for a failed login,
@@ -4200,7 +4201,10 @@ a start whose read found notes writes a `settings_read` of them,
 which settles every earlier warning of the kind,
 so that a note that stands stays a warning across a restart),
 `restart`, `reboot`, `reboot_cancelled`, `update` (`from`, `to`, `channel`,
-and `auto` for one the server started itself at night, by nobody),
+and `auto` for one the server started itself at night, by nobody;
+`backup`, the uuid of the server's backup it took first,
+or `backup_skipped`, `asked` or `no_key`, where it took none;
+one whose backup failed at `error`, with its `error`, and not started),
 `update_result` (the helper's outcome after the restart, once:
 `state`, `from`, `to`; a failure at `warn` with its `error`),
 `update_postponed` (the night's window closed while the radio,
@@ -4581,8 +4585,9 @@ a channel set later is checked within a minute.
   "can_update": true,
   "helper": {"state": "done", "from": "v0.1.0-alpha.8", "to": "v0.1.0-alpha.9", "channel": "alpha", "time": "…"},
   "auto": {"mode": "night", "window": "03:00-05:00", "next": "2026-11-06T03:00:00+01:00"},
+  "backup": {"state": "ready"},
   "history": [
-    {"at": "2026-11-05T12:01:00Z", "by": {"name": "anna", "display_name": "Anna"}, "from": "v0.1.0-alpha.8", "to": "v0.1.0-alpha.9", "channel": "alpha", "reached": "v0.1.0-alpha.9", "reached_at": "2026-11-05T12:02:10Z"},
+    {"at": "2026-11-05T12:01:00Z", "by": {"name": "anna", "display_name": "Anna"}, "from": "v0.1.0-alpha.8", "to": "v0.1.0-alpha.9", "channel": "alpha", "backup": "0193…", "reached": "v0.1.0-alpha.9", "reached_at": "2026-11-05T12:02:10Z"},
     {"at": "2026-10-30T07:15:00Z", "outside": true, "manager": "apt", "from": "v0.1.0-alpha.7", "channel": "alpha", "reached": "v0.1.0-alpha.8", "reached_at": "2026-10-30T07:15:00Z"}
   ]
 }
@@ -4693,7 +4698,19 @@ An outcome the helper reports while the server runs on,
 is taken at the next read of this route or at the next update started;
 one that comes with a restart, at that start.
 An entry the helper reports no outcome for stays open.
+`backup` is the uuid of the server's backup the update took first (`POST`),
+`backup_skipped` why it took none:
+`asked` (`no_backup`, Update without a backup) or `no_key`;
+both are absent for an update from outside Massimo.
 The log keeps an update's lines for a month only.
+`backup`, outside the history, is the backup an update takes first,
+absent without a store or with one opened read-only:
+`state` `ready`, where it takes one;
+`no_key`, where no key is set and an update goes on without one;
+or `failed`, where the last update's backup failed,
+and no update has started since, with its `error` and `at`;
+the server keeps that in memory,
+and after a restart the next update tries again.
 
 ### POST /api/v1/update
 
@@ -4721,6 +4738,21 @@ or what the box's package source has of it (`latest`).
 Answers `202` with `{"ok":true,"requested":"v…", "channel":"…"}`;
 follow the progress with GET.
 
+Before it asks the helper, the server takes a backup of itself (docs/store.md,
+"Server backups"):
+to its local targets alone, trigger `before-update`,
+pinned for 30 days, as the server and with no backup capability,
+after a scheduled backup that runs;
+its uuid goes into the history's entry and the `update` line of the log.
+The night's update and `PUT /api/v1/update/answer`'s `now` take it too.
+Without a key the update goes on, and its line says `no_key`.
+A backup that fails stops the update before the request:
+`500` with why, `409` where no local target is switched on,
+an `update` line at `error`, and GET's `backup` says `failed`;
+the night's try for that night is spent.
+`{"no_backup": true}` (Update without a backup) starts it without one,
+for any holder of `update`, audited as `update.no_backup`.
+
 Needs the API token: without `MASSIMO_API_TOKEN` it answers `403` even though
 the other routes are open.
 `403` also when no helper is configured (`serve -update-request`),
@@ -4729,8 +4761,22 @@ and with GET's `blocked` as the error wherever that names a reason;
 when the channel has no release, while an update is running (on Windows also
 in the moment between the start of the helper and its first status),
 when the package source has the release not yet, or while it is held;
-`500` on Windows when the helper could not be started (the request is withdrawn);
+`500` on Windows when the helper could not be started (the request is withdrawn),
+and wherever the backup first failed;
 `502` when GitHub or the package source could not be asked.
+
+### POST /api/v1/update/backup
+
+The backup `POST /api/v1/update` takes first, alone, for a holder of `update`:
+`massimo update` by hand asks a running server for it,
+then installs the release itself.
+Answers `201` with the backup and its steps,
+as `POST /api/v1/server-backups` does,
+and `200` with `{"skipped": "no_key"}` where no key is set,
+which lets the update go on;
+a failure as `POST /api/v1/update`'s backup fails, `500` or `409`,
+which stops it; `503` without a store or with one opened read-only.
+Audited as `update.backup`; the job writes its own `server_backup` lines.
 
 ### PUT /api/v1/update/answer
 
@@ -4963,6 +5009,8 @@ made once each night at `serverbackup.time` (`03:30` by default, the box's time;
 each target keeping them by its retention.
 A backup is one file, the same on every target, its copies the targets that hold it.
 Nothing is made while no key is set.
+Each update takes one first, to the local targets, pinned for 30 days,
+under `update` and no backup capability (`POST /api/v1/update`).
 `backup.server` makes, pushes and pulls; `backup.retry` sees the state and
 retries what failed, and `backup.server` includes it.
 The keys are the owner's alone.

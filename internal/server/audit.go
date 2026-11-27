@@ -91,6 +91,7 @@ var actions = map[string]string{
 	"DELETE /api/v1/cubes/{sn}/pairing":                          "pairing.stop",
 	"POST /api/v1/update":                                        "update.start",
 	"PUT /api/v1/update/answer":                                  "update.answer",
+	"POST /api/v1/update/backup":                                 "update.backup",
 	"POST /api/v1/restart":                                       "server.restart",
 	"POST /api/v1/reload":                                        "server.reload",
 	"POST /api/v1/cubes/{sn}/reboot":                             "cube.reboot",
@@ -163,7 +164,7 @@ var streamedBodies = map[string]bool{"POST /api/v1/server-backups/upload": true}
 var changeLines = map[string]string{
 	"login": "", "login.start": "", "login.key": "", "logout": "", "preference.set": "", "preference.delete": "", "discover": "", "restore.plan": "",
 	"push.subscribe": "", "push.unsubscribe": "", "identity.link.start": "", "identity.link.cancel": "",
-	"update.start": "system", "update.answer": "change", "server.restart": "system", "server.reload": "system", "server.reboot": "system",
+	"update.start": "system", "update.answer": "change", "update.backup": "system", "server.restart": "system", "server.reload": "system", "server.reboot": "system",
 	"server.reboot.cancel": "system", "backup.take": "system", "backup.delete": "system", "restore.start": "system",
 	"cube.add": "change", "cube.update": "change", "cube.remove": "change", "cube.reboot": "change", "cube.refresh": "change", "settings.update": "change",
 	"setpoint": "change", "room.delete": "change", "room.rename": "change", "device.update": "change", "device.remove": "change",

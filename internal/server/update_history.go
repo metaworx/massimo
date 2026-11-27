@@ -55,6 +55,13 @@ type updateEntry struct {
 	// Auto is set where the server started it itself, at night
 	// (update_auto.go); By is nil then.
 	Auto bool `json:"auto,omitempty"`
+	// Backup is the uuid of the server's backup the update took first
+	// (update_backup.go); BackupSkipped says why it took none: asked, by
+	// Update without a backup, or no_key. Both are empty for an update
+	// from outside Massimo, and for one started before updates took a
+	// backup.
+	Backup        string `json:"backup,omitempty"`
+	BackupSkipped string `json:"backup_skipped,omitempty"`
 }
 
 // waiting reports whether the entry waits for the start that completes
@@ -104,12 +111,13 @@ func (s *Server) editHistory(ctx context.Context, edit func([]updateEntry) []upd
 // noteUpdateStart adds the entry of an update started in Massimo at at:
 // by whom (userID, 0 for the owner's key), from the running version to
 // the one asked for on channel; auto where the server started it at
-// night (update_auto.go). The entry before it, still waiting, ends
+// night (update_auto.go); the backup it took first, or why none
+// (updateBackupTaken). The entry before it, still waiting, ends
 // with the outcome the update helper reported for it (helper, read just
 // before; helperFinal), so that a second Update leaves no entry open for
 // good; one the helper has no outcome for stays as it is.
-func (s *Server) noteUpdateStart(ctx context.Context, at time.Time, userID int64, from, to, channel string, helper *update.Status, auto bool) {
-	e := updateEntry{At: at.UTC(), From: from, To: to, Channel: channel, Auto: auto}
+func (s *Server) noteUpdateStart(ctx context.Context, at time.Time, userID int64, from, to, channel string, helper *update.Status, auto bool, b updateBackupTaken) {
+	e := updateEntry{At: at.UTC(), From: from, To: to, Channel: channel, Auto: auto, Backup: b.uuid, BackupSkipped: b.skipped}
 	if userID != 0 {
 		if u, ok, err := s.opts.Store.UserByID(ctx, userID); err == nil && ok {
 			e.By = &eventUser{Name: u.Name, DisplayName: u.DisplayName}
