@@ -10,7 +10,8 @@
  * kinds once; a backup now, a file uploaded, a backup downloaded,
  * checked, pinned or unpinned, its copy pushed, pulled or deleted
  * (backup.server); a failed backup or copy retried (backup.retry); a
- * target added, changed, tested or removed (backup.server); a key
+ * target added, changed, tested or removed, or the host's key its test
+ * stopped at trusted (backup.server); a key
  * pasted or made, confirmed by its last six characters, or removed (the
  * owner's). Each action is this page's own request: it reads again what
  * it changed, and says how it went in the line of its place, a job's
@@ -30,7 +31,7 @@ import { isShown } from "../shared/pages";
 import { saveResponse } from "../shared/save";
 import { session, stillSession } from "../shared/session";
 import { fmtWhen } from "../shared/time";
-import { backupUI, card, dropMade, holdMade, sb, targetFormKey, targetUI } from "./store";
+import { backupUI, card, dropMade, holdMade, type HostKey, sb, targetFormKey, targetUI } from "./store";
 
 /** The answer of a key added: the key, and for one made its secret part and the key file, once. */
 interface KeyAdded {
@@ -39,12 +40,29 @@ interface KeyAdded {
   key_file?: string;
 }
 
-/** The answer of a target added: the target, the backups found on it, the files skipped, and why it could not be read. */
-interface TargetAdded {
+/** An SFTP host's key that an answer names where it stopped at it: the host's, and the one trusted where the host's differs from it. */
+interface HostKeyAnswer {
+  host_key?: string;
+  pinned_host_key?: string;
+}
+
+/** The answer of a target added: the target, the backups found on it, the files skipped, why it could not be read, and the host's key to trust. */
+interface TargetAdded extends HostKeyAnswer {
   target: ServerBackupTarget;
   found?: number;
   skipped?: string[];
   scan_error?: string;
+}
+
+/** The answer of a target's test: whether it works, why not, and the host's key to trust. */
+interface TargetTested extends HostKeyAnswer {
+  ok: boolean;
+  error?: string;
+}
+
+/** hostOf is the host's key an answer names, null where it names none. */
+function hostOf(r: HostKeyAnswer): HostKey | null {
+  return r.host_key ? { key: r.host_key, pinned: r.pinned_host_key || "" } : null;
 }
 
 /** This page's own requests under way: an event's read waits for their reading. */
@@ -256,11 +274,15 @@ const sayTargets = (res: Outcome | null) => {
   card.targets = res;
 };
 
-/** addTarget adds a target and has it scanned for the backups it holds (POST /api/v1/server-backup-targets); added, its panel is open. */
+/** addTarget adds a target and has it scanned for the backups it holds (POST /api/v1/server-backup-targets); added, its panel is open, with the host's key the scan stopped at to trust. */
 export function addTarget(body: Record<string, unknown>): Promise<boolean> {
   const name = String(body.name || "");
   return act(sayTargets, reloadJob, () => api<TargetAdded>("POST", TARGETS, body), (r) => {
-    if (r.target?.uuid) targetUI.of(r.target.uuid).open = true;
+    if (r.target?.uuid) {
+      const ui = targetUI.of(r.target.uuid);
+      ui.open = true;
+      ui.host = hostOf(r);
+    }
     if (r.scan_error) return { text: t("serverbackup.target.scanFailed", { name, error: r.scan_error }), ok: false };
     return { text: r.found ? t("serverbackup.target.addedFound", { name, n: r.found }) : t("serverbackup.target.added", { name }), ok: true };
   }, "serverbackup.target.failed");
@@ -274,14 +296,34 @@ export function saveTarget(tg: ServerBackupTarget, body: Record<string, unknown>
   }, reloadJob, () => api("PUT", targetPath(tg), body), () => ({ text: t("serverbackup.target.saved", { name }), ok: true }), "serverbackup.target.failed");
 }
 
-/** testTarget has the server reach the target and write to it (POST …/{uuid}/test), and says whether it works. */
+/** testTarget has the server reach the target and write to it (POST …/{uuid}/test), and says whether it works, keeping the host's key it stopped at to trust. */
 export function testTarget(tg: ServerBackupTarget): Promise<boolean> {
   const name = tg.name || "";
+  const uuid = tg.uuid || "";
+  targetUI.of(uuid).host = null;
   return act((res) => {
-    targetUI.of(tg.uuid || "").said = res;
-  }, async () => undefined, () => api<{ ok: boolean; error?: string }>("POST", targetPath(tg) + "/test"),
-  (r) => (r.ok ? { text: t("serverbackup.target.works", { name }), ok: true } : { text: t("serverbackup.target.fails", { name, error: r.error || "" }), ok: false }),
-  "serverbackup.target.failed");
+    targetUI.of(uuid).said = res;
+  }, async () => undefined, () => api<TargetTested>("POST", targetPath(tg) + "/test"), (r) => {
+    targetUI.of(uuid).host = hostOf(r);
+    return r.ok ? { text: t("serverbackup.target.works", { name }), ok: true } : { text: t("serverbackup.target.fails", { name, error: r.error || "" }), ok: false };
+  }, "serverbackup.target.failed");
+}
+
+/**
+ * trustHostKey trusts the host's key that a test or an add's scan
+ * stopped at (D8-A): the target saved with its host_key set to it, its
+ * other fields as stored, not as its form holds them (PUT …/{uuid}); the
+ * host's key then goes from its panel.
+ */
+export function trustHostKey(tg: ServerBackupTarget, key: string): Promise<boolean> {
+  const name = tg.name || "";
+  const uuid = tg.uuid || "";
+  return act((res) => {
+    targetUI.of(uuid).said = res;
+  }, reloadJob, () => api("PUT", targetPath(tg), { config: { ...(tg.config || {}), host_key: key } }), () => {
+    targetUI.of(uuid).host = null;
+    return { text: t("serverbackup.target.hostKeyTrusted", { name }), ok: true };
+  }, "serverbackup.target.failed");
 }
 
 /** removeTarget removes a target and its copies from the list, its files staying (DELETE …/{uuid}). */

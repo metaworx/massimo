@@ -15,8 +15,9 @@
  * them what the card keeps beyond its parts: a new key's or target's form
  * shown, the key just made with its secret part, held until it is
  * confirmed, its hour is over, another page is shown or the card is
- * folded, a fold open per backup and per target, and the message
- * lines. A sign-out forgets it all, the secret part first.
+ * folded, a fold open per backup and per target, the host's key a
+ * target's test stopped at, and the message lines. A sign-out forgets it
+ * all, the secret part first.
  */
 
 import type { ServerBackupKey, ServerBackupKind, ServerBackupList, ServerBackupPolicy, ServerBackupTarget } from "../api";
@@ -70,8 +71,14 @@ export const card = live({
 /** Per backup, by its uuid: its fold open, and how its last action went. */
 export const backupUI = liveMap(() => ({ open: false, said: null as Outcome | null }));
 
-/** Per target, by its uuid: its panel open, and how its last test went. */
-export const targetUI = liveMap(() => ({ open: false, said: null as Outcome | null }));
+/** A host's key that a target's test or its add's scan stopped at (an SFTP target's, D8-A): the host's fingerprint, and the one trusted where the host's differs from it, "" where none is. */
+export interface HostKey {
+  key: string;
+  pinned: string;
+}
+
+/** Per target, by its uuid: its panel open, how its last test went, and the host's key it stopped at. */
+export const targetUI = liveMap(() => ({ open: false, said: null as Outcome | null, host: null as HostKey | null }));
 
 /** The counts of a target's retention, in the form's order (serverbackup.Policy). */
 export const KEEPS = ["last", "daily", "weekly", "monthly", "yearly"] as const;
@@ -120,13 +127,17 @@ export function targetFormKey(uuid: string): string {
   return "serverbackups:" + uuid;
 }
 
-/** quiet takes the card's messages back, as Maintenance is shown. */
+/** quiet takes the card's messages back, as Maintenance is shown, and the host keys the targets' tests stopped at. */
 export function quiet(): void {
   card.backups = null;
   card.targets = null;
   card.keys = null;
   for (const b of sb.list?.backups || []) backupUI.of(b.uuid || "").said = null;
-  for (const tg of sb.targets) targetUI.of(tg.uuid || "").said = null;
+  for (const tg of sb.targets) {
+    const ui = targetUI.of(tg.uuid || "");
+    ui.said = null;
+    ui.host = null;
+  }
 }
 
 /**

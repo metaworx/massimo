@@ -2415,5 +2415,16 @@
   "serverbackup.checkKey.thisBox": "L'ha fatto questo dispositivo.",
   "serverbackup.checkKey.otherBox": "L'ha fatto un altro dispositivo.",
   "serverbackup.checkKey.files": "Contiene {files}.",
-  "serverbackup.checkKey.failed": "La verifica non è riuscita: {error}"
+  "serverbackup.checkKey.failed": "La verifica non è riuscita: {error}",
+  "serverbackup.kindNote.sftp": "Il server crea la chiave SSH di questa destinazione quando viene aggiunta e mostra la riga da mettere sull'host; Prova mostra poi la chiave dell'host da approvare.",
+  "serverbackup.target.publicKey": "Chiave del server per questa destinazione",
+  "serverbackup.target.publicKeyHint": "Aggiungi questa riga agli authorized_keys dell'host, per l'utente indicato sopra.",
+  "serverbackup.target.copyPublicKey": "Copia la riga della chiave di {name}",
+  "serverbackup.target.hostKeyNew": "L'host mostra questa chiave, non ancora approvata: finché non lo è, non gli viene inviato nulla. Confrontala prima con quella dell'host stesso (ssh-keygen -lf con la sua chiave host, sul posto).",
+  "serverbackup.target.hostKeyShown": "Chiave dell'host:",
+  "serverbackup.target.hostKeyTrust": "Approva questa chiave host",
+  "serverbackup.target.hostKeyTrusted": "{name} ora approva la chiave dell'host; provala di nuovo.",
+  "serverbackup.target.hostKeyChanged": "L'host mostra una chiave diversa da quella approvata, e non gli viene inviato nulla: è stato reinstallato, o qualcuno si è messo in mezzo. Se la sua chiave è cambiata di proposito, inserisci quella nuova in Chiave dell'host e salva.",
+  "serverbackup.target.hostKeyPinned": "Approvata:",
+  "serverbackup.target.hostKeyNow": "Mostrata ora:"
 }

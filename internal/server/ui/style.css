@@ -902,6 +902,17 @@ dialog.sb-restore-dialog { width: min(92vw, 560px); }
 .sb-restore-dialog .switch:has(> input:disabled) { opacity: 0.5; cursor: default; }
 .sb-restore-dialog .sb-restore-line { margin: 0 0 0 48px; }
 .sb-restore-missing, .sb-restore-what, .sb-restore-cubes ul { margin: 0 0 8px; padding-left: 1.4em; overflow-wrap: anywhere; }
+/* an SFTP target's key line for the host's authorized_keys, wrapped
+   anywhere; the host's key its test stopped at, amber where it is to be
+   trusted, red beside the one trusted where it changed */
+.sb-public-key, .sb-host-key { margin: 0 0 8px; overflow-wrap: anywhere; }
+.sb-public-key > .action-title, .sb-public-key-hint, .sb-host-key > p { margin: 0 0 4px; }
+.sb-public-key > .copy-pair { display: flex; align-items: flex-start; }
+.sb-public-key-line { word-break: break-all; }
+.sb-host-key { margin-top: 8px; }
+.sb-host-key-bad { color: var(--bad); }
+.sb-host-key .mark-sign { width: 1em; height: 1em; vertical-align: -0.12em; stroke-width: 2.3; }
+.settings .sb-host-key-actions { justify-content: flex-start; margin: 6px 0 0; }
 .restore-plan { margin-top: 10px; padding: 8px 12px; }
 .restore-title { font-weight: 600; margin: 0 0 4px; overflow-wrap: anywhere; }
 .restore-steps li { margin: 2px 0; }

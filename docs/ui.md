@@ -2734,8 +2734,21 @@ The server's sign, when it says an update is out, opens it at Software update.
     The form keeps its changes as a settings form does, with its disk in the card's pill
     and ☰'s, **Test**, which has the server reach the target and write to it,
     **Remove**, which asks, the files staying, Reset and Save.
-    **Add a target** chooses the kind first; added, the target is read for the backups
-    it holds, and the line says how many it found.
+    **Add a target** chooses the kind first,
+    with the kind's note under it where it has one (`serverbackup.kindNote.<kind>`:
+    SFTP's, that the server makes its key);
+    added, the target is read for the backups it holds,
+    and the line says how many it found.
+    An SFTP target shows the public line of the key the server made for it,
+    which copies itself, to put into the host's `authorized_keys` for its user
+    (AP ServerBackup, D8-A).
+    The host's key that **Test** or the add's read stopped at stands under the form
+    until Maintenance is shown again: one not trusted yet with its fingerprint
+    and **Trust this host key**, which saves it as the target's Host key,
+    its other fields as stored, not as the form holds them;
+    one other than the key trusted, in red beside that one, with no button,
+    since only the host tells a host set up anew from someone standing between:
+    a key changed on purpose goes into Host key by hand.
     A kind's name and its fields' names are the texts `serverbackup.kind.<kind>`
     and `serverbackup.field.<kind>.<key>`; a kind added later needs no form of its own.
     A holder of `backup.retry` alone sees each target's name, kind, marks and line.

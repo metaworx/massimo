@@ -2413,5 +2413,16 @@
   "serverbackup.checkKey.thisBox": "Dieses Gerät hat sie gemacht.",
   "serverbackup.checkKey.otherBox": "Ein anderes Gerät hat sie gemacht.",
   "serverbackup.checkKey.files": "Sie enthält {files}.",
-  "serverbackup.checkKey.failed": "Die Prüfung ist fehlgeschlagen: {error}"
+  "serverbackup.checkKey.failed": "Die Prüfung ist fehlgeschlagen: {error}",
+  "serverbackup.kindNote.sftp": "Der Server erstellt den SSH-Schlüssel dieses Ziels beim Hinzufügen und zeigt die Zeile, die auf den Host gehört; Testen zeigt dann den Schlüssel des Hosts, dem du vertrauen kannst.",
+  "serverbackup.target.publicKey": "Schlüssel des Servers für dieses Ziel",
+  "serverbackup.target.publicKeyHint": "Trage diese Zeile in die authorized_keys des Hosts ein, für den Benutzer oben.",
+  "serverbackup.target.copyPublicKey": "Die Schlüsselzeile von {name} kopieren",
+  "serverbackup.target.hostKeyNew": "Der Host zeigt diesen Schlüssel, dem noch nicht vertraut wird: Bis dahin wird ihm nichts gesendet. Vergleiche ihn zuerst mit dem des Hosts selbst (ssh-keygen -lf mit seinem Host-Schlüssel, dort).",
+  "serverbackup.target.hostKeyShown": "Schlüssel des Hosts:",
+  "serverbackup.target.hostKeyTrust": "Diesem Host-Schlüssel vertrauen",
+  "serverbackup.target.hostKeyTrusted": "{name} vertraut jetzt dem Schlüssel des Hosts; teste es erneut.",
+  "serverbackup.target.hostKeyChanged": "Der Host zeigt einen anderen Schlüssel als den vertrauten, und ihm wird nichts gesendet: Er wurde neu eingerichtet, oder jemand steht dazwischen. Wurde sein Schlüssel absichtlich geändert, trage den neuen unter Host-Schlüssel ein und speichere.",
+  "serverbackup.target.hostKeyPinned": "Vertraut:",
+  "serverbackup.target.hostKeyNow": "Jetzt gezeigt:"
 }

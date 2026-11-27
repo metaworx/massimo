@@ -2415,5 +2415,16 @@
   "serverbackup.checkKey.thisBox": "Cet appareil l'a faite.",
   "serverbackup.checkKey.otherBox": "Un autre appareil l'a faite.",
   "serverbackup.checkKey.files": "Elle contient {files}.",
-  "serverbackup.checkKey.failed": "La vérification a échoué : {error}"
+  "serverbackup.checkKey.failed": "La vérification a échoué : {error}",
+  "serverbackup.kindNote.sftp": "Le serveur crée la clé SSH de cette cible lors de son ajout et affiche la ligne à placer sur l'hôte ; Tester affiche ensuite la clé de l'hôte à approuver.",
+  "serverbackup.target.publicKey": "Clé du serveur pour cette cible",
+  "serverbackup.target.publicKeyHint": "Ajoutez cette ligne aux authorized_keys de l'hôte, pour l'utilisateur ci-dessus.",
+  "serverbackup.target.copyPublicKey": "Copier la ligne de clé de {name}",
+  "serverbackup.target.hostKeyNew": "L'hôte présente cette clé, qui n'est pas encore approuvée : rien ne lui est envoyé tant qu'elle ne l'est pas. Comparez-la d'abord avec celle de l'hôte lui-même (ssh-keygen -lf avec sa clé d'hôte, sur place).",
+  "serverbackup.target.hostKeyShown": "Clé de l'hôte :",
+  "serverbackup.target.hostKeyTrust": "Approuver cette clé d'hôte",
+  "serverbackup.target.hostKeyTrusted": "{name} approuve désormais la clé de l'hôte ; testez-la à nouveau.",
+  "serverbackup.target.hostKeyChanged": "L'hôte présente une autre clé que celle approuvée, et rien ne lui est envoyé : il a été réinstallé, ou quelqu'un s'interpose. Si sa clé a changé volontairement, saisissez la nouvelle dans Clé de l'hôte et enregistrez.",
+  "serverbackup.target.hostKeyPinned": "Approuvée :",
+  "serverbackup.target.hostKeyNow": "Présentée maintenant :"
 }

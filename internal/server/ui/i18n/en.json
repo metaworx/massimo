@@ -2413,5 +2413,16 @@
   "serverbackup.checkKey.thisBox": "This box made it.",
   "serverbackup.checkKey.otherBox": "Another box made it.",
   "serverbackup.checkKey.files": "It holds {files}.",
-  "serverbackup.checkKey.failed": "The check failed: {error}"
+  "serverbackup.checkKey.failed": "The check failed: {error}",
+  "serverbackup.kindNote.sftp": "The server makes this target's SSH key when it is added, and shows the line to put on the host; Test then shows the host's key to trust.",
+  "serverbackup.target.publicKey": "The server's key for this target",
+  "serverbackup.target.publicKeyHint": "Put this line into the host's authorized_keys, for the user above.",
+  "serverbackup.target.copyPublicKey": "Copy the key line of {name}",
+  "serverbackup.target.hostKeyNew": "The host shows this key, which is not trusted yet: nothing is sent to it until it is. Compare it with the host's own first (ssh-keygen -lf with its host key, there).",
+  "serverbackup.target.hostKeyShown": "The host's key:",
+  "serverbackup.target.hostKeyTrust": "Trust this host key",
+  "serverbackup.target.hostKeyTrusted": "{name} trusts the host's key now; test it again.",
+  "serverbackup.target.hostKeyChanged": "The host shows another key than the one trusted, and nothing is sent to it: it was set up anew, or someone stands between. Where its key changed on purpose, put the new one into Host key and save.",
+  "serverbackup.target.hostKeyPinned": "Trusted:",
+  "serverbackup.target.hostKeyNow": "Shown now:"
 }

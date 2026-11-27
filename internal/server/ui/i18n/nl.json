@@ -2414,5 +2414,16 @@
   "serverbackup.checkKey.thisBox": "Dit apparaat heeft hem gemaakt.",
   "serverbackup.checkKey.otherBox": "Een ander apparaat heeft hem gemaakt.",
   "serverbackup.checkKey.files": "Hij bevat {files}.",
-  "serverbackup.checkKey.failed": "De controle is mislukt: {error}"
+  "serverbackup.checkKey.failed": "De controle is mislukt: {error}",
+  "serverbackup.kindNote.sftp": "De server maakt de SSH-sleutel van dit doel bij het toevoegen en toont de regel die op de host moet; Testen toont daarna de sleutel van de host om te vertrouwen.",
+  "serverbackup.target.publicKey": "Sleutel van de server voor dit doel",
+  "serverbackup.target.publicKeyHint": "Zet deze regel in de authorized_keys van de host, voor de gebruiker hierboven.",
+  "serverbackup.target.copyPublicKey": "De sleutelregel van {name} kopiëren",
+  "serverbackup.target.hostKeyNew": "De host toont deze sleutel, die nog niet vertrouwd wordt: tot dan wordt er niets naartoe gestuurd. Vergelijk hem eerst met die van de host zelf (ssh-keygen -lf met zijn hostsleutel, daar).",
+  "serverbackup.target.hostKeyShown": "Sleutel van de host:",
+  "serverbackup.target.hostKeyTrust": "Deze hostsleutel vertrouwen",
+  "serverbackup.target.hostKeyTrusted": "{name} vertrouwt nu de sleutel van de host; test het opnieuw.",
+  "serverbackup.target.hostKeyChanged": "De host toont een andere sleutel dan de vertrouwde, en er wordt niets naartoe gestuurd: hij is opnieuw ingericht, of iemand staat ertussen. Is zijn sleutel bewust gewijzigd, zet de nieuwe dan in Hostsleutel en sla op.",
+  "serverbackup.target.hostKeyPinned": "Vertrouwd:",
+  "serverbackup.target.hostKeyNow": "Nu getoond:"
 }

@@ -17,17 +17,23 @@
  * the page does not know a target's kind, its fields are shown off, with
  * why, and Save leaves them as they are; the
  * form is a settings form kept by the target's uuid (shared/forms.ts),
- * with Test, Remove, which asks, Reset and Save. The form that adds one
- * chooses the kind first. For a holder of backup.retry alone each
- * target's state, nothing more. A kind's name and its fields' names are
- * the texts serverbackup.kind.<kind> and serverbackup.field.<kind>.<key>,
- * the key itself where a text is missing.
+ * with Test, Remove, which asks, Reset and Save. A key the server made
+ * for a target (an SFTP target's, D8-A) shows its public line with its
+ * copy and where it goes; the host's key that a test or the add's scan
+ * stopped at shows with Trust this host key where none is trusted, and
+ * beside the one trusted, with no button, where the host's changed. The
+ * form that adds one chooses the kind first, with the kind's note where
+ * it has one (serverbackup.kindNote.<kind>). For a holder of backup.retry
+ * alone each target's state, nothing more. A kind's name and its fields'
+ * names are the texts serverbackup.kind.<kind> and
+ * serverbackup.field.<kind>.<key>, the key itself where a text is missing.
  */
 
 import { useRef, useState } from "preact/hooks";
 import type { ServerBackupKind, ServerBackupPolicy, ServerBackupTarget, ServerBackupTargetState } from "../api";
 import { Adder } from "../shared/adder";
 import { Badge, ResultLine } from "../shared/badge";
+import { Copy } from "../shared/copy";
 import { Mark } from "../shared/icon";
 import { type Draft, FormFooter, Meanwhile, NumberField, Select, Switch, TextField, useDraft } from "../shared/field";
 import { Fold, FoldHead } from "../shared/fold";
@@ -38,7 +44,7 @@ import { Question, BusyButton, busyProps, useAsk, useBusy } from "../shared/ques
 import { showCard } from "../shared/card";
 import { isShown, showView } from "../shared/pages";
 import { fmtWhen } from "../shared/time";
-import { addTarget, removeTarget, saveTarget, testTarget } from "./send";
+import { addTarget, removeTarget, saveTarget, testTarget, trustHostKey } from "./send";
 import { card, DEFAULT_KEEP, KEEPS, type KeepKey, sb, TAKES, targetFormKey, targetUI } from "./store";
 
 /** textOr is the text of key, else fallback where the texts have none (a kind or a field a later block adds without its text). */
@@ -364,7 +370,54 @@ function TargetForm({ tg }: { tg: ServerBackupTarget }) {
   );
 }
 
-/** TargetPanel is a target's panel: its head with its name, its kind and its marks; its line; its form. */
+/** PublicKey is the public line of the key the server made for a target (an SFTP target's, D8-A), a text that copies itself with its copy icon, and where it goes. */
+function PublicKey({ tg }: { tg: ServerBackupTarget }) {
+  useLook();
+  const id = "sb-target-" + tg.uuid + "-public-key";
+  return (
+    <div class="sb-public-key" role="group" aria-labelledby={id + "-title"}>
+      <p id={id + "-title"} class="action-title">{t("serverbackup.target.publicKey")}</p>
+      <Copy id={id} cls="mono sb-public-key-line" text={tg.public_key || ""} icon name={t("serverbackup.target.copyPublicKey", { name: tg.name || "" })} />
+      <p class="muted small sb-public-key-hint">{t("serverbackup.target.publicKeyHint")}</p>
+    </div>
+  );
+}
+
+/**
+ * HostKey is the host's key that a target's test or its add's scan
+ * stopped at (an SFTP target's, D8-A), until Maintenance is shown again:
+ * one not trusted yet with its fingerprint and Trust this host key, which
+ * saves it as the target's host_key; one other than the key trusted with
+ * both and no button, since only the host can tell a host set up anew
+ * from someone standing between: a key changed on purpose goes into the
+ * form's Host key by hand.
+ */
+function HostKey({ tg }: { tg: ServerBackupTarget }) {
+  useLook();
+  const host = targetUI.of(tg.uuid || "").host;
+  if (!host) return null;
+  const id = "sb-target-" + tg.uuid + "-host";
+  if (host.pinned) {
+    return (
+      <div id={id} class="sb-host-key" data-state="changed" role="group" aria-labelledby={id + "-text"}>
+        <p id={id + "-text"} class="small sb-host-key-bad"><Mark state="bad" /> {t("serverbackup.target.hostKeyChanged")}</p>
+        <p class="small sb-host-key-fp">{t("serverbackup.target.hostKeyPinned")} <Copy cls="mono sb-host-key-pinned" text={host.pinned} /></p>
+        <p class="small sb-host-key-fp">{t("serverbackup.target.hostKeyNow")} <Copy cls="mono sb-host-key-shown" text={host.key} /></p>
+      </div>
+    );
+  }
+  return (
+    <div id={id} class="sb-host-key" data-state="new" role="group" aria-labelledby={id + "-text"}>
+      <p id={id + "-text"} class="small warn-text"><Mark state="warn" /> {t("serverbackup.target.hostKeyNew")}</p>
+      <p class="small sb-host-key-fp">{t("serverbackup.target.hostKeyShown")} <Copy cls="mono sb-host-key-shown" text={host.key} /></p>
+      <div class="actions sb-host-key-actions">
+        <BusyButton cls="primary sb-host-key-trust" label={t("serverbackup.target.hostKeyTrust")} run={() => trustHostKey(tg, host.key)} />
+      </div>
+    </div>
+  );
+}
+
+/** TargetPanel is a target's panel: its head with its name, its kind and its marks; its line; the public line of a key the server made for it; its form; the host's key its test stopped at. */
 function TargetPanel({ tg }: { tg: ServerBackupTarget }) {
   useLook();
   const uuid = tg.uuid || "";
@@ -373,12 +426,14 @@ function TargetPanel({ tg }: { tg: ServerBackupTarget }) {
     <Fold cls="panel sb-target" open={ui.open} onToggle={(o) => { ui.open = o; }} data={{ uuid }}
       summary={<FoldHead name={tg.name} after={<span class="muted small">{kindLabel(tg.kind)}</span>} badges={stateBadges(tg)} />}>
       <p class="muted small sb-target-facts">{factsText(tg, tg.retention)}</p>
+      {tg.public_key && <PublicKey tg={tg} />}
       <TargetForm tg={tg} />
+      <HostKey tg={tg} />
     </Fold>
   );
 }
 
-/** NewTarget is the form that adds a target: the kind first, then its fields, as a free form of its own, the defaults of the kind and of the server; another kind chosen forgets the secret typed. */
+/** NewTarget is the form that adds a target: the kind first, with its note where it has one, then its fields, as a free form of its own, the defaults of the kind and of the server; another kind chosen forgets the secret typed. */
 function NewTarget() {
   useLook();
   const kinds = sb.kinds || [];
@@ -413,6 +468,7 @@ function NewTarget() {
         setKind(k);
         setSecret("");
       }}
+        hint={textOr("serverbackup.kindNote." + kname, "") || undefined} hintId="sb-target-new-kind-note"
         options={kinds.map((k): [string, string] => [k.name || "", kindLabel(k.name)])} />
       <Fields id="new" kind={kind} v={v} secret={secret} setSecret={setSecret} />
       <div class="actions">

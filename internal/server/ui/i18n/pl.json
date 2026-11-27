@@ -2492,5 +2492,16 @@
   "serverbackup.checkKey.thisBox": "Zrobiło ją to urządzenie.",
   "serverbackup.checkKey.otherBox": "Zrobiło ją inne urządzenie.",
   "serverbackup.checkKey.files": "Zawiera {files}.",
-  "serverbackup.checkKey.failed": "Sprawdzenie nie powiodło się: {error}"
+  "serverbackup.checkKey.failed": "Sprawdzenie nie powiodło się: {error}",
+  "serverbackup.kindNote.sftp": "Serwer tworzy klucz SSH tego miejsca docelowego przy dodawaniu i pokazuje wiersz do umieszczenia na hoście; Testuj pokazuje potem klucz hosta do zaufania.",
+  "serverbackup.target.publicKey": "Klucz serwera dla tego miejsca docelowego",
+  "serverbackup.target.publicKeyHint": "Dodaj ten wiersz do authorized_keys hosta, dla użytkownika podanego wyżej.",
+  "serverbackup.target.copyPublicKey": "Kopiuj wiersz klucza {name}",
+  "serverbackup.target.hostKeyNew": "Host pokazuje ten klucz, któremu jeszcze nie zaufano: dopóki to nie nastąpi, nic do niego nie jest wysyłane. Najpierw porównaj go z kluczem samego hosta (ssh-keygen -lf z jego kluczem hosta, na miejscu).",
+  "serverbackup.target.hostKeyShown": "Klucz hosta:",
+  "serverbackup.target.hostKeyTrust": "Zaufaj temu kluczowi hosta",
+  "serverbackup.target.hostKeyTrusted": "{name} ufa teraz kluczowi hosta; przetestuj ponownie.",
+  "serverbackup.target.hostKeyChanged": "Host pokazuje inny klucz niż zaufany i nic do niego nie jest wysyłane: został zainstalowany od nowa albo ktoś stoi pośrodku. Jeśli jego klucz zmieniono celowo, wpisz nowy w polu Klucz hosta i zapisz.",
+  "serverbackup.target.hostKeyPinned": "Zaufany:",
+  "serverbackup.target.hostKeyNow": "Pokazany teraz:"
 }
