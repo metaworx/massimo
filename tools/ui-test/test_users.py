@@ -10,8 +10,8 @@ import re
 import pytest
 
 from conftest import URL, api_call
-from helpers import (NAME_BAD, NAME_TAKEN, assert_busy, cleanup, close_fold, frames, hold, named_buttons, open_fold, safe_route, scroll_width, show_view, sign_out, undo,
-                     wait_held, wait_until)
+from helpers import (KEY_COPY, NAME_BAD, NAME_TAKEN, assert_busy, cleanup, close_fold, copies, frames, grant_clipboard, hold, icon_after_last_line, named_buttons,
+                     open_fold, safe_route, scroll_width, show_view, sign_out, undo, wait_held, wait_until)
 
 
 def test_users_and_roles(page, case):
@@ -382,9 +382,15 @@ def test_new_key_shown_once(page, case):
     """In an open user panel, Create key shows the new key, which the
     server shows only once, lists every token once, and sends one POST
     per click: the panel loads its tokens through one path, not through
-    the toggle of a panel built open and a direct call both."""
+    the toggle of a panel built open and a direct call both. The key
+    shown copies as the page's other texts do (AP KeyLife, D1-A): a
+    button to the keyboard named Copy the key, not by the key, with its
+    copy icon right after the key's last line; a click, Enter, Space and
+    the icon each copy it. Fails on the page before: the key a paragraph
+    alone."""
     prefix = f"ui-test-key-{case.width}-{case.lang}-"
     revoke_keys(prefix)
+    grant_clipboard(page)
     posts, loads = [], []
     page.on("request", lambda r: posts.append(r.url) if r.method == "POST" and r.url.endswith("/users/operator/tokens") else None)
     page.on("request", lambda r: loads.append(r.url) if r.method == "GET" and r.url.endswith("/users/operator/tokens") else None)
@@ -407,7 +413,12 @@ def test_new_key_shown_once(page, case):
             # for before it: counted, not waited for
             assert len(loads) - before == 1, f"one load of the tokens for key {n}, not {len(loads) - before}"
             key = panel.locator(".user-key-box")
-            assert key.is_visible() and panel.locator(".user-key").inner_text().strip(), f"key {n} is shown, once"
+            shown = panel.locator(".user-key").inner_text().strip()
+            assert key.is_visible() and shown, f"key {n} is shown, once"
+            sel = ".user-panel[data-name='operator'] .user-key"
+            placed, m = icon_after_last_line(page, sel)
+            assert placed, f"key {n}: its copy icon right after its last line: {m}"
+            copies(page, sel, shown, KEY_COPY[case.lang])
             ids = page.evaluate("[...document.querySelectorAll(%r)].map((li) => li.dataset.id).filter((id) => id)" % tokens)
             assert len(ids) == len(set(ids)), f"every token once after key {n}: {ids}"
             assert len(posts) == n, f"one POST per click, {len(posts)} after {n}"

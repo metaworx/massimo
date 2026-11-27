@@ -1,4 +1,4 @@
-# Testing the web UI (v1.29.0)
+# Testing the web UI (v1.30.0)
 
 An evaluation of a Cypress suite for the web UI, against the alternatives:
 what the Playwright smoke test covers today and what it cannot do well,
@@ -881,6 +881,20 @@ The suite's helpers for it are in `tools/ui-test/helpers.py`
   and the part's drawing after it, before the test acts inside the fold;
   a click that toggles nothing fails within seconds (`FOLD_TOGGLE`),
   not at the test's end.
+- **A copy checked** (`grant_clipboard`, `copies`, `icon_after_last_line` of `helpers.py`,
+  AP KeyLife, Block 1):
+  `grant_clipboard` lets the page's origin read and write the clipboard,
+  and empties it;
+  `copies(page, sel, value, name)` checks a shared `Copy` with its icon,
+  `sel` its text and the icon the button right after it:
+  a button to the keyboard,
+  it and its icon named `name`, which does not tell `value`,
+  and a click on it, Enter and Space on it and a click on its icon,
+  each copying `value`, the clipboard emptied before each;
+  `icon_after_last_line` says whether its icon follows the text's last line,
+  the lines measured by a range over the text,
+  which gives them where a flex item made the text a block, too
+  (`test_users.py`, `test_settings.py`).
 - **The stream watched** (`Stream`, the fixture `stream`):
   every page of the page fixture has `PAGE_KIT` before its own scripts,
   which records each event the page's listeners take,

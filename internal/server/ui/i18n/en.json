@@ -1767,6 +1767,7 @@
   "users.createKey": "Create key",
   "users.keyCreated": "Key “{label}” created; it is shown in the panel once.",
   "users.keyShown": "The new key, shown once; send it as Authorization: Bearer <key>:",
+  "users.keyCopy": "Copy the key",
   "roles.title": "Roles",
   "roles.add": "Add a role",
   "roles.key": "Key",
