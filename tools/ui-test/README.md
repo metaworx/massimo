@@ -1016,6 +1016,9 @@ Node is not needed.
 - A check that compares where elements are reads their boxes at one moment,
   with `boxes(page, …)` of `helpers.py`, not with a `bounding_box()` each:
   the page may draw between two calls (`docs/ui-testing.md`, section 9).
+- A check of what a request carried waits for the request itself
+  (`wait_held` on the route's list, or on `sent_requests` for the page's own),
+  not for what the page draws before it sends it.
 - What a reload or a click brings is waited for,
   not looked at once right after another wait:
   the page goes on after the moment the first wait saw

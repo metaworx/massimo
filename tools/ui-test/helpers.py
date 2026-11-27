@@ -304,12 +304,29 @@ def hold(page, pattern, method, held, sent):
 
 
 def wait_held(page, held, seconds=5, n=1):
-    """Waits until n held requests, one by default, have reached their
-    route, for seconds (scaled)."""
+    """Waits until held holds n requests, one by default, for seconds
+    (scaled): the requests held (hold), a route's of the test's that
+    notes each it answers, or the page's own as it sends them
+    (sent_requests). A check of a request waits for the request itself,
+    not for what the page draws before it sends it (docs/ui-testing.md,
+    section 9, "The request itself")."""
     end = time.time() + scaled(seconds)
     while len(held) < n and time.time() < end:
         page.wait_for_timeout(100)
     return len(held) >= n
+
+
+def sent_requests(page, method, pattern):
+    """The page's requests of method whose URL pattern matches
+    (route_matches), from now on, in a list that grows as the page sends
+    them, each Playwright's Request (its url, its post_data_json); a
+    route of the test's or the server answers them as before. For a
+    request that no route of the test's notes: the settings the page
+    pushes by itself a second after a sign-in, and the stream's tickets
+    (test_sign_in_resend.py); wait_held waits for the next."""
+    sent = []
+    page.on("request", lambda r: sent.append(r) if r.method == method and route_matches(pattern, r.url) else None)
+    return sent
 
 
 @contextlib.contextmanager

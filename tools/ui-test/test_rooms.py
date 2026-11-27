@@ -18,7 +18,7 @@ Block 4).
 import json
 import re
 
-from helpers import ECO_BUTTON, OPEN, STALE, named_buttons, scroll_width, settled, wait_until
+from helpers import ECO_BUTTON, OPEN, STALE, named_buttons, scroll_width, settled, wait_held, wait_until
 from test_new_batteries import Device
 from test_room_more import open_list
 
@@ -497,8 +497,7 @@ def test_a_switch_point_takes_a_full_time(page, case):
         assert "dirty" in tile.locator(".prog-days .day.editing").get_attribute("class") and \
             tile.locator(".prog-reset-day").is_enabled(), "the day is marked as changed in place"
         tile.locator(".config-body button[type=submit]").click()
-        page.wait_for_timeout(500)
-        assert sent, "Send right after the time sends it"
+        assert wait_held(page, sent), "Send right after the time sends it"
         points = next(iter(sent[0].values()))
         assert points[0]["until"] == "01:15", f"the time sent: {points}"
     finally:

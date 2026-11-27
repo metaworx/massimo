@@ -1,4 +1,4 @@
-# Testing the web UI (v1.30.0)
+# Testing the web UI (v1.31.0)
 
 An evaluation of a Cypress suite for the web UI, against the alternatives:
 what the Playwright smoke test covers today and what it cannot do well,
@@ -962,6 +962,22 @@ the server's and the test's, in order,
   What a reload brings is waited for too,
   not looked at once when the page is shown:
   the page's start goes on after it (`test_header.py`).
+- **The request itself** (`wait_held`, `sent_requests`, AP SteadyTests, Block 13):
+  a check of what a request carried, or that a write was not sent again,
+  waits for the request, not for what the page draws before it sends it,
+  nor for a fixed pause:
+  the automatic update's window comes up before its setting's PUT (`test_update.py`),
+  and the page pushes its settings a second after a sign-in,
+  after the stream is open, the moment a test of a sign-in ends at otherwise
+  (`test_sign_in_resend.py`);
+  a request a test stubs reaches its stub before the test goes on and its route goes,
+  or it reaches the server (`test_admin_updates.py`'s restores).
+  `wait_held(page, sent, n=…)` waits until the list holds n requests:
+  one a route of the test's fills as it answers (`hold`, a stub's own list),
+  or `sent_requests(page, method, pattern)`,
+  the page's requests as it sends them, for one that no route of the test's notes.
+  A list a route fills is read after the wait, not after Playwright's
+  `request` event of it, which comes before the route runs.
 - **Nothing came, against an end:**
   a check that an action brought nothing has an end of its own,
   not a fixed wait that a slow runner outlasts:
