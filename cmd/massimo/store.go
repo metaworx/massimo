@@ -45,9 +45,11 @@ func runStore(args []string) error {
   pull <id> <target>
                  fetch a server backup's copy on a target to the local target, where
                  it stays until it is deleted
-                 (backup, backups, push and pull go through a running serve, with
-                 MASSIMO_API_TOKEN, where one answers at MASSIMO_LISTEN, and act on
-                 the store otherwise)
+                 (backup, backups, push and pull go through this box's running serve,
+                 with MASSIMO_API_TOKEN, at the address it publishes in the data
+                 directory, serve.api, else MASSIMO_LISTEN's, and only where it serves
+                 this store; otherwise they act on the store, one job at a time with
+                 serve's)
   migrate        create massimo.db or apply its pending migrations, without starting serve;
                  a new one only where -data or MASSIMO_DATA names the directory
   info           the file's schema version, node and row counts

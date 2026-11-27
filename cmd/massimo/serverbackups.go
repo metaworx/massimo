@@ -5,12 +5,15 @@ package main
 
 // massimo store backups, backup without a file, push and pull: the
 // server's own backups (AP ServerBackup v1.0, Block 2; docs/store.md,
-// "Server backups"). Each goes through a running serve where one answers
-// (its API, with MASSIMO_API_TOKEN), so that the job is the server's,
-// one at a time with its schedule, and acts on the store directly
-// otherwise. The command line had no API client: serveAPI is the
-// smallest one, its address found as the update helper finds /healthz
-// (install.HealthURL).
+// "Server backups"). Each goes through this box's running serve where
+// one answers (its API, with MASSIMO_API_TOKEN), so that the job is the
+// server's, and acts on the store directly otherwise, under the jobs'
+// lock that serve's jobs take too (serverbackup.LockJobs), so that the
+// two never run at once. The command line had no API client: serveAPI is
+// the smallest one. Its address is the one serve published in the data
+// directory (internal/serve, serve.api), else MASSIMO_LISTEN's; the key
+// goes only to a server whose /healthz names the node of the store in
+// the data directory, this box's serve.
 
 import (
 	"bytes"
@@ -24,6 +27,7 @@ import (
 	"net/http"
 	"net/url"
 	"os"
+	"slices"
 	"strings"
 	"text/tabwriter"
 	"time"
@@ -45,24 +49,73 @@ type serveAPI struct {
 	client *http.Client
 }
 
-// runningServe finds the serve of the settings: the address of
-// MASSIMO_LISTEN on this box, https where MASSIMO_TLS is on, its /healthz
-// answering within two seconds; nil where none answers.
-func runningServe(ctx context.Context) *serveAPI {
-	listen := cmp.Or(os.Getenv("MASSIMO_LISTEN"), defaultListen)
-	tls := serve.TLSMode(os.Getenv(env.TLS), os.Getenv(env.TLSCert), os.Getenv(env.TLSKey)) != "off"
-	health, err := install.HealthURL(listen, tls)
-	if err != nil {
-		return nil
+// findServe finds this box's running serve of the data directory dir:
+// at the address its serve.api names, else at listen (https with tls),
+// its /healthz answering within two seconds with the node of the store
+// in dir. The token goes to that server alone, never to one that names
+// another node or none: other is the address of such a server, "" for
+// none. nil where no serve of dir answers, or the store cannot be read.
+func findServe(ctx context.Context, dir, listen string, tls bool, token string) (api *serveAPI, other string) {
+	node := storeNode(dir)
+	if node == "" {
+		return nil, ""
 	}
-	client := healthClient(health)
-	client.Timeout = 0
+	var bases []string
+	if f, err := serve.ReadAPIFile(dir); err == nil {
+		bases = append(bases, f.URL)
+	}
+	if health, err := install.HealthURL(listen, tls); err == nil {
+		if b := strings.TrimSuffix(health, "/healthz"); !slices.Contains(bases, b) {
+			bases = append(bases, b)
+		}
+	}
+	for _, base := range bases {
+		client := healthClient(base + "/healthz")
+		client.Timeout = 0
+		switch got, err := healthNode(ctx, client, base); {
+		case err != nil:
+		case got == node:
+			return &serveAPI{base: base, token: token, client: client}, ""
+		default:
+			other = base
+		}
+	}
+	return nil, other
+}
+
+// storeNode is the node of the store in dir, "" where it cannot be read.
+func storeNode(dir string) string {
+	if _, err := os.Stat(store.Path(dir)); err != nil {
+		return ""
+	}
+	st, err := store.OpenReadOnly(dir, store.Options{})
+	if err != nil {
+		return ""
+	}
+	defer st.Close()
+	return st.NodeID()
+}
+
+// healthNode asks base's /healthz, without a key, for the node it serves.
+func healthNode(ctx context.Context, client *http.Client, base string) (string, error) {
 	ctx, cancel := context.WithTimeout(ctx, 2*time.Second)
 	defer cancel()
-	if _, err := healthVersion(ctx, client, health); err != nil {
-		return nil
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, base+"/healthz", nil)
+	if err != nil {
+		return "", err
 	}
-	return &serveAPI{base: strings.TrimSuffix(health, "/healthz"), token: os.Getenv(tokenVar), client: client}
+	resp, err := client.Do(req)
+	if err != nil {
+		return "", err
+	}
+	defer resp.Body.Close()
+	var h struct {
+		Node string `json:"node_id"`
+	}
+	if err := json.NewDecoder(io.LimitReader(resp.Body, 1<<16)).Decode(&h); err != nil {
+		return "", err
+	}
+	return h.Node, nil
 }
 
 // do sends a request with a JSON body, nil for none, and reads a JSON
@@ -153,7 +206,13 @@ type backupCLI struct {
 	envFile string
 	tls     []serverbackup.TLSFile
 	log     *slog.Logger
+	// lockWait is how long a job on the store waits for the jobs' lock
+	// that another job holds: serve's, or another command's.
+	lockWait time.Duration
 }
+
+// defaultLockWait is how long a command's job waits for the jobs' lock.
+const defaultLockWait = 30 * time.Second
 
 // newBackupCLI is the commands' setting: the data directory, a running
 // serve where one answers, and the settings' env and TLS files.
@@ -164,7 +223,28 @@ func newBackupCLI(ctx context.Context, out io.Writer) *backupCLI {
 	if err != nil {
 		log = slog.Default()
 	}
-	return &backupCLI{dir: dir, api: runningServe(ctx), out: out, envFile: env.File(), tls: serve.BackupTLSFiles(o, dir), log: log}
+	listen := cmp.Or(os.Getenv("MASSIMO_LISTEN"), defaultListen)
+	api, other := findServe(ctx, dir, listen, serve.TLSMode(o.Mode, o.Cert, o.Key) != "off", os.Getenv(tokenVar))
+	if other != "" {
+		fmt.Fprintf(os.Stderr, "a server answers at %s, but not the serve of %s: it gets no key, and the command acts on the store\n", other, dir)
+	}
+	return &backupCLI{dir: dir, api: api, out: out, envFile: env.File(), tls: serve.BackupTLSFiles(o, dir), log: log, lockWait: defaultLockWait}
+}
+
+// lockJobs takes the jobs' lock for a job on the store, waiting lockWait
+// for another job's end.
+func (c *backupCLI) lockJobs(ctx context.Context, what string) (func(), error) {
+	if _, err := os.Stat(store.Path(c.dir)); err != nil {
+		// no store, no lock file left behind
+		return nil, storeError(c.dir, err)
+	}
+	ctx, cancel := context.WithTimeout(ctx, cmp.Or(c.lockWait, defaultLockWait))
+	defer cancel()
+	unlock, err := serverbackup.LockJobs(ctx, c.dir)
+	if errors.Is(err, serverbackup.ErrJobRunning) {
+		return nil, fmt.Errorf("store %s: another job of the server's backups runs on %s (serve's, or another command's); try again once it ends", what, c.dir)
+	}
+	return unlock, err
 }
 
 // open opens the store for a job, a read-only one for a listing; a
@@ -356,6 +436,7 @@ func (c *backupCLI) printJob(what string, b cliBackup, steps []cliStep) {
 		switch {
 		case !s.OK:
 			fmt.Fprintf(c.out, "  %s %s: failed: %s\n", s.Step, s.Target, s.Error)
+		case s.Step == "make":
 		case s.Step == "prune":
 			fmt.Fprintf(c.out, "  pruned %s\n", s.Target)
 		default:
@@ -405,6 +486,11 @@ func (c *backupCLI) make(ctx context.Context, target, label string) error {
 		c.printJob("made", ans.Backup, ans.Steps)
 		return nil
 	}
+	unlock, err := c.lockJobs(ctx, "backup")
+	if err != nil {
+		return err
+	}
+	defer unlock()
 	st, err := c.open(true)
 	if err != nil {
 		return err
@@ -443,6 +529,11 @@ func (c *backupCLI) copy(ctx context.Context, id, target string, pull bool) erro
 		c.printJob(what+"ed", ans.Backup, ans.Steps)
 		return nil
 	}
+	unlock, err := c.lockJobs(ctx, what)
+	if err != nil {
+		return err
+	}
+	defer unlock()
 	st, err := c.open(true)
 	if err != nil {
 		return err

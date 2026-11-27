@@ -1901,10 +1901,18 @@ and open no store ("Server backups", below).
 `store backup` without a file makes a server backup now
 (`-target <name>`, `-label <text>`), `store backups` lists them,
 `store push <id> <target>` and `store pull <id> <target>` copy one:
-these go through a running `serve`, its API with `MASSIMO_API_TOKEN`,
-where one answers at the address of `MASSIMO_LISTEN` on this box
-(`https` where `MASSIMO_TLS` is on), so that the job is the server's,
-and open the store otherwise. They are the command line's first use of the API;
+these go through this box's running `serve`, its API with `MASSIMO_API_TOKEN`,
+so that the job is the server's, and open the store otherwise.
+`serve` publishes its API's address in the data directory, `serve.api`,
+however `-listen` was given (a flag, the settings file, a systemd drop-in,
+the Windows service's arguments), and removes it at its stop;
+without one the commands ask the address of `MASSIMO_LISTEN` on this box
+(`https` where `MASSIMO_TLS` is on).
+The key goes only to a server whose `/healthz` names the node of the store
+in the data directory; another that answers there gets none.
+On the store, a command takes the jobs' lock `.serverbackup.lock`,
+which serve's jobs take as well, and waits up to 30 seconds for another job.
+They are the command line's first use of the API;
 the `-server <url>` mode below would widen it.
 
 A later mode `massimo -server <url> status` lets the commands use the server's
