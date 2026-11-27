@@ -28,24 +28,24 @@ import (
 )
 
 // backupBeforeUpdate takes the backup massimo update takes before it
-// installs, through a running serve or on the store of updateStoreDir,
-// and says so on out.
-func backupBeforeUpdate(ctx context.Context, out io.Writer) error {
+// installs the release to, through a running serve or on the store of
+// updateStoreDir, and says so on out.
+func backupBeforeUpdate(ctx context.Context, out io.Writer, to string) error {
 	c := newBackupCLI(ctx, out)
 	c.dir = updateStoreDir()
-	return c.beforeUpdate(ctx)
+	return c.beforeUpdate(ctx, to)
 }
 
 // beforeUpdate is backupBeforeUpdate on c: through c.api where a serve
 // answers, else on the store in c.dir, "" for none.
-func (c *backupCLI) beforeUpdate(ctx context.Context) error {
+func (c *backupCLI) beforeUpdate(ctx context.Context, to string) error {
 	if c.api != nil {
 		var ans struct {
 			Skipped string    `json:"skipped"`
 			Backup  cliBackup `json:"backup"`
 			Steps   []cliStep `json:"steps"`
 		}
-		if err := c.api.do(ctx, http.MethodPost, "/api/v1/update/backup", nil, &ans); err != nil {
+		if err := c.api.do(ctx, http.MethodPost, "/api/v1/update/backup", map[string]string{"to": to}, &ans); err != nil {
 			return fmt.Errorf("the backup of the server before the update: %w", err)
 		}
 		if ans.Skipped != "" {

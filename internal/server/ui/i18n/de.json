@@ -310,6 +310,7 @@
   "update.confirm": "{version} installieren und den Server neu starten? Er ist kurz nicht erreichbar; startet die neue Version nicht, wird die alte wiederhergestellt.",
   "update.confirmManaged": "{version} über {manager} installieren und den Server neu starten? Er ist kurz nicht erreichbar; startet die neue Version nicht, wird nichts rückgängig gemacht, und das letzte Update sagt, wie es zurückgeht.",
   "update.requested": "Update auf {version} angefordert …",
+  "update.backingUp": "Backup des Servers vor dem Update auf {version} …",
   "update.notStarted": "Update nicht gestartet: {error}",
   "update.backup.ready": "Vor der Installation erstellt der Server ein Backup von sich selbst, das 30 Tage aufbewahrt wird.",
   "update.backup.noKey": "Für die Server-Backups ist kein Schlüssel gesetzt: Ein Update läuft ohne Backup weiter.",

@@ -311,6 +311,7 @@
   "update.confirm": "{version} installeren en de server opnieuw starten? Hij is even niet bereikbaar; als de nieuwe versie niet opstart, wordt de oude teruggezet.",
   "update.confirmManaged": "{version} via {manager} installeren en de server opnieuw starten? Hij is even niet bereikbaar; als de nieuwe versie niet opstart, wordt niets teruggedraaid en zegt de laatste update hoe je terug kunt.",
   "update.requested": "Update naar {version} aangevraagd …",
+  "update.backingUp": "Back-up van de server voor de update naar {version} …",
   "update.notStarted": "Update niet gestart: {error}",
   "update.backup.ready": "Voor de installatie maakt de server een back-up van zichzelf, die 30 dagen bewaard blijft.",
   "update.backup.noKey": "Er is geen sleutel ingesteld voor de back-ups van de server: een update gaat door zonder back-up.",

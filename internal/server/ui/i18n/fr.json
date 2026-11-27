@@ -312,6 +312,7 @@
   "update.confirm": "Installer {version} et redémarrer le serveur ? Il sera brièvement hors ligne ; si la nouvelle version ne démarre pas, l’ancienne est rétablie.",
   "update.confirmManaged": "Installer {version} via {manager} et redémarrer le serveur ? Il sera brièvement hors ligne ; si la nouvelle version ne démarre pas, rien n’est annulé, et la dernière mise à jour indique comment revenir en arrière.",
   "update.requested": "Mise à jour vers {version} demandée…",
+  "update.backingUp": "Sauvegarde du serveur avant la mise à jour vers {version} …",
   "update.notStarted": "Mise à jour non lancée : {error}",
   "update.backup.ready": "Avant l’installation, le serveur fait une sauvegarde de lui-même, conservée 30 jours.",
   "update.backup.noKey": "Aucune clé n’est définie pour les sauvegardes du serveur : une mise à jour se poursuit sans sauvegarde.",

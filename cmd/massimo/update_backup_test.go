@@ -46,7 +46,7 @@ func TestBackupBeforeUpdateThroughServe(t *testing.T) {
 	defer ts.Close()
 	var out bytes.Buffer
 	c := &backupCLI{dir: t.TempDir(), api: &serveAPI{base: ts.URL, token: "tok", client: ts.Client()}, out: &out}
-	if err := c.beforeUpdate(ctx); err != nil || !strings.Contains(out.String(), "backup before the update 54277e08f80e") || !strings.Contains(out.String(), "copy local: ok") {
+	if err := c.beforeUpdate(ctx, "v0.17.0"); err != nil || !strings.Contains(out.String(), "backup before the update 54277e08f80e") || !strings.Contains(out.String(), "copy local: ok") {
 		t.Fatalf("made: %v\n%s", err, out.String())
 	}
 	if len(paths) != 1 || paths[0] != "POST /api/v1/update/backup Bearer tok" {
@@ -54,11 +54,11 @@ func TestBackupBeforeUpdateThroughServe(t *testing.T) {
 	}
 	out.Reset()
 	answer = http.StatusOK
-	if err := c.beforeUpdate(ctx); err != nil || !strings.Contains(out.String(), "no key is set") {
+	if err := c.beforeUpdate(ctx, "v0.17.0"); err != nil || !strings.Contains(out.String(), "no key is set") {
 		t.Fatalf("no key: %v\n%s", err, out.String())
 	}
 	answer = http.StatusInternalServerError
-	if err := c.beforeUpdate(ctx); err == nil || !strings.Contains(err.Error(), "disk full") || !strings.Contains(err.Error(), "before the update") {
+	if err := c.beforeUpdate(ctx, "v0.17.0"); err == nil || !strings.Contains(err.Error(), "disk full") || !strings.Contains(err.Error(), "before the update") {
 		t.Fatalf("failed: %v", err)
 	}
 }
@@ -74,7 +74,7 @@ func TestBackupBeforeUpdateOnTheStore(t *testing.T) {
 	st.Close()
 	var out bytes.Buffer
 	c := &backupCLI{dir: dir, out: &out, log: slog.New(slog.DiscardHandler)}
-	if err := c.beforeUpdate(ctx); err != nil || !strings.Contains(out.String(), "no key is set") {
+	if err := c.beforeUpdate(ctx, "v0.17.0"); err != nil || !strings.Contains(out.String(), "no key is set") {
 		t.Fatalf("no key: %v\n%s", err, out.String())
 	}
 	st = storekit.Open(t, dir)
@@ -88,7 +88,7 @@ func TestBackupBeforeUpdateOnTheStore(t *testing.T) {
 	st.Close()
 	out.Reset()
 	started := time.Now()
-	if err := c.beforeUpdate(ctx); err != nil || !strings.Contains(out.String(), "backup before the update ") || !strings.Contains(out.String(), "on the store in "+dir) {
+	if err := c.beforeUpdate(ctx, "v0.17.0"); err != nil || !strings.Contains(out.String(), "backup before the update ") || !strings.Contains(out.String(), "on the store in "+dir) {
 		t.Fatalf("made: %v\n%s", err, out.String())
 	}
 	st = storekit.Open(t, dir)
@@ -101,12 +101,12 @@ func TestBackupBeforeUpdateOnTheStore(t *testing.T) {
 
 	out.Reset()
 	none := &backupCLI{dir: filepath.Join(t.TempDir(), "nothing"), out: &out}
-	if err := none.beforeUpdate(ctx); err != nil || !strings.Contains(out.String(), "no store in") {
+	if err := none.beforeUpdate(ctx, "v0.17.0"); err != nil || !strings.Contains(out.String(), "no store in") {
 		t.Fatalf("no store: %v\n%s", err, out.String())
 	}
 	out.Reset()
 	none.dir = ""
-	if err := none.beforeUpdate(ctx); err != nil || !strings.Contains(out.String(), "no store on this host") {
+	if err := none.beforeUpdate(ctx, "v0.17.0"); err != nil || !strings.Contains(out.String(), "no store on this host") {
 		t.Fatalf("no service's store: %v\n%s", err, out.String())
 	}
 }

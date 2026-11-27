@@ -1313,6 +1313,27 @@ export interface UpdateInfo {
      */
     at?: string;
   };
+  starting?: UpdateStarting;
+  /**
+   * The last start that failed before the helper was asked, its backup's among
+   * them, until an update starts
+   */
+  start_error?: {
+    error: string;
+    /** @format date-time */
+    at: string;
+  };
+}
+
+/**
+ * An update being started: the server's backup runs before the helper is asked
+ */
+export interface UpdateStarting {
+  step: "backup";
+  /** The version it asks for */
+  version: string;
+  /** @format date-time */
+  since: string;
 }
 
 /**

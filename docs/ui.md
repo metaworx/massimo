@@ -2430,6 +2430,10 @@ The server's sign, when it says an update is out, opens it at Software update.
   "Before an update");
   without a key for the server's backups,
   the line says that an update goes on without one.
+  While the backup runs the line under the notes says
+  "Backing up the server before the update to v0.17.0 …",
+  and both buttons are off, as while the helper works;
+  a start that failed after it, at the helper, says why there.
   Where the backup failed, the update does not start:
   the line says why,
   and **Update without a backup** (with `update`) asks as Update does,

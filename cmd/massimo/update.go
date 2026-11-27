@@ -232,7 +232,7 @@ func runUpdate(args []string) (err error) {
 	case *noBackup:
 		fmt.Println("no backup of the server taken (-no-backup)")
 	default:
-		if err := backupBeforeUpdate(ctx, os.Stdout); err != nil {
+		if err := backupBeforeUpdate(ctx, os.Stdout, rel.Tag); err != nil {
 			err = fmt.Errorf("%w; massimo update -no-backup installs without one", err)
 			status(update.Status{State: "failed", From: version, To: rel.Tag, Channel: *ch, Message: err.Error()})
 			return err

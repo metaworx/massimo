@@ -310,6 +310,7 @@
   "update.confirm": "Install {version} and restart the server? It is offline for a short while; if the new version does not come up, the old one is put back.",
   "update.confirmManaged": "Install {version} through {manager} and restart the server? It is offline for a short while; if the new version does not come up, nothing is undone, and the last update says how to go back.",
   "update.requested": "Update to {version} requested …",
+  "update.backingUp": "Backing up the server before the update to {version} …",
   "update.notStarted": "Update not started: {error}",
   "update.backup.ready": "Before it installs, the server takes a backup of itself, kept for 30 days.",
   "update.backup.noKey": "No key is set for the server's backups: an update goes on without a backup.",

@@ -119,6 +119,15 @@ export function updateBusy(h: UpdateStatus | undefined): boolean {
   return !!h && ["checking", "installing", "restarting"].includes(h.state);
 }
 
+/**
+ * updateWorking reports whether an update is under way: being started,
+ * the server's backup running before the helper is asked (AP
+ * ServerBackup, Block 10), or at the helper.
+ */
+function updateWorking(u: UpdateInfo): boolean {
+  return !!u.starting || updateBusy(u.helper);
+}
+
 /** setBusy turns Update and greys out Check while an update runs (update.js setUpdateBusy). */
 function setBusy(busy: boolean): void {
   data.busy = busy;
@@ -149,8 +158,8 @@ export async function loadUpdate(refresh: boolean, mine: () => boolean = () => t
   data.said = null;
   if (question.asking && (!u.can_update || u.latest !== question.version)) question.asking = false;
   takeNowBack(u);
-  if (updateBusy(u.helper)) {
-    // busy follows what a read finds: the helper at work greys the buttons out, whoever started it
+  if (updateWorking(u)) {
+    // busy follows what a read finds: the backup or the helper at work greys the buttons out, whoever started it
     setBusy(true);
     if (!follow.on) followUpdate();
   }
@@ -267,7 +276,9 @@ function followUpdate(): void {
     }
     const u = await loadUpdate(false);
     if (!stillSession(n) || gen !== follow.gen) return; // stopped meanwhile: the sign-out, or a reading begun anew
-    const busy = !u || updateBusy(u.helper) || Date.now() < follow.grace;
+    // the server's backup before the update may outlast the reading's five minutes: they count from its end
+    if (u && u.starting) follow.until = Math.max(follow.until, Date.now() + 5 * 60 * 1000);
+    const busy = !u || updateWorking(u) || Date.now() < follow.grace;
     if (!busy || Date.now() > follow.until) {
       stopFollow();
       setBusy(false);
@@ -370,9 +381,11 @@ function takeNowBack(u: UpdateInfo): void {
 /**
  * runUpdate asks the server's update helper to install the version asked
  * about, then follows it: the server takes a backup of itself first,
- * unless Update without a backup asked (no_backup). A refusal, its backup
- * having failed among them, is said in the helper's line once the
- * versions are read again, which say whether the backup failed.
+ * unless Update without a backup asked (no_backup), and answers at once
+ * while it is being started; the reading follows the backup too, and a
+ * start that failed after the answer, its backup's among them, is said
+ * in the helper's line from GET's start_error. A refusal is said there
+ * once the versions are read again.
  */
 export async function runUpdate(): Promise<void> {
   const version = question.version;
@@ -390,7 +403,7 @@ export async function runUpdate(): Promise<void> {
     if (follow.on) return;
     setBusy(false);
     const error = (e as Error).message;
-    await loadUpdate(false); // a backup that failed: the versions say so, and Update without a backup shows
+    await loadUpdate(false); // the versions again: a start under way, or the backup that failed with Update without a backup
     if (!stillSession(n)) return;
     data.said = () => t("update.notStarted", { error });
     return;

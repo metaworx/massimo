@@ -315,6 +315,7 @@
   "update.confirm": "Zainstalować {version} i ponownie uruchomić serwer? Przez krótki czas będzie niedostępny; jeśli nowa wersja się nie uruchomi, zostanie przywrócona poprzednia.",
   "update.confirmManaged": "Zainstalować {version} przez {manager} i ponownie uruchomić serwer? Przez krótki czas będzie niedostępny; jeśli nowa wersja się nie uruchomi, nic nie zostanie cofnięte, a ostatnia aktualizacja podpowie, jak wrócić.",
   "update.requested": "Zażądano aktualizacji do {version} …",
+  "update.backingUp": "Kopia zapasowa serwera przed aktualizacją do {version} …",
   "update.notStarted": "Aktualizacja nie została rozpoczęta: {error}",
   "update.backup.ready": "Przed instalacją serwer tworzy kopię zapasową samego siebie, przechowywaną przez 30 dni.",
   "update.backup.noKey": "Nie ustawiono klucza dla kopii zapasowych serwera: aktualizacja przebiega bez kopii zapasowej.",

@@ -3742,9 +3742,11 @@ paths:
         Needs a configured API token even where the other routes are open.
         The server first takes a backup of itself to its local targets,
         pinned for 30 days, its id in the history's entry; without a key it
-        goes on, and a backup that fails stops the update (GET's backup
-        says failed). no_backup goes on without one, audited as
-        update.no_backup. The helper (massimo-update.service, root)
+        goes on. Where it takes one, 202 comes at once with starting, and
+        GET says starting until the helper is asked; a backup that fails
+        stops the update (GET's backup says failed, start_error why).
+        no_backup goes on without one, audited as update.no_backup. The
+        helper (massimo-update.service, root)
         verifies the release signature and checksum, replaces the binary,
         restarts the server and rolls back if the new version does not
         come up.
@@ -3768,6 +3770,7 @@ paths:
                   ok: {type: boolean}
                   requested: {type: string, description: The release tag that is newest now}
                   channel: {type: string}
+                  starting: {$ref: "#/components/schemas/UpdateStarting"}
         "400": {$ref: "#/components/responses/BadRequest"}
         "401": {$ref: "#/components/responses/Unauthorized"}
         "429": {$ref: "#/components/responses/LockedOut"}
@@ -3777,12 +3780,12 @@ paths:
             application/json:
               schema: {$ref: "#/components/schemas/Error"}
         "409":
-          description: Up to date, no release on the channel, an update is running, or the backup first found no local target switched on
+          description: Up to date, no release on the channel, an update is running or being started
           content:
             application/json:
               schema: {$ref: "#/components/schemas/Error"}
         "500":
-          description: The backup of the server first failed, and the update did not start; or the helper could not be asked or started
+          description: The helper could not be asked or started
           content:
             application/json:
               schema: {$ref: "#/components/schemas/Error"}
@@ -3831,6 +3834,7 @@ paths:
                   ok: {type: boolean}
                   requested: {type: string}
                   channel: {type: string}
+                  starting: {$ref: "#/components/schemas/UpdateStarting"}
         "400":
           description: Not a version and an answer
           content:
@@ -3860,9 +3864,20 @@ paths:
       description: |
         For massimo update by hand, which then installs the release
         itself: the backup POST /api/v1/update takes first, to the local
-        targets, pinned for 30 days, its trigger before-update. Audited as
-        update.backup.
+        targets, pinned for 30 days, its trigger before-update; to is the
+        version the update installs, another than the running one. A new
+        backup before an update takes the pin of an earlier one no update
+        used. Audited as update.backup.
       parameters: [{$ref: "#/components/parameters/idempotencyKey"}]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [to]
+              properties:
+                to: {type: string, description: "The version the update installs, such as v0.17.0"}
       responses:
         "200":
           description: No key is set; the update goes on without a backup
@@ -3878,10 +3893,11 @@ paths:
           content:
             application/json:
               schema: {$ref: "#/components/schemas/ServerBackupResult"}
+        "400": {$ref: "#/components/responses/BadRequest"}
         "401": {$ref: "#/components/responses/Unauthorized"}
         "403": {$ref: "#/components/responses/Forbidden"}
         "409":
-          description: No local target is switched on
+          description: to is the version that runs, or no local target is switched on
           content:
             application/json:
               schema: {$ref: "#/components/schemas/Error"}
@@ -6077,6 +6093,22 @@ components:
             state: {type: string, enum: [ready, no_key, failed], description: "ready: an update takes one, local and pinned for 30 days; no_key: no key is set, and an update goes on without one; failed: the last update's backup failed, and no update has started since"}
             error: {type: string, description: "Why it failed, for failed"}
             at: {type: string, format: date-time, description: "When it failed, for failed"}
+        starting: {$ref: "#/components/schemas/UpdateStarting"}
+        start_error:
+          type: object
+          description: "The last start that failed before the helper was asked, its backup's among them, until an update starts"
+          required: [error, at]
+          properties:
+            error: {type: string}
+            at: {type: string, format: date-time}
+    UpdateStarting:
+      type: object
+      description: "An update being started: the server's backup runs before the helper is asked"
+      required: [step, version, since]
+      properties:
+        step: {type: string, enum: [backup]}
+        version: {type: string, description: The version it asks for}
+        since: {type: string, format: date-time}
     UpdateEntry:
       type: object
       description: "An update: started in Massimo (by, to), or found at a start (outside); completed by the next start with another version"

@@ -106,7 +106,7 @@ func (s *Server) putUpdateAnswer(w http.ResponseWriter, r *http.Request) error {
 		if err != nil {
 			return err
 		}
-		writeJSON(w, http.StatusAccepted, map[string]any{"ok": true, "requested": v.Latest, "channel": v.Channel})
+		writeJSON(w, http.StatusAccepted, acceptedUpdate(v))
 		return nil
 	}
 	if !s.nightAt(ctx, time.Now()).on {

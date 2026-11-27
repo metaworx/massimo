@@ -312,6 +312,7 @@
   "update.confirm": "Installare {version} e riavviare il server? Resterà offline per poco tempo; se la nuova versione non si avvia, viene ripristinata quella precedente.",
   "update.confirmManaged": "Installare {version} tramite {manager} e riavviare il server? Resterà offline per poco tempo; se la nuova versione non si avvia, non viene annullato nulla e l'ultimo aggiornamento indica come tornare indietro.",
   "update.requested": "Aggiornamento a {version} richiesto …",
+  "update.backingUp": "Backup del server prima dell’aggiornamento a {version} …",
   "update.notStarted": "Aggiornamento non avviato: {error}",
   "update.backup.ready": "Prima di installare, il server fa un backup di sé stesso, conservato per 30 giorni.",
   "update.backup.noKey": "Nessuna chiave impostata per i backup del server: un aggiornamento prosegue senza backup.",

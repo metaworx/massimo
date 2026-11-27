@@ -4711,6 +4711,11 @@ or `failed`, where the last update's backup failed,
 and no update has started since, with its `error` and `at`;
 the server keeps that in memory,
 and after a restart the next update tries again.
+`starting` is an update being started, until the helper is asked:
+`step` `backup` while the server's backup runs,
+the `version` it asks for and `since`; `can_update` is false meanwhile.
+`start_error` is the last start that failed before the helper was asked,
+its backup's among them, with its `error` and `at`, until an update starts.
 
 ### POST /api/v1/update
 
@@ -4737,6 +4742,11 @@ so the most the API can do is install the newest signed release,
 or what the box's package source has of it (`latest`).
 Answers `202` with `{"ok":true,"requested":"v…", "channel":"…"}`;
 follow the progress with GET.
+Where the server takes a backup first, the `202` comes at once with `starting`,
+GET's while the backup runs:
+the backup and the request then run on a context of their own,
+which a client that gives up does not end, within 30 minutes,
+the wait for a backup job that runs included.
 
 Before it asks the helper, the server takes a backup of itself (docs/store.md,
 "Server backups"):
@@ -4747,9 +4757,11 @@ its uuid goes into the history's entry and the `update` line of the log.
 The night's update and `PUT /api/v1/update/answer`'s `now` take it too.
 Without a key the update goes on, and its line says `no_key`.
 A backup that fails stops the update before the request:
-`500` with why, `409` where no local target is switched on,
-an `update` line at `error`, and GET's `backup` says `failed`;
+an `update` line at `error`, GET's `backup` says `failed` and `start_error` why;
 the night's try for that night is spent.
+A new backup before an update takes the pin of an earlier one no update used,
+made by the version that runs and named by no entry of the history,
+so that tries in a row keep one pinned.
 `{"no_backup": true}` (Update without a backup) starts it without one,
 for any holder of `update`, audited as `update.no_backup`.
 
@@ -4759,10 +4771,10 @@ the other routes are open.
 and with GET's `blocked` as the error wherever that names a reason;
 `409` when already up to date,
 when the channel has no release, while an update is running (on Windows also
-in the moment between the start of the helper and its first status),
+in the moment between the start of the helper and its first status) or being started,
 when the package source has the release not yet, or while it is held;
 `500` on Windows when the helper could not be started (the request is withdrawn),
-and wherever the backup first failed;
+where no backup ran first; after one, GET's `start_error` says it;
 `502` when GitHub or the package source could not be asked.
 
 ### POST /api/v1/update/backup
@@ -4770,6 +4782,10 @@ and wherever the backup first failed;
 The backup `POST /api/v1/update` takes first, alone, for a holder of `update`:
 `massimo update` by hand asks a running server for it,
 then installs the release itself.
+`{"to": "v0.17.0"}` names the version the update installs,
+another than the one that runs (`400` without one, `409` for the running one),
+and a new backup takes the pin of an earlier one no update used,
+as `POST /api/v1/update`'s does.
 Answers `201` with the backup and its steps,
 as `POST /api/v1/server-backups` does,
 and `200` with `{"skipped": "no_key"}` where no key is set,

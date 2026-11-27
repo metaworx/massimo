@@ -317,6 +317,32 @@ def test_update_backup_line(page):
     page.unroute("**/api/v1/update*")
 
 
+def test_update_being_started(page):
+    """While the server's backup runs before the helper is asked, the
+    helper's line says so and both buttons are off, until it is asked; a
+    start that failed after the answer, not at its backup, says why."""
+    show_view(page, "maint")
+    body = json.loads(update_json("done", "v0.0.1-test", True))
+    body["backup"] = {"state": "ready"}
+    body["starting"] = {"step": "backup", "version": "v0.0.1-test", "since": "2026-11-27T10:00:00Z"}
+    body["can_update"] = False
+    page.route("**/api/v1/update*", lambda route: route.fulfill(status=200, content_type="application/json", body=json.dumps(body)))
+    page.locator("#update-check").click()
+    backing = page.evaluate("t('update.backingUp', {version: 'v0.0.1-test'})")
+    assert wait_until(page, "document.getElementById('update-helper').textContent === %s" % json.dumps(backing), 5), \
+        "the line says the backup runs: %r" % page.locator("#update-helper").text_content()
+    assert wait_until(page, "document.getElementById('update-check').disabled", 5), "Check for updates off while it is started"
+
+    del body["starting"]
+    body["can_update"] = True
+    body["start_error"] = {"error": "asking the update helper: permission denied", "at": "2026-11-27T10:01:00Z"}
+    not_started = page.evaluate("t('update.notStarted', {error: 'asking the update helper: permission denied'})")
+    assert wait_until(page, "document.getElementById('update-helper').textContent === %s" % json.dumps(not_started), 40), \
+        "the line says why it did not start: %r" % page.locator("#update-helper").text_content()
+    assert wait_until(page, "!document.getElementById('update-check').disabled", 40), "the buttons back"
+    page.unroute("**/api/v1/update*")
+
+
 def auto_routes(page, blocked=None, waits=None):
     """Stubs GET /api/v1/update with an update out, the automatic update
     as the settings stand and its next try, and the settings update.channel,

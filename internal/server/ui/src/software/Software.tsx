@@ -82,6 +82,19 @@ function historyLine(e: UpdateEntry, newest: boolean): string {
 }
 
 /**
+ * startLine is the line under the release's notes: an update being
+ * started, the server's backup running before the helper is asked; the
+ * last start that failed before it, until an update starts, where it was
+ * not its backup, which the backup's line says (AP ServerBackup, Block
+ * 10); else the helper's last state.
+ */
+function startLine(u: UpdateInfo): string {
+  if (u.starting) return t("update.backingUp", { version: u.starting.version });
+  if (u.start_error && !(u.backup && u.backup.state === "failed")) return t("update.notStarted", { error: u.start_error.error });
+  return u.helper ? t("update.last", { state: helperText(u.helper) }) : "";
+}
+
+/**
  * backupLine is what the section says of the server's backup an update
  * takes first, where an update is out: that it takes one, kept 30 days;
  * that it takes none, no key being set; or that the last one failed, and
@@ -293,7 +306,7 @@ export function Software() {
             {u && u.release_url ? t("update.notes", { version: u.released || u.latest || "" }) : ""}
           </a>
         </p>
-        <p id="update-helper" class="muted small">{said ? said() : u && u.helper ? t("update.last", { state: helperText(u.helper) }) : ""}</p>
+        <p id="update-helper" class="muted small">{said ? said() : u ? startLine(u) : ""}</p>
         <div id="update-history" class={"update-history" + hid(!history.length)}>
           <h4>{t("update.history")}</h4>
           <ul id="update-history-list">{history.slice(0, 3).map((e, i) => <li key={i}>{historyLine(e, i === 0)}</li>)}</ul>

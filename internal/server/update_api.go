@@ -111,9 +111,10 @@ type updateCheck struct {
 	channel string // the channel checked
 	releaseCheck
 	held updateHold
-	// backup is the last update's backup that failed (update_backup.go),
-	// under its own lock: mu is held through a release check.
-	backup updateBackupFailure
+	// start is an update being started and the last start that failed
+	// (update_backup.go), under its own lock: mu is held through a
+	// release check.
+	start updateStart
 }
 
 // updateHold is a version the update helper answered up-to-date for,
@@ -384,6 +385,11 @@ type updateView struct {
 	// Backup is the backup an update takes first (update_backup.go);
 	// absent without a store.
 	Backup *updateBackupView `json:"backup,omitempty"`
+	// Starting is an update being started, its backup running, until the
+	// helper is asked; StartError the last start that failed before it,
+	// until an update starts (update_backup.go).
+	Starting   *updateStartingView `json:"starting,omitempty"`
+	StartError *updateStartError   `json:"start_error,omitempty"`
 }
 
 func (s *Server) updateState(ctx context.Context, refresh bool) updateView {
@@ -430,7 +436,8 @@ func (s *Server) updateRelease(ctx context.Context, refresh bool) (updateView, *
 			}
 		}
 	}
-	v.CanUpdate = v.Blocked == "" && v.Available && (v.Helper == nil || !v.Helper.Running())
+	v.Starting, v.StartError = s.startState()
+	v.CanUpdate = v.Blocked == "" && v.Available && (v.Helper == nil || !v.Helper.Running()) && v.Starting == nil
 	v.Auto = s.autoFor(ctx, v)
 	if v.History = s.updateHistory(ctx); v.History == nil {
 		v.History = []updateEntry{}
@@ -455,7 +462,8 @@ func (s *Server) getUpdate(w http.ResponseWriter, r *http.Request) error {
 
 // startUpdate handles POST /api/v1/update, {} or {"no_backup": true}:
 // the update, its backup first unless no_backup asks for none, which is
-// an audit row of its own (update.no_backup).
+// an audit row of its own (update.no_backup). Where a backup is taken,
+// 202 comes at once with starting, the update being started.
 func (s *Server) startUpdate(w http.ResponseWriter, r *http.Request) error {
 	var req struct {
 		NoBackup bool `json:"no_backup"`
@@ -470,18 +478,31 @@ func (s *Server) startUpdate(w http.ResponseWriter, r *http.Request) error {
 	if err != nil {
 		return err
 	}
-	writeJSON(w, http.StatusAccepted, map[string]any{"ok": true, "requested": v.Latest, "channel": v.Channel})
+	writeJSON(w, http.StatusAccepted, acceptedUpdate(v))
 	return nil
+}
+
+// acceptedUpdate is the answer of an update accepted, 202: the version
+// asked for and its channel, and starting where its backup runs first.
+func acceptedUpdate(v updateView) map[string]any {
+	out := map[string]any{"ok": true, "requested": v.Latest, "channel": v.Channel}
+	if v.Starting != nil {
+		out["starting"] = v.Starting
+	}
+	return out
 }
 
 // beginUpdate asks the update helper to install the newest release, for
 // POST /api/v1/update (userID, 0 for the owner's key) and for the night's
 // automatic update (auto, nobody's): the checks, one request at a time,
-// the server's backup unless noBackup (backupForUpdate), the channel
-// kept, the request, the helper started where the server starts it
-// (Windows, brew), the history's entry and the log's line. A backup that
-// fails stops it before the request. Its errors are fail's, which POST
-// answers as they are.
+// the server's backup unless noBackup (planBackup), the channel kept, the
+// request, the helper started where the server starts it (Windows,
+// brew), the history's entry and the log's line (askHelper). Where a
+// backup is due, the update is being started until the helper is asked
+// (claimStart): a request's answers at once with v.Starting set, its
+// backup and the rest running on a context of their own (startInBackground);
+// the night's runs them in the loop. A backup that fails stops it before
+// the request. Its errors are fail's, which POST answers as they are.
 func (s *Server) beginUpdate(ctx context.Context, userID int64, auto, noBackup bool) (updateView, error) {
 	// Replacing the binary is never open to an unauthenticated API, even
 	// where reading and setting temperatures are.
@@ -492,6 +513,8 @@ func (s *Server) beginUpdate(ctx context.Context, userID int64, auto, noBackup b
 	switch {
 	case v.Helper != nil && v.Helper.Running():
 		return v, fail(http.StatusConflict, "an update is already running (%s)", v.Helper.State)
+	case v.Starting != nil:
+		return v, s.startUnderWay()
 	case v.Latest == "" && v.CheckError != "":
 		return v, fail(http.StatusBadGateway, "release check failed: %s", v.CheckError)
 	case v.SourceError != "":
@@ -508,53 +531,128 @@ func (s *Server) beginUpdate(ctx context.Context, userID int64, auto, noBackup b
 	// One request at a time: a second POST waits for the first's write
 	// and start, and the helper that start left at work answers it.
 	s.updateMu.Lock()
-	defer s.updateMu.Unlock()
+	locked := true
+	defer func() {
+		if locked {
+			s.updateMu.Unlock()
+		}
+	}()
 	// The helper's status again, after the release check: updateRelease
 	// read it before, when the helper a POST of the moment before started
 	// may not have written its first state yet. Refused here, this POST
 	// writes no request, which a path unit (PathExists) would take for a
 	// second run and which the Windows starter's guard leaves behind.
-	running := func() error {
-		if path := s.opts.Update.Status; path != "" {
-			if st, err := update.ReadStatus(path); err == nil && st.Running() {
-				return fail(http.StatusConflict, "an update is already running (%s)", st.State)
-			}
-		}
-		return nil
-	}
-	if err := running(); err != nil {
+	if err := s.helperRunning(); err != nil {
 		return v, err
 	}
+	if err := s.startUnderWay(); err != nil {
+		return v, err
+	}
+	skip, due := s.planBackup(ctx, noBackup)
+	if !due {
+		return s.askHelper(ctx, v, rel, userID, auto, skip)
+	}
+	// The backup runs without the lock: a POST meanwhile is refused at
+	// once while the update is being started, rather than held.
+	if !s.claimStart(v.Latest) {
+		return v, s.startUnderWay()
+	}
+	s.updateMu.Unlock()
+	locked = false
+	if auto {
+		return s.backupThenAsk(ctx, v, rel, userID, auto)
+	}
+	s.startInBackground(ctx, v, rel, userID)
+	v.Starting, _ = s.startState()
+	return v, nil
+}
+
+// helperRunning is a fail's 409 where the helper's status says it works,
+// nil where it does not or the box has no status.
+func (s *Server) helperRunning() error {
+	if path := s.opts.Update.Status; path != "" {
+		if st, err := update.ReadStatus(path); err == nil && st.Running() {
+			return fail(http.StatusConflict, "an update is already running (%s)", st.State)
+		}
+	}
+	return nil
+}
+
+// startInBackground runs a request's update past its answer
+// (backupThenAsk): on Run's context where the server runs, whose end it
+// waits for, else on the request's without its end, so that a browser
+// that gives up ends nothing; a failure is the log's and GET's.
+func (s *Server) startInBackground(ctx context.Context, v updateView, rel *update.Release, userID int64) {
+	base := s.track()
+	tracked := base != nil
+	if !tracked {
+		base = context.WithoutCancel(ctx)
+	}
+	u := &s.updates.start
+	u.runs.Add(1)
+	go func() {
+		defer u.runs.Done()
+		if tracked {
+			defer s.wg.Done()
+		}
+		if _, err := s.backupThenAsk(base, v, rel, userID, false); err != nil {
+			s.log.Warn("update not started", "version", v.Latest, "error", err)
+		}
+	}()
+}
+
+// backupThenAsk takes the backup an update takes first (backupForUpdate)
+// and then asks the helper (askHelper), and ends the start claimStart
+// marked. A backup that fails stops the update: an update line at
+// error, and GET says so until an update starts.
+func (s *Server) backupThenAsk(ctx context.Context, v updateView, rel *update.Release, userID int64, auto bool) (updateView, error) {
+	defer s.endStart()
+	taken, err := s.backupForUpdate(ctx, userID)
+	if err != nil {
+		failed := systemEvent("update", userID, updateSummary(v, auto))
+		failed.Level, failed.Error = "error", "the backup before the update failed: "+err.Error()
+		s.logServer(failed)
+		stopped := updateBackupFailed(err)
+		s.noteStartFailure(stopped, err)
+		return v, stopped
+	}
+	s.updateMu.Lock()
+	defer s.updateMu.Unlock()
+	return s.askHelper(ctx, v, rel, userID, auto, taken)
+}
+
+// updateSummary is the summary of an update's line of the log.
+func updateSummary(v updateView, auto bool) map[string]any {
 	summary := map[string]any{"from": v.Current, "to": v.Latest, "channel": v.Channel}
 	if auto {
 		summary["auto"] = true
 	}
-	// The server's backup before the helper is asked, which the request
-	// file alone does: a backup that fails stops the update here.
-	taken, err := s.backupForUpdate(ctx, userID, noBackup)
-	if err != nil {
-		s.noteBackupFailure(err)
-		failed := systemEvent("update", userID, summary)
-		failed.Level, failed.Error = "error", "the backup before the update failed: "+err.Error()
-		s.logServer(failed)
-		return v, updateBackupFailed(err)
+	return summary
+}
+
+// askHelper asks the helper for the update v found, with s.updateMu
+// held, once its backup was taken or skipped (taken): the helper's
+// status once more, the channel kept, the request, the helper started
+// where the server starts it, the history's entry and the log's line.
+func (s *Server) askHelper(ctx context.Context, v updateView, rel *update.Release, userID int64, auto bool, taken updateBackupTaken) (updateView, error) {
+	// a backup takes a while, in which the helper a POST of the moment
+	// before started may have written its first state
+	if err := s.helperRunning(); err != nil {
+		return v, err
 	}
+	summary := updateSummary(v, auto)
 	switch {
 	case taken.uuid != "":
 		summary["backup"] = taken.uuid
 	case taken.skipped != "":
 		summary["backup_skipped"] = taken.skipped
 	}
-	// and the helper's status once more: a backup takes a while, in which
-	// the helper a POST of the moment before started may have written its
-	// first state
-	if err := running(); err != nil {
-		return v, err
-	}
 	s.keepChannel(ctx, v.Channel, rel)
 	asked := time.Now()
 	if err := update.WriteRequest(s.opts.Update.Request, v.Channel); err != nil {
-		return v, fail(http.StatusInternalServerError, "asking the update helper: %v", err)
+		err = fail(http.StatusInternalServerError, "asking the update helper: %v", err)
+		s.noteStartFailure(err, nil)
+		return v, err
 	}
 	if start := s.opts.Update.Start; start != nil {
 		switch err := start(); {
@@ -567,11 +665,13 @@ func (s *Server) beginUpdate(ctx context.Context, userID int64, auto, noBackup b
 			failed := systemEvent("update", userID, summary)
 			failed.Level, failed.Error = "error", err.Error()
 			s.logServer(failed)
-			return v, fail(http.StatusInternalServerError, "starting the update helper: %v", err)
+			err = fail(http.StatusInternalServerError, "starting the update helper: %v", err)
+			s.noteStartFailure(err, nil)
+			return v, err
 		}
 	}
 	s.noteStop("update")
-	s.noteBackupFailure(nil)
+	s.noteStartFailure(nil, nil)
 	s.noteUpdateStart(ctx, asked, userID, v.Current, v.Latest, v.Channel, v.Helper, auto, taken)
 	s.logServer(systemEvent("update", userID, summary))
 	return v, nil

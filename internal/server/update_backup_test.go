@@ -105,6 +105,9 @@ func (b backupBox) state(t *testing.T) (*updateBackupView, []updateEntry) {
 	return out.Backup, out.History
 }
 
+// settle waits for the updates started in the background.
+func (b backupBox) settle() { b.s.updates.start.runs.Wait() }
+
 // beforeUpdate are st's backups before an update.
 func beforeUpdate(t *testing.T, st *store.Store) []store.ServerBackup {
 	t.Helper()
@@ -149,9 +152,10 @@ func TestUpdateTakesABackupFirst(t *testing.T) {
 		t.Fatalf("before: %+v", v)
 	}
 	started := time.Now()
-	if code, body := callAPI(t, b.ts, "POST", "/api/v1/update", b.anna, "{}"); code != 202 {
+	if code, body := callAPI(t, b.ts, "POST", "/api/v1/update", b.anna, "{}"); code != 202 || !strings.Contains(body, `"step": "backup"`) {
 		t.Fatalf("POST: %d %s", code, body)
 	}
+	b.settle()
 	if b.starts.Load() != 1 || len(seen) != 1 {
 		t.Fatalf("%d starts, %d backups before an update at the start", b.starts.Load(), len(seen))
 	}
@@ -183,10 +187,10 @@ func TestUpdateStopsWhereItsBackupFails(t *testing.T) {
 	blockLocal(t, st)
 	b := newBackupBox(t, st, nil)
 	for range 2 {
-		code, body := callAPI(t, b.ts, "POST", "/api/v1/update", b.anna, "{}")
-		if code != 500 || !strings.Contains(body, "backup of the server before the update failed") || !strings.Contains(body, "no_backup") {
+		if code, body := callAPI(t, b.ts, "POST", "/api/v1/update", b.anna, "{}"); code != 202 {
 			t.Fatalf("POST: %d %s", code, body)
 		}
+		b.settle()
 	}
 	if _, err := os.Stat(b.request); !errors.Is(err, os.ErrNotExist) || b.starts.Load() != 0 {
 		t.Fatalf("the helper asked: %v, %d starts", err, b.starts.Load())
@@ -197,6 +201,14 @@ func TestUpdateStopsWhereItsBackupFails(t *testing.T) {
 	v, history := b.state(t)
 	if v == nil || v.State != backupFailed || v.Error == "" || v.At == nil || len(history) != 0 {
 		t.Fatalf("the state %+v, the history %+v", v, history)
+	}
+	var got struct {
+		StartError *updateStartError `json:"start_error"`
+		CanUpdate  bool              `json:"can_update"`
+	}
+	if getJSON(t, b.ts, b.anna, "/api/v1/update", &got); got.StartError == nil || !got.CanUpdate ||
+		!strings.Contains(got.StartError.Error, "backup of the server before the update failed") || !strings.Contains(got.StartError.Error, "no_backup") {
+		t.Fatalf("the start's error: %+v", got)
 	}
 	if lines := updateLines(t, st); len(lines) != 2 || lines[0].Level != store.LevelError {
 		t.Fatalf("the update's lines: %+v", lines)
@@ -215,6 +227,12 @@ func TestUpdateStopsWhereItsBackupFails(t *testing.T) {
 	v, history = b.state(t)
 	if len(history) != 1 || history[0].BackupSkipped != skippedAsked || history[0].Backup != "" || v == nil || v.State != backupReady {
 		t.Fatalf("the history %+v, the state %+v", history, v)
+	}
+	var after struct {
+		StartError *updateStartError `json:"start_error"`
+	}
+	if getJSON(t, b.ts, b.anna, "/api/v1/update", &after); after.StartError != nil {
+		t.Fatalf("the start's error stays: %+v", after.StartError)
 	}
 	if lines := updateLines(t, st); len(lines) != 3 || !strings.Contains(string(lines[0].Data), `"backup_skipped":"asked"`) {
 		t.Fatalf("the update's line: %+v", lines[0])
@@ -273,9 +291,10 @@ func TestNightAndInstallNowTakeABackup(t *testing.T) {
 
 	box := newAnswerBox(t, &fakeFinder{tag: "v0.1.0-alpha.10"})
 	addBackupKey(t, box.st)
-	if code, body := box.answer(t, box.anna, "v0.1.0-alpha.10", "now"); code != 202 {
+	if code, body := box.answer(t, box.anna, "v0.1.0-alpha.10", "now"); code != 202 || !strings.Contains(body, `"starting"`) {
 		t.Fatalf("Install now: %d %s", code, body)
 	}
+	box.s.updates.start.runs.Wait()
 	if bs := beforeUpdate(t, box.st); len(bs) != 1 || bs[0].State != store.ServerBackupMade {
 		t.Fatalf("Install now's backup: %+v", bs)
 	}
@@ -285,40 +304,111 @@ func TestNightAndInstallNowTakeABackup(t *testing.T) {
 }
 
 // POST /api/v1/update/backup takes the update's backup alone, for a
-// holder of update: without a key it says so, with one it answers the
-// backup, pinned, audited as update.backup; a failure is the update's.
+// holder of update and the version an update installs: without a key it
+// says so, with one it answers the backup, pinned, audited as
+// update.backup; a second takes the pin of the first, which no update
+// used; a failure is the update's; no version, or the running one, is
+// refused.
 func TestUpdateBackupRoute(t *testing.T) {
 	t.Parallel()
 	st := testStore(t, "")
 	b := newBackupBox(t, st, nil)
-	code, body := callAPI(t, b.ts, "POST", "/api/v1/update/backup", b.anna, "")
+	const to = `{"to": "v0.1.0-alpha.10"}`
+	code, body := callAPI(t, b.ts, "POST", "/api/v1/update/backup", b.anna, to)
 	if code != 200 || !strings.Contains(body, `"skipped": "no_key"`) {
 		t.Fatalf("without a key: %d %s", code, body)
 	}
 	addBackupKey(t, st)
-	code, body = callAPI(t, b.ts, "POST", "/api/v1/update/backup", b.anna, "")
-	var out struct {
-		Backup serverBackupView `json:"backup"`
+	for _, c := range []struct {
+		body string
+		want int
+	}{{"", 400}, {`{"to": "later"}`, 400}, {`{"to": "v0.1.0-alpha.9"}`, 409}} {
+		if code, body := callAPI(t, b.ts, "POST", "/api/v1/update/backup", b.anna, c.body); code != c.want {
+			t.Fatalf("%s: %d %s, want %d", c.body, code, body, c.want)
+		}
 	}
-	if err := json.Unmarshal([]byte(body), &out); code != 201 || err != nil || out.Backup.Trigger != string(serverbackup.TriggerBeforeUpdate) ||
-		out.Backup.PinnedUntil == nil || len(out.Backup.Copies) != 1 {
-		t.Fatalf("with a key: %d %s", code, body)
+	made := func() serverBackupView {
+		t.Helper()
+		code, body := callAPI(t, b.ts, "POST", "/api/v1/update/backup", b.anna, to)
+		var out struct {
+			Backup serverBackupView `json:"backup"`
+		}
+		if err := json.Unmarshal([]byte(body), &out); code != 201 || err != nil || out.Backup.Trigger != string(serverbackup.TriggerBeforeUpdate) ||
+			out.Backup.PinnedUntil == nil || len(out.Backup.Copies) != 1 {
+			t.Fatalf("with a key: %d %s", code, body)
+		}
+		return out.Backup
 	}
-	if rows := auditRows(t, b.ts, b.anna, "?limit=1"); len(rows) != 1 || rows[0].Action != "update.backup" || rows[0].Target != "serverbackup:"+out.Backup.UUID {
+	first := made()
+	if rows := auditRows(t, b.ts, b.anna, "?limit=1"); len(rows) != 1 || rows[0].Action != "update.backup" || rows[0].Target != "serverbackup:"+first.UUID {
 		t.Fatalf("the audit: %+v", rows)
+	}
+	second := made()
+	pins := map[string]bool{}
+	for _, bk := range beforeUpdate(t, st) {
+		pins[bk.UUID] = !bk.PinnedUntil.IsZero()
+	}
+	if pins[first.UUID] || !pins[second.UUID] {
+		t.Fatalf("the pins after a second: %v (first %s, second %s)", pins, first.UUID, second.UUID)
 	}
 	if b.starts.Load() != 0 {
 		t.Fatal("the helper started")
 	}
 	viewer := userToken(t, st, "val", store.RoleViewer)
-	if code, body := callAPI(t, b.ts, "POST", "/api/v1/update/backup", viewer, ""); code != 403 {
+	if code, body := callAPI(t, b.ts, "POST", "/api/v1/update/backup", viewer, to); code != 403 {
 		t.Fatalf("a viewer: %d %s", code, body)
 	}
 	blocked := testStore(t, "")
 	addBackupKey(t, blocked)
 	blockLocal(t, blocked)
 	f := newBackupBox(t, blocked, nil)
-	if code, body := callAPI(t, f.ts, "POST", "/api/v1/update/backup", f.anna, ""); code != 500 || !strings.Contains(body, "before the update failed") {
+	if code, body := callAPI(t, f.ts, "POST", "/api/v1/update/backup", f.anna, to); code != 500 || !strings.Contains(body, "before the update failed") {
 		t.Fatalf("a failed backup: %d %s", code, body)
+	}
+}
+
+// While its backup runs, the update is being started: GET says so and
+// offers no Update, a second request is refused at once; the backup and
+// the start outlive the request's context, and a used backup keeps its
+// pin when the next update takes one.
+func TestUpdateStartsInTheBackground(t *testing.T) {
+	t.Parallel()
+	st := testStore(t, "")
+	addBackupKey(t, st)
+	b := newBackupBox(t, st, nil)
+	b.s.sb.busy <- struct{}{} // a backup job runs: the update's waits for it
+	ctx, cancel := context.WithCancel(t.Context())
+	v, err := b.s.beginUpdate(ctx, 0, false, false)
+	cancel() // the browser gave up
+	if err != nil || v.Starting == nil || v.Starting.Step != stepBackup {
+		t.Fatalf("begun: %+v %v", v.Starting, err)
+	}
+	var got struct {
+		Starting  *updateStartingView `json:"starting"`
+		CanUpdate bool                `json:"can_update"`
+	}
+	if getJSON(t, b.ts, b.anna, "/api/v1/update", &got); got.Starting == nil || got.Starting.Version != "v0.1.0-alpha.10" || got.CanUpdate {
+		t.Fatalf("GET while starting: %+v", got)
+	}
+	if code, body := callAPI(t, b.ts, "POST", "/api/v1/update", b.anna, "{}"); code != 409 || !strings.Contains(body, "being started") {
+		t.Fatalf("a second POST: %d %s", code, body)
+	}
+	<-b.s.sb.busy
+	b.settle()
+	if b.starts.Load() != 1 {
+		t.Fatalf("%d starts after the request's end", b.starts.Load())
+	}
+	var after struct {
+		Starting *updateStartingView `json:"starting"`
+	}
+	if getJSON(t, b.ts, b.anna, "/api/v1/update", &after); after.Starting != nil {
+		t.Fatalf("still starting: %+v", after.Starting)
+	}
+	used := b.s.updateHistory(t.Context())[0].Backup
+	if _, _, err := b.s.takeUpdateBackup(t.Context(), 0); err != nil {
+		t.Fatal(err)
+	}
+	if bk, ok, err := st.ServerBackup(t.Context(), used); err != nil || !ok || bk.PinnedUntil.IsZero() {
+		t.Fatalf("the used backup's pin: %+v %v %v", bk, ok, err)
 	}
 }
