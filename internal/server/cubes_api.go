@@ -48,19 +48,21 @@ type cubeRequest struct {
 	ProxyVirtual *bool `json:"proxy_virtual"`
 }
 
-// validAddress checks a host[:port] address; "" is allowed.
-func validAddress(field, a string) error {
+// addressFault says what is wrong with a host[:port] address: "host"
+// where it is no host[:port] (a host needed where needHost), "port" where
+// its port is not 1 to 65535, "" where nothing is; "" itself is allowed.
+func addressFault(a string, needHost bool) string {
 	if a == "" {
-		return nil
+		return ""
 	}
 	host, port, err := net.SplitHostPort(withCubePort(a))
-	if err != nil || host == "" && field == "address" || strings.ContainsAny(a, " /\\") {
-		return fail(http.StatusBadRequest, "%s %q: want host or host:port", field, a)
+	if err != nil || host == "" && needHost || strings.ContainsAny(a, " /\\") {
+		return "host"
 	}
 	if n, err := strconv.Atoi(port); err != nil || n < 1 || n > 65535 {
-		return fail(http.StatusBadRequest, "%s %q: bad port", field, a)
+		return "port"
 	}
-	return nil
+	return ""
 }
 
 // apply checks the request's fields and writes them into a row.
@@ -68,14 +70,17 @@ func (req cubeRequest) apply(c *store.Cube) error {
 	if req.Name != nil {
 		name := strings.TrimSpace(*req.Name)
 		if len(name) > maxCubeName || !utf8.ValidString(name) || strings.IndexFunc(name, unicode.IsControl) >= 0 {
-			return fail(http.StatusBadRequest, "name: at most %d bytes of text", maxCubeName)
+			return refuse(http.StatusBadRequest, codeCubeNameBad, maxCubeName)
 		}
 		c.Name = name
 	}
 	if req.Address != nil {
 		a := strings.TrimSpace(*req.Address)
-		if err := validAddress("address", a); err != nil {
-			return err
+		switch addressFault(a, true) {
+		case "host":
+			return refuse(http.StatusBadRequest, codeCubeAddressBad, a)
+		case "port":
+			return refuse(http.StatusBadRequest, codeCubeAddressPortBad, a)
 		}
 		c.Address = a
 	}
@@ -87,15 +92,18 @@ func (req cubeRequest) apply(c *store.Cube) error {
 	}
 	if req.ProxyAddress != nil {
 		a := strings.TrimSpace(*req.ProxyAddress)
-		if err := validAddress("proxy_address", a); err != nil {
-			return err
+		switch addressFault(a, false) {
+		case "host":
+			return refuse(http.StatusBadRequest, codeCubeProxyAddressBad, a)
+		case "port":
+			return refuse(http.StatusBadRequest, codeCubeProxyAddressPortBad, a)
 		}
 		c.ProxyAddress = a
 	}
 	if req.ProxySerial != nil {
 		ps := strings.ToUpper(strings.TrimSpace(*req.ProxySerial))
 		if ps != "" && !serialPattern.MatchString(ps) {
-			return fail(http.StatusBadRequest, "proxy_serial %q: letters and digits, at most 16", ps)
+			return refuse(http.StatusBadRequest, codeCubeProxySerialBad, ps)
 		}
 		c.ProxySerial = ps
 	}
@@ -117,7 +125,7 @@ func (req cubeRequest) apply(c *store.Cube) error {
 // cubeStore is the store, or the error of a server without one.
 func (s *Server) cubeStore() (*store.Store, error) {
 	if s.opts.Store == nil {
-		return nil, fail(http.StatusServiceUnavailable, "this server has no store")
+		return nil, refuse(http.StatusServiceUnavailable, codeServerNoStore)
 	}
 	return s.opts.Store, nil
 }
@@ -171,7 +179,7 @@ func (s *Server) postCube(w http.ResponseWriter, r *http.Request) error {
 		return fail(http.StatusBadRequest, "serial %q: letters and digits, at most 16", req.Serial)
 	}
 	if s.configured(serial) != nil {
-		return fail(http.StatusConflict, "cube %s is served already", serial)
+		return refuse(http.StatusConflict, codeCubeServedAlready, serial)
 	}
 	auditTarget(r, "cube:"+serial)
 	row, known, err := st.Cube(r.Context(), serial)
@@ -188,7 +196,7 @@ func (s *Server) postCube(w http.ResponseWriter, r *http.Request) error {
 	switch {
 	case req.Restore != "":
 		if known {
-			return fail(http.StatusConflict, "cube %s has a row that is not removed: add it without restore", serial)
+			return refuse(http.StatusConflict, codeCubeRestoreKept, serial)
 		}
 		row, err = s.restoreRow(r, st, serial, req.Restore)
 		if err == nil {
@@ -235,7 +243,7 @@ func (s *Server) restoreRow(r *http.Request, st *store.Store, serial, uuid strin
 			return c, nil
 		}
 	}
-	return store.Cube{}, fail(http.StatusNotFound, "restore %q: no removed row of cube %s", uuid, serial)
+	return store.Cube{}, refuse(http.StatusNotFound, codeCubeRestoreUnknown, uuid, serial)
 }
 
 // foundRow is a new row of serial with what discovery knows of the
@@ -275,14 +283,14 @@ func (s *Server) storedCube(r *http.Request) (*runtime, *store.Store, error) {
 		return nil, nil, err
 	}
 	if rt.cubeSerial() == "" {
-		return nil, nil, fail(http.StatusConflict, "the cube has not reported its serial yet")
+		return nil, nil, refuseSaying(http.StatusConflict, "the cube has not reported its serial yet", codeCubeSerialNotKnownYet)
 	}
 	row, ok, err := st.Cube(r.Context(), rt.cubeSerial())
 	if err != nil {
 		return nil, nil, storeFail(err)
 	}
 	if !ok || !row.Configured || rt.config().Source == store.SourceFlag {
-		return nil, nil, fail(http.StatusConflict, "cube %s is served for this run only (-addr or -sn), not from the store", rt.cubeSerial())
+		return nil, nil, refuse(http.StatusConflict, codeCubeNotStored, rt.cubeSerial())
 	}
 	return rt, st, nil
 }

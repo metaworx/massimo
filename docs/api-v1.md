@@ -493,9 +493,102 @@ which its setpoint, its configuration and its week programme go to:
 | `command_discarded` | 502 | – | the Cube discarded the command |
 | `command_discarded_no_state` | 502 | `room`, `devices` | the Cube discarded a room command, since it holds no state for those members of the room, also in `no_state` |
 | `command_unwanted` | 502 | – | the command was no longer wanted when its turn came |
-| `cube_not_connected` | 502 | – | the server's connection to the Cube is down |
+| `cube_not_connected` | 502, 503 | – | the server's connection to the Cube is down: `503` for a backup or a restore that needs it |
 | `cube_busy` | 502 | – | another command is waiting for the Cube's reply |
 | `command_timed_out` | 502 | – | the command's time ran out before the Cube answered, waiting for the radio budget or its turn |
+
+**A Cube added, changed or removed**
+(`POST /api/v1/cubes`, `PUT` and `DELETE /api/v1/cubes/{sn}`),
+its fields as typed in its form:
+
+| Code | Status | Params | Refused because |
+|------|--------|--------|-----------------|
+| `cube_name_bad` | 400 | `max` | the name is longer than `max` bytes, is no text or has a control character |
+| `cube_address_bad` | 400 | `address` | `address` is not `host` or `host:port` |
+| `cube_address_port_bad` | 400 | `address` | the port of `address` is not 1 to 65535 |
+| `cube_proxy_address_bad` | 400 | `address` | `proxy_address` is not `host[:port]` or `:port` |
+| `cube_proxy_address_port_bad` | 400 | `address` | the port of `proxy_address` is not 1 to 65535 |
+| `cube_proxy_serial_bad` | 400 | `serial` | `proxy_serial` is not letters and digits, at most 16 |
+| `server_no_store` | 503 | – | the server runs without a store, which the request needs: a Cube's row, the settings, the update's answer, the push key, `GET /api/v1/store` |
+| `cube_served_already` | 409 | `cube` | `POST`: the Cube is served already |
+| `cube_restore_not_removed` | 409 | `cube` | `POST` with `restore`: the serial has a row that is not removed |
+| `cube_restore_unknown` | 404 | `restore`, `cube` | `POST` with `restore`: the serial has no removed row of that uuid |
+| `cube_not_stored` | 409 | `cube` | the Cube is served for this run only (`-addr`, `-sn`), not from the store, so its row is not changed or removed here |
+
+**A Cube's refresh and reboot** (`POST …/refresh`, `POST …/reboot`),
+and a change of a Cube that has not said its serial:
+
+| Code | Status | Params | Refused because |
+|------|--------|--------|-----------------|
+| `cube_serial_not_known_yet` | 409 | – | the Cube has not reported its serial yet |
+| `cube_address_not_known_yet` | 409 | – | the Cube has no address: none is given, and discovery has not found it |
+| `cube_rebooting` | 409 | – | a refresh while the Cube reboots: its greeting after the reboot reads it again |
+| `cube_reboot_pending` | 409 | `pending` | more radiograms are pending, as the Cube last said, than the request's `pending`: a reboot drops them |
+
+**A Cube's backups and restores** (`…/backups`, `…/restore`):
+
+| Code | Status | Params | Refused because |
+|------|--------|--------|-----------------|
+| `backup_no_history` | 503 | – | the Cube has no row in the store, so the server keeps no backups of it |
+| `cube_not_served` | 409 | `cube` | a backup or a restore of a Cube whose row the store keeps and that the server does not serve |
+| `backup_unknown` | 404 | `backup`, `cube` | the Cube has no stored backup of that id |
+| `restore_running` | 409 | – | a restore to the Cube is running already |
+| `restore_plan_changed` | 409 | – | the plan made again from the request differs from its `plan`: the Cube or the backup has changed; `error` names both |
+| `restore_duty_cycle` | 409 | `duty`, `max` | the Cube's radio duty cycle is at `duty` percent, above `max`, and the plan sends by radio |
+| `restore_backup_no_cube` | 400 | `cube` | the backup names no Cube; `cube` is this one |
+| `restore_backup_other_cube` | 400 | `from`, `cube` | the backup is of the Cube `from`, not of `cube` |
+| `restore_file_too_large` | 413 | `max` | the file in the body is larger than `max` bytes |
+| `restore_file_empty` | 400 | – | the body is empty |
+
+A backup taken or a restore planned while the server is not connected to the Cube
+is refused with `503` and `cube_not_connected`.
+
+**The computer's reboot, the server's restart and the settings file's reload**
+(`/api/v1/reboot`, `/api/v1/restart`, `/api/v1/reload`):
+
+| Code | Status | Params | Refused because |
+|------|--------|--------|-----------------|
+| `reboot_unavailable` | 409 | – | nobody reboots the computer from this server: it runs as no service, or as one that cannot; `error` says which |
+| `reboot_switched_off` | 409 | – | the owner's switch is off (`MASSIMO_REBOOT`, `-allow-reboot`) |
+| `reboot_no_helper` | 409 | – | the root helper the system needs is not installed; `error` says how to install it |
+| `reboot_begun` | 409 | – | the reboot has begun |
+| `reboot_waiting` | 409 | – | a reboot waits, which a second reboot and a restart wait for |
+| `reboot_not_waiting` | 409 | – | `DELETE`: no reboot waits |
+| `reboot_open` | 403 | – | the server is open, and the request does not come from the box itself |
+| `reboot_delay_bad` | 400 | `max` | `delay` is not 0 to `max` seconds |
+| `restart_unavailable` | 409 | – | no service manager would start the server again, or the restart is switched off (`-restart off`); `error` says which |
+| `restart_under_way` | 409 | – | a restart is under way, which a second restart and a reboot wait for |
+| `restart_open` | 403 | – | the server is open, and the request does not come from the box itself |
+| `update_running` | 409 | – | an update is running, which a second update, a restart and a reboot wait for; `error` names the helper's state where it knows it |
+| `reload_no_settings_file` | 409 | – | `POST /api/v1/reload`: the server reads no settings file |
+
+**An update** (`POST /api/v1/update`, `PUT /api/v1/update/answer`):
+first why this box starts none from the API, then why not now:
+
+| Code | Status | Params | Refused because |
+|------|--------|--------|-----------------|
+| `update_managed` | 403 | – | a package manager updates the server, or apt follows another suite than `MASSIMO_UPDATE_CHANNEL`; `error` says which |
+| `update_open` | 403 | – | the server is open: it starts no update |
+| `update_from_service` | 403 | – | on Windows, only the installed service starts updates |
+| `update_no_helper` | 403 | – | no update helper is installed |
+| `update_helper_off` | 403 | – | the update helper the package installed is off; `error` says how to turn it on |
+| `update_helper_unstartable` | 403 | – | the server cannot start a helper that outlives it; `error` says why |
+| `update_no_channel` | 403 | – | no update channel is set, and the build has no flavour |
+| `update_dev_build` | 403 | – | a development or modified build, which is updated by hand |
+| `update_held` | 409 | `version`, `source` | `version` is held back: the helper found nothing to install for it, and no check since has found it in `source` |
+| `update_not_in_source` | 409 | `version`, `source` | `version` is released, but the package source `source` has it not yet |
+| `update_no_release` | 409 | `channel` | the channel has no release |
+| `update_up_to_date` | 409 | `version` | the server runs the newest release, `version` |
+| `update_not_offered` | 409 | `version`, `offered` | `PUT …/update/answer`: the answer's `version` is not the one offered, `offered` |
+| `update_none_offered` | 409 | `version` | `PUT …/update/answer`: no version is offered |
+| `update_auto_off` | 409 | `setting` | `PUT …/update/answer`, `tonight` or `skip`, while automatic updates are off by the setting `setting` |
+
+**The log and the server's facts**:
+
+| Code | Status | Params | Refused because |
+|------|--------|--------|-----------------|
+| `log_after_beyond` | 409 | `after` | `after` is beyond the log's newest line: the client reads the log again |
+| `config_not_shown` | 503 | – | `GET /api/v1/config`: the server does not show its settings in effect |
 
 **A call through an integration** (see "Acting for an integration's users"),
 whose `error` names the link that refused:
