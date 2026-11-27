@@ -990,6 +990,10 @@ Every room has a tile:
   a value's age on the line under its name;
   in expert mode also the exact time, under the value on the same line,
   and when the device was last heard from.
+  An age never widens its value's cell, however long it has grown ("≥ 17 min",
+  "≥ 999 days"): it takes the width the value's line gives it.
+  In expert mode, beside the exact time, it takes room the row has to spare,
+  never the values', and wraps between its words where there is none.
   Expert mode lists the room's virtual wall thermostat after the devices,
   a house with a thermometer its icon,
   with the devices its temperature comes from, by serial, and its two settings:
