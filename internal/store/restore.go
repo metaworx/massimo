@@ -216,6 +216,11 @@ type RestoreSelection struct {
 	OpaqueKey bool
 	// DryRun answers what the restore would do and changes nothing.
 	DryRun bool
+	// NoUsers refuses the restore with ErrHasUsers where this store has
+	// a regular user, counted in the restore's transaction: a new box
+	// started from a backup in the first owner's window (AP ServerBackup
+	// v1.0, Block 11), which a first owner made meanwhile closes.
+	NoUsers bool
 }
 
 // RestoreReport is what a restore did, or would do.
@@ -553,6 +558,11 @@ func (r *restorer) temp(ctx context.Context, name, def string) error {
 
 // run is the restore inside its transaction.
 func (r *restorer) run(ctx context.Context) error {
+	if r.sel.NoUsers {
+		if err := r.s.noUsers(ctx, r.tx); err != nil {
+			return err
+		}
+	}
 	var bkVersion int
 	if err := r.tx.QueryRowContext(ctx, `SELECT coalesce(max(version), 0) FROM bk.schema_version`).Scan(&bkVersion); err != nil {
 		return fmt.Errorf("store: restore: the backup's store: %w", err)

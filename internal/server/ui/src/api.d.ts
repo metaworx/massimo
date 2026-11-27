@@ -2456,6 +2456,11 @@ export interface ServerBackupKind {
   name?: string;
   /** The key of its secret field, given apart */
   secret?: string;
+  /**
+   * The server makes its secret, which nobody enters (an SFTP target's key): a
+   * new box cannot read from such a target
+   */
+  makes_secret?: boolean;
   fields?: ({
     key?: string;
     type?: "text" | "number" | "path" | "secret" | "bool" | "choice";
@@ -2634,6 +2639,77 @@ export interface ServerRestoreResult {
   report?: ServerRestoreReport;
   files?: ServerRestoreFile[];
   cubes?: ServerRestoreCube[];
+}
+
+/**
+ * A backup handed to a new box, or on a target, as its manifest says it, read
+ * without the key
+ */
+export interface NewBoxBackup {
+  uuid?: string;
+  /** @format date-time */
+  time?: string;
+  trigger?: string;
+  label?: string;
+  /** Massimo's, of the server that made it */
+  version?: string;
+  schema?: number;
+  /**
+   * Its store is of a newer schema than this server's: update this server first
+   */
+  newer?: boolean;
+  /** The fingerprint of the node key of the box that made it */
+  fingerprint?: string;
+  size?: number;
+  /** Its rows per scope */
+  counts?: {
+    users?: number;
+    integrations?: number;
+    cubes?: number;
+    rooms?: number;
+    audit?: number;
+    log?: number;
+  };
+  files?: {
+    /** It holds an env file */
+    env?: boolean;
+    /** The TLS files it holds */
+    tls?: number;
+  };
+  /** Its file on the target */
+  name?: string;
+  /** The keys it is encrypted for, by their labels and fingerprints */
+  recipients?: {
+    label?: string;
+    fingerprint?: string;
+  }[];
+}
+
+/** A target for a new box's request alone, stored nowhere */
+export interface NewBoxTarget {
+  /**
+   * A kind of GET /api/v1/server-backup-targets/kinds that does not make its
+   * own key: not sftp
+   */
+  kind: string;
+  /** Its fields */
+  config?: Record<string, string>;
+  /** Its secret field's value */
+  secret?: string;
+}
+
+export interface NewBoxRestoreRequest {
+  /**
+   * The key file's text: an age identity, or an OpenSSH ssh-ed25519 key without
+   * a passphrase
+   */
+  key_file: string;
+  /** Take the backup's node.key and node id; this box keeps its own without */
+  take_identity?: boolean;
+  /** Put the backup's env file where this server reads its own */
+  env?: boolean;
+  /** Put the backup's TLS files where this server keeps its own */
+  tls?: boolean;
 }
 
 export interface ServerBackupKey {

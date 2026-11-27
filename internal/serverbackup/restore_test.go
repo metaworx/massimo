@@ -190,6 +190,54 @@ func TestRestoreFromAnotherBox(t *testing.T) {
 	}
 }
 
+// A new box's restore (NoUsers, Block 11) goes on a store without
+// regular users, without a backup first, and is refused, its plan too,
+// once one exists, the store counting in its own transaction: nothing
+// of the store changes, and the first user stays.
+func TestRestoreNoUsers(t *testing.T) {
+	t.Parallel()
+	ctx := context.Background()
+	_, path, key := oldBox(t)
+	side := newRestoreSide(t)
+	c := side.c
+	o := RestoreOptions{File: path, Key: key, Scopes: []string{ScopeAll}, NoUsers: true, NoBackupFirst: true}
+	if p, err := c.Plan(ctx, o); err != nil || p.Refused != "" {
+		t.Fatalf("plan on a store without users: %+v %v", p, err)
+	}
+	if _, err := c.Store.AddFirstOwner(ctx, store.User{Name: "first"}, "the first one's secret"); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := c.Plan(ctx, o); !errors.Is(err, store.ErrHasUsers) {
+		t.Errorf("plan once a user exists: %v", err)
+	}
+	res, err := c.Restore(ctx, o)
+	if !errors.Is(err, store.ErrHasUsers) || res.Committed {
+		t.Fatalf("restore once a user exists: %v %+v", err, res)
+	}
+	if _, ok, _ := c.Store.User(ctx, "olga"); ok {
+		t.Error("the backup's user came in")
+	}
+	if _, ok, _ := c.Store.User(ctx, "first"); !ok {
+		t.Error("the first user went")
+	}
+	if bs, _ := c.Store.ServerBackups(ctx); len(bs) != 0 {
+		t.Errorf("a backup was taken first: %+v", bs)
+	}
+
+	// On a store without users it restores, with no backup first.
+	fresh := newRestoreSide(t).c
+	res, err = fresh.Restore(ctx, o)
+	if err != nil || !res.Committed || res.Before.UUID != "" {
+		t.Fatalf("restore on a fresh store: %v %+v", err, res)
+	}
+	if _, ok, _ := fresh.Store.User(ctx, "olga"); !ok {
+		t.Error("the backup's user did not come in")
+	}
+	if bs, _ := fresh.Store.ServerBackups(ctx); len(bs) != 0 {
+		t.Errorf("a backup was taken first: %+v", bs)
+	}
+}
+
 // A place this server cannot write refuses the restore before anything
 // is done, and the plan says so; a file that cannot be renamed into
 // place once the store is restored leaves the restore done, said, and

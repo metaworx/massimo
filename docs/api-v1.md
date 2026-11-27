@@ -180,7 +180,9 @@ those that are not an integration's, disabled ones included:
   `the server is open: its last regular user was removed; create the owner`,
   naming whom and by whom.
   `POST /api/v1/users` from an address on the local network creates the first
-  owner (see that route), and `massimo user add` does the same on the box.
+  owner (see that route), and `massimo user add` does the same on the box;
+  or the server starts from another box's backup, with that box's users
+  ("A new box from a backup", under "Server backups").
   The first regular user, made either way or from `MASSIMO_API_TOKEN`
   at a start or a reload of the settings file,
   is told once what was set up before it and still works, where anything was,
@@ -4879,6 +4881,8 @@ a loopback peer with no `X-Forwarded-For`, `X-Real-IP` or `Forwarded` header,
 so that nobody on the LAN, and no client of a reverse proxy on the box,
 can restart it;
 anyone else gets `403` with the reason.
+A new box started from a backup restarts after its restore all the same
+("Server backups", "A new box from a backup"), since its users came with it.
 `403` also without the capability `restart`;
 `409` when no service manager would start the server again (`serve` in a terminal,
 or `-restart off`),
@@ -5125,7 +5129,8 @@ with the fields of each one's form, the web UI's texts
 
 A field's `type` is `text`, `number`, `path` (a directory of this box,
 relative to the data directory), `secret`, `bool` or `choice` (with `choices`);
-`secret` names the kind's secret field, given apart and kept sealed.
+`secret` names the kind's secret field, given apart and kept sealed,
+and `makes_secret` marks a kind whose secret the server makes itself (`sftp`'s key).
 A field's `warn`, where it has one,
 is a pattern in the syntax RE2 and JavaScript share,
 of the values the card warns of beside the field,
@@ -5248,6 +5253,70 @@ of them those `kept_removed` since a row outside the scopes names them;
 the rows `missing`, each with its `table`, `uuid`, `name` and the table that names it
 (`by`); the references `cleared` and the rows `removed` with a row the restore removed;
 and the sealed secrets that did not open (`secrets_lost`), each to be entered again.
+
+#### A new box from a backup
+
+A new box starts from another box's backup while it is open,
+before its first regular user ("Authentication"):
+whoever may make that user may instead hand it a backup and its key,
+and the server takes every scope of it and restarts, with the backup's users.
+The routes of `/api/v1/setup/backup…` answer in that window alone,
+every caller of the local network as every route of an open server;
+once a regular user exists they are `401` without a session,
+`403` for a user who is not the owner, and `409` for the owner,
+who restores from the routes above.
+The OpenAPI file gives them `x-capability: owner` for that.
+
+- `POST /api/v1/setup/backup`, the file as the body (at most 8 GiB),
+  hands the server the backup, `400` for a file that is no backup,
+  `422` for one of a newer format or changed since it was made.
+  It waits in a temporary directory of the data directory, one at a time,
+  for at most an hour:
+  another backup handed replaces it, the restore removes it,
+  and so does a later request of these routes once the hour has passed
+  or a regular user exists;
+  a second upload while one is received is `409`.
+  The answer is its manifest, read without the key,
+  `{"backup": {"uuid": "0193…", "time": "…", "trigger": "scheduled",
+  "version": "v0.18.0", "schema": 100, "newer": false, "fingerprint": "SHA256:…",
+  "size": 26717, "counts": {"users": 3, "cubes": 1, …},
+  "files": {"env": true, "tls": 2}, "recipients": [{"label": "laptop",
+  "fingerprint": "…"}]}}`,
+  `newer` where its store is of a newer schema than this server's, which takes it
+  once updated.
+- `POST /api/v1/setup/backup/list`,
+  `{"kind": "webdav", "config": {"url": "https://…", "user": "…"}, "secret": "…"}`,
+  lists the backups on that target, which is used for the request alone and stored
+  nowhere: `{"backups": [{…, "name": "massimo-20261127-023000-0193….zip"}],
+  "skipped": 1}`, found by their manifests, the newest first,
+  `skipped` counting the files that are no backup.
+  A kind whose `makes_secret` is set, `sftp`, is `400`:
+  it signs in with the old box's key, which only that box's backup holds;
+  download the backup from it and hand the file.
+  The restore of the settings brings the old box's targets back.
+- `POST /api/v1/setup/backup/fetch`, the same with `"name"`, a file the list names,
+  fetches that backup and holds it as an upload; `404` for a name it does not list.
+- `POST /api/v1/setup/backup/plan`,
+  `{"key_file": "…", "take_identity": false, "env": false, "tls": false}`,
+  answers as `POST …/server-backups/{id}/restore/plan` does, for every scope,
+  and changes nothing;
+  `404` where no backup was handed or the one handed waited more than an hour.
+- `POST /api/v1/setup/backup/restore`, the same body, restores every scope
+  without a backup first, since the box has nothing to keep, and restarts the server,
+  answering as `POST …/server-backups/{id}/restore` does.
+  The store counts its regular users again in the restore's own transaction:
+  a first owner made meanwhile by another request stays, and the restore is `409`.
+  The restart, which the restore of users and sign-in needs,
+  is started from the local network too, though an open server otherwise restarts
+  only from the box itself (`POST /api/v1/restart`);
+  a server that cannot restart itself is refused with `409` before anything is done:
+  stop it and run `massimo store restore` on the box.
+
+The key is held in memory for the request alone, never written,
+and kept by no audit row, nor is a target's secret.
+After the restart the server has the backup's users,
+and a client signs in as on the old box: a password of version 2 too,
+since `opaque.key` came with the users.
 
 ## The LAN proxy
 

@@ -2452,6 +2452,15 @@ under the jobs' lock, with the store held alone, which a `serve` that has it ope
 refuses (`store.ErrInUse`); `-plan` prints what it would do and changes nothing,
 a file uploaded for it removed again where the server did not hold it.
 
+A new box starts from a backup in its first owner's window (AP ServerBackup, Block 11;
+docs/api-v1.md, "A new box from a backup"): every scope, no backup taken first,
+since the box has nothing to keep and no key yet,
+and the restore refused where the store has a regular user,
+counted in the restore's own transaction (`RestoreSelection.NoUsers`),
+so that a first owner another request made meanwhile is never restored over.
+The backup handed waits in `.serverbackup-newbox-*` in the data directory,
+encrypted as it came, for at most an hour.
+
 #### Before an update
 
 Every update the server starts, by hand, at night or as Install now,

@@ -4843,6 +4843,250 @@ paths:
               schema: {$ref: "#/components/schemas/Error"}
         "404": {$ref: "#/components/responses/NotFound"}
         "429": {$ref: "#/components/responses/LockedOut"}
+  /api/v1/setup/backup:
+    post:
+      summary: Hand a new box the backup it starts from; only while the server is open
+      x-capability: owner
+      description: |
+        A new box started from a backup (docs/api-v1.md, "A new box from a
+        backup"): only while the server is open, before its first regular
+        user, to every caller of the local network; once a regular user
+        exists, 401 without a session, 403 for a user who is not the owner,
+        409 for the owner. The body is the file, at most 8 GiB, refused
+        where it is no backup (400), of a newer format, or changed since it
+        was made (422). It is held in a temporary directory of the data
+        directory for the plan and the restore, for at most an hour, one
+        at a time: a backup handed replaces the one before, and a second
+        upload while one is received is 409. The answer is its manifest,
+        read without the key.
+      requestBody:
+        required: true
+        content:
+          application/zip:
+            schema: {type: string, format: binary}
+      responses:
+        "200":
+          description: The backup held
+          content:
+            application/json:
+              schema: {type: object, properties: {backup: {$ref: "#/components/schemas/NewBoxBackup"}}}
+        "400": {$ref: "#/components/responses/BadRequest"}
+        "401": {$ref: "#/components/responses/Unauthorized"}
+        "403":
+          description: Beyond the local network, or a user who is not the owner
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/Error"}
+        "409":
+          description: The server has users, or a backup is being received
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/Error"}
+        "413": {description: Larger than 8 GiB}
+        "422":
+          description: Of a newer format, or changed since it was made
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/Error"}
+        "429": {$ref: "#/components/responses/LockedOut"}
+  /api/v1/setup/backup/list:
+    post:
+      summary: The backups on a target, for a new box; only while the server is open
+      x-capability: owner
+      description: |
+        The target the body describes, of a kind of GET
+        /api/v1/server-backup-targets/kinds but one that makes its own key
+        (SFTP: its key is in the old box's backup alone), is used for this
+        request and stored nowhere; its backups are found by their
+        manifests, without the key, the newest first, and the files that
+        are none counted in skipped. Open as POST /api/v1/setup/backup is.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: "#/components/schemas/NewBoxTarget"}
+      responses:
+        "200":
+          description: The target's backups
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  backups: {type: array, items: {$ref: "#/components/schemas/NewBoxBackup"}}
+                  skipped: {type: integer, description: Files on the target that are no backup this server reads}
+        "400": {$ref: "#/components/responses/BadRequest"}
+        "401": {$ref: "#/components/responses/Unauthorized"}
+        "403":
+          description: Beyond the local network, or a user who is not the owner
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/Error"}
+        "409":
+          description: The server has users
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/Error"}
+        "413": {description: A body of more than 1 MiB}
+        "429": {$ref: "#/components/responses/LockedOut"}
+        "502":
+          description: The target could not be listed
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/Error"}
+  /api/v1/setup/backup/fetch:
+    post:
+      summary: Fetch a backup from a target for a new box; only while the server is open
+      x-capability: owner
+      description: |
+        The backup of name, a file the target lists, fetched from the
+        target the body describes, which is stored nowhere, and held as
+        POST /api/v1/setup/backup holds an upload. Open as that route is.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              allOf:
+                - {$ref: "#/components/schemas/NewBoxTarget"}
+                - type: object
+                  required: [name]
+                  properties:
+                    name: {type: string, description: The backup's file on the target, as the list names it}
+      responses:
+        "200":
+          description: The backup held
+          content:
+            application/json:
+              schema: {type: object, properties: {backup: {$ref: "#/components/schemas/NewBoxBackup"}}}
+        "400": {$ref: "#/components/responses/BadRequest"}
+        "401": {$ref: "#/components/responses/Unauthorized"}
+        "403":
+          description: Beyond the local network, or a user who is not the owner
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/Error"}
+        "404": {$ref: "#/components/responses/NotFound"}
+        "409":
+          description: The server has users, or a backup is being received
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/Error"}
+        "413": {description: Larger than 8 GiB, or a body of more than 1 MiB}
+        "422":
+          description: Of a newer format, or changed since it was made
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/Error"}
+        "429": {$ref: "#/components/responses/LockedOut"}
+        "502":
+          description: The target could not be read
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/Error"}
+  /api/v1/setup/backup/plan:
+    post:
+      summary: What a new box's restore of the backup held would do; only while the server is open
+      x-capability: owner
+      description: |
+        As POST /api/v1/server-backups/{id}/restore/plan, of every scope
+        of the backup handed: changing nothing, refused where a regular
+        user exists, the store counting again (409). The server's restart,
+        which the restore of users and sign-in needs, is offered from the
+        local network too. Open as POST /api/v1/setup/backup is.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: "#/components/schemas/NewBoxRestoreRequest"}
+      responses:
+        "200":
+          description: The plan
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/ServerRestorePlan"}
+        "400": {$ref: "#/components/responses/BadRequest"}
+        "401": {$ref: "#/components/responses/Unauthorized"}
+        "403":
+          description: Beyond the local network, or a user who is not the owner
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/Error"}
+        "404":
+          description: No backup handed, or the one handed waited more than an hour
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/Error"}
+        "409":
+          description: The server has users
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/Error"}
+        "413": {description: A body of more than 1 MiB}
+        "422":
+          description: The key does not open the backup, its file was changed, or its store is newer than this server's (update first)
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/Error"}
+        "429": {$ref: "#/components/responses/LockedOut"}
+  /api/v1/setup/backup/restore:
+    post:
+      summary: Start a new box from the backup held, then restart; only while the server is open
+      x-capability: owner
+      description: |
+        Every scope of the backup handed, each replaced whole in one
+        transaction, refused where a regular user exists, the store
+        counting again in that transaction (409), so that a first owner
+        made meanwhile stays; no backup taken first, since the box has
+        nothing to keep; opaque.key with the users, the backup's node.key
+        and node id with take_identity, the env file with env and the TLS
+        files with tls, each file replaced kept beside as
+        <name>.before-restore. Then the server restarts, from the local
+        network too, and the answer says so first; a server that cannot
+        restart itself is refused before anything is done. The backup held
+        goes once the server changed. The key is held in memory for the
+        request alone, never written, and kept by no audit row. Open as
+        POST /api/v1/setup/backup is.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: "#/components/schemas/NewBoxRestoreRequest"}
+      responses:
+        "200":
+          description: Restored
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/ServerRestoreResult"}
+        "500":
+          description: Restored, but a file failed after the store's commit; the server restarts all the same
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/ServerRestoreResult"}
+        "400": {$ref: "#/components/responses/BadRequest"}
+        "401": {$ref: "#/components/responses/Unauthorized"}
+        "403":
+          description: Beyond the local network, or a user who is not the owner
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/Error"}
+        "404":
+          description: No backup handed, or the one handed waited more than an hour
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/Error"}
+        "409":
+          description: The server has users, a restart or an update is under way, or the server cannot restart itself
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/Error"}
+        "413": {description: A body of more than 1 MiB}
+        "422":
+          description: The key does not open the backup, its file was changed, or its store is newer than this server's (update first)
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/Error"}
+        "429": {$ref: "#/components/responses/LockedOut"}
 components:
   securitySchemes:
     bearer:
@@ -6814,6 +7058,7 @@ components:
       properties:
         name: {type: string}
         secret: {type: string, description: 'The key of its secret field, given apart'}
+        makes_secret: {type: boolean, description: 'The server makes its secret, which nobody enters (an SFTP target''s key): a new box cannot read from such a target'}
         fields:
           type: array
           items:
@@ -6953,6 +7198,59 @@ components:
         report: {$ref: "#/components/schemas/ServerRestoreReport"}
         files: {type: array, items: {$ref: "#/components/schemas/ServerRestoreFile"}}
         cubes: {type: array, items: {$ref: "#/components/schemas/ServerRestoreCube"}}
+    NewBoxBackup:
+      type: object
+      description: A backup handed to a new box, or on a target, as its manifest says it, read without the key
+      properties:
+        uuid: {type: string}
+        time: {type: string, format: date-time}
+        trigger: {type: string}
+        label: {type: string}
+        version: {type: string, description: 'Massimo''s, of the server that made it'}
+        schema: {type: integer}
+        newer: {type: boolean, description: 'Its store is of a newer schema than this server''s: update this server first'}
+        fingerprint: {type: string, description: The fingerprint of the node key of the box that made it}
+        size: {type: integer}
+        counts:
+          type: object
+          description: Its rows per scope
+          properties:
+            users: {type: integer}
+            integrations: {type: integer}
+            cubes: {type: integer}
+            rooms: {type: integer}
+            audit: {type: integer}
+            log: {type: integer}
+        files:
+          type: object
+          properties:
+            env: {type: boolean, description: It holds an env file}
+            tls: {type: integer, description: The TLS files it holds}
+        name: {type: string, description: Its file on the target}
+        recipients:
+          type: array
+          description: The keys it is encrypted for, by their labels and fingerprints
+          items:
+            type: object
+            properties:
+              label: {type: string}
+              fingerprint: {type: string}
+    NewBoxTarget:
+      type: object
+      required: [kind]
+      description: A target for a new box's request alone, stored nowhere
+      properties:
+        kind: {type: string, description: 'A kind of GET /api/v1/server-backup-targets/kinds that does not make its own key: not sftp'}
+        config: {type: object, additionalProperties: {type: string}, description: Its fields}
+        secret: {type: string, description: Its secret field's value}
+    NewBoxRestoreRequest:
+      type: object
+      required: [key_file]
+      properties:
+        key_file: {type: string, description: 'The key file''s text: an age identity, or an OpenSSH ssh-ed25519 key without a passphrase'}
+        take_identity: {type: boolean, description: Take the backup's node.key and node id; this box keeps its own without}
+        env: {type: boolean, description: Put the backup's env file where this server reads its own}
+        tls: {type: boolean, description: Put the backup's TLS files where this server keeps its own}
     ServerBackupKey:
       type: object
       properties:

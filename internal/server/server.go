@@ -441,6 +441,8 @@ type Server struct {
 	restartGate restartGate
 	// sb is the state of the server's backups (serverbackups.go).
 	sb serverBackups
+	// newBox is the backup a new box was handed to start from (newbox.go).
+	newBox newBoxState
 	// reboot is the reboot that waits (reboot_api.go).
 	reboot    rebootPlan
 	pendingMu sync.Mutex
@@ -1638,6 +1640,7 @@ func (s *Server) routes() {
 	s.configRoutes(api)
 	s.repairRoutes(api)
 	s.serverBackupRoutes(api)
+	s.newBoxRoutes(api)
 	s.uiRoutes(mux)
 	s.mux = mux
 	// A write that another site's page sent is refused before it is

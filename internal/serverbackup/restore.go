@@ -82,6 +82,11 @@ type RestoreOptions struct {
 	// first (D6-A): for a new box started from a backup (Block 11),
 	// which has nothing to keep and no key to encrypt it for.
 	NoBackupFirst bool
+	// NoUsers refuses the restore, and its plan, with store.ErrHasUsers
+	// where this store has a regular user, counted in the store's own
+	// transaction: a new box's first-owner window (Block 11), which a
+	// first owner made meanwhile closes, is never restored over.
+	NoUsers bool
 }
 
 // PlannedFile is a file of the backup a restore would put in place, or
@@ -276,7 +281,7 @@ func storeSelection(sel Selection, o RestoreOptions, dir string, dry bool) store
 	if o.Identity {
 		scopes = append(scopes, ScopeIdentity)
 	}
-	return store.RestoreSelection{Scopes: scopes, Serials: sel.Serials, Source: dir, OpaqueKey: sel.Has(ScopeUsers), DryRun: dry}
+	return store.RestoreSelection{Scopes: scopes, Serials: sel.Serials, Source: dir, OpaqueKey: sel.Has(ScopeUsers), DryRun: dry, NoUsers: o.NoUsers}
 }
 
 // placeFiles are the files of the backup the options put in place, and
