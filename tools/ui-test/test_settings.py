@@ -7,7 +7,8 @@ without System settings' capabilities has none in ☰."""
 import json
 
 from conftest import api_call
-from helpers import PANEL_TEXTS, VIEWER, assert_busy, css_hidden, hold, named_buttons, scroll_width, show_view, wait_held, wait_until
+from helpers import (KEY_COPY, PANEL_TEXTS, VIEWER, assert_busy, copies, css_hidden, grant_clipboard, hold, icon_after_last_line, named_buttons, scroll_width,
+                     show_view, wait_held, wait_until)
 
 
 def test_settings_open(page, case):
@@ -111,7 +112,11 @@ def test_my_profile_changes_the_own_display_name(page, case):
 
 def test_my_profile_lists_and_creates_own_keys(page, case):
     """My profile lists the own sessions and keys, the suite's among them,
-    and Create key shows a new key once; Revoke takes it again."""
+    and Create key shows a new key once, which copies as the page's other
+    texts do, named Copy the key and not by the key, its copy icon right
+    after the key's last line (AP KeyLife, D1-A); Revoke takes it again.
+    Fails on the page before: the key a paragraph alone."""
+    grant_clipboard(page)
     show_view(page, "profile")
     rows = page.locator("#profile-tokens .user-tokens li")
     assert wait_until(page, "document.querySelectorAll('#profile-tokens .user-tokens li .token-label').length > 0", 5), "the own keys are listed"
@@ -122,6 +127,10 @@ def test_my_profile_lists_and_creates_own_keys(page, case):
     page.locator("#profile-tokens .create-key").click()
     assert wait_until(page, "!document.querySelector('#profile-tokens .user-key-box').classList.contains('hidden')", 5), "the new key is shown"
     assert rows.count() == before + 1, "and listed"
+    sel = "#profile-tokens .user-key"
+    placed, m = icon_after_last_line(page, sel)
+    assert placed, f"its copy icon right after its last line: {m}"
+    copies(page, sel, page.locator(sel).inner_text().strip(), KEY_COPY[case.lang])
     row = page.locator("#profile-tokens .user-tokens li", has_text=label)
     row.locator(".revoke-token").click()
     assert wait_until(page, "document.querySelectorAll('#profile-tokens .user-tokens li').length === %d" % before, 5), "Revoke takes it"

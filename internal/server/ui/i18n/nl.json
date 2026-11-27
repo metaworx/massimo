@@ -1768,6 +1768,7 @@
   "users.createKey": "Sleutel aanmaken",
   "users.keyCreated": "Sleutel ‘{label}’ aangemaakt; hij wordt één keer in het paneel getoond.",
   "users.keyShown": "De nieuwe sleutel, één keer getoond; stuur hem mee als Authorization: Bearer <sleutel>:",
+  "users.keyCopy": "Sleutel kopiëren",
   "roles.title": "Rollen",
   "roles.add": "Rol toevoegen",
   "roles.key": "Sleutel",

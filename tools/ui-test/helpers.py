@@ -23,6 +23,9 @@ Playwright's clock at the page's now. open_fold, close_fold and
 toggle_fold take a fold's toggle event before a test acts inside it.
 wait_started waits for the page's start, the page fixture's and
 owner_page's, and says on a timeout which read it waited for.
+grant_clipboard and copies check what a shared Copy puts into the
+clipboard and how it is named; icon_after_last_line where its icon
+sits.
 
 Every wait of this kit, and the page fixture's, lasts its seconds times
 UI_TEST_SCALE (scaled), a positive number, 1 where it is not set: a
@@ -68,6 +71,7 @@ PANEL_TEXTS = {"en": ["Address", "Hidden devices", "Save"], "de": ["Adresse", "A
 NAME_BAD = {"en": "Only the letters a to z, digits and . _ - @, without spaces, starting with a letter or a digit; at most 64 characters.",
             "de": "Nur die Buchstaben a bis z, Ziffern und . _ - @, ohne Leerzeichen, am Anfang ein Buchstabe oder eine Ziffer; höchstens 64 Zeichen."}
 NAME_TAKEN = {"en": "There is already a user named {name}.", "de": "Es gibt schon einen Benutzer {name}."}
+KEY_COPY = {"en": "Copy the key", "de": "Den Schlüssel kopieren"}
 NOT_A_SCHEME = {"en": "Not a Massimo colour scheme: unknown format", "de": "Kein Massimo-Farbschema: unbekanntes Format"}
 
 
@@ -901,6 +905,68 @@ def css_hidden(page, selector):
     """Whether the page's style hides an element (display none), shown or
     not where it sits: an item of a closed menu is not."""
     return page.locator(selector).evaluate("(e) => getComputedStyle(e).display === 'none'")
+
+
+def grant_clipboard(page):
+    """The page's origin may read and write the browser's clipboard, which
+    is emptied: for a test of what a copy put there (copies)."""
+    page.context.grant_permissions(["clipboard-read", "clipboard-write"], origin=page.evaluate("location.origin"))
+    page.evaluate("navigator.clipboard.writeText('')")
+
+
+def copies(page, sel, value, name):
+    """The shared Copy with its icon whose text is the element sel
+    (src/shared/copy.tsx; the icon the button right after it in its
+    copy-pair), the clipboard granted (grant_clipboard): a button to the
+    keyboard, it and its icon named name for a screen reader and as the
+    tooltip, value in neither; a click on it, Enter and Space on it, and
+    a click on its icon each put value into the clipboard, emptied before
+    each."""
+    assert value, f"{sel}: something to copy"
+    text, icon = page.locator(sel), page.locator(sel + " + .copy-icon")
+    assert text.get_attribute("role") == "button" and text.get_attribute("tabindex") == "0", f"{sel}: a button to the keyboard"
+    named = [text.get_attribute("aria-label"), text.get_attribute("title"), icon.get_attribute("aria-label")]
+    assert named == [name] * 3, f"{sel}: it and its icon named {name!r}: {named}"
+    assert not any(value in (n or "") for n in named), f"{sel}: its name and tooltip do not tell what it copies"
+    for what, act in (("a click on it", text.click), ("Enter on it", lambda: (text.focus(), page.keyboard.press("Enter"))),
+                      ("Space on it", lambda: (text.focus(), page.keyboard.press("Space"))), ("a click on its icon", icon.click)):
+        page.evaluate("navigator.clipboard.writeText('')")
+        act()
+        assert wait_until(page, "navigator.clipboard.readText().then((t) => t === %r)" % value, 3), f"{sel}: {what} copies it"
+
+
+# The copy icon of the text sel and the text's last line: where the icon
+# is, the last line's box (a range over the text, so that a text a flex
+# item made a block of gives its lines too) and how many lines it takes.
+ICON_PLACE = """(sel) => {
+  const el = document.querySelector(sel);
+  const range = document.createRange();
+  range.selectNodeContents(el);
+  const lines = [...range.getClientRects()].filter((r) => r.width > 0);
+  const icon = el.nextElementSibling;
+  if (!lines.length || !icon || !icon.classList.contains("copy-icon")) return { lines: lines.length, icon: null };
+  const box = (b) => ({ left: b.left, right: b.right, top: b.top, bottom: b.bottom });
+  return { lines: lines.length, last: box(lines[lines.length - 1]), icon: box(icon.getBoundingClientRect()) };
+}"""
+
+
+def icon_after_last_line(page, sel):
+    """Whether the copy icon of the text sel follows the text's last
+    line, however many lines the text takes: after its end, its middle
+    within that line's height; or, where the text fills its last line,
+    at the start of the line below it (within its margin of the text's
+    left edge, its top within 8 px of that line's bottom), as an inline
+    icon wraps; never beside the text's lines, centred between them, as
+    a flex pair sets it. Also what was measured (no icon where the text
+    has none, or no text)."""
+    m = page.evaluate(ICON_PLACE, sel)
+    if m["icon"] is None:
+        return False, m
+    icon, last = m["icon"], m["last"]
+    mid = (icon["top"] + icon["bottom"]) / 2
+    after = icon["left"] >= last["right"] - 0.5 and last["top"] - 0.5 <= mid <= last["bottom"] + 0.5
+    below = icon["left"] <= last["left"] + 8 and last["bottom"] - 0.5 <= icon["top"] <= last["bottom"] + 8
+    return after or below, m
 
 
 CUBE_ITEM = "#cube-menu .menu-items button[data-value='%s']"

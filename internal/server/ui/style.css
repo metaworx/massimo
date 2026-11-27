@@ -2241,7 +2241,13 @@ massimo-week-program { display: contents; }
   background: color-mix(in srgb, var(--accent) 16%, transparent);
   box-shadow: inset 0 0 0 1px var(--accent);
 }
+/* The key just made (shared/tokens.tsx): a Copy with its icon, the key
+   breaking anywhere, the icon right after its last line at any width,
+   where the copy pair's flex would set it beside all its lines (AP
+   KeyLife, D1-A). */
 .user-key { word-break: break-all; user-select: all; }
+.user-key-box .copy-pair { display: inline; }
+.user-key-box .copy-icon { margin-left: 4px; vertical-align: middle; }
 .cap-grid { margin: 4px 0; }
 .cap-grid .choices-list { grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); gap: 2px 12px; }
 .cap-grid .switch { align-items: center; }

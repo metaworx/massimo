@@ -13,7 +13,11 @@
  * key the phone keeps for the server (its status' key_id, shared/app.ts)
  * says "this device's key", in place of "its key" where both hold,
  * however the session was made (AP MobileApp, D65-A, D66-A); the label of
- * a new key with Create key, and the key just made, shown once. The list
+ * a new key with Create key, and the key just made, shown once: a Copy of
+ * it with its icon, keyed by the key, copied by a click, Enter or Space on
+ * it or by the icon, both named Copy the key and not by the key, so that
+ * neither a screen reader nor the tooltip says it again (AP KeyLife,
+ * D1-A). The list
  * is read when its place opens and again at every change of the caller's
  * counter while it is open, in the app once the app has revoked what the
  * last sign-in revokes (D67-A); the key just made is shown by the read
@@ -34,6 +38,7 @@ import { createKey, loadTokens, revokeOwn, revokeToken, type Run } from "./accou
 import { app, appKeyId, signInRevoked } from "./app";
 import { Age, Badge } from "./badge";
 import { hid } from "./cls";
+import { Copy } from "./copy";
 import { TextField } from "./field";
 import { useHelp } from "./help";
 import { useLang } from "./lang";
@@ -170,7 +175,7 @@ export function Tokens({ u, off, open, reads, run, say, labelId, help, marked, d
         <>
           <div class={"user-key-box" + hid(!shown)}>
             <p class="small">{t("users.keyShown")}</p>
-            <p class="mono user-key">{shown}</p>
+            <p><Copy key={shown || ""} text={shown || ""} name={t("users.keyCopy")} icon cls="mono user-key" /></p>
           </div>
           <TextField label={t("users.newKey")} id={labelId} name="label" maxLength={64} placeholder={t("users.keyLabel")} value={label} set={setLabel} />
           <div class="actions">

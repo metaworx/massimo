@@ -1769,6 +1769,7 @@
   "users.createKey": "Créer la clé",
   "users.keyCreated": "Clé « {label} » créée ; elle est affichée une fois dans le panneau.",
   "users.keyShown": "La nouvelle clé, affichée une fois ; envoyez-la comme Authorization: Bearer <clé> :",
+  "users.keyCopy": "Copier la clé",
   "roles.title": "Rôles",
   "roles.add": "Ajouter un rôle",
   "roles.key": "Clé",

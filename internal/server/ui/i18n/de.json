@@ -1767,6 +1767,7 @@
   "users.createKey": "Schlüssel anlegen",
   "users.keyCreated": "Schlüssel „{label}“ angelegt; er wird einmal im Panel gezeigt.",
   "users.keyShown": "Der neue Schlüssel, einmal gezeigt; als Authorization: Bearer <Schlüssel> mitsenden:",
+  "users.keyCopy": "Den Schlüssel kopieren",
   "roles.title": "Rollen",
   "roles.add": "Rolle hinzufügen",
   "roles.key": "Kürzel",
