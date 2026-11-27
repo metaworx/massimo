@@ -5,7 +5,6 @@ package serve
 
 import (
 	"context"
-	"database/sql"
 	"encoding/json"
 	"errors"
 	"io"
@@ -488,11 +487,7 @@ func TestServePlainSeedCutShort(t *testing.T) {
 			}
 			st := testStore(t, "")
 			ctx := context.Background()
-			other, err := sql.Open("sqlite", "file:"+filepath.ToSlash(st.File())+"?_pragma=busy_timeout(5000)")
-			if err != nil {
-				t.Fatal(err)
-			}
-			defer other.Close()
+			other := storekit.Raw(t, st)
 			if _, err := other.Exec(c.trigger); err != nil {
 				t.Fatal(err)
 			}

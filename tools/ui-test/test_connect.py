@@ -29,7 +29,8 @@ import os
 from axe_playwright_python.sync_playwright import Axe
 
 from conftest import TOKEN, URL, api_call, clear_preferences
-from helpers import OPERATOR_PASSWORD, assert_login_card_centred, assert_login_row, cleanup, named_buttons, open_personal_page, undo, wait_until
+from helpers import (OPERATOR_PASSWORD, assert_login_card_centred, assert_login_row, cleanup, held_timers, named_buttons, open_personal_page, undo,
+                     wait_until)
 
 CONNECT = URL + "ui/connect.html"
 FAKE_BRIDGE = os.path.join(os.path.dirname(os.path.abspath(__file__)), "fake_bridge.js")
@@ -185,17 +186,18 @@ def test_connect_list_and_open(new_context, case, watch, guard):
     assert calls(page, "open") == [["open", "s1", HOME_LAN]], "at the address its probe found"
 
     before = len(calls(page, "probe"))
-    row(page, "Cabin").locator(".server-open").click()
-    wait_toast(page, "Cabin", bad=True)  # a server that does not answer is said to be unreachable
-    assert len(calls(page, "probe")) > before, "and probed again first"
-    assert len(calls(page, "open")) == 1, "it is not opened"
-    named_buttons(page, "the toast")
-    assert_axe(page, "the toast")
+    with held_timers(page, "toast"):  # shown until the probe takes it back, not until its 10 s are up
+        row(page, "Cabin").locator(".server-open").click()
+        wait_toast(page, "Cabin", bad=True)  # a server that does not answer is said to be unreachable
+        assert len(calls(page, "probe")) > before, "and probed again first"
+        assert len(calls(page, "open")) == 1, "it is not opened"
+        named_buttons(page, "the toast")
+        assert_axe(page, "the toast")
 
-    page.evaluate(f"window.__fakeBridgeConfig.answers[{CABIN_LAN!r}] = {{node: {NODE2!r}}}")
-    page.locator("#probe-btn").click()
-    wait_state(page, "Cabin", st["lan"])
-    assert toast_gone(page), "a probe that finds the server takes the toast back"
+        page.evaluate(f"window.__fakeBridgeConfig.answers[{CABIN_LAN!r}] = {{node: {NODE2!r}}}")
+        page.locator("#probe-btn").click()
+        wait_state(page, "Cabin", st["lan"])
+        assert toast_gone(page), "a probe that finds the server takes the toast back"
 
 
 def test_connect_add_by_address(new_context, case, watch, guard):

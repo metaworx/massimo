@@ -36,7 +36,8 @@ import re
 import pytest
 
 from conftest import TOKEN, URL, api_call
-from helpers import OPERATOR_PASSWORD, frames, named_buttons, open_fold, scroll_width, show_view, toggle_fold, wait_held, wait_until
+from helpers import (OPERATOR_PASSWORD, boxes, frames, held_timers, named_buttons, open_fold, scroll_width, show_view, toggle_fold, wait_held,
+                     wait_until)
 from test_first_owner import OPEN, owner_card, start_page, stub_creation
 from test_copy import COPY_STATUS
 from test_login import sign_in
@@ -362,7 +363,8 @@ def check_suggest(page, case, field, again, console):
     says_next(page, field, "words", "before the first press")
     eye = eye_of(page, field)
     if eye.count():
-        assert dice.bounding_box()["x"] + dice.bounding_box()["width"] <= eye.bounding_box()["x"] + 0.5, f"{field}: the dice before the eye"
+        d, e = boxes(page, dice, eye)
+        assert d["x"] + d["width"] <= e["x"] + 0.5, f"{field}: the dice before the eye: {d}, {e}"
     if again:
         assert dice_of(page, again).count() == 0, f"{again}: no dice on the second field"
     v = press(page, field)
@@ -806,49 +808,51 @@ def test_copy(page, case):
       if (s) s.textContent = '';
       for (const el of document.querySelectorAll('.copied')) el.classList.remove('copied');
     }"""
-    page.evaluate(clear)
-    page.locator(line).click()
-    copied_here(page, line, v, "a click on the line")
-    page.evaluate(clear)
-    page.locator(line).focus()
-    page.keyboard.press("Enter")
-    copied_here(page, line, v, "Enter on the line")
-    page.evaluate(clear)
-    page.locator(line).focus()
-    page.keyboard.press("Space")
-    copied_here(page, line, v, "Space on the line")
-    page.evaluate(clear)
-    page.locator(icon).click()
-    copied_here(page, icon, v, "a click on the icon")
-    page.evaluate(clear)
-    page.locator(icon).focus()
-    page.keyboard.press("Enter")
-    copied_here(page, icon, v, "Enter on the icon")
-    page.evaluate(clear)
-    page.evaluate("""() => {
-      window.__clip = navigator.clipboard;
-      Object.defineProperty(navigator, "clipboard", { value: undefined, configurable: true });
-    }""")
-    try:
+    # "Copied" held until each look at it is done, not its 1400 ms; and still there as the dice is pressed below
+    with held_timers(page, "copied"):
+        page.evaluate(clear)
         page.locator(line).click()
-        copied_here(page, line, v, "without the clipboard, a click on the line", clipboard=False)
-        page.evaluate("() => { const s = document.getElementById('copy-status'); if (s) s.textContent = ''; }")
+        copied_here(page, line, v, "a click on the line")
+        page.evaluate(clear)
+        page.locator(line).focus()
+        page.keyboard.press("Enter")
+        copied_here(page, line, v, "Enter on the line")
+        page.evaluate(clear)
+        page.locator(line).focus()
+        page.keyboard.press("Space")
+        copied_here(page, line, v, "Space on the line")
+        page.evaluate(clear)
+        page.locator(icon).click()
+        copied_here(page, icon, v, "a click on the icon")
+        page.evaluate(clear)
         page.locator(icon).focus()
         page.keyboard.press("Enter")
-        copied_here(page, icon, v, "without the clipboard, Enter on the icon", clipboard=False)
-    finally:
-        page.evaluate("""() => Object.defineProperty(navigator, "clipboard", { value: window.__clip, configurable: true })""")
-    assert page.evaluate("navigator.clipboard.readText()") == v, "the fallback copies"
-    assert value(page, "me-new") == v and page.evaluate(STATE, "me-new")["type"] == "text", "the suggestion still shown"
-    # copied, then the dice pressed while Copied still shows: the new suggestion, which nobody copied, is not marked so
-    for what, sel in (("the line", line), ("its icon", icon)):
+        copied_here(page, icon, v, "Enter on the icon")
         page.evaluate(clear)
-        page.locator(sel).click()
-        assert wait_until(page, f"document.querySelector({sel!r}).classList.contains('copied')", 3), f"{what}: Copied shows on it"
-        n = press(page, "me-new", value(page, "me-new"))
-        marked = page.evaluate("() => [...document.querySelectorAll('#me-new-shown .copied')].map((el) => el.className)")
-        assert marked == [] and page.locator(line).text_content() == n, \
-            f"{what} copied, then the dice: the new suggestion not marked Copied: {marked}"
+        page.evaluate("""() => {
+          window.__clip = navigator.clipboard;
+          Object.defineProperty(navigator, "clipboard", { value: undefined, configurable: true });
+        }""")
+        try:
+            page.locator(line).click()
+            copied_here(page, line, v, "without the clipboard, a click on the line", clipboard=False)
+            page.evaluate("() => { const s = document.getElementById('copy-status'); if (s) s.textContent = ''; }")
+            page.locator(icon).focus()
+            page.keyboard.press("Enter")
+            copied_here(page, icon, v, "without the clipboard, Enter on the icon", clipboard=False)
+        finally:
+            page.evaluate("""() => Object.defineProperty(navigator, "clipboard", { value: window.__clip, configurable: true })""")
+        assert page.evaluate("navigator.clipboard.readText()") == v, "the fallback copies"
+        assert value(page, "me-new") == v and page.evaluate(STATE, "me-new")["type"] == "text", "the suggestion still shown"
+        # copied, then the dice pressed while Copied still shows: the new suggestion, which nobody copied, is not marked so
+        for what, sel in (("the line", line), ("its icon", icon)):
+            page.evaluate(clear)
+            page.locator(sel).click()
+            assert wait_until(page, f"document.querySelector({sel!r}).classList.contains('copied')", 3), f"{what}: Copied shows on it"
+            n = press(page, "me-new", value(page, "me-new"))
+            marked = page.evaluate("() => [...document.querySelectorAll('#me-new-shown .copied')].map((el) => el.className)")
+            assert marked == [] and page.locator(line).text_content() == n, \
+                f"{what} copied, then the dice: the new suggestion not marked Copied: {marked}"
     toggle_fold(page, "#me-password")
     show_view(page, "tiles")
 
