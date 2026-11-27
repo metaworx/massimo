@@ -638,6 +638,64 @@ CREATE TABLE user_identities (                  -- migration 0016, made again by
 );
 -- unique (provider_id, subject) where bound, (provider_id, email) where not,
 -- (integration_id, subject) for an integration's, each among the identities not removed
+
+CREATE TABLE server_backup_keys (               -- migration 0100: the server's backups
+    id           INTEGER PRIMARY KEY,
+    uuid         TEXT    NOT NULL UNIQUE,
+    label        TEXT    NOT NULL DEFAULT '',   -- in plain in every manifest
+    recipient    TEXT    NOT NULL,              -- age1pq1…, age1… or ssh-ed25519 …
+    fingerprint  TEXT    NOT NULL UNIQUE,
+    kind         TEXT    NOT NULL,              -- pq, x25519 or ssh-ed25519
+    confirm_hash TEXT    NOT NULL DEFAULT '',   -- a key made, unconfirmed: hash of its last six characters
+    created_at   TEXT    NOT NULL,
+    created_by   INTEGER REFERENCES users (id)
+);
+
+CREATE TABLE server_backup_targets (            -- migration 0100
+    id         INTEGER PRIMARY KEY,
+    uuid       TEXT    NOT NULL UNIQUE,
+    name       TEXT    NOT NULL,                -- unique without regard to case
+    kind       TEXT    NOT NULL,                -- local, webdav, sftp, smb, s3
+    config     TEXT    NOT NULL DEFAULT '{}',   -- the kind's fields as JSON, its secret aside
+    secret     TEXT    NOT NULL DEFAULT '',     -- sealed, the uuid the additional data
+    takes      TEXT    NOT NULL DEFAULT 'every',-- every, daily, weekly or monthly
+    retention  TEXT    NOT NULL DEFAULT '{}',   -- JSON: last, daily, weekly, monthly, yearly
+    enabled    INTEGER NOT NULL DEFAULT 1,
+    created_at TEXT    NOT NULL,
+    updated_at TEXT    NOT NULL,
+    updated_by INTEGER REFERENCES users (id)
+);
+
+CREATE TABLE server_backups (                   -- migration 0100
+    id           INTEGER PRIMARY KEY,
+    uuid         TEXT    NOT NULL UNIQUE,       -- the manifest's
+    time         TEXT    NOT NULL,              -- the manifest's created; a failed one's last try
+    trigger      TEXT    NOT NULL,              -- scheduled, manual, before-update, before-restore, uploaded
+    user_id      INTEGER REFERENCES users (id), -- who asked; NULL: the schedule, a scan
+    state        TEXT    NOT NULL DEFAULT 'made', -- made or failed
+    size         INTEGER NOT NULL DEFAULT 0,
+    sha256       TEXT    NOT NULL DEFAULT '',   -- the file's
+    manifest     TEXT    NOT NULL DEFAULT '',   -- manifest.json as signed
+    signature    TEXT    NOT NULL DEFAULT '',   -- manifest.sig
+    pinned_until TEXT,
+    error        TEXT    NOT NULL DEFAULT '',   -- a failed one's
+    tries        INTEGER NOT NULL DEFAULT 0,
+    next_try     TEXT
+);
+
+CREATE TABLE server_backup_copies (             -- migration 0100
+    backup_id  INTEGER NOT NULL REFERENCES server_backups (id) ON DELETE CASCADE,
+    target_id  INTEGER NOT NULL REFERENCES server_backup_targets (id) ON DELETE CASCADE,
+    path       TEXT    NOT NULL DEFAULT '',     -- the file's name there
+    state      TEXT    NOT NULL,                -- there, failed or missing
+    pulled     INTEGER NOT NULL DEFAULT 0,      -- pulled by hand: kept until deleted
+    pushed_at  TEXT,
+    checked_at TEXT,
+    error      TEXT    NOT NULL DEFAULT '',
+    tries      INTEGER NOT NULL DEFAULT 0,
+    next_try   TEXT,
+    PRIMARY KEY (backup_id, target_id)
+);
 ```
 
 Notes on the tables:
@@ -805,6 +863,15 @@ Notes on the tables:
   A row has no `uuid`, `version`, `deleted_at` or `origin`:
   the watch is this server's, is not replicated,
   and is deleted rather than marked.
+- `server_backup_keys`, `server_backup_targets`, `server_backups` and
+  `server_backup_copies` (migration 0100) are the catalogue of the server's own
+  backups ("Server backups", section 7).
+  They are this server's: not replicated, without `version`, `deleted_at` or
+  `origin`, deleted rather than marked, and never replaced by a restore.
+  A target's `secret` is sealed as a provider's client secret is
+  (section 6, "Sign-in through OpenID Connect"), its `uuid` the additional data.
+  A key made by the server is kept pending with a hash of its identity's last six
+  characters, never the identity, and goes after an hour unconfirmed.
 - `auth_failures` is the `authLimiter` of #7 keyed by address,
   plus a key per user name so that password guessing from many addresses behind
   a reverse proxy locks the name rather than the proxy.
@@ -1056,6 +1123,15 @@ names another reference in `ref`, and this binary's next start deletes it.
 Its down part, `0026_backup_pending.down.sql`, drops the table;
 it loses the windows of a pending backup, and only that,
 which the binary of 25 begins again at its first look.
+`0100_server_backups.sql`, the first of `main`'s block of 100 after the freeze
+of 0.17 ("Two lines of releases", below), adds the four tables of the server's
+backups (AP ServerBackup v1.0, Block 2) and seeds `backup.retry` for `manager`,
+additively, keeping `min_reader` 24:
+a binary for 24 to 26 leaves the tables alone and ignores the capability.
+Its down part, `0100_server_backups.down.sql`, drops the tables
+and removes `backup.server` and `backup.retry` from every role;
+it loses the catalogue, and only that: the files stay on their targets,
+and a target added again is scanned for them.
 On a store of 500 000 log rows (149 MB, a tenth with a user) a desktop took
 2.0 s for the raise, its copy `massimo.db.before-24` included, and 2.2 s for the
 down part, its copy included (`TestRaiseTimes` with
@@ -1250,7 +1326,8 @@ The capabilities, what each allows and the routes it guards
 are the table of docs/api-v1.md ("Authentication"),
 held to the routes the server registers by a test
 (`TestCapabilityTableCoversRoutes` in `internal/server/openapi_test.go`).
-`integrations` came with migration 0021, `repair` with 0022.
+`integrations` came with migration 0021, `repair` with 0022,
+`backup.server` and `backup.retry` with 0100.
 
 <!-- BEGIN GENERATED PARTIAL docs/fragments/_capability-rules.md - do not edit; run "GUIDELINES/shared/tools/sync-docs.sh" -->
 `update` and `reboot` each include `restart`, since each restarts the server:
@@ -1306,14 +1383,22 @@ The default roles, as seeded.
 | `passwords` | ✓ | | | | |
 | `restart` | ✓ | | | | ✓ |
 | `integrations` | ✓ | | | | |
+| `backup.retry` | ✓ | | | | |
 | `cubes`, `cubes.reboot`, `settings`, `update`, `reboot`, `audit` | | | | | ✓ |
-| `users`, `roles`, `roles.disable`, `capabilities`, `auth` | | | | | |
+| `users`, `roles`, `roles.disable`, `capabilities`, `auth`, `backup.server` | | | | | |
 
 So `manager` is `operator` plus guests, pairing, names, structure, restore,
 the server's restart (migration 0006, 2026-11-07),
 the passwords of other users (migration 0008, 2026-11-08)
 and the repairs (migration 0022, 2026-11-15, AP RadioHealth, D166-A),
-which the role integration gains with its ceiling;
+which the role integration gains with its ceiling,
+and the state of the server's backups with the retry of a failed one
+(`backup.retry`, migration 0100, 2026-11-27, AP ServerBackup, D13-A),
+which it does not (D15-A);
+`backup.server`, which makes, pushes and pulls the server's backups,
+is seeded for no role, as `auth` is:
+a server backup holds the people, the sign-in and the integrations,
+and the owner gives it;
 `reboot` is seeded for no role (2026-11-08): restarting the server is not
 rebooting a computer that may run other services too;
 nor is `cubes.reboot` (2026-11-14):
@@ -1327,7 +1412,9 @@ AP IntegrationUsers): it is the role of the registered integrations and
 of their users, and the ceiling of every call through an integration
 ("Integrations", below). It holds every capability but those that manage
 people, sign-in and the integrations themselves (`users`, `passwords`,
-`roles`, `roles.disable`, `capabilities`, `auth`, `integrations`), so that
+`roles`, `roles.disable`, `capabilities`, `auth`, `integrations`),
+and the server's backups, which hold all that (`backup.server`,
+`backup.retry`; AP ServerBackup, D15-A), so that
 an integration can never widen its own users; each integration's maximum
 narrows it further. It cannot be changed, disabled or given to a regular
 user. Its users before 0021, API keys made by hand for an integration,

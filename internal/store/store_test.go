@@ -89,7 +89,7 @@ func TestOpenMigratesAnEmptyFile(t *testing.T) {
 	}
 	var rows int
 	s2.db.QueryRow(`SELECT count(*) FROM schema_version`).Scan(&rows)
-	if rows != SchemaVersion() {
+	if ms, _ := loadMigrations(embeddedMigrations()); rows != len(ms) {
 		t.Fatalf("%d schema_version rows", rows)
 	}
 }
@@ -145,13 +145,14 @@ func TestSyncColumns(t *testing.T) {
 // The six default roles and their sets, as docs/store.md section 6
 // lists them (preferences seeded by migration 0003; integrations for
 // manager and the role integration fixed at the ceiling by 0021; repair
-// for both by 0022); owner has every capability by code and no rows.
+// for both by 0022; backup.retry for manager by 0100, backup.server for
+// none); owner has every capability by code and no rows.
 func TestSeededRoles(t *testing.T) {
 	t.Parallel()
 	s := openFresh(t, t.TempDir())
 	want := map[string][]string{
 		"owner":       nil,
-		"manager":     {"backup", "configure", "discover", "guests", "integrations", "lock", "pair", "passwords", "preferences", "read", "rename", "repair", "restart", "restore", "setpoint", "structure"},
+		"manager":     {"backup", "backup.retry", "configure", "discover", "guests", "integrations", "lock", "pair", "passwords", "preferences", "read", "rename", "repair", "restart", "restore", "setpoint", "structure"},
 		"operator":    {"backup", "configure", "discover", "lock", "preferences", "read", "setpoint"},
 		"guest":       {"configure", "read", "setpoint"},
 		"viewer":      {"preferences", "read"},
