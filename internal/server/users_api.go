@@ -58,7 +58,7 @@ func decodeUser(r *http.Request) (userRequest, error) {
 		return req, fail(http.StatusBadRequest, "bad body: %v", err)
 	}
 	if req.DisplayName != nil && len(*req.DisplayName) > maxDisplayName {
-		return req, fail(http.StatusBadRequest, "display_name: at most %d bytes", maxDisplayName)
+		return req, refuse(http.StatusBadRequest, codeUserDisplayNameLong, maxDisplayName)
 	}
 	if req.Record != nil && req.Password != nil {
 		return req, fail(http.StatusBadRequest, "password or record, not both")
@@ -112,7 +112,10 @@ func userFail(err error) error {
 		return fail(http.StatusNotFound, "%s", text)
 	case errors.Is(err, store.ErrUserExists), errors.Is(err, store.ErrRoleExists), errors.Is(err, store.ErrLastOwner), errors.Is(err, store.ErrRoleInUse):
 		return fail(http.StatusConflict, "%s", text)
-	case errors.Is(err, store.ErrBadName), errors.Is(err, store.ErrBadRole), errors.Is(err, store.ErrBadMessage):
+	case errors.Is(err, store.ErrBadName):
+		// the name's rule, which the page's check of a new name words alike
+		return refuseSaying(http.StatusBadRequest, text, codeUserNameBad)
+	case errors.Is(err, store.ErrBadRole), errors.Is(err, store.ErrBadMessage):
 		return fail(http.StatusBadRequest, "%s", text)
 	case errors.Is(err, store.ErrNoOpaque):
 		return fail(http.StatusServiceUnavailable, "%s", text)
@@ -128,7 +131,7 @@ func userFail(err error) error {
 // the local network, gives such a user a sign-in of its own.
 func noWayIn(u store.User) error {
 	if u.IntegrationID != 0 {
-		return fail(http.StatusForbidden, "the user %s is an integration's: it acts through its integration alone, with no key, password or sign-in of its own", u.Name)
+		return refuse(http.StatusForbidden, codeUserIntegrationNoWayIn, u.Name)
 	}
 	return nil
 }
@@ -173,7 +176,7 @@ const busyRetry = 5
 // client went away; nil for any other error.
 func passwordBusy(err error) error {
 	if errors.Is(err, store.ErrBusy) || errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
-		return &httpError{status: http.StatusServiceUnavailable, msg: "too many password checks at once; try again in a few seconds", retryAfter: busyRetry}
+		return withRetryAfter(refuse(http.StatusServiceUnavailable, codePasswordBusy), busyRetry)
 	}
 	return nil
 }
@@ -181,7 +184,7 @@ func passwordBusy(err error) error {
 // userStore is the store, or the error of a server without one.
 func (s *Server) userStore() (*store.Store, error) {
 	if s.opts.Store == nil {
-		return nil, fail(http.StatusServiceUnavailable, "this server has no store, so no users: it takes the API token")
+		return nil, refuse(http.StatusServiceUnavailable, codeUserNoStore)
 	}
 	return s.opts.Store, nil
 }
@@ -410,18 +413,18 @@ func allIn(caps []string, set map[string]bool) bool {
 func (a access) rankFail(role, capability string) error {
 	switch {
 	case !a.ranks(role) && role == store.RoleOwner:
-		return fail(http.StatusForbidden, "only an owner changes an owner")
+		return refuse(http.StatusForbidden, codeUserOwnerOnly)
 	case !a.ranks(role):
-		return fail(http.StatusForbidden, "the role %s has capabilities yours lacks", role)
+		return refuse(http.StatusForbidden, codeRoleBeyondYours, role)
 	}
-	return fail(http.StatusForbidden, "capability %q required", capability)
+	return refuse(http.StatusForbidden, codeCapabilityRequired, capability)
 }
 
 // throughIntegration is the refusal of a regular user, or another
 // integration's, to a call through an integration (AP AccessEnds,
 // D41-A4).
 func throughIntegration() error {
-	return fail(http.StatusForbidden, "a call through an integration changes its own integration's users alone")
+	return refuse(http.StatusForbidden, codeIntegrationOwnUsersOnly)
 }
 
 // manageFail is the refusal of user u to a principal that may not change
@@ -435,7 +438,7 @@ func (a access) manageFail(u store.User, capability string) error {
 	case a.guests && u.Role == store.RoleGuest && a.integration != 0 && u.IntegrationID != a.integration:
 		return throughIntegration()
 	case a.guests && !a.all && u.Role == store.RoleGuest && u.IntegrationID != a.integration:
-		return fail(http.StatusForbidden, "the user %s is an integration's: its own integration, a holder of integrations or of users changes it", u.Name)
+		return refuse(http.StatusForbidden, codeUserIntegrationGuest, u.Name)
 	}
 	return a.rankFail(u.Role, capability)
 }
@@ -445,15 +448,15 @@ func (a access) manageFail(u store.User, capability string) error {
 func (a access) assignFail(r store.Role, u store.User) error {
 	switch {
 	case r.Key == store.RoleIntegration && u.IntegrationID == 0:
-		return fail(http.StatusForbidden, "the role integration is an integration's and its users' alone")
+		return refuse(http.StatusForbidden, codeRoleIntegrationOnly)
 	case !a.ranks(r.Key) && r.Key == store.RoleOwner:
-		return fail(http.StatusForbidden, "only an owner gives the role owner")
+		return refuse(http.StatusForbidden, codeRoleOwnerOnly)
 	case !a.ranks(r.Key):
-		return fail(http.StatusForbidden, "the role %s has capabilities yours lacks", r.Key)
+		return refuse(http.StatusForbidden, codeRoleBeyondYours, r.Key)
 	case a.integrationsOf(u):
-		return fail(http.StatusForbidden, "the role %s lies beyond the maximum of its integration", r.Key)
+		return refuse(http.StatusForbidden, codeRoleBeyondIntegration, r.Key)
 	}
-	return fail(http.StatusForbidden, "capability %q required to give the role %s", "users", r.Key)
+	return refuse(http.StatusForbidden, codeCapabilityRequiredToGive, "users", r.Key)
 }
 
 // userMay is what the caller may do with a user (userView.May): change
@@ -606,10 +609,10 @@ func (s *Server) postUser(w http.ResponseWriter, r *http.Request) error {
 	case p.mode == modeOpen:
 		// The first owner: the form of docs/store.md section 10, item 4.
 		if !localPeer(s.clientIP(r)) {
-			return fail(http.StatusForbidden, "the first owner is created from the local network, or on the box with massimo user add")
+			return refuse(http.StatusForbidden, codeFirstOwnerNotLocal)
 		}
 		if password == "" && req.Record == nil {
-			return fail(http.StatusBadRequest, "the first owner needs a password")
+			return refuse(http.StatusBadRequest, codeFirstOwnerPasswordNeeded)
 		}
 		if u.Role != "" && u.Role != store.RoleOwner {
 			return fail(http.StatusBadRequest, "the first user is the owner")
@@ -631,7 +634,7 @@ func (s *Server) postUser(w http.ResponseWriter, r *http.Request) error {
 			case !a.ranks(u.Role) || u.Role == store.RoleIntegration:
 				return a.assignFail(r, u)
 			}
-			return fail(http.StatusForbidden, "capability %q required to create a user with the role %s", "users", u.Role)
+			return refuse(http.StatusForbidden, codeCapabilityRequiredToCreate, "users", u.Role)
 		}
 	}
 	auditTarget(r, "user:"+store.NormalName(u.Name))
@@ -661,7 +664,7 @@ func (s *Server) postUser(w http.ResponseWriter, r *http.Request) error {
 		created, err = st.AddUser(ctx, u, password, by)
 	}
 	if errors.Is(err, store.ErrHasUsers) {
-		return fail(http.StatusConflict, "the first owner exists already: sign in")
+		return refuse(http.StatusConflict, codeFirstOwnerExists)
 	}
 	if errors.Is(err, store.ErrNoRole) {
 		return fail(http.StatusBadRequest, "%v", err)
@@ -706,7 +709,7 @@ func (s *Server) targetUser(r *http.Request, st *store.Store, selfOK bool, need 
 		return store.User{}, access{}, userFail(err)
 	}
 	if !ok {
-		return store.User{}, access{}, fail(http.StatusNotFound, "no user %q", name)
+		return store.User{}, access{}, refuse(http.StatusNotFound, codeUserUnknown, name)
 	}
 	a := s.accessOf(r.Context(), principalOf(r), u.Name)
 	n := needManage
@@ -716,7 +719,7 @@ func (s *Server) targetUser(r *http.Request, st *store.Store, selfOK bool, need 
 	ok = map[int]bool{needView: a.mayView(u), needManage: a.mayManage(u), needPassword: a.mayManage(u) || a.maySetPassword(u)}[n]
 	if !ok && !(selfOK && a.self) {
 		if n == needView {
-			return store.User{}, access{}, fail(http.StatusForbidden, "capability %q required", "users")
+			return store.User{}, access{}, refuse(http.StatusForbidden, codeCapabilityRequired, "users")
 		}
 		return store.User{}, access{}, a.manageFail(u, "users")
 	}
@@ -811,11 +814,11 @@ func (s *Server) putUser(w http.ResponseWriter, r *http.Request) error {
 		// as well make another key.
 		if req.Proof != "" {
 			if !s.logins.redeemProof(req.Proof, u.ID, time.Now()) {
-				return fail(http.StatusForbidden, "proof is wrong, used or too old: sign in again to prove the current password")
+				return refuse(http.StatusForbidden, codePasswordProofWrong)
 			}
 		} else if err := st.CheckPassword(ctx, u.Name, req.CurrentPassword); err != nil {
 			if errors.Is(err, store.ErrBadPassword) {
-				return fail(http.StatusForbidden, "current_password is wrong")
+				return refuse(http.StatusForbidden, codePasswordCurrentWrong)
 			}
 			return userFail(err)
 		}
@@ -935,12 +938,12 @@ func (s *Server) deleteUser(w http.ResponseWriter, r *http.Request) error {
 	if i, own, err := integrationOwn(r.Context(), st, u); err != nil {
 		return userFail(err)
 	} else if own {
-		return fail(http.StatusForbidden, "the user %s is the integration's own: remove the integration itself, DELETE /api/v1/integrations/%s, which keeps it to be attached again", u.Name, i.UUID)
+		return refuse(http.StatusForbidden, codeUserIntegrationOwn, u.Name, i.UUID)
 	}
 	if file, ok, err := s.settingsKey(r.Context()); err != nil {
 		return userFail(err)
 	} else if ok && file.UserID == u.ID {
-		return fail(http.StatusConflict, settingsKeyHeld, u.Name)
+		return refuse(http.StatusConflict, codeUserHoldsSettingsKey, u.Name)
 	}
 	var by int64
 	p := principalOf(r)
@@ -1014,7 +1017,7 @@ func (s *Server) postToken(w http.ResponseWriter, r *http.Request) error {
 	}
 	req.Label = strings.TrimSpace(req.Label)
 	if req.Label == "" || len(req.Label) > maxLabel {
-		return fail(http.StatusBadRequest, "label: 1 to %d bytes", maxLabel)
+		return refuse(http.StatusBadRequest, codeTokenLabelLength, maxLabel)
 	}
 	if err := noWayIn(u); err != nil {
 		return err
@@ -1052,14 +1055,14 @@ func (s *Server) deleteToken(w http.ResponseWriter, r *http.Request) error {
 		return userFail(err)
 	}
 	if !ok || tok.UserID != u.ID || !tok.DeletedAt.IsZero() {
-		return fail(http.StatusNotFound, "user %s has no token %d", u.Name, id)
+		return refuse(http.StatusNotFound, codeTokenUnknown, u.Name, id)
 	}
 	file, held, err := s.settingsKey(r.Context())
 	if err != nil {
 		return userFail(err)
 	}
 	if held && id == file.ID {
-		return fail(http.StatusConflict, settingsKeyKept)
+		return refuse(http.StatusConflict, codeTokenSettingsKey)
 	}
 	if err := st.RevokeToken(r.Context(), id); err != nil {
 		return userFail(err)

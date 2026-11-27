@@ -72,7 +72,7 @@ func TestKeepOpenOnAnOpenServer(t *testing.T) {
 	if code, me, text := meFrom(t, s, lan, ""); code != 200 || me.Mode != "open" || !me.Setup || me.KeptOpen || strings.Contains(text, "kept_open") {
 		t.Fatalf("/me, not kept open: %d %s", code, text)
 	}
-	if rec := sendFrom(s, "PUT", "/api/v1/settings", far, "", `{"auth.keep_open":true}`); rec.Code != 403 || errorOf(rec.Body.String()) != openRefused {
+	if rec := sendFrom(s, "PUT", "/api/v1/settings", far, "", `{"auth.keep_open":true}`); !isRefusal(rec.Code, rec.Body.String(), 403, "server_open_local_only", "", openRefused) {
 		t.Fatalf("the PUT from beyond the local network: %d %s", rec.Code, rec.Body.String())
 	}
 	if rec := sendFrom(s, "PUT", "/api/v1/settings", lan, "", `{"auth.keep_open":"yes"}`); rec.Code != 400 {
@@ -88,7 +88,7 @@ func TestKeepOpenOnAnOpenServer(t *testing.T) {
 		t.Fatalf("/me, kept open: %d %s", code, text)
 	}
 	for _, path := range []string{"/api/v1/me", "/api/v1/cubes", "/api/v1/settings"} {
-		if rec := sendFrom(s, "GET", path, far, "", ""); rec.Code != 403 || errorOf(rec.Body.String()) != openRefused {
+		if rec := sendFrom(s, "GET", path, far, "", ""); !isRefusal(rec.Code, rec.Body.String(), 403, "server_open_local_only", "", openRefused) {
 			t.Errorf("%s from beyond the local network, kept open: %d %s", path, rec.Code, rec.Body.String())
 		}
 	}
@@ -127,7 +127,8 @@ func TestKeepOpenGoesWithTheFirstOwner(t *testing.T) {
 		t.Fatalf("/me with users: %d %s", code, text)
 	}
 	rec := sendFrom(s, "PUT", "/api/v1/settings", lan, key, `{"auth.keep_open":true}`)
-	if rec.Code != 409 || !strings.Contains(errorOf(rec.Body.String()), "without users") {
+	if !isRefusal(rec.Code, rec.Body.String(), 409, "setting_keep_open_users", `{"setting":"auth.keep_open"}`,
+		"auth.keep_open counts only on a server without users: this one has users") {
 		t.Fatalf("on with users: %d %s", rec.Code, rec.Body.String())
 	}
 	for _, body := range []string{`{"auth.keep_open":false}`, `{"auth.keep_open":null}`} {
@@ -267,7 +268,7 @@ func TestFirstOwnerHeldIsRefused(t *testing.T) {
 		io.WriteString(pw, second)
 		pw.Close()
 		<-done
-		if held.Code != 409 || errorOf(held.Body.String()) != "the first owner exists already: sign in" {
+		if !isRefusal(held.Code, held.Body.String(), 409, "first_owner_exists", "", "the first owner exists already: sign in") {
 			t.Fatalf("opaque %v: the held one: %d %s", opaque, held.Code, held.Body.String())
 		}
 		if n, _ := s.opts.Store.CountUsers(t.Context()); n != 1 {
@@ -306,7 +307,7 @@ func TestFirstOwnerOnce(t *testing.T) {
 		for range bodies {
 			rec := <-recs
 			codes[rec.Code]++
-			if rec.Code == 409 && errorOf(rec.Body.String()) != "the first owner exists already: sign in" {
+			if rec.Code == 409 && !isRefusal(rec.Code, rec.Body.String(), 409, "first_owner_exists", "", "the first owner exists already: sign in") {
 				t.Errorf("round %d: %s", round, rec.Body.String())
 			}
 		}
