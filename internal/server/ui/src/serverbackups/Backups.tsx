@@ -16,7 +16,8 @@
  * goes from the list with its last copy; for the owner alone Restore…
  * and Check with the key…, which open the dialog (Restore.tsx, AP
  * ServerBackup, Block 5); with
- * backup.retry Retry where something of it failed. A holder of
+ * backup.retry Retry where something of it failed; with backup.server
+ * Delete, which asks, of a backup no target holds a copy of. A holder of
  * backup.retry alone sees the state and Retry, nothing more.
  */
 
@@ -29,7 +30,7 @@ import { can, ownerOf } from "../shared/me";
 import { BusyButton, Question, useAsk } from "../shared/question";
 import { fmtWhen } from "../shared/time";
 import { openRestore } from "./restoring";
-import { check, deleteCopy, download, pin, pull, push, retry } from "./send";
+import { check, deleteBackup, deleteCopy, download, pin, pull, push, retry } from "./send";
 import { backupUI, sb } from "./store";
 
 /** sizeText is a file's size, in kB below a megabyte, else in MB. */
@@ -99,6 +100,24 @@ function CopyRow({ b, target, c, alone, last, localThere }: {
   );
 }
 
+/**
+ * DeleteBackup is Delete of a backup no target holds a copy of, one that
+ * failed or whose copies are missing, for a holder of backup.server: it
+ * asks in its place first, and the backup goes from the list (DELETE
+ * …/{id}); refused, the question stays, the message under the backup.
+ */
+function DeleteBackup({ b }: { b: ServerBackup }) {
+  useLook();
+  const ask = useAsk<HTMLButtonElement>();
+  if (!ask.asking) return <button ref={ask.ref} type="button" class="small sb-backup-delete" onClick={ask.ask}>{t("action.delete")}</button>;
+  return (
+    <Question text={t("serverbackup.deleteBackupAsk", { when: b.time ? fmtWhen(b.time) : "" })} yes={t("action.delete")} no={t("action.cancel")}
+      boxRef={ask.box} onNo={() => ask.done()} onYes={async () => {
+        if (await deleteBackup(b)) ask.done(false);
+      }} />
+  );
+}
+
 /** facts are a backup's lines inside its fold: who asked, its label, the version that made it, and a failed one's error with its next try. */
 function facts(b: ServerBackup): string[] {
   const out = [];
@@ -159,6 +178,7 @@ function BackupRow({ b, targets }: { b: ServerBackup; targets: ServerBackupTarge
           </>
         )}
         {mayRetry && <BusyButton cls="small sb-retry" label={t("serverbackup.retry")} run={() => retry(b)} />}
+        {server && !there.length && <DeleteBackup b={b} />}
       </div>
       <ResultLine cls="small cubes-msg sb-backup-msg" role="status" res={ui.said} />
     </Fold>

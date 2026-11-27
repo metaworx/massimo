@@ -2425,5 +2425,6 @@
   "serverbackup.target.hostKeyChanged": "The host shows another key than the one trusted, and nothing is sent to it: it was set up anew, or someone stands between. Where its key changed on purpose, put the new one into Host key and save.",
   "serverbackup.target.hostKeyPinned": "Trusted:",
   "serverbackup.target.hostKeyNow": "Shown now:",
-  "serverbackup.target.secretAgain": "Type it again: the settings above say where it is sent, so a change to them goes only with it."
+  "serverbackup.target.secretAgain": "Type it again: the settings above say where it is sent, so a change to them goes only with it.",
+  "serverbackup.deleteBackupAsk": "Delete the backup of {when}? No target holds a copy of it: it goes from the list."
 }

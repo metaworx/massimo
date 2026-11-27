@@ -870,6 +870,7 @@ body.scrolled .nav .top-btn { display: inline-flex; }
 .settings .sb-row-head > .actions { margin: 0 0 0 auto; gap: 6px; }
 .sb-copy-error, .sb-key-fp, .sb-key-pending { margin: 2px 0 0; overflow-wrap: anywhere; }
 .settings .sb-backup-actions, .settings .sb-key-actions { justify-content: flex-start; gap: 6px; margin: 6px 0 0; flex-wrap: wrap; }
+.sb-backup-actions > .confirm-box { flex-basis: 100%; }
 .sb-identity { display: block; overflow-wrap: anywhere; word-break: break-all; }
 .sb-made, .sb-key-confirm { margin-top: 8px; }
 .sb-made .notice { margin-bottom: 8px; }

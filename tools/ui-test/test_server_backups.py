@@ -404,7 +404,7 @@ def test_copy_failed_retried_by_backup_retry_alone(page, case):
         row = fold.locator(f".sb-copy[data-target='{broken['uuid']}']")
         assert row.get_attribute("data-state") == "failed" and row.locator(".sb-copy-error").inner_text(), "the failure with its error"
         assert fold.locator(f".sb-copy[data-target='{here['uuid']}']").get_attribute("data-state") == "there"
-        # a backup the schedule made and failed meanwhile has a Retry of its own (no route deletes a failed backup)
+        # a backup the schedule made and failed meanwhile has a Retry of its own (its Delete is backup.server's)
         buttons = page.evaluate(f"[...document.querySelectorAll('{BODY} button')].filter((b) => b.offsetParent).map((b) => b.textContent)")
         assert buttons and set(buttons) == {text(page, "serverbackup.retry")}, f"Retry and nothing else: {buttons}"
         own = fold.evaluate("(d) => [...d.querySelectorAll('button')].map((b) => b.textContent)")

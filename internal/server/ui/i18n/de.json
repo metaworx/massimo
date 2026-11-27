@@ -2425,5 +2425,6 @@
   "serverbackup.target.hostKeyChanged": "Der Host zeigt einen anderen Schlüssel als den vertrauten, und ihm wird nichts gesendet: Er wurde neu eingerichtet, oder jemand steht dazwischen. Wurde sein Schlüssel absichtlich geändert, trage den neuen unter Host-Schlüssel ein und speichere.",
   "serverbackup.target.hostKeyPinned": "Vertraut:",
   "serverbackup.target.hostKeyNow": "Jetzt gezeigt:",
-  "serverbackup.target.secretAgain": "Gib es erneut ein: Die Einstellungen oben bestimmen, wohin es gesendet wird, darum geht eine Änderung an ihnen nur mit ihm."
+  "serverbackup.target.secretAgain": "Gib es erneut ein: Die Einstellungen oben bestimmen, wohin es gesendet wird, darum geht eine Änderung an ihnen nur mit ihm.",
+  "serverbackup.deleteBackupAsk": "Die Sicherung vom {when} löschen? Kein Ziel hat eine Kopie davon: Sie verschwindet aus der Liste."
 }

@@ -2427,5 +2427,6 @@
   "serverbackup.target.hostKeyChanged": "L'hôte présente une autre clé que celle approuvée, et rien ne lui est envoyé : il a été réinstallé, ou quelqu'un s'interpose. Si sa clé a changé volontairement, saisissez la nouvelle dans Clé de l'hôte et enregistrez.",
   "serverbackup.target.hostKeyPinned": "Approuvée :",
   "serverbackup.target.hostKeyNow": "Présentée maintenant :",
-  "serverbackup.target.secretAgain": "Saisissez-le à nouveau : les réglages ci-dessus disent où il est envoyé, une modification de ceux-ci ne passe donc qu'avec lui."
+  "serverbackup.target.secretAgain": "Saisissez-le à nouveau : les réglages ci-dessus disent où il est envoyé, une modification de ceux-ci ne passe donc qu'avec lui.",
+  "serverbackup.deleteBackupAsk": "Supprimer la sauvegarde du {when} ? Aucune cible n'en détient de copie : elle quitte la liste."
 }

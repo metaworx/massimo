@@ -2663,7 +2663,10 @@ The server's sign, when it says an update is out, opens it at Software update.
     under them **Download**, **Check** (each copy read back for its size and hash,
     without the key), **Pin** or **Unpin**,
     for the owner alone **Restore…** and **Check with the key…** (below),
-    and with `backup.retry` **Retry** where something of it failed.
+    with `backup.retry` **Retry** where something of it failed,
+    and with `backup.server` **Delete** where no target holds a copy of it (it failed,
+    or its copies are missing), which asks in its place first,
+    and the backup goes from the list.
     A holder of `backup.retry` alone sees the backups, their copies and the targets'
     state, with **Retry**, and nothing more.
     Each action says how it went under its backup.

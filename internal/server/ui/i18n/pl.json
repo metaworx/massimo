@@ -2504,5 +2504,6 @@
   "serverbackup.target.hostKeyChanged": "Host pokazuje inny klucz niż zaufany i nic do niego nie jest wysyłane: został zainstalowany od nowa albo ktoś stoi pośrodku. Jeśli jego klucz zmieniono celowo, wpisz nowy w polu Klucz hosta i zapisz.",
   "serverbackup.target.hostKeyPinned": "Zaufany:",
   "serverbackup.target.hostKeyNow": "Pokazany teraz:",
-  "serverbackup.target.secretAgain": "Wpisz je ponownie: ustawienia powyżej określają, dokąd jest wysyłane, więc ich zmiana przechodzi tylko razem z nim."
+  "serverbackup.target.secretAgain": "Wpisz je ponownie: ustawienia powyżej określają, dokąd jest wysyłane, więc ich zmiana przechodzi tylko razem z nim.",
+  "serverbackup.deleteBackupAsk": "Usunąć kopię zapasową z {when}? Żadne miejsce docelowe nie ma jej kopii: zniknie z listy."
 }

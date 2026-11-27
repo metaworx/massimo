@@ -1,20 +1,22 @@
 # SPDX-License-Identifier: AGPL-3.0-or-later
 # Copyright (C) 2026 The Massimo Authors
 """Maintenance → Server backups, the targets' pieces (AP ServerBackup,
-Blocks 6 and 7), against the server run.sh starts, which offers every
-kind of target: an SFTP target's key line, which copies itself, and the
-host's key its test stops at, trusted with a button where none is and
-shown beside the one trusted, with no button, where it changed (the
-test's answer stubbed: no SSH server runs here); a WebDAV target's
-password asked for again when its URL changes, and plain http warned
-of. As
-test_server_backups.py, each test starts from nothing and takes away
-what it made (clean)."""
+Blocks 6 and 7) and Delete of a backup no target holds (Block 4),
+against the server run.sh starts, which offers every kind of target:
+an SFTP target's key line, which copies itself, and the host's key its
+test stops at, trusted with a button where none is and shown beside the
+one trusted, with no button, where it changed (the test's answer
+stubbed: no SSH server runs here); a WebDAV target's password asked for
+again when its URL changes, and plain http warned of; a backup whose
+copy is missing deleted, after a question, and a failed one's Delete
+refused with the question kept. As test_server_backups.py,
+each test starts from nothing and takes away what it made (clean)."""
 import json
+import os
 
 from conftest import api_call
 from helpers import named_buttons, safe_route, show_view, wait_until
-from test_server_backups import CARD, TARGETS, clean, shown_maint, text
+from test_server_backups import BACKUPS, CARD, TARGETS, backup_ids, clean, data_dir, key_set, shown_maint, text
 
 # The fingerprints a stubbed test answers: the host's key, and another one trusted before.
 HOST_KEY = "SHA256:" + "A" * 43
@@ -184,5 +186,93 @@ def test_secret_asked_again_and_http_warned(page, case):
         assert wait_until(page, f"!document.querySelector('#sb-target-{uuid}-secret-again')", 5), "the URL back as stored: not asked for"
         assert not secret.evaluate("(i) => i.required")
     finally:
+        clean()
+    show_view(page, "tiles")
+
+
+def test_backup_without_copy_deleted(page, case):
+    """A backup no target holds a copy of (Block 4): its file taken from
+    its target's directory and a check marking its copy missing, its fold
+    offers Delete, which asks first, Cancel keeping it; Yes takes it from
+    the list and from the server, saying so under Back up now. A backup
+    with a copy there offers none."""
+    clean()
+    key_set()
+    where = data_dir(f"sb-gone-{case.width}-{case.lang}")
+    # the last ten kept, so that the second backup prunes nothing of the first
+    target = api_call("POST", TARGETS, {"name": "Gone", "kind": "local", "config": {"path": where}, "retention": {"last": 10}})["target"]
+    gone = api_call("POST", BACKUPS, {"label": "gone"})["backup"]
+    kept = api_call("POST", BACKUPS, {"label": "kept"})["backup"]
+    copy = next(c for c in gone["copies"] if c["target"] == target["uuid"])
+    os.remove(os.path.join(where, copy["path"]))
+    api_call("POST", f"{BACKUPS}/{gone['uuid']}/check")
+    states = [c["state"] for b in api_call("GET", BACKUPS)["backups"] if b["uuid"] == gone["uuid"] for c in b["copies"]]
+    assert states == ["missing"], f"its copy missing: {states}"
+    try:
+        show_view(page, "maint")
+        fold = page.locator(f".sb-backup[data-uuid='{gone['uuid']}']")
+        fold.wait_for(timeout=10000)
+        fold.locator(":scope > summary").click()
+        other = page.locator(f".sb-backup[data-uuid='{kept['uuid']}']")
+        other.locator(":scope > summary").click()
+        assert other.locator(".sb-backup-delete").count() == 0, "a backup with a copy there: no Delete"
+        delete = fold.locator(".sb-backup-delete")
+        assert delete.inner_text() == text(page, "action.delete"), "Delete"
+        named_buttons(page, "a backup no target holds")
+        delete.click()
+        when = fold.locator(":scope > summary .panel-name").inner_text()
+        assert fold.locator(".confirm-text").inner_text() == text(page, "serverbackup.deleteBackupAsk", when=when), "it asks first"
+        assert page.evaluate("document.documentElement.scrollWidth") <= case.width, "no horizontal scroll"
+        fold.locator(".confirm-no").click()
+        assert gone["uuid"] in backup_ids(), "Cancel keeps it"
+        assert page.evaluate("document.activeElement.classList.contains('sb-backup-delete')"), "the focus back on Delete"
+        delete.click()
+        fold.locator(".confirm-yes").click()
+        assert wait_until(page, f"!document.querySelector(\".sb-backup[data-uuid='{gone['uuid']}']\")", 10), "gone from the list"
+        assert gone["uuid"] not in backup_ids() and kept["uuid"] in backup_ids(), "and from the server, the other kept"
+        assert page.locator("#sb-msg").inner_text() == text(page, "serverbackup.deletedLast", when=when), "it says so"
+    finally:
+        clean()
+    show_view(page, "tiles")
+
+
+# A failed backup the schedule made, which the list's answer is given: one made by hand that fails is not kept.
+FAILED = {"uuid": "01a21e2c-0000-7000-8000-0000000000f1", "time": "2026-11-27T02:30:00Z", "trigger": "scheduled", "state": "failed",
+          "error": "serverbackup: no target took the backup", "tries": 3, "copies": []}
+
+
+def test_failed_backup_offers_delete(page, case, watch):
+    """A failed backup the schedule made (added to the list's answer) offers
+    Retry and Delete; Delete asks, and where the server refuses (the
+    backup is not one it has: 404, on purpose) the question stays and the
+    backup's line says why."""
+    watch.expected.append((FAILED["uuid"], 404))
+    clean()
+
+    def with_failed(route):
+        if route.request.method != "GET":
+            route.fallback()
+            return
+        answer = route.fetch()
+        body = answer.json()
+        body["backups"] = [FAILED] + (body.get("backups") or [])
+        route.fulfill(response=answer, body=json.dumps(body))
+
+    handler = safe_route(page, "**/api/v1/server-backups", with_failed)
+    try:
+        show_view(page, "maint")
+        fold = page.locator(f".sb-backup[data-uuid='{FAILED['uuid']}']")
+        fold.wait_for(timeout=10000)
+        fold.locator(":scope > summary").click()
+        assert fold.locator(".sb-retry").count() == 1 and fold.locator(".sb-backup-delete").count() == 1, "Retry and Delete"
+        fold.locator(".sb-backup-delete").click()
+        fold.locator(".confirm-yes").click()
+        line = f".sb-backup[data-uuid='{FAILED['uuid']}'] .sb-backup-msg"
+        assert wait_until(page, f"document.querySelector(\"{line}\")?.classList.contains('bad')", 10), "refused, under the backup"
+        assert page.locator(line).inner_text().startswith(text(page, "serverbackup.failedAction", error="")), page.locator(line).inner_text()
+        assert fold.locator(".confirm-box").count() == 1, "the question stays"
+        fold.locator(".confirm-no").click()
+    finally:
+        page.unroute("**/api/v1/server-backups", handler)
         clean()
     show_view(page, "tiles")

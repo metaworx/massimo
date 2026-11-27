@@ -8,8 +8,9 @@
  * "Server backups"): the list, for a holder of backup.retry; the
  * targets, the keys and the kinds, for a holder of backup.server, the
  * kinds once; a backup now, a file uploaded, a backup downloaded,
- * checked, pinned or unpinned, its copy pushed, pulled or deleted
- * (backup.server); a failed backup or copy retried (backup.retry); a
+ * checked, pinned or unpinned, its copy pushed, pulled or deleted, one
+ * that no target holds deleted (backup.server); a failed backup or copy
+ * retried (backup.retry); a
  * target added, changed, tested or removed, or the host's key its test
  * stopped at trusted (backup.server); a key
  * pasted or made, confirmed by its last six characters, or removed (the
@@ -256,6 +257,18 @@ export function deleteCopy(b: ServerBackup, c: ServerBackupCopy, last: boolean):
   return act(set, reloadJob, () => api("DELETE", backupPath(b) + "/copies/" + encodeURIComponent(c.target || "")),
     () => ({ text: t(last ? "serverbackup.deletedLast" : "serverbackup.deleted", { target: c.target_name || "", when: b.time ? fmtWhen(b.time) : "" }), ok: true }),
     "serverbackup.failedAction");
+}
+
+/**
+ * deleteBackup removes a backup of which no target holds a copy from the
+ * list: one that failed, or whose copies are missing (DELETE …/{id}).
+ * Done, it says so under Back up now, the backup's own line going with
+ * it; refused, under the backup.
+ */
+export function deleteBackup(b: ServerBackup): Promise<boolean> {
+  const set = (res: Outcome | null) => (res && !res.ok ? sayBackup(b)(res) : sayCard(res));
+  return act(set, reloadJob, () => api("DELETE", backupPath(b)),
+    () => ({ text: t("serverbackup.deletedLast", { when: b.time ? fmtWhen(b.time) : "" }), ok: true }), "serverbackup.failedAction");
 }
 
 /** retry tries a failed backup, or a backup's failed copies, again at once, as the schedule would (POST …/{id}/retry, backup.retry). */
