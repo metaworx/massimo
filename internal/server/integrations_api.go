@@ -122,17 +122,19 @@ func (s *Server) viewIntegration(r *http.Request, i store.Integration) integrati
 	return v
 }
 
-// integrationFail maps the store's errors of integrations to statuses.
+// integrationFail maps the store's errors of integrations to statuses
+// and their codes (storeCodes), the English text the store's: too many
+// requests waiting with its Retry-After; a bad installation id, which
+// the integration sends and no page, without a code.
 func integrationFail(err error) error {
 	switch {
-	case errors.Is(err, store.ErrNoIntegration):
-		return fail(http.StatusNotFound, "%v", err)
-	case errors.Is(err, store.ErrNotPending), errors.Is(err, store.ErrRequestGone):
-		return fail(http.StatusGone, "%v", err)
 	case errors.Is(err, store.ErrTooManyRequests):
-		return &httpError{status: http.StatusTooManyRequests, msg: err.Error(), retryAfter: 60}
+		return withRetryAfter(refuseSaying(http.StatusTooManyRequests, err.Error(), codeIntegrationsWaiting), 60)
 	case errors.Is(err, store.ErrBadInstance):
 		return fail(http.StatusBadRequest, "%v", err)
+	}
+	if refused := storeRefusal(err, err.Error()); refused != nil {
+		return refused
 	}
 	return fail(http.StatusInternalServerError, "%v", err)
 }
@@ -474,10 +476,8 @@ func (s *Server) putIntegrationUser(w http.ResponseWriter, r *http.Request) erro
 	}
 	id, err := st.LinkIntegrationUser(r.Context(), i.ID, strings.ToLower(r.PathValue("id")), to, principalOf(r).userID())
 	switch {
-	case errors.Is(err, store.ErrBadLink):
-		return fail(http.StatusBadRequest, "%v", err)
 	case err != nil:
-		return integrationFail(err)
+		return integrationFail(err) // ErrBadLink a 400
 	}
 	writeJSON(w, http.StatusOK, map[string]any{"ok": true, "linked": id.Linked()})
 	return nil

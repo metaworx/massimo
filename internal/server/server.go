@@ -615,9 +615,15 @@ type event struct {
 	Source string `json:"source,omitempty"`
 	// Level is how much the event matters: debug, info, warn or error,
 	// as the server's text log names them.
-	Level string      `json:"level,omitempty"`
-	Error string      `json:"error,omitempty"`
-	State interface{} `json:"state,omitempty"`
+	Level string `json:"level,omitempty"`
+	// Error is what failed, in the server's English words; Code and
+	// Params its code and params where it has them (failed, AP
+	// ErrorCodes), which the page says in its language. An event kept
+	// before it had a code keeps its text alone.
+	Error  string         `json:"error,omitempty"`
+	Code   string         `json:"code,omitempty"`
+	Params map[string]any `json:"params,omitempty"`
+	State  interface{}    `json:"state,omitempty"`
 	// Changes says, for a "state" event, which values differ from the
 	// device's previous state event and how; absent on the first one.
 	// For a "config" event, which values of the configuration differ
@@ -879,7 +885,7 @@ func New(opts Options) *Server {
 		}
 		s.DropKeepOpen(context.Background())
 		s.warnIntegrationUsersOnly(context.Background())
-		if n, err := opts.Store.DropUnfinished(context.Background(), "server restarted"); err != nil {
+		if n, err := opts.Store.DropUnfinished(context.Background(), codeServerRestarted.format, codeServerRestarted.name); err != nil {
 			s.log.Error("store: unfinished commands not dropped", "error", err)
 		} else if n > 0 {
 			s.log.Info("unfinished commands dropped", "count", n)
@@ -1152,7 +1158,7 @@ func (s *Server) pump(ctx context.Context, rt *runtime) {
 				}
 			}
 			if e.Err != nil {
-				ev.Error = e.Err.Error()
+				ev.setFailure(e.Err)
 			}
 			if e.Kind == cubelan.EventForgotten {
 				delete(rt.last, e.Device)
@@ -1727,7 +1733,7 @@ func deviceOf(rt *runtime, name string) (cube.RFAddress, error) {
 			return 0, fail(http.StatusBadRequest, "bad device %q: a radio address of six hex digits, or a serial number", name)
 		}
 		if rf == cube.ZeroAddress {
-			return 0, fail(http.StatusBadRequest, "%v", cube.ErrZeroAddress)
+			return 0, refuseSaying(http.StatusBadRequest, cube.ErrZeroAddress.Error(), codeDeviceZeroAddress)
 		}
 		return rf, nil
 	}
@@ -2178,10 +2184,21 @@ func (s *Server) setpoint(w http.ResponseWriter, r *http.Request, rt *runtime, t
 	var until cube.Until
 	if mode == cube.ModeVacation {
 		if err := until.UnmarshalText([]byte(req.Until)); err != nil {
-			return fail(http.StatusBadRequest, "%v", err)
+			return refuseSaying(http.StatusBadRequest, err.Error(), codeUntilInvalid)
+		}
+	}
+	if !(mode == cube.ModeAuto && req.Temp == 0) {
+		// the temperature as CmdSetTemperature checks it, with its code
+		if _, err := cube.EncodeTemp(req.Temp); err != nil {
+			return refuseSaying(http.StatusBadRequest, err.Error(), codeTempInvalid, "temp")
 		}
 	}
 	m, err := cube.CmdSetTemperature(t, req.Temp, mode, until)
+	if err != nil && mode == cube.ModeVacation {
+		// the temperature checked, what is left is the end's encoding:
+		// on the half hour, a date the protocol holds
+		return refuseSaying(http.StatusBadRequest, err.Error(), codeUntilInvalid)
+	}
 	if err != nil {
 		return fail(http.StatusBadRequest, "%v", err)
 	}
@@ -2216,7 +2233,7 @@ func (s *Server) getBackup(w http.ResponseWriter, r *http.Request) error {
 	}
 	f, err := backup.Take(rt.client.Snapshot(), ntp, s.opts.Version, time.Now(), rt.hidden())
 	if err != nil {
-		return fail(http.StatusServiceUnavailable, "%v", err)
+		return backupNotTaken(err)
 	}
 	yaml := r.URL.Query().Get("format") == "yaml"
 	data, err := f.Marshal(yaml)

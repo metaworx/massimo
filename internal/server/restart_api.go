@@ -35,10 +35,12 @@ import (
 // restartGate keeps a second restart out while one is under way.
 type restartGate struct{ asked atomic.Bool }
 
+// restartView is GET /api/v1/restart: blocked, why a restart is refused
+// now, with its code and params (blocking).
 type restartView struct {
 	Available bool   `json:"available"`
 	By        string `json:"by,omitempty"`
-	Blocked   string `json:"blocked,omitempty"`
+	blocking
 	// Pending names the settings that changed since the start and
 	// apply only at the next one.
 	Pending []string `json:"pending,omitempty"`
@@ -199,7 +201,7 @@ func (s *Server) restartState(r *http.Request) (v restartView, why error) {
 		if o.Blocked != "" {
 			why = refuseSaying(http.StatusConflict, o.Blocked, codeRestartUnavailable)
 		}
-		v.Blocked = why.Error()
+		v.blocking = blockingOf(why)
 		return v, why
 	case s.restartGate.asked.Load():
 		why = refuse(http.StatusConflict, codeRestartUnderWay)
@@ -210,9 +212,7 @@ func (s *Server) restartState(r *http.Request) (v restartView, why error) {
 	case !s.authenticated(r.Context()) && !fromTheBox(r):
 		why = refuse(http.StatusForbidden, codeRestartOpen)
 	}
-	if why != nil {
-		v.Blocked = why.Error()
-	}
+	v.blocking = blockingOf(why)
 	v.By, v.Available = o.By, why == nil
 	return v, why
 }
@@ -243,7 +243,8 @@ func (s *Server) startRestart(w http.ResponseWriter, r *http.Request) error {
 		s.restartGate.asked.Store(false)
 		s.noteStop("")
 		failed := systemEvent("restart", userIDOf(r), map[string]any{"by": v.By})
-		failed.Level, failed.Error = "error", err.Error()
+		failed.Level = "error"
+		failed.setFailure(err)
 		s.logServer(failed)
 		return fail(http.StatusInternalServerError, "starting the restart: %v", err)
 	}

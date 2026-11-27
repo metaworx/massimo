@@ -51,7 +51,8 @@ const errorCodesHeading = "### Error codes"
 // of it (repair.place); and its row in the table of docs/api-v1.md,
 // "Error codes", with its parameters, and no row of a code not
 // declared. Every code is declared at the package's level, and every
-// refusal names one with as many parameters as it declares.
+// refusal names one with as many parameters as it declares; and no
+// answer a page meets is given without a code (refusalsCarryCodes).
 func TestErrorCodes(t *testing.T) {
 	t.Parallel()
 	if len(errorCodes) < 10 {
@@ -129,6 +130,119 @@ func TestErrorCodes(t *testing.T) {
 	}
 
 	refusalsNameDeclaredCodes(t, declared)
+	refusalsCarryCodes(t)
+}
+
+// codeStatuses are the statuses a page meets for what it asked, which
+// no answer gives without a code: a refusal of the caller, of the
+// thing, of its state, of the Cube, of the server's load.
+var codeStatuses = map[string]bool{"StatusUnauthorized": true, "StatusForbidden": true, "StatusNotFound": true, "StatusConflict": true,
+	"StatusPreconditionFailed": true, "StatusRequestEntityTooLarge": true, "StatusTooManyRequests": true, "StatusBadGateway": true,
+	"StatusServiceUnavailable": true}
+
+// withoutCode are the answers of codeStatuses that no page meets, by
+// their file and the format they give, each with why.
+var withoutCode = map[string]string{
+	// setProxyVirtual reads the row of a Cube the request found served
+	// with a row a moment before, under cubeMu: a row gone in between
+	// is a race no page can bring about.
+	`proxy_virtual.go "cube %d has no row"`: "the row read just before, under cubeMu",
+}
+
+// refusalsCarryCodes reads the package's sources (AP ErrorCodes, Block
+// 5): no fail() gives a status of codeStatuses, or one not written as a
+// constant, which could be one, no httpError is made with one and no
+// code, and writeError writes none, but where withoutCode names the
+// answer with why.
+func refusalsCarryCodes(t *testing.T) {
+	t.Helper()
+	files, _ := filepath.Glob("*.go")
+	fset := token.NewFileSet()
+	allowed := map[string]bool{}
+	status := func(e ast.Expr) (string, bool) {
+		sel, ok := e.(*ast.SelectorExpr)
+		if !ok {
+			return "", false
+		}
+		if x, ok := sel.X.(*ast.Ident); !ok || x.Name != "http" {
+			return "", false
+		}
+		return sel.Sel.Name, true
+	}
+	for _, f := range files {
+		if strings.HasSuffix(f, "_test.go") {
+			continue
+		}
+		file, err := parser.ParseFile(fset, f, nil, 0)
+		if err != nil {
+			t.Fatal(err)
+		}
+		ast.Inspect(file, func(n ast.Node) bool {
+			if fn, ok := n.(*ast.FuncDecl); ok && (fn.Name.Name == "fail" || fn.Name.Name == "writeError") && fn.Recv == nil {
+				return false // the functions themselves
+			}
+			switch n := n.(type) {
+			case *ast.CallExpr:
+				at := fset.Position(n.Pos())
+				if !isCall(n, "fail") && !isCall(n, "writeError") {
+					return true
+				}
+				i, what := 0, "fail"
+				if isCall(n, "writeError") {
+					i, what = 1, "writeError"
+				}
+				if len(n.Args) <= i+1 {
+					return true
+				}
+				name, constant := status(n.Args[i])
+				if constant && !codeStatuses[name] {
+					return true
+				}
+				format := ""
+				if lit, ok := n.Args[i+1].(*ast.BasicLit); ok {
+					format = lit.Value
+				}
+				key := f + " " + format
+				if _, ok := withoutCode[key]; ok {
+					allowed[key] = true
+					return true
+				}
+				if !constant {
+					t.Errorf("%s: %s with a status that is no constant, which could be one a page meets; refuse with a code", at, what)
+					return true
+				}
+				t.Errorf("%s: %s with http.%s, which a page meets: refuse with a code (errcodes.go), or name it in withoutCode with why", at, what, name)
+			case *ast.CompositeLit:
+				if id, ok := n.Type.(*ast.Ident); !ok || id.Name != "httpError" {
+					return true
+				}
+				var st string
+				coded := false
+				for _, e := range n.Elts {
+					kv, ok := e.(*ast.KeyValueExpr)
+					if !ok {
+						continue
+					}
+					switch k := kv.Key.(*ast.Ident); {
+					case k == nil:
+					case k.Name == "status":
+						st, _ = status(kv.Value)
+					case k.Name == "code":
+						coded = true
+					}
+				}
+				if codeStatuses[st] && !coded {
+					t.Errorf("%s: an httpError with http.%s and no code", fset.Position(n.Pos()), st)
+				}
+			}
+			return true
+		})
+	}
+	for key := range withoutCode {
+		if !allowed[key] {
+			t.Errorf("withoutCode names %s, which no source gives: take it out", key)
+		}
+	}
 }
 
 // errorCodeRows reads the table of docs/api-v1.md, "Error codes": each
@@ -262,6 +376,10 @@ func refusalsNameDeclaredCodes(t *testing.T, declared map[string]*errCode) {
 				code = 1
 			case isCall(call, "refuseSaying"):
 				code = 2
+			case isCall(call, "passed"):
+				// passed(status, err, code, args…): the error's text the
+				// code's last parameter
+				code = 2
 			}
 			if code < 0 {
 				return true
@@ -276,8 +394,12 @@ func refusalsNameDeclaredCodes(t *testing.T, declared map[string]*errCode) {
 				t.Errorf("%s: a refusal names a declared code's variable", at)
 				return true
 			}
-			if c := vars[id.Name]; len(call.Args)-code-1 != len(c.params) {
-				t.Errorf("%s: %s with %d parameters, where it declares %v", at, c.name, len(call.Args)-code-1, c.params)
+			given := len(call.Args) - code - 1
+			if isCall(call, "passed") {
+				given++
+			}
+			if c := vars[id.Name]; given != len(c.params) {
+				t.Errorf("%s: %s with %d parameters, where it declares %v", at, c.name, given, c.params)
 			}
 			return true
 		})
@@ -436,7 +558,8 @@ func TestLookupCodes(t *testing.T) {
 
 // commandError gives each result's error its code, its English text the
 // error's as before, and the room's members without state as params
-// beside no_state; an error of no kind it knows keeps none.
+// beside no_state; an error of no kind it knows is command_failed, its
+// text the reason.
 func TestCommandErrorCodes(t *testing.T) {
 	t.Parallel()
 	// 0a0109, room 2's only thermostat, has no state: its entry is gone
@@ -478,7 +601,9 @@ func TestCommandErrorCodes(t *testing.T) {
 		{fmt.Errorf("wakeup: %w", cubelan.ErrNotConnected), 0, http.StatusBadGateway, plain("cube_not_connected", "wakeup: cubelan: not connected")},
 		{cubelan.ErrBusy, 0, http.StatusBadGateway, plain("cube_busy", "cubelan: another command is waiting for its reply")},
 		{context.DeadlineExceeded, 0, http.StatusBadGateway, plain("command_timed_out", "context deadline exceeded")},
-		{errors.New("something else"), 0, http.StatusBadGateway, plain("", "something else")},
+		{fmt.Errorf("wakeup: %w", cubelan.ErrReplyTimeout), 0, http.StatusBadGateway, plain("cube_no_reply", "wakeup: cubelan: no reply within the reply timeout")},
+		{errors.New("something else"), 0, http.StatusBadGateway,
+			"{\n  \"code\": \"command_failed\",\n  \"error\": \"something else\",\n  \"params\": {\n    \"reason\": \"something else\"\n  }\n}\n"},
 	} {
 		status, body := answer(rg.s.commandError(rg.rt, engine.Result{Err: tc.err}, tc.room))
 		if status != tc.status || body != tc.want {

@@ -335,7 +335,7 @@ func (s *Server) putSettings(w http.ResponseWriter, r *http.Request) error {
 				return refuseSaying(http.StatusBadRequest, msg, codeSettingChoiceBad, k, store.UpdateAutoOff+", "+store.UpdateAutoNight)
 			}
 			if _, _, err := parseWindow(v); k == store.UpdateWindowKey && err != nil {
-				return fail(http.StatusBadRequest, "%s: %v", k, err)
+				return saying(k+": ", err)
 			}
 			writes = append(writes, write{key: k, name: &v})
 			continue

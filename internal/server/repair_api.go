@@ -155,7 +155,8 @@ type repairStepResult struct {
 	Lines     int    `json:"lines"`
 	Accepted  int    `json:"accepted"`
 	Discarded bool   `json:"discarded,omitempty"`
-	Error     string `json:"error,omitempty"`
+	// failure is the step's error, with its code (asFailure).
+	failure
 }
 
 // repair is the handler of a repair's route: the preview, or with run
@@ -387,8 +388,8 @@ func (s *Server) runRepair(w http.ResponseWriter, r *http.Request, rt *runtime, 
 			}
 		}
 		if res.Err != nil {
-			sr.Error = res.Err.Error()
 			failed = s.commandError(rt, res, 0)
+			sr.failure = asFailure(failed)
 		}
 		results = append(results, sr)
 		if failed != nil {
@@ -401,7 +402,7 @@ func (s *Server) runRepair(w http.ResponseWriter, r *http.Request, rt *runtime, 
 		if failed == nil {
 			sr.Accepted = 1
 		} else {
-			sr.Error = failed.Error()
+			sr.failure = asFailure(failed)
 		}
 		results = append(results, sr)
 	}
@@ -669,10 +670,12 @@ func (s *Server) buildResend(r *http.Request, rt *runtime) (*repairAction, error
 	cmds, sent, agree, others, err := cubeio.ResendCommands(rt.client.Snapshot(), c.RFAddress, room, rt.hidden())
 	var none *cubeio.NoMajorityError
 	switch {
+	case errors.As(err, &none) && none.Dead == 0:
+		return nil, refuseSaying(http.StatusConflict, err.Error(), codeRepairNoOther, none.Room)
 	case errors.As(err, &none):
-		return nil, fail(http.StatusConflict, "%v", err)
+		return nil, refuseSaying(http.StatusConflict, err.Error(), codeRepairNoneValid, none.Room, none.Dead)
 	case err != nil:
-		return nil, fail(http.StatusBadRequest, "%v", err)
+		return nil, passed(http.StatusBadRequest, err, codeRepairNotResendable, c.RFAddress.String())
 	case len(cmds) == 0:
 		return nil, refuse(http.StatusConflict, codeRepairConfigSame, c.RFAddress.String(), room, agree.Others)
 	}

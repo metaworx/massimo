@@ -86,16 +86,17 @@ func (req userRequest) expiresAt() (t time.Time, set bool, err error) {
 	}
 	var s string
 	if json.Unmarshal(req.ExpiresAt, &s) != nil {
-		return time.Time{}, false, fail(http.StatusBadRequest, "expires_at: want a time such as 2026-12-24T18:00:00Z, or null")
+		return time.Time{}, false, refuse(http.StatusBadRequest, codeUserExpiresAtBad)
 	}
 	t, err = time.Parse(time.RFC3339, s)
 	if err != nil {
-		return time.Time{}, false, fail(http.StatusBadRequest, "expires_at: %v", err)
+		return time.Time{}, false, refuseSaying(http.StatusBadRequest, "expires_at: "+err.Error(), codeUserExpiresAtBad)
 	}
 	return t, true, nil
 }
 
-// userFail maps a store error of the users and roles to a status.
+// userFail maps a store error of the users and roles to a status and
+// its code (storeCodes), its English text the store's without "store: ".
 func userFail(err error) error {
 	var he *httpError
 	if errors.As(err, &he) {
@@ -108,19 +109,15 @@ func userFail(err error) error {
 	// wrong; a client shows the rest as it is.
 	text := strings.TrimPrefix(err.Error(), "store: ")
 	switch {
-	case errors.Is(err, store.ErrNoUser), errors.Is(err, store.ErrNoRole), errors.Is(err, store.ErrNoToken):
-		return fail(http.StatusNotFound, "%s", text)
-	case errors.Is(err, store.ErrUserExists), errors.Is(err, store.ErrRoleExists), errors.Is(err, store.ErrLastOwner), errors.Is(err, store.ErrRoleInUse):
-		return fail(http.StatusConflict, "%s", text)
 	case errors.Is(err, store.ErrBadName):
 		// the name's rule, which the page's check of a new name words alike
 		return refuseSaying(http.StatusBadRequest, text, codeUserNameBad)
-	case errors.Is(err, store.ErrBadRole), errors.Is(err, store.ErrBadMessage):
+	case errors.Is(err, store.ErrBadMessage):
+		// a message no page's OPAQUE client sends
 		return fail(http.StatusBadRequest, "%s", text)
-	case errors.Is(err, store.ErrNoOpaque):
-		return fail(http.StatusServiceUnavailable, "%s", text)
-	case errors.Is(err, store.ErrImmutable), errors.Is(err, store.ErrIntegrationUser):
-		return fail(http.StatusForbidden, "%s", text)
+	}
+	if refused := storeRefusal(err, text); refused != nil {
+		return refused // with the code of its sentinel (storeCodes)
 	}
 	return fail(http.StatusInternalServerError, "%s", text)
 }
@@ -139,12 +136,13 @@ func noWayIn(u store.User) error {
 // newPassword holds a plain password that a request sets to the rule of
 // internal/password, with the user's names and the server's as its
 // context: 400 with the rule's words where it fails, which name no word
-// of the context. A record registered by OPAQUE is never seen and so
-// never checked, and the callers leave out an empty password, which
-// means none (AP PasswordRules, D11-A, D50-A).
+// of the context, and the rule's code (passwordRefusal). A record
+// registered by OPAQUE is never seen and so never checked, and the
+// callers leave out an empty password, which means none (AP
+// PasswordRules, D11-A, D50-A).
 func (s *Server) newPassword(r *http.Request, pw string, names ...string) error {
 	if err := password.Check(pw, append(names[:len(names):len(names)], s.serverNames(r)...)...); err != nil {
-		return fail(http.StatusBadRequest, "%v", err)
+		return passwordRefusal(err)
 	}
 	return nil
 }
@@ -667,7 +665,7 @@ func (s *Server) postUser(w http.ResponseWriter, r *http.Request) error {
 		return refuse(http.StatusConflict, codeFirstOwnerExists)
 	}
 	if errors.Is(err, store.ErrNoRole) {
-		return fail(http.StatusBadRequest, "%v", err)
+		return refuseSaying(http.StatusBadRequest, err.Error(), codeRoleNotFound)
 	}
 	if err != nil {
 		return userFail(err)
@@ -854,7 +852,7 @@ func (s *Server) putUser(w http.ResponseWriter, r *http.Request) error {
 			return nil
 		}, by)
 		if errors.Is(err, store.ErrNoRole) {
-			return fail(http.StatusBadRequest, "%v", err)
+			return refuseSaying(http.StatusBadRequest, err.Error(), codeRoleNotFound)
 		}
 		if err != nil {
 			return userFail(err)

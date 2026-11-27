@@ -302,18 +302,19 @@ func fetchDiscovery(ctx context.Context, issuer string) (oidcDiscovery, error) {
 // checkIssuer reads the discovery document of the issuer a provider is
 // saved with (AP Oidc v1.1, D27-A) and returns the issuer to keep: the
 // one given, or the document's where the two differ only by a trailing
-// slash, since the sign-in compares them exactly.
+// slash, since the sign-in compares them exactly; its error is the
+// refusal of the issuer (400, with its code).
 func checkIssuer(ctx context.Context, issuer string) (string, error) {
 	d, err := fetchDiscovery(ctx, issuer)
 	switch {
 	case err != nil:
-		return "", fmt.Errorf("the provider was not reached at %s: %v", issuer, err)
+		return "", refuseSaying(http.StatusBadRequest, fmt.Sprintf("the provider was not reached at %s: %v", issuer, err), codeProviderIssuerUnreach, issuer, err.Error())
 	case d.Issuer == issuer:
 		return issuer, nil
 	case strings.TrimSuffix(d.Issuer, "/") == strings.TrimSuffix(issuer, "/"):
 		return d.Issuer, nil
 	}
-	return "", fmt.Errorf("the provider calls itself %q, not %q", d.Issuer, issuer)
+	return "", refuse(http.StatusBadRequest, codeProviderIssuerOther, d.Issuer, issuer)
 }
 
 // endpointOK reports whether an endpoint is an absolute https URL, or
@@ -415,7 +416,7 @@ func (s *Server) oidcStartFlow(w http.ResponseWriter, r *http.Request, p store.A
 	d, err := s.oidcDiscover(ctx, p)
 	if err != nil {
 		s.log.Warn("api: OpenID Connect provider not reached", "provider", p.Key, "error", err)
-		return fail(http.StatusBadGateway, "provider %s: %v", p.Key, err)
+		return refuseSaying(http.StatusBadGateway, fmt.Sprintf("provider %s: %v", p.Key, err), codeProviderUnreached, p.Key, err.Error())
 	}
 	now := time.Now()
 	started := &oidcStarted{provider: p.Key, nonce: randomID(), verifier: randomID() + randomID(), redirect: redirect, linkUser: linkUser,
@@ -426,7 +427,7 @@ func (s *Server) oidcStartFlow(w http.ResponseWriter, r *http.Request, p store.A
 	}
 	auth, err := url.Parse(d.AuthorizationEndpoint)
 	if err != nil {
-		return fail(http.StatusBadGateway, "provider %s: %v", p.Key, err)
+		return refuseSaying(http.StatusBadGateway, fmt.Sprintf("provider %s: %v", p.Key, err), codeProviderUnreached, p.Key, err.Error())
 	}
 	sum := sha256.Sum256([]byte(started.verifier))
 	q := auth.Query()
@@ -657,13 +658,14 @@ func (c *oidcClaims) fill(u oidcClaims) {
 }
 
 // autoRoleAllowed checks the role a provider gives the users it creates:
-// one that exists, not owner, and holding none of adminCapabilities.
+// one that exists, not owner, and holding none of adminCapabilities;
+// the last two refused with their codes.
 func autoRoleAllowed(ctx context.Context, st *store.Store, key string) error {
 	if key == "" {
 		key = store.RoleViewer
 	}
 	if key == store.RoleOwner {
-		return fmt.Errorf("the role %s may not be given to users a provider creates", key)
+		return refuse(http.StatusBadRequest, codeProviderAutoRoleOwner, key)
 	}
 	role, ok, err := st.Role(ctx, key)
 	if err != nil {
@@ -674,7 +676,7 @@ func autoRoleAllowed(ctx context.Context, st *store.Store, key string) error {
 	}
 	for _, c := range role.Capabilities {
 		if slices.Contains(adminCapabilities, c) {
-			return fmt.Errorf("the role %s holds %s, which users a provider creates may not have", key, c)
+			return refuse(http.StatusBadRequest, codeProviderAutoRoleAdmin, key, c)
 		}
 	}
 	return nil

@@ -22,7 +22,6 @@ import (
 	"unicode/utf8"
 
 	"go.metaworx.ch/massimo/internal/cubeio"
-	"go.metaworx.ch/massimo/internal/cubelan"
 	"go.metaworx.ch/massimo/internal/engine"
 	"go.metaworx.ch/massimo/internal/protocol/cube"
 	"go.metaworx.ch/massimo/internal/roomorder"
@@ -126,7 +125,8 @@ func (s *Server) run(w http.ResponseWriter, r *http.Request, rt *runtime, cmd en
 // its kind (errcodes.go), its English text the result's error as it
 // is, naming the room members without state when a room command was
 // discarded for that: by their addresses in no_state, and with the room
-// in params. An error of no kind known keeps no code.
+// in params. An error of no kind known is command_failed, its text the
+// reason (cubeRefusal).
 func (s *Server) commandError(rt *runtime, res engine.Result, roomCmd uint8) error {
 	if res.Err == nil {
 		return nil
@@ -148,22 +148,7 @@ func (s *Server) commandError(rt *runtime, res engine.Result, roomCmd uint8) err
 			return he
 		}
 	}
-	msg := res.Err.Error()
-	switch {
-	case errors.Is(res.Err, engine.ErrSuperseded):
-		return refuseSaying(status, msg, codeCommandSuperseded)
-	case errors.Is(res.Err, engine.ErrDiscarded):
-		return refuseSaying(status, msg, codeCommandDiscarded)
-	case errors.Is(res.Err, engine.ErrUnwanted):
-		return refuseSaying(status, msg, codeCommandUnwanted)
-	case errors.Is(res.Err, cubelan.ErrNotConnected):
-		return refuseSaying(status, msg, codeCubeNotConnected)
-	case errors.Is(res.Err, cubelan.ErrBusy):
-		return refuseSaying(status, msg, codeCubeBusy)
-	case errors.Is(res.Err, context.DeadlineExceeded):
-		return refuseSaying(status, msg, codeCommandTimedOut)
-	}
-	return fail(status, "%v", res.Err)
+	return cubeRefusal(status, res.Err)
 }
 
 // noThermostat refuses a request to room's thermostats, where the Cube
@@ -186,10 +171,10 @@ func noThermostat(rt *runtime, status int, room uint8) error {
 func (s *Server) writeMetadata(ctx context.Context, rt *runtime, md *cube.Metadata) error {
 	res, err := rt.writerOf(ctx).WriteMetadata(ctx, md)
 	if err != nil {
-		return fail(http.StatusBadRequest, "%v", err)
+		return passed(http.StatusBadRequest, err, codeMetadataNotWritten)
 	}
 	if res.Err != nil {
-		return fail(http.StatusBadGateway, "%v", res.Err)
+		return cubeRefusal(http.StatusBadGateway, res.Err)
 	}
 	return nil
 }
@@ -503,7 +488,7 @@ func (s *Server) copySettings(ctx context.Context, rt *runtime, rf cube.RFAddres
 	copied, res, err := rt.writerOf(ctx).CopySettings(ctx, rf, typ, room, rt.hidden(), state)
 	if err != nil {
 		msg := fmt.Sprintf("device %s is in room %d, but the room's settings cannot be copied: %v", rf, room, err)
-		return copied, refuseSaying(http.StatusBadGateway, msg, codeDeviceNotCopied, rf.String(), room, refusalOf(err))
+		return copied, refuseSaying(http.StatusBadGateway, msg, codeDeviceNotCopied, rf.String(), room, refusalOf(passed(http.StatusBadGateway, err, codeConfigNotEncodable)))
 	}
 	if st := copied.State; copied.RoomMode {
 		rt.intend(room, st.Mode, st.Temp, st.Until, s.roomNow()) // the room's intended state (drift.go)
@@ -580,7 +565,7 @@ func (s *Server) addDevice(ctx context.Context, r *http.Request, rt *runtime, md
 	res, reached, err := rt.writerOf(ctx).AddDevice(ctx, md, c, n, room, rt.hidden())
 	was.hold(rt, reached) // the link half reached the room
 	if err != nil {
-		return placement{}, fail(http.StatusBadRequest, "%v", err)
+		return placement{}, passed(http.StatusBadRequest, err, codeMetadataNotWritten)
 	}
 	if err := s.commandError(rt, res, 0); err != nil {
 		return placement{}, err
@@ -660,7 +645,7 @@ func (s *Server) removeDevice(w http.ResponseWriter, r *http.Request) error {
 	watch := rt.beginStructure("remove", rf, room)
 	res, err := rt.writerOf(ctx).RemoveDevice(ctx, md, c, hidden)
 	if err != nil {
-		return fail(http.StatusBadRequest, "%v", err)
+		return passed(http.StatusBadRequest, err, codeMetadataNotWritten)
 	}
 	if err := s.commandError(rt, res, 0); err != nil {
 		return err
@@ -718,7 +703,7 @@ func (q configRequest) validate() error {
 			return nil
 		}
 		if _, err := cube.EncodeTemp(*v); err != nil {
-			return fail(http.StatusBadRequest, "%s: %v", name, err)
+			return refuseSaying(http.StatusBadRequest, name+": "+err.Error(), codeTempInvalid, name)
 		}
 		return nil
 	}
@@ -743,7 +728,7 @@ func (q configRequest) validate() error {
 	if v := q.DecalcDay; v != nil {
 		var d cube.Weekday
 		if err := d.UnmarshalText([]byte(*v)); err != nil {
-			return fail(http.StatusBadRequest, "decalc_day: %v", err)
+			return refuseSaying(http.StatusBadRequest, "decalc_day: "+err.Error(), codeDecalcDayInvalid)
 		}
 	}
 	if v := q.DecalcHour; v != nil && (*v < 0 || *v > 23) {
@@ -811,7 +796,7 @@ func configLines(rt *runtime, rf cube.RFAddress, c *cube.DeviceConfig, q configR
 		l, err := cube.CmdSetTemperatures(t, cube.TemperatureSettings{Comfort: m.ComfortTemp, Eco: m.EcoTemp, Max: m.MaxSetpoint, Min: m.MinSetpoint,
 			Offset: m.TempOffset, WindowOpen: m.WindowOpenTemp, WindowOpenMinutes: m.WindowOpenMins})
 		if err != nil {
-			return nil, fail(http.StatusBadRequest, "%v", err)
+			return nil, passed(http.StatusBadRequest, err, codeConfigNotEncodable)
 		}
 		lines = append(lines, l)
 	}
@@ -819,7 +804,7 @@ func configLines(rt *runtime, rf cube.RFAddress, c *cube.DeviceConfig, q configR
 		l, err := cube.CmdSetValveConfig(t, cube.ValveSettings{BoostMinutes: m.BoostMinutes, BoostValvePct: m.BoostValvePct, DecalcDay: m.DecalcDay,
 			DecalcHour: m.DecalcHour, MaxValvePct: m.MaxValvePct, ValveOffsetPct: m.ValveOffsetPct})
 		if err != nil {
-			return nil, fail(http.StatusBadRequest, "%v", err)
+			return nil, passed(http.StatusBadRequest, err, codeConfigNotEncodable)
 		}
 		lines = append(lines, l)
 	}
@@ -883,12 +868,15 @@ func (s *Server) setDeviceConfig(w http.ResponseWriter, r *http.Request) error {
 	return nil
 }
 
+// deviceResult is how a room's configuration went for one device: its
+// error, where it was not sent, with the code of the command's error
+// (failure).
 type deviceResult struct {
 	RFAddress string `json:"rf_address"`
 	Name      string `json:"name,omitempty"`
 	OK        bool   `json:"ok"`
 	Discarded bool   `json:"discarded"`
-	Error     string `json:"error,omitempty"`
+	failure
 }
 
 // setRoomConfig handles PUT /rooms/{id}/config: temperatures go to every
@@ -966,7 +954,7 @@ func (s *Server) setRoomConfig(w http.ResponseWriter, r *http.Request) error {
 				dr.OK, dr.Discarded = false, true
 			}
 		case res.Err != nil:
-			dr.OK, dr.Error = false, "not sent: "+res.Err.Error()
+			dr.OK, dr.failure = false, asFailure(saying("not sent: ", cubeRefusal(http.StatusBadGateway, res.Err)))
 		}
 	}
 	okCount := 0
@@ -1146,7 +1134,7 @@ func programLines(t cube.Target, body []byte) ([]cube.Message, error) {
 		}
 		ls, err := cube.CmdSetDayProgram(t, d, prog[d])
 		if err != nil {
-			return nil, fail(http.StatusBadRequest, "%s: %v", d, err)
+			return nil, refuseSaying(http.StatusBadRequest, fmt.Sprintf("%s: %v", d, err), codeProgramDayInvalid, d.String(), err.Error())
 		}
 		lines = append(lines, ls...)
 	}

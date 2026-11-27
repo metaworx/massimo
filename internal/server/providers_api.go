@@ -63,16 +63,15 @@ func providerSubject(p store.AuthProvider) map[string]any {
 }
 
 // providerFail maps the store's errors of the providers and identities
-// to a status.
+// to a status and its code (storeCodes): a bad provider with what is
+// bad as its reason, a provider's role that is none a 400.
 func providerFail(err error) error {
 	text := strings.TrimPrefix(err.Error(), "store: ")
 	switch {
-	case errors.Is(err, store.ErrNoProvider), errors.Is(err, store.ErrNoIdentity):
-		return fail(http.StatusNotFound, "%s", text)
-	case errors.Is(err, store.ErrProviderExists), errors.Is(err, store.ErrIdentityExists):
-		return fail(http.StatusConflict, "%s", text)
-	case errors.Is(err, store.ErrBadProvider), errors.Is(err, store.ErrBadEmail), errors.Is(err, store.ErrNoRole):
-		return fail(http.StatusBadRequest, "%s", text)
+	case errors.Is(err, store.ErrBadProvider):
+		return refuseSaying(http.StatusBadRequest, text, codeProviderBad, strings.TrimPrefix(strings.TrimPrefix(text, "bad provider"), ": "))
+	case errors.Is(err, store.ErrNoRole):
+		return refuseSaying(http.StatusBadRequest, text, codeRoleNotFound)
 	}
 	return userFail(err) // ErrIntegrationUser among them: 403
 }
@@ -158,7 +157,7 @@ func (s *Server) checkAutoRole(r *http.Request, st *store.Store, p store.AuthPro
 		if errors.Is(err, store.ErrNoRole) {
 			return providerFail(err)
 		}
-		return fail(http.StatusBadRequest, "auto_role: %v", err)
+		return saying("auto_role: ", err)
 	}
 	return nil
 }
@@ -172,7 +171,7 @@ func saveIssuer(r *http.Request, p *store.AuthProvider) error {
 	}
 	issuer, err := checkIssuer(r.Context(), strings.TrimSpace(p.Issuer))
 	if err != nil {
-		return fail(http.StatusBadRequest, "issuer: %v", err)
+		return saying("issuer: ", err)
 	}
 	p.Issuer = issuer
 	return nil
@@ -429,11 +428,8 @@ func (s *Server) putIdentity(w http.ResponseWriter, r *http.Request) error {
 		return fail(http.StatusBadRequest, "body must have either \"email\" or \"subject\"")
 	}
 	i, err := st.UpdateIdentity(r.Context(), u.ID, id, req.Email, req.Subject)
-	if errors.Is(err, store.ErrIdentityUsed) {
-		return fail(http.StatusConflict, "%s", strings.TrimPrefix(err.Error(), "store: "))
-	}
 	if err != nil {
-		return providerFail(err)
+		return providerFail(err) // ErrIdentityUsed a 409
 	}
 	auditSubject(r, identitySubject(i, u))
 	s.log.Info("identity changed", "user", u.Name, "provider", i.Provider, "remote", s.clientIP(r))

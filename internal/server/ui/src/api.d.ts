@@ -138,9 +138,9 @@ export interface CommandStep {
    */
   request?: Record<string, unknown>;
   /**
-   * discarded, the budget the Cube reported, the error, answers (the Cube's
-   * answer to each line, in order, up to the first failure) and discarded_line
-   * (the line the Cube discarded)
+   * discarded, the budget the Cube reported, the error with its code and params
+   * where it has them, answers (the Cube's answer to each line, in order, up to
+   * the first failure) and discarded_line (the line the Cube discarded)
    */
   result?: Record<string, unknown>;
   /** @format date-time */
@@ -776,6 +776,10 @@ export interface RestoreStepResult {
   /** The Cube refused the radiogram; present when true */
   discarded?: boolean;
   error?: string;
+  /** The error's code where it has one (docs/api-v1.md, "Error codes") */
+  code?: string;
+  /** The error's params, by name */
+  params?: Record<string, unknown>;
   budget?: Budget;
   /** @format date-time */
   time?: string;
@@ -867,6 +871,10 @@ export interface RepairResult {
     accepted?: number;
     discarded?: boolean;
     error?: string;
+    /** The error's code where it has one */
+    code?: string;
+    /** The error's params, by name */
+    params?: Record<string, unknown>;
   }[];
   budget?: Budget;
   /**
@@ -931,6 +939,10 @@ export interface RestoreState {
   radio_commands?: number;
   /** Which step failed and why, for a failed restore */
   error?: string;
+  /** The error's code where it has one (docs/api-v1.md, "Error codes") */
+  code?: string;
+  /** The error's params, by name */
+  params?: Record<string, unknown>;
 }
 
 /** The restore field of restore_step and restore_done events */
@@ -946,6 +958,10 @@ export interface RestoreProgress {
   /** Present when true */
   discarded?: boolean;
   error?: string;
+  /** The error's code where it has one (docs/api-v1.md, "Error codes") */
+  code?: string;
+  /** The error's params, by name */
+  params?: Record<string, unknown>;
   /** restore_done only */
   state?: "done" | "failed";
   /** Steps the Cube accepted; restore_done only */
@@ -959,6 +975,13 @@ export interface RestartInfo {
   by?: "systemd" | "launchd" | "windows" | "exit";
   /** Why the restart is not available */
   blocked?: string;
+  /**
+   * The code of blocked, the refusal a POST meets now (docs/api-v1.md, "Error
+   * codes")
+   */
+  blocked_code?: string;
+  /** The params of blocked, by name */
+  blocked_params?: Record<string, unknown>;
   /**
    * The settings file's variables that changed since the start and apply only
    * at the next one; names, never values
@@ -1007,6 +1030,13 @@ export interface RebootInfo {
   /** Why the reboot is not available */
   blocked?: string;
   /**
+   * The code of blocked, the refusal a POST meets now (docs/api-v1.md, "Error
+   * codes")
+   */
+  blocked_code?: string;
+  /** The params of blocked, by name */
+  blocked_params?: Record<string, unknown>;
+  /**
    * When a reboot that waits, or has begun, is asked for
    * @format date-time
    */
@@ -1015,6 +1045,10 @@ export interface RebootInfo {
   begun?: boolean;
   /** Why the last reboot failed */
   error?: string;
+  /** The error's code: reboot_failed or reboot_not_done */
+  code?: string;
+  /** The error's params, by name */
+  params?: Record<string, unknown>;
 }
 
 export interface ReloadResult {
@@ -1266,6 +1300,13 @@ export interface UpdateInfo {
    * setting, a development build)
    */
   blocked?: string;
+  /**
+   * The code of blocked, the refusal a POST meets now (docs/api-v1.md, "Error
+   * codes")
+   */
+  blocked_code?: string;
+  /** The params of blocked, by name */
+  blocked_params?: Record<string, unknown>;
   helper?: UpdateStatus;
   /** The automatic update at night; absent without a store */
   auto?: {
@@ -2059,7 +2100,12 @@ export interface DeviceResult {
   name?: string;
   ok?: boolean;
   discarded?: boolean;
+  /** Why the device's settings were not sent */
   error?: string;
+  /** The error's code where it has one (docs/api-v1.md, "Error codes") */
+  code?: string;
+  /** The error's params, by name */
+  params?: Record<string, unknown>;
 }
 
 export interface RoomConfig {

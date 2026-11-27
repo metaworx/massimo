@@ -294,7 +294,8 @@ async function putInterval(iv: Interval, sec: number): Promise<void> {
 function renderRestart(v: RestartInfo): void {
   lastRestart = v;
   restart.shown = v.available;
-  const reason = v.blocked || "";
+  // blocked in the page's language by its code (refusalText)
+  const reason = refusalText({ error: v.blocked, code: v.blocked_code, params: v.blocked_params }, "", v.blocked || "");
   restart.text = !v.available && reason ? () => t("restart.unavailable", { reason }) : () => t("maint.restartText");
   restart.pending = v.pending || [];
   restart.refused = v.refused || [];
@@ -480,8 +481,10 @@ function renderReboot(v: RebootInfo | null): void {
     timers.reboot = setTimeout(() => followReboot(at), Math.min(Math.max(0, at - Date.now()), 2147483647));
     return;
   }
-  const text = [v.available ? t("maint.rebootText") : t("reboot.unavailable", { reason: v.blocked || "" })];
-  if (v.error) text.push(t("reboot.lastFailed", { error: v.error }));
+  // why not, and why the last one failed, in the page's language by their codes (refusalText)
+  const blocked = refusalText({ error: v.blocked, code: v.blocked_code, params: v.blocked_params }, "", v.blocked || "");
+  const text = [v.available ? t("maint.rebootText") : t("reboot.unavailable", { reason: blocked })];
+  if (v.error) text.push(t("reboot.lastFailed", { error: refusalText(v, "", v.error) }));
   const said = text.join(" ");
   reboot.text = () => said;
 }

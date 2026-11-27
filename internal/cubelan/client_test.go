@@ -1048,3 +1048,20 @@ func TestAFailedReconnectIsALoss(t *testing.T) {
 		t.Errorf("%d re-established lines, want 1", n)
 	}
 }
+
+// Send's error for a command the Cube did not answer in time is
+// ErrReplyTimeout to errors.Is, wrapped too, its own text naming the
+// reply and the command; no other error is.
+func TestReplyTimeoutIsErrReplyTimeout(t *testing.T) {
+	t.Parallel()
+	err := error(&replyTimeout{want: 'L', cmd: 'l', after: 2 * time.Second})
+	if !errors.Is(err, ErrReplyTimeout) || !errors.Is(fmt.Errorf("wakeup: %w", err), ErrReplyTimeout) {
+		t.Errorf("%v is not ErrReplyTimeout", err)
+	}
+	if err.Error() != "cubelan: no L reply to l command within 2s" {
+		t.Errorf("text %q", err.Error())
+	}
+	if errors.Is(ErrBusy, ErrReplyTimeout) || errors.Is(err, ErrBusy) {
+		t.Error("ErrBusy and a reply timeout taken for each other")
+	}
+}

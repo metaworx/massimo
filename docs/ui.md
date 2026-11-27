@@ -3035,6 +3035,13 @@ and the error keeps the answer's `status`, `data`, `code` and `params`.
 which is no thrown error,
 such as why a repair's preview has nothing to send or would be refused now,
 its `nothing` or its `refused` by the preview's `code` and `params`;
+and for an error kept with a step or a run, by its `error`, `code` and `params`:
+a restore that stopped (`backups/`), the last failed reboot and why the reboot
+and the restart are not offered (`maintenance/`, their `blocked_code`),
+why updates cannot be started (`software/`),
+a device a room's configuration did not reach (`rooms/configuration.ts`),
+a log line's error and a command's step (`log/`);
+one kept before the codes by its English `error`;
 it is text, set as text, never markup.
 A refusal shows where the user acted, on its tile's or its card's line, as before:
 a code makes no toast of it (D5-A).

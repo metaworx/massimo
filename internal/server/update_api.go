@@ -367,12 +367,14 @@ type updateView struct {
 	ReleaseURL string `json:"release_url,omitempty"`
 	// Available is set where Latest is newer than the running version
 	// and not held back.
-	Available  bool           `json:"available"`
-	CheckedAt  time.Time      `json:"checked_at"`
-	CheckError string         `json:"check_error,omitempty"`
-	CanUpdate  bool           `json:"can_update"`
-	Blocked    string         `json:"blocked,omitempty"`
-	Helper     *update.Status `json:"helper,omitempty"`
+	Available  bool      `json:"available"`
+	CheckedAt  time.Time `json:"checked_at"`
+	CheckError string    `json:"check_error,omitempty"`
+	CanUpdate  bool      `json:"can_update"`
+	// blocking is why updates cannot be started from the API on this
+	// box, with its code and params.
+	blocking
+	Helper *update.Status `json:"helper,omitempty"`
 	// Auto is the automatic update at night (update_auto.go); absent
 	// without a store.
 	Auto *autoView `json:"auto,omitempty"`
@@ -389,9 +391,7 @@ func (s *Server) updateState(ctx context.Context, refresh bool) updateView {
 func (s *Server) updateRelease(ctx context.Context, refresh bool) (updateView, *update.Release) {
 	u := s.opts.Update
 	v := updateView{Current: u.Version, Flavour: u.Flavour, Channel: s.updateChannel(ctx), Suite: s.aptSuite(), Manager: u.Manager}
-	if why := s.updateBlocked(ctx); why != nil {
-		v.Blocked = why.Error()
-	}
+	v.blocking = blockingOf(s.updateBlocked(ctx))
 	if u.Status != "" {
 		if st, err := update.ReadStatus(u.Status); err == nil && !st.Time.IsZero() {
 			v.Helper = &st
@@ -475,9 +475,9 @@ func (s *Server) beginUpdate(ctx context.Context, userID int64, auto bool) (upda
 	case v.Helper != nil && v.Helper.Running():
 		return v, refuseSaying(http.StatusConflict, fmt.Sprintf("an update is already running (%s)", v.Helper.State), codeUpdateRunning)
 	case v.Latest == "" && v.CheckError != "":
-		return v, fail(http.StatusBadGateway, "release check failed: %s", v.CheckError)
+		return v, refuse(http.StatusBadGateway, codeUpdateCheckFailed, v.CheckError)
 	case v.SourceError != "":
-		return v, fail(http.StatusBadGateway, "reading what %s has failed: %s", sourceName(v.Manager), v.SourceError)
+		return v, refuse(http.StatusBadGateway, codeUpdateSourceFailed, sourceName(v.Manager), v.SourceError)
 	case v.Held != "":
 		return v, refuse(http.StatusConflict, codeUpdateHeld, v.Held, sourceName(v.Manager))
 	case v.Released != "" && !v.Available:
@@ -515,11 +515,12 @@ func (s *Server) beginUpdate(ctx context.Context, userID int64, auto bool) (upda
 		case errors.Is(err, update.ErrHelperRunning):
 			// The running helper takes the request or has taken its own;
 			// a leftover one names the same channel and goes to the next.
-			return v, fail(http.StatusConflict, "%v (starting)", err)
+			return v, refuseSaying(http.StatusConflict, err.Error()+" (starting)", codeUpdateRunning)
 		case err != nil:
 			os.Remove(s.opts.Update.Request)
 			failed := systemEvent("update", userID, summary)
-			failed.Level, failed.Error = "error", err.Error()
+			failed.Level = "error"
+			failed.setFailure(err)
 			s.logServer(failed)
 			return v, fail(http.StatusInternalServerError, "starting the update helper: %v", err)
 		}

@@ -340,12 +340,18 @@ func (s *Store) Pending(ctx context.Context) ([]Command, error) {
 }
 
 // DropUnfinished moves every queued or sent row to dropped with the
-// reason as its error, at a start: the queue they were in is gone.
-func (s *Store) DropUnfinished(ctx context.Context, reason string) (int, error) {
+// reason as its error, and code as its code where it is not empty, at
+// a start: the queue they were in is gone. The result is an error
+// answer, which a replay of the row answers.
+func (s *Store) DropUnfinished(ctx context.Context, reason, code string) (int, error) {
 	if err := s.writable(); err != nil {
 		return 0, err
 	}
-	result, _ := json.Marshal(map[string]string{"error": reason})
+	answer := map[string]string{"error": reason}
+	if code != "" {
+		answer["code"] = code
+	}
+	result, _ := json.Marshal(answer)
 	now := s.nowText()
 	res, err := s.db.ExecContext(ctx, `UPDATE commands SET state = ?, result = ?, updated_at = ?, finished_at = ?, origin = ?, version = version + 1 WHERE `+pendingWhere,
 		StateDropped, string(result), now, now, s.nodeID)

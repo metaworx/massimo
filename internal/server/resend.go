@@ -193,7 +193,7 @@ func (s *Server) resendUnconfirmed(ctx context.Context, rt *runtime, r confirmRe
 	m, err := cube.CmdSetTemperature(sent.target, st.Setpoint, st.Mode, st.Until)
 	if err != nil { // not for a write the Cube took once
 		ev := s.resendEvent(r.w, outcomeResendFail, "warn")
-		ev.Error = err.Error()
+		ev.setFailure(err)
 		rt.emit(ev)
 		return
 	}
@@ -266,7 +266,7 @@ func (s *Server) sendOnceMore(ctx context.Context, rt *runtime, r confirmReport,
 		return
 	case res.Err != nil:
 		ev := s.resendEvent(r.w, outcomeResendFail, "warn")
-		ev.Error = res.Err.Error()
+		ev.setFailure(res.Err)
 		rt.emit(ev)
 		return
 	}

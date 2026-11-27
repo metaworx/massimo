@@ -6,6 +6,7 @@ package server
 import (
 	"context"
 	"errors"
+	"fmt"
 	"net/http"
 	"time"
 
@@ -58,10 +59,15 @@ func (s *Server) refreshCube(w http.ResponseWriter, r *http.Request) error {
 		if errors.Is(res.Err, engine.ErrSuperseded) {
 			status = http.StatusConflict
 		}
+		reason := res.Err.Error()
 		if l := rt.client.Link(); l.State != cubelan.LinkConnected {
-			return fail(status, "refresh of %s: %v (link %s)", serial, res.Err, l.State)
+			reason = fmt.Sprintf("%v (link %s)", res.Err, l.State)
 		}
-		return fail(status, "refresh of %s: %v", serial, res.Err)
+		msg := fmt.Sprintf("refresh of %s: %s", serial, reason)
+		if status == http.StatusConflict {
+			return refuseSaying(status, msg, codeCommandSuperseded)
+		}
+		return refuseSaying(status, msg, codeCubeRefreshFailed, serial, reason)
 	}
 	s.log.Info("snapshot refreshed", asked...)
 	writeJSON(w, http.StatusOK, map[string]any{"ok": true, "budget": res.Budget})

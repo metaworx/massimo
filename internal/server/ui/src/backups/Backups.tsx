@@ -112,7 +112,7 @@ function PlanBox({ place, serial }: { place: string; serial: string }) {
   else if (run?.state === "unseen") result = { text: t("restore.unseen"), ok: false };
   else if (run) {
     result = run.state === "done" ? { text: t("restore.done", { sent: run.sent || 0, n }), ok: true }
-      : { text: t("restore.failedAt", { sent: run.sent || 0, n, error: run.error || "" }), ok: false };
+      : { text: t("restore.failedAt", { sent: run.sent || 0, n, error: refusalText(run, serial, run.error || "") }), ok: false };
   }
   const plan = p.plan;
   return (

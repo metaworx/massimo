@@ -21,7 +21,7 @@ package server
 
 import (
 	"context"
-	"fmt"
+	"net/http"
 	"regexp"
 	"slices"
 	"strconv"
@@ -57,16 +57,17 @@ var windowRe = regexp.MustCompile(`^([01][0-9]|2[0-3]):([0-5][0-9])-([01][0-9]|2
 
 // parseWindow reads a window of an automatic update, HH:MM-HH:MM, as
 // minutes of the day: at least minWindowMinutes long, its end on the
-// next day where it is not after its start (23:30-01:30).
+// next day where it is not after its start (23:30-01:30). Its error is
+// the refusal of such a setting (400, with its code).
 func parseWindow(s string) (start, end int, err error) {
 	m := windowRe.FindStringSubmatch(s)
 	if m == nil {
-		return 0, 0, fmt.Errorf("%q: want a window HH:MM-HH:MM in the server's time, such as %s", s, store.DefaultUpdateWindow)
+		return 0, 0, refuse(http.StatusBadRequest, codeUpdateWindowBad, s, store.DefaultUpdateWindow)
 	}
 	n := func(i int) int { v, _ := strconv.Atoi(m[i]); return v }
 	start, end = n(1)*60+n(2), n(3)*60+n(4)
 	if (end-start+24*60)%(24*60) < minWindowMinutes {
-		return 0, 0, fmt.Errorf("%q: the window is shorter than %d minutes", s, minWindowMinutes)
+		return 0, 0, refuse(http.StatusBadRequest, codeUpdateWindowShort, s, minWindowMinutes)
 	}
 	return start, end, nil
 }

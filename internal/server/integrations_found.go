@@ -103,7 +103,7 @@ func (s *Server) getFoundIntegrations(w http.ResponseWriter, r *http.Request) er
 	found, at := s.lastFoundIntegrations()
 	if r.URL.Query().Get("refresh") == "1" {
 		if found, at, err = s.browseIntegrations(r.Context()); err != nil {
-			return fail(http.StatusBadGateway, "the LAN not asked: %v", err)
+			return refuseSaying(http.StatusBadGateway, "the LAN not asked: "+err.Error(), codeIntegrationsNotAsked, err.Error())
 		}
 	}
 	list, err := st.Integrations(r.Context())

@@ -108,7 +108,8 @@ func TestPutCube(t *testing.T) {
 		t.Fatal("old proxy address still listens")
 	}
 
-	// Each field as typed has its code; what no form sends has none.
+	// Each field as typed has its code, a hidden radio address too; what
+	// no form sends has none.
 	for _, c := range []struct{ body, code, params string }{
 		{`{"address":"no such host:x"}`, "cube_address_bad", `{"address":"no such host:x"}`},
 		{`{"address":"192.0.2.10:0"}`, "cube_address_port_bad", `{"address":"192.0.2.10:0"}`},
@@ -116,7 +117,7 @@ func TestPutCube(t *testing.T) {
 		{`{"proxy_address":":65536"}`, "cube_proxy_address_port_bad", `{"address":":65536"}`},
 		{`{"proxy_serial":"a-b"}`, "cube_proxy_serial_bad", `{"serial":"A-B"}`},
 		{`{"name":"` + strings.Repeat("x", 65) + `"}`, "cube_name_bad", `{"max":64}`},
-		{`{"hidden":["zz"]}`, "", "null"},
+		{`{"hidden":["zz"]}`, "cube_hidden_bad", `{"address":"zz"}`},
 		{`{"nmae":"typo"}`, "", "null"},
 		{`{"serial":"KEQ1"}`, "", "null"},
 	} {

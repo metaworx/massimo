@@ -3323,6 +3323,9 @@ paths:
                     serial: {type: string, description: "The device's serial number, also before it has a state and after it is gone; the Cube's for its own configuration"}
                     source: {type: string, enum: [device, cube, system, config, queue, server, proxy], description: "Whose the event is: a device's, the Cube's own, the server's own jobs, a change of the configuration, the queue's, the server's sign-ins, the LAN proxy's"}
                     level: {type: string, enum: [debug, info, warn, error]}
+                    error: {type: string, description: "What failed, in the server's English words"}
+                    code: {type: string, description: "The error's code where it has one (docs/api-v1.md, \"Error codes\"); absent for an event kept before the codes"}
+                    params: {type: object, additionalProperties: true, description: "The error's params, by name"}
                     summary: {type: object, description: "What a line holds in short: a connection's devices, rooms, firmware, duty_cycle_pct, free_memory_slots, cause and down_for_s; a hello's budget; a list's rooms and devices; a configuration's main values"}
                     list_changes:
                       type: array
@@ -3398,6 +3401,9 @@ paths:
                     serial: {type: string, description: "The device's serial number; the Cube's for its own configuration"}
                     source: {type: string, enum: [device, cube, system, config, queue, server, proxy]}
                     level: {type: string, enum: [debug, info, warn, error]}
+                    error: {type: string, description: "What failed, in the server's English words"}
+                    code: {type: string, description: "The error's code where it has one (docs/api-v1.md, \"Error codes\"); absent for an event kept before the codes"}
+                    params: {type: object, additionalProperties: true, description: "The error's params, by name"}
                     time: {type: string, format: date-time}
         "400": {$ref: "#/components/responses/BadRequest"}
         "401": {$ref: "#/components/responses/Unauthorized"}
@@ -4473,7 +4479,7 @@ components:
         target: {type: string, description: "device:0a010d or room:6"}
         state: {$ref: "#/components/schemas/CommandState"}
         request: {type: object, description: "The queue key, the priority, the number of lines and of radio lines, the wakeup, the room"}
-        result: {type: object, description: "discarded, the budget the Cube reported, the error, answers (the Cube's answer to each line, in order, up to the first failure) and discarded_line (the line the Cube discarded)"}
+        result: {type: object, description: "discarded, the budget the Cube reported, the error with its code and params where it has them, answers (the Cube's answer to each line, in order, up to the first failure) and discarded_line (the line the Cube discarded)"}
         created_at: {type: string, format: date-time}
         finished_at: {type: string, format: date-time}
     AuditEntry:
@@ -4916,6 +4922,8 @@ components:
         ok: {type: boolean}
         discarded: {type: boolean, description: The Cube refused the radiogram; present when true}
         error: {type: string}
+        code: {type: string, description: "The error's code where it has one (docs/api-v1.md, \"Error codes\")"}
+        params: {type: object, additionalProperties: true, description: "The error's params, by name"}
         budget: {$ref: "#/components/schemas/Budget"}
         time: {type: string, format: date-time}
     RepairPlan:
@@ -4973,6 +4981,8 @@ components:
               accepted: {type: integer, description: "The lines the Cube accepted"}
               discarded: {type: boolean}
               error: {type: string}
+              code: {type: string, description: "The error's code where it has one"}
+              params: {type: object, additionalProperties: true, description: "The error's params, by name"}
         budget: {$ref: "#/components/schemas/Budget"}
         confirmation: {type: string, enum: [pending], description: "Radiograms were sent: the log's device change line says when the Cube's free slots are back, or names the slots still held and the members left flagged"}
         still_flagged: {type: array, items: {type: string}, description: "The devices reset whose flag the device list read after the resets still shows"}
@@ -5008,6 +5018,8 @@ components:
         sent: {type: integer, description: Steps the Cube accepted}
         radio_commands: {type: integer}
         error: {type: string, description: "Which step failed and why, for a failed restore"}
+        code: {type: string, description: "The error's code where it has one (docs/api-v1.md, \"Error codes\")"}
+        params: {type: object, additionalProperties: true, description: "The error's params, by name"}
     RestoreProgress:
       type: object
       description: The restore field of restore_step and restore_done events
@@ -5019,6 +5031,8 @@ components:
         ok: {type: boolean}
         discarded: {type: boolean, description: Present when true}
         error: {type: string}
+        code: {type: string, description: "The error's code where it has one (docs/api-v1.md, \"Error codes\")"}
+        params: {type: object, additionalProperties: true, description: "The error's params, by name"}
         state: {type: string, enum: [done, failed], description: restore_done only}
         sent: {type: integer, description: Steps the Cube accepted; restore_done only}
     RestartInfo:
@@ -5028,6 +5042,8 @@ components:
         available: {type: boolean, description: Whether this caller's POST would restart the server now}
         by: {type: string, enum: [systemd, launchd, windows, exit], description: Who starts the server again; absent when nobody would}
         blocked: {type: string, description: Why the restart is not available}
+        blocked_code: {type: string, description: "The code of blocked, the refusal a POST meets now (docs/api-v1.md, \"Error codes\")"}
+        blocked_params: {type: object, additionalProperties: true, description: "The params of blocked, by name"}
         pending:
           type: array
           items: {type: string}
@@ -5073,9 +5089,13 @@ components:
         available: {type: boolean, description: Whether this caller's POST would reboot the computer now}
         by: {type: string, enum: [systemd, launchd, windows], description: Who reboots; absent when nobody can}
         blocked: {type: string, description: Why the reboot is not available}
+        blocked_code: {type: string, description: "The code of blocked, the refusal a POST meets now (docs/api-v1.md, \"Error codes\")"}
+        blocked_params: {type: object, additionalProperties: true, description: "The params of blocked, by name"}
         at: {type: string, format: date-time, description: "When a reboot that waits, or has begun, is asked for"}
         begun: {type: boolean, description: The delay is over and the helper or the system was asked}
         error: {type: string, description: Why the last reboot failed}
+        code: {type: string, description: "The error's code: reboot_failed or reboot_not_done"}
+        params: {type: object, additionalProperties: true, description: "The error's params, by name"}
     ReloadResult:
       type: object
       required: [changed, pending, refused, read_at]
@@ -5243,6 +5263,8 @@ components:
         check_error: {type: string}
         can_update: {type: boolean, description: POST would start an update}
         blocked: {type: string, description: "Why an update cannot be started from the API (a package manager owning the binary without a helper of its own, no token, no helper, on Windows and under brew a listen address the helper cannot ask /healthz at, named by its setting, a development build)"}
+        blocked_code: {type: string, description: "The code of blocked, the refusal a POST meets now (docs/api-v1.md, \"Error codes\")"}
+        blocked_params: {type: object, additionalProperties: true, description: "The params of blocked, by name"}
         helper: {$ref: "#/components/schemas/UpdateStatus"}
         auto:
           type: object
@@ -5693,7 +5715,9 @@ components:
         name: {type: string}
         ok: {type: boolean}
         discarded: {type: boolean}
-        error: {type: string}
+        error: {type: string, description: "Why the device's settings were not sent"}
+        code: {type: string, description: "The error's code where it has one (docs/api-v1.md, \"Error codes\")"}
+        params: {type: object, additionalProperties: true, description: "The error's params, by name"}
     RoomConfig:
       type: object
       properties:

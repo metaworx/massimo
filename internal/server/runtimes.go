@@ -16,8 +16,8 @@ package server
 import (
 	"cmp"
 	"context"
-	"fmt"
 	"net"
+	"net/http"
 	"strconv"
 	"strings"
 	"sync"
@@ -74,7 +74,7 @@ func CubeFromRow(row store.Cube) (CubeConfig, error) {
 	for _, a := range row.Hidden {
 		rf, err := cube.ParseRFAddress(a)
 		if err != nil {
-			return CubeConfig{}, err
+			return CubeConfig{}, refuseSaying(http.StatusConflict, err.Error(), codeCubeHiddenBad, a)
 		}
 		c.Hidden = append(c.Hidden, rf)
 	}
@@ -158,7 +158,7 @@ func (s *Server) register(rt *runtime) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	if _, taken := s.cubes[key]; taken {
-		return fmt.Errorf("cube %s is served already", key)
+		return refuse(http.StatusConflict, codeCubeServedAlready, key)
 	}
 	s.cubes[key] = rt
 	s.order = append(s.order, key)

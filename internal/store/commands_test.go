@@ -93,11 +93,11 @@ func TestCommands(t *testing.T) {
 	if pending, _ := s.Pending(ctx); len(pending) != 2 {
 		t.Fatalf("pending %+v", pending)
 	}
-	n, err := s.DropUnfinished(ctx, "server restarted")
+	n, err := s.DropUnfinished(ctx, "server restarted", "server_restarted")
 	if err != nil || n != 2 {
 		t.Fatalf("dropped %d %v", n, err)
 	}
-	if got, _, _ := s.Command(ctx, other.ID); got.State != StateDropped || string(got.Result) != `{"error":"server restarted"}` || got.FinishedAt.IsZero() {
+	if got, _, _ := s.Command(ctx, other.ID); got.State != StateDropped || string(got.Result) != `{"code":"server_restarted","error":"server restarted"}` || got.FinishedAt.IsZero() {
 		t.Fatalf("dropped row %+v", got)
 	}
 	if pending, _ := s.Pending(ctx); len(pending) != 0 {

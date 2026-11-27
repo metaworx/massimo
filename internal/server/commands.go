@@ -101,6 +101,14 @@ func (o *stepObserver) stepEvent(cmd engine.Command, parent, step int64, state, 
 		ev.Error = e
 		delete(summary, "error")
 	}
+	if c, ok := summary["code"].(string); ok {
+		ev.Code = c
+		delete(summary, "code")
+	}
+	if p, ok := summary["params"].(map[string]any); ok {
+		ev.Params = p
+		delete(summary, "params")
+	}
 	if cmd.Target != 0 {
 		ev.Device = cmd.Target.String()
 		ev.Serial = o.rt.client.Snapshot().Serial(cmd.Target)
@@ -198,13 +206,17 @@ func (o *stepObserver) finished(cmd engine.Command, res engine.Result) {
 			result["discarded_line"] = cmd.Lines[len(res.Replies)-1].String()
 		}
 	}
+	// The error with its code where it has one (asFailure), in the row
+	// and in the log's line.
+	failed := asFailure(res.Err)
 	switch {
 	case res.Err == nil:
 	case errors.Is(res.Err, engine.ErrSuperseded), errors.Is(res.Err, engine.ErrDiscarded), errors.Is(res.Err, context.Canceled), errors.Is(res.Err, context.DeadlineExceeded):
-		state, result["error"] = store.StateDropped, res.Err.Error()
+		state = store.StateDropped
 	default:
-		state, result["error"] = store.StateFailed, res.Err.Error()
+		state = store.StateFailed
 	}
+	failed.set(result)
 	raw, _ := json.Marshal(result)
 	if err := o.s.opts.Store.SetCommandState(context.Background(), id, state, 0, raw); err != nil {
 		o.s.log.Error("commands: step not finished", "step", id, "error", err)
@@ -220,7 +232,8 @@ func (o *stepObserver) finished(cmd engine.Command, res engine.Result) {
 		summary["discarded"] = true
 	}
 	if state != store.StateAcknowledged {
-		level, summary["error"] = "warn", result["error"]
+		level = "warn"
+		failed.set(summary)
 		if cmd.Target != 0 {
 			o.rt.sentTo.forget(cmd.Target, parent)
 		}
@@ -379,14 +392,20 @@ func (s *Server) endCommand(ctx context.Context, a *auditInfo, status int) {
 
 // withoutSecrets is an answer as a command row keeps it: an object
 // without the secretFields at its top level, so that a new API key is
-// shown once and its replay answers without it.
+// shown once and its replay answers without it. An error answer keeps
+// its code, which is no secret but the refusal's (AP ErrorCodes), so
+// that the row and a replay say it as the first answer did.
 func withoutSecrets(answer []byte) []byte {
 	var m map[string]json.RawMessage
 	if json.Unmarshal(answer, &m) != nil {
 		return answer
 	}
+	_, refusal := m["error"]
 	found := false
 	for _, k := range secretFields {
+		if k == "code" && refusal {
+			continue
+		}
 		if _, ok := m[k]; ok {
 			delete(m, k)
 			found = true

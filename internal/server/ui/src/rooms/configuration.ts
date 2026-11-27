@@ -261,7 +261,7 @@ function deviceResults(label: string, res: Answer | null): string {
     const name = deviceName(d as Device);
     if (d.ok) lines.push(t("cfg.devOk", { name }));
     else if (d.discarded) lines.push(t("cfg.devDiscarded", { name }));
-    else lines.push(t("cfg.devFailed", { name, error: d.error || t("cfg.failed") }));
+    else lines.push(t("cfg.devFailed", { name, error: refusalText(d, state.roomsOf || "", t("cfg.failed")) }));
   }
   if (res && res.budget) lines.push(t("cfg.budgetLine", { duty: res.budget.duty_cycle_pct ?? "", slots: res.budget.free_memory_slots ?? "" }));
   return lines.join("\n");

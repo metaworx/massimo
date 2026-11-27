@@ -54,7 +54,7 @@ function CommandDetail({ id }: { id: number }) {
     const r = st.result || {};
     let text = t("log.cmd.step", { state: logWord("log.cmdState.", st.state), target: st.target || "–" });
     if (r.discarded) text += "; " + t("log.cmd.discarded");
-    if (r.error) text += "; " + r.error;
+    if (r.error) text += "; " + refusalText(r, c.cube || "", String(r.error));
     return text;
   });
   const a = c.audit;
