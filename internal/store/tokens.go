@@ -288,8 +288,17 @@ type KeyOptions struct {
 	// MadeBy is the API key that was the bearer of the request that makes
 	// this one (AP KeyLife, D5-A), 0 for none: a key made by a session of
 	// any kind, by the command line, the bootstrap or an integration's
-	// approval. A revoke of that key revokes this one.
+	// approval. A revoke of that key revokes this one. It names the maker
+	// by its id alone; a request's bearer is Maker.
 	MadeBy int64
+	// Maker, where its ID is not 0, is the API key a request was let in
+	// with, as TokenByHash gave it: it names the maker in MadeBy's place,
+	// and the key is made only while the maker still holds the secret the
+	// request was let in with, so that a request let in with a secret a new
+	// one has replaced since (RekeyToken) makes none, ErrNoToken, as one
+	// whose bearer was revoked meanwhile makes none (AP KeyLife, Block 5).
+	// A maker read without its secret makes none either.
+	Maker Token
 	// IdleExempt keeps the key from the idle limit (AP KeyLife, D7-A):
 	// who may set it is the caller's question, the server's.
 	IdleExempt bool
@@ -350,17 +359,24 @@ func (s *Store) addTokenHash(ctx context.Context, userID int64, kind, hash strin
 			return Token{}, err
 		}
 	}
-	madeBy, exempt := opts.MadeBy, opts.IdleExempt
+	madeBy, makerHash, exempt := opts.MadeBy, "", opts.IdleExempt
+	if opts.Maker.ID != 0 {
+		if opts.Maker.hash == "" {
+			return Token{}, fmt.Errorf("%w: the maker %d was read without its secret", ErrNoToken, opts.Maker.ID)
+		}
+		madeBy, makerHash = opts.Maker.ID, opts.Maker.hash
+	}
 	if kind != TokenAPI {
-		madeBy, exempt = 0, false
+		madeBy, makerHash, exempt = 0, "", false
 	}
 	r, err := s.rule(ctx, s.now())
 	if err != nil {
 		return Token{}, err
 	}
-	args := append([]any{newUUID(), userID, kind, hash, opts.Label, s.nowText(), nullTime(expires), s.nodeID, nullID(madeBy), exempt, madeBy, madeBy, TokenAPI}, r.args()...)
+	args := append([]any{newUUID(), userID, kind, hash, opts.Label, s.nowText(), nullTime(expires), s.nodeID, nullID(madeBy), exempt, madeBy, madeBy, TokenAPI,
+		makerHash, makerHash}, r.args()...)
 	res, err := s.db.ExecContext(ctx, `INSERT INTO tokens (uuid, user_id, kind, hash, label, created_at, expires_at, origin, made_by, idle_exempt)
-		SELECT ?, ?, ?, ?, ?, ?, ?, ?, ?, ? WHERE ? = 0 OR EXISTS (SELECT 1`+tokenJoins+` WHERE t.id = ? AND t.kind = ? AND `+alive+`)`, args...)
+		SELECT ?, ?, ?, ?, ?, ?, ?, ?, ?, ? WHERE ? = 0 OR EXISTS (SELECT 1`+tokenJoins+` WHERE t.id = ? AND t.kind = ? AND (? = '' OR t.hash = ?) AND `+alive+`)`, args...)
 	if err != nil {
 		return Token{}, fmt.Errorf("store: add token: %w", err)
 	}
@@ -425,15 +441,30 @@ func (s *Store) TokenAlive(ctx context.Context, id int64) (Token, bool, error) {
 	return s.liveToken(ctx, `t.id = ?`, id)
 }
 
-// liveToken is the token where (of t, with its one argument) selects,
+// TokenAliveAs returns the token t, as TokenByHash gave it, while it
+// lives under the rule TokenByHash holds to and still holds the secret
+// it was let in with, with its life; ok is false for one that does not,
+// one given a new secret since (RekeyToken, AP KeyLife, Block 5) among
+// them, and for one read without its secret. The event stream asks it
+// at each keep-alive (the server's stillAdmitted), so that a stream
+// opened with a key's old secret, or a ticket taken with it, ends at a
+// new secret as at a revoke.
+func (s *Store) TokenAliveAs(ctx context.Context, t Token) (Token, bool, error) {
+	if t.hash == "" {
+		return Token{}, false, nil
+	}
+	return s.liveToken(ctx, `t.id = ? AND t.hash = ?`, t.ID, t.hash)
+}
+
+// liveToken is the token where (of t, with its arguments args) selects,
 // while it lives under the rule alive at the store's now, with its life.
-func (s *Store) liveToken(ctx context.Context, where string, arg any) (Token, bool, error) {
+func (s *Store) liveToken(ctx context.Context, where string, args ...any) (Token, bool, error) {
 	r, err := s.rule(ctx, s.now())
 	if err != nil {
 		return Token{}, false, err
 	}
 	t, err := scanToken(s.db.QueryRowContext(ctx, `SELECT `+tokenColumns+tokenJoins+` WHERE `+where+` AND `+alive,
-		append([]any{arg}, r.args()...)...))
+		append(args, r.args()...)...))
 	if errors.Is(err, sql.ErrNoRows) {
 		return Token{}, false, nil
 	}
@@ -684,12 +715,12 @@ func (s *Store) RekeyToken(ctx context.Context, id, keep int64) (Token, string, 
 	if err := tx.Commit(); err != nil {
 		return Token{}, "", fmt.Errorf("store: new secret of key %d: %w", id, err)
 	}
-	got, _, err := s.Token(ctx, id)
-	if err != nil {
-		return Token{}, "", err
-	}
-	r.apply(&got)
-	return got, secret, nil
+	// The key as the transaction left it, from the row it read: no read
+	// after the commit, whose failure would answer an error for a key
+	// whose new secret nobody then knows.
+	t.hash, t.Version = HashToken(secret), t.Version+1
+	r.apply(&t)
+	return t, secret, nil
 }
 
 // AddKeySession makes a session from the live API key keyID, with a
@@ -698,8 +729,28 @@ func (s *Store) RekeyToken(ctx context.Context, id, keep int64) (Token, string, 
 // so that a key has one live session at a time. ErrNoToken where the key
 // is not a live API key under the rule alive: none, revoked, past its end
 // or ended unused; ErrIntegrationUser where its user is an integration's,
-// which makes no session.
+// which makes no session. It names the key by its id alone, whatever its
+// secret; a request's bearer goes to AddKeySessionAs.
 func (s *Store) AddKeySession(ctx context.Context, keyID int64, label string, expires time.Time) (Token, string, error) {
+	return s.addKeySession(ctx, keyID, "", label, expires)
+}
+
+// AddKeySessionAs is AddKeySession of key, the API key a request was let
+// in with, as TokenByHash gave it: the session is made only while the key
+// still holds the secret the request was let in with, so that a request
+// let in with a secret a new one has replaced since (RekeyToken, AP
+// KeyLife, Block 5) makes none, ErrNoToken, as for a key revoked
+// meanwhile. A key read without its secret makes none either.
+func (s *Store) AddKeySessionAs(ctx context.Context, key Token, label string, expires time.Time) (Token, string, error) {
+	if key.hash == "" {
+		return Token{}, "", fmt.Errorf("%w: key %d was read without its secret", ErrNoToken, key.ID)
+	}
+	return s.addKeySession(ctx, key.ID, key.hash, label, expires)
+}
+
+// addKeySession is AddKeySession, and with hash not "" AddKeySessionAs:
+// the key keyID is taken only while its hash is hash.
+func (s *Store) addKeySession(ctx context.Context, keyID int64, hash, label string, expires time.Time) (Token, string, error) {
 	if err := s.writable(); err != nil {
 		return Token{}, "", err
 	}
@@ -717,8 +768,8 @@ func (s *Store) AddKeySession(ctx context.Context, keyID int64, label string, ex
 	}
 	defer tx.Rollback()
 	var userID int64
-	err = tx.QueryRowContext(ctx, `SELECT t.user_id`+tokenJoins+` WHERE t.id = ? AND t.kind = ? AND `+alive,
-		append([]any{keyID, TokenAPI}, r.args()...)...).Scan(&userID)
+	err = tx.QueryRowContext(ctx, `SELECT t.user_id`+tokenJoins+` WHERE t.id = ? AND t.kind = ? AND (? = '' OR t.hash = ?) AND `+alive,
+		append([]any{keyID, TokenAPI, hash, hash}, r.args()...)...).Scan(&userID)
 	if errors.Is(err, sql.ErrNoRows) {
 		return Token{}, "", fmt.Errorf("%w: key %d", ErrNoToken, keyID)
 	}

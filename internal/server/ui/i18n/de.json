@@ -447,7 +447,7 @@
 
   "help.profilePassword": "Mit einem Passwort meldest du dich in jedem Browser mit deinem Namen an. Es wird per OPAQUE in diesem Browser registriert, der Server sieht es also nie; eine Änderung verlangt das aktuelle. Speichern setzt es.",
 
-  "help.profileTokens": "Jeder als du angemeldete Browser ist eine Sitzung; ein API-Schlüssel meldet ein Programm an. Widerrufen beendet eine sofort und meldet diesen Browser oder dieses Programm ab. Schlüssel anlegen macht einen Schlüssel, der nur einmal gezeigt wird: kopiere ihn dann. Wo der Server unbenutzte Schlüssel beendet, sagt die Zeile eines Schlüssels, wann; Auch unbenutzt behalten, das sieht, wer deinen Benutzer verwaltet, nimmt einen Schlüssel davon aus. Ein Schlüssel kann ein Enddatum bekommen, beim Anlegen oder später mit Ändern…; ab dann wird er abgewiesen. Neues Geheimnis gibt einem Schlüssel ein neues Geheimnis, das einmal gezeigt wird; er behält seine ID und seinen Namen, und was das alte hatte, wird abgewiesen.",
+  "help.profileTokens": "Jeder als du angemeldete Browser ist eine Sitzung; ein API-Schlüssel meldet ein Programm an. Widerrufen beendet eine sofort und meldet diesen Browser oder dieses Programm ab. Schlüssel anlegen macht einen Schlüssel, der nur einmal gezeigt wird: kopiere ihn dann. Wo der Server unbenutzte Schlüssel beendet, sagt die Zeile eines Schlüssels, wann; Auch unbenutzt behalten, das sieht, wer deinen Benutzer verwaltet, nimmt einen Schlüssel davon aus. Ein Schlüssel kann ein Enddatum bekommen, beim Anlegen oder später mit Ändern…; ab dann wird er abgewiesen. Neues Geheimnis gibt einem Schlüssel ein neues Geheimnis, das einmal gezeigt wird; er behält seine ID und seinen Namen, und was das alte hatte, wird abgewiesen, die mit ihm erstellten Schlüssel aber bleiben; Widerrufen beendet einen Schlüssel und die mit ihm erstellten.",
 
   "help.profileLinked": "Verknüpfen meldet dich einmal beim Anmeldedienst an; das zurückgekommene Konto wird gezeigt, und Verknüpfen dort lässt es dich auch hier anmelden. Erneutes Verknüpfen bei einem Anmeldedienst ersetzt die Verknüpfung dort. Entfernen beendet eine Verknüpfung, aber nicht deinen letzten Weg zur Anmeldung.",
   "help.roomName": "Der Name des Raums, gespeichert im Cube und in jedem Programm sichtbar, das mit ihm spricht.",
@@ -1826,7 +1826,8 @@
   "users.keyCopy": "Den Schlüssel kopieren",
   "users.newSecret": "Neues Geheimnis",
   "users.newSecretLabel": "neues Geheimnis für {label}",
-  "users.newSecretAsk": "Ein neues Geheimnis für {label}: Was den Schlüssel jetzt hat, wird abgewiesen. Das neue Geheimnis wird einmal gezeigt.",
+  "users.newSecretAsk": "Ein neues Geheimnis für {label}: Was den Schlüssel jetzt hat, wird abgewiesen. Mit ihm erstellte Schlüssel bleiben; Widerrufen beendet einen Schlüssel und die mit ihm erstellten. Das neue Geheimnis wird einmal gezeigt.",
+  "users.newSecretAskHeirs": "Ein neues Geheimnis für {label}: Was den Schlüssel jetzt hat, wird abgewiesen, doch die mit ihm erstellten Schlüssel bleiben ({n} hier aufgeführt); Widerrufen beendet einen Schlüssel und die mit ihm erstellten. Das neue Geheimnis wird einmal gezeigt.",
   "users.newSecretShown": "Das neue Geheimnis von Schlüssel {id}, einmal gezeigt:",
   "users.newSecretMade": "Schlüssel {id} hat ein neues Geheimnis; es wird einmal im Panel gezeigt.",
   "roles.title": "Rollen",

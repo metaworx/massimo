@@ -199,13 +199,17 @@ function KeyChange({ u, tk, run, done, keeps, ends, id, say }: {
  * secret once the question goes; never on the settings file's key, the
  * key the page is signed in with, the key its session was made from, nor,
  * in the app, the key the phone keeps, which would hold the old secret.
+ * The question says that the keys made with the key stay, heirs of them
+ * by number where the list holds some (made_by), and that Revoke ends a
+ * key and the keys made with it.
  * idBase is the start of the ids of its fields; say is the caller's
  * message line, for what Change… refuses itself.
  */
-function TokenRow({ u, tk, labels, run, marked, deviceKey, keeps, ends, rekeys, rekeyed, idBase, say }: {
+function TokenRow({ u, tk, labels, heirs, run, marked, deviceKey, keeps, ends, rekeys, rekeyed, idBase, say }: {
   u: User;
   tk: Token;
   labels: Map<number, string>;
+  heirs: number;
   run: Run;
   marked: boolean;
   deviceKey: number;
@@ -271,7 +275,7 @@ function TokenRow({ u, tk, labels, run, marked, deviceKey, keeps, ends, rekeys, 
           </span>
         )}
       {asking && (
-        <Question text={t("users.newSecretAsk", { label: tk.label || kind })} yes={t("users.newSecret")} no={t("action.cancel")} onNo={() => ask.done()}
+        <Question text={heirs ? t("users.newSecretAskHeirs", { label: tk.label || kind, n: heirs }) : t("users.newSecretAsk", { label: tk.label || kind })} yes={t("users.newSecret")} no={t("action.cancel")} onNo={() => ask.done()}
           boxRef={ask.box} onYes={async () => {
             await rekeyToken(run, u.name, tk, (key) => rekeyed(key, tk.id));
             ask.done();
@@ -373,6 +377,9 @@ export function Tokens({ u, off, open, reads, run, say, labelId, help, marked, d
   }, [list]);
   const labels = new Map((list || []).map((tk) => [tk.id, tk.label || t("users.kind." + tk.kind)]));
   const rekeys = ends && !listOnly;
+  // the keys each key made, as the list holds them (made_by): New secret's question names how many stay
+  const heirs = new Map<number, number>();
+  for (const tk of list || []) if (tk.made_by) heirs.set(tk.made_by, (heirs.get(tk.made_by) || 0) + 1);
   const rekeyed = (key: string, id: number) => {
     made.current = key ? { key, id } : null;
   };
@@ -401,7 +408,7 @@ export function Tokens({ u, off, open, reads, run, say, labelId, help, marked, d
         {error && <li class="muted small bad">{error}</li>}
         {list && !list.length && <li class="muted small">{t("users.tokensNone")}</li>}
         {(list || []).map((tk) => (
-          <TokenRow key={tk.id} u={u} tk={tk} labels={labels} run={run} marked={tk.kind === "api" && tk.id === marked} deviceKey={deviceKey} keeps={keeps && !listOnly}
+          <TokenRow key={tk.id} u={u} tk={tk} labels={labels} heirs={heirs.get(tk.id) || 0} run={run} marked={tk.kind === "api" && tk.id === marked} deviceKey={deviceKey} keeps={keeps && !listOnly}
             ends={ends} rekeys={rekeys} rekeyed={rekeyed} idBase={labelId} say={say} />
         ))}
       </ul>

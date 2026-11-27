@@ -1058,8 +1058,10 @@ def test_new_secret(page, case):
     the key just made is, the users' line saying so; the row keeps its id
     and label, the key's session is listed no more, the focus is back on
     New secret, and the old secret is refused, counted toward no lockout,
-    while the new one lets in. A session has none. Fails on the page
-    before: no New secret."""
+    while the new one lets in. The question says that the keys made with
+    the key stay, and how many the list holds: one here, which stays after
+    the new secret. A session has none. Fails on the page before: no New
+    secret, then a question that did not say the keys made with it stay."""
     from test_login import status_with
     prefix = f"ui-test-rekey-{case.width}-{case.lang}-"
     revoke_keys(prefix)
@@ -1068,6 +1070,8 @@ def test_new_secret(page, case):
     # the session's label out of the prefix: it goes with its key, which revoke_keys revokes
     session_label = f"ui-test-rekey-session-{case.width}-{case.lang}"
     api_call("POST", "api/v1/login/key", {"label": session_label}, token=key["token"])
+    # a key made with the key, its heir, which stays; out of the prefix too, it goes with its maker
+    heir = api_call("POST", "api/v1/users/operator/tokens", {"label": f"ui-test-rekey-heir-{case.width}-{case.lang}"}, token=key["token"])
     posts = []
     page.on("request", lambda r: posts.append(r.url) if r.method == "POST" and r.url.endswith("/rekey") else None)
     rows = ".user-panel[data-name='operator'] .user-tokens"
@@ -1090,7 +1094,10 @@ def test_new_secret(page, case):
         page.locator(button).click()
         box = row.locator(".confirm-box")
         box.wait_for()
-        assert box.locator(".confirm-text").inner_text() == page.evaluate("(l) => t('users.newSecretAsk', { label: l })", prefix + "phone"), "the question"
+        panel.locator(f".user-tokens li[data-id='{heir['id']}']").wait_for(timeout=5000)
+        asked = page.evaluate("(l) => t('users.newSecretAskHeirs', { label: l, n: 1 })", prefix + "phone")
+        assert "{n}" not in asked and "(1 " in asked, f"the question's text: {asked!r}"
+        assert box.locator(".confirm-text").inner_text() == asked, "the question names the one key made with the key, which stays"
         assert row.locator(".token-buttons").is_hidden(), "asked in place of the row's buttons"
         assert wait_until(page, FOCUSED % f"li[data-id='{key['id']}'] .confirm-no", 3), "the focus on No"
         named_buttons(page, "System settings → Users, New secret asked")
@@ -1118,6 +1125,7 @@ def test_new_secret(page, case):
         assert row.locator(".token-label").inner_text() == prefix + "phone", "the row keeps its id and label"
         assert wait_until(page, "![...document.querySelectorAll(%r)].some((li) => li.textContent.includes(%r))" % (f"{rows} li", session_label), 5), \
             "the key's session is listed no more"
+        assert panel.locator(f".user-tokens li[data-id='{heir['id']}']").count() == 1, "the key made with the key stays"
 
         # the old secret refused, not counted; the new one lets in
         assert status_with(key["token"]) == 401, "the old secret is refused"

@@ -1060,12 +1060,13 @@ func (s *Server) postToken(w http.ResponseWriter, r *http.Request) error {
 	}
 	opts := store.KeyOptions{Label: req.Label, IdleExempt: req.IdleExempt, Expires: end}
 	if p := principalOf(r); p.named() && p.token.Kind == store.TokenAPI {
-		opts.MadeBy = p.token.ID
+		opts.Maker = p.token // held to the secret it was let in with
 	}
 	tok, secret, err := st.AddKey(r.Context(), u.ID, opts)
-	if opts.MadeBy != 0 && errors.Is(err, store.ErrNoToken) {
-		// The bearer, let in a moment before, was revoked or ended since:
-		// no key is made, as none would have been made after it.
+	if opts.Maker.ID != 0 && errors.Is(err, store.ErrNoToken) {
+		// The bearer, let in a moment before, was revoked, ended or given
+		// a new secret since: no key is made, as none would have been made
+		// after it.
 		return fail(http.StatusUnauthorized, "%v", errEndedToken)
 	}
 	if err != nil {
@@ -1074,8 +1075,8 @@ func (s *Server) postToken(w http.ResponseWriter, r *http.Request) error {
 	auditTarget(r, "token:"+strconv.FormatInt(tok.ID, 10))
 	auditSubject(r, tokenSubject(tok, u))
 	line := []any{"user", s.logUserName(r.Context(), u), "label", req.Label, "remote", s.clientIP(r)}
-	if opts.MadeBy != 0 {
-		line = append(line, "made_by", opts.MadeBy)
+	if tok.MadeBy != 0 {
+		line = append(line, "made_by", tok.MadeBy)
 	}
 	if opts.IdleExempt {
 		line = append(line, "idle_exempt", true)

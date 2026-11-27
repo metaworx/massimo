@@ -337,13 +337,15 @@ func (s *Server) login(w http.ResponseWriter, r *http.Request) error {
 // keys are cleared. An integration's user gets none, by whatever it
 // signed in (noWayIn).
 func (s *Server) openSession(w http.ResponseWriter, r *http.Request, u store.User, label string, extra map[string]any, keys ...string) error {
-	return s.openSessionFrom(w, r, u, 0, label, extra, keys...)
+	return s.openSessionFrom(w, r, u, store.Token{}, label, extra, keys...)
 }
 
 // openSessionFrom is openSession for a session made from the API key
-// keyID, which then names the key and ends the key's earlier session; 0
-// for a sign-in.
-func (s *Server) openSessionFrom(w http.ResponseWriter, r *http.Request, u store.User, keyID int64, label string, extra map[string]any, keys ...string) error {
+// key, the request's bearer as it was let in, which then names the key
+// and ends the key's earlier session; one of ID 0 for a sign-in. The
+// session is made only while the key still holds the secret the request
+// was let in with (store.AddKeySessionAs; AP KeyLife, Block 5).
+func (s *Server) openSessionFrom(w http.ResponseWriter, r *http.Request, u store.User, key store.Token, label string, extra map[string]any, keys ...string) error {
 	ctx := r.Context()
 	st := s.opts.Store
 	ip := s.clientIP(r)
@@ -366,13 +368,13 @@ func (s *Server) openSessionFrom(w http.ResponseWriter, r *http.Request, u store
 	var tok store.Token
 	var secret string
 	var err error
-	if keyID != 0 {
-		tok, secret, err = st.AddKeySession(ctx, keyID, label, now.Add(SessionLifetime))
+	if key.ID != 0 {
+		tok, secret, err = st.AddKeySessionAs(ctx, key, label, now.Add(SessionLifetime))
 	} else {
 		tok, secret, err = st.AddToken(ctx, u.ID, store.TokenSession, label, now.Add(SessionLifetime))
 	}
 	if errors.Is(err, store.ErrNoToken) {
-		return fail(http.StatusUnauthorized, "%s", errBadToken.Error()) // the key was revoked meanwhile
+		return fail(http.StatusUnauthorized, "%s", errBadToken.Error()) // the key was revoked, or given a new secret, meanwhile
 	}
 	if err != nil {
 		return fail(http.StatusInternalServerError, "%v", err)
@@ -434,7 +436,7 @@ func (s *Server) loginKey(w http.ResponseWriter, r *http.Request) error {
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil && !errors.Is(err, io.EOF) {
 		return fail(http.StatusBadRequest, "bad body: %v", err)
 	}
-	return s.openSessionFrom(w, r, p.user, p.token.ID, req.Label, nil)
+	return s.openSessionFrom(w, r, p.user, p.token, req.Label, nil)
 }
 
 // logout handles POST /api/v1/logout: the session that made the call

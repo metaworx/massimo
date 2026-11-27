@@ -279,3 +279,75 @@ func TestRekeySettingsKey(t *testing.T) {
 		t.Errorf("the file's former key, revoked by the bootstrap, given a new secret: %v, want ErrNoToken", err)
 	}
 }
+
+// A request let in with a key's old secret just before a new secret, and
+// writing just after it (AP KeyLife, Block 5): the session it would make
+// from the key (AddKeySessionAs) and the key it would make with the key
+// as its maker (KeyOptions.Maker) are refused as for a key revoked
+// meanwhile, ErrNoToken, and nothing is made; the event stream's check of
+// its caller (TokenAliveAs) lets it in no more. Let in with the new
+// secret, each goes through. A key without its secret, as a caller could
+// make one by its id alone, is let in by none of them.
+func TestRekeyAdmittedBefore(t *testing.T) {
+	t.Parallel()
+	s, err := Open(copied(t), Options{Logger: quiet()})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer s.Close()
+	ctx := context.Background()
+	anna, _ := s.AddUser(ctx, User{Name: "anna", Role: RoleOperator}, "pw", 0)
+	key, oldSecret, err := s.AddKey(ctx, anna.ID, KeyOptions{Label: "phone"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	before, ok, err := s.TokenByHash(ctx, HashToken(oldSecret)) // the request's admission
+	if err != nil || !ok {
+		t.Fatalf("the key let in: %v %v", ok, err)
+	}
+	_, newSecret, err := s.RekeyToken(ctx, key.ID, 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	count := func() int {
+		t.Helper()
+		var n int
+		if err := s.db.QueryRowContext(ctx, `SELECT count(*) FROM tokens WHERE user_id = ?`, anna.ID).Scan(&n); err != nil {
+			t.Fatal(err)
+		}
+		return n
+	}
+	n := count()
+	day := time.Now().Add(24 * time.Hour)
+	for _, c := range []struct {
+		what string
+		key  Token
+	}{{"the key let in with its old secret", before}, {"the key by its id alone", Token{ID: key.ID}}} {
+		if _, secret, err := s.AddKeySessionAs(ctx, c.key, "phone", day); !errors.Is(err, ErrNoToken) || secret != "" {
+			t.Errorf("a session made from %s: %q %v, want ErrNoToken", c.what, secret, err)
+		}
+		if tok, _, err := s.AddKey(ctx, anna.ID, KeyOptions{Label: "heir", Maker: c.key}); !errors.Is(err, ErrNoToken) {
+			t.Errorf("a key made by %s: %+v %v, want ErrNoToken", c.what, tok, err)
+		}
+		if _, ok, err := s.TokenAliveAs(ctx, c.key); err != nil || ok {
+			t.Errorf("%s, alive as it: %v %v, want false", c.what, ok, err)
+		}
+	}
+	if c := count(); c != n {
+		t.Errorf("a refused write made a row: %d tokens, %d before", c, n)
+	}
+
+	after, ok, err := s.TokenByHash(ctx, HashToken(newSecret))
+	if err != nil || !ok {
+		t.Fatalf("the key let in with its new secret: %v %v", ok, err)
+	}
+	if got, ok, err := s.TokenAliveAs(ctx, after); err != nil || !ok || got.ID != key.ID {
+		t.Errorf("the key let in with its new secret, alive as it: %+v %v %v", got, ok, err)
+	}
+	if session, _, err := s.AddKeySessionAs(ctx, after, "phone", day); err != nil || session.ParentID != key.ID {
+		t.Errorf("a session made from the key let in with its new secret: %+v %v", session, err)
+	}
+	if heir, _, err := s.AddKey(ctx, anna.ID, KeyOptions{Label: "heir", Maker: after}); err != nil || heir.MadeBy != key.ID {
+		t.Errorf("a key made by the key let in with its new secret: %+v %v", heir, err)
+	}
+}

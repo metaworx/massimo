@@ -1127,8 +1127,9 @@ its change line from and to (`null` for none).
 `POST …/tokens/{id}/rekey`, with no body, gives a live API key a new secret
 (AP KeyLife v1.0, Block 5; AP MobileApp, D76-A, D81-A),
 the way back to a key whose secret is lost, since none is shown again,
-and the way to end whatever holds a secret that may have leaked
-without making another key.
+and the way to refuse whatever holds the key's secret now without making another key.
+The keys made with the key (its heirs, `made_by`) stay:
+for a secret that may have leaked, Revoke ends a key and the keys made with it.
 It answers `200` as `POST` answers `201`, the new secret shown once,
 the command keeping the answer without `token`
 and a retry with its `Idempotency-Key` answering without it and giving no other:
@@ -1140,8 +1141,13 @@ and a retry with its `Idempotency-Key` answering without it and giving no other:
 The key keeps its row: its id, label, making, last use, end date,
 exclusion from the idle limit, maker and heirs stay.
 The old secret is answered `401` as a token that ended,
-which counts toward no lockout (Authentication),
-and the key's session ends, with what it subscribed to push,
+which counts toward no lockout (Authentication);
+an event stream opened with it, or with a ticket taken with it,
+ends at its next keep-alive,
+and a request let in with it just before the new secret
+makes no session (`POST /api/v1/login/key`) and no key (`POST …/tokens`) after it,
+answered `401`;
+the key's session ends, with what it subscribed to push,
 unless it is the caller's own, made from that key,
 which stays; what the key itself subscribed to push goes.
 The key's user may, signed in or with another of its keys,

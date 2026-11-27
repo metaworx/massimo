@@ -1577,11 +1577,13 @@ and of a session made from a key only while the key is neither revoked,
 past its end nor ended unused,
 wherever a token is let in, counted or sent to:
 `TokenByHash` and `TokenAlive` give a token under it,
+and `TokenAliveAs` too while it holds the secret it was let in with,
 `TokenEnded` says a token the store issued is not,
 `Tokens` lists the sessions under it and the keys while not revoked,
 a key past its end staying listed, to be revoked,
 `PushSubscriptions` sends to a session's devices under it,
-and `AddKeySession` makes a session from a key under it alone.
+and `AddKeySession` and `AddKeySessionAs` make a session from a key under it alone,
+the latter also only while the key holds the secret it was let in with.
 A password set by someone else ends the sessions, those made from keys
 among them, and leaves the keys.
 
@@ -1602,7 +1604,9 @@ A key is made with a maker only while the maker is alive,
 the check and the insert one statement (`AddKey`, else `ErrNoToken`, a `401`):
 a request whose bearer was let in before its revoke,
 and makes its key after it, makes none,
-so that no live key names a revoked maker that no later revoke reaches.
+so that no live key names a revoked maker that no later revoke reaches;
+nor does one let in with a secret the maker no longer holds (`KeyOptions.Maker`,
+its hash checked in the same statement; Block 5).
 `RevokeToken` revokes, in its transaction, the heirs of the token it revokes,
 followed through `made_by` from key to key in any state,
 so that a key past its end, or one an older binary revoked alone,
@@ -1689,7 +1693,9 @@ whatever else of its life, so that it refuses every change of it.
 A live key may take a new secret (AP KeyLife v1.0, Block 5; MobileApp.D76-A),
 the way back to a key whose secret is lost,
 since the store keeps its hash alone (D81-A),
-and the way to end whatever holds a secret that may have leaked.
+and the way to refuse whatever holds the key's secret now.
+Its heirs, the keys made with it, stay:
+for a secret that may have leaked, a revoke ends a key and the keys it made.
 `RekeyToken` replaces the key's hash in one transaction,
 so the key keeps its row:
 its id, label, making, last use, end date, exclusion, maker and heirs.
@@ -1703,7 +1709,13 @@ a hash replaced alone would make it one.
 The key's session (a key has one at a time, `AddKeySession`) is revoked
 with what it subscribed to push, unless it is the caller's own (`keep`),
 and what the key itself subscribed goes too:
-whoever held the old secret holds nothing.
+whoever held the old secret holds no session and no subscription.
+What a request let in with the old secret does next is held to that secret,
+since the key keeps its id:
+`AddKeySessionAs` and a key made with `KeyOptions.Maker` take the key only
+while its hash is still the one the request was let in with (`ErrNoToken`),
+and `TokenAliveAs`, which the event stream asks at each keep-alive,
+no longer finds it, so a stream opened with the old secret ends.
 A key that is not live, by its revoke, its end date or the idle limit,
 takes none (`ErrNoToken`),
 and an integration's key none (`ErrIntegrationUser`):
