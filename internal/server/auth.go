@@ -193,9 +193,13 @@ type principal struct {
 	// let the principal in, "" for none (stillAdmitted).
 	legacyToken string
 	// integration is the registered integration whose key it is, and
-	// actsFor the integration's user the call acts for (onbehalf.go).
+	// actsFor the integration's user the call acts for (onbehalf.go),
+	// with instance, the installation id the call came from, which its
+	// event stream asks again at each keep-alive (stillActsFor); "" for
+	// every other principal.
 	integration *store.Integration
 	actsFor     *store.IntegrationIdentity
+	instance    string
 }
 
 // realUserID is who makes the principal's calls: the integration's user
@@ -913,10 +917,11 @@ func (s *Server) principalFor(ctx context.Context, tok store.Token, now time.Tim
 // for would be let in now: an open server still open, the one token of a
 // server without a store unchanged, a user's token neither revoked nor
 // expired, its user and role still allowed and holding read, and for a
-// call through an integration for one of its users the chain again
-// (stillActsFor). A store that cannot be read ends the stream, as
-// authorize fails closed. The stream asks at each keep-alive (server.go,
-// events).
+// call through an integration for one of its users the chain and the
+// installation id again (stillActsFor). A store that cannot be read ends
+// the stream, as authorize fails closed. The stream asks at each
+// keep-alive (server.go, events), and authorize when it redeems a
+// stream's ticket.
 func (s *Server) stillAdmitted(ctx context.Context, p *principal) bool {
 	if p == nil {
 		return false
@@ -1042,7 +1047,17 @@ func (s *Server) authorize(w http.ResponseWriter, r *http.Request, capability st
 		q := r.URL.Query()
 		ticket, tok := q.Get("ticket"), q.Get("token")
 		if tp, ok := s.tickets.redeem(ticket, strings.ToLower(r.PathValue("sn"))); ok {
-			p = tp
+			// The ticket's caller is asked again before the stream sends
+			// anything, as at each keep-alive: one no longer let in since
+			// the ticket was issued (its key revoked, its user disabled,
+			// another installation accepted) is refused as a token that
+			// ended is, uncounted, and the page's next ticket asks it to
+			// sign in.
+			if s.stillAdmitted(ctx, tp) {
+				p = tp
+			} else {
+				why = errEndedToken
+			}
 		} else {
 			guess = guess || ticket != ""
 			if tok != "" {
