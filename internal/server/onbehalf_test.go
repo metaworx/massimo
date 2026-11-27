@@ -62,9 +62,13 @@ func registerHA(t *testing.T, st *store.Store, caps []string) (store.Integration
 	return i, key
 }
 
-// as is a call for a user of the integration at a level.
-func as(id, level string) map[string]string {
-	return map[string]string{OnBehalfHeader: "id=" + id + "; level=" + level + "; name=Anna; instance=" + haInstance}
+// as is a call for a user of the integration at a level, from the
+// installation registerHA registered.
+func as(id, level string) map[string]string { return asFrom(id, level, haInstance) }
+
+// asFrom is as from the installation id given.
+func asFrom(id, level, instance string) map[string]string {
+	return map[string]string{OnBehalfHeader: "id=" + id + "; level=" + level + "; name=Anna; instance=" + instance}
 }
 
 // A call's capabilities are what every link of the chain leaves: the
