@@ -952,14 +952,21 @@ ICON_PLACE = """(sel) => {
 
 def icon_after_last_line(page, sel):
     """Whether the copy icon of the text sel follows the text's last
-    line: after its end, its middle within that line's height, however
-    many lines the text takes; and what was measured (no icon where the
-    text has none, or no text)."""
+    line, however many lines the text takes: after its end, its middle
+    within that line's height; or, where the text fills its last line,
+    at the start of the line below it (within its margin of the text's
+    left edge, its top within 8 px of that line's bottom), as an inline
+    icon wraps; never beside the text's lines, centred between them, as
+    a flex pair sets it. Also what was measured (no icon where the text
+    has none, or no text)."""
     m = page.evaluate(ICON_PLACE, sel)
     if m["icon"] is None:
         return False, m
-    mid = (m["icon"]["top"] + m["icon"]["bottom"]) / 2
-    return m["icon"]["left"] >= m["last"]["right"] - 0.5 and m["last"]["top"] - 0.5 <= mid <= m["last"]["bottom"] + 0.5, m
+    icon, last = m["icon"], m["last"]
+    mid = (icon["top"] + icon["bottom"]) / 2
+    after = icon["left"] >= last["right"] - 0.5 and last["top"] - 0.5 <= mid <= last["bottom"] + 0.5
+    below = icon["left"] <= last["left"] + 8 and last["bottom"] - 0.5 <= icon["top"] <= last["bottom"] + 8
+    return after or below, m
 
 
 CUBE_ITEM = "#cube-menu .menu-items button[data-value='%s']"
