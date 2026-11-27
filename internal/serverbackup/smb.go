@@ -556,6 +556,13 @@ type smbMount struct {
 // dialSMB connects to the target's server, negotiates SMB 2 or 3 with
 // every message signed, signs in by NTLM and mounts the share; ctx
 // bounds the connection and every call on it.
+//
+// It encrypts only where the server asks for it, for the session or the
+// share: go-smb2 announces that it can encrypt, which a server that
+// wants it answers by asking, but has no setting by which a client asks
+// for encryption a server merely offers, as SMB 3 would let it. A share
+// that does not ask is reached signed, not encrypted; a copy is
+// encrypted by age in any case.
 func dialSMB(ctx context.Context, t *SMB) (smbShare, error) {
 	var nd net.Dialer
 	conn, err := nd.DialContext(ctx, "tcp", t.addr)

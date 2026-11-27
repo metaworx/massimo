@@ -2263,6 +2263,10 @@ so Windows' service account needs no rights on one.
   and encrypts where the server asks for it:
   Samba's `server smb encrypt = required`,
   Windows' `Set-SmbShare -EncryptData $true`.
+  It cannot ask for encryption where a server only offers it:
+  go-smb2 encrypts where the server asks, for the session or the share,
+  and has no setting by which a client asks for it,
+  so a share that does not ask is reached signed, not encrypted.
   A copy is encrypted by age in any case;
   the share's encryption hides the names and the listing on the network too.
 - Each call connects, signs in, mounts the share and logs off again;
