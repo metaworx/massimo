@@ -5,7 +5,7 @@
 key."""
 import json
 
-from helpers import wait_until
+from helpers import boxes, wait_until
 
 SHOWN = "!document.getElementById('open-banner').classList.contains('hidden')"
 
@@ -29,8 +29,8 @@ def test_open_server_banner(page):
     assert wait_until(page, SHOWN, 5), "the banner on an open server"
     text = banner.inner_text()
     assert page.evaluate("t('open.title')") in text and page.evaluate("t('open.text')") in text, "it says the server is open and what to do"
-    header = page.locator("header.top").bounding_box()
-    assert banner.bounding_box()["y"] >= header["y"] + header["height"] - 1, "under the header's rule"
+    header, b = boxes(page, "header.top", banner)
+    assert b["y"] >= header["y"] + header["height"] - 1, f"under the header's rule: {b} under {header}"
     page.unroute("**/api/v1/me")
     stub_me(page, "none")
     page.evaluate("loadMe()")
