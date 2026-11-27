@@ -805,10 +805,11 @@ paths:
       summary: Remove a user
       x-capability: users
       description: >-
-        The user's tokens are revoked; its row stays for the audit. The last enabled owner without an end date stays
-        (409), and so does the user that holds the settings file's MASSIMO_API_TOKEN (409), whose key the next start
-        would not add back: it is changed or removed in the settings file first. An integration's own user (<uuid>:)
-        and its system user stay too (403): DELETE /api/v1/integrations/{uuid} removes the integration and keeps both.
+        The user's tokens are revoked; its row stays for the audit. An integration's user's link to a Massimo user ends
+        with it: its integration's next call for it makes it anew, unlinked. The last enabled owner without an end date
+        stays (409), and so does the user that holds the settings file's MASSIMO_API_TOKEN (409), whose key the next start
+        would not add back: it is changed or removed in the settings file first. An integration's own user (<uuid>:) and
+        its system user stay too (403): DELETE /api/v1/integrations/{uuid} removes the integration and keeps both.
       parameters: [{$ref: "#/components/parameters/name"}, {$ref: "#/components/parameters/idempotencyKey"}]
       responses:
         "200":
