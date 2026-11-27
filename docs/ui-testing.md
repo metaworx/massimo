@@ -1,4 +1,4 @@
-# Testing the web UI (v1.31.0)
+# Testing the web UI (v1.32.0)
 
 An evaluation of a Cypress suite for the web UI, against the alternatives:
 what the Playwright smoke test covers today and what it cannot do well,
@@ -804,6 +804,27 @@ The suite's helpers for it are in `tools/ui-test/helpers.py`
   so the hold fails at its end where the timer is no longer the one it cleared.
   What a poll itself draws the test counts for one poll of its own (`poll(false)`),
   once every request it started has been answered.
+- **A timed state held** (`with held_timers(page, *kinds):`, AP SteadyTests, Block 13):
+  a test that checks a state the page takes back on a timer of its own,
+  or that must come before a timer of the page's, holds it while it checks,
+  rather than fitting its steps into the timer, which a slow runner
+  or the retry's trace outlasts:
+  "Copied" on a copy control (`copied`, 1400 ms, `copied()` of `components.js`),
+  which a copy, the page shown again and its reads did not fit in
+  (`test_maint_updates.py`);
+  the toast (`toast`, 8 to 30 s), checked after an axe run,
+  or taken back by its ×, Show or a probe, which its own time would take back too
+  (`test_notifications.py`, `test_discover.py`, `test_connect.py`);
+  the settings' push (`push`, a second after a change or a dismissed sign-in,
+  `schedulePreferences` of `login.js`),
+  which a test's later read must come before (`test_sign_in_resend.py`).
+  The page sets its timer as always and an observer clears it at once,
+  so nothing else of the page stops: a later copy, a × on the toast,
+  a sign-in that takes the push go as they do;
+  at the end what was held goes at once, as its timer would have by then.
+  A look right after the wait that saw a state, within its time, holds nothing,
+  nor a check of the fade itself.
+  The hold is within one document: a block whose page was loaded anew fails at its end.
 - **The same element** (`mark`, `replaced`, `frames` of `helpers.py`):
   a test that holds that data takes nothing from the user marks the elements
   of its selectors, lets the data come, waits two frames and a task,

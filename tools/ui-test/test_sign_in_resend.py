@@ -27,7 +27,7 @@ import time
 import pytest
 
 from conftest import TOKEN, URL, api_call, clear_preferences
-from helpers import OPERATOR_PASSWORD, frames, open_personal_page, scaled, sent_requests, show_view, sign_out, wait_held, wait_until
+from helpers import OPERATOR_PASSWORD, frames, held_timers, open_personal_page, scaled, sent_requests, show_view, sign_out, wait_held, wait_until
 from test_login import sign_in
 
 NOT_SENT = {"en": "not sent, since you were signed out: do it again once signed in",
@@ -536,12 +536,15 @@ def test_dismissed_then_a_later_sign_in(page, case, watch):
     said = "!document.getElementById('message').classList.contains('hidden') && " \
            f"document.getElementById('message').textContent.includes({json.dumps(NOT_SENT[case.lang])})"
     assert wait_until(page, said, 5), "the message line says it was not sent"
-    page.evaluate("document.getElementById('login-dialog').close()")
-    assert wait_until(page, "!document.body.classList.contains('signed-out')", 5), "dismissed: the page is back"
-    assert page.evaluate(said), "with the line"
-    page.evaluate("() => { api('GET', 'api/v1/me?again=1').catch(() => {}); }")
-    assert wait_until(page, DIALOG_OPEN, 5), "a read's 401 opens the sign-in again"
-    assert wait_held(page, reads.sent), "the read meets the 401"
+    # the dismissal sends the settings' push it held a second later, without a session: refused and said not sent
+    # anew, it would open a sign-in of its own; held until the later read's 401 has opened the sign-in, which takes it
+    with held_timers(page, "push"):
+        page.evaluate("document.getElementById('login-dialog').close()")
+        assert wait_until(page, "!document.body.classList.contains('signed-out')", 5), "dismissed: the page is back"
+        assert page.evaluate(said), "with the line"
+        page.evaluate("() => { api('GET', 'api/v1/me?again=1').catch(() => {}); }")
+        assert wait_until(page, DIALOG_OPEN, 5), "a read's 401 opens the sign-in again"
+        assert wait_held(page, reads.sent), "the read meets the 401"
     before, pushed = len(seen), len(pushes)
     sign_in_key(page)
     back(page, seen, before)

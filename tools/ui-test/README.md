@@ -1019,6 +1019,9 @@ Node is not needed.
 - A check of what a request carried waits for the request itself
   (`wait_held` on the route's list, or on `sent_requests` for the page's own),
   not for what the page draws before it sends it.
+- A state the page takes back on a timer of its own, "Copied" or the toast,
+  is held while a test checks it after more than one look
+  (`with held_timers(page, "copied"):`), not raced.
 - What a reload or a click brings is waited for,
   not looked at once right after another wait:
   the page goes on after the moment the first wait saw

@@ -18,8 +18,10 @@ keeps a log of the test's own lines; wait_log_live waits until the log
 takes the stream's state events; safe_route is the one route handler
 that lets go a request the page no longer waits for; undo is a cleanup
 that says what it could not undo; held_poll holds the page's poll while
-a test measures what the page does by itself; pause_clock pauses
-Playwright's clock at the page's now. open_fold, close_fold and
+a test measures what the page does by itself; held_timers holds the
+page's timed states, "Copied", the toast and the settings' push, while a
+test checks them; pause_clock pauses Playwright's clock at the page's
+now. open_fold, close_fold and
 toggle_fold take a fold's toggle event before a test acts inside it.
 wait_started waits for the page's start, the page fixture's and
 owner_page's, and says on a timeout which read it waited for. boxes
@@ -347,6 +349,103 @@ def held_poll(page):
     finally:
         if not page.is_closed():
             page.evaluate("startPolling()")
+
+
+# --- a timed state held ---------------------------------------------------
+
+# The page's timers that held_timers holds, by kind, each with what the
+# page shows or sends while it runs:
+# - copied: "Copied" on a copy control, the class copied, taken back
+#   1400 ms after the copy (copied() of components.js, el.copiedTimer);
+# - toast: the page's toast, hidden 8 to 30 s after it is shown
+#   (showToast of components.js, toastState.timer);
+# - push: the settings' push to the server, sent 1 s after a change or
+#   the end of a sign-in that held it (schedulePreferences of login.js,
+#   prefsSync.timer).
+TIMED = ("copied", "toast", "push")
+
+# The hold, in the page: an observer of the classes clears the timer of
+# each control that shows "Copied" and of the toast shown, once the page
+# has set it; the push's timer is cleared as the page sets it, the push
+# noted as due. The page's own code is not changed: a later copy, a toast
+# closed by its ×, a push taken by a sign-in all go as they do.
+HOLD_TIMED = """(kinds) => {
+  const k = window.__uiTest || (window.__uiTest = {});
+  if (k.timed) throw new Error("held_timers: a hold is on already");
+  const h = k.timed = { kinds, observer: null, due: false };
+  const sweep = () => {
+    if (kinds.includes("copied")) for (const el of document.querySelectorAll(".copied")) {
+      clearTimeout(el.copiedTimer);
+      el.copiedTimer = 0;
+    }
+    const toast = document.getElementById("toast");
+    if (kinds.includes("toast") && toast && !toast.classList.contains("hidden") && toastState.timer) {
+      clearTimeout(toastState.timer);
+      toastState.timer = null;
+    }
+  };
+  sweep();
+  if (kinds.includes("copied") || kinds.includes("toast")) {
+    h.observer = new MutationObserver(sweep);
+    h.observer.observe(document.documentElement, { subtree: true, attributes: true, attributeFilter: ["class"] });
+  }
+  if (kinds.includes("push")) {
+    if (prefsSync.timer) {
+      clearTimeout(prefsSync.timer);
+      h.due = true;
+    }
+    Object.defineProperty(prefsSync, "timer", { configurable: true,
+      get: () => (h.due ? -1 : null),
+      set: (t) => {
+        if (t) clearTimeout(t);
+        h.due = !!t;
+      } });
+  }
+}"""
+
+# The hold's end: what it held goes at once, as its timer would have by
+# then: "Copied" taken back, the toast hidden, a push that came due sent.
+END_TIMED = """() => {
+  const k = window.__uiTest || {};
+  const h = k.timed;
+  if (!h) return false;
+  k.timed = null;
+  if (h.observer) h.observer.disconnect();
+  if (h.kinds.includes("copied")) for (const el of document.querySelectorAll(".copied")) el.classList.remove("copied");
+  const toast = document.getElementById("toast");
+  if (h.kinds.includes("toast") && toast && !toast.classList.contains("hidden")) hideToast();
+  if (h.kinds.includes("push")) {
+    Object.defineProperty(prefsSync, "timer", { configurable: true, writable: true, value: null });
+    if (h.due) prefsSync.timer = setTimeout(pushPreferences, 0);
+  }
+  return true;
+}"""
+
+
+@contextlib.contextmanager
+def held_timers(page, *kinds):
+    """The page's timed states of kinds (TIMED) held for the with block:
+    "Copied" on a copy control (copied), the toast (toast) and the
+    settings' push (push) stay or wait until the block ends, not until a
+    product timer that a slow runner, or the retry's trace, outlasts:
+    "Copied" fades after 1400 ms, which a copy, a page shown again and its
+    reads did not fit in (test_maint_updates.py, AP SteadyTests, Block
+    13). The page's code is not changed and nothing else of it stops: a
+    later copy, a × on the toast, a push a sign-in takes go as they do.
+    At the end what it held goes at once, as its timer would have by then.
+    It holds within one document, as a mark does: a block whose page was
+    loaded anew meanwhile fails at its end, and a hold already on fails."""
+    unknown = [k for k in kinds if k not in TIMED]
+    if unknown or not kinds:
+        raise ValueError(f"held_timers holds {', '.join(TIMED)}, not {', '.join(unknown) or 'nothing'}")
+    page.evaluate(HOLD_TIMED, list(kinds))
+    try:
+        yield
+    except BaseException:
+        if not page.is_closed():
+            page.evaluate(END_TIMED)
+        raise
+    assert page.evaluate(END_TIMED), f"the page's {', '.join(kinds)} held until the end: its document was loaded anew meanwhile"
 
 
 # --- what the page reads and what its stream brings -------------------
