@@ -1,33 +1,40 @@
-# AP SteadyTests v1.0: Steady tests at their cause
+# AP SteadyTests v1.1: Steady tests at their cause
 
 ## TL;DR
 
-The nine flakes met while AP AccessEnds was built, fixed at their cause,
-each with the kit piece of its class,
-and the guards that keep each class closed,
-in nine blocks and two pull requests
-(`wip/2026-11-26_14-29_ANALYSIS_SteadyTests_steady_tests.md`).
+Flaky tests fixed at their cause, a pattern at a time:
+each fix is a kit helper, documented, which every test with the pattern uses,
+and a guard keeps the pattern closed
+(`wip/2026-11-26_14-29_ANALYSIS_SteadyTests_steady_tests.md`,
+`wip/2026-11-27_13-12_ANALYSIS_SteadyTests_eval_and_soak.md`).
+v1.0's nine blocks carried AccessEnds' nine flakes;
+v1.1 adds five blocks for what the run, the soak and other sessions found.
 
-- fixed windows a loaded runner overruns (1, 2, 3, 7, 8) →
-  the fake Cube's apply held by the test; `UI_TEST_SCALE` in every UI wait
-- waits on a moment that proves nothing (4, 5, 6) →
-  waits on what they check; one wait for a page whose reads all answered
-- Gradle's 429 (9) → a Gradle cache
-- the old idioms → guards with lists that only shrink
-- the server's own traffic → a known Cube per test file, no poll in UI runs
-- flakes → found by a nightly run, not by a feature's PR
+- fixed windows → the fake's apply held, `UI_TEST_SCALE`, a write made due
+  by the test, timed UI states held
+- waits on the wrong moment → one wait for the page's reads, several boxes
+  read at once, waits for the request itself
+- the server's own traffic and earlier tests' leftovers → a known Cube and a
+  server left as found, per test file; no poll in UI runs
+- a pattern found → a helper in the kit, with its page in the tests' front page
+- flakes → found by a nightly soak; Gradle's 429 → a cache
 
 ### Blocks
 
 1. WrongWaits: items 4, 5 and 6 wait for what they check
-2. HoldApply: the fake Cube holds its apply; items 1, 2 and 3; the same race in three tests
-3. UiScale: `UI_TEST_SCALE` in the kit's waits and the fixture; the page's start (items 7, 8)
+2. HoldApply: the fake Cube holds its apply; items 1, 2, 3; three tests of the same race
+3. UiScale: `UI_TEST_SCALE` in the kit's waits; the page's start (items 7, 8)
 4. PageReads: one wait for a page whose reads all answered; the idioms' guard
 5. KnownCube: the fake reset between test files; `serve -poll 0`; UI runs without the poll
 6. StateGuard: no test file writes `state.<field>` outside a shrinking list
 7. FakeCommands: the fake applies or names every command the server builds
 8. NightlySoak: a nightly UI run, each test three times, shuffled
 9. GradleCache: a Gradle cache in the Android and emulator jobs
+10. FrontPage: one page for every suite; the authors' rule; the kit by pattern
+11. ServerLeftovers: a test file leaves the server as it found it (the soak's A, B, D)
+12. GoWindows: the Go tests' windows set by the test, the fake's silent lines
+13. UiMoments: timed UI states held, several boxes read at once, waits for the request
+14. AgedCell: a reading's age does not widen its cell; the test pins it
 
 ## Discussion
 
@@ -47,14 +54,39 @@ The owner, 2026-11-26, `PLAN++` on the TL;DR gate of the same day:
   Block 7 waits for AP FakeGroup's pull request,
   and goes into the second one, or a third, whichever is open then.
 
-Open, asked by the owner during the writing:
+The owner, 2026-11-27, `PLAN+` on the checkpoint gate of the same day,
+every decision not answered taking its recommended option:
 
-- **D6.** A front page for the tests:
-  - **A (recommended).** A Block 10: `docs/testing.md` becomes the page for
-    every suite (which exist, how each runs, the rules of a steady test,
-    a flaky test fixed at its cause), and `docs/ui-testing.md` opens with its
-    kit, the runner comparison moved to its end.
-  - **B.** Each block updates only the documents it touches.
+- **The authors' rule** (the owner's words): local individual fixes do not
+  go on where there is a pattern; a test's author evaluates using a helper
+  and documents it, so that other tests reuse it.
+  Each block of v1.1 begins with a sweep for its pattern's other places;
+  its fix is a kit helper, documented, which every place found takes;
+  a local fix stays only where the sweep finds the pattern once,
+  and its commit says so.
+- **D6-A.** Block 10: `docs/testing.md` becomes the front page of every suite,
+  and `docs/ui-testing.md` opens with its kit, the runner comparison moved
+  to its end.
+- **D7-A.** The findings outside v1.0's blocks become Blocks 10 to 14.
+- **D8-A.** Block 11 goes into #473 before its merge,
+  so that the soak's first night says something.
+- **D9-A.** Blocks 12 to 14 go into `maint/0.17` and are merged upward:
+  the release line runs the same tests, and Block 14 fixes a defect of 0.17.
+
+Open, for the plan gate of v1.1:
+
+- **D10.** Where the authors' rule is written:
+  - **A (recommended).** A sentence in the contract's "Tests"
+    (`GUIDELINES/project/_CONTRACT.md`, inlined into `AGENTS.md`),
+    every agent's first reading, and the rule with the kit's helpers by
+    pattern in `docs/testing.md`.
+  - **B.** In `docs/testing.md` only.
+- **D11.** What Block 11's check does with a file that leaves the server
+  otherwise than it found it:
+  - **A (recommended).** It fails that file, naming what it left,
+    as Block 5's check of pending writes does;
+    what no API can undo (log lines) is listed with its reason.
+  - **B.** It warns in the log and fails nothing.
 
 ### Decided in the writing
 
@@ -78,6 +110,12 @@ Open, asked by the owner during the writing:
 - **The soak gates nothing:** Block 8's run is a workflow of its own,
   red where a test failed once, read as a report;
   the nightly build does not wait for it.
+- **v1.1's pull requests:** Block 11 onto `claude/steady-kit` (#473);
+  Blocks 12, 13 and 14 in one pull request into `maint/0.17`,
+  merged upward after it; Block 10 against `main` once #473 has merged,
+  since it documents #473's kit too.
+- **v1.1's plan commits** go onto `maint/0.17`, where Blocks 1 to 3 and 9
+  shipped, and are merged upward (the owner's rule after the freeze).
 
 ## Analysis
 
@@ -111,6 +149,46 @@ Block 7 starts once FakeGroup's pull request has merged,
 so that the two do not both edit `fakecube/apply.go`.
 Block 2's `HoldApply` touches the same file;
 the first pull request merges `origin/main` before it is opened, as always.
+
+### For Blocks 10 to 14: the patterns
+
+`wip/2026-11-27_13-12_ANALYSIS_SteadyTests_eval_and_soak.md` holds the
+causes and proofs of the owner's eight, the pairing test and the soak's
+first run; the NOTE of v1.0's run lists the rest
+(`wip/2026-11-26_22-05_NOTE_SteadyTests_v1.0_how_the_run_went.md`,
+"Found outside the plan").
+Grouped by pattern, not by test:
+
+- **A window the test should set** (Block 12, 13):
+  a fixed product timer or a rig's window that a slow runner overruns.
+  The resend window of `TestUnconfirmedRoomCommandNotResent`,
+  the drift rig's poll overtaking `setRoom2`'s "pending",
+  `TestConfigWriteConfirmed`'s apply, the 250 ms client timeout of
+  `TestDownloadOutlastsTheClientTimeout`, the retries of
+  `TestProxyRetriedUntilTheAddressIsThere`;
+  in the UI, the 1400 ms "copied" fade.
+  The kit already has `HoldApply` and the scales; the new helpers let a
+  test make a write due (`dueNow`), wait for a try made after a change,
+  and hold a timed UI state.
+- **A wait on the wrong moment** (Block 13):
+  two reads where one moment is checked (the pairing test's two boxes;
+  `bounding_box()` is called in 16 test files),
+  a check before the request it checks (`test_automatic_updates`;
+  the two sign-in tests' settings sync, to be confirmed).
+- **An earlier test's leftover on the server** (Block 11):
+  the login warning four tests leave puts a mark on ☰ for every later page;
+  `test_register_and_link` leaves a disabled integration its next run joins;
+  `test_moving_inside_asks_nothing`'s 401 and
+  `test_a_joined_device_keeps_what_is_typed`, to be confirmed.
+  Block 5 resets the fake Cube per file; the server's users, integrations,
+  settings and unseen warnings are not.
+- **The fake doing less than a Cube** (Block 12):
+  `TestPollSkipsABusyLine`: the fake records one line at a time,
+  so an `f:` after a poll's `l:` is missed while it is silent.
+- **Text whose length grows with the run** (Block 14):
+  a reading's age reaches two digits in a run over 10 minutes,
+  and the holiday tile overflows in German at 1100 px; a real server shows
+  two-digit ages all day, so the page is wrong, not the test.
 
 ## Implementation Plan
 
@@ -301,6 +379,125 @@ taken onto its branch in their order.
 - **Commit:** `ci(android): The Android jobs cache Gradle's downloads`
 - **Verification:** `make actionlint`; the jobs' logs show the cache.
 
+### Block 10: FrontPage
+
+- **Goal:** one page says which suites exist, how each runs, how a steady
+  test is written, and which helper serves which pattern.
+- **Changes:**
+  - `docs/testing.md`: the front page: the suites (Go, the UI suite, the
+    soak, the LAN test, the emulator, the hardware plans) with their
+    commands; the rules of a steady test; the authors' rule; the kit's
+    helpers by pattern, Go and UI, each with when to use it and where it
+    is described; the Go waits that are there today stay below it.
+  - `docs/ui-testing.md`: opens with its kit (today's section 9 and the
+    guard), the runner comparison moved to its end.
+  - D10-A: the contract's "Tests" gets the authors' rule in a sentence,
+    `AGENTS.md` and `GUIDELINES/README.md` regenerated from it.
+  - `README.md`'s documents list names the front page.
+- **Tests:** none: documents only; `GUIDELINES/shared/tools/check`.
+- **CHANGELOG:** none: documents only.
+- **Commits:** `docs(testing): …`; the contract's sentence in a commit of
+  its own.
+- **Verification:** `check`; every helper the page names exists
+  (a grep in the commit's proof).
+
+### Block 11: ServerLeftovers
+
+- **Goal:** a UI test file leaves the server as it found it, and the soak's
+  failures of causes A, B and D end.
+- **Changes:**
+  - The sweep: every test that leaves a user, an integration, a setting,
+    a preference, a session or a warning behind, in a whole seeded run.
+  - `tools/ui-test/conftest.py`: `clear_preferences` marks every warning
+    present as seen; after each file's last test, beside Block 5's check of
+    pending writes, a check that the server's users, integrations and
+    settings are as at the file's start (D11-A), failing that file and
+    naming what it left; what no API undoes is listed with its reason.
+  - `helpers.py`: a helper for an id of a test's own per run
+    (`test_register_and_link`'s installation and subject), and whatever the
+    sweep finds that several files undo alike.
+  - The tests the sweep names undo what they set; `test_update.py`'s
+    automatic updates wait for the request (cause D), with the helper
+    Block 13 makes if it fits, else the kit's request wait.
+  - `test_moving_inside_asks_nothing` and
+    `test_a_joined_device_keeps_what_is_typed`: their cause confirmed;
+    each goes to the block of its pattern.
+  - `tools/ui-test/soak_summary.py`: each failure names its worker,
+    and the retry's outcome.
+  - `docs/ui-testing.md` section 9.
+- **Tests:** the soak's seed 45895569993 in 390-en, three repeats:
+  the old tree fails 11, the new none; the check fails a planted file that
+  leaves a user; the whole suite once in 1100-en, shuffled.
+- **CHANGELOG:** none: `tools/` is not shipped.
+- **Commits:** the warnings; the check; each pattern's helper with the tests
+  that take it.
+- **Verification:** the plants; the four cases of the touched files;
+  the soak on #473 green, or each failure left named with its cause.
+
+### Block 12: GoWindows
+
+- **Goal:** a Go test sets the moments it checks instead of racing a window.
+- **Changes:**
+  - The sweep: the Go tests that wait out or race a rig's window or a
+    product timer, from the NOTE's list and a grep.
+  - The kit: a rig helper that makes a room's open writes due now
+    (`dueNow`), for the resend and confirmation tests
+    (`TestUnconfirmedRoomCommandNotResent`, `resend_test.go:170`, `:313`);
+    a wait for a try made after a change, for the proxy's retries
+    (`TestProxyRetriedUntilTheAddressIsThere`);
+    `setRoom2` and `TestConfigWriteConfirmed` hold the fake's apply
+    (`HoldApply`); client timeouts against a local fake scaled
+    (`TestDownloadOutlastsTheClientTimeout`).
+  - The fake Cube records the lines it reads while silent
+    (`TestPollSkipsABusyLine`).
+  - `docs/testing.md`: each helper.
+- **Tests:** a planted delay per pattern: the old test fails, the new
+  passes, three runs each; `-race` at scale 2, `-count=5`.
+- **CHANGELOG:** a fragment where a non-test file of `internal/` changes.
+- **Commits:** a commit per helper with the tests that take it.
+- **Verification:** `go test` of the touched packages, `make race` for them;
+  `gofmt`; `go vet` for linux, windows and darwin; Windows through interop for
+  `internal/update`.
+
+### Block 13: UiMoments
+
+- **Goal:** a UI test reads one moment once, and holds what fades.
+- **Changes:**
+  - The sweep: the tests that read two boxes for one check
+    (`bounding_box()` in 16 files), that check a request's effect before
+    the request, or that race a timed state (fades, toasts, marks).
+  - `helpers.py`: a read of several boxes at once; a hold of a timed state
+    (the "copied" fade first); the request wait the sweep shows is needed.
+  - The places found take them: `test_pairing.py`'s, `test_cubes.py`'s and
+    `test_repair.py`'s two-box checks, `test_system_info`'s fade,
+    the sign-in tests' settings sync once confirmed.
+  - `docs/ui-testing.md` section 9; Block 4's guard counts a new
+    two-box read, if the sweep shows it can be counted.
+- **Tests:** a planted redraw between two reads, a planted 1.6 s before
+  the fade's check, a planted late request: old fails, new passes;
+  the touched files in the four cases; the whole suite once in 1100-en.
+- **CHANGELOG:** none: `tools/` is not shipped.
+- **Commits:** a commit per helper with the tests that take it.
+- **Verification:** the plants; the four cases.
+
+### Block 14: AgedCell
+
+- **Goal:** a reading's age never widens its cell, and the tests do not
+  depend on how long a run has lasted.
+- **Changes:**
+  - `internal/server/ui/style.css` (the aged cell's grid, around line 1448):
+    the age's track does not widen the cell.
+  - The sweep: the tests whose page shows a text that grows with the run
+    (ages, durations); they pin it with the kit's `pause_clock` or a told
+    time.
+  - A UI test at 1100 px in German with a two-digit age.
+- **Tests:** the old page overflows with "≥ 17 Min.", the new does not,
+  in the four cases.
+- **CHANGELOG:** a fragment under Fixed: the page is shipped.
+- **Commit:** `fix(ui): A reading's age does not widen its cell`
+- **Verification:** `make ui-check`; the four cases of the touched files;
+  the screenshots at 1100 and 390 px.
+
 ### Before each pull request
 
 The branch merges `origin/main`;
@@ -309,7 +506,9 @@ the pull request's text in commit form, a block's proofs in it.
 
 ## Proposed commit message
 
-The plan: `chore(aps): +SteadyTests v1.0, +ANALYSIS SteadyTests`
+The plan: `chore(aps): +SteadyTests v1.0, +ANALYSIS SteadyTests`;
+its revision: `chore(aps): +SteadyTests v1.1, +ANALYSIS SteadyTests eval_and_soak`,
+onto `maint/0.17`, then `merge: maint/0.17 into main, with SteadyTests v1.1`.
 
 Block 1:
 
@@ -334,3 +533,8 @@ Assisted-by: claude-code:claude-opus-5-5
 
 - v1.0 (2026-11-26): first revision, from the owner's `PLAN++`
   on the TL;DR gate of 2026-11-26: D1-A, D3-A, D4-A, D5-A; D6 open.
+- v1.1 (2026-11-27): from the owner's `PLAN+` on the checkpoint gate of
+  2026-11-27, with the authors' rule: Blocks 10 to 14, a pattern each,
+  from the run's NOTE, the soak's first run and the owner's eight;
+  D6-A, D7-A, D8-A, D9-A; D10 and D11 open; v1.0's PR shape after the freeze
+  (#466, #467 into `maint/0.17`, #473 against `main`) recorded.
