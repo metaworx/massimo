@@ -593,6 +593,29 @@ then wakeup of the new room,
 Links are therefore the only per-device data that is not readable from the Cube;
 a restore derives them from the room layout.
 
+Massimo moves a device the same way (`PUT …/devices/{rf}`, the placement repair,
+a restore whose room differs, and the add of a device whose C line names a room;
+`cubeio.MoveCommands`), but for two things the test Cube showed on 2026-11-26
+("Lessons from the hardware days"), since AP FakeGroup (Block 4, 2026-11-27):
+
+- **The 0x23 names the room the device's C line names**, not the room list's,
+  and is left out where the C line names none:
+  a device refuses a 0x23 of another room and is flagged with it.
+- **The device is woken itself** (`z:1e,D,<rf>`, after the room's wakeup),
+  since a room's wakeup reaches only the devices whose C line names the room:
+  before the unlink half where its C line names another room than the one it
+  leaves, or none, and before the link half always,
+  the device not being in the new room's group yet.
+
+So a move of a device whose C line names room A, the room it is listed in,
+into an empty room B sends `z:1e,G,<A>`, an `r:` for each flagged member of A,
+0x23 A and the 0x21s of A's partners;
+then `z:1e,G,<B>`, `z:1e,D,<rf>` and 0x22 B, no partner to link in B;
+then `m:` and `c:<rf>`, and the copy of the room's settings unless
+`"copy": false`.
+Whether a device's wakeup right after its room's keeps the room's wakeup for
+the other members is *unverified*.
+
 The Cube takes a link radiogram with the room flag (0x20, 0x21) as one delivery
 per member of the room's group, about one memory slot each (2026-11-15, Cube
 firmware 1.1.3, one of the owner's rooms with three radiator thermostats; the

@@ -2985,8 +2985,11 @@ A metadata write; answers `{"ok": true}`.
 Rename a device and/or move it to another room:
 `{"name": "Thermostat Küche", "room_id": 2}`, either field alone is fine.
 A move is done as the original software moved one in its capture of 2026-11-04:
-after a wakeup of the old room, one `r:` for each other member whose error flag is set,
-0x23 remove group,
+after a wakeup of the old room, and of the device itself (`z:1e,D,<rf>`)
+where its C line names another room or none,
+one `r:` for each other member whose error flag is set,
+0x23 remove group naming the room the device's C line names,
+left out where it names none,
 one 0x21 remove link partner radiogram with the room flag naming the device,
 which every member of the room takes,
 addressed to the first of the room's order, as a room command is
@@ -2996,8 +2999,14 @@ else its wall thermostat, else its first radiator thermostat,
 one the Cube holds no valid state for passed over,
 one to each window contact among its partners,
 and one to the device for each partner;
-then, after a wakeup of the new room, the same with 0x20 add link partner
-and 0x22 set group; then the metadata is written.
+then, after a wakeup of the new room and of the device,
+the same with 0x20 add link partner and 0x22 set group;
+then the metadata is written.
+The Cube takes a 0x23 only for the room the device's C line names,
+and a room's wakeup reaches only the devices whose C line names the room
+(seen on the test Cube on 2026-11-26, docs/cube-protocol.md):
+so the device is woken itself before a half whose room's wakeup misses it,
+and a device listed in no room whose C line names none leaves nothing.
 `room_id` must name an existing room; 0 is refused,
 a device outside every room would be a device that blocks no room but cannot be
 addressed by one either.
@@ -3006,7 +3015,8 @@ A device that is paired but in no room yet (`"unlisted": true`,
 such as one just paired, see Pairing) needs `room_id`;
 `name` alone answers `409`.
 It is added to the room as the original software adds a new device:
-after a wakeup of the room (`z:1e,G,<room>`)
+after a wakeup of the room (`z:1e,G,<room>`) and of the device,
+which is in no room's group yet (`z:1e,D,<rf>`),
 and one `r:` for each member whose error flag is set,
 one 0x20 add link partner radiogram with the room flag naming the device,
 addressed as in a move, which every member of the room takes,
@@ -3761,6 +3771,8 @@ the flagged devices its direct lines address, as the queue's prelude does
 for every command (D204-A),
 the room woken up before it (`z:1e,G,<room>`, not among `lines`),
 and its `lines` as they go to the Cube;
+a move's halves wake the device itself as well where a room's wakeup
+misses it (`z:1e,D,<rf>`, not among `lines` either, `PUT …/devices/{rf}`);
 a metadata write is a step of its own.
 `radiograms` counts the `s:` lines,
 `duty_cost_pct` is about what they cost of the hourly radio budget (1.25 % each),
@@ -3770,7 +3782,8 @@ and `held_slots` those that stay taken until the members' next wakeup,
 about ten minutes: a room radiogram's but its addressee's.
 `resets` counts the `r:` lines, those the queue sends before each step included,
 by the device list as it is now, which cost no radio time;
-`wakeups` the room wakeups; `metadata` a metadata write, no radio.
+`wakeups` the wakeups, a room's and a device's own;
+`metadata` a metadata write, no radio.
 `budget` is what the Cube last reported.
 `untested` marks a repair not yet run on hardware.
 `refused` says why a run would be refused now:

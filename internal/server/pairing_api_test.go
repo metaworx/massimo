@@ -103,15 +103,16 @@ func TestPairingAndAddingToARoom(t *testing.T) {
 	}
 	// Room 1 has one radiator thermostat, 0a010a. As the original
 	// software: wakeup, a link in each direction, the group, then the
-	// metadata and a re-read of the C line; the copy of the room's
+	// metadata and a re-read of the C line, the device woken itself after
+	// its room, whose group it is not in yet; the copy of the room's
 	// settings, which follows by default, has tests of its own
 	// (TestAddCopiesTheRoomsSettings and those after it).
 	partner := cube.CmdLinkPartner(cube.Target{RFAddress: 0x0a010a, RoomID: 1, Room: true}, true, newDevice, cube.DeviceRadiatorThermostat)
 	own := cube.CmdLinkPartner(cube.Target{RFAddress: newDevice}, true, 0x0a010a, cube.DeviceRadiatorThermostat)
 	group := cube.CmdSetGroup(newDevice, 1, false)
 	got := received.Since(before, cubewatch.Except('l'))
-	want := []string{"z:1e,G,01", partner.String(), own.String(), group.String()}
-	if len(got) != 6 {
+	want := []string{"z:1e,G,01", "z:1e,D,0a0b0c", partner.String(), own.String(), group.String()}
+	if len(got) != 7 {
 		t.Fatalf("cube received %v", got)
 	}
 	for i, w := range want {
@@ -119,8 +120,8 @@ func TestPairingAndAddingToARoom(t *testing.T) {
 			t.Fatalf("line %d: %s, want %s", i, got[i], w)
 		}
 	}
-	if got[4].Type != 'm' || got[5].String() != "c:0a0b0c" {
-		t.Fatalf("metadata and re-read: %v", got[4:])
+	if got[5].Type != 'm' || got[6].String() != "c:0a0b0c" {
+		t.Fatalf("metadata and re-read: %v", got[5:])
 	}
 	_, d := do(t, ts, "GET", base+"/devices/0a0b0c", "")
 	if d["unlisted"] == true || d["name"] != "Neu" || d["room_id"] != float64(1) {
