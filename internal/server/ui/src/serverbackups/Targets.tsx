@@ -13,7 +13,9 @@
  * types, which is secret, what a value is warned of: GET
  * …/server-backup-targets/kinds), so that a
  * kind a later block adds needs no form of its own: a secret is a
- * password field that never shows what is stored, written only; while
+ * password field that never shows what is stored, written only, and
+ * required again, with why, while the kind's other fields differ from
+ * those stored, since they say where it goes (Block 6); while
  * the page does not know a target's kind, its fields are shown off, with
  * why, and Save leaves them as they are; the
  * form is a settings form kept by the target's uuid (shared/forms.ts),
@@ -273,14 +275,22 @@ function Keeps({ id, v }: { id: string; v: Val<Record<KeepKey, string>> }) {
   );
 }
 
-/** Fields are a target's fields, the ids under id: its name, its kind's fields and secret, what it takes, its retention, whether it is on. */
-function Fields({ id, kind, v, secret, setSecret, stored }: {
+/**
+ * Fields are a target's fields, the ids under id: its name, its kind's
+ * fields and secret, what it takes, its retention, whether it is on.
+ * again asks for the secret again, required and saying why in a note
+ * under it, amber with its mark, that describes it: the kind's fields
+ * say where the secret goes, so the server takes a change to them only
+ * with the secret (400 without).
+ */
+function Fields({ id, kind, v, secret, setSecret, stored, again }: {
   id: string;
   kind: ServerBackupKind | undefined;
   v: Values;
   secret: string;
   setSecret: (s: string) => void;
   stored?: ServerBackupTarget;
+  again?: boolean;
 }) {
   useLook();
   const merge = useMerge(v.config);
@@ -297,8 +307,11 @@ function Fields({ id, kind, v, secret, setSecret, stored }: {
       )}
       {sec && (
         <TextField label={textOr("serverbackup.field." + kname + "." + sec.key, sec.key || "")} id={f("secret")} name="secret" type="password"
-          autocomplete="new-password" value={secret} set={setSecret}
-          hint={t(stored?.secret_lost ? "serverbackup.target.secretLost" : stored?.has_secret ? "serverbackup.target.secretKept" : "serverbackup.target.secretNone")} />
+          autocomplete="new-password" value={secret} set={setSecret} required={again} describedBy={again ? f("secret-again") : undefined}
+          hint={again ? undefined : t(stored?.secret_lost ? "serverbackup.target.secretLost" : stored?.has_secret ? "serverbackup.target.secretKept" : "serverbackup.target.secretNone")} />
+      )}
+      {sec && again && (
+        <p id={f("secret-again")} class="small warn-text sb-field-warn sb-secret-again" role="note"><Mark state="warn" /> {t("serverbackup.target.secretAgain")}</p>
       )}
       {kname === "local" && <p class="muted small sb-local-note">{t("serverbackup.target.localNote")}</p>}
       <Select label={t("serverbackup.target.takes")} id={f("takes")} name="takes" wide options={TAKES.map((x): [string, string] => [x, t("serverbackup.takes." + x)])}
@@ -328,7 +341,7 @@ function useDrafts(tg: ServerBackupTarget, place: <T>(field: string) => Place<T>
   };
 }
 
-/** TargetForm is a target's settings in its panel: its fields, Test, Remove, which asks in place of the actions, Reset and Save; the secret written only. */
+/** TargetForm is a target's settings in its panel: its fields, Test, Remove, which asks in place of the actions, Reset and Save; the secret written only, and asked for again while the kind's fields differ from those stored. */
 function TargetForm({ tg }: { tg: ServerBackupTarget }) {
   useLook();
   const uuid = tg.uuid || "";
@@ -340,6 +353,8 @@ function TargetForm({ tg }: { tg: ServerBackupTarget }) {
   const ask = useAsk<HTMLButtonElement>();
   const drafts = [v.name, v.config, v.takes, v.keep, v.enabled].map((x) => x.draft as Draft<unknown>);
   const changed = drafts.some((x) => x.changed) || secret !== "";
+  // a change to the kind's fields, which say where the secret goes, asks for the secret again, as the server does
+  const again = !!secretOf(kind) && !!v.config.draft?.changed;
   form.track(changed, [...drafts, { take: () => setSecret("") }]);
   const submit = (ev: Event) => {
     ev.preventDefault();
@@ -347,7 +362,7 @@ function TargetForm({ tg }: { tg: ServerBackupTarget }) {
   };
   return (
     <form {...form.props} class="sb-target-form" onSubmit={submit}>
-      <Fields id={uuid} kind={kind} v={v} secret={secret} stored={tg} setSecret={(x) => {
+      <Fields id={uuid} kind={kind} v={v} secret={secret} stored={tg} again={again} setSecret={(x) => {
         setSecret(x);
         form.place("secret").changed();
       }} />

@@ -2426,5 +2426,6 @@
   "serverbackup.target.hostKeyTrusted": "{name} ora approva la chiave dell'host; provala di nuovo.",
   "serverbackup.target.hostKeyChanged": "L'host mostra una chiave diversa da quella approvata, e non gli viene inviato nulla: è stato reinstallato, o qualcuno si è messo in mezzo. Se la sua chiave è cambiata di proposito, inserisci quella nuova in Chiave dell'host e salva.",
   "serverbackup.target.hostKeyPinned": "Approvata:",
-  "serverbackup.target.hostKeyNow": "Mostrata ora:"
+  "serverbackup.target.hostKeyNow": "Mostrata ora:",
+  "serverbackup.target.secretAgain": "Digitalo di nuovo: le impostazioni sopra dicono dove viene inviato, quindi una loro modifica passa solo insieme a esso."
 }

@@ -2425,5 +2425,6 @@
   "serverbackup.target.hostKeyTrusted": "{name} vertrouwt nu de sleutel van de host; test het opnieuw.",
   "serverbackup.target.hostKeyChanged": "De host toont een andere sleutel dan de vertrouwde, en er wordt niets naartoe gestuurd: hij is opnieuw ingericht, of iemand staat ertussen. Is zijn sleutel bewust gewijzigd, zet de nieuwe dan in Hostsleutel en sla op.",
   "serverbackup.target.hostKeyPinned": "Vertrouwd:",
-  "serverbackup.target.hostKeyNow": "Nu getoond:"
+  "serverbackup.target.hostKeyNow": "Nu getoond:",
+  "serverbackup.target.secretAgain": "Typ het opnieuw: de instellingen hierboven bepalen waarheen het gaat, dus een wijziging ervan gaat alleen samen met het."
 }

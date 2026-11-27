@@ -2426,5 +2426,6 @@
   "serverbackup.target.hostKeyTrusted": "{name} approuve désormais la clé de l'hôte ; testez-la à nouveau.",
   "serverbackup.target.hostKeyChanged": "L'hôte présente une autre clé que celle approuvée, et rien ne lui est envoyé : il a été réinstallé, ou quelqu'un s'interpose. Si sa clé a changé volontairement, saisissez la nouvelle dans Clé de l'hôte et enregistrez.",
   "serverbackup.target.hostKeyPinned": "Approuvée :",
-  "serverbackup.target.hostKeyNow": "Présentée maintenant :"
+  "serverbackup.target.hostKeyNow": "Présentée maintenant :",
+  "serverbackup.target.secretAgain": "Saisissez-le à nouveau : les réglages ci-dessus disent où il est envoyé, une modification de ceux-ci ne passe donc qu'avec lui."
 }

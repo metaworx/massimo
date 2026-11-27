@@ -2718,7 +2718,12 @@ The server's sign, when it says an update is out, opens it at Software update.
     (under the data directory where relative), a number, a switch or a choice,
     and a secret as a password field that never shows what is stored,
     saying whether one is kept, written only, sent where one is typed
-    and only for a kind that has one, another kind chosen forgetting it;
+    and only for a kind that has one, another kind chosen forgetting it,
+    and required again as soon as the kind's other fields differ from those stored,
+    with a note under it in place of whether one is kept,
+    amber with its mark, saying why:
+    they say where the secret goes (a WebDAV server's URL, an SMB host),
+    and the server takes a change to them only with it;
     a switch and a choice show the field's default where nothing is set;
     while a field's value matches the `warn` the server gives it (plain `http:`
     to a WebDAV target), its note `serverbackup.warn.<kind>.<key>` stands under it,
