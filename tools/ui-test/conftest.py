@@ -80,7 +80,9 @@ the address out for five minutes (429). After a test that used
 new_context, one request with the token forgets them (the autouse
 fixture failed_checks_forgotten); after every test, the set's store,
 massimo.db beside UI_TEST_SERVE_LOG, has none counted against an address,
-or the test errors at teardown.
+or the test errors at teardown. A sign-in a test makes leaves a session
+on the server where its context closes without a sign-out: after every
+test the sessions it made are ended (the autouse fixture ended_sessions).
 
 The guard (autouse) fails a test on any console error, page error or a
 horizontal scroll left at its end; the refused stream of a used_ticket
@@ -114,8 +116,8 @@ if _WORKER.startswith("gw"):
 
 pytest.register_assert_rewrite("helpers")
 
-from helpers import (PAGE_KIT, USED, ApiReads, Stream, reads_of, report_to, scaled, scroll_width, used_ticket_first,  # noqa: E402
-                     wait_started, wait_until)
+from helpers import (PAGE_KIT, USED, ApiReads, Stream, cleanup, reads_of, report_to, scaled, scroll_width, undo,  # noqa: E402
+                     used_ticket_first, wait_started, wait_until)
 
 URL = os.environ.get("UI_TEST_URL", "http://127.0.0.1:8119/")
 TOKEN = os.environ.get("UI_TEST_TOKEN", "")
@@ -504,6 +506,47 @@ def failed_checks_forgotten(request):
         api_call("GET", "api/v1/me")
     left = address_failures()
     assert not left, f"the test leaves failed token checks counted against the address (key, count, locked until): {left}"
+
+
+def _quoted(name):
+    """A user's name as a segment of a path: an integration's users' hold ':'."""
+    return urllib.parse.quote(name, safe="")
+
+
+def live_sessions():
+    """The sessions the set's server holds, as (user name, token id), of
+    every user but an integration's, which signs in with no session: a
+    sign-in's and a key's sign-in's (kind session), not a key."""
+    out = set()
+    for u in api_call("GET", "api/v1/users") or []:
+        if u.get("integration"):
+            continue
+        for t in api_call("GET", f"api/v1/users/{_quoted(u['name'])}/tokens") or []:
+            if t.get("kind") == "session":
+                out.add((u["name"], t["id"]))
+    return out
+
+
+@pytest.fixture(autouse=True)
+def ended_sessions():
+    """A test's sign-in, in a context of its own (new_context, owner_page)
+    or in its page, leaves its session on the server where the context
+    closes without a sign-out, for whichever test the worker runs next:
+    after every test the sessions it made are ended (DELETE
+    …/users/{name}/tokens/{id}, undo), so that it leaves none (AP
+    SteadyTests, Block 11). Set up before the test's contexts, the
+    page's among them, this is torn down after them: pytest sets up a
+    conftest's autouse fixtures in the order of their names, and this
+    one's comes before guard's, which loads the page. Without the token,
+    nothing."""
+    if not TOKEN:
+        yield
+        return
+    before = live_sessions()
+    yield
+    cleanup(*[lambda name=name, sid=sid: undo(f"{name}'s session {sid}",
+                                              lambda: api_call("DELETE", f"api/v1/users/{_quoted(name)}/tokens/{sid}"))
+              for name, sid in sorted(live_sessions() - before)])
 
 
 def clear_preferences():

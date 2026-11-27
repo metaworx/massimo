@@ -1,4 +1,4 @@
-# Testing the web UI (v1.36.0)
+# Testing the web UI (v1.37.0)
 
 An evaluation of a Cypress suite for the web UI, against the alternatives:
 what the Playwright smoke test covers today and what it cannot do well,
@@ -1163,3 +1163,19 @@ the server's and the test's, in order,
   in its memory, so a run of the three tests that make one,
   each case three times on one server, meets its 429 (2026-11-27);
   the soak's, a case a job, makes nine at most.
+- **A test's sessions ended** (`ended_sessions`, `conftest.py`, AP SteadyTests, Block 11):
+  a sign-in makes a session on the server,
+  in a context of the test's own (`new_context`, `owner_page`) or in its page,
+  and a context that closes without a sign-out leaves it there,
+  for whichever test the worker runs next.
+  After every test the sessions it made are ended
+  (`DELETE /api/v1/users/{name}/tokens/{id}`, as `undo`),
+  those of every user but an integration's:
+  the fixture notes them before the test and ends the new ones once its contexts have closed,
+  set up before them all, the page's too,
+  since pytest sets up a conftest's autouse fixtures in the order of their names
+  and `ended_sessions` comes before `guard`, which loads the page.
+  A key the test makes is the test's to revoke,
+  as is anything else it makes (below).
+  74 tests in 23 files left one (1100-en, 2026-11-27),
+  each a sign-in it checks, a sign-out late or a page after a 401 among them.

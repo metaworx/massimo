@@ -244,6 +244,9 @@ makes, sweeps and keeps it (`tools/workdir/README.md`; AP EmulatorRuns, D3-B).
   failed token checks its pages counted against 127.0.0.1;
   after every test, the set's store (`massimo.db` beside `UI_TEST_SERVE_LOG`)
   has none counted against an address, or the test errors at teardown;
+- `ended_sessions` (autouse): after every test, the sessions on the server
+  that it made, by a sign-in in a context of its own or in its page,
+  are ended (`docs/ui-testing.md`, section 9);
 - `reads`: the page's own reads answered with the server's data and what
   the test put in (`helpers.Reads`), so that the page's poll and the reads
   that events and actions start keep it:
