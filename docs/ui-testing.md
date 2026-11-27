@@ -1,4 +1,4 @@
-# Testing the web UI (v1.33.0)
+# Testing the web UI (v1.34.0)
 
 An evaluation of a Cypress suite for the web UI, against the alternatives:
 what the Playwright smoke test covers today and what it cannot do well,
@@ -925,7 +925,11 @@ The suite's helpers for it are in `tools/ui-test/helpers.py`
   which the test's look waits for, a look at a time (`settled`),
   since a server's own event of a device draws the server's age
   until keep's read is answered:
-  `test_rooms.py`'s device list, at two digits and the longest of each unit.
+  `test_rooms.py`'s device list, at two digits and the longest of each unit,
+  `test_room_more.py`'s holiday tile, at two digits as a server's are all day,
+  and `test_an_age_moves_on_with_the_minute`'s age an hour on,
+  which says the same from two days on.
+  A whole run with every age at its widest found no other test that depends on one.
   A test that tells the rooms' read a device's times itself
   tells its `received` the same way (`test_stale_and_expert`'s 30 hours).
 - **A fold opened** (`open_fold`, `close_fold`, `toggle_fold` of `helpers.py`):

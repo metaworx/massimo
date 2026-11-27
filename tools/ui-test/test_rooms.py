@@ -784,17 +784,20 @@ def test_mismatch_marks(page, case, reads):
     assert tile.locator(".device .mismatch-badge").count() == 0, "the device's badges gone with the findings"
 
 
-def test_an_age_moves_on_with_the_minute(page, case):
+def test_an_age_moves_on_with_the_minute(page, case, reads):
     """A value's age in a tile's device list follows the page's minute,
     a signal of the parts (MassimoParts.minute), where a plain timer wrote
     into the parts' ages before: an hour on, it says so at the next
-    minute."""
+    minute. The values told 17 minutes old (Reads.age), not as old as the
+    run: from two days on an hour more says the same."""
     tile = page.locator(".room").first
+    was = reads.age(int(tile.get_attribute("data-id")), 17.5 * 60, already=True)
     tile.locator(".room-name-btn").click()
     age = tile.locator(".device-vals .age .age-text").first
     try:
         age.wait_for()
-        was = age.inner_text()
+        assert wait_until(page, "document.querySelector('.room .device-vals .age .age-text').textContent === %s" % json.dumps(was), 5), \
+            f"the values {was!r} old"
         page.evaluate("""() => {
           window.__realNow = Date.now;
           Date.now = () => window.__realNow() + 3600e3;
