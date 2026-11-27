@@ -39,7 +39,8 @@ type BootstrapResult struct {
 // integration's, a known one loses its maker, and a key with the token's
 // label that is not the token any more is revoked, with the keys it made
 // (AP KeyLife, D8-A); the store keeps the token's hash in memory, so
-// that no revoke takes that key as an heir (revokeHeirs). The
+// that no revoke takes that key as an heir (revokeHeirs) and the idle
+// limit passes over it (lifeRule, AP KeyLife, D3-A). The
 // token's key that an older start gave to an integration's user with the
 // role owner moves to that owner, the one made or the first regular one
 // (AP LooseEnds, D1): such a user holds no key of its own, and the

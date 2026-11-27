@@ -72,6 +72,10 @@ var intSettings = []intSetting{
 	{key: store.BackupsKeepDaysAutoKey, def: store.DefaultBackupsKeepDaysAuto, min: 0, max: 3650},
 	{key: store.BackupsKeepDaysManualKey, def: store.DefaultBackupsKeepDaysManual, min: 0, max: 3650},
 	{key: store.BackupsKeepNewestKey, def: store.DefaultBackupsKeepNewest, min: 0, max: 1000},
+	// An API key unused for this many days ends, its session with it; 0,
+	// the default, keeps every key (AP KeyLife, Block 3, D2-A). The store
+	// reads it at each check (tokens.go).
+	{key: store.KeyIdleDaysKey, def: 0, min: 0, max: 3650},
 }
 
 // boolSetting describes one switch, which applies at once.

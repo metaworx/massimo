@@ -16,6 +16,7 @@ import (
 	"go.metaworx.ch/massimo/internal/protocol/cube"
 	"go.metaworx.ch/massimo/internal/store"
 	"go.metaworx.ch/massimo/internal/testkit/cubewatch"
+	"go.metaworx.ch/massimo/internal/testkit/storekit"
 )
 
 // roleSets are the default roles' capabilities as docs/store.md section
@@ -33,7 +34,15 @@ var roleSets = map[string][]string{
 // stays quick.
 func storeOptions(t *testing.T, dir, token string) Options {
 	t.Helper()
-	st := testStore(t, dir)
+	return storeOptionsAt(t, dir, token, nil)
+}
+
+// storeOptionsAt is storeOptions with the store's clock now (nil for the
+// real one; storekit.OpenAt), for a test that moves the store's days on:
+// an API key's idle limit (AP KeyLife, Block 3).
+func storeOptionsAt(t *testing.T, dir, token string, now func() time.Time) Options {
+	t.Helper()
+	st := storekit.OpenAt(t, dir, now)
 	// The fake Cube has a row, as a served Cube has in production, so
 	// that the audit can name it; the runtime itself comes from Cubes.
 	if _, ok, _ := st.Cube(t.Context(), "KEQ0000100"); !ok {

@@ -98,14 +98,18 @@ func (s *Store) PushSubscription(ctx context.Context, id int64) (PushSubscriptio
 
 // PushSubscriptions lists a user's subscriptions, oldest first; with
 // userID 0, every subscription that may be sent to: its token alive (the
-// rule of tokens.go: neither revoked nor past its end, its user not
-// removed, and a session made from a key only while the key is neither
-// revoked nor past its end), its user neither disabled nor expired.
+// rule of tokens.go: neither revoked, past its end nor ended unused, its
+// user not removed, and a session made from a key only while the key is
+// neither), its user neither disabled nor expired.
 func (s *Store) PushSubscriptions(ctx context.Context, userID int64) ([]PushSubscription, error) {
 	now := s.now()
+	r, err := s.rule(ctx, now)
+	if err != nil {
+		return nil, err
+	}
 	q := `SELECT ` + pushColumns + `, ` + alive + `, u.disabled, u.expires_at
 		FROM push_subscriptions p JOIN tokens t ON t.id = p.token_id JOIN users u ON u.id = p.user_id LEFT JOIN tokens k ON k.id = t.parent_id`
-	args := aliveArgs(now)
+	args := r.args()
 	if userID != 0 {
 		q += ` WHERE p.user_id = ?`
 		args = append(args, userID)

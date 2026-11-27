@@ -5,7 +5,8 @@
  * @file internal/server/ui/src/admin/Users.tsx
  *
  * System settings → Users as a part: the password sign-in's switch with
- * the users it would lock out, a panel per user, built once per user and
+ * the users it would lock out, the days an API key may stay unused (AP
+ * KeyLife, Block 3), a panel per user, built once per user and
  * updated in place, and the form that adds one. A user's panel holds its
  * settings form, kept by its login name (shared/forms.ts) so that what is
  * typed outlives an action in another panel, a reload of the list and
@@ -20,7 +21,7 @@ import type { User } from "../api";
 import { Adder } from "../shared/adder";
 import { Badge, ResultLine } from "../shared/badge";
 import { hid } from "../shared/cls";
-import { DateTime, Field, FormFooter, Select, Switch, TextField, useDraft } from "../shared/field";
+import { DateTime, Field, FormFooter, NumberField, numberNorm, Select, Switch, TextField, useDraft } from "../shared/field";
 import { Fold, FoldHead } from "../shared/fold";
 import { focusForm, useForm } from "../shared/forms";
 import { BusyButton, Question, busyProps, useAsk, useBusy, useSetAtOnce } from "../shared/question";
@@ -31,8 +32,8 @@ import { UserNameField, useNameCheck } from "../shared/username";
 import { PasswordField, passwordRefusal } from "../shared/password";
 import { firstOwnerOf, isMe, me } from "../shared/me";
 import { askOwner, keptOpen } from "../shared/owner";
-import { adding, enabled, identityFormKey, identityUI, keptOff, passwordLogin, passwordReveal, reads, said, userFormKey, userUI, users } from "./store";
-import { createUser, keepOpenOff, mayManage, mayPassword, removeUser, roleOptions, run, saveUser, setPasswordLogin, setPasswordReveal, usersAdmin, usersMsg } from "./sendUsers";
+import { adding, enabled, identityFormKey, identityUI, keptOff, keyIdleDays, passwordLogin, passwordReveal, reads, said, userFormKey, userUI, users } from "./store";
+import { createUser, keepOpenOff, mayManage, mayPassword, removeUser, roleOptions, run, saveUser, setKeyIdleDays, setPasswordLogin, setPasswordReveal, usersAdmin, usersMsg } from "./sendUsers";
 import { cardBadges, showCard } from "../shared/card";
 import { isShown, showView } from "../shared/pages";
 import { useLook } from "../shared/look";
@@ -229,7 +230,7 @@ function UserPanel({ u }: { u: User }) {
       {links && <p class="muted small user-integration-links">{t("users.linksList", { users: links })}</p>}
       <UserForm u={u} off={locked} open={ui.open} />
       <Tokens u={u} off={!manage && !self} open={ui.open} reads={reads.value} run={run} say={usersMsg} labelId={"user-key-label-" + u.name}
-        listOnly={!!u.integration} />
+        listOnly={!!u.integration} keeps={manage && !u.integration} />
       <Identities u={u} off={!manage || !enabled.value.length} open={ui.open} reads={reads.value} providers={enabled.value} run={run} say={usersMsg}
         title={t("users.identities")} none={t("users.identitiesNone")} changes={u.integration ? undefined : changes} assign={!u.integration} />
       {locked && <p class="muted small">{t(u.role === "owner" ? "users.ownerOnly" : "users.outranked")}</p>}
@@ -327,7 +328,47 @@ function PasswordLogin() {
       <p id="password-login-hint" class="muted small">{users.loaded ? (left ? tn("users.passwordLoginHint", left) : t("users.passwordLoginNone")) : ""}</p>
       <Switch id="password-reveal" label={t("users.passwordReveal")} checked={eye.value} onChange={(v) => eye.set(v, setPasswordReveal)} />
       <p id="password-reveal-hint" class="muted small">{t("users.passwordRevealHint")}</p>
+      <KeyIdle />
     </div>
+  );
+}
+
+/** KEY_IDLE_MAX is the most days the server takes for auth.key_idle_days. */
+const KEY_IDLE_MAX = 3650;
+
+/**
+ * KeyIdle is the days an API key may stay unused before it ends, the
+ * setting auth.key_idle_days (AP KeyLife, Block 3, D2-A), under the
+ * password sign-in's switches for a holder of settings: whole days, 0
+ * for never, its draft the field's text, saved as the field is left
+ * changed (setKeyIdleDays); emptied, it goes back to the value stored,
+ * and a value that is no whole number of 0 to 3650 is refused in the
+ * field, its limit saying so, and not sent. Its line says that a key
+ * unused for longer ends at once, an integration's key always held to
+ * it and the settings file's never.
+ */
+function KeyIdle() {
+  useLook();
+  const stored = keyIdleDays.value;
+  const days = useDraft(stored === null ? "" : String(stored), numberNorm);
+  const valid = (s: string) => {
+    const n = Number(s);
+    return s !== "" && Number.isInteger(n) && n >= 0 && n <= KEY_IDLE_MAX;
+  };
+  const typed = days.value.trim();
+  const commit = (v: string) => {
+    const s = v.trim();
+    if (s === "") {
+      days.take();
+      return;
+    }
+    if (!valid(s) || Number(s) === keyIdleDays.value) return;
+    void setKeyIdleDays(Number(s));
+  };
+  return (
+    <NumberField label={t("users.keyIdleDays")} id="key-idle-days" name="key_idle_days" cls="key-idle" unit={t("users.keyIdleUnit")} min={0} max={KEY_IDLE_MAX}
+      step={1} inputMode="numeric" hint={t("users.keyIdleHint")} limit={{ text: t("users.keyIdleLimit", { max: KEY_IDLE_MAX }), over: typed !== "" && !valid(typed) }}
+      draft={days} onChange={commit} />
   );
 }
 

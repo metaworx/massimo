@@ -714,6 +714,27 @@ export interface Token {
    * for a session. A revoke of that key revokes this one
    */
   made_by?: number;
+  /**
+   * An API key kept from the idle limit (the setting auth.key_idle_days; AP
+   * KeyLife, D7-A), the settings file's always; absent for one held to it and
+   * for a session
+   */
+  idle_exempt?: boolean;
+  /**
+   * When an API key ends unused: its last use, its session's included, or its
+   * making where it was never used, plus the limit's days. Absent where the
+   * limit is off, the key kept from it, and for a session; in the past for a
+   * key that ended so
+   * @format date-time
+   */
+  idle_ends_at?: string;
+  /**
+   * Why an API key has ended, listed to be revoked: idle, unused past the
+   * limit; expired, past its end date. Absent while it lives. It lives again
+   * where the limit is raised or turned off, or the key kept from it (AP
+   * KeyLife, D6-A); its use never brings it back
+   */
+  ended?: "idle" | "expired";
 }
 
 /**

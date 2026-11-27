@@ -936,7 +936,10 @@ func (s *Server) stillAdmitted(ctx context.Context, p *principal) bool {
 }
 
 // touch records a token's use at most once an hour, and moves a
-// session's end.
+// session's end; a session made from a key records its key's use too,
+// with the same address, so that a phone in use keeps its key under the
+// idle limit (AP KeyLife, Block 3). A token reaches it only once the
+// rule has let it in, so an ended key's use is never written.
 func (s *Server) touch(ctx context.Context, tok store.Token, ip string, now time.Time) {
 	if !tok.LastUsedAt.IsZero() && now.Sub(tok.LastUsedAt) < touchEvery {
 		return
@@ -947,6 +950,11 @@ func (s *Server) touch(ctx context.Context, tok store.Token, ip string, now time
 	}
 	if err := s.opts.Store.TouchToken(ctx, tok.ID, ip, end); err != nil {
 		s.log.Error("api: token use not recorded", "token", tok.ID, "error", err)
+	}
+	if tok.ParentID != 0 {
+		if err := s.opts.Store.TouchToken(ctx, tok.ParentID, ip, time.Time{}); err != nil {
+			s.log.Error("api: key use not recorded", "token", tok.ParentID, "session", tok.ID, "error", err)
+		}
 	}
 }
 

@@ -6,9 +6,6 @@ package store
 import (
 	"context"
 	"database/sql"
-	"fmt"
-	"io/fs"
-	"path/filepath"
 	"testing"
 )
 
@@ -20,60 +17,36 @@ func TestTokenMakerMigration(t *testing.T) {
 	t.Parallel()
 	ctx := context.Background()
 	clock := fixedClock()
-	at26 := t.TempDir()
-	migrateOnly(t, at26, migrationsUpTo(t, 26), clock)
-	dir := copyStore(t, at26)
-	upTo100 := migrationsUpTo(t, 100) // 0100 alone, whatever comes after it
-	migrateOnly(t, dir, upTo100, clock)
-	s, err := Open(dir, Options{Logger: quiet(), Now: clock, migrations: upTo100})
+	at := formatTime(clock())
+	dir := additiveMigration(t, 26, 100, "0100_token_maker", func(ctx context.Context, db *sql.DB) {
+		exec := func(q string, args ...any) {
+			t.Helper()
+			if _, err := db.ExecContext(ctx, q, args...); err != nil {
+				t.Fatal(err)
+			}
+		}
+		exec(`INSERT INTO users (uuid, name, role_id, created_at, updated_at) SELECT ?, 'anna', id, ?, ? FROM roles WHERE key = ?`, newUUID(), at, at, RoleManager)
+		key := `INSERT INTO tokens (uuid, user_id, kind, hash, label, created_at, origin, made_by) SELECT ?, id, 'api', ?, ?, ?, '', ? FROM users WHERE name = 'anna'`
+		exec(key, newUUID(), HashToken("placeholder-maker"), "maker", at, nil)
+		exec(key, newUUID(), HashToken("placeholder-heir"), "heir", at, nil)
+		exec(`UPDATE tokens SET made_by = (SELECT id FROM tokens WHERE label = 'maker') WHERE label = 'heir'`)
+		exec(`INSERT INTO tokens (uuid, user_id, kind, hash, label, created_at, origin) SELECT ?, id, 'api', ?, ?, ?, '' FROM users WHERE name = 'anna'`,
+			newUUID(), HashToken("placeholder-old-binary"), "written as 26 writes it", at)
+	})
+
+	s, err := Open(dir, Options{Logger: quiet(), Now: clock})
 	if err != nil {
 		t.Fatal(err)
 	}
-	anna, err := s.AddUser(ctx, User{Name: "anna", Role: RoleManager}, "", 0)
-	if err != nil {
-		t.Fatal(err)
-	}
-	maker, _, _ := s.AddKey(ctx, anna.ID, KeyOptions{Label: "maker"})
-	_, heirSecret, _ := s.AddKey(ctx, anna.ID, KeyOptions{Label: "heir", MadeBy: maker.ID})
-	if _, err := s.db.ExecContext(ctx, `INSERT INTO tokens (uuid, user_id, kind, hash, label, created_at, origin) VALUES (?, ?, ?, ?, ?, ?, ?)`,
-		newUUID(), anna.ID, TokenAPI, HashToken("placeholder-old-binary"), "written as 26 writes it", s.nowText(), s.nodeID); err != nil {
-		t.Fatal(err)
+	defer s.Close()
+	maker, ok, err := s.TokenByHash(ctx, HashToken("placeholder-maker"))
+	if err != nil || !ok || maker.MadeBy != 0 {
+		t.Fatalf("the maker: %+v %v %v", maker, ok, err)
 	}
 	if got, ok, err := s.TokenByHash(ctx, HashToken("placeholder-old-binary")); err != nil || !ok || got.MadeBy != 0 {
 		t.Fatalf("a key written as 26 writes it: %+v %v %v", got, ok, err)
 	}
-	if got, ok, _ := s.TokenByHash(ctx, HashToken(heirSecret)); !ok || got.MadeBy != maker.ID {
+	if got, ok, _ := s.TokenByHash(ctx, HashToken("placeholder-heir")); !ok || got.MadeBy != maker.ID {
 		t.Fatalf("the heir: %+v %v", got, ok)
-	}
-	s.Close()
-
-	old, err := Open(dir, Options{Logger: quiet(), migrations: migrationsUpTo(t, 26), readerVersion: 26})
-	if err != nil {
-		t.Fatalf("a binary for 26: %v", err)
-	}
-	if v, mr := old.SchemaVersion(); v != 100 || mr != 24 {
-		t.Fatalf("a binary for 26 reads version %d, min_reader %d", v, mr)
-	}
-	old.Close()
-
-	down, err := fs.ReadFile(embeddedMigrations(), "0100_token_maker.down.sql")
-	if err != nil {
-		t.Fatal(err)
-	}
-	db, err := sql.Open("sqlite", "file:"+filepath.ToSlash(Path(dir)))
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer db.Close()
-	if _, err := db.ExecContext(ctx, string(down)); err != nil {
-		t.Fatal(err)
-	}
-	want, got := fileSchema(t, rawDB(t, at26)), fileSchema(t, db)
-	if fmt.Sprint(got) != fmt.Sprint(want) {
-		t.Fatalf("after the down part:\n%v\nwant the schema of 26:\n%v", got, want)
-	}
-	var n int
-	if err := db.QueryRowContext(ctx, `SELECT count(*) FROM tokens`).Scan(&n); err != nil || n != 3 {
-		t.Fatalf("the tokens after the down part: %d %v", n, err)
 	}
 }

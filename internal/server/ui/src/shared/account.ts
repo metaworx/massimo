@@ -61,13 +61,24 @@ export function revokeOwn(name: string, tk: Token): Promise<unknown> {
 /**
  * createKey makes an API key for a user (POST): the key, which the server
  * shows once, goes to shown alone, before the caller reads again; it is
- * kept nowhere else.
+ * kept nowhere else. keep keeps it from the idle limit (idle_exempt, AP
+ * KeyLife, D7-A), sent only where it is true.
  */
-export function createKey(run: Run, name: string, label: string, shown: (key: string) => void): Promise<boolean> {
+export function createKey(run: Run, name: string, label: string, shown: (key: string) => void, keep = false): Promise<boolean> {
   return run(name, async () => {
-    const res = await api<{ token: string }>("POST", userPath(name, "/tokens"), { label });
+    const res = await api<{ token: string }>("POST", userPath(name, "/tokens"), keep ? { label, idle_exempt: true } : { label });
     shown(res.token);
   }, t("users.keyCreated", { label }));
+}
+
+/** The life of an API key that setTokenLife changes (PUT …/tokens/{id}); a field left out keeps the key's. */
+export interface TokenLife {
+  idle_exempt?: boolean;
+}
+
+/** setTokenLife changes the life of one of a user's API keys (PUT, AP KeyLife, Block 3): kept from the idle limit or held to it again. */
+export function setTokenLife(run: Run, name: string, tk: Token, life: TokenLife): Promise<boolean> {
+  return run(name, () => api("PUT", userPath(name, "/tokens/" + tk.id), life), t("users.keyChanged", { id: tk.id }));
 }
 
 /** loadIdentities reads a user's identities at the sign-in providers. */

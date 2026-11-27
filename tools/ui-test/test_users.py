@@ -156,10 +156,14 @@ def test_an_integrations_user_has_no_way_in(page, case, reads):
             if not regular:
                 assert said.inner_text() == line, f"{name}: the line's words"
             assert panel.locator(".remove-password").count() == (1 if name == PHONE else 0), f"{name}: the held password's removal"
+            # an integration's key is always held to the idle limit: no Keep while unused, no Change…; the
+            # regular user's, which the owner manages, has it (AP KeyLife, Block 3)
+            assert panel.locator(".key-keep").count() == (1 if regular else 0), f"{name}: Create key's Keep while unused"
             if name == PHONE:
                 row = panel.locator(f".user-tokens li[data-id='{held_key['id']}']")
                 row.wait_for()
                 assert row.locator(".revoke-token").count() == 1, "the held key's Revoke"
+                assert row.locator(".change-key").count() == 0, "no Change… on an integration's key"
                 with page.expect_request(lambda r: r.method == "PUT" and phone_path.search(r.url)):
                     panel.locator(".remove-password").click()
                 assert sent == [{"password": ""}], f"the removal sends an empty password: {sent}"
@@ -570,6 +574,217 @@ def test_settings_file_key_has_no_revoke(page, case):
     finally:
         api_call("DELETE", "api/v1/users/owner/tokens/%d" % other["id"])
     show_view(page, "tiles")
+
+
+KEY_IDLE_SAVED = {"en": "API keys now end after 30 days unused.", "de": "API-Schlüssel enden jetzt nach 30 Tagen ohne Nutzung."}
+
+
+def test_key_idle_setting(page, case):
+    """System settings → Users: API keys end unused after, the setting
+    auth.key_idle_days (AP KeyLife, Block 3, D2-A), 0 by default, in days,
+    with its line; a value typed is saved as the field is left, one PUT,
+    the users' line saying so, and the next showing of the page reads it
+    again; one out of 0 to 3650 is refused in the field, its limit saying
+    so, and sends nothing; emptied, the field goes back to the value
+    stored. The setting goes back to its default at the end."""
+    puts = []
+    page.on("request", lambda r: puts.append(r.post_data_json) if r.method == "PUT" and r.url.endswith("/api/v1/settings") else None)
+    sel = "#key-idle-days"
+    try:
+        show_view(page, "system")
+        field = page.locator(sel)
+        field.wait_for()
+        assert wait_until(page, "document.querySelector(%r).value === '0'" % sel, 5), f"0 by default: {field.input_value()}"
+        row = page.locator(".field.key-idle")
+        assert row.locator("label").inner_text() == page.evaluate("t('users.keyIdleDays')"), "its label"
+        assert row.locator(".field-hint").inner_text() == page.evaluate("t('users.keyIdleHint')"), "its line"
+        assert page.evaluate("t('users.keyIdleUnit')") in row.inner_text(), "in days"
+        field.fill("4000")
+        field.press("Tab")
+        limit = page.locator(sel + "-limit")
+        assert limit.is_visible() and field.get_attribute("aria-invalid") == "true", "out of 0 to 3650: refused in the field"
+        field.fill("")
+        field.press("Tab")
+        assert wait_until(page, "document.querySelector(%r).value === '0'" % sel, 5), "emptied: back to the value stored"
+        assert limit.is_hidden() and puts == [], f"nothing sent: {puts}"
+        field.fill("30")
+        with page.expect_request(lambda r: r.method == "PUT" and r.url.endswith("/api/v1/settings")):
+            field.press("Tab")
+        assert wait_until(page, "document.getElementById('users-msg').textContent.includes(%r)" % KEY_IDLE_SAVED[case.lang], 5), \
+            f"the users' line: {page.locator('#users-msg').text_content()}"
+        assert puts == [{"auth.key_idle_days": 30}], f"one PUT: {puts}"
+        assert api_call("GET", "api/v1/settings")["auth.key_idle_days"]["value"] == "30", "stored"
+        api_call("PUT", "api/v1/settings", {"auth.key_idle_days": 45})
+        show_view(page, "tiles")
+        show_view(page, "system")
+        assert wait_until(page, "document.querySelector(%r).value === '45'" % sel, 5), "read again at the next showing"
+        assert scroll_width(page) <= case.width, "no horizontal scroll"
+    finally:
+        api_call("PUT", "api/v1/settings", {"auth.key_idle_days": None})
+    show_view(page, "tiles")
+
+
+# the page's own form of an API time, fmtWhen of shared/time.ts
+WHEN = """(iso) => new Intl.DateTimeFormat(i18n.lang, { year: "numeric", month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit",
+  hour12: false }).format(new Date(iso))"""
+
+
+def test_a_keys_life_line(page, case, reads):
+    """Under the idle limit (AP KeyLife, Block 3; the list stubbed), a
+    key's line says when it ends unless used, that it is kept while
+    unused, or, ended, the badge Ended and since when it was unused; a key
+    with none of them says nothing of its life; at 390 px in every
+    language each row stays inside its list."""
+    prefix = f"ui-test-life-{case.width}-{case.lang}-"
+    revoke_keys(prefix)
+    keys = {what: api_call("POST", "api/v1/users/operator/tokens", {"label": prefix + what}) for what in ("ends", "kept", "ended", "plain")}
+    future, past = "2026-12-24T09:30:00Z", "2026-11-01T08:00:00Z"
+
+    def life(body):
+        for tk in body or []:
+            if tk["id"] == keys["ends"]["id"]:
+                tk["idle_ends_at"] = future
+            elif tk["id"] == keys["kept"]["id"]:
+                tk["idle_exempt"] = True
+            elif tk["id"] == keys["ended"]["id"]:
+                tk.update(ended="idle", idle_ends_at=past, last_used_at=past, last_used_from="192.0.2.7")
+        return body
+    pattern = "**/api/v1/users/operator/tokens"
+    reads.change(pattern, life)
+    try:
+        show_view(page, "system")
+        panel = page.locator(".user-panel[data-name='operator']")
+        panel.wait_for()
+        panel.locator("summary").click()
+        row = lambda what: panel.locator(f".user-tokens li[data-id='{keys[what]['id']}']")
+        row("ended").wait_for(timeout=5000)
+        want = page.evaluate("""([future, past]) => {
+          const at = """ + WHEN + """;
+          return { ends: t('users.idleEnds', { date: at(future) }), kept: t('users.idleKept'), ended: t('users.ended'), since: t('users.endedIdle', { date: at(past) }) };
+        }""", [future, past])
+        assert row("ends").locator(".token-life").inner_text() == want["ends"], "ends unless used"
+        assert row("kept").locator(".token-life").inner_text() == want["kept"], "kept while unused"
+        assert row("ended").locator(".flag.bad").inner_text().strip() == want["ended"], "the badge Ended"
+        assert row("ended").locator(".token-life").inner_text() == want["since"], "unused since"
+        assert row("plain").locator(".token-life").count() == 0, "a key with none of them"
+        langs = ("en", "de", "fr", "it", "nl", "pl") if case.width == 390 else (case.lang,)
+        for lang in langs:
+            page.evaluate("async (l) => { await changeLanguage(l); applyLanguage(); }", lang)
+            frames(page)
+            m = page.evaluate("""() => [...document.querySelectorAll(".user-panel[data-name='operator'] .user-tokens li[data-id]")].map((li) => {
+              const r = li.getBoundingClientRect(), list = li.parentElement.getBoundingClientRect();
+              return {id: li.dataset.id, inside: r.left >= list.left - 0.5 && r.right <= list.right + 0.5};
+            })""")
+            assert m and all(x["inside"] for x in m), f"{lang}: every row inside the list: {m}"
+            assert scroll_width(page) <= case.width, f"no horizontal scroll in {lang}"
+        page.evaluate("async (l) => { await changeLanguage(l); applyLanguage(); }", case.lang)
+    finally:
+        reads.clear(pattern)
+        revoke_keys(prefix)
+    show_view(page, "tiles")
+
+
+def test_keep_while_unused(page, case):
+    """For who manages the user, the owner of the operator (AP KeyLife,
+    Block 3, D7-A): a key's Change… opens a small form, the focus on its
+    switch Keep while unused, which shows the key's state, Save off until
+    it is changed; Cancel sends nothing and gives the focus back to
+    Change…; Save sends one PUT with idle_exempt, the line follows and the
+    focus is back on Change…. Create key's switch sends idle_exempt, and
+    the key made says it is kept. No Change… on the settings file's key,
+    in the owner's panel nor in My profile, where it is this device."""
+    prefix = f"ui-test-keep-{case.width}-{case.lang}-"
+    revoke_keys(prefix)
+    plain = api_call("POST", "api/v1/users/operator/tokens", {"label": prefix + "plain"})
+    puts, posts = [], []
+    page.on("request", lambda r: puts.append(r.post_data_json) if r.method == "PUT" and "/users/operator/tokens/" in r.url else None)
+    page.on("request", lambda r: posts.append(r.post_data_json) if r.method == "POST" and r.url.endswith("/users/operator/tokens") else None)
+    focused = "document.activeElement && document.activeElement.matches(%r)"
+    try:
+        show_view(page, "system")
+        panel = page.locator(".user-panel[data-name='operator']")
+        panel.wait_for()
+        panel.locator("summary").click()
+        row = panel.locator(f".user-tokens li[data-id='{plain['id']}']")
+        row.wait_for(timeout=5000)
+        change = row.locator(".change-key")
+        assert change.is_visible() and change.get_attribute("aria-label") == page.evaluate("(l) => t('users.changeKeyLabel', { label: l })", prefix + "plain"), \
+            "Change…, named by the key"
+        change.click()
+        form = row.locator("form.token-change")
+        form.wait_for()
+        switch = form.locator("input[name=idle_exempt]")
+        assert not switch.is_checked(), "the switch shows the key held to the limit"
+        assert wait_until(page, focused % ".token-change input[name=idle_exempt]", 3), "the focus on the switch"
+        save = form.locator("button[type=submit]")
+        assert save.is_disabled(), "Save off until it is changed"
+        form.locator(".form-cancel").click()
+        assert wait_until(page, "!document.querySelector(%r)" % f"li[data-id='{plain['id']}'] form.token-change", 3), "Cancel closes the form"
+        assert wait_until(page, focused % f"li[data-id='{plain['id']}'] .change-key", 3), "the focus back on Change…"
+        assert puts == [], f"Cancel sends nothing: {puts}"
+        change.click()
+        form.wait_for()
+        form.locator("label.switch .slider").click()
+        with page.expect_request(lambda r: r.method == "PUT" and "/users/operator/tokens/" in r.url):
+            save.click()
+        assert puts == [{"idle_exempt": True}], f"one PUT with idle_exempt: {puts}"
+        kept = page.evaluate("t('users.idleKept')")
+        assert wait_until(page, "(document.querySelector(%r) || {}).textContent === %r" % (f"li[data-id='{plain['id']}'] .token-life", kept), 5), "the line follows"
+        assert wait_until(page, focused % f"li[data-id='{plain['id']}'] .change-key", 3), "the focus back on Change… after Save"
+        assert api_call("GET", "api/v1/users/operator/tokens") and \
+            [tk for tk in api_call("GET", "api/v1/users/operator/tokens") if tk["id"] == plain["id"]][0].get("idle_exempt"), "stored"
+        # Create key's switch
+        panel.locator("label.switch.key-keep .slider").click()
+        panel.locator("input[name=label]").fill(prefix + "made kept")
+        with page.expect_request(lambda r: r.method == "POST" and r.url.endswith("/users/operator/tokens")):
+            panel.locator(".create-key").click()
+        assert posts == [{"label": prefix + "made kept", "idle_exempt": True}], f"the switch sends idle_exempt: {posts}"
+        made = panel.locator(".user-tokens li", has_text=prefix + "made kept")
+        made.wait_for(timeout=5000)
+        assert made.locator(".token-life").inner_text() == kept, "the key made is kept"
+        assert not panel.locator("label.switch.key-keep input").is_checked(), "the switch off again for the next key"
+        named_buttons(page, "System settings → Users, a key's Change…")
+        assert scroll_width(page) <= case.width, "no horizontal scroll"
+        # the settings file's key: no Change…, in the owner's panel and in My profile
+        file_key = api_call("GET", "api/v1/me")["token"]["id"]
+        owner = page.locator(".user-panel[data-name='owner']")
+        owner.locator("summary").click()
+        owner.locator(f".user-tokens li[data-id='{file_key}']").wait_for(timeout=5000)
+        assert owner.locator(f".user-tokens li[data-id='{file_key}'] .change-key").count() == 0, "none on the settings file's key"
+        show_view(page, "profile")
+        page.locator(f"#profile-tokens li[data-id='{file_key}']").wait_for(timeout=5000)
+        assert page.locator(f"#profile-tokens li[data-id='{file_key}'] .change-key").count() == 0, "none in My profile on this device's key"
+    finally:
+        revoke_keys(prefix)
+    show_view(page, "tiles")
+
+
+def test_no_keep_for_who_manages_nobody(new_context, case, watch, guard):
+    """A user who manages nobody, a viewer, keeps the idle limit on its own
+    keys (AP KeyLife, D7-A): My profile lists its key with Revoke, but
+    offers neither Create key's Keep while unused nor Change…."""
+    from test_login import sign_in
+    name = f"idle-{case.width}-{case.lang}"
+    api_call("POST", "api/v1/users", {"name": name, "role": "viewer", "password": "pass-word-kv-71"})
+    try:
+        key = api_call("POST", f"api/v1/users/{name}/tokens", {"label": "a key of the viewer's"})
+        ctx = new_context()
+        page = ctx.new_page()
+        guard.page = page
+        page.set_default_timeout(5000)
+        page.on("pageerror", lambda e: watch.problems.append(f"page error: {e}"))
+        page.goto(URL)
+        sign_in(page, name, "pass-word-kv-71")
+        show_view(page, "profile")
+        row = page.locator(f"#profile-tokens li[data-id='{key['id']}']")
+        row.wait_for(timeout=5000)
+        assert row.locator(".revoke-token").count() == 1, "its Revoke"
+        assert row.locator(".change-key").count() == 0, "no Change…"
+        assert page.locator("#profile-tokens .create-key").count() == 1, "Create key"
+        assert page.locator("#profile-tokens .key-keep").count() == 0, "no Keep while unused"
+        sign_out(page)
+    finally:
+        api_call("DELETE", "api/v1/users/" + name)
 
 
 NO_ANSWER = {"en": "no answer from the server; it may have been done all the same",

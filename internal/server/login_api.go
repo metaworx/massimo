@@ -105,6 +105,19 @@ type tokenView struct {
 	// key made by a session, the command line, the bootstrap or an
 	// integration's approval, and for a session.
 	MadeBy int64 `json:"made_by,omitempty"`
+	// IdleExempt says an API key is kept from the idle limit (AP KeyLife,
+	// D7-A), the settings file's always (D3-A); absent for one held to it
+	// and for a session.
+	IdleExempt bool `json:"idle_exempt,omitempty"`
+	// IdleEndsAt is when an API key ends unused, its last use or its
+	// making plus the setting auth.key_idle_days; absent where the limit
+	// is off, the key kept from it, and for a session. Each use moves it.
+	IdleEndsAt *time.Time `json:"idle_ends_at,omitempty"`
+	// Ended says why an API key has ended, listed to be revoked: idle,
+	// unused past the limit, or expired, past its end date; absent while
+	// it lives (D6-A). It lives again where the limit is raised or turned
+	// off, or the key kept from it.
+	Ended string `json:"ended,omitempty"`
 }
 
 // meView is the answer of GET /api/v1/me.
@@ -147,8 +160,15 @@ func viewUser(u store.User, invitedBy string) userView {
 		InvitedBy: invitedBy, AuthVersion: u.AuthVersion, CreatedAt: u.CreatedAt, UpdatedAt: u.UpdatedAt, LastLoginAt: optTime(u.LastLoginAt)}
 }
 
+// viewToken is t as the API shows it, its life as the store gave it
+// (store.Token.EndsAt): from Tokens, TokenByHash or SetTokenLife.
 func viewToken(t store.Token) tokenView {
-	return tokenView{ID: t.ID, Kind: t.Kind, Label: t.Label, CreatedAt: t.CreatedAt, ExpiresAt: optTime(t.ExpiresAt), LastUsedAt: optTime(t.LastUsedAt), LastUsedFrom: t.LastUsedFrom, KeyID: t.ParentID, MadeBy: t.MadeBy}
+	v := tokenView{ID: t.ID, Kind: t.Kind, Label: t.Label, CreatedAt: t.CreatedAt, ExpiresAt: optTime(t.ExpiresAt), LastUsedAt: optTime(t.LastUsedAt), LastUsedFrom: t.LastUsedFrom, KeyID: t.ParentID, MadeBy: t.MadeBy,
+		IdleExempt: t.Kind == store.TokenAPI && (t.IdleExempt || t.SettingsKey), IdleEndsAt: optTime(t.IdleEndsAt)}
+	if t.Ended == store.EndedIdle || t.Ended == store.EndedExpired {
+		v.Ended = t.Ended
+	}
+	return v
 }
 
 // signIns holds the addresses with a login running, so that an address

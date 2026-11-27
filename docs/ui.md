@@ -1564,6 +1564,16 @@ as the settings' ⓘ do:
   the key that is the settings file's `MASSIMO_API_TOKEN` (`from_settings`)
   says **from the settings file: change or remove it there** in place of Revoke,
   which the server refuses for it (D86-A);
+  under the idle limit (`auth.key_idle_days`, AP KeyLife, Block 3)
+  a key's line says **ends … unless used**, the date and time it ends unused,
+  or **kept while unused** for one kept from it,
+  and a key that ended says **Ended** and **unused since …**, listed to be revoked;
+  for one who manages its own user (with `users`, as an owner,
+  or `guests` where it is a guest itself; D7-A) a key's row has **Change…**,
+  a small form with the switch **Keep while unused**, **Save** and **Cancel**,
+  but not on the settings file's key nor on the key the page is signed in with,
+  and **Create key** has the same switch;
+  one who manages nobody keeps the limit on its keys, and sees neither;
   **Create key** shows the new key once,
   and it copies as the page's other strings do (AP KeyLife, D1-A):
   a tap or a click on it, or Enter or Space, copies the key,
@@ -2192,7 +2202,15 @@ settings forms and have none of it.
   and an administrator looking at that user's panel sees the phone's key rightly;
   the settings file's key says it comes from there in place of Revoke,
   as under My profile;
-  and **Create key**, which shows the new key once: from the read that follows it
+  a key's line says its life under the idle limit, as under My profile,
+  and for who manages the user (AP KeyLife, D7-A) a key's row has **Change…**,
+  whose switch **Keep while unused** keeps it from the limit or holds it to it again,
+  with **Save**, off until the switch is changed, and **Cancel**,
+  the focus on the switch as the form opens and back on Change… as it closes,
+  never on an integration's key, the settings file's key
+  or the key the page is signed in with;
+  and **Create key**, with the same switch for who manages the user,
+  which shows the new key once: from the read that follows it
   until the next, in that panel alone, kept nowhere;
   it copies with its copy icon, as under My profile;
   where a sign-in provider is enabled, the user's identities at the providers,
@@ -2222,6 +2240,15 @@ settings forms and have none of it.
   on every device; off, no field has one,
   and this page's fields lose theirs at once, the others' at their next look
   at the server.
+  Under it, **API keys end unused after** so many days (`auth.key_idle_days`,
+  AP KeyLife, Block 3), 0 for never, the default (D2-A),
+  saved as the field is left, the users' line saying so;
+  emptied, it goes back to the value stored,
+  and a value that is no whole number of 0 to 3650 is refused in the field,
+  its limit saying so, and not sent.
+  Its line says that a key unused for longer ends at once, its session with it,
+  that a key kept while unused and the settings file's key never end so,
+  and an integration's key always does.
   On a server without users (FirstOwner D14),
   an integration's beside it or not
   (AP LooseEnds, D42; its list taken back by AP LooseEnds, D46),
@@ -3170,7 +3197,7 @@ for the first owner's toast and the log's `open_setup` line.
 | `Brand`, `BrandName` | `brand.tsx` | Massimo's logo and small mark from the sprite (`brandMarks` of `components.js`, which draws them over the skeleton's `data-brand`), of which the place's style shows one, hidden from screen readers: ☰'s first row; `BrandName`, the big name under the logo, the first owner's form and the sign-in's card | |
 | `page`, `isShown`, `showView`, `onView`, `mayShow`, `setAddress`, `definePages`, `pagesPart` | `pages.ts` | the page of the main area shown, a signal: a drawing that reads `page.value` follows it, `isShown` asks at that moment and follows nothing (a handler, a reader, a timer), so that no request is sent again at a change of page; showing a page puts it into the address, as a new entry of the history or in place of the current one, and brings each page back at the scroll it was left at; `onView` runs at each showing, on the `viewshown` event; `mayShow` says who may open which, reading who is in; a page with an address of its own (the log's, `ui/src/log/index.tsx`) hands it over with `ownAddress`, a card's region what the card's address holds after its `?` with `readCardAddress` (My profile's key to mark), told of every address read, null for another, before the page is shown; the page's chrome hands over the pages at the start (`definePages`, `chrome/pages.ts`), the log puts its choices into the address in place (`setAddress`), and the plain code calls these as `MassimoParts.pages` (`pagesPart`) | `view`, `address`, `card`; `card`, `read(q)` |
 | `userPath`, `Run`, `loadTokens`, `revokeToken`, `revokeOwn`, `createKey`, `loadIdentities`, `addIdentity`, `changeIdentity`, `removeIdentity` | `account.ts` | what a user's sessions, keys and identities read and send (`…/users/{name}/tokens`, `…/identities`), for System settings → Users and My profile alike; a change through the caller's runner (`Run`), which reloads what it shows and says how it went in its own line, a text or one made from the answer once it came (a revoke's, which names the keys that went with it, `heirs`); Revoke of the token in use signs out | `name`, `rest`; `run`, `name`, and what each sends |
-| `Tokens` | `tokens.tsx` | a user's sessions and keys (a user's panel, My profile): each with its id and Revoke, a key made by a key naming its maker (`made_by`) by the list's label, else its id, the settings file's key (`from_settings`) saying so in Revoke's place, "this device" and "its key" by `own`, in the app "this device's key" by the app's status (`app.ts`), Create key and the key just made, shown once by the read that follows and kept in the part's own state alone, a `Copy` of it with its icon, keyed by the key, both named Copy the key, not by the key (AP KeyLife, D1-A); read when its place opens and again at each change of the caller's counter while open, in the app once the last sign-in's revoke is done (`signInRevoked`); an answer after a sign-out dropped; the API key the caller names tinted (`token-marked`), and the caller told of each read drawn with that row (My profile's key of its address) | `u`, `off`, `open`, `reads` (the caller's counter), `run`, `say` (the caller's message line), `labelId` (the new key's field's id), `help` (the group's ⓘ after Create key, My profile's), `marked` (the id of the API key marked), `drawn(row)` (told of each read drawn, with the row marked or null), `listOnly` (the list with Revoke, no new key: an integration's user's) |
+| `Tokens` | `tokens.tsx` | a user's sessions and keys (a user's panel, My profile): each with its id and Revoke, a key made by a key naming its maker (`made_by`) by the list's label, else its id, the settings file's key (`from_settings`) saying so in Revoke's place, "this device" and "its key" by `own`, in the app "this device's key" by the app's status (`app.ts`), Create key and the key just made, shown once by the read that follows and kept in the part's own state alone, a `Copy` of it with its icon, keyed by the key, both named Copy the key, not by the key (AP KeyLife, D1-A); a key's line of its life under the idle limit (`KeyLife`: ends … unless used, kept while unused, or the badge Ended and unused since …) and, where `keeps`, a key's Change… (`KeyChange`: the switch Keep while unused with its draft, Save off until it is changed, Cancel, the focus on the switch as it opens and back on Change… as it closes) on any API key but the settings file's and the one the page is signed in with, and Create key's switch Keep while unused, the part's own state (AP KeyLife, Block 3); read when its place opens and again at each change of the caller's counter while open, in the app once the last sign-in's revoke is done (`signInRevoked`); an answer after a sign-out dropped; the API key the caller names tinted (`token-marked`), and the caller told of each read drawn with that row (My profile's key of its address) | `u`, `off`, `open`, `reads` (the caller's counter), `run`, `say` (the caller's message line), `labelId` (the new key's field's id), `help` (the group's ⓘ after Create key, My profile's), `marked` (the id of the API key marked), `drawn(row)` (told of each read drawn, with the row marked or null), `listOnly` (the list with Revoke, no new key: an integration's user's), `keeps` (the caller may keep the user's keys from the idle limit, who manages the user: AP KeyLife, D7-A) |
 | `Identities`, `Changes` | `identities.tsx` | a user's identities at the sign-in providers (a user's panel, My profile): each with what the provider said and Remove; with `changes`, Change of one no sign-in used, a settings form kept by its key, the forms of identities gone or made unchangeable forgotten, and all of them where the box goes off; with `assign`, Assign; `after` what follows the list once read (My profile's Link buttons); `quiet` draws nothing while the list is empty and the caller offers nothing after it (`offer`: My profile's Link buttons, none in the app, where the rows are still named from every provider) | `u`, `off`, `open`, `reads`, `providers` (the enabled ones), `run`, `say`, `title`, `none`, `cls`, `changes` (`key(id)`, `under`, `ui(key)`, `forget(key)`, `show(key)`: the caller's forms and how one is brought into sight), `assign`, `after(list)`, `quiet`, `offer` |
 | `FileButton` | `file.tsx` | a button that opens the browser's choice of a file of the types it accepts, the same file again too | `id` (the button's), `cls`, `label`, `accept`, `off`, `inputId` and `inputLabel` (the input's id and its name in the page's language: the Appearance card's Import…), `onFile(file)` |
 | `Adder` | `adder.tsx` | the end of a list that adds an item: the new item's form in its place while shown, the button that shows it hidden meanwhile, the focus in the form's first field when it comes, in the drawing's own turn, and back on the button when it goes (Users, Roles, Sign-in providers) | `id` (the button's), `formId` (the form's place), `label`, `shown`, `set(shown)`, the form as children |

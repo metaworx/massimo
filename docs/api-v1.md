@@ -263,7 +263,7 @@ and the OpenAPI file carries each operation's as `x-capability`:
 | `restore` | plan and run a restore, delete a kept backup | `POST …/restore/plan`, `POST …/restore`, `DELETE …/backups/{id}` |
 | `repair` | the repairs of a Cube's rooms and devices: their communication errors reset, a device's configuration re-sent from its room, a device placed or listed where the Cube and its list disagree, a room's master named, a room re-linked; "unlink all and re-link" needs `structure` as well ("Repairs", below) | `GET`/`POST …/repair/…`; `GET`/`POST …/repair/unlink-relink` with `structure` as well |
 | `guests` | create, invite, change, disable and remove users whose role is `guest`, and give them an end date: regular ones, or for a call through an integration that integration's own, which makes no user ("Users", below) | the users routes, `GET`/`POST`/`PUT`/`DELETE /api/v1/users…`, for those users |
-| `users` | every user: create, role, disable, password, tokens, the identities they sign in with | `GET`/`POST /api/v1/users`, `GET`/`PUT`/`DELETE …/users/{name}`, `GET`/`POST …/users/{name}/tokens`, `DELETE …/users/{name}/tokens/{id}`, `POST …/users/{name}/register`, `GET`/`POST`/`PUT`/`DELETE …/users/{name}/identities…` |
+| `users` | every user: create, role, disable, password, tokens, the identities they sign in with | `GET`/`POST /api/v1/users`, `GET`/`PUT`/`DELETE …/users/{name}`, `GET`/`POST …/users/{name}/tokens`, `PUT`/`DELETE …/users/{name}/tokens/{id}`, `POST …/users/{name}/register`, `GET`/`POST`/`PUT`/`DELETE …/users/{name}/identities…` |
 | `passwords` | set the password of a user (the manager's by default) | `GET /api/v1/users`, `GET …/users/{name}`, `PUT …/users/{name}` with a password, `POST …/users/{name}/register` |
 | `roles` | a role's capabilities and name, create and delete roles | `GET`/`POST /api/v1/roles`, `PUT`/`DELETE /api/v1/roles/{key}` |
 | `roles.disable` | disable and enable a role | `PUT /api/v1/roles/{key}/disabled` |
@@ -350,7 +350,8 @@ a page before its sign-in, or a scanner behind a proxy not in
 `-trusted-proxies`, does not lock the address out.
 Nor does a token the server issued and that has ended:
 a session revoked, logged out or past its end, a revoked key,
-a session whose key was revoked or is past its end,
+a key ended unused (`auth.key_idle_days`, Tokens),
+a session whose key was revoked, is past its end or ended unused,
 or the token of a removed user
 is answered `401` with the words of a wrong token, and counts as none,
 since a guessed token never matches one that was issued:
@@ -885,20 +886,22 @@ the key is changed or removed in the settings file first
 ### Tokens: /api/v1/users/{name}/tokens
 
 `GET` and `POST /api/v1/users/{name}/tokens`;
-`DELETE /api/v1/users/{name}/tokens/{id}`.
+`PUT` and `DELETE /api/v1/users/{name}/tokens/{id}`.
 A user's sessions and API keys, as `GET /api/v1/me` shows the one presented;
 the same rules of access as the user.
 
 `GET` lists the live ones, oldest first, without their secrets:
-a key not revoked, and a session not revoked, not past its end,
-and, made from a key, only while the key is neither revoked nor past its end;
+a key not revoked, ended or not, and a session not revoked, not past its end,
+and, made from a key, only while the key lives;
 the key that is the settings file's `MASSIMO_API_TOKEN` carries `"from_settings": true`,
 found by the hash of the file's token, not by its label
 (AP MobileApp v1.4, D86-A);
 a key made with another key as the bearer carries that key's id as `made_by`,
 absent for every other token.
-`POST` with `{"label": "Loxone"}` creates an API key, which never expires,
+`POST` with `{"label": "Loxone"}` creates an API key, which has no end date,
 and answers `201` with the key once;
+`"idle_exempt": true` beside the label keeps it from the idle limit (below),
+from who manages the user alone (`403` for anyone else);
 an integration's user gets none (`403`, "Acting for an integration's users"):
 
 ```json
@@ -943,6 +946,38 @@ A token revokes itself the same way, as its own bearer:
 a key with `DELETE …/tokens/{id}` and its own id,
 or any token with `DELETE /api/v1/me/token`, which needs neither the name nor the id;
 a session ends itself with `POST /api/v1/logout`.
+
+An API key unused for the days of the setting `auth.key_idle_days`
+(GET and PUT /api/v1/settings; off by default) ends
+(AP KeyLife v1.0, Block 3), and its session with it:
+the idle clock is the key's last use, a use of its session included,
+or its making where it was never used,
+so a phone that signs in by fingerprint and uses its session keeps its key.
+An ended key and its session are refused as ended tokens,
+which do not count toward the lockout (Authentication);
+nothing is written when a key ends, so it lives again,
+its session with it while the session's own 30 days last,
+where the limit is raised or turned off, or the key kept from it (D6-A);
+its use never brings it back, since it is refused before its use is written.
+The list shows each key's life:
+`idle_exempt`, true for a key kept from the limit and always for the settings
+file's key, which the limit passes over (D3-A);
+`idle_ends_at`, when it ends unused, absent where the limit is off or the key is
+kept from it;
+and for a key that has ended `ended`, `idle`, or `expired` past its end date,
+listed to be revoked.
+`PUT …/tokens/{id}` with `{"idle_exempt": true}` keeps a key from the limit,
+`false` holds it to it again,
+for who manages the key's user alone (`users`, or `guests` for a guest it reaches,
+within the rank rule: D7-A), the key's own user not, unless it manages itself;
+it answers the key as the list shows it, and is audited as `token.update`,
+its change line from and to.
+A body without `idle_exempt`, or with another field, is `400`,
+a session `400`, an integration's key kept from the limit `400`
+(it is always held to it, and its integration registers again once it ended),
+the settings file's key `409`, a token of another user `404`,
+and the bearer that very key `403`: a key changes nothing of its own life,
+and a session made from it is not the key.
 
 ### Identities: /api/v1/users/{name}/identities
 
@@ -2116,6 +2151,12 @@ the days the others are kept (365), 0 for ever and at most 3650,
 and `backups.keep_newest`,
 how many of a Cube's newest backups are kept whatever their age (10, 0 to 1000);
 a change of the last three prunes at once.
+`auth.key_idle_days`, 0 by default for off, 0 to 3650, is how many days an API key
+may stay unused before it ends, its session with it,
+counted from its last use, its session's included, or its making
+(Tokens, above; AP KeyLife, Block 3, D2-A);
+it applies at once, so a key unused for longer ends at its next check,
+and a key kept from it and the settings file's key never end by it.
 `auth.password_login`, true by default, says whether `POST /api/v1/login`
 takes a password, and applies at once:
 off, it answers `403`, the start of a sign-in by OPAQUE says `"v1": false`,

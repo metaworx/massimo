@@ -989,6 +989,7 @@ func (s *Server) listTokens(w http.ResponseWriter, r *http.Request) error {
 	for _, t := range tokens {
 		v := viewToken(t)
 		v.FromSettings = held && t.ID == file.ID
+		v.IdleExempt = v.IdleExempt || v.FromSettings // the store passes over it by the hash Bootstrap applied (D3-A)
 		out = append(out, v)
 	}
 	writeJSON(w, http.StatusOK, out)
@@ -999,18 +1000,21 @@ func (s *Server) listTokens(w http.ResponseWriter, r *http.Request) error {
 // shown once. Where the bearer is an API key, the new key names it as
 // its maker, and a revoke of that key revokes it (AP KeyLife, D5-A); a
 // key made by a session of any kind, one made from a key by
-// POST /api/v1/login/key among them, names none.
+// POST /api/v1/login/key among them, names none. idle_exempt true keeps
+// the key from the idle limit, for who manages its user alone (AP
+// KeyLife, D7-A; keptFail).
 func (s *Server) postToken(w http.ResponseWriter, r *http.Request) error {
 	st, err := s.userStore()
 	if err != nil {
 		return err
 	}
-	u, _, err := s.targetUser(r, st, true)
+	u, a, err := s.targetUser(r, st, true)
 	if err != nil {
 		return err
 	}
 	var req struct {
-		Label string `json:"label"`
+		Label      string `json:"label"`
+		IdleExempt bool   `json:"idle_exempt"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		return fail(http.StatusBadRequest, "bad body: %v", err)
@@ -1022,7 +1026,10 @@ func (s *Server) postToken(w http.ResponseWriter, r *http.Request) error {
 	if err := noWayIn(u); err != nil {
 		return err
 	}
-	opts := store.KeyOptions{Label: req.Label}
+	if req.IdleExempt && !a.mayManage(u) {
+		return keptFail(u)
+	}
+	opts := store.KeyOptions{Label: req.Label, IdleExempt: req.IdleExempt}
 	if p := principalOf(r); p.named() && p.token.Kind == store.TokenAPI {
 		opts.MadeBy = p.token.ID
 	}
@@ -1040,6 +1047,9 @@ func (s *Server) postToken(w http.ResponseWriter, r *http.Request) error {
 	line := []any{"user", s.logUserName(r.Context(), u), "label", req.Label, "remote", s.clientIP(r)}
 	if opts.MadeBy != 0 {
 		line = append(line, "made_by", opts.MadeBy)
+	}
+	if opts.IdleExempt {
+		line = append(line, "idle_exempt", true)
 	}
 	s.log.Info("api key created", line...)
 	v := viewToken(tok)
@@ -1084,6 +1094,93 @@ func (s *Server) deleteToken(w http.ResponseWriter, r *http.Request) error {
 	}
 	s.revoked(w, r, tok, u, heirs, "user", s.logUserName(r.Context(), u), "token", id, "kind", tok.Kind, "remote", s.clientIP(r))
 	return nil
+}
+
+// putToken handles PUT /api/v1/users/{name}/tokens/{id}: an API key's
+// life, {"idle_exempt": true|false} (AP KeyLife, Block 3), answered with
+// the key's view; a field left out keeps what the key has, and a body of
+// none is 400. A session is 400; the settings file's key 409, its life
+// being the file's (D3-A); the bearer that very key 403, since a key
+// changes nothing of its own life, a session made from it not being the
+// key (D4-A); idle_exempt from a caller that does not manage the key's
+// user 403 (D7-A, keptFail), and true for an integration's key 400
+// (AP MobileApp, D75); another user's token 404. Audited as
+// token.update, its change line from and to.
+func (s *Server) putToken(w http.ResponseWriter, r *http.Request) error {
+	st, err := s.userStore()
+	if err != nil {
+		return err
+	}
+	u, a, err := s.targetUser(r, st, true)
+	if err != nil {
+		return err
+	}
+	id, err := strconv.ParseInt(r.PathValue("id"), 10, 64)
+	if err != nil {
+		return fail(http.StatusBadRequest, "bad token id %q", r.PathValue("id"))
+	}
+	var req struct {
+		IdleExempt *bool `json:"idle_exempt"`
+	}
+	dec := json.NewDecoder(r.Body)
+	dec.DisallowUnknownFields()
+	if err := dec.Decode(&req); err != nil {
+		return fail(http.StatusBadRequest, "bad body: %v (want {\"idle_exempt\": true} or false)", err)
+	}
+	if req.IdleExempt == nil {
+		return fail(http.StatusBadRequest, "nothing to change: want idle_exempt")
+	}
+	tok, ok, err := st.Token(r.Context(), id)
+	if err != nil {
+		return userFail(err)
+	}
+	if !ok || tok.UserID != u.ID || !tok.DeletedAt.IsZero() {
+		return fail(http.StatusNotFound, "user %s has no token %d", u.Name, id)
+	}
+	if tok.Kind != store.TokenAPI {
+		return fail(http.StatusBadRequest, "token %d is a session: it lasts 30 days from its last use, and only an API key's life changes", id)
+	}
+	file, held, err := s.settingsKey(r.Context())
+	if err != nil {
+		return userFail(err)
+	}
+	if held && id == file.ID {
+		return fail(http.StatusConflict, settingsKeyKept)
+	}
+	if p := principalOf(r); p.named() && p.token.ID == id {
+		return fail(http.StatusForbidden, "a key changes nothing of its own life: sign in, or send another key")
+	}
+	// Each field's own rule; the exclusion is who manages the user's alone.
+	if req.IdleExempt != nil {
+		if !a.mayManage(u) {
+			return keptFail(u)
+		}
+		if *req.IdleExempt && u.IntegrationID != 0 {
+			return fail(http.StatusBadRequest, "the key of user %s is an integration's: it is always held to the idle limit, and its integration registers again once it ended", u.Name)
+		}
+	}
+	auditTarget(r, "token:"+strconv.FormatInt(id, 10))
+	auditSubject(r, tokenSubject(tok, u))
+	got, err := st.SetTokenLife(r.Context(), id, store.TokenLife{IdleExempt: req.IdleExempt})
+	if err != nil {
+		return userFail(err)
+	}
+	line := []any{"user", s.logUserName(r.Context(), u), "token", id, "remote", s.clientIP(r)}
+	if req.IdleExempt != nil {
+		auditChange(r, "idle_exempt", tok.IdleExempt, got.IdleExempt)
+		line = append(line, "idle_exempt", got.IdleExempt)
+	}
+	s.log.Info("token changed", line...)
+	writeJSON(w, http.StatusOK, viewToken(got))
+	return nil
+}
+
+// keptFail is the refusal of idle_exempt, a key kept from the idle limit
+// or held to it again, to a caller that does not manage the key's user u
+// (AP KeyLife, D7-A): the limit is the policy of who sets it, and a user
+// who manages nobody keeps it on its own keys.
+func keptFail(u store.User) error {
+	return fail(http.StatusForbidden, "only who manages user %s keeps a key from the idle limit, or holds it to it again", u.Name)
 }
 
 // revoked answers a revoke of tok, a token of u, that took heirs with it

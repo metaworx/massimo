@@ -415,14 +415,15 @@ CREATE TABLE tokens (
     last_used_from TEXT    NOT NULL DEFAULT '',  -- the client's address
     deleted_at     TEXT,                         -- revoked; revoked_at until migration 0024 (D7)
     parent_id      INTEGER,                      -- migration 0025: the key a session was made from; NULL for a sign-in's and for a key
-    made_by        INTEGER                       -- migration 0100: the API key that made a key; NULL for every other token
+    made_by        INTEGER,                      -- migration 0100: the API key that made a key; NULL for every other token
+    idle_exempt    INTEGER NOT NULL DEFAULT 0    -- migration 0101: 1 for an API key kept from the idle limit (auth.key_idle_days)
 );
 CREATE INDEX tokens_user ON tokens (user_id);
 CREATE INDEX tokens_parent ON tokens (parent_id) WHERE parent_id IS NOT NULL;  -- migration 0025
 CREATE INDEX tokens_made_by ON tokens (made_by) WHERE made_by IS NOT NULL;  -- migration 0100
 
 CREATE TABLE settings (
-    key        TEXT    NOT NULL,   -- 'stale_after', 'poll_interval', 'log.keep_days', 'backups.keep_days_auto', …
+    key        TEXT    NOT NULL,   -- 'stale_after', 'poll_interval', 'log.keep_days', 'backups.keep_days_auto', 'auth.key_idle_days', …
     value      TEXT    NOT NULL,   -- JSON: a string, a number or a document
     updated_at TEXT    NOT NULL,
     updated_by INTEGER REFERENCES users (id),
@@ -1084,6 +1085,19 @@ and no key has an end before AP KeyLife's Block 4.
 The column has no foreign key, so that its down part,
 `0100_token_maker.down.sql`, can drop it and the index;
 it loses which key made a key, and only that.
+`0101_token_idle.sql` (AP KeyLife v1.0, Block 3, D7-A) adds
+`tokens.idle_exempt`, a column defaulted to 0, additively, keeping `min_reader` 24:
+an API key kept from the idle limit of the setting `auth.key_idle_days`
+(section 6, "The life of a key").
+A binary for 24 to 100 writes its tokens without the column,
+so a key it makes is held to the limit,
+and knows no idle limit at all, so it lets in a key this binary ends unused.
+A raise of `min_reader` would not keep such a key out:
+an end is a state read at each check and nothing is written (D6-A),
+so the older binary that a downgrade serves would let it in all the same.
+Its down part, `0101_token_idle.down.sql`, drops the column;
+it loses which keys were kept from the limit, and only that,
+and a binary of 101 or later that opens the file again holds every key to it.
 On a store of 500 000 log rows (149 MB, a tenth with a user) a desktop took
 2.0 s for the raise, its copy `massimo.db.before-24` included, and 2.2 s for the
 down part, its copy included (`TestRaiseTimes` with
@@ -1543,12 +1557,13 @@ and what they subscribed to push;
 the key's next session revokes its earlier one, in the same transaction,
 so a key has one live session at a time;
 and a session counts only while its key does,
-neither revoked nor past its end (AP KeyLife, Block 2),
+neither revoked, past its end nor ended unused (AP KeyLife, Blocks 2 and 3),
 which also ends one whose key a binary before 0025 revoked.
 That is one rule, `alive` in `internal/store/tokens.go`,
-of a token not revoked, not past its own end, its user not removed,
-and of a session made from a key only while the key is neither revoked nor
-past its end,
+of a token not revoked, not past its own end, not an API key ended unused
+("The life of a key", below), its user not removed,
+and of a session made from a key only while the key is neither revoked,
+past its end nor ended unused,
 wherever a token is let in, counted or sent to:
 `TokenByHash` and `TokenAlive` give a token under it,
 `TokenEnded` says a token the store issued is not,
@@ -1597,6 +1612,41 @@ whoever made it, as the API revokes it neither by a revoke nor with its user
 `massimo user`, which runs no bootstrap, knows no such hash.
 A key's end, by its end date, takes none:
 an heir lives past its maker's end, and only a revoke reaches it.
+
+### The life of a key
+
+An API key unused for the days of the setting `auth.key_idle_days` ends
+(AP KeyLife v1.0, Block 3; AP MobileApp, D75):
+whole days, 0 or unset for off, the default (D2-A), at most 3650,
+read at each check, so that a change applies at once.
+The idle clock is the key's last use, or its making where it was never used:
+`coalesce(last_used_at, created_at)` at or before the time of the check less
+the limit has ended.
+A session's use is its key's: where the server writes a session's last use,
+at most once an hour, it writes the key's too, with that use's address,
+so a phone that uses its session keeps its key.
+The idle part joins the rule `alive` ("A session from a key", above),
+for the token itself and for the key a session was made from,
+so an ended key's session ends with it, and its heirs live on:
+an end is no revoke.
+Two keys never end by it:
+one kept from it, `tokens.idle_exempt` (migration 0101),
+which only who manages the key's user sets (D7-A)
+and an integration's key never has (MobileApp.D75);
+and the settings file's key (D3-A), known by its hash,
+which the store keeps in memory as `Bootstrap` last applied it,
+at the start and at each reading of the file,
+not by a mark on its row: the file may change.
+An end is a state read at each check, and nothing is written (D6-A):
+an ended key stays listed, to be revoked, with why it ended,
+and lives again, its session with it while the session's own 30 days last,
+where the limit is raised or turned off, or the key kept from it.
+Its use never brings it back, since the rule refuses it before its use is written.
+`Tokens` gives each key its life by the same rule in Go
+(`IdleEndsAt`, `EndsAt`, the earlier of its end date and its idle end,
+and `Ended`, `idle` or `expired`),
+which `TestKeyEndRule` holds to the SQL on one table of cases;
+`SetTokenLife` changes a key's exclusion.
 
 ### The sign-in by OPAQUE
 
