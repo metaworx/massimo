@@ -15,7 +15,7 @@ test_log.py 3
 test_parts_guard.py 2
 test_room_marks.py 5
 test_room_updates.py 3
-test_rooms.py 6
+test_rooms.py 8
 test_scroll.py 2
 test_server_sign.py 1
 test_unsaved.py 5

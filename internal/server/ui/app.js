@@ -301,8 +301,9 @@ function noAnswer(method) {
 }
 
 // apiRequest sends one request and returns the answer's JSON, null for
-// an empty one; an answer that is not ok is thrown as an Error with the
-// server's error (or the status), its status and its data. The token
+// an empty one; an answer that is not ok is thrown as an Error whose
+// message is the refusal in the page's language, else the server's
+// error, else the status (refusalError). The token
 // goes along unless auth is false, and a token given in its place;
 // keepalive lets the request outlive the page, and has no time limit;
 // every other request is aborted where its answer has not come within
@@ -337,13 +338,80 @@ async function apiRequest(method, path, body, { auth = true, keepalive = false, 
     }
   }
   if (!resp.ok) {
-    const err = new Error((data && data.error) || resp.status + " " + resp.statusText);
-    err.status = resp.status;
-    err.data = data;
+    const err = refusalError(resp, data, path);
     err.sentWith = bearer || ""; // the token it carried, for dropToken
     throw err;
   }
   return data;
+}
+
+// refusalError is the Error of an answer that is not ok, data its JSON
+// (null for none), to path: its message the page's text of the refusal
+// (refusalText), else the status line; the status, the data, the code
+// ("" for none) and the params (null for none) kept on it.
+function refusalError(resp, data, path) {
+  const err = new Error(refusalText(data, cubeOfPath(path), resp.status + " " + resp.statusText));
+  err.status = resp.status;
+  err.data = data;
+  err.code = (data && typeof data.code === "string" && data.code) || "";
+  err.params = (data && data.params) || null;
+  return err;
+}
+
+// cubeOfPath is the serial of the Cube an API path is for, "" for a path
+// of no Cube's.
+function cubeOfPath(path) {
+  const m = /^api\/v1\/cubes\/([^/?]+)/.exec(path || "");
+  if (!m) return "";
+  try {
+    return decodeURIComponent(m[1]);
+  } catch (e) {
+    return m[1];
+  }
+}
+
+// refusalText is the page's text of a refusal of the server (AP
+// ErrorCodes): an error answer's {error, code, params}, or one kept with
+// a result that was no thrown error. Where English has a text for its
+// code (err.<code>), that text in the page's language, its params
+// filled (refusalParams) for serial, the Cube it concerns; else the
+// server's English error; else fallback. A text, never markup.
+function refusalText(obj, serial, fallback) {
+  const o = obj && typeof obj === "object" ? obj : {};
+  if (typeof o.code === "string" && o.code) {
+    const key = "err." + o.code;
+    if (t(key) !== key) return t(key, refusalParams(o.params, serial));
+  }
+  return (typeof o.error === "string" && o.error) || fallback || "";
+}
+
+// refusalParams are a refusal's params as its text shows them: room, a
+// room's id, by the room's name, device, a radio address or a serial, by
+// the device's (deviceName), and each of devices so, where serial is the
+// selected Cube's and its rooms are loaded; every other value, and these
+// of another Cube, as given, a list joined by commas.
+function refusalParams(params, serial) {
+  const out = {};
+  const own = !!serial && !!state.serial && state.roomsOf === state.serial && String(serial).toLowerCase() === String(state.serial).toLowerCase();
+  const devices = own ? state.rooms.flatMap((r) => (r.vwt ? r.devices.concat([r.vwt]) : r.devices)).concat(state.unlisted) : [];
+  const device = (v) => {
+    const k = String(v).toLowerCase();
+    const d = devices.find((x) => x.rf_address === k || (!!x.serial && x.serial.toLowerCase() === k));
+    return d ? deviceName(d) : String(v);
+  };
+  for (const [k, v] of Object.entries(params && typeof params === "object" ? params : {})) {
+    if (k === "room" && own) {
+      const r = state.rooms.find((x) => x.id === Number(v));
+      out[k] = r ? r.name : String(v);
+    } else if (k === "device" && own) {
+      out[k] = device(v);
+    } else if (Array.isArray(v)) {
+      out[k] = v.map((x) => (k === "devices" && own ? device(x) : String(x))).join(", ");
+    } else {
+      out[k] = v;
+    }
+  }
+  return out;
 }
 
 // dropToken forgets the page's token at a 401 that a request carrying it
@@ -477,16 +545,13 @@ async function apiRaw(method, path, body, contentType) {
     throw new Error(t("api.badToken"));
   }
   if (!resp.ok) {
-    let msg = resp.status + " " + resp.statusText;
+    let data = null;
     try {
-      const data = JSON.parse(await resp.text());
-      if (data && data.error) msg = data.error;
+      data = JSON.parse(await resp.text());
     } catch (e) {
       // not JSON: the status says it
     }
-    const err = new Error(msg);
-    err.status = resp.status;
-    throw err;
+    throw refusalError(resp, data, path);
   }
   return resp;
 }

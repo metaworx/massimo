@@ -1158,11 +1158,17 @@ def test_a_running_restore_stays_in_sight(page, case):
     restore are stubbed: nothing is restored."""
     bid = take_backup()
     safe_route(page, "**/restore/plan*", lambda r: r.fulfill(status=200, content_type="application/json", body=json.dumps(PLAN)))
-    safe_route(page, f"**/cubes/{SERIAL}/restore?*", lambda r: r.fulfill(status=202, content_type="application/json", body='{"id":"rw-run"}'))
+    restores = []
+
+    def restore(route):
+        restores.append(route.request.url)
+        route.fulfill(status=202, content_type="application/json", body='{"id":"rw-run"}')
+    safe_route(page, f"**/cubes/{SERIAL}/restore?*", restore)
     try:
         show_view(page, "cube")
         first_row(page, CUBE_BOX).locator(".backup-actions button").nth(1).click()
         page.locator(CUBE_BOX + " .restore-plan .restore-actions button.primary").click()
+        assert wait_held(page, restores), "the restore sent to its stub, before the test goes on and its route goes"
         page.evaluate("(s) => MassimoParts.backups.restoreEvent({kind: 'restore_step', cube: s, restore: {id: 'rw-run', step: 1, ok: true}})", SERIAL)
         frames(page)
         assert page.locator(CUBE_BOX + " .restore-file").is_disabled(), "Restore from file… off"
@@ -1189,11 +1195,17 @@ def test_a_restore_unseen_at_a_resync(page, case):
     The plan and the restore are stubbed: nothing is restored."""
     bid = take_backup()
     safe_route(page, "**/restore/plan*", lambda r: r.fulfill(status=200, content_type="application/json", body=json.dumps(PLAN)))
-    safe_route(page, f"**/cubes/{SERIAL}/restore?*", lambda r: r.fulfill(status=202, content_type="application/json", body='{"id":"rw-lost"}'))
+    restores = []
+
+    def restore(route):
+        restores.append(route.request.url)
+        route.fulfill(status=202, content_type="application/json", body='{"id":"rw-lost"}')
+    safe_route(page, f"**/cubes/{SERIAL}/restore?*", restore)
     try:
         show_view(page, "cube")
         first_row(page, CUBE_BOX).locator(".backup-actions button").nth(1).click()
         page.locator(CUBE_BOX + " .restore-plan .restore-actions button.primary").click()
+        assert wait_held(page, restores), "the restore sent to its stub, before the test goes on and its route goes"
         page.evaluate("(s) => MassimoParts.backups.restoreEvent({kind: 'restore_step', cube: s, restore: {id: 'rw-lost', step: 1, ok: true}})", SERIAL)
         assert wait_until(page, f"document.querySelector('{CUBE_BOX} .restore-file').disabled", 5), "running: Restore from file… off"
         page.evaluate("() => state.events.dispatchEvent(new MessageEvent('resync', { data: '{}' }))")

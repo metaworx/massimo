@@ -8,7 +8,7 @@ as found, with its removed row to restore. Each test puts the server's store bac
 case uses the same server; nothing is sent to the fake Cube."""
 import json
 
-from helpers import (CUBES, assert_busy, busy_state, choose_cube, cube_item, hold, named_buttons, open_cube_panel, open_found, safe_route, scroll_width,
+from helpers import (CUBES, assert_busy, boxes, busy_state, choose_cube, cube_item, hold, named_buttons, open_cube_panel, open_found, safe_route, scroll_width,
                      show_view, wait_held, wait_until)
 
 PANEL = ".cube-panel[data-serial='KEQ0000100']"
@@ -566,8 +566,8 @@ def test_cube_panel_pill(page, case, reads):
             "the pill led by the red sign"
         uses = head.locator(".cube-pill .problems-sum .conn-sign use").evaluate_all("(us) => us.map((u) => u.getAttribute('href'))")
         assert uses == ["#icon-net-base", "#mark-net-x"], f"the network sign with its cross ({uses})"
-        box = (head.locator(".cube-head-who .cube-icon").bounding_box(), head.locator(".panel-name, .mono").first.bounding_box())
-        assert box[0]["x"] < box[1]["x"], "the cube before the name"
+        box = boxes(page, head.locator(".cube-head-who .cube-icon"), head.locator(".panel-name, .mono").first)
+        assert box[0]["x"] < box[1]["x"], f"the cube before the name: {box}"
         head.locator(".cube-pill .problems-sum").click()
         assert head.locator(".cube-pill details").get_attribute("open") is not None, "the pill's list open"
         assert page.locator(PANEL).get_attribute("open") is None, "the panel still closed"

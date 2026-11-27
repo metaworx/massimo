@@ -135,9 +135,9 @@ func (s *Server) freeSlots() string {
 
 // SetSilent makes the fake a Cube whose network cable is out, or puts
 // the cable back: while silent it keeps its connections, sends no
-// greeting and holds every line it reads unanswered; once it speaks
-// again it carries on with what it held, as TCP delivers it when the
-// cable is back. Close ends a silence too.
+// greeting and holds every line it reads unanswered, each in Received
+// as it comes; once it speaks again it carries on with what it held, as
+// TCP delivers it when the cable is back. Close ends a silence too.
 func (s *Server) SetSilent(on bool) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -698,7 +698,7 @@ func (s *Server) Received() []cube.Message {
 // OnReceive calls f with each command the fake receives: first with
 // each one received so far, then with each as it comes, one at a time
 // and in the order Received has them, after Received holds it and before
-// the fake answers it. It is for tests, which watch the lines this way
+// the fake answers it, also while the fake is silent (SetSilent). It is for tests, which watch the lines this way
 // rather than poll Received (internal/testkit/cubewatch); the fake
 // behaves the same with it as without. f holds up the line's answer
 // while it runs, so it is to return soon, and must not call OnReceive.
@@ -781,8 +781,10 @@ func (s *Server) serve(conn net.Conn) {
 	// The lines are read on their own, so that the end of the connection
 	// is seen while the fake is silent too: a client that leaves during
 	// a silence is a FIN the outage lost, and a SingleClient fake holds
-	// its session (holdDeadLocked).
-	lines := make(chan string, 64)
+	// its session (holdDeadLocked). Each line is recorded as it is read,
+	// before its answer: so while the fake is silent every line a client
+	// writes is in Received, not only the first, which waits unanswered.
+	lines := make(chan cube.Message, 64)
 	done := make(chan struct{})
 	gone := make(chan struct{}) // the reader ended: the client left
 	var diedSilent bool         // written by the reader before it closes gone
@@ -798,8 +800,13 @@ func (s *Server) serve(conn net.Conn) {
 				diedSilent = !errors.Is(err, net.ErrClosed) && s.isSilent()
 				return
 			}
+			m, err := cube.ParseLine(line)
+			if err != nil {
+				continue
+			}
+			s.record(m)
 			select {
-			case lines <- line:
+			case lines <- m:
 			case <-done:
 				return
 			}
@@ -856,12 +863,7 @@ func (s *Server) serve(conn net.Conn) {
 			last = m
 		}
 	}
-	for line := range lines {
-		m, err := cube.ParseLine(line)
-		if err != nil {
-			continue
-		}
-		s.record(m)
+	for m := range lines {
 		if !s.audibleOr(gone) {
 			return // the client left during the silence
 		}

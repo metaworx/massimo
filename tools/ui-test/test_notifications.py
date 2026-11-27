@@ -20,7 +20,7 @@ import urllib.error
 from axe_playwright_python.sync_playwright import Axe
 
 from conftest import api_call
-from helpers import own_id, show_view, wait_until
+from helpers import held_timers, own_id, show_view, wait_until
 
 # The fake push of a browser: a service worker container whose register
 # and ready give a registration with a pushManager, whose subscription
@@ -297,14 +297,15 @@ def test_toast(page, case):
     the toast closes."""
     n = notification(30, "2026-11-09T06:42:00Z")
     send = """(n) => state.events.dispatchEvent(new MessageEvent("notification", { data: JSON.stringify({ kind: "notification", notification: n }) }))"""
-    page.evaluate(send, n)
     toast = page.locator("#toast")
-    toast.wait_for(state="visible")
-    assert page.locator("#toast-title").inner_text() == t(page, "notify.window_open.title")
-    assert page.locator("#toast-body").inner_text() == t(page, "notify.window_open.body", {"where": "Window (Bath)", "minutes": "30"})
-    assert_axe(page, "the toast")
-    page.locator("#toast-close").click()
-    toast.wait_for(state="hidden")
+    with held_timers(page, "toast"):  # shown until its × is clicked, after axe, not until its 10 s are up
+        page.evaluate(send, n)
+        toast.wait_for(state="visible")
+        assert page.locator("#toast-title").inner_text() == t(page, "notify.window_open.title")
+        assert page.locator("#toast-body").inner_text() == t(page, "notify.window_open.body", {"where": "Window (Bath)", "minutes": "30"})
+        assert_axe(page, "the toast")
+        page.locator("#toast-close").click()
+        toast.wait_for(state="hidden")
     page.evaluate(send, n)
     page.wait_for_timeout(300)
     assert toast.is_hidden(), "the same notification shows once"

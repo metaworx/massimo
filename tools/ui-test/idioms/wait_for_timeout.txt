@@ -29,13 +29,12 @@ test_repair.py 2
 test_room_marks.py 17
 test_room_more.py 2
 test_room_updates.py 6
-test_rooms.py 2
+test_rooms.py 1
 test_scroll.py 5
 test_send.py 7
 test_settings.py 2
-test_sign_in_resend.py 7
+test_sign_in_resend.py 5
 test_stream.py 2
 test_system_info.py 2
 test_unsaved.py 10
-test_update.py 1
 test_users.py 6

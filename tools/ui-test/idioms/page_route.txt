@@ -13,6 +13,7 @@ test_cube_page.py 1
 test_cube_updates.py 1
 test_cubes.py 2
 test_discover.py 3
+test_error_texts.py 1
 test_first_owner.py 11
 test_header.py 3
 test_home.py 1

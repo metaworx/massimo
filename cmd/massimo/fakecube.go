@@ -28,7 +28,7 @@ func runFakeCube(args []string) error {
 	discovery := fs.String("discovery", "", "also answer UDP discovery on this address, such as 127.0.0.1:23273, as a Cube that is not configured (serve finds it with -discover-target <that address>)")
 	discoverySerial := fs.String("discovery-serial", "KEQ0000000", "serial of the Cube that answers -discovery")
 	fixture := fs.String("fixture", "", "serve a built-in house instead of -greeting: rooms (a wall thermostat with two radiator thermostats, three radiator thermostats, a shutter contact alone)")
-	apply := fs.Bool("apply", true, "carry out the radio commands acknowledged: setpoints, modes, boosts, programmes, presets and locks change the devices' lines (false: acknowledge only)")
+	apply := fs.Bool("apply", true, "carry out the radio commands acknowledged: setpoints, modes, boosts, programmes, presets, locks and the group (set group names the room in the C line, remove group clears it or flags the device) change the devices' lines (false: acknowledge only)")
 	applyAfter := fs.Duration("apply-after", 0, "apply a command this long after acknowledging it, as a device confirms it after its wakeup")
 	boostFor := fs.Duration("boost-for", 0, "end a boost after this long instead of the device's boost time")
 	control := fs.String("control", "", "serve the control on this loopback address, such as 127.0.0.1:62911: set a device's state, remove it from its room and restore it, drop the connections, reset the fake to the greeting it started with, go silent, release a dead session (see the README)")

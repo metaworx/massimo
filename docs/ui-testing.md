@@ -1,4 +1,4 @@
-# Testing the web UI (v1.38.1)
+# Testing the web UI (v1.39.0)
 
 An evaluation of a Cypress suite for the web UI, against the alternatives:
 what the Playwright smoke test covers today and what it cannot do well,
@@ -804,11 +804,45 @@ The suite's helpers for it are in `tools/ui-test/helpers.py`
   so the hold fails at its end where the timer is no longer the one it cleared.
   What a poll itself draws the test counts for one poll of its own (`poll(false)`),
   once every request it started has been answered (`answered`).
+- **A timed state held** (`with held_timers(page, *kinds):`, AP SteadyTests, Block 13):
+  a test that checks a state the page takes back on a timer of its own,
+  or that must come before a timer of the page's, holds it while it checks,
+  rather than fitting its steps into the timer, which a slow runner
+  or the retry's trace outlasts:
+  "Copied" on a copy control (`copied`, 1400 ms, `copied()` of `components.js`),
+  which a copy, the page shown again and its reads did not fit in
+  (`test_maint_updates.py`);
+  the toast (`toast`, 8 to 30 s), checked after an axe run,
+  or taken back by its ×, Show or a probe, which its own time would take back too
+  (`test_notifications.py`, `test_discover.py`, `test_connect.py`);
+  the settings' push (`push`, a second after a change or a dismissed sign-in,
+  `schedulePreferences` of `login.js`),
+  which a test's later read must come before (`test_sign_in_resend.py`).
+  The page sets its timer as always and an observer clears it at once,
+  so nothing else of the page stops: a later copy, a × on the toast,
+  a sign-in that takes the push go as they do;
+  at the end what was held goes at once, as its timer would have by then.
+  A look right after the wait that saw a state, within its time, holds nothing,
+  nor a check of the fade itself.
+  The hold is within one document: a block whose page was loaded anew fails at its end.
 - **The same element** (`mark`, `replaced`, `frames` of `helpers.py`):
   a test that holds that data takes nothing from the user marks the elements
   of its selectors, lets the data come, waits two frames and a task,
   and asks which selectors no longer find the element it marked
   (`test_pairing_updates.py`, `test_repair_updates.py`).
+- **One moment for several boxes** (`boxes(page, *targets)`, AP SteadyTests, Block 13):
+  a check that compares where elements are reads their boxes at one moment,
+  in one `page.evaluate`, not with a `bounding_box()` each:
+  the page may draw between two calls,
+  as the server's poll drew a device's values above the pairing form
+  between the form's two reads, and the limit, read second,
+  came out 78 px below the box it sits above (`test_pairing.py`).
+  Each target, a selector or a `Locator`, is found as `bounding_box()` finds it,
+  one element, waited for, and its box is the one `bounding_box()` gives,
+  `None` for an element not drawn;
+  where one was drawn anew between its finding and the read, all are read again.
+  A box compared with nothing else the page draws,
+  the place of a click or the window's width, is read alone.
 - **The repairs' routes** (`RepairStub` of `helpers.py`, by `safe_route`):
   a test's previews by repair, or a function of the query,
   and with `runs` the runs kept and answered;
@@ -873,6 +907,31 @@ The suite's helpers for it are in `tools/ui-test/helpers.py`
   A read that the patterns of several changes match takes each of them,
   so a test's own change under another spelling of the pattern goes with them
   (Playwright runs the later of two routes alone).
+- **How old the values are** (`reads.age(rid, seconds, already=False)`,
+  AP SteadyTests v1.1, Block 14):
+  the server received the fake Cube's values when it connected,
+  at its set's start, and the page counts their age from then,
+  so an age grows with the run,
+  "≥ 7 Min." in a short one and "≥ 17 Min." in a long one,
+  and with it the width of what shows it.
+  A test whose look depends on an age, its text or the width it takes,
+  tells it: every value of the room's devices and of its virtual wall
+  thermostat received `seconds` before the page's now,
+  in the rooms' read (`reads.device`, the devices kept),
+  and with `already` a value that was there when the server connected,
+  which the page marks "≥",
+  by the Cube's `observed_since` (`reads.cube`, beside its other fields told).
+  It starts the page's reads and returns the age as the page says it,
+  which the test's look waits for, a look at a time (`settled`),
+  since a server's own event of a device draws the server's age
+  until keep's read is answered:
+  `test_rooms.py`'s device list, at two digits and the longest of each unit,
+  `test_room_more.py`'s holiday tile, at two digits as a server's are all day,
+  and `test_an_age_moves_on_with_the_minute`'s age an hour on,
+  which says the same from two days on.
+  A whole run with every age at its widest found no other test that depends on one.
+  A test that tells the rooms' read a device's times itself
+  tells its `received` the same way (`test_stale_and_expert`'s 30 hours).
 - **A fold opened** (`open_fold`, `close_fold`, `toggle_fold` of `helpers.py`):
   a `<details>` fold's `toggle` event comes in a task of its own after the click,
   and a part that starts anew at it drops what the test did inside the fold before it:
@@ -881,6 +940,20 @@ The suite's helpers for it are in `tools/ui-test/helpers.py`
   and the part's drawing after it, before the test acts inside the fold;
   a click that toggles nothing fails within seconds (`FOLD_TOGGLE`),
   not at the test's end.
+- **A copy checked** (`grant_clipboard`, `copies`, `icon_after_last_line` of `helpers.py`,
+  AP KeyLife, Block 1):
+  `grant_clipboard` lets the page's origin read and write the clipboard,
+  and empties it;
+  `copies(page, sel, value, name)` checks a shared `Copy` with its icon,
+  `sel` its text and the icon the button right after it:
+  a button to the keyboard,
+  it and its icon named `name`, which does not tell `value`,
+  and a click on it, Enter and Space on it and a click on its icon,
+  each copying `value`, the clipboard emptied before each;
+  `icon_after_last_line` says whether its icon follows the text's last line,
+  the lines measured by a range over the text,
+  which gives them where a flex item made the text a block, too
+  (`test_users.py`, `test_settings.py`).
 - **The stream watched** (`Stream`, the fixture `stream`):
   every page of the page fixture has `PAGE_KIT` before its own scripts,
   which records each event the page's listeners take,
@@ -974,6 +1047,22 @@ the server's and the test's, in order,
   and fails naming the reads still open;
   the 200 ms are not scaled, its ceiling is.
   `ApiReads.answered` is the same wait, for a test that makes its own.
+- **The request itself** (`wait_held`, `sent_requests`, AP SteadyTests, Block 13):
+  a check of what a request carried, or that a write was not sent again,
+  waits for the request, not for what the page draws before it sends it,
+  nor for a fixed pause:
+  the automatic update's window comes up before its setting's PUT (`test_update.py`),
+  and the page pushes its settings a second after a sign-in,
+  after the stream is open, the moment a test of a sign-in ends at otherwise
+  (`test_sign_in_resend.py`);
+  a request a test stubs reaches its stub before the test goes on and its route goes,
+  or it reaches the server (`test_admin_updates.py`'s restores).
+  `wait_held(page, sent, n=…)` waits until the list holds n requests:
+  one a route of the test's fills as it answers (`hold`, a stub's own list),
+  or `sent_requests(page, method, pattern)`,
+  the page's requests as it sends them, for one that no route of the test's notes.
+  A list a route fills is read after the wait, not after Playwright's
+  `request` event of it, which comes before the route runs.
 - **Nothing came, against an end:**
   a check that an action brought nothing has an end of its own,
   not a fixed wait that a slow runner outlasts:
@@ -1060,6 +1149,7 @@ the server's and the test's, in order,
   the structure checks' reconnect, twelve minutes after a change,
   and the refresh every six hours stay, and fall outside one test's time.
   What changes is their age:
+  every value's, counted from the set's start (`reads.age`, above);
   the window contact's window, open from the start (`greeting.txt`),
   counts as open long five minutes after its set started,
   and as open too long after ten (`window_warn_after`, `window_alert_after`),

@@ -1488,16 +1488,10 @@ func (s *Server) routes() {
 					if he.retryAfter > 0 {
 						w.Header().Set("Retry-After", strconv.Itoa(he.retryAfter))
 					}
-					if len(he.noState) > 0 {
-						writeJSON(w, he.status, map[string]any{"error": he.msg, "no_state": he.noState})
-						return
-					}
 					if he.etag != "" {
 						w.Header().Set("ETag", quoteTag(he.etag))
-						writeJSON(w, he.status, map[string]any{"error": he.msg, "etag": he.etag})
-						return
 					}
-					writeError(w, he.status, he.msg)
+					writeJSON(w, he.status, he.body())
 					return
 				}
 				// Every handler error should come through fail; one that
@@ -1657,6 +1651,10 @@ func (s *Server) crossOriginRefused(w http.ResponseWriter, r *http.Request) {
 type httpError struct {
 	status int
 	msg    string
+	// code is the refusal's declared code (errcodes.go), nil for an
+	// error that keeps none; params are its parameters by name.
+	code   *errCode
+	params map[string]any
 	// noState lists room members the Cube holds no state for when a
 	// room command was discarded for that reason.
 	noState []string
@@ -1667,6 +1665,25 @@ type httpError struct {
 }
 
 func (e *httpError) Error() string { return e.msg }
+
+// body is the answer of the error: its English text, its code and
+// params where it has a code, and no_state or etag where they are set.
+func (e *httpError) body() map[string]any {
+	b := map[string]any{"error": e.msg}
+	if e.code != nil {
+		b["code"] = e.code.name
+	}
+	if len(e.params) > 0 {
+		b["params"] = e.params
+	}
+	if len(e.noState) > 0 {
+		b["no_state"] = e.noState
+	}
+	if e.etag != "" {
+		b["etag"] = e.etag
+	}
+	return b
+}
 
 func fail(status int, format string, args ...any) error {
 	return &httpError{status: status, msg: fmt.Sprintf(format, args...)}
@@ -1690,7 +1707,7 @@ func (s *Server) cube(r *http.Request) (*runtime, error) {
 	rt := s.cubes[key]
 	s.mu.RUnlock()
 	if rt == nil {
-		return nil, fail(http.StatusNotFound, "no cube %q", r.PathValue("sn"))
+		return nil, refuse(http.StatusNotFound, codeCubeUnknown, r.PathValue("sn"))
 	}
 	return rt, nil
 }
@@ -1718,7 +1735,7 @@ func deviceOf(rt *runtime, name string) (cube.RFAddress, error) {
 	}
 	rf, ok := rt.client.Snapshot().BySerial(name)
 	if !ok {
-		return 0, fail(http.StatusNotFound, "no device %s", strings.ToUpper(name))
+		return 0, refuse(http.StatusNotFound, codeDeviceUnknown, strings.ToUpper(name))
 	}
 	return rf, nil
 }
@@ -1793,8 +1810,8 @@ type cubeView struct {
 	MAC      string     `json:"mac,omitempty"`
 	LastSeen *time.Time `json:"last_seen,omitempty"`
 	// Problems are the Cube's devices with a problem, for a client that
-	// shows every Cube's (the web UI's header): a radio fault, a low
-	// battery, a window open, with its times (problems.go).
+	// shows every Cube's (the web UI's header): a radio fault, a weak or
+	// low battery, a window open, with its times (problems.go).
 	Problems []cubeProblem `json:"problems,omitempty"`
 	// FoundAddress is the host discovery last found the Cube at, which
 	// may differ from Address: the server connects through a proxy, or
@@ -1977,7 +1994,7 @@ func (s *Server) getDevice(w http.ResponseWriter, r *http.Request) error {
 	st, ok := snap.State(rf)
 	c := snap.Config(rf)
 	if !ok && c == nil || rt.hidden()[rf] {
-		return fail(http.StatusNotFound, "no device %s", rf)
+		return refuse(http.StatusNotFound, codeDeviceUnknown, rf.String())
 	}
 	d := deviceDetail{Device: view.DeviceOf(snap, rf, s.staleness())}
 	d.SetWindow(s.windowLimits())
@@ -2018,7 +2035,7 @@ func (s *Server) setDeviceSetpoint(w http.ResponseWriter, r *http.Request) error
 	snap := rt.client.Snapshot()
 	c := snap.Config(rf)
 	if c == nil || rt.hidden()[rf] {
-		return fail(http.StatusNotFound, "no device %s", rf)
+		return refuse(http.StatusNotFound, codeDeviceUnknown, rf.String())
 	}
 	if !c.Type.IsRadiatorThermostat() && c.Type != cube.DeviceWallThermostat {
 		return fail(http.StatusBadRequest, "device %s is a %s and has no setpoint", rf, c.Type)
@@ -2043,7 +2060,7 @@ func (s *Server) setDeviceLock(w http.ResponseWriter, r *http.Request) error {
 	}
 	c := rt.client.Snapshot().Config(rf)
 	if c == nil || rt.hidden()[rf] {
-		return fail(http.StatusNotFound, "no device %s", rf)
+		return refuse(http.StatusNotFound, codeDeviceUnknown, rf.String())
 	}
 	if !c.Type.IsRadiatorThermostat() && c.Type != cube.DeviceWallThermostat {
 		return fail(http.StatusBadRequest, "device %s is a %s and has no key lock", rf, c.Type)
@@ -2058,12 +2075,8 @@ func (s *Server) setDeviceLock(w http.ResponseWriter, r *http.Request) error {
 	ctx, cancel := context.WithTimeout(r.Context(), 2*time.Minute)
 	defer cancel()
 	res := rt.enqueue(ctx, engine.Command{Key: "lock:" + rf.String(), Priority: engine.PriorityHigh, Target: rf, RoomID: c.RoomID, Wakeup: c.RoomID != 0, Lines: []cube.Message{m}}).Wait(ctx)
-	if res.Err != nil {
-		status := http.StatusBadGateway
-		if errors.Is(res.Err, engine.ErrSuperseded) {
-			status = http.StatusConflict
-		}
-		return fail(status, "%v", res.Err)
+	if err := s.commandError(rt, res, 0); err != nil {
+		return err
 	}
 	rt.afterWrite()
 	answer := rt.beginConfirm(&confirmWrite{what: writeLock, target: "device:" + rf.String(), source: "api", command: commandOf(ctx),
@@ -2093,10 +2106,10 @@ func (s *Server) deleteRoom(w http.ResponseWriter, r *http.Request) error {
 	defer unlock()
 	md := rt.client.Snapshot().Metadata()
 	if md == nil {
-		return fail(http.StatusServiceUnavailable, "cube not connected yet")
+		return refuse(http.StatusServiceUnavailable, codeCubeNotConnectedYet)
 	}
 	if _, ok := rt.hidden().Room(md, uint8(id)); !ok {
-		return fail(http.StatusNotFound, "no room %d", id)
+		return refuse(http.StatusNotFound, codeRoomUnknown, id)
 	}
 	for _, d := range md.Devices {
 		if int(d.RoomID) == id {
@@ -2128,18 +2141,18 @@ func (s *Server) setRoomSetpoint(w http.ResponseWriter, r *http.Request) error {
 	}
 	md := rt.client.Snapshot().Metadata()
 	if md == nil {
-		return fail(http.StatusServiceUnavailable, "cube not connected yet")
+		return refuse(http.StatusServiceUnavailable, codeCubeNotConnectedYet)
 	}
 	room, ok := rt.hidden().Room(md, uint8(id))
 	if !ok {
-		return fail(http.StatusNotFound, "no room %d", id)
+		return refuse(http.StatusNotFound, codeRoomUnknown, id)
 	}
 	// The device the room command names (cubeio.RoomAddressee): every
 	// member of the room takes a room-flagged command whichever it names,
 	// but the named device takes it too, whatever its room.
 	addr, ok := cubeio.RoomAddressee(rt.client.Snapshot(), room.ID, rt.hidden())
 	if !ok {
-		return fail(http.StatusConflict, "room %d has no thermostat", room.ID)
+		return noThermostat(rt, http.StatusConflict, room.ID)
 	}
 	return s.setpoint(w, r, rt, cube.Target{RFAddress: addr, RoomID: room.ID, Room: true}, 0, fmt.Sprintf("room:%d", id))
 }

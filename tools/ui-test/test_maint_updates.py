@@ -16,7 +16,7 @@ import time
 import pytest
 
 from conftest import TOKEN, URL, api_call
-from helpers import answered, frames, hold, mark, owner_page, replaced, safe_route, scaled, show_view, update_json, wait_held, wait_until
+from helpers import answered, frames, held_timers, hold, mark, owner_page, replaced, safe_route, scaled, show_view, update_json, wait_held, wait_until
 from test_admin_updates import across
 from test_unsaved import expire
 from test_reboot import RebootStub, iso, reboot_text
@@ -1154,13 +1154,14 @@ def test_system_info_keeps_its_folds_a_copy_and_a_selection(page, case):
         assert wait_reads(page, reads, n + 1), "the certificate read again"
         assert selected(page) == want, "the name still selected"
         icon = page.locator("#info-proxies .copy-icon").first
-        icon.focus()
-        page.keyboard.press("Enter")
-        assert wait_until(page, "document.querySelector('#info-proxies .copy-icon').classList.contains('copied')", 1), "copied"
-        n = len(reads)
-        show_view(page, "info")
-        assert wait_reads(page, reads, n + 1), "the page read again"
-        assert icon.evaluate("(b) => b.classList.contains('copied')"), "still copied, until it fades"
+        with held_timers(page, "copied"):  # "Copied" stays while the page is shown again and read, longer than its 1400 ms
+            icon.focus()
+            page.keyboard.press("Enter")
+            assert wait_until(page, "document.querySelector('#info-proxies .copy-icon').classList.contains('copied')", 1), "copied"
+            n = len(reads)
+            show_view(page, "info")
+            assert wait_reads(page, reads, n + 1), "the page read again"
+            assert icon.evaluate("(b) => b.classList.contains('copied')"), "still copied: the page shown again does not take it back"
         assert replaced(page, sels) == [], f"the same elements after the reads: {replaced(page, sels)}"
         assert page.evaluate("document.getElementById('store-info').open && document.getElementById('config-info').open"), "the folds open"
     finally:

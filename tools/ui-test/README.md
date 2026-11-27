@@ -256,7 +256,8 @@ makes, sweeps and keeps it (`tools/workdir/README.md`; AP EmulatorRuns, D3-B).
   the test put in (`helpers.Reads`), so that the page's poll and the reads
   that events and actions start keep it:
   `reads.cube(serial, **fields)`, `reads.found(cube)`,
-  `reads.change(pattern, fn)` and `reads.clear(pattern)`;
+  `reads.change(pattern, fn)` and `reads.clear(pattern)`,
+  and `reads.age(rid, seconds, already)`, how old a room's values are;
 - `stream`: the page's event stream as the page took it, from a mark
   (`helpers.Stream`): `stream.mark()`, `stream.wait(what, kind, …)`,
   which on a timeout says what came since the mark, and `stream.since(mark)`.
@@ -1077,9 +1078,23 @@ Node is not needed.
   (`docs/ui-testing.md`, section 9,
   "The old idioms counted" and "The page's state written").
 - A wait that returns whether it was met is asserted where it is called.
+- What a test's look depends on does not grow with the run:
+  a look at the values' ages, their text or their width,
+  tells them (`reads.age`),
+  since the page counts them from the server's start,
+  and a long run's ages have two digits where a short one's have one.
 - A test's own wait loop ends at `scaled(seconds)` of `helpers.py`,
   so that `UI_TEST_SCALE` stretches it as it does the kit's waits;
   a window that waits for nothing to come does not take it.
+- A check that compares where elements are reads their boxes at one moment,
+  with `boxes(page, …)` of `helpers.py`, not with a `bounding_box()` each:
+  the page may draw between two calls (`docs/ui-testing.md`, section 9).
+- A check of what a request carried waits for the request itself
+  (`wait_held` on the route's list, or on `sent_requests` for the page's own),
+  not for what the page draws before it sends it.
+- A state the page takes back on a timer of its own, "Copied" or the toast,
+  is held while a test checks it after more than one look
+  (`with held_timers(page, "copied"):`), not raced.
 - What a reload or a click brings is waited for,
   not looked at once right after another wait:
   the page goes on after the moment the first wait saw
