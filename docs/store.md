@@ -2446,8 +2446,10 @@ On the command line,
 `massimo store restore <file|id> -scope <list> -key <file>`,
 with `-identity`, `-env`, `-tls` and `-plan`,
 goes through a running `serve` (its API with `MASSIMO_API_TOKEN`, a file uploaded
-first), so that the restore is that server's, and acts on the store otherwise,
-with `serve` stopped; `-plan` prints what it would do and changes nothing.
+first), so that the restore is that server's, and acts on the store otherwise:
+under the jobs' lock, with the store held alone, which a `serve` that has it open
+refuses (`store.ErrInUse`); `-plan` prints what it would do and changes nothing,
+a file uploaded for it removed again where the server did not hold it.
 
 ## 8. Migration of an installed box
 

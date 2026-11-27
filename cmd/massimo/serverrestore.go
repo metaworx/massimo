@@ -76,7 +76,10 @@ type cliRestore struct {
 		By      string `json:"by"`
 		Blocked string `json:"blocked"`
 	} `json:"restart"`
-	Before string `json:"before_backup"`
+	Before     string     `json:"before_backup"`
+	BeforeTime *time.Time `json:"before_backup_time"`
+	At         *time.Time `json:"restored_at"`
+	Error      string     `json:"error"`
 }
 
 // readKeyFile reads a key file into memory and checks that it holds a
@@ -123,7 +126,22 @@ func (c *backupCLI) restore(ctx context.Context, ref string, a restoreArgs) erro
 			return fmt.Errorf("store restore: %w", err)
 		}
 	}
-	st, err := c.open(true)
+	unlock, err := c.lockJobs(ctx, "restore")
+	if err != nil {
+		return err
+	}
+	defer unlock()
+	// A restore replaces scopes of the store: it needs the store alone,
+	// never beside a serve this command did not find. A plan only reads.
+	var st *store.Store
+	if a.plan {
+		st, err = c.open(true)
+	} else if st, err = store.OpenAlone(c.dir, store.Options{Version: versionString(), Logger: c.log}); errors.Is(err, store.ErrInUse) {
+		return fmt.Errorf("store restore: %w; where serve runs, the restore goes through it: check that it answers and that %s names this store, "+
+			"or stop it and restore on the store", err, tokenVar)
+	} else if err != nil {
+		err = storeError(c.dir, err)
+	}
 	if err != nil {
 		return err
 	}
@@ -143,7 +161,7 @@ func (c *backupCLI) restore(ctx context.Context, ref string, a restoreArgs) erro
 	if errors.Is(err, store.ErrRestoreMissing) {
 		c.printMissing(res.Report)
 	}
-	if err != nil {
+	if !res.Committed {
 		return fmt.Errorf("store restore: %w", err)
 	}
 	r := cliRestore{Scopes: res.Selection.Scopes, Serials: res.Selection.Serials, Files: res.Files, Report: res.Report, Before: res.Before.UUID}
@@ -152,6 +170,9 @@ func (c *backupCLI) restore(ctx context.Context, ref string, a restoreArgs) erro
 	}
 	r.Restart.Blocked = "no serve runs; start it"
 	c.printRestore(r, false)
+	if err != nil {
+		return fmt.Errorf("store restore: %w", err)
+	}
 	return nil
 }
 
@@ -167,15 +188,42 @@ func planOf(p serverbackup.RestorePlan, st *store.Store) cliRestore {
 	return r
 }
 
-// restoreThroughServe restores through the API: a file uploaded first.
+// restoreThroughServe restores through the API: a file uploaded first,
+// and for a plan removed again where the server did not hold it before,
+// so that a plan changes nothing.
 func (c *backupCLI) restoreThroughServe(ctx context.Context, ref, file string, key []byte, a restoreArgs) error {
 	uuid := ""
 	var err error
 	if file != "" {
-		if uuid, err = c.api.upload(ctx, file); err != nil {
+		held := map[string]bool{}
+		if a.plan {
+			var ans struct {
+				Backups []cliBackup `json:"backups"`
+			}
+			if err := c.api.do(ctx, http.MethodGet, "/api/v1/server-backups", nil, &ans); err != nil {
+				return fmt.Errorf("store restore: %w", err)
+			}
+			for _, b := range ans.Backups {
+				held[b.UUID] = true
+			}
+		}
+		var targets []string
+		if uuid, targets, err = c.api.upload(ctx, file); err != nil {
 			return fmt.Errorf("store restore: the upload: %w", err)
 		}
 		fmt.Fprintf(c.out, "uploaded %s as %s\n", file, shortBackupID(uuid))
+		if a.plan && !held[uuid] {
+			defer func() {
+				for _, t := range targets {
+					path := "/api/v1/server-backups/" + url.PathEscape(uuid) + "/copies/" + url.PathEscape(t)
+					if err := c.api.do(context.WithoutCancel(ctx), http.MethodDelete, path, nil, nil); err != nil {
+						fmt.Fprintf(c.out, "the upload stays on the server: %v\n", err)
+						return
+					}
+				}
+				fmt.Fprintln(c.out, "the upload removed again")
+			}()
+		}
 	} else if uuid, err = c.resolve(ctx, ref); err != nil {
 		return fmt.Errorf("store restore: %w", err)
 	}
@@ -185,7 +233,23 @@ func (c *backupCLI) restoreThroughServe(ctx context.Context, ref, file string, k
 		path += "/plan"
 	}
 	var r cliRestore
-	if err := c.api.do(ctx, http.MethodPost, path, body, &r); err != nil {
+	err = c.api.do(ctx, http.MethodPost, path, body, &r)
+	var ae *apiError
+	switch {
+	case errors.As(err, &ae) && ae.Status == http.StatusConflict:
+		// A refusal of the store names what is missing.
+		var refused cliRestore
+		if json.Unmarshal(ae.Body, &refused) == nil {
+			c.printMissing(refused.Report)
+		}
+	case errors.As(err, &ae) && ae.Status == http.StatusInternalServerError && !a.plan:
+		// A failure after the store's commit: what was restored, and the
+		// restart, all the same.
+		if json.Unmarshal(ae.Body, &r) == nil && len(r.Scopes) > 0 {
+			c.printRestore(r, false)
+		}
+	}
+	if err != nil {
 		return fmt.Errorf("store restore: %w", err)
 	}
 	c.printRestore(r, a.plan)
@@ -193,20 +257,20 @@ func (c *backupCLI) restoreThroughServe(ctx context.Context, ref, file string, k
 }
 
 // upload sends a backup file to the server's local target and answers
-// its uuid.
-func (a *serveAPI) upload(ctx context.Context, path string) (string, error) {
+// its uuid and the targets that hold a copy of it.
+func (a *serveAPI) upload(ctx context.Context, path string) (string, []string, error) {
 	f, err := os.Open(path)
 	if err != nil {
-		return "", err
+		return "", nil, err
 	}
 	defer f.Close()
 	fi, err := f.Stat()
 	if err != nil {
-		return "", err
+		return "", nil, err
 	}
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, a.base+"/api/v1/server-backups/upload", f)
 	if err != nil {
-		return "", err
+		return "", nil, err
 	}
 	req.ContentLength = fi.Size()
 	req.Header.Set("Content-Type", "application/zip")
@@ -215,20 +279,27 @@ func (a *serveAPI) upload(ctx context.Context, path string) (string, error) {
 	}
 	resp, err := a.client.Do(req)
 	if err != nil {
-		return "", fmt.Errorf("the server at %s: %w", a.base, err)
+		return "", nil, fmt.Errorf("the server at %s: %w", a.base, err)
 	}
 	defer resp.Body.Close()
 	var ans struct {
 		Backup struct {
-			UUID string `json:"uuid"`
+			UUID   string `json:"uuid"`
+			Copies []struct {
+				Target string `json:"target"`
+			} `json:"copies"`
 		} `json:"backup"`
 		Error string `json:"error"`
 	}
 	json.NewDecoder(io.LimitReader(resp.Body, 1<<20)).Decode(&ans)
 	if resp.StatusCode/100 != 2 {
-		return "", fmt.Errorf("the server at %s answered %d: %s", a.base, resp.StatusCode, ans.Error)
+		return "", nil, fmt.Errorf("the server at %s answered %d: %s", a.base, resp.StatusCode, ans.Error)
 	}
-	return ans.Backup.UUID, nil
+	var targets []string
+	for _, c := range ans.Backup.Copies {
+		targets = append(targets, c.Target)
+	}
+	return ans.Backup.UUID, targets, nil
 }
 
 // printMissing prints the rows a refused restore misses.
@@ -261,6 +332,12 @@ func (c *backupCLI) printRestore(r cliRestore, plan bool) {
 		fmt.Fprintf(c.out, "restored %s (%s)\n", strings.Join(r.Scopes, ", "), c.where())
 		if r.Before != "" {
 			fmt.Fprintf(c.out, "  the store before it is backup %s, pinned for 30 days\n", shortBackupID(r.Before))
+		}
+		if r.BeforeTime != nil && r.At != nil {
+			fmt.Fprintf(c.out, "  what the server wrote from %s to %s is in neither\n", r.BeforeTime.Local().Format("15:04:05"), r.At.Local().Format("15:04:05"))
+		}
+		if r.Error != "" {
+			fmt.Fprintf(c.out, "  but: %s\n", r.Error)
 		}
 	}
 	if len(r.Serials) > 0 {

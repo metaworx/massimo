@@ -1245,6 +1245,8 @@ the scopes named (`settings`, `users`, `integrations`, `cubes` or `cube:<serial>
 each file replaced kept beside as `<name>.before-restore`;
 `-plan` prints what it would do and changes nothing.
 The key is read into memory and written nowhere.
+On the store, without a `serve`, the restore needs the store alone:
+stop the service first.
 These five go through this box's running `serve`, with `MASSIMO_API_TOKEN`,
 found by the address it publishes in the data directory (`serve.api`)
 and proved by its node, and act on the store otherwise,

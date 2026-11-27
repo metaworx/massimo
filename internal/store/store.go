@@ -134,19 +134,49 @@ func Open(dir string, o Options) (*Store, error) {
 	if s.created {
 		s.log.Info("store created", "path", s.path)
 	}
-	if err := s.migrate(context.Background(), o.migrations, o.readerVersion); err != nil {
+	if err := s.start(o); err != nil {
 		s.db.Close()
 		return nil, err
+	}
+	return s, nil
+}
+
+// start makes an opened store ready: the pending migrations applied, the
+// node identity and the OPAQUE keys read or made, the plain secrets
+// sealed.
+func (s *Store) start(o Options) error {
+	if err := s.migrate(context.Background(), o.migrations, o.readerVersion); err != nil {
+		return err
 	}
 	if err := s.loadIdentity(); err != nil {
-		s.db.Close()
-		return nil, err
+		return err
 	}
 	if err := s.loadOpaque(); err != nil {
+		return err
+	}
+	return s.sealPlainSecrets(context.Background())
+}
+
+// OpenAlone opens the existing massimo.db in dir as Open does, and holds
+// it alone until Close, as Downgrade does: a running serve, or any other
+// program that has it open, makes it fail with ErrInUse, and while it is
+// open nobody else opens the file. For massimo store restore on the
+// store, which must not replace scopes beside a serve. A missing file is
+// fs.ErrNotExist.
+func OpenAlone(dir string, o Options) (*Store, error) {
+	s := newStore(dir, o)
+	s.exclusive = true
+	if _, err := os.Stat(s.path); err != nil {
+		return nil, err
+	}
+	if err := s.open(false); err != nil {
+		return nil, s.inUse(err)
+	}
+	if err := s.lockAlone(context.Background()); err != nil {
 		s.db.Close()
 		return nil, err
 	}
-	if err := s.sealPlainSecrets(context.Background()); err != nil {
+	if err := s.start(o); err != nil {
 		s.db.Close()
 		return nil, err
 	}

@@ -118,9 +118,19 @@ func healthNode(ctx context.Context, client *http.Client, base string) (string, 
 	return h.Node, nil
 }
 
+// apiError is an answer of the API that is not 2xx: its status and
+// body, the body for a command that prints more of it than the text.
+type apiError struct {
+	text   string
+	Status int
+	Body   []byte
+}
+
+func (e *apiError) Error() string { return e.text }
+
 // do sends a request with a JSON body, nil for none, and reads a JSON
-// answer into out, nil to drop it; an answer not 2xx is an error with
-// the API's own text.
+// answer into out, nil to drop it; an answer not 2xx is an *apiError
+// with the API's own text.
 func (a *serveAPI) do(ctx context.Context, method, path string, body, out any) error {
 	var rd io.Reader
 	if body != nil {
@@ -153,10 +163,11 @@ func (a *serveAPI) do(ctx context.Context, method, path string, body, out any) e
 		var e struct {
 			Error string `json:"error"`
 		}
+		ae := &apiError{text: fmt.Sprintf("the server at %s answered %d", a.base, resp.StatusCode), Status: resp.StatusCode, Body: b}
 		if json.Unmarshal(b, &e) == nil && e.Error != "" {
-			return fmt.Errorf("the server at %s answered %d: %s", a.base, resp.StatusCode, e.Error)
+			ae.text += ": " + e.Error
 		}
-		return fmt.Errorf("the server at %s answered %d", a.base, resp.StatusCode)
+		return ae
 	}
 	if out == nil {
 		return nil
