@@ -1,24 +1,26 @@
-# AP MobileApp v1.5: the Android and iOS apps
+# AP MobileApp v1.6: the Android and iOS apps
 
 ## TL;DR
 
-Roadmap items 16 and 17: the web UI in a thin native shell for Android and iOS,
-with a `serve` or one embedded.
+Roadmap items 16 and 17: the web UI in a thin shell for Android and iOS,
+a client or stand-alone.
 On `main`: Blocks 2 to 4, 8 and 12 to 18;
-v1.5 folds in every NOTE and adds the fourth phone check's findings, F41 to F48.
+v1.6 adds a revoke code and a server's settings in sections.
 
 - list → ☰ in its header, version row, Exit; full width, by name
 - Back → menu, panel, out; pull down → ↻
-- server's settings → Save on a change, ✕, Store login
+- server's settings → Connection, Login, Certificate; Save in Connection
 - failed load → the list
 - server's ☰ → app entries last, no "…"; a copy → the toast
 - cards → server above the title; command, ⓘ copyable
 - new password → one eye, repetition red
 - session held → recorded, ended after the process
+- token forgotten → its revoke code at the next contact
+- removed server's codes → 90 days
 - no logout the server ended; cancelled revoke → no "password checks"
-- keys' life → AP KeyLife v1.0
-- open → D109 a tap's probe, D110 D105's words, D111 what goes below Save
-- first release → the client with the login; the core second
+- sessions bound to the phone → a plan of its own
+- open → D115, a copy's word: toast or bubble
+- order → 21, 19, 20; first release the client with the login
 
 ### Blocks
 
@@ -55,14 +57,15 @@ v1.5 folds in every NOTE and adds the fourth phone check's findings, F41 to F48.
     an ended token not counted (done)
 18. Emulator: an instrumented suite, `make app-emulator-test`, a CI job (done)
 19. The list: ☰ in the header with the version row and Exit, the width,
-    the order, Back, a server's settings, Store login, pull down,
-    a page that fails to load
+    the order, Back, a server's settings in three sections, Store login,
+    pull down, a page that fails to load
 20. The menu and the cards: the server's ☰ and its version row,
     the card's server line, the command and ⓘ copyable, the copy's toast,
     the password pair, Sign out to the list, My profile's failures, the name trimmed
 21. The sessions: the sessions held with the process and recorded,
-    no refused logout, the toast's two test cases, the list while a server
-    does not answer; the server's cancelled request
+    a forgotten token's revoke code and its route, no refused logout,
+    the toast's two test cases, the list while a server does not answer;
+    the server's cancelled request
 
 ## Discussion
 
@@ -172,6 +175,25 @@ UnifiedPush.
     the release commit's number is counted before the commit exists,
     and `make release` checks it against the tag before the push;
 - **D22 to D31** at this revision's gate of 2026-11-18, below.
+
+**Revision v1.6 (2026-11-28).**
+At v1.5's gate on 2026-11-27 the owner proposed a code that only revokes,
+for D110, and sections in a server's settings, for D111,
+and asked how a session could be bound to the phone.
+The decisions on them, D109-A to D114-A, are below, each as recommended.
+They change Blocks 19 and 21:
+Block 19 builds the sections, Block 21 the revoke code,
+its server half in a commit of its own.
+An independent review of the revision, before it was presented, is folded in:
+D116-A, taken under the owner's `PLAN++` as recommended,
+bounds a removed server's codes;
+and the blocks run 21, 19, 20, so that Block 20, which waits on D115 and on
+AP ErrorCodes' bubble, comes last.
+The bridge's contract takes version 6 with Block 21 and version 7 with Block 19,
+in the order the blocks run.
+AP KeyLife v1.0 is on `main` now, and is named by its path.
+D115, found writing this revision, is open:
+D97-A's toast and AP ErrorCodes' bubble both change what a copy shows.
 
 **Revision v1.5 (2026-11-27).**
 Blocks 15 to 18 are on `main` (metaworx/massimo#405, #408, #409 and #411),
@@ -491,7 +513,8 @@ and `EXEC++`:
   the four blocks' phone checks gathered into one phone session at the end;
   no retirement, no release, no roadmap edit.
 
-**Taken over by AP KeyLife v1.0**,
+**Taken over by AP KeyLife v1.0**
+(`GUIDELINES/wip/2026-11-27_16-53_AP_KeyLife_the_life_of_api_keys.md`),
 a plan of the session "Open Items", which has taken over the decisions on
 keys and tokens (the owner, 2026-11-27):
 the owner's decisions on My profile's keys of 2026-11-21,
@@ -630,7 +653,8 @@ The menus and the cards (Block 20):
   Add server… keeps it.
 - **D97-A**: every copy, on a phone and in a browser, shows the page's toast
   "Copied" in place of the word at the element;
-  in the app on Android 13 and later the system's preview shows beside it.
+  in the app on Android 13 and later the system's preview shows beside it
+  (D115 asks how, beside AP ErrorCodes' bubble).
 - **D98-A**: the new password's repetition is outlined in red
   while it is not empty and differs from the first,
   with the words "The two passwords differ" under it.
@@ -661,7 +685,8 @@ The sessions (Block 21):
 - **D105-A** (F42): while a server does not answer, the list's
   "signed in as …" turns grey, and the settings' session line says
   that Sign out ends the session there once the server answers again
-  (D110 asks how, the app keeping no secret it was asked to forget).
+  (D110 asked how, the app keeping no secret it was asked to forget;
+  D112-A's revoke code is how).
 - **D106-A** (F46): only the password routes answer a cancelled request
   as "too many password checks at once";
   elsewhere the audit says the client went away before the answer,
@@ -703,7 +728,7 @@ as this revision builds them:
   (a server's settings, Add server, App settings), back to the list;
   only then does it leave the app (Block 19);
 - **a server's settings**: the certificate and key part below Cancel and Save,
-  beside Remove server (Block 19; D111 asks what goes with it);
+  beside Remove server (Block 19), which D111-A has replaced by three sections;
 - **pull down on the list** refreshes it, as ↻ does
   (the F44 run's proposal; Block 19);
 - **Store login** in a server's settings, where the app holds a session there
@@ -725,35 +750,159 @@ as this revision builds them:
   app's list; in a browser as now (Block 20);
 - **a manual order of the list**: a later plan, for the roadmap's owner.
 
-**Open at this revision's gate**, found writing it, each with its options,
-the recommended first:
+**Decided at v1.5's gate** (2026-11-27):
+the owner proposed at the gate a code that only revokes, for D110,
+and sections in a server's settings, for D111;
+their evaluation offered D111 again, with D112 and D113;
+the owner then asked how a session could be bound to the phone (D114),
+and gave the signal "send the plan to a subagent for review.
+If issues are easy to resolve, PLAN++; if issues require bigger design decisions,
+show an updated PLAN instead", every open decision as recommended:
 
-- **D109, a tap on a server's row**: today it opens at once where the list's last
-  probe found the server (`openServer`), so in the seconds after a server goes
-  down it meets the load's failure, which D108-A turns into the list.
-  - **A (recommended).** As it is: a tap stays immediate,
-    and a load that fails returns to the list (Block 19, step 10).
-  - **B.** A tap probes first, as Show in My profile will:
-    up to four seconds more before a page opens where the server does not answer,
-    a probe's round trip where it does.
-- **D110, the words of D105-A**: the session's line says Sign out "ends the
-  session there once the server answers again";
-  but the app keeps no secret it was asked to forget (D70-A),
-  so a session signed out while its server is down goes to `unended`,
-  and is ended at the next sign-in there as that user, not when the server answers.
-  - **A (recommended).** The line says what happens: Sign out forgets the session
-    on this phone now, and it is ended at the next sign-in there as that user,
-    the words of a session left (`connect.sessionLeft`).
-  - **B.** Sign out keeps the session sealed until the server answers,
-    and ends it then with its own secret: a change of D70-A.
-- **D111, what moves below Cancel and Save**: "the certificate and key part".
-  - **A (recommended).** Every line of the settings that acts at once rather
-    than being saved: the session with Sign out, the certificate with
-    Certificate…, the kept login with its key's id and Turn off, Store login,
-    and the keys and sessions left with Show in My profile;
-    above Save, only what Save saves.
-  - **B.** The certificate, the kept login and the keys and sessions left alone;
-    the session with Sign out stays above Save.
+- **D109-A, a tap on a server's row**: it stays immediate,
+  opening where the list's last probe found the server (`openServer`);
+  a main frame that fails to load returns to the list (D108-A; Block 19, step 10).
+  Not B, a probe before every tap,
+  up to four seconds more where the server does not answer.
+- **D110, the words of D105-A**: no option of its own any more; D112-A settles it.
+  For a server that knows the revoke route, D105-A's words hold as first written:
+  Sign out "ends the session there the next time the app reaches the server".
+  For a server older than the route, which answers `404`,
+  the app falls back to today's path, the session in `unended`
+  and ended at the next sign-in there as that user,
+  and its line then says so, in the words of a session left
+  (`connect.sessionLeft`).
+- **D111-A, revised: a server's settings in three sections**,
+  switched as the server's page switches between its settings pages,
+  in their look (`ui/style.css`, which the connect page loads),
+  built by the plain script with `components.js`' builders and the roles of a
+  tab list (`src/shared/tabs.tsx` is a part, and the connect page loads none):
+  - **Connection**: the name, the LAN and remote addresses, Open at start,
+    notifications, when the fingerprint is asked; then Cancel and Save;
+    then Remove server under its rule (F34);
+  - **Login**: the session with Sign out, the kept login with its key's id and
+    Turn off, Store login, and the keys and sessions left with Show in My profile,
+    each acting at once, with no Save;
+  - **Certificate**: the certificate's facts in place, what `#cert-dialog` shows
+    today, the dialog removed; where the server does not answer,
+    the pinned fingerprint.
+
+  Save and Cancel (D94-A) are Connection's alone.
+  The draft is kept across the sections;
+  Connection's tab carries the "changed here" mark while the form differs,
+  as AP UnsavedMarks marks a settings page that has changes,
+  and Back or ✕ asks once (D93-A).
+  Login's tab carries a dot while a key or a session is left there.
+  Connection opens first.
+  Checked at 390 px in the six languages,
+  every key in all six `ui/i18n/<lang>.json`, FR/IT/NL/PL machine-translated
+  and marked.
+  It replaces v1.5's D111, what moves below Save, in Block 19.
+  Not B, one panel with every line that acts at once below Save.
+- **D112-A, a revoke code** for a token the app forgets, the owner's proposal:
+  - the code is `SHA-256("massimo revoke v1" ‖ secret)`, hex;
+    the store keeps `SHA-256(code)` in a column of its own, `tokens.revoke_hash`,
+    not the hash it keeps already (`store.HashToken`),
+    with which the store, and every backup of it, could revoke every token;
+    the server writes the column when it makes a token,
+    and for an older one at its first use after the update;
+  - `POST /api/v1/tokens/revoke`, without a token, its body `{"code": "<hex>"}`,
+    revokes the one live token the code matches, a key's sessions with it
+    (with AP KeyLife's Block 2, its heirs too),
+    and answers `204` whether it matched or not, so that it tells nobody which
+    codes are live; `400` for a malformed body; `429` and `5xx` mean later;
+    the audit names the token's id, its user and the caller's address,
+    never the code;
+  - the app works out a token's code whenever it holds the secret,
+    at a sign-in, a key's making and a fingerprint's unseal,
+    and keeps it on disk, unsealed, beside D102-A's `{user, id}`:
+    the code lets nothing in, so D70-A holds;
+  - once it has dropped the token (Sign out, Turn off's key left, Forget all,
+    Remove, Exit, the process ended: F43, F47) the app posts the code at each
+    contact, a start, a return, ↻ or a probe; it drops it on `204`,
+    falls back to `unended` and the keys left on `404`,
+    and keeps it on a broken connection, `429` or `5xx`;
+  - codes outlive Remove (F39): the app goes on posting a removed server's codes
+    until they are taken, no longer than the tokens' life,
+    and with D116-A no longer than 90 days;
+  - a kept login sealed before this version has no code until its next unseal,
+    and until then its key falls to today's path (the Analysis,
+    "The gate of v1.5", "The app's side").
+
+  Not B, the hash the store keeps as the code: no migration,
+  but every copy of the store could revoke every token;
+  nor C, D110-A's words now and the code in a later plan.
+- **D113-A, who builds D112**: Block 21,
+  the server half in a commit of its own, as D106-A's is;
+  the session "Open Items" is told before Block 21 starts,
+  since AP KeyLife's Block 2 changes the same revoke
+  and its migrations draw on the same range of numbers:
+  whichever lands second adapts.
+  Not B, a block of AP KeyLife's, with Block 21 building D110-A's words meanwhile.
+- **D114-A, sessions bound to the phone**: a plan of its own, later,
+  proposed to the roadmap's owner, the coordinating session; not in this plan.
+  The client would keep a private key, on Android in the Keystore,
+  not exportable and unlocked by the fingerprint, and sign each request
+  (DPoP, RFC 9449, or HTTP Message Signatures, RFC 9421);
+  the server would keep the public key,
+  and forgetting a session would be deleting its key,
+  dead at once even while the server is down.
+  A token is a bearer today, and need not be more against guessing:
+  32 random bytes the server makes (`store.NewSecret`), worth nothing elsewhere,
+  their SHA-256 unguessable;
+  OPAQUE is a costly exchange of several messages, run once per sign-in,
+  whose outcome is the token.
+  The gap is that a bearer serves whoever reads it,
+  which proof of possession closes, and a PAKE does not.
+  D112-A stays meanwhile: it is small, covers the key Turn off leaves as well,
+  and keeps its use as tidying once sessions are bound.
+
+**Taken under the owner's `PLAN++`** (2026-11-28), raised by the review of this
+revision, as recommended, and the owner's to change before Block 21's pull
+request merges, as AP KeyLife recorded its D6 to D8:
+
+- **D116-A, how long a removed server's codes stay**:
+  every code in `gone` is dropped 90 days after the Remove at the latest,
+  a session's after 30 days as planned.
+  Remove means "forget this server":
+  without a bound the app would go on reaching a removed server's addresses for
+  years, and an address given to another host would go on receiving codes.
+  A key left there stays in sight under My profile,
+  and AP KeyLife's idle limit can end it.
+  Not B, a key's code kept for as long as the key may live, which is without end.
+
+**Open at this revision's gate**, found writing it, with its options,
+the recommended first; it is to be decided before Block 20 alone,
+which runs last:
+
+- **D115, a copy's word: D97-A's toast or AP ErrorCodes' bubble.**
+  D97-A shows "Copied" in the page's toast, in place of the word drawn at the
+  element (Block 20, step 4).
+  AP ErrorCodes' Block 6 (metaworx/massimo#489, open), at the owner's words
+  there, makes the copy's word a bubble of its own, `showBubble(text, ctrl)`:
+  above `ctrl`, or at the window's bottom centre without one.
+  Both change `copied` (`components.js`), and the later would undo the other.
+  - **A (recommended).** Both, through the bubble: every copy calls
+    `showBubble` without a control, so that its word shows at the window's foot,
+    where D97-A wants it seen on a phone, by the one builder the owner asked for;
+    the toast stays the outcomes', and a copy no longer replaces one shown there.
+    Block 20 then follows ErrorCodes' Block 6.
+  - **B.** The bubble above the control for every copy; D97-A is dropped.
+  - **C.** D97-A as written, the page's toast; ErrorCodes' bubble keeps its
+    other users.
+
+  The review agrees with A, for one more reason:
+  the version row's tap closes ☰, a `<details>` (`src/shared/menu.tsx:86`),
+  and the bubble of metaworx/massimo#489 hides itself once its control has no
+  client rects (`followBubble`), so B's bubble would vanish at once in the very
+  case D97-A is about.
+  Two caveats of A: on Android 13 and later the system's clipboard preview also
+  sits at the screen's foot, so Block 20's phone check looks at both at 390 px;
+  and A changes AP ErrorCodes' "`copied(el, ok)` becomes `showBubble(t(…), el)`"
+  and #489's test of the bubble above its control,
+  so that plan's session is told.
+
+The next free number is D117.
 
 **Left open by the runs**, none of them a step of this revision,
 each for a block that touches it or a plan of its own:
@@ -823,6 +972,19 @@ a server's field `held`; the class `MassimoApp`, the app's `Application`;
 the library `androidx.swiperefreshlayout`;
 the branches `claude/mobile-list-menu`, `claude/mobile-menu-cards`
 and `claude/mobile-sessions-held`.
+With v1.6: the route `POST /api/v1/tokens/revoke`, its error code
+`revoke_code_malformed`, the column `tokens.revoke_hash` and its migration
+`<NNNN>_token_revoke`, the store's `RevokeCode` and `RevokeByCode`;
+in the app the class `RevokeCode`, `ServerApi.revokeCode`,
+a key's or a session's left `code` and `taken`, and a server's record kept for
+its codes after Remove, `gone`; on the connect page an entry's `pending`,
+the sections `connection`, `login` and `certificate`, the classes
+`server-tabs` and `server-section`, the template `tpl-cert`, `fillCert`,
+and the builder `signEl` of `components.js`;
+the audit's action `token.revoke_code` and its texts `log.action.token.revoke_code`;
+the app's file `gone.json`; the texts `connect.sessionDown`,
+`connect.sessionPending`, `connect.keyPending`, `connect.signedOutPending`,
+`connect.loginOffPending` and `connect.removedPending`.
 
 **Not in this plan:**
 
@@ -834,6 +996,9 @@ and `claude/mobile-sessions-held`.
   fingerprint follows whichever sign-in succeeded, but a provider's page in
   the WebView is untested;
 - the life of a key, its idle limit, end date and re-key: AP KeyLife v1.0, above;
+- sessions bound to the phone by proof of possession (D114-A),
+  a key kept in the Keystore signing each request:
+  a plan of its own, proposed to the roadmap's owner;
 - a manual order of the server list (D95-A): a later plan, for the roadmap's owner;
 - showing the user manual in the app (D37-A): a plan of its own;
 - saving a file the page offers (a backup's download): the app says it
@@ -882,12 +1047,22 @@ it is told before each block starts,
 and whichever lands second merges `main` first.
 v1.5's blocks branch from `main` and target 0.18,
 0.17 being frozen on `maint/0.17`; the plan and its revisions still go onto `main`.
-21 first, its server's commit first, since 19 builds Exit on its record
+21 first, its two server's commits first, since 19 builds Exit on its record
 and both change `connect.js`;
-then 20, whose copy's toast the list's version row uses;
-19 last, after the two have merged, rebuilding a server's settings around
-21's lines.
+then 19, rebuilding a server's settings around 21's lines into its sections;
+20 last, since it waits on D115 and on AP ErrorCodes' bubble
+(metaworx/massimo#489).
+Block 19 builds nothing on Block 20: its version row calls `copied()` as every
+copy does, and shows the copy's toast or bubble once Block 20 has landed.
 Each starts from `main` once the one before has merged.
+Before Block 21 starts, three sessions are told:
+"Open Items" (D113-A), since AP KeyLife's Blocks 2 to 5 change the revoke,
+the making of a token and its use, and take the migrations 0100 and 0101
+(the list of what they would change is in the Analysis, "The gate of v1.5");
+AP ServerBackup's, whose metaworx/massimo#492 takes 0100 too;
+and AP ErrorCodes', whose #488 changes `userFail` and `passwordBusy`;
+whichever lands second adapts.
+Before Block 20 starts, AP ErrorCodes' session is told of D115.
 Block 20 changes shared parts of the server's page (`src/chrome/`, `src/signin/`,
 `src/shared/`, `src/profile/`, `components.js`, `login.js`):
 any session changing them then is told before it starts.
@@ -1812,7 +1987,9 @@ The row's badge "signed in as …" (`fillRow`, `fill-ok session-badge`)
 and the settings' session line (`fillFacts`, `connect.sessionLine`) follow the
 session's last check, kept while the probe finds the server at neither address.
 The badge turns grey while the probe's state is neither `lan` nor `remote`,
-and the line says what Sign out does then (D110).
+and the line says what Sign out does then:
+it ends the session there the next time the app reaches the server (D112-A;
+the Analysis, "The gate of v1.5", "The words").
 
 **A cancelled request at the server** (F46; D106-A; Block 21).
 `passwordBusy` answers `503` "too many password checks at once" for the store's
@@ -1849,7 +2026,8 @@ A menu or a panel that opens pushes a history entry of the page's own
 `popstate`, which closes it, and a panel with changes asks first (D93-A);
 with nothing open there is no entry, and Back leaves the app as today.
 A server's settings (`settingsPanel`) have Cancel and Save always on,
-no ✕, and the facts (`fillFacts`) and the kept login above them.
+no ✕, and the facts (`fillFacts`) and the kept login above them;
+D111-A splits them into three sections (the Analysis, "The gate of v1.5").
 Store login reuses the keep a server's page asks for (`Bridge.kt` `keep`),
 from the connect page and at the probe's address: a new call, `keep(id, url)`.
 Pull down: the WebView in a `SwipeRefreshLayout`
@@ -1873,7 +2051,7 @@ server's origin, which drops the opening and shows the list with
 `#unreachable=<id>`, the bridge's handover as `#settings=<id>` is;
 the list probes that server at once, and says it is not reachable with the
 probe's reason, as a tap's failed probe does (`connect.unreachable`).
-D109 asks whether a tap probes first too.
+A tap keeps opening on the last probe (D109-A).
 
 **The menu and the cards** (the points taken as written, D96-A to D98-A,
 D104-A, D107-A; Block 20).
@@ -1899,14 +2077,343 @@ The card trims the name it sends (`Card.tsx`, `Owner.tsx`), and the server's
 sign-in routes take it through `store.NormalName`, which trims:
 D107-A holds where the block's tests show it does, each path checked.
 
-**The bridge's contract becomes version 6** (`docs/app.md`),
-Blocks 21 and 19, the first to land raising the number,
-the page testing for each call and field it uses:
-a server's `held`, the session held there, `{user, id, created_at}`,
-read only for `save` and never shown,
-and `unended` fed from a process that ended (Block 21);
-on the connect page `about()`, `exit()`, `keep(id, url)`, the event `refresh`,
-and the handover `#unreachable=<id>` (Block 19).
+**The bridge's contract** takes two versions (`docs/app.md`),
+in the order the blocks run, the page testing for each call and field it uses:
+version 6 with Block 21: a server's `held`, the session held there,
+`{user, id, created_at}` and its code (the Analysis, "The gate of v1.5"),
+kept in the app's file alone and never given to the page;
+`unended` fed from a process that ended;
+an entry of `unended` or `unrevoked` `pending: true` while its code waits,
+the code itself never given to the page;
+the answers of `signOut`, `forget`, `forgetAll` and `remove` saying what waits;
+version 7 with Block 19: on the connect page `about()`, `exit()`,
+`keep(id, url)`, the event `refresh` and the handover `#unreachable=<id>`.
+Block 20 changes no call.
+
+### The gate of v1.5 (Blocks 19 and 21)
+
+Read on `main` at `chore(aps): +NOTE KeyLife v1.0, how the run went`,
+2026-11-28, in the code alone; the lines are those of that commit.
+
+**How the store keeps a token today** (D112-A).
+A token is 32 random bytes, hex (`NewSecret`, `internal/store/tokens.go:63`),
+shown once; the store keeps its SHA-256, hex, without a pepper (`HashToken`,
+`:57`), in `tokens.hash`, unique (`internal/store/migrations/store.sql:317`),
+and a revoked row keeps it, which is how `TokenEnded` (`:176`) tells a token
+that ended from a guess.
+The store makes the secret itself where it makes a token,
+`addToken` (`:101`) and `AddKeySession` (`:256`),
+and so holds it at that moment.
+`AddTokenHash` (`:113`) is handed a hash alone, and nothing calls it but the
+tests; the bootstrap writes the settings file's key itself (`keyIn`,
+`internal/store/bootstrap.go:177`): a new row (`:180`), or an integration's
+user's row of that hash made the file's key and live again (`:186`).
+`RevokeToken` (`:210`) revokes a live token, a key's live sessions with it,
+and what they subscribed to push; `ErrNoToken` where it is not live.
+The server turns a presented secret into its hash in `resolve`
+(`internal/server/auth.go:824`), the one place that holds every token's secret
+at each request, and writes the token's last use in `touch` (`:959`),
+at most once an hour (`touchEvery`, `:57`), through `TouchToken`
+(`tokens.go:315`); `touch` is not handed the secret.
+
+**Why a code of its own.**
+The hash the store keeps would serve as a code at once, with no migration,
+but whoever holds the store or a backup of it could then revoke any token:
+the server's backups and a copy taken for a look would carry that power.
+A code derived with a label, `RevokeCode(secret)`, the hex of
+SHA-256(`"massimo revoke v1"` ‖ secret), the secret as the server gave it,
+64 hex digits, is another value;
+the store keeps `HashToken(code)` in `tokens.revoke_hash`,
+from which no code can be had back.
+So only a client that once held the secret can revoke the token by its code,
+and the code lets nothing in: no request is ever authenticated by it.
+The label holds a version, so that another derivation could follow beside it.
+
+**The column, and the tokens made before it.**
+The store writes `revoke_hash` where it makes the secret,
+in `addToken` and `AddKeySession`,
+and in AP KeyLife's `AddKey` and `RekeyToken` once those land;
+neither `AddTokenHash` nor the bootstrap writes one.
+A token made before the update has none, and the server writes it at the
+token's first use after the update: `resolve` hands `touch` the secret,
+and where the row has no `revoke_hash` (read with the row, `Token.RevokeKept`)
+`touch` writes it with the use, whatever `touchEvery` says,
+through `TouchToken`, which takes it and keeps a hash already written.
+The settings file's key is passed over there (`settingsKey`'s rule,
+`internal/server/login_api.go:451`: the hash of the file's token),
+so that it gets none and is still touched at most once an hour.
+It may hold one all the same: a key `addToken` made and named in the settings
+file later, or an integration's key `keyIn` makes the file's;
+so the route itself leaves that key live (below), as no revoke may end it
+(D86-A, D89-A).
+A token the server has not seen since its update has no `revoke_hash`,
+so its code matches nothing; the app keeps a fallback for that (below).
+The migration is additive, as `0025_token_parent.sql` is:
+`ALTER TABLE tokens ADD COLUMN revoke_hash TEXT` and a unique index on it
+where it is not NULL, `min_reader` 24, with a down part that drops both,
+since every migration after 0024 comes with one
+(`internal/store/migrate.go`, its header).
+A binary for 24 to 26 reads the file and writes its tokens without the column,
+which the next use with this binary fills.
+`docs/store.md` lists the column in its tokens table (section 5, beside
+`parent_id`, `:417`) and the migration among the migrations.
+
+**Its number.**
+`main`'s last migration is `0026_backup_pending.sql`, and so is `maint/0.17`'s;
+since the freeze `main` numbers in the block from 0100
+(`docs/store.md`, "Two lines of releases").
+`loadMigrations` takes each number as the one before plus 1,
+or the next multiple of 100 (`nextVersion`, `nextBlock`,
+`internal/store/migrate.go:164`, `:173`), so a jump from 0026 to 0102 is
+refused.
+No 01xx file is on `main` yet, and three open pull requests claim 0100:
+AP KeyLife's `0100_token_maker` (metaworx/massimo#481, with #482's
+`0101_token_idle` and #484 and #490 stacked on it)
+and AP ServerBackup's `0100_server_backups` (#492, with #493 to #495 on it).
+So Block 21's is the number after `main`'s last when its pull request is opened,
+0100 where none of those has merged,
+and it is renumbered at its merge of `main` where one merges first:
+`<NNNN>_token_revoke.sql` and its down part.
+
+**The route.**
+`POST /api/v1/tokens/revoke`, registered with `none` as the sign-ins are
+(`internal/server/server.go:1503`), whose wrapper lets the request through
+without a user (`auth.go:1008`); its body `{"code": "<64 hex digits>"}`.
+
+- A server without a store (one token in the settings file) reaches the handler
+  too, `s.opts.Store` nil: it answers `204` at once.
+- A code that matches a live token's `revoke_hash` revokes it
+  through the store's `RevokeByCode` and `RevokeToken`, a key's sessions with
+  it; with AP KeyLife's Block 2, which makes `RevokeToken` take a key's heirs,
+  they follow.
+  The settings file's key is left live: the server hands the store the file's
+  hash (`settingsKey`'s rule), which `RevokeByCode` passes over;
+  with AP KeyLife the store knows that hash itself (`settingsHash`).
+- It answers `204` whether the code matched, matched a token that had ended,
+  matched the settings file's key, or matched nothing,
+  so that it tells nobody which codes are live.
+- A body that is not that object, or a code that is not 64 lower-case hex
+  digits, is `400`, with the code `revoke_code_malformed` of AP ErrorCodes,
+  whose Block 1 is on `main` (`errorCode`, `refuse`,
+  `internal/server/errcodes.go`), its six texts `err.revoke_code_malformed`
+  and its row in `docs/api-v1.md`'s "Error codes", which `TestErrorCodes` reads.
+- The address's lockout applies, as for every route without a token,
+  each of which checks it itself (`lockedOut`, `auth.go:1122`):
+  `429` with `Retry-After` while the address is locked out.
+  A code never counts toward the lockout, matched or not:
+  one that matches nothing is a code taken already, a token that ended by itself,
+  or one the server has not seen since its update,
+  and 256 bits make guessing hopeless;
+  counted, an app's codes would lock its own address out.
+  `5xx` is the store's failure.
+- What the route writes, since anyone may call it and nothing counts:
+  today every request to a `none` route is an audit row of its own
+  (`server.go:1462-1470`), an action outside `noCommand` (`audit.go:158`) also
+  a row of `commands` keeping any `Idempotency-Key` (`beginCommand`,
+  `commands.go:304`), and a `change` action's success a Configuration line in the
+  log and in every open page's feed (`changeLines`, `audit.go:149`; `endAudit`,
+  `:417`).
+  So a code that matches nothing, one of the settings file's key, and a
+  malformed body write no row of their own (`auditInfo.skip`, `audit.go:183`):
+  they are counted per address and minute as refused requests are
+  (`refusalAudit`, `audit.go:477`, `note` `:502`),
+  with no change line and no Info line.
+  A match alone writes its row, with the token as its target and its user as
+  its subject (`auditTarget`, `auditSubject`), its change line,
+  and an Info line as `deleteMyToken` writes one (`login_api.go:490`),
+  "by code" in place of "by itself".
+  The route takes an action of its own, `token.revoke_code`, in `noCommand`,
+  with a `change` line and the six texts `log.action.token.revoke_code`:
+  a revoke sends nothing to a Cube and its retry is the same `204`,
+  while putting `token.revoke` into `noCommand` would also take the command row
+  and the `Idempotency-Key` replay from both revokes that carry a token
+  (`audit.go:58`, `:104`), which this plan does not touch.
+  No row and no line ever carries the code, which the audit's `secretFields`
+  leaves out already (`audit.go:163`).
+- `docs/api-v1.md` beside `DELETE /api/v1/me/token`,
+  `docs/api-v1-openapi.yaml` (`TestOpenAPICoversRoutes`) with `make api-types`,
+  `TestAuditOfEveryWrite` (`internal/server/audit_test.go:47`) and
+  `TestEveryActionHasALine` (`logchange_test.go:21`) for its action.
+
+**AP KeyLife meets it** (D113-A).
+KeyLife's Blocks 2 to 5 are open pull requests now
+(metaworx/massimo#481, #482, #484, #490), and change what this half touches.
+Where Block 21 lands first, they change, and the session "Open Items" is given
+this list before Block 21 starts:
+
+- `AddKey` writes `revoke_hash`, as `addToken` does;
+- `RekeyToken` writes the new secret's `revoke_hash` on the key's row and puts
+  the old one on the revoked row it inserts with the old hash,
+  so that an old code does not revoke the key re-keyed;
+- `tokenColumns` reads the column as `Token.RevokeKept`;
+- Block 3's `touch`, which writes a session's use as its key's,
+  still fills the presented token's own `revoke_hash`;
+- the "live" of `RevokeByCode` follows KeyLife's rule for a live token
+  (a key ended, a maker revoked), and its settings file's hash.
+
+Where they land first, Block 21 takes them as they are. AP ErrorCodes' #488
+changes `userFail`, `passwordBusy` (then `codePasswordBusy`) and `loginMode`,
+which Block 21's first commit (D106-A) touches: whichever lands second adapts.
+
+**The app's side** (D112-A; Block 21).
+The app holds a token's secret at a sign-in (the page's `setToken`,
+`Sessions.put`, `Sessions.kt:101`), at a key login (`Bridge.kt` `openKept`,
+`:450`), at a key's making (`Bridge.kt` `keep`, `:481`; `AppKey.kt` `keep`,
+`:170`) and at each unseal (`LoginStore.open`, from `AppKey.kt:265` and `:368`).
+
+- A session's code is kept in its server's `held` (D102-A),
+  `{user, id, created_at, code}`, written where a check learns its id
+  (`Sessions.look`, `:133`), and only for a session (`Checked.kind` `session`);
+  the kept login's in its record beside `keyId`
+  (`KeptLogin`, `LoginStore.kt:24`), in clear, as the id is.
+  A key the user typed into the card's "API key" way is not the app's:
+  the card makes it the page's token (`setToken(key)`,
+  `src/signin/Card.tsx:240`), and a check records it of kind `api`;
+  it gets no `held` and no code, so nothing of it reaches `unended` after a new
+  process or Exit, and forgetting it leaves it valid, as a logout does today
+  (`leave` passes over keys, `Sessions.kt:313-314`; `end`'s `quietKey`, `:293`).
+  A code of it would revoke the user's own key,
+  and the settings file's key would then fail every start (D86-A).
+- Where the app drops a token without its server ending it
+  (`Sessions.leave`; the keys `Revoker`, `forgetLeavingKey` and Remove leave),
+  the entry written into `unended` or `unrevoked`
+  (`ServerStore.kt`: `SessionLeft`, `:36`; `KeyLeft`, `:21`) carries the code.
+  At the next process's start a `held` whose session is no longer held moves
+  there with its code (D102-A), and Exit (D91-A) moves them so at once.
+- `held` and every code go to the file alone (`fileJson`):
+  `toJson`, what the page sees and what Remove answers, carries no `held`,
+  no code and no `taken` entry, and `pending: true` on an entry whose code waits;
+  `save` keeps the stored lists as it keeps them today
+  (`ServerStore.kt:177-178`), and `held` with them.
+- At each contact the codes are posted:
+  the connect page's `session(id, url)`, which follows every probe that finds a
+  server (`checkSession`, `connect.js:254`, after `probeServer`, `:223`),
+  at a start, a return, ↻ and a pull down, posts that server's codes at that
+  address before its check (`ServerApi.revokeCode`, without the
+  `Authorization` header `ServerApi.send` sets on every call today,
+  `ServerApi.kt:150`); a code is no secret,
+  so plain HTTP outside the private ranges carries it too.
+  The adapter's `open` posts them too, at the address it opens,
+  so that a server opened at the app's start (D43-A) takes them.
+- On `204` the entry is marked `taken` and its code dropped:
+  its line goes, and its tab's dot with it;
+  the next session the app holds there for that user checks it as today
+  (`KeysLeft.revoke`, `KeysLeft.kt:57`): the user's list no longer has a token
+  the code ended, so the entry is dropped unasked,
+  and one the server had not seen since its update is revoked then.
+- A broken connection, `429` and `5xx` keep the code for the next contact;
+  `400` drops it, logged.
+  Any other answer, `404` first (a server older than the route: none has a route
+  under `/api/v1/tokens`), and `401`, `403`, `405`, `409`, a redirect or a
+  proxy's page of `200`, is a server that takes no codes: the code is dropped
+  and the entry stays as today's, in today's words
+  (`connect.keyLeft`, `connect.sessionLeft`).
+- Remove posts the server's codes where the server answers,
+  and keeps what is still to post in `gone`, a file of its own (`gone.json`,
+  since `servers.json` is the list's array):
+  the server's id, node, addresses and pinned fingerprint with the codes,
+  never listed nor opened.
+  The adapter probes those addresses at the app's start and each time the list is
+  shown, and posts the codes only at an address where the probe finds the server
+  at its node (`Addresses.answering`, `Addresses.kt:26`),
+  as Sign out of all (`Sessions.kt:218`) and `Revoker` (`:213`) find theirs,
+  so that an address given to another host spends no code.
+  Each code is dropped on `204` or on a server that takes none,
+  a session's 30 days after it was left, the longest a session lives unused,
+  and every code 90 days after the Remove at the latest (D116-A).
+- A kept login sealed before this version has no code until its next unseal;
+  Turn off, Forget all or Remove that leave its key before then leave it as
+  today, ended at the next sign-in there as that user.
+- One pure function works the code out, `RevokeCode.of(secret)`,
+  held to the Go function by one vector shared by
+  `internal/store/tokens_test.go` and `RevokeCodeTest.kt`.
+
+**The words** (D110, settled by D112-A; D105-A; Block 21).
+While the server does not answer, the session's line says that Sign out ends
+the session there the next time the app reaches the server
+(`connect.sessionDown`); after a Sign out, a Turn off or a Remove that left a
+token with its code, the toasts say so too (`connect.signedOutPending`,
+`connect.loginOffPending`, `connect.removedPending`), and the Login section
+lists the token as pending (`connect.sessionPending`, `connect.keyPending`).
+A server older than the route answers `404` at the next contact,
+and the entry's line then takes today's words.
+`fillFacts` draws its lines again only where its key changed
+(`connect.js:616`), and the key holds no probe state:
+over plain HTTP `cert` is null whether the server answers or not,
+so the key gains whether it answers, or the line of a server down would never
+show there.
+
+**A server's settings today** (D111-A; Block 19).
+`settingsPanel` (`connect.js:477`) is one form (`formEl`, `panel server-panel`)
+under the server's row: the name, the LAN and remote addresses,
+Open at start, when the fingerprint is asked, `.server-facts` (`fillFacts`,
+`:607`: the session with Sign out, the certificate's line with Certificate…,
+each key left with Show in My profile, each session left),
+the kept login with its key's id and Turn off, notifications where the app has
+push, the message line, Cancel and Save (`formFooter`),
+and after a rule Remove server with its line (`fillRemove`, `:538`).
+Certificate… opens `#cert-dialog` (`connect.html:133-144`; `showCert`,
+`connect.js:715`): the address, the subject, the issuer or "self-signed",
+the names, the validity, the fingerprint and since when it is trusted,
+offered only where the probe found a certificate at an address that answers.
+
+**How the sections are built.**
+The server's page switches its settings pages by the page bar's row
+(`Switch`, `src/chrome/Bar.tsx:84`): `.page-link` buttons, each its icon and
+its name, the one shown filled (`.current`), folded to their icons below 900 px
+(`style.css:635`, `:654`);
+the sign-in card's ways take that look unfolded (`.login-way`, `style.css:2197`).
+The sections take it too, unfolded and without icons, their names alone,
+since three names fit at 390 px:
+`.page-link` buttons in a row of their own, `.server-tabs`,
+the folding rule scoped to `.page-switch` so that it stays the page bar's.
+`.page-link-label` ends a name too long in "…",
+so the check at 390 px in the six languages refuses a name cut short.
+The roles are a tab list's, as `src/shared/tabs.tsx` gives them to a part:
+the row `role="tablist"` named by `connect.sections`,
+each button `role="tab"` with `aria-selected` and `aria-controls`,
+each section `role="tabpanel"` (`.server-section`); built with `elem` and
+`button`.
+All three sections are built when the panel opens and hidden but the one shown,
+so that the draft, the focus and the lines `fillFacts` keeps in place outlive a
+switch, and the emulator suite's clicks still find their buttons.
+Connection is the form; Login and Certificate are none,
+so that Enter in a field saves Connection alone.
+Back or ✕ while Login or Certificate is shown and Connection differs shows
+Connection and asks there, the focus on the question:
+`confirmInPlace` asks inside an action row, and Connection's is hidden then.
+The other ways the panel closes (another server's cog, a tap on a row,
+Add server, App settings) close it without asking, as today:
+D93-A names Back alone, and ✕ closes as Back does (D94-A).
+The "changed here" mark is AP UnsavedMarks' disk
+(`ItemMark`, `src/chrome/Menu.tsx:48`, a `Sign` of `src/shared/icon.tsx:55`),
+which no plain script can draw yet: `components.js` has the signs' table
+(`SIGNS`, `:164`) and `markEl` alone,
+so the block writes `signEl(kind, state)` there, beside `markEl`.
+Login's dot is a mark on its tab, named for a screen reader.
+
+**The certificate in place.**
+`#cert-dialog` becomes a `<template>` of `connect.html`, `tpl-cert`,
+its rows the same and its ids turned into classes,
+cloned into the Certificate section and filled by `fillCert`,
+which is `showCert` drawn in place, and drawn again only where it changed,
+as `fillFacts` is.
+Where the server does not answer, the section shows the pinned fingerprint
+and since when it is trusted (`s.fp`, `s.trusted_at`);
+where none is pinned, that the certificate shows once the server answers;
+over plain HTTP, that there is no certificate.
+`connect.certTitle`, `connect.certButton` and `connect.certLine` go,
+and so does the listener of `#cert-close` (`connect.js:1321`).
+
+**The tests that move.**
+`test_connect_certificate` (`tools/ui-test/test_connect.py:1010`) reads the
+section in place of the dialog; the other cases of `test_connect.py` that use
+the panel's lines (45 lines name their classes) open their section first.
+The emulator suite clicks Turn off and Remove by their classes
+(`SessionsTest.kt:31`, `:50`, `:69`) through `element.click()`
+(`Page.kt:83`), which reaches a hidden section's button;
+those cases open the section first all the same, as a user does,
+and so do the cases Block 21 adds.
 
 ### Risks
 
@@ -1967,7 +2474,24 @@ and the handover `#unreachable=<id>` (Block 19).
 - Pull down (Block 19) adds a library to the app,
   which Dependabot's library group then carries.
 - The copy's toast (D97-A, Block 20) takes the toast's place for a moment:
-  a copy while an outcome is shown replaces it, as any newer outcome does.
+  a copy while an outcome is shown replaces it, as any newer outcome does;
+  with D115-A the copy's word is a bubble of its own, and replaces none.
+- The revoke code (D112-A, Block 21) lies on the phone's disk unsealed
+  while its token lives: whoever reads the app's files can end its sessions
+  and its key, and nothing more; whoever sees a code posted ends a token the app
+  was dropping anyway.
+  A token the server has not seen since its update matches no code,
+  and ends at the next sign-in as that user, as today;
+  a removed server's codes are posted for 90 days at most (D116-A),
+  and a key left there after that stays listed under My profile.
+- The route without a token (Block 21) is one more door for anyone:
+  it answers the same `204` to everything, writes a row, a change line and an
+  Info line only where a code matches, counts the rest per address and minute,
+  and stays behind the address's lockout;
+  a loop of codes that match nothing costs a hash and a lookup each,
+  and fills neither the store nor the log.
+- The sections (D111-A, Block 19) put Remove and the key's lines one tap deeper;
+  the Login tab's dot keeps a key or a session left in sight.
 
 What changes, by file, in the blocks still to run:
 
@@ -1976,13 +2500,14 @@ What changes, by file, in the blocks still to run:
 | `app/core/*.go`, `go.mod`, `Makefile` | 1 | the bound package, the `tool` directive, the targets |
 | a merge request to `fdroiddata` | 5 | the recipe; here `app/README.md`'s section |
 | the Play Console | 6 | the owner's; `app/README.md` records the steps |
-| `app/android/**` | 7, 11, 19 to 21 | the service and its server kept open; push; Exit, Back, pull down, Store login, `about`, a page that fails to load; the sessions with the process and `held`, a fingerprint tap's check, no refused logout, the emulator's cases |
+| `app/android/**` | 7, 11, 19 to 21 | the service and its server kept open; push; Exit, Back, pull down, Store login, `about`, a page that fails to load; the sessions with the process and `held`, a fingerprint tap's check, the revoke codes, `gone`, no refused logout, the emulator's cases |
 | `app/ios/**`, `.github/workflows/ci.yml` | 9 | the Xcode project, the macOS job |
-| `internal/server/ui/connect.html`, `connect.js`, `style.css`, `i18n/*.json`, `tools/ui-test/` | 19 | ☰ in the header with the version row and Exit, the width, the order, Back, a server's settings, Store login, pull down, `#unreachable=<id>`, Show in My profile probing first |
+| `internal/server/ui/connect.html`, `connect.js`, `components.js`, `style.css`, `i18n/*.json`, `tools/ui-test/` | 19 | ☰ in the header with the version row and Exit, the width, the order, Back, a server's settings in three sections with the certificate in place, `signEl`, Store login, pull down, `#unreachable=<id>`, Show in My profile probing first |
+| `internal/store/tokens.go`, its migration, `internal/server/auth.go`, a route of its own, `internal/server/audit.go`, `internal/server/errcodes.go`, `ui/i18n/*.json` (`err.*`, `log.action.*`), their tests, `docs/api-v1.md`, `docs/api-v1-openapi.yaml`, `docs/store.md` | 21 | the revoke code: `tokens.revoke_hash`, its fill at a token's making and use, `POST /api/v1/tokens/revoke`, its action `token.revoke_code` |
 | `internal/server/ui/src/chrome/Menu.tsx`, `src/shared/server.tsx`, `src/shared/copy.tsx`, `src/shared/password.tsx`, `src/signin/`, `src/profile/`, `components.js`, `login.js`, `style.css`, `i18n/*.json`, `tools/ui-test/`; `internal/server/` where a sign-in route does not trim | 20 | the server's ☰, the version row, the copy's toast, the card's line, the command, the password pair, Sign out to the list, My profile's failures, the name trimmed |
 | `internal/server/users_api.go`, its test, `docs/api-v1.md` | 21 | a cancelled request |
-| `internal/server/ui/connect.js`, `i18n/*.json`, `tools/ui-test/` | 21 | the list while a server does not answer; D103-A's UI case |
-| `docs/app.md`, `docs/ui.md`, `docs/user-manual.md` | 11, 19 to 21 | push; the contract's version 6, the list, the menu and the cards, the sessions |
+| `internal/server/ui/connect.js`, `i18n/*.json`, `tools/ui-test/` | 21 | the list while a server does not answer, the codes pending; D103-A's UI case |
+| `docs/app.md`, `docs/ui.md`, `docs/user-manual.md` | 11, 19 to 21 | push; the contract's versions 6 and 7, the list, the menu and the cards, the sessions |
 | `app/README.md`, `README.md`, `docs/roadmap.md`, `GUIDELINES/wip/HANDOVER.md` | 10 | the documents; the roadmap and the handover by the coordinating session |
 | `CHANGELOG.d/` | 1, 7, 9, 11, 19 to 21 | a fragment per change |
 
@@ -2009,7 +2534,7 @@ Each new test is seen failing with its fix undone.
 (Block 8, "As built").
 Nothing reaches a real Cube or a box: the fake Cube answers;
 a phone is the owner's, used on the owner's word.
-Every commit cites `AP MobileApp v1.5, Block <n>`;
+Every commit cites `AP MobileApp v1.6, Block <n>`;
 a block's bullet is a fragment, `CHANGELOG.d/<Heading>/<branch>.md`;
 a pull request per block.
 The app's bullets of Blocks 3 to 18 are frozen into 0.17 on `maint/0.17`:
@@ -3182,12 +3707,12 @@ the connect page's call within 59 s); CI's job passed with the guard.
 
 ### Block 19: The list
 
-D90-A to D95-A, D96-A on the list's menu, D108-A,
+D90-A to D95-A, D96-A on the list's menu, D108-A, D109-A, D111-A,
 and the points taken as written for the list:
 the version row, Back, a server's settings, Store login and pull down
-(the Analysis, "The phone check of Blocks 15 to 17"),
+(the Analysis, "The phone check of Blocks 15 to 17" and "The gate of v1.5"),
 in one pull request on `claude/mobile-list-menu`, from `main`, for 0.18,
-after Blocks 21 and 20.
+after Block 21 and before Block 20.
 
 1. ☰ in the header (D90-A): `connect.html`: `#servers-menu` moves from the Servers
    card's head into `header.connect-top`, at the brand's right,
@@ -3200,13 +3725,16 @@ after Blocks 21 and 20.
    the focus back to ☰.
 2. The version row (taken as written): first in ☰, Massimo's mark and the build's
    version, from the bridge's new `about()` (`{version}`, the build's
-   `versionName`, contract version 6), with its copy icon;
-   a tap copies the whole version, shows the copy's toast (D97-A, Block 20's
-   `copied`) and closes ☰; no row where the bridge has no `about`.
+   `versionName`, contract version 7), with its copy icon;
+   a tap copies the whole version through `copied()`, as every copy goes,
+   and closes ☰; no row where the bridge has no `about`.
+   What the copy shows is Block 20's (D97-A, D115), which lands after:
+   until then the word drawn at the element goes with the closed ☰.
 3. Exit (D91-A): ☰'s last entry, where the bridge has `exit()`;
    `Bridge.kt` drops every session held in memory, each recorded one moving into
-   `unended` (D102-A, Block 21), sends nothing to a server,
-   and `MainActivity` ends with `finishAndRemoveTask()`.
+   `unended` with its revoke code (D102-A, D112-A, Block 21),
+   sends nothing to a server, and `MainActivity` ends with
+   `finishAndRemoveTask()`; the codes go at the next start's contact.
 4. The width (D92-A): `style.css` `.connect-main` up to the page's 1100 px,
    in place of 640 px, the cards and the list at its full width below it.
 5. The order (D95-A): `connect.js` `renderServers` draws the servers sorted by the
@@ -3219,26 +3747,74 @@ after Blocks 21 and 20.
    by other means; `popstate` closes the open menu first, then the open panel;
    with nothing open there is no entry, and the adapter's Back leaves the app
    as today (`web.goBack()`, on while the WebView can go back).
-   A server's settings with changes ask once, in place, as Remove's question
-   does (`confirmInPlace`): discard the changes, or stay,
-   which pushes the entry again.
-7. A server's settings (D94-A, taken as written): `connect.js` `settingsPanel`:
-   Save and Cancel off while the form holds what is stored,
-   compared field by field at each input, as the server's forms are;
-   a labelled ✕ in the panel's head (`card-close`, `action.close`),
-   which closes it as Back does;
-   below Cancel and Save, after the rule, beside Remove server,
-   the part on the certificate and the keys, as D111 settles it
-   (`fillFacts`; with D111-A also the session's line with Sign out);
-   the toast that covered the foot at 390 px looked at again.
-8. Store login (taken as written): in a server's settings, where the app holds a
+   A server's settings whose Connection differs from what is stored ask once,
+   in place, as Remove's question does (`confirmInPlace`):
+   discard the changes, or stay, which pushes the entry again;
+   while Login or Certificate is shown, Connection is shown first and asks
+   there, the focus on the question, since `confirmInPlace` asks inside
+   Connection's action row;
+   a switch between the sections pushes no entry.
+   The other ways the panel closes (another server's cog, a tap on a row,
+   Add server, App settings) close it without asking, as today:
+   D93-A names Back alone, and ✕ closes as Back does.
+7. A server's settings in three sections (D111-A, D94-A, taken as written):
+   `connect.js` `settingsPanel` becomes a panel with a head, the row of tabs and
+   three sections, all built when it opens and hidden but the one shown,
+   Connection first:
+   - the head: the server's name and a labelled ✕ (`card-close`,
+     `action.close`), which closes the panel as Back does, asking once where
+     Connection differs, in Connection (step 6);
+   - the row (`.server-tabs`, `role="tablist"`, named by `connect.sections`):
+     Connection, Login and Certificate (`connect.tab.connection`,
+     `connect.tab.login`, `connect.tab.certificate`), each a `.page-link`
+     button with its name and no icon, `role="tab"`, `aria-selected` and
+     `aria-controls`, the one shown filled (`.current`), built with
+     `components.js`' `button`;
+     `style.css` scopes `.page-link`'s folding below 900 px to `.page-switch`,
+     so that the row keeps its names at 390 px, as `.login-way` does,
+     and no name is cut short by `.page-link-label`'s "…";
+   - **Connection** (`.server-section`, `role="tabpanel"`, the form):
+     the name, the LAN and remote addresses, Open at start, notifications where
+     the app has push, when the fingerprint is asked; the message line;
+     Cancel and Save, off while the form holds what is stored, compared field
+     by field at each input, as the server's forms are;
+     then, after the rule, Remove server with its line (`fillRemove`, F34);
+     the draft is the form's, so it outlives a switch;
+     while it differs, Connection's tab carries the "changed here" mark,
+     AP UnsavedMarks' disk in amber (`problem.unsaved` its name),
+     drawn by a new builder of `components.js`, `signEl(kind, state)`,
+     beside `markEl`, from `SIGNS`, as `src/shared/icon.tsx`'s `Sign` draws it,
+     its row in `docs/ui.md` ("How the page is built");
+   - **Login** (no form): what `fillFacts` writes of the session and the keys,
+     in place and drawn again only where it changed:
+     the session with Sign out, and while the server does not answer its line
+     of D112-A (Block 21); the kept login with its key's id and Turn off;
+     Store login (step 8); each key and session left or pending, with Show in
+     My profile for a key; each acts at once, and none touches Connection's
+     draft; while a key or a session is left or pending there, Login's tab
+     carries a dot, named for a screen reader (`connect.tab.leftMark`);
+   - **Certificate** (no form): `connect.html`'s `#cert-dialog` becomes the
+     template `tpl-cert`, its rows the same, its ids turned into classes,
+     cloned here and filled by `fillCert` (today's `showCert`), drawn again
+     only where it changed: the address, the subject, the issuer or
+     "self-signed", the names, the validity, the fingerprint and since when it
+     is trusted; where the server does not answer, the pinned fingerprint and
+     since when (`connect.certPinned`), or, where none is pinned, that it shows
+     once the server answers (`connect.certWaiting`); over plain HTTP, that
+     there is none (`connect.certPlain`);
+     the dialog, Certificate…, its line and `#cert-close`'s listener go,
+     with `connect.certTitle`, `connect.certButton` and `connect.certLine`.
+
+   The toast that covered the foot at 390 px is looked at again.
+8. Store login (taken as written): in the Login section, where the app holds a
    session there and keeps no login (`s.session`, not `s.login`),
-   "Store login" calls the connect page's new `keep(id, url)` (version 6)
+   "Store login" calls the connect page's new `keep(id, url)` (version 7)
    at the probe's address;
    the bridge makes the key with the session held and asks the fingerprint once,
    as `login.keep` does for a server's page (`Bridge.kt` `keep`: the user from
    `GET /api/v1/me`, the key from `POST /api/v1/users/{name}/tokens`,
-   sealed under the app key), a prompt not passed revoking it again;
+   sealed under the app key, its revoke code beside its id, D112-A),
+   a prompt not passed revoking it again;
    off while the server does not answer, its title saying why, as Show in My
    profile is (`showsKeys`); never over plain HTTP outside the private ranges
    (D36-A); its toast says the login is kept.
@@ -3251,7 +3827,7 @@ after Blocks 21 and 20.
    `SwipeRefreshLayout` (`androidx.swiperefreshlayout`,
    `app/android/gradle/libs.versions.toml`), on while the connect page is shown
    and scrolled to its top, which sends the page the event `refresh`
-   (`Bridge.event`, version 6), the native spinner stopping as it is sent;
+   (`Bridge.event`, version 7), the native spinner stopping as it is sent;
    `connect.js` `onBridgeEvent` runs what ↻ runs, `#probe-btn` turning meanwhile.
 10. A page that fails to load (D108-A, F48):
     `MainActivity`'s `Client.onReceivedError` for the main frame of the opened
@@ -3265,39 +3841,53 @@ after Blocks 21 and 20.
     server its last probe did not find, and opens My profile only where the
     server answers now, else the toast, the button turned off with its title;
     Turn off, Sign out or Remove that the server did not answer probe it again;
-    a tap keeps the last probe (D109-A).
+    a tap keeps opening on the last probe (D109-A).
 11. D96-A on this menu: "App settings" without "…"; "Add server…" keeps it.
 12. The texts: every new key in all six `ui/i18n/<lang>.json` (`connect.*`: Exit,
     the version row's name, Store login with its title and toast, the question
-    of a panel with changes), FR/IT/NL/PL machine-translated and marked;
+    of a panel with changes, the sections, their tabs and Login's mark, the
+    certificate's three lines), FR/IT/NL/PL machine-translated and marked,
+    and the keys that go removed from all six;
     `strings.xml` for Store login's prompt where `login_keep_title` does not serve.
-13. The contract's version 6, with Block 21's
+13. The contract's version 7, after Block 21's 6
     (`docs/app.md`, `res/raw/bridge.js`, `Origins.kt`, `tools/ui-test/fake_bridge.js`):
     `about()`, `exit()`, `keep(id, url)`, the event `refresh`,
     the handover `#unreachable=<id>`.
-14. Tests: `test_connect.py` over the fake bridge at version 6:
-    ☰ in the header with its entries in order, the version row copied with the
-    toast and ☰ closed, Exit's call, none of the app's entries without its call;
+14. Tests: `test_connect.py` over the fake bridge at version 7:
+    ☰ in the header with its entries in order, the version row's tap copying the
+    whole version (the fake bridge's clipboard) and closing ☰,
+    Exit's call, none of the app's entries without its call;
     the cards wider than 640 px at 1100 and the page's width at 390;
     the servers in the collation's order (case, accents, "server 9" before
     "server 10"); `history.back()` closing ☰, then a panel,
     a panel with changes asking once, the bare list leaving no entry;
-    Save and Cancel off until a change and off again when it is undone, ✕;
-    the part below Save beside Remove server;
+    the sections: Connection first, the tabs' roles and names, no name cut
+    short at 390 px in any of the six languages, a switch keeping
+    what is typed, Connection's mark while it differs and gone when it is undone,
+    Back and ✕ from Login and from Certificate with Connection changed showing
+    Connection with the question, the focus on it,
+    Save and Cancel off until a change and off again when it is undone, ✕,
+    Login's dot while a key or a session is left and gone when none is,
+    Login's and Certificate's actions without a Save;
+    `test_connect_certificate` reading the Certificate section in place of the
+    dialog, with the pinned fingerprint while the server does not answer
+    and the line of plain HTTP;
+    the cases that use the panel's lines opening their section first;
     Store login's call, and off while the server does not answer;
     the `refresh` event probing every server;
     `#unreachable=<id>` marking its server, with the toast;
     Show in My profile probing first;
-    each measured at 390 px in the six languages.
+    each measured at 390 px in the six languages, the axe check on the panel.
     The emulator suite: Exit leaving the recent apps; Back from a panel and from
     the bare list; a page whose load fails, the rig's `serve` stopped after the
     probe, back at the list; Store login with one prompt and the key in the audit;
-    the pull down.
+    the pull down; `SessionsTest`'s Turn off and Remove, and the cases Block 21
+    adds, opening their section first.
     `OriginsTest.kt` for the new handover.
 15. `docs/app.md` (the connect page: ☰, the version row, Exit, Back, the order,
-    a server's settings, Store login, pull down, a page that fails to load;
-    version 6), `docs/ui.md` ("In the apps"),
-    `docs/user-manual.md` where it tells the list.
+    a server's settings and their sections, Store login, pull down, a page that
+    fails to load; version 7), `docs/ui.md` ("In the apps"; `signEl` in "How the
+    page is built"), `docs/user-manual.md` where it tells the list.
 16. The fragments, under the headings COMMIT.md 5.2 gives them.
 
 **Verification:**
@@ -3305,32 +3895,36 @@ after Blocks 21 and 20.
 the touched UI test files (`test_connect.py`, `test_copy.py`) in the four cases,
 at 1100 and 390 px;
 `MASSIMO_ENV_FILE=/dev/null go test ./internal/server/...`
-for the embedded files (`TestUIPage`, `TestUITranslations`);
+for the embedded files (`TestUIPage`, `TestUITranslations`, `TestUIScriptGlobals`);
 `gofmt -l .` empty, `go vet` for linux, windows and darwin;
 the Gradle tasks; `make app-emulator-test`; `GUIDELINES/shared/tools/check`.
 The owner's phone check to propose at the block's completion gate,
 each step after what it needs:
 
-1. ☰ at the logo's right: the version row first, a tap copying the version with
-   the toast "Copied" and closing ☰; the entries in order, App settings without
-   "…";
+1. ☰ at the logo's right: the version row first, a tap copying the version and
+   closing ☰; the entries in order, App settings without "…";
 2. a password sign-in at A, its login kept and asked at each start,
    back to the list, Exit: the app gone from the recent apps;
-   started again: the list; a sign-in at A as that user,
-   and A's audit ending the session Exit dropped;
+   started again: the list; A's audit ending the session Exit dropped
+   at that start's contact, by its code;
 3. the phone turned to landscape: the cards wider than before;
    the servers sorted by name;
 4. ☰ opened, Back: ☰ closed; A's settings opened, Back: closed;
    A's name changed, Back: the question, Stay, Back again, Discard;
    Back from the bare list: the app leaves;
-5. A's settings: Save and Cancel off until a change, and off again when it is
-   undone; ✕ closing them; the certificate and the keys below Save,
-   beside Remove server;
-6. a password sign-in at B with "Enable login by fingerprint" off, back to the
-   list, Store login in B's settings: one prompt, the login kept;
+5. A's settings: Connection first; Save and Cancel off until a change,
+   and off again when it is undone; a name changed, Login opened and Connection
+   again: the name kept, Connection's tab marked;
+   Login shown, ✕: Connection shown with the question;
+   Remove server under Connection's rule;
+6. A's Login section: the session with Sign out, the kept login with its key's id
+   and Turn off; A's Certificate section: the facts the dialog showed, in place;
+   A stopped: the pinned fingerprint;
+7. a password sign-in at B with "Enable login by fingerprint" off, back to the
+   list, Store login in B's Login section: one prompt, the login kept;
    B's page: the new key tagged "this device's key" under My profile;
-7. the list pulled down: every server checked again, as ↻ does;
-8. A's `serve` stopped: within seconds, Show in My profile: the toast "not
+8. the list pulled down: every server checked again, as ↻ does;
+9. A's `serve` stopped: within seconds, Show in My profile: the toast "not
    reachable", no WebView error page; a tap on A's row: back at the list,
    A not reachable, the reason said.
 
@@ -3340,14 +3934,20 @@ The points taken as written for the server's page,
 D96-A, D97-A, D98-A, D104-A and D107-A
 (the Analysis, "The menu and the cards"),
 in one pull request on `claude/mobile-menu-cards`, from `main`, for 0.18,
-after Block 21.
+after Blocks 21 and 19, the last of the three:
+it waits on D115 and on AP ErrorCodes' Block 6 (metaworx/massimo#489).
 Its parts are shared, so the server's page in a browser changes too:
 whoever changes `src/chrome/`, `src/signin/`, `src/shared/`, `src/profile/`,
 `components.js` or `login.js` then is told before the block starts,
 and whichever lands second merges `main` first.
-AP KeyLife v1.0's Block 1 shows a key once with the shared copy part,
-which overlaps this block's D97-A (the copy's toast) and D104-A (My profile's
-failures): whichever of the two lands second merges the other's.
+AP KeyLife v1.0's Block 1, on `main` since metaworx/massimo#477,
+shows a key once with the shared copy part, so D97-A reaches that box too.
+AP ErrorCodes' Block 6 (metaworx/massimo#489, open) turns `copied` into
+`showBubble(text, ctrl)`, the word above the control,
+where D97-A puts the page's toast: D115 asks which, before this block starts,
+and that plan's session is told of the answer.
+The list's version row (Block 19) calls `copied()`, so this block's copy word
+reaches it too.
 
 1. The server's ☰ (taken as written, `src/chrome/Menu.tsx`):
    the version row, the pages, Personal settings, a rule, App settings,
@@ -3368,6 +3968,8 @@ failures): whichever of the two lands second merges the other's.
    (`data-copied` and its CSS go); the hidden live region `#copy-status` goes,
    the toast being a polite live region of its own (`partials/toast.html`,
    and its copy in `connect.html`); on the connect page as on a server's.
+   With D115-A, where AP ErrorCodes' Block 6 has landed, the same through
+   `showBubble` without a control, at the window's foot, in place of the toast.
 5. The cards' server line (taken as written, `src/signin/Server.tsx`, `Card.tsx`):
    `ServerLine` above `#login-title`: the name, then the address and ⓘ in one
    element that does not break between them;
@@ -3403,6 +4005,7 @@ failures): whichever of the two lands second merges the other's.
     FR/IT/NL/PL machine-translated and marked.
 13. Tests: `test_main_menu.py` (the order in the app and in a browser, one rule
     there; the version row's tap: copied, the toast, ☰ closed);
+    `test_connect.py` (the list's version row: the same word once ☰ closed);
     `test_copy.py` and `test_settings_copy.py` (the toast in place of the word);
     `test_login.py` and `test_first_owner.py` (the line above the title, the
     address and ⓘ on one line at 390 px in the six languages, the facts' icons,
@@ -3432,6 +4035,9 @@ each step after what it needs:
 
 1. A's ☰: the order, the two rules, no "…";
    the version row's tap copying with the toast and closing ☰;
+   the list's version row the same;
+   at 390 px on Android 13 or later, the copy's word beside the system's
+   clipboard preview at the screen's foot, both readable;
 2. A's sign-in card: the server's line above the title,
    the address and ⓘ on one line; ⓘ's two facts copied by their icons,
    the toast each time;
@@ -3448,12 +4054,19 @@ each step after what it needs:
 
 ### Block 21: The sessions
 
-D100-A, D102-A, D103-A's two test cases and D105-A in the app,
-D106-A in the server (the Analysis, "The sessions held",
-"A logout the server refused", "The list while a server does not answer",
-"A cancelled request at the server"),
+D100-A, D102-A, D103-A's two test cases, D105-A and D112-A's app half in the app,
+D106-A and D112-A's server half in the server
+(the Analysis, "The sessions held", "A logout the server refused",
+"The list while a server does not answer", "A cancelled request at the server"
+and "The gate of v1.5"),
 in one pull request on `claude/mobile-sessions-held`, from `main`, for 0.18,
-the first of v1.5's three; its first commit the server's, D106-A's, of its own.
+the first of v1.6's three;
+its first two commits the server's, D106-A's and D112-A's, each of its own
+(D113-A).
+Before it starts the session "Open Items" is told (D113-A), with the list of
+what AP KeyLife's blocks would change (the Analysis, "AP KeyLife meets it"),
+and so are AP ServerBackup's session (the migration's number) and AP ErrorCodes'
+(`userFail`); the block takes their blocks as `main` then has them.
 
 1. A cancelled request (D106-A, F46): `internal/server/users_api.go`:
    `userFail` answers a context that ended with words of its own,
@@ -3466,31 +4079,139 @@ the first of v1.5's three; its first commit the server's, D106-A's, of its own.
    before the store answers is audited with the new words, not the password
    check's; a password check or hash that waited stays `503` as before.
    `docs/api-v1.md` where it says what `503` means.
-2. The sessions with the process (D102-A): `MassimoApp`, an `Application` of the
+   AP ErrorCodes' metaworx/massimo#488 changes `userFail`, `passwordBusy`
+   (then `codePasswordBusy`) and `loginMode`: whichever lands second adapts.
+2. The revoke code at the server (D112-A), a commit of its own:
+   - `internal/store/migrations/<NNNN>_token_revoke.sql` and its down part,
+     the number after `main`'s last when the pull request is opened:
+     0100 where none of metaworx/massimo#481, #482 and #492 has merged,
+     renumbered at the merge of `main` where one merges first
+     (`loadMigrations` refuses a gap);
+     `tokens.revoke_hash`, TEXT, and a unique index on it where it is not NULL,
+     `min_reader` 24, additive, as `0025_token_parent.sql`;
+     `store.sql` written again (`TestStoreSQL`);
+   - `internal/store/tokens.go`: `RevokeCode(secret)`, the hex of
+     SHA-256(`"massimo revoke v1"` ‖ secret); `revoke_hash`, `HashToken` of the
+     code, written by `addToken` and `AddKeySession` (and by KeyLife's `AddKey`
+     and `RekeyToken`, where they have landed: the list in the Analysis,
+     "AP KeyLife meets it"); none by `AddTokenHash` nor by the bootstrap
+     (`keyIn`); `Token.RevokeKept`, read with the row;
+     `TouchToken` takes a revoke hash and keeps one already written;
+     `RevokeByCode(ctx, code, keep)`, which revokes through `RevokeToken` the
+     live token whose `revoke_hash` the code's hash is, but a token of the hash
+     `keep`, the settings file's, and returns what it matched;
+   - `internal/server/auth.go`: `resolve` hands `touch` the secret,
+     and `touch` writes the revoke hash of a row without one at that use,
+     whatever `touchEvery` says, but for the settings file's key
+     (`settingsKey`'s rule), which gets none and is touched at most once an
+     hour as before;
+   - `POST /api/v1/tokens/revoke` (`server.go`, `none`), beside
+     `deleteMyToken` in `login_api.go`:
+     without a store, `204` at once;
+     the address's lockout (`lockedOut`, its address part), `429` with
+     `Retry-After`;
+     the body `{"code"}`, 64 lower-case hex digits, else `400` with the new code
+     `revoke_code_malformed` (`errcodes.go`, its six texts
+     `err.revoke_code_malformed`);
+     `RevokeByCode` with the settings file's hash as `keep`;
+     `204` in every other case, and no count toward the lockout, matched or not;
+     its action `token.revoke_code` (`actions`, in `noCommand`, a `change` line in
+     `changeLines`, its six texts `log.action.token.revoke_code`):
+     a match writes its row, the token as its target and its user as its
+     subject, its change line and an Info line "by code";
+     a code that matches nothing, one of the settings file's key and a malformed
+     body write no row of their own (`auditInfo.skip`), and are counted per
+     address and minute as refused requests are (`refusals.note`),
+     with no change line and no Info line; no row nor line carries the code;
+   - Go tests: `tokens_test.go` (the code of a fixed secret, the vector the app's
+     test shares; the column written at the making of a session, a key and a
+     key's session, none for `AddTokenHash`; `RevokeByCode` revoking the live
+     token and a key's sessions, nothing for an ended token, an unknown code or
+     the hash `keep`); `bootstrap_test.go` (the file's key, new and taken from an
+     integration's user, gets no `revoke_hash`);
+     the migration's (`TestMigrationFilesNamed`, `TestStoreSQL`,
+     `TestMigratesReleasedStores`, `TestDowngradeFromTheStoresDownParts`);
+     a route test of its own, `revoke_code_test.go`: a session revoked by its
+     code and refused after, a key revoked with its session, `204` for a code
+     that matches nothing and for one taken already, the token in the store
+     unchanged then; a key made by `POST …/tokens` and then named in the settings
+     file left live by its code, `204`; `400` for a malformed body with its code;
+     `429` while the address is locked out, no failure counted;
+     30 posts of codes that match nothing making one row of the minute,
+     no row of `commands` and no line of the log;
+     a match's row, change line and Info line, none of them with the code;
+     a server without a store answering `204`;
+     the fill at first use: a token made without the column revoked by its code
+     after one request; the settings file's key never given one, and touched at
+     most once an hour (no bypass of `touchEvery`);
+     `TestOpenAPICoversRoutes`, `TestAuditOfEveryWrite`,
+     `TestEveryActionHasALine`, `TestErrorCodes`;
+   - `docs/api-v1.md` (beside `DELETE /api/v1/me/token`: the route, its `204`,
+     its `400`, the lockout, what is audited; the row of
+     `revoke_code_malformed` in "Error codes"), `docs/api-v1-openapi.yaml` with
+     `make api-types`, `docs/store.md` (the column in section 5's `tokens`, beside
+     `parent_id`; the migration among the migrations).
+3. The sessions with the process (D102-A): `MassimoApp`, an `Application` of the
    app's own named in the manifest, holds the sessions kept in memory
    (`SessionKeeper`) and what was checked of them (`Sessions.checked`, moved into
    a holder the activity's `Sessions` takes);
    `MainActivity.onCreate` takes both from it, so that an activity made anew
    (the phone's dark mode or language, the app's Appearance) keeps them;
    `configChanges` stays as it is, AppCompat's night mode needing the new activity.
-3. The session held, recorded (D102-A): `ServerStore.kt`: a server's `held`,
-   `{user, id, created_at}` of the session the app holds there,
-   written where a check learns its id (`Sessions.look`),
+4. The session held, recorded (D102-A, D112-A): `ServerStore.kt`: a server's
+   `held`, `{user, id, created_at, code}` of the session the app holds there,
+   its code worked out from the secret, written where a check learns its id
+   (`Sessions.look`), and only where the check found a session
+   (`Checked.kind` `session`): a key the user typed into the card, which the page
+   holds as its token, gets no `held` and no code;
    cleared where the session ends, goes into `unended` or is replaced;
-   no secret; dropped where the node changes, as `unended` is;
-   read only for `save`, never shown.
+   dropped where the node changes, as `unended` is;
+   kept in the file alone (`fileJson`), never given to the page.
    At the process's start (`MassimoApp.onCreate`, before any activity)
    each `held` whose session the app no longer holds, none in memory,
-   moves into `unended`, which the next session the app holds there for that user
-   ends (`KeysLeft`); a sealed session, still held, stays;
+   moves into `unended` with its code; a sealed session, still held, stays;
    Exit (Block 19) moves them so at once.
-4. A fingerprint tap's session checked at once (D102-A, F43): `Bridge.kt`
+5. The revoke codes in the app (D112-A): `RevokeCode.kt`, `RevokeCode.of(secret)`;
+   - the kept login's code in its record beside `keyId` (`LoginStore.kt`
+     `KeptLogin`), written at the key's making (`AppKey.kt` `keep`) and at an
+     unseal where it is missing (`LoginStore.open`), so that a login kept before
+     this version has one from its next unseal;
+     none for a key the user typed into the card;
+   - `KeyLeft` and `SessionLeft` carry an optional `code` and `taken`:
+     `Sessions.leave`, `Revoker`'s keys left, `forgetLeavingKey` and `Remove`
+     write the code they have;
+   - `ServerApi.revokeCode(base, fp, code)`: `POST /api/v1/tokens/revoke`
+     without `Authorization`, the pinned fingerprint as for every call;
+   - the connect page's `session(id, url)` posts the server's codes at that
+     address before its check (`Sessions.look`), and `open` at the address it
+     opens (a server opened at the start, D43-A), in the background:
+     `204` marks the entry `taken` and drops its code; `404` drops the code, the
+     entry staying as today; `400` drops it, logged; a broken connection, `429`
+     and `5xx` keep it; `KeysLeft.revoke` drops a `taken` entry its list no longer
+     has, and revokes one it still has;
+   - any answer but `204`, `400`, `429` and `5xx` (`404` first, and `401`,
+     `403`, `405`, `409`, a redirect, a proxy's page of `200`) is a server that
+     takes no codes: the code dropped, the entry staying as today;
+   - Remove: the server's codes posted where it answers, and those still to post
+     kept in `gone`, a file of its own (`gone.json`,
+     `{id, node, lan, remote, fp, codes}` per server),
+     its addresses probed by the adapter at the app's start and each time the
+     list is shown, and the codes posted only where the probe finds the server
+     at its node (`Addresses.answering`);
+     each dropped on `204` or on a server that takes none,
+     a session's 30 days after it was left,
+     every code 90 days after the Remove at the latest (D116-A);
+   - `held` and every code go to the file alone (`fileJson`); `toJson`, which the
+     page and Remove's answer see, carries `pending: true` on an entry with a
+     code, no code, no `held` and no `taken` entry.
+6. A fingerprint tap's session checked at once (D102-A, F43): `Bridge.kt`
    `openKept` checks the session it made (`Sessions.look`, one `GET /api/v1/me`)
-   as `setToken` checks a page's, its id learnt before the page opens,
+   as `setToken` checks a page's, its id and code learnt before the page opens,
    the keys and sessions left there revoked as at any check.
-5. `Sessions.look` logs what it swallows (D102-A): a server's failure and a broken
-   connection go to the log as `end` writes them (`what`), without any secret.
-6. No logout the server refused (D100-A, F41): `Sessions.kt`: `Checked` gains the
+7. `Sessions.look` logs what it swallows (D102-A): a server's failure and a broken
+   connection go to the log as `end` writes them (`what`), without any secret,
+   and so does a code's post, without the code.
+8. No logout the server refused (D100-A, F41): `Sessions.kt`: `Checked` gains the
    key a session was made from, `GET /api/v1/me`'s `token.key_id`
    (`ServerApi.Me.keyId`), or the kept key's id where `login.fingerprint` made it;
    `put` drops a session that one made from the same key replaces without
@@ -3505,7 +4226,7 @@ the first of v1.5's three; its first commit the server's, D106-A's, of its own.
    D100-A's "the server ended it itself" covers these too, at the same `401`,
    which forgets the session with no logout sent (`Sessions.look`,
    the page's `setToken(null)`).
-7. D103-A's two test cases (F44; no fix):
+9. D103-A's two test cases (F44; no fix):
    in the emulator suite, Turn off with the rig's `serve` stopped, the key left;
    the server started, Show in My profile, a password sign-in:
    the toast `profile.keyRevokedAtSignIn` over My profile, and the key not marked;
@@ -3513,45 +4234,80 @@ the first of v1.5's three; its first commit the server's, D106-A's, of its own.
    `setToken` answering `{revoked: [id]}` at once, before My profile reads its
    list: the toast, and no mark.
    Each seen failing with the toast's call undone.
-8. The list while a server does not answer (D105-A, F42): `connect.js` `fillRow`:
-   the badge "signed in as …" grey while the probe's state is neither `lan` nor
-   `remote`; `fillFacts`: the session's line says then what Sign out does,
-   as D110 settles it (with D110-A, the words of a session left);
-   both drawn again as the state changes.
-9. The texts: every new key in all six `ui/i18n/<lang>.json`,
-   FR/IT/NL/PL machine-translated and marked.
-10. The contract's version 6, with Block 19's (`docs/app.md`, `res/raw/bridge.js`,
-    `tools/ui-test/fake_bridge.js`), the first to land raising the number:
+   With D112-A a key left with its code is taken at the probe that finds the
+   server, before the sign-in, and the toast then has nothing to say:
+   the emulator case keeps its login as one kept before this version,
+   its record without a code, so that the sign-in still revokes the key,
+   as the toast needs; a second case lets the code take it, and no toast shows.
+10. The list while a server does not answer (D105-A, F42; D112-A):
+    `connect.js` `fillRow`: the badge "signed in as …" grey while the probe's
+    state is neither `lan` nor `remote`; `fillFacts`: the session's line says
+    then that Sign out ends the session there the next time the app reaches the
+    server (`connect.sessionDown`); a key or a session left `pending` says it
+    ends then (`connect.keyPending`, `connect.sessionPending`), one without a
+    code in today's words; the toasts of Sign out, Turn off and Remove that left
+    a code say so (`connect.signedOutPending`, `connect.loginOffPending`,
+    `connect.removedPending`); `checkSession` reads the list again where the
+    server had a code pending, so that a line taken goes;
+    `fillFacts`' key (`connect.js:616`) gains whether the server answers,
+    which over plain HTTP nothing else in it tells;
+    all drawn again as the state changes.
+11. The texts: every new key in all six `ui/i18n/<lang>.json`,
+    FR/IT/NL/PL machine-translated and marked.
+12. The contract's version 6 (`docs/app.md`, `res/raw/bridge.js`,
+    `tools/ui-test/fake_bridge.js`), the first of v1.6's two, Block 19 taking 7:
     a server's `held`; `unended` fed at a new process;
-    a fingerprint tap's session checked.
-11. Tests: the JVM tests: `SessionKeeperTest.kt` and `SessionsTest.kt`
-    (one holder over two activities' `Sessions`; `held` written at a check,
-    cleared at an end, moved into `unended` at a new process with nothing in
-    memory, kept where sealed; `Checked`'s key; no logout for a session the same
-    key replaced or the revoked key ended; `look`'s log, without a secret),
-    `ServerStoreTest.kt` (`held` kept by `save`, dropped with the node),
-    `KeysLeftTest.kt` (a session moved from `held` revoked at the next session),
-    `RevokerTest.kt`;
+    an entry's `pending`; the answers of `signOut`, `forget`, `forgetAll` and
+    `remove` saying what waits for its code; a fingerprint tap's session checked.
+13. Tests: the JVM tests: `SessionKeeperTest.kt` and `SessionsTest.kt`
+    (one holder over two activities' `Sessions`; `held` written at a check with
+    its code, cleared at an end, moved into `unended` with its code at a new
+    process with nothing in memory, kept where sealed; `Checked`'s key; no logout
+    for a session the same key replaced or the revoked key ended; `look`'s log,
+    without a secret or a code),
+    `ServerStoreTest.kt` (`held` and the entries' `code` and `taken` kept by
+    `save`, dropped with the node; `toJson` and Remove's answer with no `held`,
+    no code and no `taken` entry, and `pending: true` where a code waits;
+    `gone.json` kept, and a code dropped after 30 days for a session and 90 days
+    after the Remove for any);
+    `SessionsTest.kt` also: a key typed into the card and checked gets no `held`
+    and no code, and nothing of it lands in `unended` after a new process or
+    after Exit;
+    `KeysLeftTest.kt` (a session moved from `held` revoked at the next session;
+    a `taken` entry dropped where the list has it not, revoked where it has it),
+    `RevokerTest.kt` (Turn off, Forget all and Remove leaving their codes),
+    `RevokeCodeTest.kt` (the vector of `tokens_test.go`),
+    `ServerApiTest.kt` (`revokeCode` without `Authorization`; `204`, `400`,
+    `429`, `5xx` and a broken connection, and `401`, `403`, `405`, `409`, a
+    redirect and a page of `200` taken as `404`),
+    a JVM case of `gone`: a probe that finds another node at a removed server's
+    address posts no code,
+    `LoginStoreTest.kt` (the code beside `keyId`, written at an unseal);
     the emulator suite: a password sign-in at a server asked at each start,
     the process ended after Home (`am kill`, as Android does), the app started,
-    a sign-in as that user, and the first session ended in the audit;
+    and the first session ended in the audit at that start's contact, by its code;
     the night mode turned on (`cmd uimode night yes`) while signed in,
     and still signed in; a fingerprint tap, the rig's `serve` stopped at once,
-    Turn off, the server started, a sign-in, and that session ended;
-    Turn off with a session made from the key, and no refused `logout`
-    in the audit; D103-A's case;
-    the UI suite: D105-A in `test_connect.py` at 390 px in the six languages,
-    and D103-A's case.
-12. `docs/app.md` ("The login by fingerprint": the sessions held, a process that
-    ends, Exit; version 6), `docs/ui.md` ("In the apps": the grey badge,
-    the session's line), `docs/api-v1.md` (step 1), `docs/user-manual.md`.
-13. The fragments, under the headings COMMIT.md 5.2 gives them:
-    the server's of its own, Fixed.
+    Turn off, the server started, ↻, and the key and the session ended by their
+    codes; Sign out with the server stopped, the server started, ↻, the session
+    ended; Remove with the server stopped, the server started, the app started,
+    the session ended; Turn off with a session made from the key, and no refused
+    `logout` in the audit; D103-A's case;
+    the UI suite: D105-A's and D112-A's lines in `test_connect.py` at 390 px in
+    the six languages, over HTTPS and over plain HTTP (the line of a server down
+    shown there too), a pending entry taken at a probe, and D103-A's case.
+14. `docs/app.md` ("The login by fingerprint": the sessions held, a process that
+    ends, Exit, the revoke codes and `gone`; version 6), `docs/ui.md` ("In the
+    apps": the grey badge, the session's line, the pending lines),
+    `docs/api-v1.md` (steps 1 and 2), `docs/user-manual.md`
+    (what Sign out, Turn off and Remove do while a server does not answer).
+15. The fragments, under the headings COMMIT.md 5.2 gives them:
+    the server's of their own, D106-A's under Fixed, D112-A's under Added.
 
 **Verification:**
 `make ui`;
-`MASSIMO_ENV_FILE=/dev/null go test ./internal/server/...`;
-`go test -race -count=1 -timeout 30m ./internal/server/`;
+`MASSIMO_ENV_FILE=/dev/null go test ./internal/server/... ./internal/store/...`;
+`go test -race -count=1 -timeout 30m ./internal/server/ ./internal/store/`;
 `gofmt -l .` empty, `go vet` for linux, windows and darwin; `make cross-check`;
 `make ui-check`; the touched UI test files (`test_connect.py`) in the four cases,
 at 1100 and 390 px;
@@ -3560,34 +4316,36 @@ The owner's phone check to propose at the block's completion gate,
 the server's audit read after each, each step after what it needs:
 
 1. at A, asked at each start: a password sign-in; the app swiped from the recent
-   apps and started again; a sign-in as that user: the first session ended
-   within a second (F47);
+   apps and started again: the first session ended within seconds, by its code
+   (F47);
 2. at A, asked at each start, signed in: the phone's dark mode turned on,
    then its language changed: still signed in each time, no prompt;
 3. at A, asked at each return: a fingerprint tap; within seconds A's `serve`
-   stopped, then Turn off; A started, a sign-in: the session left ended (F43);
+   stopped, then Turn off; A started, ↻: the key and the session ended,
+   no sign-in needed (F43);
 4. at B: two fingerprint logins one after the other, then Turn off while signed
    in: no refused `logout` in B's audit (F41);
 5. A frozen while a session is held: the list's "signed in as …" grey;
-   the settings' session line saying what Sign out does then; Sign out;
-   A thawed, a sign-in: the session ended;
+   the settings' session line saying Sign out ends it the next time the app
+   reaches A; Sign out; A thawed, ↻: the session ended, its line gone;
 6. A frozen, a Revoke under My profile given up after the limit; A thawed:
-   its audit says the client went away, not "too many password checks" (F46).
+   its audit says the client went away, not "too many password checks" (F46);
+7. A stopped, Remove A with its login kept; A started, the app started again:
+   the key and the session ended, A no longer in the list.
 
 ## Proposed commit message
 
 The revision's registration, a commit of its own on `main`:
 
 ```
-chore(aps): +MobileApp v1.5
+chore(aps): +MobileApp v1.6
 
-The owner's check of Blocks 15 to 17 on the phone found seven points, F41 to F47, and the run that looked again at F44 found F48; with the owner's decisions on them, D90 to D108, D108-A as recommended, they become Blocks 19 to 21. Blocks 15 to 18 are marked done, and every NOTE of the plan is folded into it, the run NOTEs too, at the owner's word.
+At v1.5's gate the owner proposed a code that only revokes a token the app forgets, and sections in a server's settings; with the decisions D109-A to D114-A, taken as recommended, Block 21 builds the revoke code, its server half in a commit of its own, and Block 19 the sections, the certificate dialog's facts in place. A review before the revision was presented is folded in: D116-A, taken under PLAN++, bounds a removed server's codes to 90 days, and the blocks run 21, 19, 20. D115, found writing it, asks before Block 20 how a copy's word meets AP ErrorCodes' bubble.
 
 Key changes:
-- GUIDELINES/wip/2026-11-09_02-30_AP_MobileApp_android_ios_apps.md: v1.5: Blocks 15 to 18 done, each built block with what its run found; D84-A and D85-A to D108-A recorded, D109 to D111 open; the decisions on keys handed on by v1.4 marked as taken over by their own plan; the fourth check's findings in the Analysis with their causes; Blocks 19 to 21; the table of files pruned of Blocks 15 to 18.
-- GUIDELINES/wip/: the plan's 27 NOTEs removed, their substance in the plan.
+- GUIDELINES/wip/2026-11-09_02-30_AP_MobileApp_android_ios_apps.md: v1.6: D109-A to D114-A and D116-A recorded, D110 settled by D112-A, D115 open; the revoke code and the sections in the Analysis, read in the code, with the migration's number, what the route writes and what AP KeyLife's blocks would change; Block 19 with the three sections, Block 21 with the revoke code's server commit and app half and their tests; the order 21, 19, 20; the contract's versions 6 and 7; AP KeyLife named by its path; sessions bound to the phone among the plans to come.
 
-File-revision-v1: GUIDELINES/wip/2026-11-09_02-30_AP_MobileApp_android_ios_apps.md::v1.5::2026-11-27::TL;DR, Discussion, Analysis, Implementation Plan, Proposed commit message, Change History::Blocks 19 to 21, every NOTE folded in
+File-revision-v1: GUIDELINES/wip/2026-11-09_02-30_AP_MobileApp_android_ios_apps.md::v1.6::2026-11-28::TL;DR, Discussion, Analysis, Implementation Plan, Proposed commit message, Change History::revoke code and sections in a server's settings
 Assisted-by: claude-code:claude-opus-5-5
 ```
 
@@ -3599,10 +4357,13 @@ The blocks' commits still to come:
 10. `docs(app): The apps' documents`
 11. `feat(app): Push through UnifiedPush`
 19. `feat(app): The list's ☰ in its header, with Exit, Store login and pull down`,
+    `feat(app): A server's settings in three sections, its certificate in place`
     and `fix(app): A page that fails to load returns to the list`
 20. `feat(ui): The menu's app entries last, every copy in the toast, one eye for a new password`
 21. `fix(server): A cancelled request is not a password check that waited`,
+    `feat(api): POST /api/v1/tokens/revoke ends a token by its revoke code`,
     then `fix(app): A session the app held is ended after its process, and no logout the server refused`
+    and `feat(app): A token the app forgets is ended by its code at the next contact`
 
 Blocks 5 and 6 commit nothing but `app/README.md`'s sections.
 
@@ -3674,3 +4435,31 @@ Blocks 5 and 6 commit nothing but `app/README.md`'s sections.
   "NOTE MobileApp v1.4: phone check blocks 15 to 17",
   "NOTE MobileApp v1.4: decisions after the phone check",
   "NOTE MobileApp v1.4: phone check F44".
+- v1.6 (2026-11-28): v1.5's open points decided at its gate, each as recommended:
+  D109-A, a tap stays immediate; D110 settled by D112-A, D105-A's words holding
+  where the server knows the revoke route; D111-A revised, a server's settings in
+  three sections, Connection, Login and Certificate, the certificate dialog
+  removed; D112-A, a revoke code for a token the app forgets, with
+  `POST /api/v1/tokens/revoke` and `tokens.revoke_hash`; D113-A, Block 21 builds
+  it, its server half in a commit of its own, the session "Open Items" told first;
+  D114-A, sessions bound to the phone left to a plan of its own;
+  the Analysis of both read in the code, with the migration's number;
+  Blocks 19 and 21 rewritten for them, Block 20 touched where AP KeyLife's
+  Block 1 has landed and AP ErrorCodes' bubble meets it;
+  the bridge's contract versions 6 and 7 in the order the blocks run;
+  AP KeyLife v1.0 named by its path;
+  D115 open, found writing it: a copy's word, D97-A's toast or AP ErrorCodes'
+  bubble.
+  An independent review before the revision was presented, folded in:
+  D116-A, a removed server's codes dropped after 90 days at the latest,
+  taken under the owner's `PLAN++`; the order 21, 19, 20, Block 20 last;
+  a key typed into the card given no code; the route writing a row, a change line
+  and an Info line only for a match, the rest counted per minute, in an action of
+  its own, `token.revoke_code`; the settings file's key left live by a code;
+  the migration's number as `loadMigrations` takes it; a server without a store;
+  every other answer taken as `404`; `held` and the codes in the app's file
+  alone; the session's line over plain HTTP; the bootstrap's key without a code;
+  `gone` in a file of its own and posted where the probe finds its node;
+  Back and ✕ from Login or Certificate; what AP KeyLife's and AP ErrorCodes'
+  blocks meet; the missing tests and documents; the line references of today's
+  `main`.
