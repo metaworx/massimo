@@ -400,7 +400,9 @@ func (s *Server) serverBackupRoutes(api func(pattern, capability string, h func(
 	api("DELETE /api/v1/server-backup-keys/{uuid}", "owner", s.deleteServerBackupKey)
 }
 
-// sbFail maps an error of the catalogue to a status.
+// sbFail maps an error of the catalogue to a status: a copy the target
+// keeps (ErrRetained, an S3 bucket's object lock) is a conflict, not a
+// target that failed.
 func sbFail(err error) error {
 	var he *httpError
 	switch {
@@ -413,6 +415,7 @@ func sbFail(err error) error {
 		return fail(http.StatusNotFound, "%v", err)
 	case errors.Is(err, serverbackup.ErrNoKey), errors.Is(err, serverbackup.ErrNoCopy), errors.Is(err, serverbackup.ErrSameTarget), errors.Is(err, serverbackup.ErrMixedKinds),
 		errors.Is(err, serverbackup.ErrNotRetried), errors.Is(err, serverbackup.ErrHasCopies), errors.Is(err, serverbackup.ErrJobRunning),
+		errors.Is(err, serverbackup.ErrRetained),
 		errors.Is(err, store.ErrServerBackupTargetExists), errors.Is(err, store.ErrServerBackupKeyExists):
 		return fail(http.StatusConflict, "%v", err)
 	case errors.Is(err, serverbackup.ErrNotABackup):

@@ -5043,7 +5043,9 @@ The other routes of a backup, `backup.server`'s:
 - `PUT …/server-backups/{id}/copies/{target}` pushes it to the target,
   a uuid or a name, from a copy that is there;
   `DELETE` removes the copy, the file included,
-  and the backup goes from the catalogue with its last copy.
+  and the backup goes from the catalogue with its last copy;
+  `409` where the target keeps the file, such as an S3 bucket's object lock,
+  the copy staying.
 - `POST …/server-backups/{id}/copies/{target}/pull` fetches the target's copy
   to the local target, where it stays until it is deleted.
 

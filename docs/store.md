@@ -2331,7 +2331,7 @@ all with Go's standard library:
   or an answer that speaks of a lock, a retention or WORM,
   such as MinIO's for a locked version.
   The prune warns, `server backups: a copy the target keeps`, and goes on;
-  a copy deleted by hand says why.
+  a copy deleted by hand stays, the request answering `409` with why.
 - `TestS3Live` runs the target against a real store,
   where `MASSIMO_TARGET_TEST_S3_ENDPOINT`, `_BUCKET`, `_REGION`, `_KEY`
   and `_SECRET` are set, as `make target-test` sets them for its MinIO.

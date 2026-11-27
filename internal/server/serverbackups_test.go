@@ -5,6 +5,7 @@ package server
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -447,4 +448,53 @@ func TestServerBackupAPI(t *testing.T) {
 		t.Fatalf("delete a target: %d", code)
 	}
 
+}
+
+// lockedTarget is a target whose files are locked, as an S3 bucket's
+// object lock keeps them: it takes every copy and deletes none.
+type lockedTarget struct{ stubTarget }
+
+// Delete refuses, as an S3 bucket does for a locked version.
+func (lockedTarget) Delete(_ context.Context, name string) error {
+	return fmt.Errorf("lockedtest: delete %s: %w", name, serverbackup.ErrRetained)
+}
+
+func init() {
+	serverbackup.Register(serverbackup.Kind{Name: "lockedtest", Fields: []serverbackup.Field{
+		{Key: "bucket", Type: serverbackup.FieldText},
+	}, New: func(map[string]string, []byte) (serverbackup.Target, error) { return lockedTarget{}, nil }})
+}
+
+// A copy the target keeps, by an S3 bucket's object lock, is refused
+// with 409, not 502 as a target that failed, and stays in the catalogue.
+func TestServerBackupCopyRetained(t *testing.T) {
+	t.Parallel()
+	r, _ := startSB(t, time.Date(2026, 11, 27, 10, 0, 0, 0, time.UTC))
+	var added struct {
+		Target struct {
+			UUID string `json:"uuid"`
+		} `json:"target"`
+	}
+	code, text := callAPI(t, r.ts, "POST", "/api/v1/server-backup-targets", "secret", `{"name":"locked","kind":"lockedtest","config":{}}`)
+	if json.Unmarshal([]byte(text), &added); code != 201 || added.Target.UUID == "" {
+		t.Fatalf("add the target: %d %s", code, text)
+	}
+	var made struct {
+		Backup struct {
+			UUID string `json:"uuid"`
+		} `json:"backup"`
+	}
+	code, text = callAPI(t, r.ts, "POST", "/api/v1/server-backups", "secret", `{"target":"locked"}`)
+	if json.Unmarshal([]byte(text), &made); code != 201 || made.Backup.UUID == "" {
+		t.Fatalf("a backup to the locked target: %d %s", code, text)
+	}
+	code, text = callAPI(t, r.ts, "DELETE", "/api/v1/server-backups/"+made.Backup.UUID+"/copies/locked", "secret", "")
+	if code != 409 || !strings.Contains(text, "keeps the file") {
+		t.Fatalf("a retained copy deleted: %d %s", code, text)
+	}
+	if b, ok, _ := r.st.ServerBackup(t.Context(), made.Backup.UUID); !ok {
+		t.Fatal("the backup went from the catalogue")
+	} else if cp, has := b.Copy(added.Target.UUID); !has || cp.State != store.CopyThere {
+		t.Fatalf("the retained copy went: %+v", b.Copies)
+	}
 }
