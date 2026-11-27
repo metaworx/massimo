@@ -20,7 +20,7 @@ import urllib.request
 
 import pytest
 
-from helpers import named_buttons, scroll_width, show_view, wait_until
+from helpers import boxes, named_buttons, scroll_width, show_view, wait_until
 
 URL = os.environ.get("UI_TEST_URL", "http://127.0.0.1:8119/").rstrip("/")
 TOKEN = os.environ.get("UI_TEST_TOKEN", "")
@@ -128,8 +128,8 @@ def check_name_mark(page, case, form, long, submit=False):
     assert name.get_attribute("aria-describedby") == hint.get_attribute("id"), "the limit is the field's description"
     assert hint.evaluate("(el) => getComputedStyle(el).color") == colour_of(page, "--warn"), "the limit in amber"
     assert name.evaluate("(el) => getComputedStyle(el).borderTopColor") == colour_of(page, "--bad"), "the box in red"
-    box, before = name.bounding_box(), hint.bounding_box()
-    assert before["y"] + before["height"] <= box["y"] + 1, "the limit above the box"
+    box, before = boxes(page, name, hint)  # at one moment: the page may draw between two reads
+    assert before["y"] + before["height"] <= box["y"] + 1, f"the limit above the box: {before} over {box}"
     assert scroll_width(page) <= case.width, "no horizontal scroll with the limit"
     if not submit:
         return
@@ -339,7 +339,7 @@ def test_pairing_time_at_most_255(page, case, clean):
     assert secs.get_attribute("aria-describedby") == hint.get_attribute("id"), "the range is the field's description"
     assert hint.evaluate("(el) => getComputedStyle(el).color") == colour_of(page, "--warn"), "the range in amber"
     assert secs.evaluate("(el) => getComputedStyle(el).borderTopColor") == colour_of(page, "--bad"), "the box in red"
-    box, before = secs.bounding_box(), hint.bounding_box()
+    box, before = boxes(page, secs, hint)  # at one moment: the page may draw between two reads
     assert before["x"] + before["width"] <= box["x"] + 1, "the range before the box"
     assert before["y"] < box["y"] + box["height"] and box["y"] < before["y"] + before["height"], "on the box's line"
     assert scroll_width(page) <= case.width, "no horizontal scroll with the range"

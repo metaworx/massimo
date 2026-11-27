@@ -11,7 +11,7 @@ gone where that button is."""
 import json
 
 from conftest import URL
-from helpers import OPERATOR_PASSWORD, VIEWER, css_hidden, open_main_menu, show_view, wait_until
+from helpers import OPERATOR_PASSWORD, VIEWER, boxes, css_hidden, open_main_menu, show_view, wait_until
 from test_login import sign_in
 
 ORDER = ["#menu-log", "hr", "#menu-cube", "#menu-system", "#menu-maint", "#menu-info", "hr", "#menu-me", "#menu-servers", "#menu-server-settings",
@@ -45,7 +45,7 @@ def test_main_menu_entries(page, case):
             assert page.locator(sel).is_hidden(), f"{sel} not shown to the owner of a browser"
             continue
         assert page.locator(sel).is_visible(), f"{sel} shown to the owner"
-    ys = [page.locator(sel).bounding_box()["y"] for sel in ORDER if sel != "hr" and sel not in APP_ONLY]
+    ys = [b["y"] for b in boxes(page, *(sel for sel in ORDER if sel != "hr" and sel not in APP_ONLY))]
     assert ys == sorted(ys), "one under the other"
     assert page.locator("#menu-logout-label").inner_text() == page.evaluate("document.getElementById('logout-label').textContent"), \
         "Sign out says what the personal page's button says"

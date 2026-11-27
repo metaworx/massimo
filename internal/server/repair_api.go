@@ -172,7 +172,7 @@ func (s *Server) repair(action string, build func(*http.Request, *runtime) (*rep
 		var he *httpError
 		switch {
 		case errors.As(err, &need):
-			writeJSON(w, http.StatusOK, repairNothing(rt, action, err, map[string]any{"code": "room_name_needed", "room": need.room}))
+			writeJSON(w, http.StatusOK, repairNothing(rt, action, err, map[string]any{"code": codeRoomNameNeeded.name, "room": need.room}))
 			return nil
 		case errors.As(err, &he) && he.status == http.StatusConflict:
 			writeJSON(w, http.StatusOK, repairNothing(rt, action, err, nil))
@@ -197,16 +197,19 @@ func repairNothing(rt *runtime, action string, why error, details map[string]any
 type errRoomNameNeeded struct{ room uint8 }
 
 func (e *errRoomNameNeeded) Error() string {
-	return fmt.Sprintf("room %d is not in the Cube's room list; give room_name to list it there as a new room", e.room)
+	return fmt.Sprintf(codeRoomNameNeeded.format, e.room)
 }
 
 // repairRefusal writes a refusal of a repair: an httpError as it is,
-// errRoomNameNeeded with its code and room, so that a client can ask
-// for the name.
+// errRoomNameNeeded with its code and room, top-level as before and in
+// its params, so that a client can ask for the name.
 func repairRefusal(w http.ResponseWriter, err error) error {
 	var need *errRoomNameNeeded
 	if errors.As(err, &need) {
-		writeJSON(w, http.StatusConflict, map[string]any{"error": err.Error(), "code": "room_name_needed", "room": need.room})
+		he := refuse(http.StatusConflict, codeRoomNameNeeded, need.room).(*httpError)
+		body := he.body()
+		body["room"] = need.room
+		writeJSON(w, he.status, body)
 		return nil
 	}
 	return err

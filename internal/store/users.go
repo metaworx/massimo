@@ -674,9 +674,11 @@ func (s *Store) NoteLogin(ctx context.Context, id int64) error {
 // DeleteUser removes a user: a tombstone that keeps its name, with every
 // token of the user revoked, and the keys they made, and theirs, of any
 // user (revokeHeirs, AP KeyLife, D5-A), every preference and every
-// identity a tombstone too. The name is free again, and a user added under it later
-// is a row of its own, with none of the removed one's history. The last
-// owner without an end date is ErrLastOwner.
+// identity a tombstone too, those that act as the user and an
+// integration's user's own, linked or not, so that its integration's
+// next call makes it anew, unlinked. The name is free again, and a user
+// added under it later is a row of its own, with none of the removed
+// one's history. The last owner without an end date is ErrLastOwner.
 func (s *Store) DeleteUser(ctx context.Context, name string, by int64) error {
 	if err := s.writable(); err != nil {
 		return err
@@ -719,9 +721,11 @@ func (s *Store) DeleteUser(ctx context.Context, name string, by int64) error {
 	if err := removePushSubscriptions(ctx, tx, u.ID, 0); err != nil {
 		return fmt.Errorf("store: user %s: %w", u.Name, err)
 	}
-	// its identities: no sign-in finds it any more
+	// Its identities: no sign-in finds it any more, and no call through
+	// an integration acts as it, nor as the Massimo user that an
+	// integration's user it was is linked to (AP AccessEnds, D54-A).
 	if _, err := tx.ExecContext(ctx, `UPDATE user_identities SET deleted_at = ?, updated_at = ?, origin = ?, version = version + 1
-		WHERE effective_user_id = ? AND deleted_at IS NULL`, now, now, s.nodeID, u.ID); err != nil {
+		WHERE (effective_user_id = ? OR real_user_id = ?) AND deleted_at IS NULL`, now, now, s.nodeID, u.ID, u.ID); err != nil {
 		return fmt.Errorf("store: user %s: %w", u.Name, err)
 	}
 	if err := tx.Commit(); err != nil {

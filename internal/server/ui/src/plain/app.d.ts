@@ -5,10 +5,10 @@
  * @file internal/server/ui/src/plain/app.d.ts
  *
  * The globals of the plain script ui/app.js that the parts call: the
- * page's state, the API, the reload, the loads and the poll, the Cube
- * chosen, the ages of values and the times, a Cube's link and clock, a
- * device's path, detail and name, a temperature, the app's bridge, the
- * explanations shown.
+ * page's state, the API and a refusal's text, the reload, the loads and
+ * the poll, the Cube chosen, the ages of values and the times, a Cube's
+ * link and clock, a device's path, detail and name, a temperature, the
+ * app's bridge, the explanations shown.
  */
 
 import type { Cube, Device, DeviceDetail, FoundCube, Me, Room } from "../api";
@@ -83,11 +83,11 @@ declare global {
   function store(key: string, value: string | null): void;
   /** The Massimo app's bridge on the page it opened (docs/app.md), null in a browser; connect, from version 2, shows the app's servers. */
   function appBridge(): { connect?: () => Promise<null> } | null;
-  /** A request to the API, without the page's token where auth is false (/healthz, always open); the answer's JSON, or an error with the server's message. */
+  /** A request to the API, without the page's token where auth is false (/healthz, always open); the answer's JSON, or an error whose message says the refusal in the page's language (refusalText), its status, data, code and params on it. */
   function apiRequest<T = unknown>(method: string, path: string, body?: unknown, opts?: { auth?: boolean; token?: string }): Promise<T>;
   /** Opens the chosen Cube's event stream again. */
   function connectEvents(): Promise<void>;
-  /** A request to the API with the page's token, headers added to its own; the answer's JSON, or an error with the server's message (and its status). */
+  /** A request to the API with the page's token, headers added to its own; the answer's JSON, or an error as apiRequest throws it. */
   function api<T = unknown>(method: string, path: string, body?: unknown, headers?: Record<string, string>): Promise<T>;
   /** Loads the Cubes, the rooms and the log's alerts again. */
   function refresh(): Promise<boolean>;
@@ -141,6 +141,12 @@ declare global {
   function localDateTimeValue(d: Date): string;
   /** A request to the API as the answer itself, for a file or a body of another type; an error with the server's message where it fails. */
   function apiRaw(method: string, path: string, body?: unknown, contentType?: string): Promise<Response>;
+  /**
+   * The page's text of a refusal of the server that is no thrown error, one kept with a result (AP ErrorCodes): its code's text in the
+   * page's language where English has one, a room and a device by their names where serial is the chosen Cube's; else its English
+   * error; else fallback. A thrown error of api() says it in its message already.
+   */
+  function refusalText(obj: { error?: string; code?: string; params?: Record<string, unknown> } | null | undefined, serial?: string, fallback?: string): string;
   /** The default end of a temporary setting, tomorrow at six, as a datetime-local value. */
   function tomorrowMorning(): string;
   /** The page's message line: a text, ok or a failure. */
