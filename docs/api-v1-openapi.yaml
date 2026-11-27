@@ -3413,9 +3413,11 @@ paths:
         event has settled: a disconnect by the next connect, a command by
         the same command acknowledged, a failed backup by the next one;
         a hold and a lockout once they end; a kind without a counterpart
-        only by a mark. A device's communication error, link error and low
-        battery are alerts at warn while the device has them, at the state
-        line that set them. The audit's lines for a holder of audit only.
+        only by a mark. A device's communication error and link error are
+        alerts at warn while the device has them, at the state line that
+        set them; its battery is one by its level, the battery event at
+        low, settled by the next at ok, not by the Cube's flag. The audit's
+        lines for a holder of audit only.
         A Cube without a row in the store adds nothing; without a store,
         none.
       parameters:
@@ -3440,7 +3442,7 @@ paths:
                         cube_serial: {type: string, description: "The Cube whose line it is; absent for the server's own"}
                         device: {type: string, description: The device's radio address on its Cube}
                         serial: {type: string}
-                        flag: {type: string, enum: [error, link_error, battery_low], description: "The device's flag, for a state line"}
+                        flag: {type: string, enum: [error, link_error], description: "The device's flag, for a state line"}
                         failed_radiogram:
                           description: "The error flag's: of the radiograms that failed while it stayed set, the most severe (Assignment and Remove, then Configuration, then Control, then the rest), of two as severe the oldest"
                           allOf: [{$ref: "#/components/schemas/FailedRadiogram"}]
@@ -5428,7 +5430,7 @@ components:
             logged: {type: string, format: date-time, description: When the log's slots event of the level was given}
         problems:
           type: array
-          description: "The Cube's visible devices with a problem (a communication or link error, a low battery, a window open), each with its room's name; absent where none"
+          description: "The Cube's visible devices with a problem (a communication or link error, a battery level weak or low, or the battery flag where the server keeps no level, a window open), each with its room's name; absent where none"
           items:
             allOf:
               - {$ref: '#/components/schemas/Device'}

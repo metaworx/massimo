@@ -1892,7 +1892,9 @@ among them.
 
 `problems` lists, where there are any, the Cube's visible devices with a problem,
 as `GET …/devices` shows them, each with its room's name (`room`):
-a communication or link error, a low battery, a window open (with its `window` times);
+a communication or link error, a battery level (`battery`) weak or low,
+or the Cube's flag (`battery_low`) where the server keeps no level,
+a window open (with its `window` times);
 a client that shows every Cube's problems, such as the web UI's header,
 needs no other request.
 It is the server's last state, also while the Cube is not connected.
@@ -4132,6 +4134,7 @@ of the same Cube, or of the server for the server's own:
 | `restart`, `reboot`, `update` not started | `server_started`; for `update`, also an `update` started |
 | `error_watch` `back` or `lasting` | the same device's `error_watch` `clear` of the same `flag` |
 | `unconfirmed`, a room's setpoint or its re-send not confirmed, its re-send failed | an `unconfirmed` of the same `target` whose `outcome` is `resend_confirmed` |
+| `battery`, a device's battery level `low` | a `battery` of the same device whose `level` is `ok`: new batteries marked, or the server's rules (see the devices' `battery`) |
 
 Any other, such as `proxy_discarded`, `proxy_delete_refused` and `open_setup`,
 is settled only by a person's mark.
@@ -4139,7 +4142,11 @@ The alerts the signed-in user marked seen are left out:
 the preference `log.seen` (see "Preferences"),
 which the web UI writes and opening the log does not;
 a browser without a user keeps its marks itself and asks with `after`.
-A device's communication error, link error and low battery are in the log at info,
+A device's battery is an alert by its level, not by the Cube's flag,
+which flickers under the valve motor's load:
+its `battery` event at warn once the level is `low` (the table above);
+a `weak` level's event is at info, and no alert.
+A device's communication error and link error are in the log at info,
 in its state's changes:
 each is an alert at warn while the device has it,
 at the state line that set it (`flag`),
