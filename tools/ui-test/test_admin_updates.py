@@ -16,7 +16,7 @@ import re
 import pytest
 
 from conftest import TOKEN, URL, api_call
-from helpers import OPERATOR_PASSWORD, focus_in_turn, frames, hold, mark, open_main_menu, owner_page, pause_clock, reads_of, replaced, safe_route, show_view, sign_out, undo, wait_held, wait_until
+from helpers import OPERATOR_PASSWORD, focus_in_turn, frames, hold, mark, open_main_menu, own_id, owner_page, pause_clock, reads_of, replaced, safe_route, show_view, sign_out, undo, wait_held, wait_until
 from test_log_alerts import alerts_route
 from test_login import sign_in
 from test_oidc import provider  # noqa: F401, the fixture
@@ -985,13 +985,16 @@ def stub_integrations(page):
 
 
 def made_integrations(case, n=1, approve=True):
-    """Requests the test makes, the first approved; their uuids."""
+    """Requests the test makes, the first approved; their uuids. Each has
+    an installation of its own (own_id): an integration revoked at the
+    end stays, disabled, and a request from its installation, the next
+    run's, would join it."""
     from test_integrations import raw_call
     made = []
     for k in range(n):
         status, req = raw_call("POST", "api/v1/integrations/requests",
                                {"kind": "homeassistant", "name": f"Rw {k} {case.width} {case.lang}",
-                                "instance_id": ("rw%d%04d%s" % (k, case.width, case.lang)).encode().hex().ljust(32, "d")[:32],
+                                "instance_id": own_id(f"rw{k}{case.width}{case.lang}"),
                                 "url": "http://192.0.2.33:8123", "version": "2026.11.1"})
         assert status == 201, "the request is taken"
         made.append((req["id"], req["code"]))

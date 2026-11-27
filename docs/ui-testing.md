@@ -1,4 +1,4 @@
-# Testing the web UI (v1.35.0)
+# Testing the web UI (v1.36.0)
 
 An evaluation of a Cypress suite for the web UI, against the alternatives:
 what the Playwright smoke test covers today and what it cannot do well,
@@ -1139,3 +1139,27 @@ the server's and the test's, in order,
   A warning a test makes once its page has loaded is newer, and shows;
   a test that reads the log's alerts answers them itself (`alerts_route`),
   with ids above the server's.
+- **An id of the test's own** (`own_id(what)` of `helpers.py`, AP SteadyTests, Block 11):
+  32 hex digits, new at each call, `what` hex-encoded first
+  (at most 8 bytes, for a reader of the server's log), then random ones,
+  for what a test makes on the shared server that no API removes,
+  so that its next run, a repeat on the same server among them,
+  makes its own and meets nothing the last run left.
+  An integration is only disabled at its end (`DELETE …/integrations/{uuid}`),
+  its users, links and maximum kept,
+  and a request from the same installation joins it:
+  `test_register_and_link` took its installation id and its user's id there
+  from the case alone, so its next repeat on the server
+  found the integration of the one before, disabled,
+  and waited in vain for a new one's panel
+  (8 of the 33 failures of the soak's first run, 2026-11-26).
+  Every test that registers an integration takes its installation id from `own_id`,
+  and the ids of its users there
+  (`test_integrations.py`, `test_users.py`, `test_admin_updates.py`'s `made_integrations`),
+  and `test_notifications.py`'s push endpoint, which it removes, is one too.
+  A name the test removes at its end, a user's or a provider's,
+  may stay one of the case's.
+  The server takes ten integration requests from an address in ten minutes,
+  in its memory, so a run of the three tests that make one,
+  each case three times on one server, meets its 429 (2026-11-27);
+  the soak's, a case a job, makes nine at most.

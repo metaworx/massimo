@@ -279,7 +279,8 @@ and `isolate_log` (the log holds the test's own lines alone),
 fixed wait of 1.6 s), `safe_route` (the one route handler that lets go
 a request the page no longer waits for, and reports to the guard any
 other error and a request it had to abort), `undo` (a cleanup's step
-that says what it could not undo) and `cleanup`
+that says what it could not undo), `own_id` (an id of the test's own,
+new at each call, for what it makes that no API removes) and `cleanup`
 (every step of a cleanup runs, the first error raised at the end).
 What several test files did alike is there too:
 `load_cubes` (a load of the Cubes' list, its reads answered),

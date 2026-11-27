@@ -5,14 +5,16 @@ the owner: an integration asks to be registered, its request waits with
 its code, the owner approves it with a narrower maximum, the integration
 collects its key and acts for a user of its own, whom the owner links to
 the operator, proposed by name; the users list then marks the link. Each
-case has an installation of its own, revoked at the end."""
+run of a case has an installation of its own (helpers.own_id), revoked
+at the end: a revoked integration stays, disabled, and a request from
+its installation would join it."""
 import json
 import ssl
 import urllib.request
 
 from conftest import TOKEN, URL, api_call
-from helpers import (OPERATOR_PASSWORD, ApiReads, cleanup, focus_in_turn, frames, hold, named_buttons, owner_page, reads_of, safe_route, scroll_width,
-                     show_view, undo, wait_held, wait_until)
+from helpers import (OPERATOR_PASSWORD, ApiReads, cleanup, focus_in_turn, frames, hold, named_buttons, own_id, owner_page, reads_of, safe_route,
+                     scroll_width, show_view, undo, wait_held, wait_until)
 from test_admin_updates import out, stub_integrations
 from test_login import sign_in
 
@@ -41,8 +43,8 @@ def test_register_and_link(page, case):
     collection; an approval expired shows Register (v1.1, Block 8); the
     Users head counts the integration's two users at once, without
     System settings shown again (AP AccessEnds, D10)."""
-    instance = ("%04d%s" % (case.width, case.lang)).encode().hex().ljust(32, "0")[:32]
-    subject = ("a1%04d%s" % (case.width, case.lang)).encode().hex().ljust(32, "b")[:32]
+    # of this run's own: its next repeat on the server would join this one's integration, disabled
+    instance, subject = own_id(f"{case.width}{case.lang}"), own_id(f"a1{case.width}{case.lang}")
     status, req = raw_call("POST", "api/v1/integrations/requests",
                            {"kind": "homeassistant", "name": f"Casa {case.width} {case.lang}", "instance_id": instance,
                             "url": "http://192.0.2.20:8123", "version": "2026.11.1"})

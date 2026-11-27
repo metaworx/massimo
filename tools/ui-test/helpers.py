@@ -17,10 +17,12 @@ them; Stream watches the page's event stream from a mark; isolate_log
 keeps a log of the test's own lines; wait_log_live waits until the log
 takes the stream's state events; safe_route is the one route handler
 that lets go a request the page no longer waits for; undo is a cleanup
-that says what it could not undo; held_poll holds the page's poll while
-a test measures what the page does by itself; pause_clock pauses
-Playwright's clock at the page's now. open_fold, close_fold and
-toggle_fold take a fold's toggle event before a test acts inside it.
+that says what it could not undo; own_id is an id of a test's own, new
+at each call, for what it makes that no API removes; held_poll holds
+the page's poll while a test measures what the page does by itself;
+pause_clock pauses Playwright's clock at the page's now. open_fold,
+close_fold and toggle_fold take a fold's toggle event before a test
+acts inside it.
 wait_started waits for the page's start, the page fixture's and
 owner_page's, and says on a timeout which read it waited for; answered
 waits until the page has read all it reads now, a read it starts only
@@ -37,6 +39,7 @@ import json
 import math
 import os
 import re
+import secrets
 import sys
 import time
 import urllib.error
@@ -924,6 +927,21 @@ def isolate_log(page, reads=None):
         reads.change(CUBE_LOG, no_lines)
         page.evaluate("MassimoParts.log.load()")
         assert wait_until(page, "!MassimoParts.log.state.loading && MassimoParts.log.state.lines.length === 0", 5), "the log loaded, without a line of the server's"
+
+
+def own_id(what=""):
+    """An id of the test's own, new at each call: 32 hex digits, what
+    hex-encoded first (at most 8 bytes of it, for a reader of the
+    server's log), then random ones. For what a test makes on the shared
+    server that no API removes, so that its next run, a repeat on the
+    same server among them, makes its own and meets nothing the last one
+    left: an integration's installation id and the ids of its users
+    there, since an integration is only disabled at its end and a
+    request from the same installation joins it (docs/ui-testing.md,
+    section 9; AP SteadyTests, Block 11). An id made from the case alone
+    is the same at every repeat."""
+    head = what.encode()[:8].hex()
+    return head + secrets.token_hex(16)[:32 - len(head)]
 
 
 def undo(what, call, absent=(404,)):

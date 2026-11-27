@@ -10,8 +10,8 @@ import re
 import pytest
 
 from conftest import URL, api_call
-from helpers import (NAME_BAD, NAME_TAKEN, assert_busy, cleanup, close_fold, frames, hold, named_buttons, open_fold, safe_route, scroll_width, show_view, sign_out, stub_me,
-                     undo, wait_held, wait_until)
+from helpers import (NAME_BAD, NAME_TAKEN, assert_busy, cleanup, close_fold, frames, hold, named_buttons, open_fold, own_id, safe_route, scroll_width, show_view,
+                     sign_out, stub_me, undo, wait_held, wait_until)
 
 
 def test_users_and_roles(page, case):
@@ -938,8 +938,8 @@ def test_an_integrations_holder_manages_its_users(new_context, case, watch, guar
     from test_login import sign_in
     tag = f"{case.width}{case.lang}"
     key, name, manager = f"igs{tag}", f"igs-{tag}", f"igm-{tag}"
-    instance = ("b9%04d%s" % (case.width, case.lang)).encode().hex().ljust(32, "0")[:32]
-    subject = ("b9u%04d%s" % (case.width, case.lang)).encode().hex().ljust(32, "c")[:32]
+    # of this run's own: its next repeat on the server would join this one's integration, disabled
+    instance, subject = own_id(f"b9{tag}"), own_id(f"b9u{tag}")
     status, req = raw_call("POST", "api/v1/integrations/requests",
                            {"kind": "homeassistant", "name": f"Home {tag}", "instance_id": instance, "url": "http://192.0.2.21:8123", "version": "2026.11.1"})
     assert status == 201, "the request is taken"
