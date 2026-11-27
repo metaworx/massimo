@@ -114,7 +114,8 @@ func (s *Server) planServerRestore(w http.ResponseWriter, r *http.Request) error
 		"backup": map[string]any{"uuid": p.Manifest.UUID, "time": p.Manifest.Created, "trigger": p.Manifest.Trigger, "label": p.Manifest.Label,
 			"version": p.Manifest.Version, "schema": p.Manifest.Schema.Version},
 		"identity": id, "migrated": p.Migrated, "scopes": p.Selection.Scopes, "serials": p.Selection.Serials, "cubes": orEmpty(p.Cubes),
-		"env": p.Env, "tls": p.TLS, "files": orEmpty(p.Files), "report": p.Report, "refused": p.Refused,
+		"env": p.Env, "tls": p.TLS, "env_refused": p.EnvRefused, "tls_refused": p.TLSRefused, "files": orEmpty(p.Files), "report": p.Report,
+		"refused": p.Refused,
 		"restart": map[string]any{"available": v.Available, "by": v.By, "blocked": v.Blocked},
 	})
 	return nil

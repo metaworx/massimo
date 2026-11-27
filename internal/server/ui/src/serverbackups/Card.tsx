@@ -8,7 +8,9 @@
  * D4-A, D13-A, D14-C, D17-C): at its top, while no key is set, that the
  * server makes no backup until one is, else when it makes them; with
  * backup.server Back up now and Upload a backup…; then the backups, the
- * targets and, for a holder of backup.server, the keys. The card's head
+ * targets and, for a holder of backup.server, the keys; for the owner
+ * the dialog that restores a backup or checks it with the key, and, while
+ * it is closed, how the server's restart after a restore goes. The card's head
  * says that backups are off without a key, counts what failed and the
  * backups kept, and marks a target two of its periods behind.
  */
@@ -22,6 +24,8 @@ import { can, ownerOf } from "../shared/me";
 import { BusyButton } from "../shared/question";
 import { Backups } from "./Backups";
 import { Keys } from "./Keys";
+import { RestoreDialog } from "./Restore";
+import { restoreRestart, rs } from "./restoring";
 import { backUpNow, upload } from "./send";
 import { card, sb } from "./store";
 import { Targets } from "./Targets";
@@ -55,6 +59,9 @@ function Status() {
         {l && !noKey && <p id="sb-schedule" class="muted small">{t("serverbackup.schedule", { time: l.time || "" })}</p>}
         {sb.failed && <p class="small cubes-msg bad" role="status">{t("serverbackup.readFailed", { error: sb.failed })}</p>}
         <ResultLine id="sb-msg" cls="small cubes-msg" role="status" res={card.backups} />
+        {!rs.backup && restoreRestart.text && (
+          <p id="sb-restart" class={"small cubes-msg" + (restoreRestart.ok ? " ok" : " bad")} role="status">{restoreRestart.text()}</p>
+        )}
       </div>
       {server && (
         <div class="actions sb-status-actions">
@@ -83,6 +90,7 @@ export function Card() {
       <Backups />
       <Targets />
       {can("backup.server") && <Keys />}
+      {ownerOf() && <RestoreDialog />}
     </>
   );
 }

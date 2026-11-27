@@ -2535,6 +2535,16 @@ export interface ServerRestorePlan {
   env?: boolean;
   /** The TLS files it holds */
   tls?: number;
+  /**
+   * Why the env file could not be put in place on this server, asked for or
+   * not; empty where it could or the backup holds none
+   */
+  env_refused?: string;
+  /**
+   * Why the TLS files could not be put in place on this server, asked for or
+   * not; empty where they could or the backup holds none
+   */
+  tls_refused?: string;
   files?: ServerRestoreFile[];
   restart?: {
     /** This server can restart itself */

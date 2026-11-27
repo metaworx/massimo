@@ -119,6 +119,12 @@ type RestorePlan struct {
 	Env   bool          `json:"env"`
 	TLS   int           `json:"tls"`
 	Files []PlannedFile `json:"files"`
+	// EnvRefused and TLSRefused say why the env file or the TLS files
+	// the backup holds could not be put in place on this box, whether
+	// the options ask for them or not; "" where they could, or where the
+	// backup holds none.
+	EnvRefused string `json:"env_refused,omitempty"`
+	TLSRefused string `json:"tls_refused,omitempty"`
 	// Report is what the selection would do of the store; Refused why
 	// the restore would be refused, "" for not.
 	Report  store.RestoreReport `json:"report"`
@@ -391,7 +397,9 @@ func acmeName(f InnerFile) string {
 // the backup opened with the key, its store migrated beside where older,
 // and the restore run and rolled back. A restore the store would refuse,
 // a reference missing or no owner left, is answered in Refused, with
-// the report's list.
+// the report's list. Whether the env file and the TLS files the backup
+// holds could be put in place is answered for each, asked for or not
+// (EnvRefused, TLSRefused), so that a caller offers only what can go.
 func (c *Catalogue) Plan(ctx context.Context, o RestoreOptions) (RestorePlan, error) {
 	sel, err := ParseScopes(o.Scopes)
 	if err != nil {
@@ -415,6 +423,16 @@ func (c *Catalogue) Plan(ctx context.Context, o RestoreOptions) (RestorePlan, er
 	}
 	for _, cb := range ob.cubes {
 		p.Cubes = append(p.Cubes, PlanCube{Serial: cb.Serial, Name: cb.Name, Live: live[cb.Serial]})
+	}
+	if p.Env {
+		if _, err := c.placeFiles(ob, Selection{}, RestoreOptions{Env: true}); err != nil {
+			p.EnvRefused = err.Error()
+		}
+	}
+	if p.TLS > 0 {
+		if _, err := c.placeFiles(ob, Selection{}, RestoreOptions{TLS: true, TLSPlace: o.TLSPlace}); err != nil {
+			p.TLSRefused = err.Error()
+		}
 	}
 	if p.Files, err = c.placeFiles(ob, sel, o); err != nil {
 		p.Refused = err.Error()

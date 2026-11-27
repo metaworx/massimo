@@ -2662,10 +2662,54 @@ The server's sign, when it says an update is out, opens it at Software update.
     and the backup goes from the list with its last copy;
     under them **Download**, **Check** (each copy read back for its size and hash,
     without the key), **Pin** or **Unpin**,
+    for the owner alone **Restore…** and **Check with the key…** (below),
     and with `backup.retry` **Retry** where something of it failed.
     A holder of `backup.retry` alone sees the backups, their copies and the targets'
     state, with **Retry**, and nothing more.
     Each action says how it went under its backup.
+  - **Restore…** (the owner's; AP ServerBackup, D6-A, D7-A) opens a dialog
+    over the page, named by the backup's time.
+    First the key, the secret key of one of the keys the backup was made for:
+    pasted, or read from its file in the browser (**Read a key file…**,
+    its text not shown, **Forget the file**).
+    The page holds it while the dialog is open, sends it in each request's body
+    and stores it nowhere: closing the dialog, another page shown
+    and a sign-out clear it.
+    **Open the backup** asks the server's plan of every scope
+    (`POST …/server-backups/{id}/restore/plan`); a key that does not open it
+    is refused with why.
+    Then what the backup holds: when and by which version it was made,
+    that another box made it, that its store is brought to this version's;
+    a switch per scope, System settings, Users and sign-in, Integrations
+    and History, each with its rows from the backup and this server's that go,
+    and a switch per Cube by its name and serial, saying whether this server has it,
+    nothing ticked; for a backup of another box **Take the backup's identity**
+    with its warning, and that the other box still answers on the network;
+    **The env file** and **The TLS files**, each off with the server's reason
+    where it cannot put them in place (`env_refused`, `tls_refused`);
+    where the server cannot restart itself, a note, and users and sign-in
+    and the identity off.
+    What every scope together would refuse is said, with the rows missing.
+    **Restore…** asks the plan of what is ticked and stays there with its refusal
+    and the rows missing, or goes on to a confirmation that names what it replaces,
+    that a backup is taken first and kept pinned for 30 days,
+    and whether the server then restarts; **Back** returns to the choice.
+    **Restore** sends it (`POST …/{id}/restore`); the dialog stays open meanwhile.
+    A refusal (`409`, rows missing or no owner left) goes back to the choice
+    with its list.
+    Done, the dialog lists what it restored, an error after the store changed,
+    the secrets to enter again, and that what the server wrote between the backup
+    taken first and the restore is in neither; the server's restart is followed
+    as Maintenance's Restart the server is (`/healthz` every 2 s), saying when it is
+    back, or why it did not restart; then each Cube whose configuration the Cube
+    restore could write is a link to it: Cube settings, that Cube chosen,
+    at its Backup and restore.
+    While the dialog is closed, the card's top says how the restart goes,
+    until Maintenance is shown again.
+  - **Check with the key…** (the owner's) takes the key as Restore… does,
+    then **Check** (`POST …/{id}/check-key`) gives the verdict:
+    whether the key opens the backup and its store is whole,
+    which box made it, and the files it holds.
   - **Targets**: with `backup.server` a panel per target,
     its name, its kind and its marks (off, behind: no copy for two of its periods,
     its secret lost), then what it takes, what it keeps and its last copy;
@@ -3246,6 +3290,8 @@ for the first owner's toast and the log's `open_setup` line.
 | `useBusy`, `busyProps` | `question.tsx` | a button's request under way: busy, off, `aria-busy` (`whileBusy`, `setBusy`); with an epoch, a request belongs to the epoch it ran in, the button ready again in a later one (the sign-in card's opening) | `useBusy(epoch)`, `run(fn)`; `busyProps(cls, busy, off)` |
 | `useSetAtOnce` | `question.tsx` | a setting saved at once, a switch without a Save: the user's choice shown while its request runs, the control on so that the focus stays on it, a change meanwhile sending nothing and drawn back, then what is stored, the old value where it was refused (the password sign-in, a capability for every role, whether integrations may ask, an integration's Enabled) | `stored`; gives `value`, `busy`, `set(v, fn)` |
 | `BusyButton` | `question.tsx` | a button that sends a request and turns until its answer (`useBusy`, `busyProps`), a click meanwhile sending nothing | `id`, `cls`, `label`, `run`, `aria` (its name where the text is not enough), `off` (kept off: a request that may not be sent now), `data` (its `data-` attributes: a Link button's provider), `epoch` (`useBusy`'s: the sign-in card's opening) |
+| `Modal` | `dialog.tsx` | a modal `<dialog>` whose content is its caller's, open while `shown`, the focus on `focusRef`'s element as it opens, else where the browser puts it, given back where it was when it closes; a close of the browser's, Escape among it, runs `onClose`, and while `held` (a request under way) Escape leaves it open and a close all the same opens it again (a server backup's restore) | `shown`, `title` (its heading, which names it), `cls`, `held`, `focusRef`, `onClose` |
+| `startedAt`, `followStart`, `serverBack` | `restart.ts` | the page following the server through a restart (Maintenance's Restart the server, a server backup's restore): the server's start from `/healthz`, which needs no sign-in, read before the request; then read every 2 s until it is another, when `back` runs and the data are read and the stream opened again (`serverBack`), or after `until` `lost`; a sign-out ends it, and so does the function it returns | –; `before`, `until`, `back(now)`, `lost`; – |
 | `burstReader` | `burst.ts` | one read for a burst of the stream's events: a read in flight and at most one more after it, which reads what the events meanwhile asked for, none asked for in the session before (the parts that follow the server while shown) | `read(what)`, the reads by name; gives `ask(...what)` |
 | `session`, `stillSession`, `newSession` | `session.ts` | the session's number, raised by `MassimoParts.signedOut` before anything is forgotten: a store takes it before an await and drops the answer, its message and its next timer where it changed; `actionRunner`'s `bound` does so for a runner, and a plain load takes it as `MassimoParts.session()` | –; `n`; – |
 | `me`, `own` | `me.ts` | who the page is signed in as, `state.me` underneath (`shared/data.ts`), which `applyCaps` of `login.js` writes at every read of it, null from a sign-out on; the token it is signed in with, by which a user's sessions say "this device" and "its key" | — |

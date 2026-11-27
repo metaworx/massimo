@@ -13,7 +13,9 @@
  * there) and the actions who is in may take: with backup.server
  * Download, Check, Pin or Unpin, and on a copy Push, Pull and Delete,
  * which asks, saying so where no other copy is there, and the backup
- * goes from the list with its last copy; with
+ * goes from the list with its last copy; for the owner alone Restore…
+ * and Check with the key…, which open the dialog (Restore.tsx, AP
+ * ServerBackup, Block 5); with
  * backup.retry Retry where something of it failed. A holder of
  * backup.retry alone sees the state and Retry, nothing more.
  */
@@ -23,9 +25,10 @@ import type { ServerBackup, ServerBackupCopy, ServerBackupTargetState } from "..
 import { Badge, ResultLine } from "../shared/badge";
 import { Fold, FoldHead } from "../shared/fold";
 import { useLook } from "../shared/look";
-import { can } from "../shared/me";
+import { can, ownerOf } from "../shared/me";
 import { BusyButton, Question, useAsk } from "../shared/question";
 import { fmtWhen } from "../shared/time";
+import { openRestore } from "./restoring";
 import { check, deleteCopy, download, pin, pull, push, retry } from "./send";
 import { backupUI, sb } from "./store";
 
@@ -149,7 +152,12 @@ function BackupRow({ b, targets }: { b: ServerBackup; targets: ServerBackupTarge
         {server && b.state === "made" && there.length > 0 && <BusyButton cls="small sb-download" label={t("serverbackup.download")} run={() => download(b)} />}
         {server && b.state === "made" && there.length > 0 && <BusyButton cls="small sb-check" label={t("serverbackup.check")} run={() => check(b)} />}
         {server && b.state === "made" && <BusyButton cls="small sb-pin" label={t(pinned ? "serverbackup.unpin" : "serverbackup.pin")} run={() => pin(b, !pinned)} />}
-        {/* Block 5's card part comes here, for the owner: Restore… and Check with the key */}
+        {ownerOf() && b.state === "made" && there.length > 0 && (
+          <>
+            <button type="button" class="small sb-restore" onClick={() => openRestore(b, "restore")}>{t("serverbackup.restore")}</button>
+            <button type="button" class="small sb-check-key" onClick={() => openRestore(b, "check")}>{t("serverbackup.checkKey")}</button>
+          </>
+        )}
         {mayRetry && <BusyButton cls="small sb-retry" label={t("serverbackup.retry")} run={() => retry(b)} />}
       </div>
       <ResultLine cls="small cubes-msg sb-backup-msg" role="status" res={ui.said} />

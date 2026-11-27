@@ -882,6 +882,26 @@ body.scrolled .nav .top-btn { display: inline-flex; }
    and the line over a target's fields kept while its kind is unknown */
 .sb-field-warn, .sb-kind-unknown { margin: 0 0 6px; overflow-wrap: anywhere; }
 .sb-field-warn > .mark-sign, .sb-kind-unknown > .mark-sign { width: 1em; height: 1em; vertical-align: -0.12em; stroke-width: 2.3; }
+/* a server backup's restore and its check with the key (Restore.tsx), a
+   modal dialog as wide as a phone allows: the key's box, a switch per
+   scope and Cube with its line under it, the files with why one is off,
+   a refusal with the rows it lists, each long text wrapped anywhere */
+dialog.sb-restore-dialog { width: min(92vw, 560px); }
+.sb-restore-dialog h3 { margin: 0 0 8px; overflow-wrap: anywhere; }
+.sb-restore-dialog p, .sb-restore-dialog .notice { margin: 0 0 8px; overflow-wrap: anywhere; }
+.sb-restore-dialog .field > label:not(.switch), .sb-restore-dialog label.switch { margin-bottom: 0; }
+.sb-restore-dialog textarea { resize: vertical; min-height: 5.5em; word-break: break-all; }
+.sb-restore-h { margin: 4px 0 8px; font-size: 1rem; }
+.sb-restore-h.ok { color: var(--ok); }
+.sb-restore-h.bad, .sb-restore-dialog p.bad { color: var(--bad); }
+.sb-restore-keyfile { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 10px; }
+.sb-restore-dialog .sb-restore-keyfile-actions { justify-content: flex-start; margin: 0 0 8px; }
+.sb-restore-group { border: none; padding: 0; margin: 0 0 8px; min-width: 0; }
+.sb-restore-group > legend { padding: 0; margin-bottom: 4px; font-weight: 600; }
+.sb-restore-scope { margin-bottom: 6px; }
+.sb-restore-dialog .switch:has(> input:disabled) { opacity: 0.5; cursor: default; }
+.sb-restore-dialog .sb-restore-line { margin: 0 0 0 48px; }
+.sb-restore-missing, .sb-restore-what, .sb-restore-cubes ul { margin: 0 0 8px; padding-left: 1.4em; overflow-wrap: anywhere; }
 .restore-plan { margin-top: 10px; padding: 8px 12px; }
 .restore-title { font-weight: 600; margin: 0 0 4px; overflow-wrap: anywhere; }
 .restore-steps li { margin: 2px 0; }
@@ -1715,7 +1735,7 @@ html.blink-first .server-icon.state-new use.mark, html.blink-first .server-icon.
 .flag.fill-info { background: var(--fill-info); color: var(--fill-fg); border-color: var(--fill-info); }
 .flag.fill-open { background: var(--accent); color: var(--accent-fg); border-color: var(--accent); } /* a window open briefly */
 
-button, select, input {
+button, select, input, textarea {
   font: inherit;
   color: var(--fg);
   background: var(--card);

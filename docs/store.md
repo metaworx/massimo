@@ -2376,7 +2376,8 @@ The env file and the TLS files are restored only where ticked, each on its own,
 since a new box's paths can differ: the env file goes where this server reads its own,
 the TLS files where it keeps its own (files mode's, else the self-signed pair's place,
 and the ACME directory). Each file replaced stays beside as `<name>.before-restore`.
-A place this server cannot write refuses the restore, and the plan says so:
+A place this server cannot write refuses the restore, and the plan says so,
+of the env file and of the TLS files whether they are asked for or not:
 under the systemd unit's protection (`ProtectSystem=strict`) only the data
 directory and the log's are writable to `serve`, so `/etc/massimo/env` and
 `/etc/massimo/cert.pem` are put in place by hand, from `massimo store decrypt`.

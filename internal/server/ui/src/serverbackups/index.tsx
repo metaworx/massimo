@@ -11,7 +11,9 @@
  * targets, the keys and, once, the kinds for a holder of backup.server),
  * after each of its actions and for the stream's events while it is
  * shown (serverEvent, MassimoParts.serverEvent). A key made's secret
- * part goes as another page is shown or the card is folded.
+ * part goes as another page is shown or the card is folded; the restore's
+ * dialog, with the key typed into it, as another page is shown and at a
+ * sign-out.
  */
 
 import { onFold } from "../shared/card";
@@ -19,6 +21,7 @@ import { mounter } from "../shared/region";
 import { can } from "../shared/me";
 import { onView } from "../shared/pages";
 import { Card } from "./Card";
+import { closeRestore, forgetRestore, quietRestore } from "./restoring";
 import { loadShown } from "./send";
 import { dropMade, forgetServerBackups, quiet } from "./store";
 
@@ -26,19 +29,25 @@ export { serverEvent } from "./send";
 
 const mount = mounter("sys-server-backups-body", () => <Card />);
 
-/** signedOut forgets what the card kept of the user who was signed in, a key made's secret part first (MassimoParts.signedOut, index.ts). */
-export const signedOut = forgetServerBackups;
+/** signedOut forgets what the card kept of the user who was signed in, the key typed into the restore's dialog and a key made's secret part first (MassimoParts.signedOut, index.ts). */
+export function signedOut(): void {
+  forgetRestore();
+  forgetServerBackups();
+}
 
 // Maintenance shown: the card's messages taken back, then what it shows read, for whoever may see it
 onView("maint", () => {
   quiet();
+  quietRestore();
   if (!can("backup.retry")) return;
   mount();
   void loadShown();
 });
 
-// a key made's secret part is shown that once (D4-A): another page shown, or the card folded, takes it away
+// a key made's secret part is shown that once (D4-A): another page shown, or the card folded, takes it away; another page closes the restore's dialog, its key with it
 document.addEventListener("viewshown", (ev) => {
-  if ((ev as CustomEvent<string>).detail !== "maint") dropMade();
+  if ((ev as CustomEvent<string>).detail === "maint") return;
+  dropMade();
+  closeRestore();
 });
 onFold("sys-server-backups", dropMade);

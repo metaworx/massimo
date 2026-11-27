@@ -4249,6 +4249,9 @@ paths:
         would refuse is answered in refused, with the report's list. A
         backup of another box says whether that box still answers on the
         network (identity.answers, null where it was not looked for).
+        Whether the env file and the TLS files the backup holds could be
+        put in place is answered for each, asked for or not (env_refused,
+        tls_refused).
       parameters: [{$ref: "#/components/parameters/serverBackupID"}]
       requestBody:
         required: true
@@ -6817,6 +6820,8 @@ components:
               live: {type: boolean}
         env: {type: boolean, description: The backup holds an env file}
         tls: {type: integer, description: The TLS files it holds}
+        env_refused: {type: string, description: 'Why the env file could not be put in place on this server, asked for or not; empty where it could or the backup holds none'}
+        tls_refused: {type: string, description: 'Why the TLS files could not be put in place on this server, asked for or not; empty where they could or the backup holds none'}
         files: {type: array, items: {$ref: "#/components/schemas/ServerRestoreFile"}}
         restart:
           type: object

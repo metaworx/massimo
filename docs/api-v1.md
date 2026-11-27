@@ -5148,6 +5148,9 @@ and so is a backup whose store is newer than this server's: update first.
   whether that box still `answers` on the network, `null` where not looked for),
   whether its store was `migrated` from an older schema,
   the `cubes` it holds (`serial`, `name`, `live` where this server has it),
+  whether it holds an `env` file and how many `tls` files,
+  and for each why this server could not put it in place, asked for or not
+  (`env_refused`, `tls_refused`, empty where it could),
   the `files` the options would put in place (`role`, `to`),
   whether this server can `restart` itself (`available`, `by`, `blocked`),
   the `report` and, where the restore would be refused, why (`refused`):

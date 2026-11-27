@@ -78,6 +78,9 @@ func TestServerRestoreAPI(t *testing.T) {
 	if id := plan["identity"].(map[string]any); id["this_box"] != true || plan["refused"] != "" || len(plan["scopes"].([]any)) != 5 {
 		t.Fatalf("plan %v", plan)
 	}
+	if _, ok := plan["env_refused"]; !ok || plan["tls_refused"] == nil {
+		t.Fatalf("the plan says nothing of the env file and the TLS files: %v", plan)
+	}
 	if _, ok, _ := st.User(ctx, "late"); !ok {
 		t.Fatal("the plan changed the store")
 	}

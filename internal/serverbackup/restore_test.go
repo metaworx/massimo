@@ -206,8 +206,26 @@ func TestRestoreFilePlaces(t *testing.T) {
 	etc := filepath.Dir(side.env)
 	os.Chmod(etc, 0o500)
 	defer os.Chmod(etc, 0o700)
+	// The plan says of the env file and the TLS files whether they could
+	// go, asked for or not.
+	settings := RestoreOptions{File: path, Key: key, Scopes: []string{ScopeSettings}, TLSPlace: side.place}
+	p, err := c.Plan(ctx, settings)
+	if err != nil || p.Refused != "" || !strings.Contains(p.EnvRefused, "cannot write "+side.env) || !strings.Contains(p.TLSRefused, "cannot write") {
+		t.Fatalf("plan of the settings, a read-only place: %q %q %q %v", p.Refused, p.EnvRefused, p.TLSRefused, err)
+	}
+	c.EnvFile = ""
+	if p, err = c.Plan(ctx, RestoreOptions{File: path, Key: key, Scopes: []string{ScopeSettings}}); err != nil ||
+		!strings.Contains(p.EnvRefused, "reads no env file") || !strings.Contains(p.TLSRefused, "no place for the TLS file") {
+		t.Fatalf("plan without an env file or a TLS place: %q %q %v", p.EnvRefused, p.TLSRefused, err)
+	}
+	c.EnvFile = side.env
+	os.Chmod(etc, 0o700)
+	if p, err = c.Plan(ctx, settings); err != nil || p.EnvRefused != "" || p.TLSRefused != "" {
+		t.Fatalf("plan of the settings, a place it can write: %q %q %v", p.EnvRefused, p.TLSRefused, err)
+	}
+	os.Chmod(etc, 0o500)
 	o := RestoreOptions{File: path, Key: key, Scopes: []string{ScopeUsers}, Env: true}
-	p, err := c.Plan(ctx, o)
+	p, err = c.Plan(ctx, o)
 	if err != nil || !strings.Contains(p.Refused, "cannot write "+side.env) {
 		t.Fatalf("plan %q %v", p.Refused, err)
 	}
