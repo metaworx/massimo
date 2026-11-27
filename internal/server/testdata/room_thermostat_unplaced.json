@@ -1,0 +1,8 @@
+{
+  "code": "room_thermostat_unplaced",
+  "error": "room 2 has no thermostat on the cube: its list has thermostat 0a0109 in the room, but the cube has it in another room or in none; place it in its listed room",
+  "params": {
+    "device": "0a0109",
+    "room": 2
+  }
+}

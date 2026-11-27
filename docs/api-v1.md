@@ -420,18 +420,100 @@ for a restore, a guard rail: see POST /restore),
 `502` the Cube discarded the command or the connection failed,
 `503` the Cube has not sent its greeting yet.
 
+A refusal a client may meet carries a `code` beside `error`,
+which says what was refused,
+and `params`, the values its text names, by name (AP ErrorCodes):
+
+```json
+{"error": "room 2 has no thermostat", "code": "room_no_thermostat", "params": {"room": 2}}
+```
+
+- `code` is lower-case words joined by `_`, and never renamed once released;
+  one code may come with more than one status (a `409` on a write,
+  a `404` on a read).
+  The table below lists them.
+- `params` holds a room as its `{id}`, a number,
+  a device as the request named it, its radio address or its serial,
+  and devices as a list of radio addresses;
+  it is absent where the text names nothing.
+- `error` stays the server's English text, as the log has it:
+  a client that finds no `code`, or one it does not know,
+  shows `error` and goes by the status.
+- An error without a code is input no client sends (a body that does not parse,
+  an id out of range) or a failure on the server's side.
+
+The web UI says each code in the page's language (docs/ui.md,
+"Signs, texts and buttons").
+
 A room command is discarded by the Cube while it holds no state for a device in that room:
 one that never reported,
 or one that has not reported since the Cube restarted (window contacts only
 transmit on a window change).
 The error message then names the devices and the response carries their
-addresses as `no_state`.
+addresses as `no_state`,
+and with the room as `params` (`command_discarded_no_state`).
 Make them report (open and close the window, turn the thermostat's wheel),
 replace a dead battery, or remove the device from the Cube:
 
 ```json
-{"error": "engine: command discarded by the cube: the cube holds no state for room 4 members 005447, 1570d3 …", "no_state": ["005447", "1570d3"]}
+{"error": "engine: command discarded by the cube: the cube holds no state for room 4 members 0a0104, 0a0105 …",
+ "code": "command_discarded_no_state", "params": {"room": 4, "devices": ["0a0104", "0a0105"]},
+ "no_state": ["0a0104", "0a0105"]}
 ```
+
+### Error codes
+
+The codes a client may branch on, by area,
+each with the statuses it comes with and its `params`;
+`TestErrorCodes` holds the table to the server's codes and to the web UI's texts.
+
+**The lookups** every request to a Cube, a room or a device passes:
+
+| Code | Status | Params | Refused because |
+|------|--------|--------|-----------------|
+| `cube_unknown` | 404 | `cube` | the server serves no Cube of that serial |
+| `cube_not_connected_yet` | 503 | – | the Cube has not sent its greeting yet |
+| `room_unknown` | 404 | `room` | the Cube has no room of that id, or the room is hidden |
+| `device_unknown` | 404 | `device` | the Cube has no device of that radio address or serial, or the device is hidden |
+
+**A room's thermostats**,
+which its setpoint, its configuration and its week programme go to:
+
+| Code | Status | Params | Refused because |
+|------|--------|--------|-----------------|
+| `room_no_thermostat` | 409, 404 | `room` | the room has no thermostat: a write is `409`, a read of its programme `404` |
+| `room_thermostat_unplaced` | 409, 404 | `room`, `device` | the Cube's list has a thermostat in the room, `device` the first, but its C line names another room or none, so that the Cube has no thermostat there; the repair `…/devices/{rf}/repair/place` puts it there |
+
+**A command's result**, of a write sent to the Cube through its queue;
+`error` is the result's own:
+
+| Code | Status | Params | Refused because |
+|------|--------|--------|-----------------|
+| `command_superseded` | 409 | – | a newer command for the same target replaced it before it was sent |
+| `command_discarded` | 502 | – | the Cube discarded the command |
+| `command_discarded_no_state` | 502 | `room`, `devices` | the Cube discarded a room command, since it holds no state for those members of the room, also in `no_state` |
+| `command_unwanted` | 502 | – | the command was no longer wanted when its turn came |
+| `cube_not_connected` | 502 | – | the server's connection to the Cube is down |
+| `cube_busy` | 502 | – | another command is waiting for the Cube's reply |
+| `command_timed_out` | 502 | – | the command's time ran out before the Cube answered, waiting for the radio budget or its turn |
+
+**A call through an integration** (see "Acting for an integration's users"),
+whose `error` names the link that refused:
+
+| Code | Status | Params | Refused because |
+|------|--------|--------|-----------------|
+| `bad_header` | 400 | – | the header says something it may not |
+| `not_integration` | 403 | – | the header with a key that is no registered integration's |
+| `integration_disabled` | 403 | – | the integration is disabled or revoked |
+| `instance_pending` | 403 | – | another installation id than the accepted one |
+| `user_disabled` | 403 | – | the integration's user, its linked user or one of their roles is disabled |
+| `forbidden` | 403 | – | a capability the chain did not leave |
+
+**A repair** (see "Repairs"):
+
+| Code | Status | Params | Refused because |
+|------|--------|--------|-----------------|
+| `room_name_needed` | 409 | `room` | a listing into a room the Cube's list does not have, without `room_name`; `room` is also at the top level |
 
 ## Routes
 
@@ -2868,7 +2950,10 @@ each passed over while the Cube holds no valid state for it
 (`reported` false or `out_of_date`) and another thermostat of the room is not,
 never a device of another room, which would take the command as well
 (docs/cube-protocol.md, "Set temperature (0x40) addressing").
-A room without a thermostat is refused with `409`.
+A room without a thermostat is refused with `409`, `room_no_thermostat`,
+and so is its configuration and its week programme;
+where the Cube's list has a thermostat in the room whose C line names another room or none,
+`room_thermostat_unplaced` names it (see "Error codes").
 Before the radiogram, every member of the room whose communication error
 (`error`) is set gets one `r:`, the room taken from each device's C line,
 as the Cube takes it, so that the Cube does not hold the command back
@@ -3279,7 +3364,7 @@ a programme written and not yet in a thermostat's configuration counts as writte
 Plus `source`, the first thermostat of that order whose whole week is the room's,
 else the first of the order;
 its tag `etag` (also the `ETag` header), `pending` and `program_consistent`;
-`404` for a room without a thermostat.
+`404` for a room without a thermostat (`room_no_thermostat`, `room_thermostat_unplaced`).
 `GET …/devices/{rf}/program` gives one thermostat's own the same way,
 under its room's tag;
 a virtual wall thermostat's is its room's.

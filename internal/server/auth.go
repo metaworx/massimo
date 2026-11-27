@@ -802,8 +802,11 @@ func guessed(why error) bool {
 }
 
 // forbiddenError carries the words of the refusal, and where a client
-// tells refusals apart by it, a code ("integration_disabled").
-type forbiddenError struct{ msg, code string }
+// tells refusals apart by it, a code (integration_disabled, errcodes.go).
+type forbiddenError struct {
+	msg  string
+	code *errCode
+}
 
 func (e *forbiddenError) Error() string { return e.msg }
 
@@ -899,7 +902,7 @@ func (s *Server) principalFor(ctx context.Context, tok store.Token, now time.Tim
 			return nil, err
 		}
 		if !ok || integ.State != store.IntegrationActive {
-			return nil, &forbiddenError{msg: fmt.Sprintf("the integration of user %s is disabled", u.Name), code: "integration_disabled"}
+			return nil, &forbiddenError{msg: fmt.Sprintf("the integration of user %s is disabled", u.Name), code: codeIntegrationDisabled}
 		}
 		p.caps = intersect(intersect(p.caps, integrationCeiling), integ.MaxCaps)
 	}
@@ -1056,8 +1059,8 @@ func (s *Server) authorize(w http.ResponseWriter, r *http.Request, capability st
 			if guess && s.limiter.fail(ctx, key) {
 				s.logLockout(ip, "tokens")
 			}
-			if fe.code != "" {
-				writeJSON(w, http.StatusForbidden, map[string]any{"error": fe.msg, "code": fe.code})
+			if fe.code != nil {
+				writeJSON(w, http.StatusForbidden, map[string]any{"error": fe.msg, "code": fe.code.name})
 			} else {
 				writeError(w, http.StatusForbidden, fe.msg)
 			}
@@ -1076,8 +1079,8 @@ func (s *Server) authorize(w http.ResponseWriter, r *http.Request, capability st
 	q, no := s.integrationPrincipal(ctx, r, p)
 	if no != nil {
 		body := map[string]any{"error": no.msg}
-		if no.code != "" {
-			body["code"] = no.code
+		if no.code != nil {
+			body["code"] = no.code.name
 		}
 		writeJSON(w, no.status, body)
 		return p, false // the audit names who was refused
@@ -1085,7 +1088,7 @@ func (s *Server) authorize(w http.ResponseWriter, r *http.Request, capability st
 	p = q
 	if !s.allowed(p, capability, r) {
 		if p.integration != nil {
-			writeJSON(w, http.StatusForbidden, map[string]any{"error": capabilityRequired(capability), "code": "forbidden"})
+			writeJSON(w, http.StatusForbidden, map[string]any{"error": capabilityRequired(capability), "code": codeForbidden.name})
 			return p, false
 		}
 		writeError(w, http.StatusForbidden, capabilityRequired(capability))
