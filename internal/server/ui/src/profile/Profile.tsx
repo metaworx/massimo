@@ -222,7 +222,7 @@ function Mine({ who }: { who: User }) {
       {ofIntegration ? <p id="me-no-sign-in" class="muted small user-no-sign-in">{t("users.integrationNoSignIn")}</p> : <PasswordForm who={who} />}
       <div id="profile-tokens">
         {u && <Tokens u={u} off={false} open reads={profile.reads} run={run} say={profileMsg} labelId={"profile-key-label-" + u.name} help="profileTokens"
-          marked={profile.marked} drawn={keysDrawn} listOnly={ofIntegration} keeps={!ofIntegration && keepsOwn(u)} />}
+          marked={profile.marked} drawn={keysDrawn} listOnly={ofIntegration} keeps={!ofIntegration && keepsOwn(u)} ends={!ofIntegration} />}
       </div>
       <div id="profile-identities">
         {u && c && !ofIntegration && <LinkConfirm key={c.code} u={u} c={c} />}

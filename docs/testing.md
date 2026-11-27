@@ -485,6 +485,14 @@ a rig with waits of its own builds on the start and keeps its name
 (`startDrift`, `startSlotsCube`, `startMismatchCube`, `startMovingCube`).
 The recorded greeting is read once for every test:
 `recorded(t)` returns a copy of it, the test's to change.
+A test of a route's change line reads it with `changeSummaries(t, r, action, target)`
+(`logchange_test.go`, AP KeyLife, Block 4):
+once the store has written what the server handed it,
+the summaries of the change lines of that action on that target (`token:4`),
+oldest first, from the newest 100 of KEQ0000100's log,
+as the owner's key reads them,
+whose `changes` and `subject` the test then checks (`TestPutToken`,
+`TestKeyEndDate`, `TestKeyHeirs`).
 One test runs the server by hand, since it tests `Run`'s start and end:
 `TestNothingStartsAfterRun`.
 

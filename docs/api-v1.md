@@ -350,7 +350,7 @@ a page before its sign-in, or a scanner behind a proxy not in
 `-trusted-proxies`, does not lock the address out.
 Nor does a token the server issued and that has ended:
 a session revoked, logged out or past its end, a revoked key,
-a key ended unused (`auth.key_idle_days`, Tokens),
+a key past its end date or ended unused (`auth.key_idle_days`, Tokens),
 a session whose key was revoked, is past its end or ended unused,
 or the token of a removed user
 is answered `401` with the words of a wrong token, and counts as none,
@@ -900,9 +900,11 @@ found by the hash of the file's token, not by its label
 (AP MobileApp v1.4, D86-A);
 a key made with another key as the bearer carries that key's id as `made_by`,
 absent for every other token.
-`POST` with `{"label": "Loxone"}` creates an API key, which has no end date,
-and answers `201` with the key once;
-`"idle_exempt": true` beside the label keeps it from the idle limit (below),
+`POST` with `{"label": "Loxone"}` creates an API key and answers `201` with the key once;
+`"expires_at"` beside the label gives it an end date (below),
+an RFC 3339 time in the future, `null` or absent for none,
+one that has passed or is no time `400`, and no key made;
+`"idle_exempt": true` keeps it from the idle limit (below),
 from who manages the user alone (`403` for anyone else);
 an integration's user gets none (`403`, "Acting for an integration's users"):
 
@@ -959,7 +961,8 @@ An ended key and its session are refused as ended tokens,
 which do not count toward the lockout (Authentication);
 nothing is written when a key ends, so it lives again,
 its session with it while the session's own 30 days last,
-where the limit is raised or turned off, or the key kept from it (D6-A);
+where the limit is raised or turned off, the key kept from it,
+or its end date moved later or removed (D6-A);
 its use never brings it back, since it is refused before its use is written.
 The list shows each key's life:
 `idle_exempt`, true for a key kept from the limit and always for the settings
@@ -974,12 +977,43 @@ for who manages the key's user alone (`users`, or `guests` for a guest it reache
 within the rank rule: D7-A), the key's own user not, unless it manages itself;
 it answers the key as the list shows it, and is audited as `token.update`,
 its change line from and to.
-A body without `idle_exempt`, or with another field, is `400`,
+A body without `idle_exempt` or `expires_at`, or with another field, is `400`,
 a session `400`, an integration's key kept from the limit `400`
 (it is always held to it, and its integration registers again once it ended),
 the settings file's key `409`, a token of another user `404`,
 and the bearer that very key `403`: a key changes nothing of its own life,
 and a session made from it is not the key.
+
+An API key may take an end date (AP KeyLife v1.0, Block 4; AP MobileApp, D75),
+at its `POST` or later with `PUT …/tokens/{id}` and
+`{"expires_at": "2026-12-24T18:00:00Z"}`, which sets or moves it,
+or `{"expires_at": null}`, which removes it;
+the list shows it as the key's `expires_at`, absent for none.
+At its end date the key ends, its session with it,
+refused as ended tokens that do not count toward the lockout,
+and is listed with `ended` `expired`, to be revoked;
+an end is no revoke, so the keys it made live on (D5-A).
+Nothing is written when it ends (D6-A):
+moved later or removed, the key lives again,
+its session with it while the session's own 30 days last.
+The end date is the key's user's to move, signed in or with another of its keys,
+or a session made from the key,
+and that of who manages the user (`users`, or `guests` for a guest it reaches,
+within the rank rule);
+an integration's key's that of a holder of `users` or `integrations`,
+on its row in the integration's user's panel;
+the integration registers again once its key ended.
+A time that has passed, or now, is `400` and changes nothing:
+a key ends now by its revoke.
+The settings file's key takes none (`409`, D3-A):
+an ended one would lock the owner out,
+since the bootstrap adds it back only where its hash is unknown.
+The bearer that very key is `403` (D4-A):
+an end date that the key could move would renew itself,
+which is the idle limit again.
+A user or a key with no right to the user is `403`, as for its other fields.
+The change is audited as `token.update`,
+its change line from and to (`null` for none).
 
 ### Identities: /api/v1/users/{name}/identities
 

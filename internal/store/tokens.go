@@ -4,7 +4,8 @@
 package store
 
 // Tokens (docs/store.md section 6): a session the web UI holds for 30
-// days, extended on use, or an API key that never expires. A token is
+// days, extended on use, or an API key, which ends at its end date where
+// it has one (AP KeyLife, Block 4). A token is
 // 32 random bytes shown once; the store keeps its SHA-256. A revoked
 // token is a tombstone (deleted_at, revoked_at before migration 0024)
 // that keeps its row, so that the audit's token_id still
@@ -16,9 +17,9 @@ package store
 // for the days of the setting auth.key_idle_days ends, unless it is kept
 // from it (idle_exempt, migration 0101) or is the settings file's (AP
 // KeyLife, Block 3); an end is a state read at each check, nothing
-// written, so a key lives again where the limit is raised or the key
-// excluded (D6-A). Every place a token is let in, counted or sent to
-// holds to one rule, alive.
+// written, so a key lives again where the limit is raised, the key
+// excluded or its end date moved later (D6-A). Every place a token is let
+// in, counted or sent to holds to one rule, alive.
 
 import (
 	"context"
@@ -39,6 +40,11 @@ const (
 
 // ErrNoToken is the error of a token that does not exist or is revoked.
 var ErrNoToken = errors.New("store: no such token")
+
+// ErrEndPassed is the error of an API key's end date that is not after
+// the store's now (AP KeyLife, Block 4): a key is made or moved to end
+// later, never at once nor in the past.
+var ErrEndPassed = errors.New("store: the end date has passed")
 
 // Token is one row of tokens, without the hash.
 type Token struct {
@@ -261,19 +267,34 @@ type KeyOptions struct {
 	// IdleExempt keeps the key from the idle limit (AP KeyLife, D7-A):
 	// who may set it is the caller's question, the server's.
 	IdleExempt bool
+	// Expires is the key's end date (AP KeyLife, Block 4), zero for none;
+	// one not after the store's now is ErrEndPassed.
+	Expires time.Time
 }
 
-// AddKey creates an API key for a user with opts, without an end, and
-// returns it with the secret, shown once; AddToken of a key is AddKey
-// without a maker or an exclusion. An integration's user is
-// ErrIntegrationUser, as with AddToken.
+// AddKey creates an API key for a user with opts, its end date the one
+// opts give (none where zero), and returns it with the secret, shown
+// once; AddToken of a key is AddKey without a maker, an exclusion or an
+// end checked. An end date that has passed is ErrEndPassed, and nothing
+// is made; an integration's user is ErrIntegrationUser, as with
+// AddToken.
 func (s *Store) AddKey(ctx context.Context, userID int64, opts KeyOptions) (Token, string, error) {
+	if endPassed(opts.Expires, s.now()) {
+		return Token{}, "", fmt.Errorf("%w: %s", ErrEndPassed, formatTime(opts.Expires))
+	}
 	secret, err := NewSecret()
 	if err != nil {
 		return Token{}, "", err
 	}
-	t, err := s.addTokenHash(ctx, userID, TokenAPI, HashToken(secret), time.Time{}, opts, false)
+	t, err := s.addTokenHash(ctx, userID, TokenAPI, HashToken(secret), opts.Expires, opts, false)
 	return t, secret, err
+}
+
+// endPassed reports whether the end date end, as the store keeps it, is
+// not after now as the rule alive compares the two: a key that ended
+// there at once. A zero end is none, and has not passed.
+func endPassed(end, now time.Time) bool {
+	return !end.IsZero() && formatTime(end) <= formatTime(now)
 }
 
 // AddTokenHash creates a token whose secret the caller holds, as the
@@ -606,18 +627,26 @@ type TokenLife struct {
 	// it (false); an integration's key takes no exclusion (AP
 	// MobileApp, D75).
 	IdleExempt *bool
+	// Expires is the key's end date (AP KeyLife, Block 4): a time after
+	// the store's now sets or moves it, else ErrEndPassed; the zero time
+	// removes it, the key then ending by the idle limit alone.
+	Expires *time.Time
 }
 
 // SetTokenLife changes the life of the API key id, not revoked, ended or
-// not, since a key kept from the idle limit lives again (AP KeyLife,
-// D6-A), and returns it with its life under the rule at the store's now.
-// ErrNoToken where there is no such key: none, a session or revoked;
-// ErrIntegrationUser where an integration's key is to be kept from the
-// idle limit. Who may change it is the caller's question (the server's,
-// D7-A).
+// not, since a key kept from the idle limit, or whose end date is moved
+// later or removed, lives again (AP KeyLife, D6-A), and returns it with
+// its life under the rule at the store's now. ErrNoToken where there is
+// no such key: none, a session or revoked; ErrIntegrationUser where an
+// integration's key is to be kept from the idle limit; ErrEndPassed where
+// the end date given has passed, and nothing is changed. Who may change
+// it is the caller's question (the server's, D4-A, D7-A).
 func (s *Store) SetTokenLife(ctx context.Context, id int64, life TokenLife) (Token, error) {
 	if err := s.writable(); err != nil {
 		return Token{}, err
+	}
+	if life.Expires != nil && endPassed(*life.Expires, s.now()) {
+		return Token{}, fmt.Errorf("%w: %s", ErrEndPassed, formatTime(*life.Expires))
 	}
 	var integration sql.NullInt64
 	err := s.db.QueryRowContext(ctx, `SELECT u.integration_id FROM tokens t JOIN users u ON u.id = t.user_id WHERE t.id = ? AND t.kind = ? AND t.deleted_at IS NULL`,
@@ -631,12 +660,16 @@ func (s *Store) SetTokenLife(ctx context.Context, id int64, life TokenLife) (Tok
 	if life.IdleExempt != nil && *life.IdleExempt && integration.Valid {
 		return Token{}, fmt.Errorf("%w: its key %d is held to the idle limit", ErrIntegrationUser, id)
 	}
-	var exempt any
+	var exempt, expires any
 	if life.IdleExempt != nil {
 		exempt = *life.IdleExempt
 	}
-	res, err := s.db.ExecContext(ctx, `UPDATE tokens SET idle_exempt = coalesce(?, idle_exempt), origin = ?, version = version + 1 WHERE id = ? AND kind = ? AND deleted_at IS NULL`,
-		exempt, s.nodeID, id, TokenAPI)
+	if life.Expires != nil {
+		expires = nullTime(*life.Expires)
+	}
+	res, err := s.db.ExecContext(ctx, `UPDATE tokens SET idle_exempt = coalesce(?, idle_exempt), expires_at = CASE WHEN ? THEN ? ELSE expires_at END,
+		origin = ?, version = version + 1 WHERE id = ? AND kind = ? AND deleted_at IS NULL`,
+		exempt, life.Expires != nil, expires, s.nodeID, id, TokenAPI)
 	if err != nil {
 		return Token{}, fmt.Errorf("store: token %d: %w", id, err)
 	}

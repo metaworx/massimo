@@ -156,14 +156,19 @@ def test_an_integrations_user_has_no_way_in(page, case, reads):
             if not regular:
                 assert said.inner_text() == line, f"{name}: the line's words"
             assert panel.locator(".remove-password").count() == (1 if name == PHONE else 0), f"{name}: the held password's removal"
-            # an integration's key is always held to the idle limit: no Keep while unused, no Change…; the
-            # regular user's, which the owner manages, has it (AP KeyLife, Block 3)
+            # an integration's key is always held to the idle limit: no Keep while unused; the regular user's,
+            # which the owner manages, has it (AP KeyLife, Block 3); its Change… has the end date alone (Block 4)
             assert panel.locator(".key-keep").count() == (1 if regular else 0), f"{name}: Create key's Keep while unused"
             if name == PHONE:
                 row = panel.locator(f".user-tokens li[data-id='{held_key['id']}']")
                 row.wait_for()
                 assert row.locator(".revoke-token").count() == 1, "the held key's Revoke"
-                assert row.locator(".change-key").count() == 0, "no Change… on an integration's key"
+                row.locator(".change-key").click()
+                form = row.locator("form.token-change")
+                form.wait_for()
+                assert form.locator(".token-end-input").count() == 1, "Change… of an integration's key: its end date"
+                assert form.locator("input[name=idle_exempt]").count() == 0, "Change… of an integration's key: no Keep while unused"
+                form.locator(".form-cancel").click()
                 with page.expect_request(lambda r: r.method == "PUT" and phone_path.search(r.url)):
                     panel.locator(".remove-password").click()
                 assert sent == [{"password": ""}], f"the removal sends an empty password: {sent}"
@@ -762,7 +767,8 @@ def test_keep_while_unused(page, case):
 def test_no_keep_for_who_manages_nobody(new_context, case, watch, guard):
     """A user who manages nobody, a viewer, keeps the idle limit on its own
     keys (AP KeyLife, D7-A): My profile lists its key with Revoke, but
-    offers neither Create key's Keep while unused nor Change…."""
+    offers no Keep while unused, at Create key nor in Change…, which has
+    the key's end date alone, the user's own to move (Block 4, D4-A)."""
     from test_login import sign_in
     name = f"idle-{case.width}-{case.lang}"
     api_call("POST", "api/v1/users", {"name": name, "role": "viewer", "password": "pass-word-kv-71"})
@@ -779,12 +785,171 @@ def test_no_keep_for_who_manages_nobody(new_context, case, watch, guard):
         row = page.locator(f"#profile-tokens li[data-id='{key['id']}']")
         row.wait_for(timeout=5000)
         assert row.locator(".revoke-token").count() == 1, "its Revoke"
-        assert row.locator(".change-key").count() == 0, "no Change…"
         assert page.locator("#profile-tokens .create-key").count() == 1, "Create key"
         assert page.locator("#profile-tokens .key-keep").count() == 0, "no Keep while unused"
+        row.locator(".change-key").click()
+        form = row.locator("form.token-change")
+        form.wait_for()
+        assert form.locator(".token-end-input").count() == 1, "Change…: the key's end date"
+        assert form.locator("input[name=idle_exempt]").count() == 0, "Change…: no Keep while unused"
+        # the user's own end date, moved signed in, is taken (D4-A)
+        form.locator(".token-end-input").fill("2031-02-03T12:30")
+        with page.expect_response(lambda r: r.request.method == "PUT" and f"/users/{name}/tokens/" in r.url and r.status == 200):
+            form.locator("button[type=submit]").click()
+        row.locator(".token-end").wait_for(timeout=5000)
         sign_out(page)
     finally:
         api_call("DELETE", "api/v1/users/" + name)
+
+
+def test_a_keys_end_date(page, case, watch):
+    """A key's end date (AP KeyLife, Block 4): Create key's field Ends,
+    with its label and its line, sends expires_at, the browser's time as
+    an API time, the key made saying when it ends and the field empty
+    again; a key made with the field empty sends none. Change… shows the
+    date, Save off until it is changed; a new date is one PUT and the line
+    follows; one that has passed is refused by the server, the form
+    staying open and the users' line saying why; No end empties the field
+    and Save sends null, the line gone, and the key stored without an
+    end."""
+    prefix = f"ui-test-end-{case.width}-{case.lang}-"
+    revoke_keys(prefix)
+    puts, posts = [], []
+    page.on("request", lambda r: puts.append(r.post_data_json) if r.method == "PUT" and "/users/operator/tokens/" in r.url else None)
+    page.on("request", lambda r: posts.append(r.post_data_json) if r.method == "POST" and r.url.endswith("/users/operator/tokens") else None)
+    iso = lambda local: page.evaluate("(l) => new Date(l).toISOString()", local)
+    ends = lambda at: page.evaluate("(iso) => t('users.keyEnds', { date: (" + WHEN + ")(iso) })", at)
+    try:
+        show_view(page, "system")
+        panel = page.locator(".user-panel[data-name='operator']")
+        panel.wait_for()
+        panel.locator("summary").click()
+        field = panel.locator("#user-key-label-operator-end")
+        field.wait_for()
+        row_of = panel.locator(".field.key-end")
+        assert row_of.locator("label").inner_text() == page.evaluate("t('users.keyEndsField')"), "the field's label"
+        assert row_of.locator(".field-hint").inner_text() == page.evaluate("t('users.keyEndsHint')"), "its line"
+        field.fill("2031-02-03T12:30")
+        panel.locator("input[name=label]").fill(prefix + "dated")
+        with page.expect_request(lambda r: r.method == "POST" and r.url.endswith("/users/operator/tokens")):
+            panel.locator(".create-key").click()
+        first = iso("2031-02-03T12:30")
+        assert posts == [{"label": prefix + "dated", "expires_at": first}], f"Create key sends expires_at: {posts}"
+        made = panel.locator(".user-tokens li", has_text=prefix + "dated")
+        made.wait_for(timeout=5000)
+        assert made.locator(".token-end").inner_text() == ends(first), "the key made says when it ends"
+        assert wait_until(page, "document.querySelector('#user-key-label-operator-end').value === ''", 3), "the field empty again"
+        panel.locator("input[name=label]").fill(prefix + "plain")
+        with page.expect_request(lambda r: r.method == "POST" and r.url.endswith("/users/operator/tokens")):
+            panel.locator(".create-key").click()
+        assert posts[-1] == {"label": prefix + "plain"}, f"a key made with the field empty sends no end: {posts}"
+
+        # Change… shows the date and moves it
+        made.locator(".change-key").click()
+        form = made.locator("form.token-change")
+        form.wait_for()
+        end = form.locator(".token-end-input")
+        assert end.input_value() == "2031-02-03T12:30", "Change… shows the key's end"
+        assert form.locator("label", has_text=page.evaluate("t('users.keyEndsField')")).count() == 1, "the field's label"
+        save = form.locator("button[type=submit]")
+        assert save.is_disabled(), "Save off until it is changed"
+        end.fill("2032-03-04T13:00")
+        with page.expect_request(lambda r: r.method == "PUT" and "/users/operator/tokens/" in r.url):
+            save.click()
+        second = iso("2032-03-04T13:00")
+        assert puts == [{"expires_at": second}], f"one PUT with expires_at: {puts}"
+        assert wait_until(page, "(document.querySelector(%r) || {}).textContent === %r" % (f"li[data-id='{made.get_attribute('data-id')}'] .token-end", ends(second)), 5), \
+            "the line follows"
+
+        # a date that has passed: refused, the form left open; the refusal is on purpose
+        watch.expected.append((f"/api/v1/users/operator/tokens/{made.get_attribute('data-id')}", 400))
+        made.locator(".change-key").click()
+        form.wait_for()
+        end.fill("2020-01-01T00:00")
+        with page.expect_response(lambda r: r.request.method == "PUT" and "/users/operator/tokens/" in r.url and r.status == 400):
+            save.click()
+        assert wait_until(page, "document.getElementById('users-msg').textContent.includes('has passed')", 5), \
+            f"the users' line says why: {page.locator('#users-msg').text_content()}"
+        assert form.is_visible(), "the form left open"
+
+        # No end: the field emptied, null sent, the line gone
+        form.locator(".token-no-end").click()
+        assert end.input_value() == "", "No end empties the field"
+        with page.expect_request(lambda r: r.method == "PUT" and "/users/operator/tokens/" in r.url):
+            save.click()
+        assert puts[-1] == {"expires_at": None}, f"No end sends null: {puts}"
+        assert wait_until(page, "!document.querySelector(%r)" % f"li[data-id='{made.get_attribute('data-id')}'] .token-end", 5), "the line gone"
+        stored = [tk for tk in api_call("GET", "api/v1/users/operator/tokens") if (tk.get("label") or "") == prefix + "dated"]
+        assert stored and "expires_at" not in stored[0], f"stored without an end: {stored}"
+        named_buttons(page, "System settings → Users, a key's Change… with its end")
+        assert scroll_width(page) <= case.width, "no horizontal scroll"
+    finally:
+        revoke_keys(prefix)
+    show_view(page, "tiles")
+
+
+def test_a_keys_end_line(page, case, reads):
+    """A key's line of its end date (AP KeyLife, Block 4; the list
+    stubbed): ends … where it has one, beside ends … unless used only
+    where that comes first, and kept while unused as before; past it, the
+    badge Ended and ended …; at 390 px in every language each row, its
+    Change… form open, stays inside its list."""
+    prefix = f"ui-test-endline-{case.width}-{case.lang}-"
+    revoke_keys(prefix)
+    keys = {what: api_call("POST", "api/v1/users/operator/tokens", {"label": prefix + what}) for what in ("dated", "idle first", "kept", "expired")}
+    end, sooner, later, past = "2026-12-24T09:30:00Z", "2026-12-10T08:00:00Z", "2027-01-15T08:00:00Z", "2026-11-01T08:00:00Z"
+
+    def life(body):
+        for tk in body or []:
+            if tk["id"] == keys["dated"]["id"]:
+                tk.update(expires_at=end, idle_ends_at=later)
+            elif tk["id"] == keys["idle first"]["id"]:
+                tk.update(expires_at=end, idle_ends_at=sooner)
+            elif tk["id"] == keys["kept"]["id"]:
+                tk.update(expires_at=end, idle_exempt=True)
+            elif tk["id"] == keys["expired"]["id"]:
+                tk.update(ended="expired", expires_at=past)
+        return body
+    pattern = "**/api/v1/users/operator/tokens"
+    reads.change(pattern, life)
+    try:
+        show_view(page, "system")
+        panel = page.locator(".user-panel[data-name='operator']")
+        panel.wait_for()
+        panel.locator("summary").click()
+        row = lambda what: panel.locator(f".user-tokens li[data-id='{keys[what]['id']}']")
+        row("expired").wait_for(timeout=5000)
+        want = page.evaluate("""([end, sooner, past]) => {
+          const at = """ + WHEN + """;
+          return { ends: t('users.keyEnds', { date: at(end) }), idle: t('users.idleEnds', { date: at(sooner) }), kept: t('users.idleKept'),
+                   ended: t('users.ended'), past: t('users.endedExpired', { date: at(past) }) };
+        }""", [end, sooner, past])
+        assert row("dated").locator(".token-end").inner_text() == want["ends"], "ends …"
+        assert row("dated").locator(".token-life").count() == 0, "no idle end after the end date"
+        assert row("idle first").locator(".token-end").inner_text() == want["ends"], "ends …, the idle end first"
+        assert row("idle first").locator(".token-life").inner_text() == want["idle"], "ends … unless used, before the end date"
+        assert row("kept").locator(".token-end").inner_text() == want["ends"], "ends …, kept while unused"
+        assert row("kept").locator(".token-life").inner_text() == want["kept"], "kept while unused"
+        assert row("expired").locator(".flag.bad").inner_text().strip() == want["ended"], "the badge Ended"
+        assert row("expired").locator(".token-life").inner_text() == want["past"], "ended …"
+        assert row("expired").locator(".token-end").count() == 0, "no ends … past it"
+        row("dated").locator(".change-key").click()
+        row("dated").locator("form.token-change").wait_for()
+        langs = ("en", "de", "fr", "it", "nl", "pl") if case.width == 390 else (case.lang,)
+        for lang in langs:
+            page.evaluate("async (l) => { await changeLanguage(l); applyLanguage(); }", lang)
+            frames(page)
+            m = page.evaluate("""() => [...document.querySelectorAll(".user-panel[data-name='operator'] .user-tokens li[data-id]")].map((li) => {
+              const r = li.getBoundingClientRect(), list = li.parentElement.getBoundingClientRect();
+              return {id: li.dataset.id, inside: r.left >= list.left - 0.5 && r.right <= list.right + 0.5};
+            })""")
+            assert m and all(x["inside"] for x in m), f"{lang}: every row inside the list: {m}"
+            assert scroll_width(page) <= case.width, f"no horizontal scroll in {lang}"
+        page.evaluate("async (l) => { await changeLanguage(l); applyLanguage(); }", case.lang)
+    finally:
+        reads.clear(pattern)
+        revoke_keys(prefix)
+    show_view(page, "tiles")
 
 
 NO_ANSWER = {"en": "no answer from the server; it may have been done all the same",

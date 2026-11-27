@@ -417,7 +417,7 @@
 
   "help.profilePassword": "Met een wachtwoord meld je je in elke browser aan met je naam. Het wordt met OPAQUE in deze browser geregistreerd, dus de server ziet het nooit; een wijziging vraagt het huidige. Opslaan stelt het in.",
 
-  "help.profileTokens": "Elke browser die als jou is aangemeld is een sessie; een API-sleutel meldt een programma aan. Intrekken beëindigt er een meteen en meldt die browser of dat programma af. Sleutel aanmaken maakt een sleutel die maar één keer getoond wordt: kopieer hem dan. Waar de server ongebruikte sleutels laat vervallen, zegt de regel van een sleutel wanneer; Ook ongebruikt bewaren, aangeboden aan wie je gebruiker beheert, zondert een sleutel daarvan uit.",
+  "help.profileTokens": "Elke browser die als jou is aangemeld is een sessie; een API-sleutel meldt een programma aan. Intrekken beëindigt er een meteen en meldt die browser of dat programma af. Sleutel aanmaken maakt een sleutel die maar één keer getoond wordt: kopieer hem dan. Waar de server ongebruikte sleutels laat vervallen, zegt de regel van een sleutel wanneer; Ook ongebruikt bewaren, aangeboden aan wie je gebruiker beheert, zondert een sleutel daarvan uit. Een sleutel kan een einddatum krijgen, bij het aanmaken of later met Wijzigen…; daarna wordt hij geweigerd.",
 
   "help.profileLinked": "Koppelen meldt je één keer aan bij de provider; het teruggekomen account wordt getoond, en Koppelen daar laat het je ook hier aanmelden. Opnieuw koppelen bij een provider vervangt daar de koppeling. Verwijderen beëindigt een koppeling, maar niet je laatste manier om aan te melden.",
   "help.roomName": "De naam van de ruimte, opgeslagen in de Cube en zichtbaar in elk programma dat met de Cube praat.",
@@ -1781,6 +1781,10 @@
   "users.changeKey": "Wijzigen…",
   "users.changeKeyLabel": "{label} wijzigen",
   "users.keyChanged": "Sleutel {id} gewijzigd.",
+  "users.keyEnds": "vervalt op {date}",
+  "users.keyEndsField": "Einde",
+  "users.keyEndsHint": "Leeg: geen einddatum. Daarna wordt de sleutel geweigerd, met zijn sessie.",
+  "users.keyNoEnd": "Geen einde",
   "users.newKey": "Nieuwe API-sleutel",
   "users.keyLabel": "waar de sleutel voor is",
   "users.keyLabelNeeded": "Zeg waar de sleutel voor is.",

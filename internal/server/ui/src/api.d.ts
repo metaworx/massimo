@@ -688,7 +688,8 @@ export interface Token {
   /** @format date-time */
   created_at: string;
   /**
-   * Absent for an API key
+   * A session's end, 30 days from its last use; an API key's end date, absent
+   * for a key without one (AP KeyLife, Block 4)
    * @format date-time
    */
   expires_at?: string;
@@ -731,8 +732,9 @@ export interface Token {
   /**
    * Why an API key has ended, listed to be revoked: idle, unused past the
    * limit; expired, past its end date. Absent while it lives. It lives again
-   * where the limit is raised or turned off, or the key kept from it (AP
-   * KeyLife, D6-A); its use never brings it back
+   * where the limit is raised or turned off, the key kept from it, or its end
+   * date moved later or removed (AP KeyLife, D6-A); its use never brings it
+   * back
    */
   ended?: "idle" | "expired";
 }

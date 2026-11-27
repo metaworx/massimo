@@ -121,24 +121,11 @@ func TestKeyHeirs(t *testing.T) {
 	alive("the grandchild", grandchild.Token, false)
 	alive("a key made by a sign-in's session", bySession.Token, true)
 	alive("a key made by a key's session", byKeySession.Token, true)
-	if err := st.FlushEvents(ctx); err != nil {
-		t.Fatal(err)
-	}
-	var lines []map[string]any
-	getJSON(t, ts, "secret", "/api/v1/cubes/KEQ0000100/log?kind=change&limit=100", &lines)
-	found := false
-	for _, l := range lines {
-		sum, _ := l["summary"].(map[string]any)
-		subject, _ := sum["subject"].(map[string]any)
-		if sum["action"] == "token.revoke" && sum["target"] == "token:"+strconv.FormatInt(annaKey.ID, 10) {
-			found = fmt.Sprint(subject["heirs"]) == fmt.Sprint([]any{float64(child.ID), float64(ginas.ID), float64(grandchild.ID)})
-			if !found {
-				t.Errorf("the change line of the revoke: %v", l)
-			}
-		}
-	}
-	if !found {
-		t.Errorf("no change line of the revoke naming the heirs: %v", lines)
+	lines := changeSummaries(t, r, "token.revoke", "token:"+strconv.FormatInt(annaKey.ID, 10))
+	if len(lines) != 1 {
+		t.Errorf("the change lines of the revoke: %v", lines)
+	} else if subject, _ := lines[0]["subject"].(map[string]any); fmt.Sprint(subject["heirs"]) != fmt.Sprint([]any{float64(child.ID), float64(ginas.ID), float64(grandchild.ID)}) {
+		t.Errorf("the change line of the revoke naming the heirs: %v", lines[0])
 	}
 
 	// A key revoking itself names its heirs too; one without names none.

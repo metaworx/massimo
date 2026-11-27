@@ -371,6 +371,12 @@ A key left unused past the limit ends, its session with it,
 and the next login by fingerprint is refused (`401`),
 which makes the app forget the kept login, as it does for a revoked key:
 nothing to build in the app.
+So does a key past the end date its user, or who manages the user,
+gave it in a browser (AP KeyLife, Block 4):
+the app never sets one, since its key is made by the page's session without one,
+and the key itself may not move its own end date;
+where the date is moved later before the app's next login,
+that login goes through.
 
 - **Enabling.**
   The sign-in form asks `login.status()` when it is drawn,

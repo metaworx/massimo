@@ -418,7 +418,7 @@
 
   "help.profilePassword": "Una password ti permette di accedere con il tuo nome in qualsiasi browser. Viene registrata con OPAQUE in questo browser, quindi il server non la vede mai; una modifica chiede quella attuale. Salva la imposta.",
 
-  "help.profileTokens": "Ogni browser connesso a tuo nome è una sessione; una chiave API connette un programma. Revoca ne termina una subito, disconnettendo quel browser o programma. Crea la chiave ne crea una, mostrata una sola volta: copiala allora. Dove il server fa scadere le chiavi inutilizzate, la riga di una chiave dice quando; Tieni anche se inutilizzata, offerto a chi gestisce il tuo utente, la esenta.",
+  "help.profileTokens": "Ogni browser connesso a tuo nome è una sessione; una chiave API connette un programma. Revoca ne termina una subito, disconnettendo quel browser o programma. Crea la chiave ne crea una, mostrata una sola volta: copiala allora. Dove il server fa scadere le chiavi inutilizzate, la riga di una chiave dice quando; Tieni anche se inutilizzata, offerto a chi gestisce il tuo utente, la esenta. Una chiave può avere una data di fine, alla creazione o più tardi con Modifica…; da allora è rifiutata.",
 
   "help.profileLinked": "Collega ti fa accedere una volta presso il provider; l'account tornato viene mostrato, e Collega lì ti fa accedere con esso anche qui. Collegare di nuovo presso un provider vi sostituisce il collegamento. Rimuovi termina un collegamento, ma non il tuo ultimo modo di accedere.",
   "help.roomName": "Il nome del locale, memorizzato sul Cube e mostrato da ogni programma che comunica con esso.",
@@ -1782,6 +1782,10 @@
   "users.changeKey": "Modifica…",
   "users.changeKeyLabel": "modifica {label}",
   "users.keyChanged": "Chiave {id} modificata.",
+  "users.keyEnds": "scade il {date}",
+  "users.keyEndsField": "Fine",
+  "users.keyEndsHint": "Vuoto: nessuna data di fine. Da allora la chiave è rifiutata, con la sua sessione.",
+  "users.keyNoEnd": "Nessuna fine",
   "users.newKey": "Nuova chiave API",
   "users.keyLabel": "a cosa serve la chiave",
   "users.keyLabelNeeded": "Indica a cosa serve la chiave.",

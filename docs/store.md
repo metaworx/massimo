@@ -410,7 +410,7 @@ CREATE TABLE tokens (
     hash           TEXT    NOT NULL UNIQUE,      -- SHA-256 of the token, hex; the token itself is never stored
     label          TEXT    NOT NULL DEFAULT '',  -- 'MASSIMO_API_TOKEN', 'Loxone', 'Firefox on the laptop'
     created_at     TEXT    NOT NULL,
-    expires_at     TEXT,                         -- NULL: never (API keys); sessions: moved on every use
+    expires_at     TEXT,                         -- sessions: moved on every use; API keys: the end date, NULL for none (AP KeyLife, Block 4)
     last_used_at   TEXT,
     last_used_from TEXT    NOT NULL DEFAULT '',  -- the client's address
     deleted_at     TEXT,                         -- revoked; revoked_at until migration 0024 (D7)
@@ -1098,6 +1098,12 @@ so the older binary that a downgrade serves would let it in all the same.
 Its down part, `0101_token_idle.down.sql`, drops the column;
 it loses which keys were kept from the limit, and only that,
 and a binary of 101 or later that opens the file again holds every key to it.
+AP KeyLife's Block 4, an API key's end date, adds no migration:
+the end date is `tokens.expires_at`, a column of 0001 that every binary reads
+for the token itself,
+so a binary for 24 to 101 refuses a key past its end date too;
+one before Block 2 lets in that key's session, as the paragraph of 0100 says,
+which is its code's and not the file's, and `min_reader` stays 24.
 On a store of 500 000 log rows (149 MB, a tenth with a user) a desktop took
 2.0 s for the raise, its copy `massimo.db.before-24` included, and 2.2 s for the
 down part, its copy included (`TestRaiseTimes` with
@@ -1647,6 +1653,26 @@ Its use never brings it back, since the rule refuses it before its use is writte
 and `Ended`, `idle` or `expired`),
 which `TestKeyEndRule` holds to the SQL on one table of cases;
 `SetTokenLife` changes a key's exclusion.
+
+A key may also take an end date (AP KeyLife v1.0, Block 4; AP MobileApp, D75):
+`tokens.expires_at`,
+which the rule `alive` always read for the token itself and,
+since Block 2, for the key a session was made from,
+`NULL` for none, as every key had before.
+`AddKey` makes a key with one (`KeyOptions.Expires`) and `SetTokenLife` sets,
+moves or removes it (`TokenLife.Expires`, the zero time for none);
+a date not after the store's clock, as the rule compares the two,
+is `ErrEndPassed`, and nothing is made or changed:
+a key is ended now by its revoke.
+At its date the key ends, its session with it,
+and is listed with `Ended` `expired`;
+its heirs live on, an end being no revoke (D5-A).
+The end is a state read at each check, as the idle end is (D6-A):
+the date moved later, or removed, brings the key back, its session with it.
+Who may move it is the server's question:
+the key's user or who manages it, never the key itself as the bearer (D4-A),
+and never the settings file's key (D3-A);
+the bootstrap clears any end date the file's key has.
 
 ### The sign-in by OPAQUE
 

@@ -230,7 +230,7 @@ function UserPanel({ u }: { u: User }) {
       {links && <p class="muted small user-integration-links">{t("users.linksList", { users: links })}</p>}
       <UserForm u={u} off={locked} open={ui.open} />
       <Tokens u={u} off={!manage && !self} open={ui.open} reads={reads.value} run={run} say={usersMsg} labelId={"user-key-label-" + u.name}
-        listOnly={!!u.integration} keeps={manage && !u.integration} />
+        listOnly={!!u.integration} keeps={manage && !u.integration} ends={manage || (self && !u.integration)} />
       <Identities u={u} off={!manage || !enabled.value.length} open={ui.open} reads={reads.value} providers={enabled.value} run={run} say={usersMsg}
         title={t("users.identities")} none={t("users.identitiesNone")} changes={u.integration ? undefined : changes} assign={!u.integration} />
       {locked && <p class="muted small">{t(u.role === "owner" ? "users.ownerOnly" : "users.outranked")}</p>}

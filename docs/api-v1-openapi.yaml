@@ -885,10 +885,12 @@ paths:
       summary: Create an API key for the user
       x-capability: users
       description: >-
-        The key is shown once, in token; the store keeps its hash. It has no end date; unused for the days
-        of the setting auth.key_idle_days it ends, unless idle_exempt keeps it from that limit, which only
-        who manages the user may set (403 for anyone else, the key's own user among them; AP KeyLife,
-        D7-A). A retry with the same Idempotency-Key answers 201 without token. An integration's user gets
+        The key is shown once, in token; the store keeps its hash. expires_at gives it an end date, a time
+        in the future (one that has passed is 400 and makes no key), null or absent none (AP KeyLife,
+        Block 4); unused for the days of the setting auth.key_idle_days it ends, unless idle_exempt keeps
+        it from that limit, which only who manages the user may set (403 for anyone else, the key's own
+        user among them; AP KeyLife, D7-A). A retry with the same Idempotency-Key answers 201 without
+        token. An integration's user gets
         none (403): it acts through its integration alone. With an API key as the bearer, the new key names
         it (made_by) and goes with its revoke; a bearer key revoked or ended after the request was let in
         makes none (401).
@@ -903,6 +905,7 @@ paths:
               properties:
                 label: {type: string, maxLength: 64, example: Loxone}
                 idle_exempt: {type: boolean, description: "Keeps the key from the idle limit; false by default"}
+                expires_at: {type: string, format: date-time, nullable: true, description: "The key's end date, in the future; null or absent for none"}
       responses:
         "201":
           description: The key
@@ -930,14 +933,20 @@ paths:
         idle_exempt keeps the key from the idle limit (true) or holds it
         to it again (false), for who manages the key's user alone (AP
         KeyLife, D7-A); a key that ended unused lives again once kept
-        from it (D6-A). A field left out keeps what the key has, and a
-        body of none, or with another field, is 400. A session is 400,
-        and so is an integration's key kept from the limit: it is always
-        held to it. The settings file's key (from_settings in the list)
-        is 409: it never ends by the limit, and is changed in the file.
-        The bearer that very key is 403: a key changes nothing of its
-        own life; a session made from it is not the key. Audited as
-        token.update.
+        from it (D6-A). expires_at sets or moves the key's end date, a
+        time in the future (one that has passed is 400 and changes
+        nothing), and null removes it (Block 4): for the key's user and
+        who manages it, an integration's key's for a holder of users or
+        integrations; a key past its end date lives again, its session
+        with it, once the date is moved later or removed (D6-A). A field
+        left out keeps what the key has, and a body of none, or with
+        another field, is 400. A session is 400, and so is an
+        integration's key kept from the limit: it is always held to it.
+        The settings file's key (from_settings in the list) is 409: it
+        never ends, by the limit nor by a date, and is changed in the
+        file (D3-A). The bearer that very key is 403: a key changes
+        nothing of its own life, its end date included; a session made
+        from it is not the key (D4-A). Audited as token.update.
       parameters:
         - {$ref: "#/components/parameters/idempotencyKey"}
         - {$ref: "#/components/parameters/name"}
@@ -951,7 +960,8 @@ paths:
               additionalProperties: false
               properties:
                 idle_exempt: {type: boolean}
-            example: {idle_exempt: true}
+                expires_at: {type: string, format: date-time, nullable: true, description: "The key's end date, in the future; null removes it"}
+            example: {idle_exempt: true, expires_at: "2026-12-24T18:00:00Z"}
       responses:
         "200":
           description: The key as the list shows it
@@ -4922,7 +4932,7 @@ components:
         kind: {type: string, enum: [session, api]}
         label: {type: string}
         created_at: {type: string, format: date-time}
-        expires_at: {type: string, format: date-time, description: Absent for an API key}
+        expires_at: {type: string, format: date-time, description: "A session's end, 30 days from its last use; an API key's end date, absent for a key without one (AP KeyLife, Block 4)"}
         last_used_at: {type: string, format: date-time}
         last_used_from: {type: string, description: The client's address}
         key_id: {type: integer, description: "The key a session was made from (POST /api/v1/login/key); absent for a session of a sign-in and for a key"}
@@ -4933,7 +4943,7 @@ components:
         ended:
           type: string
           enum: [idle, expired]
-          description: "Why an API key has ended, listed to be revoked: idle, unused past the limit; expired, past its end date. Absent while it lives. It lives again where the limit is raised or turned off, or the key kept from it (AP KeyLife, D6-A); its use never brings it back"
+          description: "Why an API key has ended, listed to be revoked: idle, unused past the limit; expired, past its end date. Absent while it lives. It lives again where the limit is raised or turned off, the key kept from it, or its end date moved later or removed (AP KeyLife, D6-A); its use never brings it back"
     TokenHeirs:
       type: array
       description: "The ids of the keys a revoke took with the token, the keys it made and theirs (made_by), oldest first; [] for none"

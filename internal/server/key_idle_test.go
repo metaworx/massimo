@@ -17,10 +17,11 @@ import (
 )
 
 // idleView is what a test reads of a token's answer: its life (AP
-// KeyLife, Block 3).
+// KeyLife, Blocks 3 and 4).
 type idleView struct {
 	ID           int64      `json:"id"`
 	Kind         string     `json:"kind"`
+	ExpiresAt    *time.Time `json:"expires_at"`
 	LastUsedAt   *time.Time `json:"last_used_at"`
 	LastUsedFrom string     `json:"last_used_from"`
 	IdleExempt   bool       `json:"idle_exempt"`
@@ -277,20 +278,12 @@ func TestPutToken(t *testing.T) {
 		t.Fatalf("listed kept: %+v", k)
 	}
 	put("held to it again", "secret", "anna", annaKey.ID, `{"idle_exempt": false}`, 200, "")
-	if err := st.FlushEvents(ctx); err != nil {
-		t.Fatal(err)
-	}
-	var lines []map[string]any
-	getJSON(t, ts, "secret", "/api/v1/cubes/KEQ0000100/log?kind=change&limit=100", &lines)
 	var changes []string
-	for _, l := range lines {
-		sum, _ := l["summary"].(map[string]any)
-		if sum["action"] == "token.update" && sum["target"] == "token:"+strconv.FormatInt(annaKey.ID, 10) {
-			c, _ := sum["changes"].(map[string]any)
-			changes = append(changes, fmt.Sprint(c["idle_exempt"]))
-		}
+	for _, sum := range changeSummaries(t, r, "token.update", "token:"+strconv.FormatInt(annaKey.ID, 10)) {
+		c, _ := sum["changes"].(map[string]any)
+		changes = append(changes, fmt.Sprint(c["idle_exempt"]))
 	}
-	if fmt.Sprint(changes) != "[map[from:true to:false] map[from:false to:true]]" && fmt.Sprint(changes) != "[map[from:false to:true] map[from:true to:false]]" {
+	if fmt.Sprint(changes) != "[map[from:false to:true] map[from:true to:false]]" {
 		t.Errorf("the change lines of token.update: %v", changes)
 	}
 

@@ -36,31 +36,38 @@
  * user, D7-A) Create key has the switch Keep while unused, and a key's
  * row Change…, a small form with that switch, Save and Cancel, on none of
  * an integration's keys, the settings file's key or the key the page is
- * signed in with. Moved from System settings' users (AP UiParts, Block
- * 13), its texts the users.… keys both places use.
+ * signed in with. A key's end date (Block 4) is on its line, "ends …",
+ * or, past it, Ended and when it ended; Create key has the field Ends,
+ * empty for none, and for a caller who may move a key's end date (ends:
+ * the key's user or who manages it, D4-A) a key's row has Change… with
+ * that field and No end, on an integration's key too, the switch there
+ * for who keeps alone, and never on the settings file's key nor the key
+ * the page is signed in with. Moved from System settings' users (AP
+ * UiParts, Block 13), its texts the users.… keys both places use.
  */
 
 import { useEffect, useLayoutEffect, useRef, useState } from "preact/hooks";
 import type { Token, User } from "../api";
-import { createKey, loadTokens, revokeOwn, revokeToken, setTokenLife, type Run } from "./account";
+import { createKey, loadTokens, revokeOwn, revokeToken, setTokenLife, type Run, type TokenLife } from "./account";
 import { app, appKeyId, signInRevoked } from "./app";
 import { Age, Badge } from "./badge";
 import { hid } from "./cls";
 import { Copy } from "./copy";
-import { FormFooter, Switch, TextField, useDraft } from "./field";
+import { DateTime, Field, FormFooter, Switch, TextField, useDraft } from "./field";
 import { useHelp } from "./help";
 import { useLang } from "./lang";
 import { isMe, own } from "./me";
 import { BusyButton, useBusy } from "./question";
 import { session, stillSession } from "./session";
-import { fmtWhen } from "./time";
+import { fmtWhen, isoOf, localOf } from "./time";
 
 /**
- * KeyLife is an API key's line of its life (AP KeyLife, Block 3): ended,
- * the badge Ended with since when it was unused (idle) or when its end
- * came (expired); else kept while unused, or when it ends unless used
- * where the idle limit holds it; nothing for a session, nor for the
- * settings file's key, whose own line says where it comes from.
+ * KeyLife is an API key's line of its life (AP KeyLife, Blocks 3 and 4):
+ * ended, the badge Ended with since when it was unused (idle) or when its
+ * end came (expired); else when its end date comes, where it has one, and
+ * kept while unused, or when it ends unless used where the idle limit
+ * holds it and that comes before its end date; nothing for a session, nor
+ * for the settings file's key, whose own line says where it comes from.
  */
 function KeyLife({ tk }: { tk: Token }) {
   if (tk.kind !== "api" || tk.from_settings) return null;
@@ -74,39 +81,58 @@ function KeyLife({ tk }: { tk: Token }) {
       </>
     );
   }
-  if (tk.idle_exempt) return <span class="muted small token-life">{t("users.idleKept")}</span>;
-  if (tk.idle_ends_at) return <span class="muted small token-life">{t("users.idleEnds", { date: fmtWhen(tk.idle_ends_at) })}</span>;
-  return null;
+  const end = tk.expires_at ? <span class="muted small token-end">{t("users.keyEnds", { date: fmtWhen(tk.expires_at) })}</span> : null;
+  const first = !tk.expires_at || (!!tk.idle_ends_at && Date.parse(tk.idle_ends_at) < Date.parse(tk.expires_at));
+  const idle = tk.idle_exempt ? <span class="muted small token-life">{t("users.idleKept")}</span>
+    : tk.idle_ends_at && first ? <span class="muted small token-life">{t("users.idleEnds", { date: fmtWhen(tk.idle_ends_at) })}</span>
+    : null;
+  return end || idle ? <>{end}{idle}</> : null;
 }
 
 /**
- * KeyChange is Change… of an API key's life (AP KeyLife, Block 3): the
- * switch Keep while unused, its draft against the key's idle_exempt,
- * Save, off until it is changed, which sends PUT …/tokens/{id}
+ * KeyChange is Change… of an API key's life (AP KeyLife, Blocks 3 and
+ * 4): where keeps, the switch Keep while unused, its draft against the
+ * key's idle_exempt; where ends, the field Ends, its draft against the
+ * key's end date, empty for none, and No end, which empties it; Save, off
+ * until one is changed, which sends what changed by PUT …/tokens/{id}
  * (setTokenLife) and closes the form once it is taken, and Cancel, which
- * closes it; done closes it, giving the focus back to Change…. The
- * switch takes the focus as the form comes, in its layout effect.
+ * closes it; done closes it, giving the focus back to Change…. The form's
+ * first control takes the focus as it comes, in its layout effect. id is
+ * the end field's.
  */
-function KeyChange({ u, tk, run, done }: { u: User; tk: Token; run: Run; done: () => void }) {
+function KeyChange({ u, tk, run, done, keeps, ends, id }: { u: User; tk: Token; run: Run; done: () => void; keeps: boolean; ends: boolean; id: string }) {
   useLang();
   const keep = useDraft(!!tk.idle_exempt);
+  const end = useDraft(localOf(tk.expires_at));
   const busy = useBusy();
   const form = useRef<HTMLFormElement>(null);
-  // the form comes where Change… was pressed: the focus on its switch
+  // the form comes where Change… was pressed: the focus on its first control
   useLayoutEffect(() => {
-    form.current?.querySelector<HTMLInputElement>("input[type=checkbox]")?.focus();
+    form.current?.querySelector<HTMLInputElement>("input")?.focus();
   }, []);
+  const changed = (keeps && keep.changed) || (ends && end.changed);
   const submit = (ev: Event) => {
     ev.preventDefault();
-    if (busy.busy || !keep.changed) return;
-    busy.run(() => setTokenLife(run, u.name, tk, { idle_exempt: keep.value })).then((ok) => {
+    if (busy.busy || !changed) return;
+    const life: TokenLife = {};
+    if (keeps && keep.changed) life.idle_exempt = keep.value;
+    if (ends && end.changed) life.expires_at = isoOf(end.value);
+    busy.run(() => setTokenLife(run, u.name, tk, life)).then((ok) => {
       if (ok) done();
     });
   };
   return (
     <form ref={form} class="token-change" onSubmit={submit}>
-      <Switch label={t("users.keepUnused")} name="idle_exempt" draft={keep} cls="token-keep" />
-      <FormFooter submit={t("action.save")} busy={busy.busy} off={!keep.changed} cancel={done} />
+      {keeps && <Switch label={t("users.keepUnused")} name="idle_exempt" draft={keep} cls="token-keep" />}
+      {ends && (
+        <Field label={t("users.keyEndsField")} id={id} cls="token-end-field">
+          <span class="inline field-control">
+            <DateTime id={id} cls="token-end-input" step={60} value={end.value} set={end.set} />
+            <button type="button" class="token-no-end" onClick={() => end.set("")}>{t("users.keyNoEnd")}</button>
+          </span>
+        </Field>
+      )}
+      <FormFooter submit={t("action.save")} busy={busy.busy} off={!changed} cancel={done} />
     </form>
   );
 }
@@ -120,12 +146,14 @@ function KeyChange({ u, tk, run, done }: { u: User; tk: Token; run: Run; done: (
  * the phone keeps, of the id deviceKey, says "this device's key" in its
  * place; Revoke on "this device" signs out. The settings file's key has
  * no Revoke, and says where it is changed in its place. A key's line
- * says its life (KeyLife); where keeps, an API key's row has Change…
- * (KeyChange), but the settings file's key and the key the page is
- * signed in with, a key changing nothing of its own life (AP KeyLife,
- * D4-A); Cancel and a Save taken give the focus back to Change….
+ * says its life (KeyLife); where keeps or ends, an API key's row has
+ * Change… (KeyChange), with the switch where keeps and the end date where
+ * ends, but the settings file's key and the key the page is signed in
+ * with, a key changing nothing of its own life (AP KeyLife, D4-A); Cancel
+ * and a Save taken give the focus back to Change…. idBase is the start of
+ * the ids of its fields.
  */
-function TokenRow({ u, tk, labels, run, marked, deviceKey, keeps }: {
+function TokenRow({ u, tk, labels, run, marked, deviceKey, keeps, ends, idBase }: {
   u: User;
   tk: Token;
   labels: Map<number, string>;
@@ -133,6 +161,8 @@ function TokenRow({ u, tk, labels, run, marked, deviceKey, keeps }: {
   marked: boolean;
   deviceKey: number;
   keeps: boolean;
+  ends: boolean;
+  idBase: string;
 }) {
   const [changing, setChanging] = useState(false);
   const changeRef = useRef<HTMLButtonElement>(null);
@@ -144,7 +174,7 @@ function TokenRow({ u, tk, labels, run, marked, deviceKey, keeps }: {
   const itsKey = !device && !!mine && !!mine.key_id && mine.key_id === tk.id;
   const tag = current ? "users.thisDevice" : device ? "users.thisDeviceKey" : itsKey ? "users.itsKey" : "";
   const cls = [current ? "token-current" : device ? "token-device-key" : itsKey ? "token-its-key" : "", marked ? "token-marked" : ""].filter(Boolean).join(" ") || undefined;
-  const changeable = keeps && tk.kind === "api" && !tk.from_settings && !current;
+  const changeable = (keeps || ends) && tk.kind === "api" && !tk.from_settings && !current;
   // the form closed: the focus back on Change…, in the drawing that shows it again
   useLayoutEffect(() => {
     if (!changing && back.current) {
@@ -178,7 +208,7 @@ function TokenRow({ u, tk, labels, run, marked, deviceKey, keeps }: {
               run={() => (current ? revokeOwn(u.name, tk) : revokeToken(run, u.name, tk))} />
           </span>
         )}
-      {changeable && changing && <KeyChange u={u} tk={tk} run={run} done={() => {
+      {changeable && changing && <KeyChange u={u} tk={tk} run={run} keeps={keeps} ends={ends} id={idBase + "-end-" + tk.id} done={() => {
         back.current = true;
         setChanging(false);
       }} />}
@@ -202,9 +232,12 @@ function TokenRow({ u, tk, labels, run, marked, deviceKey, keeps }: {
  * that the caller may keep the user's keys from the idle limit, who
  * manages the user (AP KeyLife, D7-A): Create key's switch Keep while
  * unused, the part's own state until a key is made, and each key's
- * Change….
+ * Change…; ends says that the caller may move the user's keys' end
+ * dates, the user itself or who manages it (Block 4, D4-A): each key's
+ * Change…, an integration's key's too. Create key's field Ends, empty for
+ * none, is the part's own state until a key is made.
  */
-export function Tokens({ u, off, open, reads, run, say, labelId, help, marked, drawn, listOnly, keeps = false }: {
+export function Tokens({ u, off, open, reads, run, say, labelId, help, marked, drawn, listOnly, keeps = false, ends = false }: {
   u: User;
   off: boolean;
   open: boolean;
@@ -217,6 +250,7 @@ export function Tokens({ u, off, open, reads, run, say, labelId, help, marked, d
   drawn?: (row: HTMLElement | null) => void;
   listOnly?: boolean;
   keeps?: boolean;
+  ends?: boolean;
 }) {
   useLang();
   const deviceKey = appKeyId(app.value); // the key the phone keeps for this server, in the app
@@ -227,6 +261,7 @@ export function Tokens({ u, off, open, reads, run, say, labelId, help, marked, d
   const made = useRef<string | null>(null);
   const [label, setLabel] = useState("");
   const [keep, setKeep] = useState(false);
+  const [end, setEnd] = useState("");
   const ul = useRef<HTMLUListElement>(null);
   // read when its place opens and at every change of the caller's counter while it is open; the key just made shown by this read alone
   // biome-ignore lint/correctness/useExhaustiveDependencies: reads is the caller's change counter, which asks for the read again by its change alone.
@@ -263,9 +298,10 @@ export function Tokens({ u, off, open, reads, run, say, labelId, help, marked, d
       say(t("users.keyLabelNeeded"), false);
       return;
     }
-    if (await createKey(run, u.name, l, (key) => { made.current = key; }, keeps && keep)) {
+    if (await createKey(run, u.name, l, (key) => { made.current = key; }, keeps && keep, isoOf(end))) {
       setLabel("");
       setKeep(false);
+      setEnd("");
     }
   };
   return (
@@ -275,7 +311,8 @@ export function Tokens({ u, off, open, reads, run, say, labelId, help, marked, d
         {error && <li class="muted small bad">{error}</li>}
         {list && !list.length && <li class="muted small">{t("users.tokensNone")}</li>}
         {(list || []).map((tk) => (
-          <TokenRow key={tk.id} u={u} tk={tk} labels={labels} run={run} marked={tk.kind === "api" && tk.id === marked} deviceKey={deviceKey} keeps={keeps && !listOnly} />
+          <TokenRow key={tk.id} u={u} tk={tk} labels={labels} run={run} marked={tk.kind === "api" && tk.id === marked} deviceKey={deviceKey} keeps={keeps && !listOnly}
+            ends={ends} idBase={labelId} />
         ))}
       </ul>
       {!listOnly && (
@@ -286,6 +323,9 @@ export function Tokens({ u, off, open, reads, run, say, labelId, help, marked, d
           </div>
           <TextField label={t("users.newKey")} id={labelId} name="label" maxLength={64} placeholder={t("users.keyLabel")} value={label} set={setLabel} />
           {keeps && <Switch label={t("users.keepUnused")} id={labelId + "-keep"} name="idle_exempt" cls="key-keep" checked={keep} onChange={setKeep} />}
+          <Field label={t("users.keyEndsField")} id={labelId + "-end"} cls="key-end" hint={t("users.keyEndsHint")} hintId={labelId + "-end-hint"}>
+            <DateTime id={labelId + "-end"} cls="field-control" step={60} value={end} set={setEnd} />
+          </Field>
           <div class="actions">
             <span class="actions-right">
               <BusyButton cls="create-key" label={t("users.createKey")} run={make} />

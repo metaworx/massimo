@@ -62,21 +62,30 @@ export function revokeOwn(name: string, tk: Token): Promise<unknown> {
  * createKey makes an API key for a user (POST): the key, which the server
  * shows once, goes to shown alone, before the caller reads again; it is
  * kept nowhere else. keep keeps it from the idle limit (idle_exempt, AP
- * KeyLife, D7-A), sent only where it is true.
+ * KeyLife, D7-A), sent only where it is true; end, an API time, is its
+ * end date (expires_at, Block 4), sent only where there is one.
  */
-export function createKey(run: Run, name: string, label: string, shown: (key: string) => void, keep = false): Promise<boolean> {
+export function createKey(run: Run, name: string, label: string, shown: (key: string) => void, keep = false, end: string | null = null): Promise<boolean> {
+  const body: { label: string; idle_exempt?: boolean; expires_at?: string } = { label };
+  if (keep) body.idle_exempt = true;
+  if (end) body.expires_at = end;
   return run(name, async () => {
-    const res = await api<{ token: string }>("POST", userPath(name, "/tokens"), keep ? { label, idle_exempt: true } : { label });
+    const res = await api<{ token: string }>("POST", userPath(name, "/tokens"), body);
     shown(res.token);
   }, t("users.keyCreated", { label }));
 }
 
-/** The life of an API key that setTokenLife changes (PUT …/tokens/{id}); a field left out keeps the key's. */
+/**
+ * The life of an API key that setTokenLife changes (PUT …/tokens/{id}); a
+ * field left out keeps the key's: idle_exempt (AP KeyLife, Block 3), and
+ * expires_at, its end date, an API time, null for none (Block 4).
+ */
 export interface TokenLife {
   idle_exempt?: boolean;
+  expires_at?: string | null;
 }
 
-/** setTokenLife changes the life of one of a user's API keys (PUT, AP KeyLife, Block 3): kept from the idle limit or held to it again. */
+/** setTokenLife changes the life of one of a user's API keys (PUT, AP KeyLife, Blocks 3 and 4): kept from the idle limit or held to it again, its end date set, moved or removed. */
 export function setTokenLife(run: Run, name: string, tk: Token, life: TokenLife): Promise<boolean> {
   return run(name, () => api("PUT", userPath(name, "/tokens/" + tk.id), life), t("users.keyChanged", { id: tk.id }));
 }

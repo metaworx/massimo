@@ -2236,6 +2236,10 @@ massimo-week-program { display: contents; }
 .user-tokens li .token-buttons { display: inline-flex; flex-wrap: wrap; align-items: center; gap: 6px; }
 .user-tokens li .token-change { flex-basis: 100%; display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }
 .user-tokens li .token-change .actions { margin-left: auto; }
+/* Change…'s end date with No end on a line of their own, wrapping at a
+   phone's width (AP KeyLife, Block 4) */
+.user-tokens li .token-change .token-end-field { flex: 1 1 100%; }
+.user-tokens li .token-change .token-end-field .inline { flex-wrap: wrap; justify-content: flex-end; }
 /* the key My profile was opened with (#profile?key=<id>, ui/src/profile/
    store.ts markKey, shared/tokens.tsx): tinted and outlined in the
    accent, in either theme */

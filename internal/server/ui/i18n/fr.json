@@ -418,7 +418,7 @@
 
   "help.profilePassword": "Un mot de passe vous permet de vous connecter par votre nom dans n'importe quel navigateur. Il est enregistré par OPAQUE dans ce navigateur, le serveur ne le voit donc jamais ; un changement demande l'actuel. Enregistrer le définit.",
 
-  "help.profileTokens": "Chaque navigateur connecté en votre nom est une session ; une clé d'API connecte un programme. Révoquer en met fin aussitôt et déconnecte ce navigateur ou ce programme. Créer la clé en crée une, montrée une seule fois : copiez-la alors. Là où le serveur fait expirer les clés inutilisées, la ligne d'une clé dit quand ; Garder même inutilisée, proposé à qui gère votre utilisateur, l'en exempte.",
+  "help.profileTokens": "Chaque navigateur connecté en votre nom est une session ; une clé d'API connecte un programme. Révoquer en met fin aussitôt et déconnecte ce navigateur ou ce programme. Créer la clé en crée une, montrée une seule fois : copiez-la alors. Là où le serveur fait expirer les clés inutilisées, la ligne d'une clé dit quand ; Garder même inutilisée, proposé à qui gère votre utilisateur, l'en exempte. Une clé peut recevoir une date de fin, à sa création ou plus tard avec Modifier… ; elle est ensuite refusée.",
 
   "help.profileLinked": "Lier vous connecte une fois chez le fournisseur ; le compte revenu est montré, et Lier là le fait vous connecter ici aussi. Lier à nouveau chez un fournisseur y remplace le lien. Supprimer met fin à un lien, mais pas à votre dernier moyen de connexion.",
   "help.roomName": "Le nom de la pièce, enregistré dans le Cube et affiché par tous les programmes qui communiquent avec lui.",
@@ -1782,6 +1782,10 @@
   "users.changeKey": "Modifier…",
   "users.changeKeyLabel": "modifier {label}",
   "users.keyChanged": "Clé {id} modifiée.",
+  "users.keyEnds": "expire le {date}",
+  "users.keyEndsField": "Fin",
+  "users.keyEndsHint": "Vide : pas de date de fin. Ensuite, la clé est refusée, avec sa session.",
+  "users.keyNoEnd": "Pas de fin",
   "users.newKey": "Nouvelle clé API",
   "users.keyLabel": "à quoi sert la clé",
   "users.keyLabelNeeded": "Dites à quoi sert la clé.",

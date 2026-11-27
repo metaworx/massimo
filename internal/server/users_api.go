@@ -78,14 +78,22 @@ func (req userRequest) record() ([]byte, error) {
 // expiresAt reads the end date of a request: set, cleared (null), or
 // absent.
 func (req userRequest) expiresAt() (t time.Time, set bool, err error) {
-	if len(req.ExpiresAt) == 0 {
+	return expiresOf(req.ExpiresAt)
+}
+
+// expiresOf reads an end date, expires_at of a user's or an API key's
+// body, decoded apart so that a null is told from an absent field: an
+// RFC 3339 time (set), null (set, the zero time: no end), or absent (not
+// set); anything else is 400.
+func expiresOf(raw json.RawMessage) (t time.Time, set bool, err error) {
+	if len(raw) == 0 {
 		return time.Time{}, false, nil
 	}
-	if string(req.ExpiresAt) == "null" {
+	if string(raw) == "null" {
 		return time.Time{}, true, nil
 	}
 	var s string
-	if json.Unmarshal(req.ExpiresAt, &s) != nil {
+	if json.Unmarshal(raw, &s) != nil {
 		return time.Time{}, false, fail(http.StatusBadRequest, "expires_at: want a time such as 2026-12-24T18:00:00Z, or null")
 	}
 	t, err = time.Parse(time.RFC3339, s)
@@ -93,6 +101,16 @@ func (req userRequest) expiresAt() (t time.Time, set bool, err error) {
 		return time.Time{}, false, fail(http.StatusBadRequest, "expires_at: %v", err)
 	}
 	return t, true, nil
+}
+
+// endFail is the refusal of an API key's end date that has passed
+// (store.ErrEndPassed, AP KeyLife, Block 4): 400, as for any bad field;
+// any other error goes on as it is.
+func endFail(err error) error {
+	if errors.Is(err, store.ErrEndPassed) {
+		return fail(http.StatusBadRequest, "expires_at: %s: an API key's end date is in the future; Revoke ends a key now", strings.TrimPrefix(err.Error(), "store: "))
+	}
+	return err
 }
 
 // userFail maps a store error of the users and roles to a status.
@@ -1002,7 +1020,8 @@ func (s *Server) listTokens(w http.ResponseWriter, r *http.Request) error {
 // key made by a session of any kind, one made from a key by
 // POST /api/v1/login/key among them, names none. idle_exempt true keeps
 // the key from the idle limit, for who manages its user alone (AP
-// KeyLife, D7-A; keptFail).
+// KeyLife, D7-A; keptFail); expires_at, an RFC 3339 time in the future,
+// gives it an end date, null or absent none (Block 4; endFail).
 func (s *Server) postToken(w http.ResponseWriter, r *http.Request) error {
 	st, err := s.userStore()
 	if err != nil {
@@ -1013,8 +1032,9 @@ func (s *Server) postToken(w http.ResponseWriter, r *http.Request) error {
 		return err
 	}
 	var req struct {
-		Label      string `json:"label"`
-		IdleExempt bool   `json:"idle_exempt"`
+		Label      string          `json:"label"`
+		IdleExempt bool            `json:"idle_exempt"`
+		ExpiresAt  json.RawMessage `json:"expires_at"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		return fail(http.StatusBadRequest, "bad body: %v", err)
@@ -1023,13 +1043,17 @@ func (s *Server) postToken(w http.ResponseWriter, r *http.Request) error {
 	if req.Label == "" || len(req.Label) > maxLabel {
 		return fail(http.StatusBadRequest, "label: 1 to %d bytes", maxLabel)
 	}
+	end, _, err := expiresOf(req.ExpiresAt)
+	if err != nil {
+		return err
+	}
 	if err := noWayIn(u); err != nil {
 		return err
 	}
 	if req.IdleExempt && !a.mayManage(u) {
 		return keptFail(u)
 	}
-	opts := store.KeyOptions{Label: req.Label, IdleExempt: req.IdleExempt}
+	opts := store.KeyOptions{Label: req.Label, IdleExempt: req.IdleExempt, Expires: end}
 	if p := principalOf(r); p.named() && p.token.Kind == store.TokenAPI {
 		opts.MadeBy = p.token.ID
 	}
@@ -1040,7 +1064,7 @@ func (s *Server) postToken(w http.ResponseWriter, r *http.Request) error {
 		return fail(http.StatusUnauthorized, "%v", errEndedToken)
 	}
 	if err != nil {
-		return userFail(err)
+		return userFail(endFail(err))
 	}
 	auditTarget(r, "token:"+strconv.FormatInt(tok.ID, 10))
 	auditSubject(r, tokenSubject(tok, u))
@@ -1050,6 +1074,9 @@ func (s *Server) postToken(w http.ResponseWriter, r *http.Request) error {
 	}
 	if opts.IdleExempt {
 		line = append(line, "idle_exempt", true)
+	}
+	if !tok.ExpiresAt.IsZero() {
+		line = append(line, "expires_at", tok.ExpiresAt)
 	}
 	s.log.Info("api key created", line...)
 	v := viewToken(tok)
@@ -1097,15 +1124,19 @@ func (s *Server) deleteToken(w http.ResponseWriter, r *http.Request) error {
 }
 
 // putToken handles PUT /api/v1/users/{name}/tokens/{id}: an API key's
-// life, {"idle_exempt": true|false} (AP KeyLife, Block 3), answered with
-// the key's view; a field left out keeps what the key has, and a body of
-// none is 400. A session is 400; the settings file's key 409, its life
-// being the file's (D3-A); the bearer that very key 403, since a key
-// changes nothing of its own life, a session made from it not being the
-// key (D4-A); idle_exempt from a caller that does not manage the key's
-// user 403 (D7-A, keptFail), and true for an integration's key 400
-// (AP MobileApp, D75); another user's token 404. Audited as
-// token.update, its change line from and to.
+// life, {"idle_exempt": true|false} (AP KeyLife, Block 3) and
+// {"expires_at": "<RFC 3339>"|null} (Block 4), answered with the key's
+// view; a field left out keeps what the key has, and a body of none is
+// 400. A session is 400; the settings file's key 409, its life being the
+// file's (D3-A); the bearer that very key 403, since a key changes
+// nothing of its own life, a session made from it not being the key
+// (D4-A); idle_exempt from a caller that does not manage the key's user
+// 403 (D7-A, keptFail), and true for an integration's key 400 (AP
+// MobileApp, D75); expires_at from the key's user or who manages it, as
+// targetUser lets in, an integration's key's from a holder of users or
+// integrations, a time that has passed 400 (endFail), null removing the
+// end date; another user's token 404. Audited as token.update, its
+// change line from and to.
 func (s *Server) putToken(w http.ResponseWriter, r *http.Request) error {
 	st, err := s.userStore()
 	if err != nil {
@@ -1120,15 +1151,20 @@ func (s *Server) putToken(w http.ResponseWriter, r *http.Request) error {
 		return fail(http.StatusBadRequest, "bad token id %q", r.PathValue("id"))
 	}
 	var req struct {
-		IdleExempt *bool `json:"idle_exempt"`
+		IdleExempt *bool           `json:"idle_exempt"`
+		ExpiresAt  json.RawMessage `json:"expires_at"`
 	}
 	dec := json.NewDecoder(r.Body)
 	dec.DisallowUnknownFields()
 	if err := dec.Decode(&req); err != nil {
-		return fail(http.StatusBadRequest, "bad body: %v (want {\"idle_exempt\": true} or false)", err)
+		return fail(http.StatusBadRequest, "bad body: %v (want {\"idle_exempt\": true} or false, {\"expires_at\": \"2026-12-24T18:00:00Z\"} or null)", err)
 	}
-	if req.IdleExempt == nil {
-		return fail(http.StatusBadRequest, "nothing to change: want idle_exempt")
+	end, setEnd, err := expiresOf(req.ExpiresAt)
+	if err != nil {
+		return err
+	}
+	if req.IdleExempt == nil && !setEnd {
+		return fail(http.StatusBadRequest, "nothing to change: want idle_exempt or expires_at")
 	}
 	tok, ok, err := st.Token(r.Context(), id)
 	if err != nil {
@@ -1159,16 +1195,31 @@ func (s *Server) putToken(w http.ResponseWriter, r *http.Request) error {
 			return fail(http.StatusBadRequest, "the key of user %s is an integration's: it is always held to the idle limit, and its integration registers again once it ended", u.Name)
 		}
 	}
+	// The end date is the key's user's or who manages it, as targetUser let
+	// in, an integration's key's a holder of users' or integrations'
+	// (D4-A): nothing more to ask of the caller.
+	life := store.TokenLife{IdleExempt: req.IdleExempt}
+	if setEnd {
+		life.Expires = &end
+	}
 	auditTarget(r, "token:"+strconv.FormatInt(id, 10))
 	auditSubject(r, tokenSubject(tok, u))
-	got, err := st.SetTokenLife(r.Context(), id, store.TokenLife{IdleExempt: req.IdleExempt})
+	got, err := st.SetTokenLife(r.Context(), id, life)
 	if err != nil {
-		return userFail(err)
+		return userFail(endFail(err))
 	}
 	line := []any{"user", s.logUserName(r.Context(), u), "token", id, "remote", s.clientIP(r)}
 	if req.IdleExempt != nil {
 		auditChange(r, "idle_exempt", tok.IdleExempt, got.IdleExempt)
 		line = append(line, "idle_exempt", got.IdleExempt)
+	}
+	if setEnd {
+		auditChange(r, "expires_at", optTime(tok.ExpiresAt), optTime(got.ExpiresAt))
+		if got.ExpiresAt.IsZero() {
+			line = append(line, "expires_at", "none")
+		} else {
+			line = append(line, "expires_at", got.ExpiresAt)
+		}
 	}
 	s.log.Info("token changed", line...)
 	writeJSON(w, http.StatusOK, viewToken(got))

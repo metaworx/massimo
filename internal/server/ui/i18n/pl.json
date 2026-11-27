@@ -425,7 +425,7 @@
 
   "help.profilePassword": "Hasło pozwala logować się nazwą w dowolnej przeglądarce. Jest rejestrowane przez OPAQUE w tej przeglądarce, więc serwer nigdy go nie widzi; zmiana wymaga obecnego. Zapisz je ustawia.",
 
-  "help.profileTokens": "Każda przeglądarka zalogowana jako ty to sesja; klucz API loguje program. Unieważnij kończy ją od razu, wylogowując tę przeglądarkę lub program. Utwórz klucz tworzy klucz, pokazany tylko raz: wtedy go skopiuj. Gdy serwer unieważnia nieużywane klucze, wiersz klucza mówi kiedy; Zachowaj mimo nieużywania, dostępne dla tego, kto zarządza twoim użytkownikiem, wyłącza z tego klucz.",
+  "help.profileTokens": "Każda przeglądarka zalogowana jako ty to sesja; klucz API loguje program. Unieważnij kończy ją od razu, wylogowując tę przeglądarkę lub program. Utwórz klucz tworzy klucz, pokazany tylko raz: wtedy go skopiuj. Gdy serwer unieważnia nieużywane klucze, wiersz klucza mówi kiedy; Zachowaj mimo nieużywania, dostępne dla tego, kto zarządza twoim użytkownikiem, wyłącza z tego klucz. Klucz może mieć datę końca, przy tworzeniu lub później przez Zmień…; od tej chwili jest odrzucany.",
 
   "help.profileLinked": "Powiąż loguje cię raz u dostawcy; konto, które wróci, jest pokazane, a Powiąż tam sprawia, że loguje cię także tutaj. Ponowne powiązanie u dostawcy zastępuje tam powiązanie. Usuń kończy powiązanie, ale nie twój ostatni sposób logowania.",
   "help.roomName": "Nazwa pomieszczenia, zapisana w Cube i widoczna w każdym programie, który się z nim komunikuje.",
@@ -1833,6 +1833,10 @@
   "users.changeKey": "Zmień…",
   "users.changeKeyLabel": "zmień {label}",
   "users.keyChanged": "Zmieniono klucz {id}.",
+  "users.keyEnds": "wygasa {date}",
+  "users.keyEndsField": "Koniec",
+  "users.keyEndsHint": "Puste: bez daty końca. Od tej chwili klucz jest odrzucany, wraz z jego sesją.",
+  "users.keyNoEnd": "Bez końca",
   "users.newKey": "Nowy klucz API",
   "users.keyLabel": "do czego służy klucz",
   "users.keyLabelNeeded": "Podaj, do czego służy klucz.",
