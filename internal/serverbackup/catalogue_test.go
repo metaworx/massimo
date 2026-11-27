@@ -7,6 +7,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"io"
 	"log/slog"
 	"os"
 	"path/filepath"
@@ -74,7 +75,7 @@ func TestMakeWithoutKeyOrTarget(t *testing.T) {
 	}
 	c2, _ := catalogue(t)
 	b, outs, err := c2.Make(ctx, MakeRequest{Trigger: TriggerManual, UserID: 0, Label: "first"})
-	if err != nil || b.State != store.ServerBackupMade || len(b.Copies) != 1 || b.Copies[0].State != store.CopyThere || len(outs) != 2 {
+	if err != nil || b.State != store.ServerBackupMade || len(b.Copies) != 1 || b.Copies[0].State != store.CopyThere || len(outs) != 3 || outs[0].Step != "make" || outs[0].Err != nil {
 		t.Fatalf("make %+v %+v %v", b, outs, err)
 	}
 	ts, _ := c2.Store.ServerBackupTargets(ctx)
@@ -147,8 +148,12 @@ func TestCatalogueJobs(t *testing.T) {
 	}
 	var last Outcome
 	for i, wait := range []time.Duration{5 * time.Minute, 30 * time.Minute, 2 * time.Hour} {
-		at.Add(int64(wait))
-		_, outs, _ := c.Retry(ctx, b3.UUID)
+		at.Add(int64(wait - time.Second))
+		if _, outs, _ := c.RetryDue(ctx, b3.UUID, c.now()); len(outs) != 0 {
+			t.Fatalf("retry %d before its time: %+v", i+1, outs)
+		}
+		at.Add(int64(time.Second))
+		_, outs, _ := c.RetryDue(ctx, b3.UUID, c.now())
 		if len(outs) != 1 || outs[0].Err == nil || outs[0].Tries != i+2 {
 			t.Fatalf("retry %d: %+v", i+1, outs)
 		}
@@ -156,6 +161,14 @@ func TestCatalogueJobs(t *testing.T) {
 	}
 	if !last.Spent || !last.NextTry.IsZero() {
 		t.Fatalf("after the third retry: %+v", last)
+	}
+	// Spent, it waits for a retry by hand, which is told no more.
+	at.Add(int64(24 * time.Hour))
+	if _, outs, _ := c.RetryDue(ctx, b3.UUID, c.now()); len(outs) != 0 {
+		t.Fatalf("a spent copy retried by the schedule: %+v", outs)
+	}
+	if _, outs, _ := c.Retry(ctx, b3.UUID); len(outs) != 1 || outs[0].Spent || !outs[0].NextTry.IsZero() || outs[0].Tries != 5 {
+		t.Fatalf("a retry by hand of a spent copy: %+v", outs)
 	}
 	os.Remove(blocked)
 	if b, outs, err := c.Retry(ctx, b3.UUID); err != nil || len(outs) != 2 || outs[0].Err != nil {
@@ -262,11 +275,191 @@ func TestMakeFailedAndRetried(t *testing.T) {
 	if err != nil || got.UUID != b.UUID || got.State != store.ServerBackupMade || got.Tries != 0 || !got.NextTry.IsZero() || len(got.Copies) != 1 {
 		t.Fatalf("retried %+v %v", got, err)
 	}
-	// A backup made by hand that fails is not retried.
+	// A backup made by hand that fails is neither kept nor retried.
 	c.Version = "not\x00printable"
-	if b, outs, _ := c.Make(ctx, MakeRequest{Trigger: TriggerManual}); !b.NextTry.IsZero() || outs[0].Spent {
-		t.Fatalf("a manual one retried: %+v %+v", b, outs)
+	if b, outs, err := c.Make(ctx, MakeRequest{Trigger: TriggerManual}); err == nil || b.UUID != "" || len(outs) != 0 {
+		t.Fatalf("a manual one kept: %+v %+v %v", b, outs, err)
 	}
+	if bs, _ := c.Store.ServerBackups(ctx); len(bs) != 1 {
+		t.Fatalf("rows %+v", bs)
+	}
+}
+
+// A scheduled backup that no target takes is retried in its row, its
+// tries counted on across the file made again each time, its copies no
+// copies; after the third retry it is told once and waits.
+func TestMakeRetriesEnd(t *testing.T) {
+	t.Parallel()
+	ctx := context.Background()
+	c, at := catalogue(t)
+	blocked := filepath.Join(c.Store.Dir(), "blocked")
+	os.WriteFile(blocked, []byte("x"), 0o600)
+	addLocal(t, c, "nas", "blocked", TakesEvery, Policy{})
+	b, outs, err := c.Make(ctx, MakeRequest{Trigger: TriggerScheduled})
+	if err == nil || b.State != store.ServerBackupFailed || b.Tries != 1 || len(b.Copies) != 0 || len(outs) != 1 || outs[0].Step != "make" {
+		t.Fatalf("make %+v %+v %v", b, outs, err)
+	}
+	spent := 0
+	for i := 0; i < 8; i++ {
+		cur, _, _ := c.Store.ServerBackup(ctx, b.UUID)
+		if cur.NextTry.IsZero() {
+			break
+		}
+		at.Store(cur.NextTry.UnixNano())
+		got, outs, _ := c.RetryDue(ctx, b.UUID, c.now())
+		if got.UUID != b.UUID || got.Tries != cur.Tries+1 || len(got.Copies) != 0 || len(outs) != 1 {
+			t.Fatalf("retry %d: %+v %+v", i+1, got, outs)
+		}
+		if outs[0].Spent {
+			spent++
+		}
+	}
+	if cur, _, _ := c.Store.ServerBackup(ctx, b.UUID); cur.Tries != 4 || !cur.NextTry.IsZero() || spent != 1 {
+		t.Fatalf("after the retries: tries %d next %v, told %d times", cur.Tries, cur.NextTry, spent)
+	}
+}
+
+// A retry of a failed scheduled backup that ends before its file, the
+// key gone, is a try too: its next try moves on.
+func TestMakeRetryWithoutKey(t *testing.T) {
+	t.Parallel()
+	ctx := context.Background()
+	c, at := catalogue(t)
+	c.Version = "not\x00printable"
+	b, _, _ := c.Make(ctx, MakeRequest{Trigger: TriggerScheduled})
+	keys, _ := c.Store.ServerBackupKeys(ctx)
+	c.Store.DeleteServerBackupKey(ctx, keys[0].UUID)
+	at.Store(b.NextTry.UnixNano())
+	got, outs, err := c.RetryDue(ctx, b.UUID, c.now())
+	if !errors.Is(err, ErrNoKey) || got.Tries != 2 || !got.NextTry.After(c.now()) || len(outs) != 1 {
+		t.Fatalf("retry without a key: %+v %+v %v", got, outs, err)
+	}
+	// A scheduled run with no key at all makes nothing, no row.
+	c2, _ := catalogue(t)
+	keys, _ = c2.Store.ServerBackupKeys(ctx)
+	c2.Store.DeleteServerBackupKey(ctx, keys[0].UUID)
+	if _, _, err := c2.Make(ctx, MakeRequest{Trigger: TriggerScheduled}); !errors.Is(err, ErrNoKey) {
+		t.Fatal(err)
+	}
+	if bs, _ := c2.Store.ServerBackups(ctx); len(bs) != 0 {
+		t.Fatalf("rows without a key: %+v", bs)
+	}
+}
+
+// hangTarget is a target whose put waits for its context's end.
+type hangTarget struct{}
+
+func (hangTarget) Put(ctx context.Context, _ string, _ io.Reader, _ int64) error {
+	hangPut <- struct{}{}
+	<-ctx.Done()
+	return ctx.Err()
+}
+func (hangTarget) Open(context.Context, string) (File, int64, error) { return nil, 0, io.EOF }
+func (hangTarget) List(context.Context) ([]Entry, error)             { return nil, nil }
+func (hangTarget) Delete(context.Context, string) error              { return nil }
+func (hangTarget) Check(context.Context) error                       { return nil }
+
+// hangPut says a hangTarget's put has begun.
+var hangPut = make(chan struct{}, 4)
+
+func init() {
+	Register(Kind{Name: "hangtest", New: func(map[string]string, []byte) (Target, error) { return hangTarget{}, nil }})
+}
+
+// A stop in the middle of the copies, its context ended: a scheduled
+// backup stays a failed row with its retry, never one made without a
+// file, and can be deleted; one made by hand goes.
+func TestMakeBrokenOff(t *testing.T) {
+	t.Parallel()
+	ctx := context.Background()
+	c, _ := catalogue(t)
+	if _, err := c.Store.AddServerBackupTarget(ctx, store.ServerBackupTarget{Name: "remote", Kind: "hangtest", Enabled: true}, 0); err != nil {
+		t.Fatal(err)
+	}
+	for _, trigger := range []Trigger{TriggerScheduled, TriggerManual} {
+		stop, cancel := context.WithCancel(ctx)
+		go func() { <-hangPut; cancel() }()
+		_, _, err := c.Make(stop, MakeRequest{Trigger: trigger})
+		if err == nil {
+			t.Fatalf("%s: made", trigger)
+		}
+	}
+	bs, _ := c.Store.ServerBackups(ctx)
+	if len(bs) != 1 || bs[0].State != store.ServerBackupFailed || bs[0].Trigger != string(TriggerScheduled) || bs[0].NextTry.IsZero() || len(bs[0].Copies) != 0 {
+		t.Fatalf("rows %+v", bs)
+	}
+	if err := c.Delete(ctx, bs[0].UUID); err != nil {
+		t.Fatal(err)
+	}
+}
+
+// A retry keeps the request: a backup made by hand that failed is not
+// made again (ErrNotRetried); a failed copy of one is the same file put
+// again, by hand alone, its pin kept, no backup made anew.
+func TestRetryKeepsTheRequest(t *testing.T) {
+	t.Parallel()
+	ctx := context.Background()
+	c, at := catalogue(t)
+	blocked := filepath.Join(c.Store.Dir(), "blocked")
+	os.WriteFile(blocked, []byte("x"), 0o600)
+	addLocal(t, c, "local", "local", TakesEvery, Policy{})
+	nas := addLocal(t, c, "nas", "blocked", TakesEvery, Policy{})
+	b, _, err := c.Make(ctx, MakeRequest{Trigger: TriggerBeforeUpdate, Local: true, PinFor: PinBefore})
+	if err != nil {
+		t.Fatal(err)
+	}
+	cp, _ := b.Copy(nas.UUID)
+	if cp.State != store.CopyFailed || !cp.NextTry.IsZero() || !b.Pinned(c.now()) {
+		t.Fatalf("made %+v", b)
+	}
+	at.Add(int64(time.Hour))
+	if _, outs, _ := c.RetryDue(ctx, b.UUID, c.now()); len(outs) != 0 {
+		t.Fatalf("the schedule retried a copy of a backup before an update: %+v", outs)
+	}
+	os.Remove(blocked)
+	got, outs, err := c.Retry(ctx, b.UUID)
+	if err != nil || len(outs) != 2 || outs[0].Err != nil || got.UUID != b.UUID || got.SHA256 != b.SHA256 || !got.Pinned(c.now()) {
+		t.Fatalf("retry by hand %+v %+v %v", got, outs, err)
+	}
+	if bs, _ := c.Store.ServerBackups(ctx); len(bs) != 1 {
+		t.Fatalf("a backup made anew: %d", len(bs))
+	}
+	f, err := os.ReadFile(filepath.Join(c.Store.Dir(), "blocked", FileName(mustManifest(t, b))))
+	if err != nil || int64(len(f)) != b.Size {
+		t.Fatalf("the copy pushed: %d %v", len(f), err)
+	}
+	// A failed backup made by hand is not retried.
+	if _, err := c.Store.SaveServerBackup(ctx, store.ServerBackup{UUID: "01a21e2c-0000-7000-8000-0000000000aa", Trigger: string(TriggerManual), State: store.ServerBackupFailed, Error: "x", Tries: 1}); err != nil {
+		t.Fatal(err)
+	}
+	if _, _, err := c.Retry(ctx, "01a21e2c-0000-7000-8000-0000000000aa"); !errors.Is(err, ErrNotRetried) {
+		t.Fatalf("a failed manual backup retried: %v", err)
+	}
+	if err := c.Delete(ctx, b.UUID); !errors.Is(err, ErrHasCopies) {
+		t.Fatalf("a backup with copies deleted: %v", err)
+	}
+}
+
+// One job at a time on a data directory: a second lock waits, and is
+// refused when its context ends first.
+func TestLockJobs(t *testing.T) {
+	t.Parallel()
+	dir := t.TempDir()
+	unlock, err := LockJobs(context.Background(), dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	short, cancel := context.WithTimeout(context.Background(), 300*time.Millisecond)
+	defer cancel()
+	if _, err := LockJobs(short, dir); !errors.Is(err, ErrJobRunning) {
+		t.Fatalf("a second lock: %v", err)
+	}
+	unlock()
+	again, err := LockJobs(context.Background(), dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	again()
 }
 
 // An upload is refused where it is no backup or was changed, and taken

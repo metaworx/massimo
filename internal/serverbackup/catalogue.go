@@ -57,6 +57,12 @@ var (
 	// ErrNoTarget is a target the catalogue does not hold, or one
 	// switched off.
 	ErrNoTarget = errors.New("serverbackup: no such target")
+	// ErrNotRetried is a retry of a backup made by hand that failed,
+	// which is made again by hand, with its own request.
+	ErrNotRetried = errors.New("serverbackup: a backup made by hand that failed is made again by hand, not retried")
+	// ErrHasCopies is a backup deleted from the catalogue while a target
+	// holds a copy; its copies are deleted first.
+	ErrHasCopies = errors.New("serverbackup: a target holds a copy of this backup; delete its copies")
 	// ErrSameTarget is a pull from the local target to itself.
 	ErrSameTarget = errors.New("serverbackup: a copy is pulled from another target than the local one")
 )
@@ -251,46 +257,85 @@ func (c *Catalogue) addDefaultLocal(ctx context.Context) (store.ServerBackupTarg
 }
 
 // retryAt is when a failure of its tries-th try is tried again, zero for
-// never: its retries are spent.
-func (c *Catalogue) retryAt(tries int) (time.Time, bool) {
-	if tries >= 1 && tries <= len(RetryDelays) {
+// never: a backup made by hand, or of the schedule once its retries are
+// spent. spent is true the once its last retry failed, so that the
+// failure is told once.
+func (c *Catalogue) retryAt(tries int, scheduled bool) (next time.Time, spent bool) {
+	switch {
+	case !scheduled:
+		return time.Time{}, false
+	case tries >= 1 && tries <= len(RetryDelays):
 		return c.now().Add(RetryDelays[tries-1]), false
 	}
-	return time.Time{}, true
+	return time.Time{}, tries == len(RetryDelays)+1
 }
 
+// scheduled reports whether a backup of a trigger is the schedule's,
+// whose failures are retried by themselves.
+func scheduled(trigger string) bool { return trigger == string(TriggerScheduled) }
+
+// notCopied is the error of a backup whose file is made and not yet on
+// a target: the row a stop or a crash in the middle of its copies leaves.
+const notCopied = "not on a target yet: its copies were broken off"
+
 // Make makes a backup and copies it as req asks (MakeRequest), each
-// target that took a copy pruned by its retention after. A backup that
-// failed is kept as failed, with its retry where it was scheduled. The
-// backup, as the catalogue holds it then, and what each step did are
-// returned; the error is the backup's own, a copy's failing being an
-// outcome.
+// target that took a copy pruned by its retention after. The backup is
+// a failed row until its first copy is there, so that a stop in the
+// middle of its copies leaves a backup to retry, not one made without a
+// file; the catalogue's writes after the backup is made outlive ctx. A
+// scheduled backup that fails, before its file or with no copy there,
+// is kept as failed with its retry, its tries counted on from the row a
+// retry names; one made by hand that fails is not kept, the error
+// saying why. The backup, as the catalogue holds it then, and what each
+// step did are returned, its own step first; the error is the backup's
+// own, a copy's failing being an outcome.
 func (c *Catalogue) Make(ctx context.Context, req MakeRequest) (store.ServerBackup, []Outcome, error) {
+	keep := context.WithoutCancel(ctx)
+	now := c.now()
+	prevTries := 0
+	if req.UUID != "" {
+		if prev, ok, _ := c.Store.ServerBackup(ctx, req.UUID); ok {
+			prevTries = prev.Tries
+		}
+	}
+	// fail records a failure before any copy: a retry's always, a
+	// scheduled run's but for no key, which makes nothing at all.
+	fail := func(err error) (store.ServerBackup, []Outcome, error) {
+		if req.UUID == "" && (!scheduled(string(req.Trigger)) || errors.Is(err, ErrNoKey)) {
+			return store.ServerBackup{}, nil, err
+		}
+		b, o := c.failed(keep, req, now, prevTries, err)
+		return b, []Outcome{o}, err
+	}
 	rs, err := c.Recipients(ctx)
 	if err != nil {
-		return store.ServerBackup{}, nil, err
+		return fail(err)
 	}
 	targets, err := c.chosen(ctx, req)
 	if err != nil {
-		return store.ServerBackup{}, nil, err
+		return fail(err)
 	}
 	tmp, err := os.MkdirTemp(c.Store.Dir(), tempPrefix+"made-*")
 	if err != nil {
-		return store.ServerBackup{}, nil, fmt.Errorf("serverbackup: %w", err)
+		return fail(fmt.Errorf("serverbackup: %w", err))
 	}
 	defer os.RemoveAll(tmp)
 	out := filepath.Join(tmp, "backup.zip")
-	now := c.now()
 	m, err := Write(ctx, Inputs{Store: c.Store, EnvFile: c.EnvFile, TLSFiles: c.TLSFiles, Trigger: req.Trigger, Label: req.Label,
 		Version: c.Version, Time: now, UUID: req.UUID}, rs, out)
 	if err != nil {
-		b, o := c.failed(ctx, req, now, err)
-		return b, []Outcome{o}, err
+		return fail(err)
 	}
-	b, err := c.keepFile(ctx, out, store.ServerBackup{Trigger: string(req.Trigger), UserID: req.UserID}, req.PinFor)
+	pending := store.ServerBackup{Trigger: string(req.Trigger), UserID: req.UserID, State: store.ServerBackupFailed, Error: notCopied, Tries: prevTries}
+	pending.NextTry, _ = c.retryAt(prevTries+1, scheduled(string(req.Trigger)))
+	b, err := c.keepFile(keep, out, pending, req.PinFor)
 	if err != nil {
-		return store.ServerBackup{}, nil, err
+		if scheduled(string(req.Trigger)) {
+			req.UUID = m.UUID
+		}
+		return fail(err)
 	}
+	auto := scheduled(b.Trigger)
 	var outs []Outcome
 	have := c.copyTimes(ctx)
 	took := 0
@@ -299,36 +344,65 @@ func (c *Catalogue) Make(ctx context.Context, req MakeRequest) (store.ServerBack
 			continue
 		}
 		took++
-		outs = append(outs, c.putFile(ctx, b, out, t, false))
+		outs = append(outs, c.putFile(ctx, b, out, t, false, auto))
 	}
 	if took == 0 {
-		locals, err := c.localTargets(ctx)
+		locals, err := c.localTargets(keep)
 		if err != nil {
 			outs = append(outs, Outcome{Step: "copy", Backup: b.UUID, Err: err})
 		}
 		for _, t := range locals {
-			outs = append(outs, c.putFile(ctx, b, out, t, false))
+			outs = append(outs, c.putFile(ctx, b, out, t, false, auto))
 		}
 	}
 	var cause error = ErrNoCopy
 	for _, o := range outs {
-		if o.Err == nil && o.Step == "copy" {
-			outs = append(outs, c.pruneOutcome(ctx, o.TargetUUID))
+		if o.Err == nil {
 			cause = nil
-		} else if o.Err != nil && cause == ErrNoCopy {
+		} else if cause == ErrNoCopy {
 			cause = o.Err
 		}
 	}
 	if cause != nil {
 		// No target holds the file, which goes with the temporary
-		// directory: the backup failed, and is retried as one.
+		// directory: its copies are no copies, and the backup failed.
 		cause = fmt.Errorf("serverbackup: no target took the backup: %w", cause)
+		c.dropCopies(keep, b)
+		if !auto {
+			c.Store.DeleteServerBackup(keep, b.UUID)
+			return store.ServerBackup{}, []Outcome{{Step: "make", Backup: b.UUID, Err: cause, Tries: 1}}, cause
+		}
 		req.UUID = b.UUID
-		b, o := c.failed(ctx, req, now, cause)
-		return b, append(outs, o), cause
+		b, o := c.failed(keep, req, now, prevTries, cause)
+		return b, []Outcome{o}, cause
 	}
-	b, _, err = c.Store.ServerBackup(ctx, b.UUID)
-	return b, outs, err
+	b.State, b.Error, b.Tries, b.NextTry = store.ServerBackupMade, "", 0, time.Time{}
+	if _, err := c.Store.SaveServerBackup(keep, b); err != nil {
+		return b, outs, err
+	}
+	steps := []Outcome{{Step: "make", Backup: b.UUID}}
+	for _, o := range outs {
+		steps = append(steps, o)
+		if o.Err == nil && o.Step == "copy" {
+			steps = append(steps, c.pruneOutcome(keep, o.TargetUUID))
+		}
+	}
+	b, _, err = c.Store.ServerBackup(keep, b.UUID)
+	return b, steps, err
+}
+
+// dropCopies removes the copy rows of a backup whose file no target
+// holds.
+func (c *Catalogue) dropCopies(ctx context.Context, b store.ServerBackup) {
+	cur, ok, err := c.Store.ServerBackup(ctx, b.UUID)
+	if err != nil || !ok {
+		return
+	}
+	for _, cp := range cur.Copies {
+		if _, err := c.Store.DeleteServerBackupCopy(ctx, b.UUID, cp.TargetUUID); err != nil {
+			c.log().Error("server backups: a copy that is none not removed", "error", err)
+		}
+	}
 }
 
 // chosen are the targets a request copies to: the one it names, the
@@ -360,22 +434,16 @@ func (c *Catalogue) chosen(ctx context.Context, req MakeRequest) ([]store.Server
 	return out, nil
 }
 
-// failed keeps a backup that failed: as failed, a scheduled one with its
-// retry, its tries counted on from the row retried.
-func (c *Catalogue) failed(ctx context.Context, req MakeRequest, now time.Time, cause error) (store.ServerBackup, Outcome) {
+// failed keeps a backup that failed: as failed, its tries one more than
+// prevTries, a scheduled one with its retry.
+func (c *Catalogue) failed(ctx context.Context, req MakeRequest, now time.Time, prevTries int, cause error) (store.ServerBackup, Outcome) {
 	id := req.UUID
-	tries := 1
-	if id != "" {
-		if prev, ok, _ := c.Store.ServerBackup(ctx, id); ok {
-			tries = prev.Tries + 1
-		}
-	} else {
+	if id == "" {
 		id = newBackupUUID()
 	}
+	tries := prevTries + 1
 	o := Outcome{Step: "make", Backup: id, Err: cause, Tries: tries}
-	if req.Trigger == TriggerScheduled {
-		o.NextTry, o.Spent = c.retryAt(tries)
-	}
+	o.NextTry, o.Spent = c.retryAt(tries, scheduled(string(req.Trigger)))
 	b, err := c.Store.SaveServerBackup(ctx, store.ServerBackup{UUID: id, Time: now, Trigger: string(req.Trigger), UserID: req.UserID,
 		State: store.ServerBackupFailed, Error: cause.Error(), Tries: tries, NextTry: o.NextTry})
 	if err != nil {
@@ -385,7 +453,8 @@ func (c *Catalogue) failed(ctx context.Context, req MakeRequest, now time.Time, 
 }
 
 // keepFile reads the file at path, a backup, and keeps it in the
-// catalogue as b says, made: its size, hash and manifest.
+// catalogue as b says, with its size, hash and manifest; b's state, its
+// error, tries and next try are kept as given.
 func (c *Catalogue) keepFile(ctx context.Context, path string, b store.ServerBackup, pinFor time.Duration) (store.ServerBackup, error) {
 	f, err := os.Open(path)
 	if err != nil {
@@ -404,9 +473,11 @@ func (c *Catalogue) keepFile(ctx context.Context, path string, b store.ServerBac
 	if err != nil {
 		return store.ServerBackup{}, fmt.Errorf("serverbackup: %w", err)
 	}
-	b.UUID, b.Time, b.State = m.UUID, m.Created, store.ServerBackupMade
+	b.UUID, b.Time = m.UUID, m.Created
+	if b.State == "" {
+		b.State = store.ServerBackupMade
+	}
 	b.Size, b.SHA256, b.Manifest, b.Signature = fi.Size(), sum, json.RawMessage(raw.Manifest), string(raw.Signature)
-	b.Error, b.Tries, b.NextTry = "", 0, time.Time{}
 	if pinFor > 0 {
 		b.PinnedUntil = c.now().Add(pinFor)
 	}
@@ -444,22 +515,22 @@ func (c *Catalogue) copyTimes(ctx context.Context) map[string][]time.Time {
 }
 
 // putFile copies the backup's file at path to a target and keeps the
-// copy: there, or failed with its retry.
-func (c *Catalogue) putFile(ctx context.Context, b store.ServerBackup, path string, t store.ServerBackupTarget, pulled bool) Outcome {
+// copy: there, or failed, with its retry where auto, the schedule's.
+func (c *Catalogue) putFile(ctx context.Context, b store.ServerBackup, path string, t store.ServerBackupTarget, pulled, auto bool) Outcome {
 	f, err := os.Open(path)
 	if err != nil {
-		return c.copyFailed(ctx, b, t, fmt.Errorf("serverbackup: %w", err))
+		return c.copyFailed(ctx, b, t, fmt.Errorf("serverbackup: %w", err), auto)
 	}
 	defer f.Close()
-	return c.put(ctx, b, f, b.Size, t, pulled)
+	return c.put(ctx, b, f, b.Size, t, pulled, auto)
 }
 
 // put copies r, the backup's size bytes, to a target under its file name
-// and keeps the copy.
-func (c *Catalogue) put(ctx context.Context, b store.ServerBackup, r io.Reader, size int64, t store.ServerBackupTarget, pulled bool) Outcome {
+// and keeps the copy; the catalogue's write outlives ctx.
+func (c *Catalogue) put(ctx context.Context, b store.ServerBackup, r io.Reader, size int64, t store.ServerBackupTarget, pulled, auto bool) Outcome {
 	m, _, err := ParseManifest(Raw{Manifest: b.Manifest, Signature: []byte(b.Signature)})
 	if err != nil {
-		return c.copyFailed(ctx, b, t, err)
+		return c.copyFailed(ctx, b, t, err, auto)
 	}
 	name := FileName(m)
 	tgt, err := c.Open(t)
@@ -467,21 +538,23 @@ func (c *Catalogue) put(ctx context.Context, b store.ServerBackup, r io.Reader, 
 		err = tgt.Put(ctx, name, r, size)
 	}
 	if err != nil {
-		return c.copyFailed(ctx, b, t, err)
+		return c.copyFailed(ctx, b, t, err, auto)
 	}
 	prev, _ := b.Copy(t.UUID)
 	cp := store.ServerBackupCopy{TargetUUID: t.UUID, Path: name, State: store.CopyThere, Pulled: pulled || prev.Pulled, PushedAt: c.now()}
-	if err := c.Store.SaveServerBackupCopy(ctx, b.UUID, cp); err != nil {
+	if err := c.Store.SaveServerBackupCopy(context.WithoutCancel(ctx), b.UUID, cp); err != nil {
 		return Outcome{Step: "copy", Backup: b.UUID, Target: t.Name, TargetUUID: t.UUID, Err: err}
 	}
 	return Outcome{Step: "copy", Backup: b.UUID, Target: t.Name, TargetUUID: t.UUID}
 }
 
-// copyFailed keeps a copy that failed, with its retry, its tries counted
-// on from the copy's row.
-func (c *Catalogue) copyFailed(ctx context.Context, b store.ServerBackup, t store.ServerBackupTarget, cause error) Outcome {
+// copyFailed keeps a copy that failed, its tries counted on from the
+// copy's row, with its retry where auto, the schedule's; a copy that is
+// there already stays there. The catalogue's write outlives ctx.
+func (c *Catalogue) copyFailed(ctx context.Context, b store.ServerBackup, t store.ServerBackupTarget, cause error, auto bool) Outcome {
+	keep := context.WithoutCancel(ctx)
 	prev, had := b.Copy(t.UUID)
-	if cur, ok, _ := c.Store.ServerBackup(ctx, b.UUID); ok {
+	if cur, ok, _ := c.Store.ServerBackup(keep, b.UUID); ok {
 		prev, had = cur.Copy(t.UUID)
 	}
 	tries := 1
@@ -489,25 +562,40 @@ func (c *Catalogue) copyFailed(ctx context.Context, b store.ServerBackup, t stor
 		tries = prev.Tries + 1
 	}
 	o := Outcome{Step: "copy", Backup: b.UUID, Target: t.Name, TargetUUID: t.UUID, Err: cause, Tries: tries}
-	o.NextTry, o.Spent = c.retryAt(tries)
-	cp := store.ServerBackupCopy{TargetUUID: t.UUID, Path: prev.Path, State: store.CopyFailed, Pulled: prev.Pulled, PushedAt: prev.PushedAt,
-		CheckedAt: prev.CheckedAt, Error: cause.Error(), Tries: tries, NextTry: o.NextTry}
 	if had && prev.State == store.CopyThere {
 		// a copy that is there stays there; the push that failed is told
-		o.NextTry, o.Spent = time.Time{}, false
 		return o
 	}
-	if err := c.Store.SaveServerBackupCopy(ctx, b.UUID, cp); err != nil {
+	o.NextTry, o.Spent = c.retryAt(tries, auto)
+	cp := store.ServerBackupCopy{TargetUUID: t.UUID, Path: prev.Path, State: store.CopyFailed, Pulled: prev.Pulled, PushedAt: prev.PushedAt,
+		CheckedAt: prev.CheckedAt, Error: cause.Error(), Tries: tries, NextTry: o.NextTry}
+	if err := c.Store.SaveServerBackupCopy(keep, b.UUID, cp); err != nil {
 		c.log().Error("server backups: a failed copy not kept", "error", err)
 	}
 	return o
 }
 
-// Retry tries a failed backup again, as the schedule made it, with its
-// copies; or a made backup's failed copies again, each from a copy that
-// is there; each target that took a copy is pruned after, as the
-// schedule would.
+// Retry tries again, by hand, what of a backup failed: a scheduled
+// backup that failed is made again in its row, as the schedule made it,
+// its tries counted on; a backup's failed copies are put again from a
+// copy that is there, each target that took one pruned after, as the
+// schedule would. A backup made by hand that failed is not made again
+// here (ErrNotRetried): its request, a target, a pin, is the one who
+// made it's.
 func (c *Catalogue) Retry(ctx context.Context, uuid string) (store.ServerBackup, []Outcome, error) {
+	return c.retry(ctx, uuid, time.Time{})
+}
+
+// RetryDue is Retry for the schedule at now: what of a backup failed
+// and is due, its retry's time past; a failure whose retries are spent
+// waits for a retry by hand.
+func (c *Catalogue) RetryDue(ctx context.Context, uuid string, now time.Time) (store.ServerBackup, []Outcome, error) {
+	return c.retry(ctx, uuid, now)
+}
+
+// retry is Retry, of what is due at now alone where now is not zero.
+func (c *Catalogue) retry(ctx context.Context, uuid string, now time.Time) (store.ServerBackup, []Outcome, error) {
+	due := func(next time.Time) bool { return now.IsZero() || !next.IsZero() && !now.Before(next) }
 	b, ok, err := c.Store.ServerBackup(ctx, uuid)
 	if err != nil {
 		return store.ServerBackup{}, nil, err
@@ -516,36 +604,60 @@ func (c *Catalogue) Retry(ctx context.Context, uuid string) (store.ServerBackup,
 		return store.ServerBackup{}, nil, fmt.Errorf("%w: %s", store.ErrNoServerBackup, uuid)
 	}
 	if b.State == store.ServerBackupFailed {
-		return c.Make(ctx, MakeRequest{Trigger: Trigger(b.Trigger), UserID: b.UserID, UUID: b.UUID})
+		switch {
+		case !scheduled(b.Trigger):
+			return b, nil, fmt.Errorf("%w: %s", ErrNotRetried, uuid)
+		case !due(b.NextTry):
+			return b, nil, nil
+		}
+		return c.Make(ctx, MakeRequest{Trigger: TriggerScheduled, UUID: b.UUID})
 	}
 	var outs []Outcome
 	for _, cp := range b.Copies {
-		if cp.State != store.CopyFailed {
+		if cp.State != store.CopyFailed || !due(cp.NextTry) {
 			continue
 		}
 		t, ok, err := c.Store.ServerBackupTarget(ctx, cp.TargetUUID)
 		if err != nil || !ok {
 			continue
 		}
-		o := c.copyFrom(ctx, b, t, cp.Pulled)
+		o := c.copyFrom(ctx, b, t, cp.Pulled, scheduled(b.Trigger))
 		outs = append(outs, o)
 		if o.Err == nil {
-			outs = append(outs, c.pruneOutcome(ctx, t.UUID))
+			outs = append(outs, c.pruneOutcome(context.WithoutCancel(ctx), t.UUID))
 		}
 	}
-	b, _, err = c.Store.ServerBackup(ctx, uuid)
+	b, _, err = c.Store.ServerBackup(context.WithoutCancel(ctx), uuid)
 	return b, outs, err
 }
 
 // copyFrom copies a backup to a target from a copy that is there on
 // another one, the local ones first.
-func (c *Catalogue) copyFrom(ctx context.Context, b store.ServerBackup, t store.ServerBackupTarget, pulled bool) Outcome {
+func (c *Catalogue) copyFrom(ctx context.Context, b store.ServerBackup, t store.ServerBackupTarget, pulled, auto bool) Outcome {
 	f, size, _, err := c.openCopy(ctx, b, t.UUID)
 	if err != nil {
-		return c.copyFailed(ctx, b, t, err)
+		return c.copyFailed(ctx, b, t, err, auto)
 	}
 	defer f.Close()
-	return c.put(ctx, b, io.NewSectionReader(f, 0, size), size, t, pulled)
+	return c.put(ctx, b, io.NewSectionReader(f, 0, size), size, t, pulled, auto)
+}
+
+// Delete removes from the catalogue a backup of which no target holds a
+// copy: one that failed, or whose copies were broken off. One with a
+// copy there is refused (ErrHasCopies); its copies are deleted first
+// (DeleteCopy).
+func (c *Catalogue) Delete(ctx context.Context, uuid string) error {
+	b, ok, err := c.Store.ServerBackup(ctx, uuid)
+	if err != nil {
+		return err
+	}
+	if !ok {
+		return fmt.Errorf("%w: %s", store.ErrNoServerBackup, uuid)
+	}
+	if anyThere(b) {
+		return fmt.Errorf("%w: %s", ErrHasCopies, uuid)
+	}
+	return c.Store.DeleteServerBackup(ctx, uuid)
 }
 
 // Push copies a backup to a target, from a copy that is there. A push by
@@ -589,7 +701,7 @@ func (c *Catalogue) Pull(ctx context.Context, uuid, from string) (store.ServerBa
 		return b, Outcome{}, err
 	}
 	defer f.Close()
-	o := c.put(ctx, b, io.NewSectionReader(f, 0, size), size, locals[0], true)
+	o := c.put(ctx, b, io.NewSectionReader(f, 0, size), size, locals[0], true, false)
 	o.Step = "pull"
 	b, _, _ = c.Store.ServerBackup(ctx, uuid)
 	return b, o, o.Err
@@ -608,7 +720,7 @@ func (c *Catalogue) copyTo(ctx context.Context, uuid, target string, pulled bool
 	if !ok || b.State != store.ServerBackupMade {
 		return store.ServerBackup{}, Outcome{}, fmt.Errorf("%w: %s", store.ErrNoServerBackup, uuid)
 	}
-	o := c.copyFrom(ctx, b, t, pulled)
+	o := c.copyFrom(ctx, b, t, pulled, false)
 	b, _, _ = c.Store.ServerBackup(ctx, uuid)
 	return b, o, o.Err
 }
@@ -934,17 +1046,31 @@ func (c *Catalogue) Upload(ctx context.Context, path string, by int64) (store.Se
 	if err != nil {
 		return store.ServerBackup{}, Outcome{}, err
 	}
-	if !ok || b.State != store.ServerBackupMade {
-		if b, err = c.keepFile(ctx, path, store.ServerBackup{Trigger: string(TriggerUploaded), UserID: by}, 0); err != nil {
+	keep := context.WithoutCancel(ctx)
+	fresh := !ok || b.State != store.ServerBackupMade
+	if fresh {
+		// a failed row until its copy is there, as Make keeps one
+		if b, err = c.keepFile(keep, path, store.ServerBackup{Trigger: string(TriggerUploaded), UserID: by, State: store.ServerBackupFailed, Error: notCopied}, 0); err != nil {
 			return store.ServerBackup{}, Outcome{}, err
 		}
 	}
 	if cp, ok := b.Copy(locals[0].UUID); ok && cp.State == store.CopyThere {
 		return b, Outcome{Step: "upload", Backup: b.UUID, Target: locals[0].Name, TargetUUID: locals[0].UUID}, nil
 	}
-	o := c.putFile(ctx, b, path, locals[0], true)
+	o := c.putFile(ctx, b, path, locals[0], true, false)
 	o.Step = "upload"
-	b, _, _ = c.Store.ServerBackup(ctx, b.UUID)
+	switch {
+	case o.Err != nil && fresh:
+		c.dropCopies(keep, b)
+		c.Store.DeleteServerBackup(keep, b.UUID)
+		return store.ServerBackup{}, o, o.Err
+	case fresh:
+		b.State, b.Error = store.ServerBackupMade, ""
+		if _, err := c.Store.SaveServerBackup(keep, b); err != nil {
+			return b, o, err
+		}
+	}
+	b, _, _ = c.Store.ServerBackup(keep, b.UUID)
 	return b, o, o.Err
 }
 
