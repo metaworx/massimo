@@ -8,7 +8,6 @@ import (
 	"errors"
 	"io"
 	"net/http"
-	"strings"
 
 	"go.metaworx.ch/massimo/internal/battery"
 	"go.metaworx.ch/massimo/internal/protocol/cube"
@@ -44,7 +43,7 @@ func (s *Server) replaceBattery(w http.ResponseWriter, r *http.Request) error {
 	if room, ok := virtualOf(rt, name); ok {
 		return fail(http.StatusBadRequest, "the virtual wall thermostat of room %d has no batteries", room.ID)
 	} else if roomAlias.MatchString(name) {
-		return fail(http.StatusNotFound, "no room %s", strings.TrimPrefix(strings.ToLower(name), "room-"))
+		return noAliasRoom(name)
 	}
 	rf, err := deviceOf(rt, name)
 	if err != nil {
@@ -54,7 +53,7 @@ func (s *Server) replaceBattery(w http.ResponseWriter, r *http.Request) error {
 	st, ok := snap.State(rf)
 	c := snap.Config(rf)
 	if !ok && c == nil || rt.hidden()[rf] {
-		return fail(http.StatusNotFound, "no device %s", rf)
+		return refuse(http.StatusNotFound, codeDeviceUnknown, rf.String())
 	}
 	if c != nil && c.Type == cube.DeviceCube || st.Type == cube.DeviceCube {
 		return fail(http.StatusBadRequest, "device %s is the Cube, which has no batteries", rf)
@@ -66,9 +65,9 @@ func (s *Server) replaceBattery(w http.ResponseWriter, r *http.Request) error {
 	if dv.State == nil {
 		// Since the Cube's restart, or for some minutes: the flag as the
 		// Cube shows it now is not known.
-		return fail(http.StatusConflict, "the Cube holds no current report of device %s: wait for its next report", rf)
+		return refuse(http.StatusConflict, codeBatteryNoReport, rf.String())
 	}
-	still := fail(http.StatusConflict, "device %s still reports its batteries low: wait for its next report", rf)
+	still := refuse(http.StatusConflict, codeBatteryStillLow, rf.String())
 	if dv.State.BatteryLow {
 		return still
 	}

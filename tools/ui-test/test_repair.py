@@ -6,10 +6,11 @@ stubbed, a GET with a preview or a refusal, a POST with a run, so that
 nothing reaches the fake Cube; the routes have their Go tests
 (internal/server/repair_api_test.go)."""
 import json
+import re
 import time
 from urllib.parse import parse_qs, urlparse
 
-from helpers import REPAIR_BUDGET, RepairStub, focus_in_turn, named_buttons, scroll_width, show_view, wait_until
+from helpers import REPAIR_BUDGET, RepairStub, focus_in_turn, named_buttons, repair_nothing, safe_route, scroll_width, show_view, wait_until
 
 PANEL = ".cube-panel[data-serial='KEQ0000100']"
 
@@ -411,3 +412,63 @@ def test_unlink_relink_warns_and_asks_twice(page, case):
         assert len(stub.runs) == 1 and stub.runs[0][1].get("plan") == ["plan-unlink"], f"one run with its plan: {stub.runs}"
     finally:
         stub.close()
+
+
+# Room 2 of greeting.txt, "Büro", and its only thermostat 0a0109,
+# "Radiator Büro", which the stub has in room 1, "Wohnzimmer", by the
+# Cube and in room 2 by its list: the preview of its configuration says
+# so with a code, and its placement's run is stopped by a discard.
+DIFFER = dict(repair_nothing("config", "the Cube has device 0a0109 in room 1 and its list in room 2: place or list it first"),
+              code="repair_rooms_differ", params={"device": "0a0109", "room": 1, "list_room": 2})
+PLACE = dict(RELINK, action="move", plan="plan-place", radiograms=4, steps=[{"what": "link", "device": "0a0109", "room": 2, "lines": ["s:AAAA"]},
+                                                                            {"what": "link", "device": "0a0109", "room": 2, "lines": ["s:BBBB"]}])
+STOPPED = {"action": "move", "error": "move: stopped at step 1 of 2: engine: command discarded by the cube", "code": "repair_stopped",
+           "params": {"step": 1, "steps": 2, "reason": {"code": "command_discarded", "error": "engine: command discarded by the cube"}},
+           "steps": [{"what": "link", "lines": 1, "accepted": 0, "discarded": True}], "budget": REPAIR_BUDGET}
+SAID = {
+    "en": ("the Cube has Radiator Büro in the room Wohnzimmer and its list in the room Büro: "
+           "first “Place in its listed room” or “List where the Cube has it”",
+           "stopped at step 1 of 2: discarded by the Cube"),
+    "de": ("der Cube hat Radiator Büro im Raum Wohnzimmer, seine Liste im Raum Büro: "
+           "zuerst „In den gelisteten Raum setzen“ oder „Dort listen, wo der Cube es hat“",
+           "bei Schritt 1 von 2 angehalten: vom Cube verworfen"),
+}
+
+
+def test_repair_refusals_in_the_page_language(page, case, watch):
+    """Why a repair has nothing to send, and why its run stopped, are said
+    in the page's language from their codes (AP ErrorCodes, Block 2): the
+    device and the rooms by their names, the repairs by their labels; the
+    discard that stopped the run by its own text, its reason; as text."""
+    def stopped(route):
+        if route.request.method != "POST":
+            route.fallback()
+            return
+        route.fulfill(status=502, content_type="application/json", body=json.dumps(STOPPED))
+
+    watch.expected.append(("plan=plan-place", 502))
+    place_run = re.compile(r"/repair/place\?plan=plan-place$")  # the device by its serial (devicePath)
+    routed = safe_route(page, place_run, stopped)
+    stub = RepairStub(page, {"config": DIFFER, "place": PLACE}, runs=False)
+    try:
+        tile = page.locator('.room[data-id="2"]')
+        tile.locator(".room-name-btn").click()
+        device = tile.locator('.device[data-rf="0a0109"]')
+        device.wait_for(state="visible")
+        device.locator(".repair-open").click()
+        box = page.locator(".device .repair-box:not(.hidden)").first
+        box.wait_for(state="visible")
+        none = box.locator(".repair-item[data-repair=config] .repair-none")
+        none.wait_for(state="visible")
+        assert none.inner_text() == SAID[case.lang][0], f"why there is nothing to send: {none.inner_text()!r}"
+        assert none.evaluate("(e) => e.children.length") == 0, "as text"
+        place = box.locator(".repair-item[data-repair=place]")
+        place.locator(".repair-run").click()
+        place.locator(".confirm-yes").click()
+        result = place.locator(".repair-result.bad")
+        result.wait_for(state="visible")
+        assert result.inner_text() == SAID[case.lang][1], f"why the run stopped: {result.inner_text()!r}"
+    finally:
+        stub.close()
+        page.unroute(place_run, routed)
+

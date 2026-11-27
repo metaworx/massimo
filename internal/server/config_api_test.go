@@ -12,6 +12,7 @@ import (
 	"maps"
 	"net/http"
 	"net/http/httptest"
+	"reflect"
 	"slices"
 	"strings"
 	"sync"
@@ -588,6 +589,11 @@ func TestCopyStopsAtADiscard(t *testing.T) {
 	code, out := do(t, ts, "PUT", base+"/devices/0a0b0c", `{"room_id":1}`)
 	if msg, _ := out["error"].(string); code != 502 || !strings.Contains(msg, "device 0a0b0c is in room 1, but copying the room's settings stopped") {
 		t.Fatalf("a discarded 0x11: %d %v", code, out)
+	}
+	// Its code says so, the discard its reason.
+	if params, _ := out["params"].(map[string]any); out["code"] != "device_settings_not_copied" || params["device"] != "0a0b0c" || params["room"] != float64(1) ||
+		!reflect.DeepEqual(params["reason"], map[string]any{"code": "command_discarded", "error": "engine: command discarded by the cube"}) {
+		t.Fatalf("a discarded 0x11's code: %v", out)
 	}
 	for _, l := range radioBytes(cubewatch.Lines(fc).Since(0, cubewatch.Type('s'))) {
 		if l[2] == cube.RFSetValveConfig || l[2] == cube.RFSetWeekProgram {

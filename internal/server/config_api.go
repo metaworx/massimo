@@ -197,10 +197,10 @@ func (s *Server) writeMetadata(ctx context.Context, rt *runtime, md *cube.Metada
 func checkName(name string) error {
 	name = strings.TrimSpace(name)
 	if name == "" {
-		return fail(http.StatusBadRequest, "name must not be empty")
+		return refuse(http.StatusBadRequest, codeNameEmpty)
 	}
 	if !utf8.ValidString(name) || len(name) > maxNameBytes {
-		return fail(http.StatusBadRequest, "name must be valid text of at most %d bytes", maxNameBytes)
+		return refuse(http.StatusBadRequest, codeNameTooLong, maxNameBytes)
 	}
 	return nil
 }
@@ -439,7 +439,7 @@ func (s *Server) moveDevice(ctx context.Context, r *http.Request, rt *runtime, m
 			return placement{}, refuse(http.StatusNotFound, codeRoomUnknown, newRoom)
 		}
 		if other, ok := secondWall(md, rf, newRoom); ok && c.Type == cube.DeviceWallThermostat && newRoom != cur.RoomID {
-			return placement{}, fail(http.StatusConflict, "room %d has a wall thermostat already (%s); a room takes one, as in the original software", newRoom, other)
+			return placement{}, refuse(http.StatusConflict, codeRoomWallTaken, newRoom, other.String())
 		}
 		if newRoom != cur.RoomID {
 			if withCopy {
@@ -502,7 +502,8 @@ func (s *Server) moveDevice(ctx context.Context, r *http.Request, rt *runtime, m
 func (s *Server) copySettings(ctx context.Context, rt *runtime, rf cube.RFAddress, typ cube.DeviceType, room uint8, state *cubeio.RoomState) (cubeio.Copied, error) {
 	copied, res, err := rt.writerOf(ctx).CopySettings(ctx, rf, typ, room, rt.hidden(), state)
 	if err != nil {
-		return copied, fail(http.StatusBadGateway, "device %s is in room %d, but the room's settings cannot be copied: %v", rf, room, err)
+		msg := fmt.Sprintf("device %s is in room %d, but the room's settings cannot be copied: %v", rf, room, err)
+		return copied, refuseSaying(http.StatusBadGateway, msg, codeDeviceNotCopied, rf.String(), room, refusalOf(err))
 	}
 	if st := copied.State; copied.RoomMode {
 		rt.intend(room, st.Mode, st.Temp, st.Until, s.roomNow()) // the room's intended state (drift.go)
@@ -521,14 +522,15 @@ func (s *Server) copySettings(ctx context.Context, rt *runtime, rf cube.RFAddres
 	s.log.Info("settings copied", append(attrs, "temperatures", len(copied.Temperatures), "valve", copied.Valve, "days", copied.Days,
 		"mode_not_set", copied.ModeNotSet, "room_mode", copied.RoomMode)...)
 	if err := s.commandError(rt, res, 0); err != nil {
+		// The result's refusal, with its code, is the reason the copy
+		// stopped, with its status.
+		status := http.StatusBadGateway
 		var he *httpError
 		if errors.As(err, &he) {
-			// Its words say more than the result's code: the page shows
-			// them as they are (AP ErrorCodes, Block 2 gives it a code).
-			he.msg = fmt.Sprintf("device %s is in room %d, but copying the room's settings stopped: %s", rf, room, he.msg)
-			he.code, he.params = nil, nil
+			status = he.status
 		}
-		return copied, err
+		msg := fmt.Sprintf("device %s is in room %d, but copying the room's settings stopped: %s", rf, room, err)
+		return copied, refuseSaying(status, msg, codeDeviceNotCopied, rf.String(), room, refusalOf(err))
 	}
 	return copied, nil
 }
@@ -541,7 +543,7 @@ func (s *Server) copySettings(ctx context.Context, rt *runtime, rf cube.RFAddres
 // (roomBefore). It returns the placement.
 func (s *Server) addDevice(ctx context.Context, r *http.Request, rt *runtime, md *cube.Metadata, c *cube.DeviceConfig, name *string, roomID *int, withCopy bool) (placement, error) {
 	if roomID == nil {
-		return placement{}, fail(http.StatusConflict, "device %s is in no room yet; give room_id to add it to one", c.RFAddress)
+		return placement{}, refuse(http.StatusConflict, codeDeviceRoomNeeded, c.RFAddress.String())
 	}
 	if *roomID < 1 || *roomID > 255 {
 		return placement{}, fail(http.StatusBadRequest, "room_id must be 1..255")
@@ -555,7 +557,7 @@ func (s *Server) addDevice(ctx context.Context, r *http.Request, rt *runtime, md
 		return placement{}, fail(http.StatusBadRequest, "the cube itself is not in a room")
 	}
 	if other, ok := secondWall(md, c.RFAddress, room); ok && c.Type == cube.DeviceWallThermostat {
-		return placement{}, fail(http.StatusConflict, "room %d has a wall thermostat already (%s); a room takes one, as in the original software", room, other)
+		return placement{}, refuse(http.StatusConflict, codeRoomWallTaken, room, other.String())
 	}
 	if withCopy {
 		if err := s.require(r, "configure"); err != nil {
@@ -632,7 +634,7 @@ func (s *Server) removeDevice(w http.ResponseWriter, r *http.Request) error {
 	case c != nil && c.Type == cube.DeviceCube:
 		return fail(http.StatusBadRequest, "%s is the cube itself", rf)
 	case md == nil || !rt.client.Connected():
-		return fail(http.StatusServiceUnavailable, "cube not connected")
+		return refuseSaying(http.StatusServiceUnavailable, "cube not connected", codeCubeNotConnected)
 	}
 	if c == nil {
 		// A leftover of the metadata: the Cube holds no device to delete.
@@ -727,16 +729,16 @@ func (q configRequest) validate() error {
 		}
 	}
 	if v := q.TempOffset; v != nil && (*v < -3.5 || *v > 3.5 || *v*2 != float64(int(*v*2))) {
-		return fail(http.StatusBadRequest, "temp_offset: must be a multiple of 0.5 between -3.5 and 3.5")
+		return refuse(http.StatusBadRequest, codeConfigOffsetInvalid)
 	}
 	if v := q.WindowOpenMins; v != nil && (*v < 0 || *v > 60 || *v%5 != 0) {
-		return fail(http.StatusBadRequest, "window_open_minutes: must be 0..60 in steps of 5")
+		return refuse(http.StatusBadRequest, codeConfigWindowInvalid)
 	}
 	if v := q.BoostMinutes; v != nil && !((*v >= 0 && *v <= 30 && *v%5 == 0) || *v == 60) {
-		return fail(http.StatusBadRequest, "boost_minutes: must be 0..30 in steps of 5, or 60")
+		return refuse(http.StatusBadRequest, codeConfigBoostInvalid)
 	}
 	if v := q.BoostValvePct; v != nil && (*v < 0 || *v > 100 || *v%5 != 0) {
-		return fail(http.StatusBadRequest, "boost_valve_pct: must be 0..100 in steps of 5")
+		return refuse(http.StatusBadRequest, codeConfigValveInvalid)
 	}
 	if v := q.DecalcDay; v != nil {
 		var d cube.Weekday
@@ -745,11 +747,11 @@ func (q configRequest) validate() error {
 		}
 	}
 	if v := q.DecalcHour; v != nil && (*v < 0 || *v > 23) {
-		return fail(http.StatusBadRequest, "decalc_hour: must be 0..23")
+		return refuse(http.StatusBadRequest, codeConfigDecalcInvalid)
 	}
 	for name, v := range map[string]*int{"max_valve_pct": q.MaxValvePct, "valve_offset_pct": q.ValveOffsetPct} {
 		if v != nil && (*v < 0 || *v > 100) {
-			return fail(http.StatusBadRequest, "%s: must be 0..100", name)
+			return refuse(http.StatusBadRequest, codeConfigPercentInvalid, name)
 		}
 	}
 	return nil

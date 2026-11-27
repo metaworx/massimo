@@ -4,6 +4,7 @@
 package server
 
 import (
+	"reflect"
 	"testing"
 	"time"
 
@@ -43,8 +44,8 @@ func TestPairingAndAddingToARoom(t *testing.T) {
 	if code != 200 || st["active"] != true || st["until"] == nil {
 		t.Fatalf("start: %d %v", code, st)
 	}
-	if code, _ := do(t, ts, "POST", base+"/pairing", ""); code != 409 {
-		t.Fatalf("second start: %d", code)
+	if code, out := do(t, ts, "POST", base+"/pairing", ""); code != 409 || out["code"] != "pairing_running" || out["error"] != "pairing is already running" {
+		t.Fatalf("second start: %d %v", code, out)
 	}
 	// n: gets no answer, so the fake may hold it only after the API's.
 	// The device joins 50 ms after it, and the server reads its C line,
@@ -168,7 +169,8 @@ func TestPairingTimeLimit(t *testing.T) {
 	received := cubewatch.Lines(fc)
 	const base = "/api/v1/cubes/KEQ0000100"
 	for _, body := range []string{`{"seconds":256}`, `{"seconds":600}`} {
-		if code, out := do(t, ts, "POST", base+"/pairing", body); code != 400 || out["error"] != "seconds must be 1..255" {
+		if code, out := do(t, ts, "POST", base+"/pairing", body); code != 400 || out["error"] != "seconds must be 1..255" ||
+			out["code"] != "pairing_seconds_invalid" || !reflect.DeepEqual(out["params"], map[string]any{"max": float64(255)}) {
 			t.Fatalf("%s: %d %v", body, code, out)
 		}
 	}

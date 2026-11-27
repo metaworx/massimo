@@ -80,7 +80,7 @@ func TestProgramTag(t *testing.T) {
 	received := cubewatch.Lines(fc)
 	sent := received.Mark()
 	monday := `{"monday":[{"temp":17,"until":"06:00"},{"temp":21.5,"until":"22:00"},{"temp":17,"until":"24:00"}]}`
-	if code, body := putProgram(t, base+"rooms/2/program", `"p0000"`, monday); code != 412 || body["etag"] != tag {
+	if code, body := putProgram(t, base+"rooms/2/program", `"p0000"`, monday); code != 412 || body["etag"] != tag || body["code"] != "program_changed" {
 		t.Fatalf("an old tag: %d %v", code, body)
 	}
 	if got := received.Since(sent, cubewatch.Type('s')); len(got) != 0 {

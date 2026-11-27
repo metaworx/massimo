@@ -4947,12 +4947,22 @@ components:
         notes: {type: array, items: {type: string}}
         untested: {type: boolean, description: "Not yet run on hardware"}
         details: {type: object, additionalProperties: true, description: "What the repair names: the devices reset, the room's masters, the agreement of a re-sent configuration, the rooms of a placement or listing"}
+        code: {type: string, description: "The code of nothing or of refused, whichever is set, as an error answer has it (docs/api-v1.md, \"Error codes\")"}
+        params:
+          type: object
+          additionalProperties: true
+          description: "The parameters of that code, as an error answer has them"
     RepairResult:
       type: object
       properties:
         ok: {type: boolean}
         action: {type: string}
         error: {type: string, description: "Where and why the repair stopped"}
+        code: {type: string, description: "repair_stopped where it stopped"}
+        params:
+          type: object
+          additionalProperties: true
+          description: "The step it stopped at, the steps, and the refusal that stopped it as reason (docs/api-v1.md, \"Error codes\")"
         steps:
           type: array
           items:

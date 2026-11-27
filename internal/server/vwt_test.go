@@ -7,6 +7,7 @@ import (
 	"context"
 	"encoding/base64"
 	"net/http/httptest"
+	"reflect"
 	"slices"
 	"strings"
 	"testing"
@@ -371,7 +372,8 @@ func TestSecondWallThermostatRefused(t *testing.T) {
 	received := cubewatch.Lines(fc)
 	before := received.Mark()
 	code, body := do(t, ts, "PUT", "/api/v1/cubes/KEQ0000100/devices/0a0299", `{"room_id":1,"name":"Zweiter"}`)
-	if code != 409 || !strings.Contains(body["error"].(string), "wall thermostat already") {
+	if code != 409 || !strings.Contains(body["error"].(string), "wall thermostat already") || body["code"] != "room_wall_thermostat_taken" ||
+		!reflect.DeepEqual(body["params"], map[string]any{"room": float64(1), "device": "0a0201"}) {
 		t.Fatalf("a second wall thermostat: %d %v", code, body)
 	}
 	if got := received.Since(before, cubewatch.Type('s', 'm')); len(got) != 0 {

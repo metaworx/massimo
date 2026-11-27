@@ -432,10 +432,13 @@ and `params`, the values its text names, by name (AP ErrorCodes):
   one code may come with more than one status (a `409` on a write,
   a `404` on a read).
   The table below lists them.
-- `params` holds a room as its `{id}`, a number,
+- `params` holds a room as its `{id}`, a number
+  (so does a parameter whose name ends in `_room`),
   a device as the request named it, its radio address or its serial,
   and devices as a list of radio addresses;
   it is absent where the text names nothing.
+  `reason`, where a refusal names another one that stopped it,
+  is that one as an error answer, its `error`, `code` and `params`.
 - `error` stays the server's English text, as the log has it:
   a client that finds no `code`, or one it does not know,
   shows `error` and goes by the status.
@@ -484,6 +487,54 @@ which its setpoint, its configuration and its week programme go to:
 | `room_no_thermostat` | 409, 404 | `room` | the room has no thermostat: a write is `409`, a read of its programme `404` |
 | `room_thermostat_unplaced` | 409, 404 | `room`, `device` | the Cube's list has a thermostat in the room, `device` the first, but its C line names another room or none, so that the Cube has no thermostat there; the repair `…/devices/{rf}/repair/place` puts it there |
 
+**Rooms and devices**, their names, the rooms they are in,
+and the Cube's structure, which one change at a time writes:
+
+| Code | Status | Params | Refused because |
+|------|--------|--------|-----------------|
+| `structure_change_running` | 503 | – | another change of the Cube's rooms and devices did not end within the request's time |
+| `name_empty` | 400 | – | a room's or a device's name is empty |
+| `name_too_long` | 400 | `max` | the name is longer than `max` bytes, the Cube's limit |
+| `room_not_empty` | 409 | `room`, `device` | a room to delete still has a device, `device` the first |
+| `room_wall_thermostat_taken` | 409 | `room`, `device` | a wall thermostat moved, added, placed or listed into a room that has one, `device` |
+| `device_room_needed` | 409 | `device` | a device in no room yet, written without a `room_id` |
+| `device_settings_not_copied` | 502, 409 | `device`, `room`, `reason` | the device is in the room, but copying the room's settings to it stopped, for `reason`, with its status |
+| `setpoint_mode_invalid` | 400 | – | a setpoint's `mode` is none of `auto`, `manual`, `vacation`, `boost` |
+
+**A device's and a room's configuration**,
+a value out of the range the original software offers:
+
+| Code | Status | Params | Refused because |
+|------|--------|--------|-----------------|
+| `config_temp_offset_invalid` | 400 | – | `temp_offset` is no multiple of 0.5 from -3.5 to 3.5 |
+| `config_window_minutes_invalid` | 400 | – | `window_open_minutes` is not 0..60 in steps of 5 |
+| `config_boost_minutes_invalid` | 400 | – | `boost_minutes` is not 0..30 in steps of 5, or 60 |
+| `config_boost_valve_invalid` | 400 | – | `boost_valve_pct` is not 0..100 in steps of 5 |
+| `config_decalc_hour_invalid` | 400 | – | `decalc_hour` is not 0..23 |
+| `config_valve_pct_invalid` | 400 | `field` | `max_valve_pct` or `valve_offset_pct`, `field`, is not 0..100 |
+| `program_changed` | 412 | – | a week programme's `If-Match` names another tag than its current one, which `etag` carries |
+
+**A room's virtual wall thermostat** (see "The virtual wall thermostat"):
+
+| Code | Status | Params | Refused because |
+|------|--------|--------|-----------------|
+| `vwt_lock_no_wall_thermostat` | 409 | `room` | a lock of a room without a real wall thermostat |
+| `vwt_rename_with_room` | 409 | `room` | a rename or a move of the virtual wall thermostat, which goes with its room |
+| `vwt_remove_with_room` | 409 | `room` | a removal of the virtual wall thermostat, which goes with its room |
+| `vwt_temp_method_invalid` | 400 | – | `temp_method` is neither `median` nor `mean` |
+| `vwt_address_invalid` | 400 | – | `rf_address` is neither six hex digits nor `""` |
+| `vwt_address_real` | 409 | `device` | `rf_address` is a real device's, `device` |
+| `vwt_address_taken` | 409 | `address`, `room` | `rf_address`, `address`, is the virtual wall thermostat's of another room |
+
+**The pairing and new batteries**:
+
+| Code | Status | Params | Refused because |
+|------|--------|--------|-----------------|
+| `pairing_seconds_invalid` | 400 | `max` | `seconds` is not 1..`max` |
+| `pairing_running` | 409 | – | the Cube is in pairing mode already |
+| `battery_no_report` | 409 | `device` | the Cube holds no current report of the device |
+| `battery_still_low` | 409 | `device` | the device still reports its batteries low |
+
 **A command's result**, of a write sent to the Cube through its queue;
 `error` is the result's own:
 
@@ -493,7 +544,7 @@ which its setpoint, its configuration and its week programme go to:
 | `command_discarded` | 502 | – | the Cube discarded the command |
 | `command_discarded_no_state` | 502 | `room`, `devices` | the Cube discarded a room command, since it holds no state for those members of the room, also in `no_state` |
 | `command_unwanted` | 502 | – | the command was no longer wanted when its turn came |
-| `cube_not_connected` | 502 | – | the server's connection to the Cube is down |
+| `cube_not_connected` | 502, 503 | – | the server's connection to the Cube is down: a command's result `502`, a request that needs the connection before it sends `503` |
 | `cube_busy` | 502 | – | another command is waiting for the Cube's reply |
 | `command_timed_out` | 502 | – | the command's time ran out before the Cube answered, waiting for the radio budget or its turn |
 
@@ -513,6 +564,24 @@ whose `error` names the link that refused:
 
 | Code | Status | Params | Refused because |
 |------|--------|--------|-----------------|
+| `repair_changed` | 409 | – | the repair as it is now differs from the preview whose plan the run names |
+| `repair_duty_cycle` | 409 | `duty`, `cost`, `max` | the duty cycle, `duty` %, and the repair's, about `cost` %, would reach the queue's hold at `max` % |
+| `repair_memory_slots` | 409 | `free`, `held`, `min` | the slots the repair's room radiograms hold, `held`, would leave fewer free than `min` |
+| `repair_stopped` | 502, 409, … | `step`, `steps`, `reason` | the run stopped at `step` of `steps`, for `reason`, with its status |
+| `repair_none_flagged` | 409 | – | no device of the Cube has a communication error |
+| `repair_room_none_flagged` | 409 | `room` | no device of the room has a communication error |
+| `repair_master_valid` | 409 | `room`, `device` | the room's master, `device`, is a thermostat of the room |
+| `repair_master_none` | 409 | `room` | the room has no thermostat to name as its master |
+| `repair_room_disagrees` | 409 | `room`, `devices` | the Cube and its list disagree on these devices of the room |
+| `repair_link_too_few` | 409 | `room` | the room has fewer than two devices to link |
+| `repair_device_no_room` | 409 | `device` | the Cube has the device in no room |
+| `repair_rooms_differ` | 409 | `device`, `room`, `list_room` | the Cube has the device in `room`, its list in `list_room` |
+| `repair_config_same` | 409 | `device`, `room`, `thermostats` | the device has the room's temperatures and week programme already |
+| `repair_device_unlisted` | 409 | `device` | the Cube's list does not list the device |
+| `repair_list_no_room` | 409 | `device` | the Cube's list places the device in no room |
+| `repair_placed_already` | 409 | `device`, `room` | the Cube has the device in the room its list has |
+| `repair_hidden_room` | 409 | `device`, `room` | the Cube has the device in its hidden room |
+| `repair_listed_already` | 409 | `device`, `room` | the Cube's list has the device in the room the Cube has |
 | `room_name_needed` | 409 | `room` | a listing into a room the Cube's list does not have, without `room_name`; `room` is also at the top level |
 
 ## Routes
@@ -3866,6 +3935,8 @@ either would stop it halfway.
 A repair with nothing to send now has a preview without `plan` and
 `steps`, and `nothing` says why, as the table names it;
 its run is refused with `409` and that message.
+`code` and `params` are those of `nothing` or of `refused`, whichever is set,
+as the run's refusal has them (see "Error codes").
 A listing into a room the Cube's list does not have says so with
 `details` `{"code": "room_name_needed", "room": 7}`, and its run's `409`
 carries the same `code` and `room`.
@@ -3893,7 +3964,8 @@ for resets, the device list read about two seconds after them:
 `still_flagged` names the devices whose flag it still shows.
 A step the Cube discarded or that failed stops the run there:
 `502` (`409` when superseded) with `error` naming the step and the same
-`steps`, so that a client sees how far it got.
+`steps`, so that a client sees how far it got;
+its `code` is `repair_stopped`, the refusal that stopped it its `reason`.
 Room repairs and placements run under the Cube's structure lock,
 as moves and removals do.
 A room is its members by their C lines, the Cube's own idea of it.

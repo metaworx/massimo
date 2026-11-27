@@ -8,6 +8,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"io"
 	"net/http"
 	"regexp"
@@ -380,16 +381,17 @@ func (s *Server) onVirtual(w http.ResponseWriter, r *http.Request, rt *runtime, 
 	case vwtLock:
 		wall, ok := roomWall(rt, room.ID)
 		if !ok {
-			return fail(http.StatusConflict, "room %d has no wall thermostat whose keys could be locked; lock its radiator thermostats one by one", room.ID)
+			return refuse(http.StatusConflict, codeVwtLockNoWall, room.ID)
 		}
 		r.SetPathValue("rf", wall.String())
 		return s.setDeviceLock(w, r)
 	case vwtConfig:
 		return s.virtualConfig(w, r, rt, room)
 	case vwtUpdate:
-		return fail(http.StatusConflict, "the virtual wall thermostat of room %d goes with its room: rename the room (PUT …/rooms/%d)", room.ID, room.ID)
+		msg := fmt.Sprintf("the virtual wall thermostat of room %d goes with its room: rename the room (PUT …/rooms/%d)", room.ID, room.ID)
+		return refuseSaying(http.StatusConflict, msg, codeVwtRename, room.ID)
 	}
-	return fail(http.StatusConflict, "the virtual wall thermostat of room %d goes with its room: it is removed with the room", room.ID)
+	return refuse(http.StatusConflict, codeVwtRemove, room.ID)
 }
 
 // roomWall is a room's real wall thermostat, the first where another tool
@@ -496,29 +498,29 @@ func (s *Server) checkVirtualSettings(rt *runtime, room cube.RoomMeta, p map[str
 	if raw, ok := p["temp_method"]; ok {
 		var m string
 		if json.Unmarshal(raw, &m) != nil || m != view.TempMedian && m != view.TempMean {
-			return nil, fail(http.StatusBadRequest, "temp_method: median or mean")
+			return nil, refuse(http.StatusBadRequest, codeVwtMethodInvalid)
 		}
 		set.TempMethod = &m
 	}
 	if raw, ok := p["rf_address"]; ok {
 		var a string
 		if json.Unmarshal(raw, &a) != nil {
-			return nil, fail(http.StatusBadRequest, "rf_address: six hex digits, or \"\" for the room number")
+			return nil, refuse(http.StatusBadRequest, codeVwtAddressInvalid)
 		}
 		a = strings.ToLower(a)
 		if a != "" {
 			rf, err := cube.ParseRFAddress(a)
 			if err != nil || len(a) != 6 {
-				return nil, fail(http.StatusBadRequest, "rf_address: six hex digits, or \"\" for the room number")
+				return nil, refuse(http.StatusBadRequest, codeVwtAddressInvalid)
 			}
 			snap := rt.client.Snapshot()
 			if view.RealAddresses(snap)[rf] {
-				return nil, fail(http.StatusConflict, "rf_address %s is a real device's", a)
+				return nil, refuse(http.StatusConflict, codeVwtAddressReal, a)
 			}
 			if md := snap.Metadata(); md != nil {
 				for id, other := range view.VirtualAddresses(snap, rt.hidden().VisibleRooms(md), rt.roomInfo()) {
 					if other == rf && id != room.ID {
-						return nil, fail(http.StatusConflict, "rf_address %s is the virtual wall thermostat's of room %d", a, id)
+						return nil, refuse(http.StatusConflict, codeVwtAddressTaken, a, id)
 					}
 				}
 			}
@@ -535,7 +537,7 @@ func (s *Server) setVirtualSettings(r *http.Request, rt *runtime, room cube.Room
 	if st, id := rt.store, rt.storeID.Load(); st != nil && id != 0 {
 		if _, err := st.SetRoomSettings(r.Context(), id, room.ID, set, principalOf(r).userID()); err != nil {
 			if errors.Is(err, store.ErrNoRoom) {
-				return vwtSettings{}, fail(http.StatusNotFound, "no room %d", room.ID)
+				return vwtSettings{}, refuse(http.StatusNotFound, codeRoomUnknown, room.ID)
 			}
 			return vwtSettings{}, err
 		}
