@@ -1356,7 +1356,18 @@ export interface UpdateStatus {
 }
 
 export interface Error {
+  /** The server's English text */
   error?: string;
+  /**
+   * What was refused, lower-case words joined by _, never renamed once
+   * released; absent for an error without one (docs/api-v1.md, "Error codes")
+   */
+  code?: string;
+  /**
+   * The values the error names, by name: a room by its id, a device as the
+   * request named it, devices as radio addresses; absent where it names none
+   */
+  params?: Record<string, unknown>;
   /**
    * Radio addresses of room members without state, when that caused the discard
    */

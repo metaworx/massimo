@@ -3018,6 +3018,22 @@ the stream's ticket the 20 seconds of every other request.
 The event stream and what the page sends as it is left (`keepalive`) have none,
 and neither has what goes as a file (`apiRaw`):
 a backup's download, and a restore's plan and its run.
+A refusal of the server is said in the page's language (AP ErrorCodes):
+the error `apiRequest` and `apiRaw` throw (`refusalError`)
+has as its message the text of the answer's `code` in the page's tables (`err.<code>`),
+with its `params` filled in,
+a room and a device by the names the page has for them
+where the request was for the chosen Cube;
+the server's English `error` where English has no text for the code,
+or the answer no code;
+the status line where it has no `error` either.
+So every line that shows an error's message shows it in the page's language,
+and the error keeps the answer's `status`, `data`, `code` and `params`.
+`refusalText` of `app.js` gives the same text for a refusal kept with a result,
+which is no thrown error;
+it is text, set as text, never markup.
+A refusal shows where the user acted, on its tile's or its card's line, as before:
+a code makes no toast of it (D5-A).
 A part gives the focus in the handler of the user's action, or in a layout effect,
 in the drawing that shows the thing, never in an effect, which runs a frame later,
 when a user may be typing elsewhere;
