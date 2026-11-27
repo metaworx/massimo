@@ -66,8 +66,8 @@ func (st State) apply(e []byte, t cube.DeviceType) error {
 			e[i] |= bit
 		}
 	}
-	flag(st.Reported, 5, 0x10)
-	flag(st.Error, 5, 0x08)
+	flag(st.Reported, lFlags1, 0x10)
+	flag(st.Error, lFlags1, lError)
 	flag(st.BatteryLow, lFlags2, 0x80)
 	flag(st.LinkError, lFlags2, 0x40)
 	flag(st.PanelLocked, lFlags2, 0x20)

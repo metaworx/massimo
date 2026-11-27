@@ -1121,9 +1121,8 @@ const newcomer cube.RFAddress = 0x0a0201
 // none, and the list has it in listed, out of the list for 0. change
 // changes the greeting after that, fake the fake Cube. The structure
 // changes are read back within a fraction of a second. The fake Cube
-// does not take a group (0x22) itself; as the Cube does once the device
-// acknowledged, it answers 0a0201's C line with the room its 0x22 named
-// from then on.
+// takes the group as the Cube does once the device acknowledged it: a
+// 0x22 names its room in the device's C line.
 func startNewcomer(t *testing.T, listed uint8, change func([]cube.Message) []cube.Message, fake func(*fakecube.Server)) *driftRig {
 	t.Helper()
 	clock := &checkClock{}
@@ -1150,15 +1149,6 @@ func startNewcomer(t *testing.T, listed uint8, change func([]cube.Message) []cub
 				lines = change(lines)
 			}
 			return lines
-		}),
-		withFake(func(fc *fakecube.Server) {
-			raw := rawConfig(t, fc.Greeting, newcomer)
-			fc.OnReceive(func(m cube.Message) {
-				rc, err := cube.ParseRadioCommand(m.Data)
-				if m.Type == 's' && err == nil && rc.Command == cube.RFSetGroupAddress && rc.Target.RFAddress == newcomer && len(rc.Payload) > 0 {
-					fc.SetConfig(configLine(raw, newcomer, rc.Payload[0], string(raw[8:18])))
-				}
-			})
 		}),
 	}
 	if fake != nil {
@@ -1570,6 +1560,47 @@ func TestMoveGivesTheRoomsState(t *testing.T) {
 	}
 	if copied, _ := out["copied"].(map[string]any); fmt.Sprint(copied["state"]) != "map[mode:manual setpoint:5]" {
 		t.Fatalf("copied %v", out["copied"])
+	}
+}
+
+// A move and an add leave the device's C line in its new room, as the
+// fake Cube takes the 0x22 as the Cube does (AP FakeGroup, Block 2): no
+// line finding of the device follows. 0a0204 moves from room 2, its C
+// line's room too, into room 1, and the move's leave-out ends at the
+// check of its re-read, which follows the change's end, not
+// mismatchSettle later; the newcomer 0a0201, in no room and not listed,
+// is put into room 1, its re-read before the change's end.
+func TestMoveAndAddLeaveTheCLineInTheRoom(t *testing.T) {
+	t.Parallel()
+	for _, c := range []struct {
+		name  string
+		rf    cube.RFAddress
+		ended bool // the leave-out ends at the re-read's check
+	}{{"a move", 0x0a0204, true}, {"an add", newcomer, false}} {
+		t.Run(c.name, func(t *testing.T) {
+			t.Parallel()
+			r := startNewcomer(t, 0, nil, nil)
+			path := fmt.Sprintf("/api/v1/cubes/KEQ0000100/devices/%s", c.rf)
+			if code, out := do(t, r.ts, "PUT", path, `{"room_id":1}`); code != 200 {
+				t.Fatalf("%s into room 1: %d %v", c.rf, code, out)
+			}
+			settling := func() bool {
+				r.rt.cong.mu.Lock()
+				defer r.rt.cong.mu.Unlock()
+				return r.rt.cong.settling[c.rf] != nil
+			}
+			testkit.Eventually(t, "the C line in room 1", func() bool {
+				cfg := r.rt.client.Snapshot().Config(c.rf)
+				return cfg != nil && cfg.RoomID == 1 && (!c.ended || !settling())
+			})
+			snap := r.rt.client.Snapshot()
+			found, _ := findMismatches(snap, snap.Metadata(), view.Hidden{}, nil)
+			for _, m := range found {
+				if m.Device == c.rf.String() && lineFinding(m.Finding) {
+					t.Fatalf("a finding of %s after it went into room 1: %+v", c.rf, m)
+				}
+			}
+		})
 	}
 }
 
