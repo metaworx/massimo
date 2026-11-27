@@ -5149,10 +5149,18 @@ and so is a backup whose store is newer than this server's: update first.
   whether its store was `migrated` from an older schema,
   the `cubes` it holds (`serial`, `name`, `live` where this server has it),
   the `files` the options would put in place (`role`, `to`),
-  the `report` and, where the restore would be refused, why (`refused`).
-- `POST …/server-backups/{id}/restore` takes a pinned local backup first,
-  replaces the scopes whole in one transaction, puts the files in place,
-  and restarts the server as `POST /api/v1/restart` does.
+  whether this server can `restart` itself (`available`, `by`, `blocked`),
+  the `report` and, where the restore would be refused, why (`refused`):
+  what is missing, a place this server cannot write (the systemd unit keeps
+  `/etc/massimo` read-only to it), or users and sign-in or the identity
+  on a server that cannot restart itself.
+- `POST …/server-backups/{id}/restore` writes the files beside their places,
+  takes a pinned local backup, replaces the scopes whole in one transaction,
+  renames the files into place, and restarts the server as `POST /api/v1/restart` does,
+  also where a file failed after the commit: then `500`, with the answer and its `error`.
+  What the server wrote between the backup taken first and the commit is in neither:
+  the answer names both times, `before_backup_time` and `restored_at`.
+  Users and sign-in, or the identity, are `409` on a server that cannot restart itself.
   The answer says so first, `{"restart": {"started": true, "by": "systemd"}, …}`,
   or why not (`blocked`): the server is then to be restarted by hand,
   since it keeps `opaque.key` and its node in memory.

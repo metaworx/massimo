@@ -113,3 +113,41 @@ func TestServerRestoreAPI(t *testing.T) {
 	// A second restore while the first one's restart is under way.
 	call("/restore", body(map[string]any{"key_file": keyFile, "scopes": []string{"users"}}), 409)
 }
+
+// A server that cannot restart itself refuses a restore of users and
+// sign-in, which takes the backup's opaque.key, and the plan says so; a
+// restore of the settings goes, and its answer says the restart is the
+// owner's.
+func TestServerRestoreNeedsARestart(t *testing.T) {
+	t.Parallel()
+	r, keyFile := startSB(t, time.Date(2026, 11, 27, 10, 0, 0, 0, time.UTC))
+	code, text := callAPI(t, r.ts, "POST", "/api/v1/server-backups", "secret", "")
+	if code != 201 {
+		t.Fatalf("a backup: %d %s", code, text)
+	}
+	var made struct {
+		Backup struct {
+			UUID string `json:"uuid"`
+		} `json:"backup"`
+	}
+	json.Unmarshal([]byte(text), &made)
+	body := func(scopes ...string) string {
+		b, _ := json.Marshal(map[string]any{"key_file": string(keyFile), "scopes": scopes})
+		return string(b)
+	}
+	base := "/api/v1/server-backups/" + made.Backup.UUID
+	code, text = callAPI(t, r.ts, "POST", base+"/restore/plan", "secret", body("users"))
+	if code != 200 || !strings.Contains(text, "cannot restart itself") || !strings.Contains(text, `"available": false`) {
+		t.Fatalf("plan %d %s", code, text)
+	}
+	if code, text = callAPI(t, r.ts, "POST", base+"/restore", "secret", body("users")); code != 409 || !strings.Contains(text, "cannot restart itself") {
+		t.Fatalf("users without a restart: %d %s", code, text)
+	}
+	if bs := r.backups(t); len(bs) != 1 {
+		t.Fatalf("the refused restore took a backup: %d", len(bs))
+	}
+	code, text = callAPI(t, r.ts, "POST", base+"/restore", "secret", body("settings"))
+	if code != 200 || !strings.Contains(text, `"started": false`) || !strings.Contains(text, "no service manager") || !strings.Contains(text, `"restored_at"`) {
+		t.Fatalf("settings without a restart: %d %s", code, text)
+	}
+}

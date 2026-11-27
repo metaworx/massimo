@@ -4309,6 +4309,11 @@ paths:
           content:
             application/json:
               schema: {$ref: "#/components/schemas/ServerRestoreResult"}
+        "500":
+          description: Restored, but a file failed after the store's commit; the server restarts all the same
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/ServerRestoreResult"}
         "400": {$ref: "#/components/responses/BadRequest"}
         "401": {$ref: "#/components/responses/Unauthorized"}
         "403":
@@ -4321,7 +4326,9 @@ paths:
           description: |
             Refused: rows of other scopes missing (code missing), no owner
             left (code no_owner), each with the report; or no key for the
-            backup taken first, no copy, a restart or an update under way
+            backup taken first, no copy, a restart or an update under way,
+            or users and sign-in or the identity on a server that cannot
+            restart itself
           content:
             application/json:
               schema:
@@ -6811,8 +6818,14 @@ components:
         env: {type: boolean, description: The backup holds an env file}
         tls: {type: integer, description: The TLS files it holds}
         files: {type: array, items: {$ref: "#/components/schemas/ServerRestoreFile"}}
+        restart:
+          type: object
+          properties:
+            available: {type: boolean, description: This server can restart itself}
+            by: {type: string}
+            blocked: {type: string}
         report: {$ref: "#/components/schemas/ServerRestoreReport"}
-        refused: {type: string, description: Why the restore would be refused; empty for not}
+        refused: {type: string, description: 'Why the restore would be refused: rows missing, a place this server cannot write, or no restart for users or the identity; empty for not'}
     ServerRestoreResult:
       type: object
       properties:
@@ -6822,7 +6835,10 @@ components:
             started: {type: boolean}
             by: {type: string}
             blocked: {type: string, description: Why the server did not restart; restart it by hand}
+        error: {type: string, description: 'A failure after the store''s commit, a file not put in place; the server restarts all the same'}
         before_backup: {type: string, description: The pinned local backup taken first}
+        before_backup_time: {type: string, format: date-time, description: 'When it was made: what the server wrote from then until restored_at is in neither'}
+        restored_at: {type: string, format: date-time}
         scopes: {type: array, items: {type: string}}
         serials: {type: array, items: {type: string}}
         report: {$ref: "#/components/schemas/ServerRestoreReport"}

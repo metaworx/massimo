@@ -2536,8 +2536,17 @@ export interface ServerRestorePlan {
   /** The TLS files it holds */
   tls?: number;
   files?: ServerRestoreFile[];
+  restart?: {
+    /** This server can restart itself */
+    available?: boolean;
+    by?: string;
+    blocked?: string;
+  };
   report?: ServerRestoreReport;
-  /** Why the restore would be refused; empty for not */
+  /**
+   * Why the restore would be refused: rows missing, a place this server cannot
+   * write, or no restart for users or the identity; empty for not
+   */
   refused?: string;
 }
 
@@ -2548,8 +2557,21 @@ export interface ServerRestoreResult {
     /** Why the server did not restart; restart it by hand */
     blocked?: string;
   };
+  /**
+   * A failure after the store's commit, a file not put in place; the server
+   * restarts all the same
+   */
+  error?: string;
   /** The pinned local backup taken first */
   before_backup?: string;
+  /**
+   * When it was made: what the server wrote from then until restored_at is in
+   * neither
+   * @format date-time
+   */
+  before_backup_time?: string;
+  /** @format date-time */
+  restored_at?: string;
   scopes?: string[];
   serials?: string[];
   report?: ServerRestoreReport;

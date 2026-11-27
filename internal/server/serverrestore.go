@@ -102,6 +102,10 @@ func (s *Server) planServerRestore(w http.ResponseWriter, r *http.Request) error
 	if err != nil {
 		return restoreFail(err)
 	}
+	v, _ := s.restartState(r)
+	if why := restartNeeded(o, v); why != "" && p.Refused == "" {
+		p.Refused = why
+	}
 	id := backupIdentityView{ThisBox: p.ThisBox, Fingerprint: p.Manifest.Node.Fingerprint, Node: p.NodeID}
 	if !p.ThisBox {
 		id.Answers = s.boxAnswers(r.Context(), p.NodeID)
@@ -111,6 +115,7 @@ func (s *Server) planServerRestore(w http.ResponseWriter, r *http.Request) error
 			"version": p.Manifest.Version, "schema": p.Manifest.Schema.Version},
 		"identity": id, "migrated": p.Migrated, "scopes": p.Selection.Scopes, "serials": p.Selection.Serials, "cubes": orEmpty(p.Cubes),
 		"env": p.Env, "tls": p.TLS, "files": orEmpty(p.Files), "report": p.Report, "refused": p.Refused,
+		"restart": map[string]any{"available": v.Available, "by": v.By, "blocked": v.Blocked},
 	})
 	return nil
 }
@@ -152,12 +157,20 @@ type serverRestartAnswer struct {
 
 // serverRestoreAnswer is the answer of a restore, the restart first.
 type serverRestoreAnswer struct {
-	Restart serverRestartAnswer        `json:"restart"`
-	Before  string                     `json:"before_backup,omitempty"`
-	Scopes  []string                   `json:"scopes"`
-	Serials []string                   `json:"serials"`
-	Report  store.RestoreReport        `json:"report"`
-	Files   []serverbackup.PlannedFile `json:"files"`
+	Restart serverRestartAnswer `json:"restart"`
+	// Error is a failure after the store's commit: a file not put in
+	// place; the server restarts all the same.
+	Error  string `json:"error,omitempty"`
+	Before string `json:"before_backup,omitempty"`
+	// BeforeTime and At are when the backup taken first was made and
+	// when the store was restored: what the server wrote between them is
+	// in neither.
+	BeforeTime *time.Time                 `json:"before_backup_time,omitempty"`
+	At         *time.Time                 `json:"restored_at,omitempty"`
+	Scopes     []string                   `json:"scopes"`
+	Serials    []string                   `json:"serials"`
+	Report     store.RestoreReport        `json:"report"`
+	Files      []serverbackup.PlannedFile `json:"files"`
 	// Cubes are the Cubes restored whose configuration the Cube restore
 	// could write onto them (POST /api/v1/cubes/{sn}/restore).
 	Cubes []store.RestoredCube `json:"cubes"`
@@ -181,6 +194,17 @@ func (s *Server) restoreServerBackup(w http.ResponseWriter, r *http.Request) err
 	case s.updateRunning():
 		return fail(http.StatusConflict, "an update is running")
 	}
+	// The restart is taken before the restore: a store that took the
+	// backup's opaque.key, or a node.key replaced, must not stay with the
+	// keys this server holds in memory.
+	v, _ := s.restartState(r)
+	if why := restartNeeded(o, v); why != "" {
+		return fail(http.StatusConflict, "%s", why)
+	}
+	held := v.Available && s.restartGate.asked.CompareAndSwap(false, true)
+	if v.Available && !held {
+		return fail(http.StatusConflict, "a restart is under way")
+	}
 	var res serverbackup.Restored
 	err = s.sbJob(r.Context(), func() error {
 		var err error
@@ -190,37 +214,57 @@ func (s *Server) restoreServerBackup(w http.ResponseWriter, r *http.Request) err
 		}
 		return err
 	})
-	var code string
-	switch {
-	case errors.Is(err, store.ErrRestoreMissing):
-		code = "missing"
-	case errors.Is(err, store.ErrRestoreNoOwner):
-		code = "no_owner"
-	case err != nil:
-		return restoreFail(err)
-	}
-	if code != "" {
-		writeJSON(w, http.StatusConflict, map[string]any{"error": err.Error(), "code": code, "report": res.Report})
-		return nil
+	if !res.Committed {
+		if held {
+			s.restartGate.asked.Store(false)
+		}
+		var code string
+		switch {
+		case errors.Is(err, store.ErrRestoreMissing):
+			code = "missing"
+		case errors.Is(err, store.ErrRestoreNoOwner):
+			code = "no_owner"
+		case err != nil:
+			return restoreFail(err)
+		}
+		if code != "" {
+			writeJSON(w, http.StatusConflict, map[string]any{"error": err.Error(), "code": code, "report": res.Report})
+			return nil
+		}
 	}
 	auditChange(r, "scopes", nil, res.Selection.Scopes)
-	ans := serverRestoreAnswer{Before: res.Before.UUID, Scopes: orEmpty(res.Selection.Scopes), Serials: orEmpty(res.Selection.Serials), Report: res.Report,
-		Files: orEmpty(res.Files), Cubes: orEmpty(res.Report.Cubes)}
-	v, _ := s.restartState(r)
+	ans := serverRestoreAnswer{Before: res.Before.UUID, BeforeTime: timeOrNil(res.Before.Time), At: timeOrNil(res.At), Scopes: orEmpty(res.Selection.Scopes),
+		Serials: orEmpty(res.Selection.Serials), Report: res.Report, Files: orEmpty(res.Files), Cubes: orEmpty(res.Report.Cubes)}
+	// Once the server changed it restarts, an error of a file after the
+	// store's commit included.
 	switch {
-	case !v.Available:
+	case !held:
 		ans.Restart.Blocked = v.Blocked
-	case !s.restartGate.asked.CompareAndSwap(false, true):
-		ans.Restart.Blocked = "a restart is under way"
 	default:
-		if err := s.restartNow(r, v); err != nil {
-			ans.Restart.Blocked = "starting the restart: " + err.Error()
+		if rerr := s.restartNow(r, v); rerr != nil {
+			ans.Restart.Blocked = "starting the restart: " + rerr.Error()
 		} else {
 			ans.Restart.Started, ans.Restart.By = true, v.By
 		}
 	}
-	writeJSON(w, http.StatusOK, ans)
+	status := http.StatusOK
+	if err != nil {
+		status, ans.Error = http.StatusInternalServerError, err.Error()
+	}
+	writeJSON(w, status, ans)
 	return nil
+}
+
+// restartNeeded is why a restore cannot go without the restart v
+// allows: users and sign-in take the backup's opaque.key, the identity
+// its node.key, and the server holds both in memory; "" where it can.
+func restartNeeded(o serverbackup.RestoreOptions, v restartView) string {
+	sel, _ := serverbackup.ParseScopes(o.Scopes)
+	if v.Available || !sel.Has(serverbackup.ScopeUsers) && !o.Identity {
+		return ""
+	}
+	return "this server cannot restart itself (" + v.Blocked + "), and a restore of users and sign-in or of the identity needs it: " +
+		"stop the server and run massimo store restore on the box"
 }
 
 // checkServerBackupKey handles POST /api/v1/server-backups/{id}/check-key:
