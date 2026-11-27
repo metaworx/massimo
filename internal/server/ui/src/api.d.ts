@@ -1587,7 +1587,8 @@ export interface Cube {
   };
   /**
    * The Cube's visible devices with a problem (a communication or link error, a
-   * low battery, a window open), each with its room's name; absent where none
+   * battery level weak or low, or the battery flag where the server keeps no
+   * level, a window open), each with its room's name; absent where none
    */
   problems?: (Device & {
     /** The device's room's name */

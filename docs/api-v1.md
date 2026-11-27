@@ -1810,7 +1810,9 @@ among them.
 
 `problems` lists, where there are any, the Cube's visible devices with a problem,
 as `GET …/devices` shows them, each with its room's name (`room`):
-a communication or link error, a low battery, a window open (with its `window` times);
+a communication or link error, a battery level (`battery`) weak or low,
+or the Cube's flag (`battery_low`) where the server keeps no level,
+a window open (with its `window` times);
 a client that shows every Cube's problems, such as the web UI's header,
 needs no other request.
 It is the server's last state, also while the Cube is not connected.

@@ -295,7 +295,7 @@ func (s *Server) logAlerts(ctx context.Context, st *store.Store, audit bool) ([]
 // the device's last ones that has it, where it was set before them.
 func (s *Server) flagAlerts(ctx context.Context, st *store.Store, id int64, rt *runtime) ([]logAlert, error) {
 	var out []logAlert
-	for _, p := range s.problemsOf(rt) {
+	for _, p := range s.flaggedOf(rt) {
 		set := map[string]bool{"error": p.State.Error, "link_error": p.State.LinkError, "battery_low": p.State.BatteryLow}
 		var states []event
 		for _, flag := range deviceFlags {

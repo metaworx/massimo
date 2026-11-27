@@ -5423,7 +5423,7 @@ components:
             logged: {type: string, format: date-time, description: When the log's slots event of the level was given}
         problems:
           type: array
-          description: "The Cube's visible devices with a problem (a communication or link error, a low battery, a window open), each with its room's name; absent where none"
+          description: "The Cube's visible devices with a problem (a communication or link error, a battery level weak or low, or the battery flag where the server keeps no level, a window open), each with its room's name; absent where none"
           items:
             allOf:
               - {$ref: '#/components/schemas/Device'}
