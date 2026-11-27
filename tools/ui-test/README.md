@@ -1013,6 +1013,9 @@ Node is not needed.
 - A test's own wait loop ends at `scaled(seconds)` of `helpers.py`,
   so that `UI_TEST_SCALE` stretches it as it does the kit's waits;
   a window that waits for nothing to come does not take it.
+- A check that compares where elements are reads their boxes at one moment,
+  with `boxes(page, …)` of `helpers.py`, not with a `bounding_box()` each:
+  the page may draw between two calls (`docs/ui-testing.md`, section 9).
 - What a reload or a click brings is waited for,
   not looked at once right after another wait:
   the page goes on after the moment the first wait saw

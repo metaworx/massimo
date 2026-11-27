@@ -9,7 +9,7 @@ import json
 import time
 from urllib.parse import parse_qs, urlparse
 
-from helpers import REPAIR_BUDGET, RepairStub, focus_in_turn, named_buttons, scroll_width, show_view, wait_until
+from helpers import REPAIR_BUDGET, RepairStub, boxes, focus_in_turn, named_buttons, scroll_width, show_view, wait_until
 
 PANEL = ".cube-panel[data-serial='KEQ0000100']"
 
@@ -328,8 +328,8 @@ def test_listing_name_too_long(page, case):
         if case.lang == "de":
             assert hint.is_visible() and hint.inner_text() == "länger als 32 Bytes", "the limit, on the field"
             assert field.get_attribute("aria-invalid") == "true", "the field marked"
-            box, before = field.bounding_box(), hint.bounding_box()
-            assert before["y"] + before["height"] <= box["y"] + 1, "the limit above the box"
+            box, before = boxes(page, field, hint)  # at one moment: the page may draw between two reads
+            assert before["y"] + before["height"] <= box["y"] + 1, f"the limit above the box: {before} over {box}"
             assert listing.locator(".repair-run").count() == 0 and listing.locator(".repair-cost").count() == 0, "nothing to run"
             assert names == [None], f"no preview read with it: {names}"
             assert scroll_width(page) <= case.width, "no horizontal scroll with the limit"

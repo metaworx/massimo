@@ -36,7 +36,7 @@ import re
 import pytest
 
 from conftest import TOKEN, URL, api_call
-from helpers import OPERATOR_PASSWORD, frames, named_buttons, open_fold, scroll_width, show_view, toggle_fold, wait_held, wait_until
+from helpers import OPERATOR_PASSWORD, boxes, frames, named_buttons, open_fold, scroll_width, show_view, toggle_fold, wait_held, wait_until
 from test_first_owner import OPEN, owner_card, start_page, stub_creation
 from test_copy import COPY_STATUS
 from test_login import sign_in
@@ -362,7 +362,8 @@ def check_suggest(page, case, field, again, console):
     says_next(page, field, "words", "before the first press")
     eye = eye_of(page, field)
     if eye.count():
-        assert dice.bounding_box()["x"] + dice.bounding_box()["width"] <= eye.bounding_box()["x"] + 0.5, f"{field}: the dice before the eye"
+        d, e = boxes(page, dice, eye)
+        assert d["x"] + d["width"] <= e["x"] + 0.5, f"{field}: the dice before the eye: {d}, {e}"
     if again:
         assert dice_of(page, again).count() == 0, f"{again}: no dice on the second field"
     v = press(page, field)

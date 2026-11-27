@@ -22,7 +22,9 @@ a test measures what the page does by itself; pause_clock pauses
 Playwright's clock at the page's now. open_fold, close_fold and
 toggle_fold take a fold's toggle event before a test acts inside it.
 wait_started waits for the page's start, the page fixture's and
-owner_page's, and says on a timeout which read it waited for.
+owner_page's, and says on a timeout which read it waited for. boxes
+reads several elements' boxes at one moment, for a check that compares
+where they are.
 
 Every wait of this kit, and the page fixture's, lasts its seconds times
 UI_TEST_SCALE (scaled), a positive number, 1 where it is not set: a
@@ -1152,6 +1154,46 @@ def focus_in_turn(page, click, focused):
 def frames(page):
     """Two frames and a task: a part drawn again after a change has been drawn."""
     page.evaluate("() => new Promise((done) => requestAnimationFrame(() => requestAnimationFrame(() => setTimeout(done, 0))))")
+
+
+# --- one moment ------------------------------------------------------------
+
+# The boxes of elements read in one turn of the page's, each as
+# Playwright's bounding_box gives it (x, y, width and height in the
+# viewport's pixels), None for one that is not drawn, "gone" for one that
+# left the document after it was found.
+BOXES = """(els) => els.map((e) => {
+  if (!e.isConnected) return "gone";
+  if (!e.getClientRects().length) return null;
+  const r = e.getBoundingClientRect();
+  return { x: r.x, y: r.y, width: r.width, height: r.height };
+})"""
+
+
+def boxes(page, *targets, seconds=5):
+    """The boxes of targets, each a selector or a Locator, read at one
+    moment of the page's, in one evaluate, each as bounding_box gives it
+    (None for an element not drawn): for a check that compares where
+    elements are, since the page may draw between two calls. The server's
+    poll drew a device's values above the pairing form between the form's
+    two bounding_box() calls, and the limit, read second, came out 78 px
+    below the box it sits above (test_pairing.py, AP SteadyTests, Block
+    13). Each target is found as bounding_box finds it, one element,
+    waited for; where one was drawn anew between its finding and the read,
+    all are found and read again, within seconds (scaled)."""
+    end = time.monotonic() + scaled(seconds)
+    while True:
+        handles = [(page.locator(t) if isinstance(t, str) else t).element_handle() for t in targets]
+        try:
+            got = page.evaluate(BOXES, handles)
+        finally:
+            for h in handles:
+                h.dispose()
+        if "gone" not in got:
+            return got
+        if time.monotonic() >= end:
+            gone = [str(t) for t, b in zip(targets, got) if b == "gone"]
+            raise AssertionError(f"the boxes at one moment: {', '.join(gone)} drawn anew at every read for {scaled(seconds):g} s")
 
 
 # --- a fold ---------------------------------------------------------------

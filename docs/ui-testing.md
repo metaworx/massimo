@@ -1,4 +1,4 @@
-# Testing the web UI (v1.29.0)
+# Testing the web UI (v1.30.0)
 
 An evaluation of a Cypress suite for the web UI, against the alternatives:
 what the Playwright smoke test covers today and what it cannot do well,
@@ -809,6 +809,19 @@ The suite's helpers for it are in `tools/ui-test/helpers.py`
   of its selectors, lets the data come, waits two frames and a task,
   and asks which selectors no longer find the element it marked
   (`test_pairing_updates.py`, `test_repair_updates.py`).
+- **One moment for several boxes** (`boxes(page, *targets)`, AP SteadyTests, Block 13):
+  a check that compares where elements are reads their boxes at one moment,
+  in one `page.evaluate`, not with a `bounding_box()` each:
+  the page may draw between two calls,
+  as the server's poll drew a device's values above the pairing form
+  between the form's two reads, and the limit, read second,
+  came out 78 px below the box it sits above (`test_pairing.py`).
+  Each target, a selector or a `Locator`, is found as `bounding_box()` finds it,
+  one element, waited for, and its box is the one `bounding_box()` gives,
+  `None` for an element not drawn;
+  where one was drawn anew between its finding and the read, all are read again.
+  A box compared with nothing else the page draws,
+  the place of a click or the window's width, is read alone.
 - **The repairs' routes** (`RepairStub` of `helpers.py`, by `safe_route`):
   a test's previews by repair, or a function of the query,
   and with `runs` the runs kept and answered;
