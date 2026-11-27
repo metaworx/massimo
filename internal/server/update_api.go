@@ -514,7 +514,7 @@ func (s *Server) beginUpdate(ctx context.Context, userID int64, auto, noBackup b
 	case v.Helper != nil && v.Helper.Running():
 		return v, fail(http.StatusConflict, "an update is already running (%s)", v.Helper.State)
 	case v.Starting != nil:
-		return v, s.startUnderWay()
+		return v, fail(http.StatusConflict, "an update to %s is being started: the server's backup runs", v.Starting.Version)
 	case v.Latest == "" && v.CheckError != "":
 		return v, fail(http.StatusBadGateway, "release check failed: %s", v.CheckError)
 	case v.SourceError != "":
@@ -555,7 +555,7 @@ func (s *Server) beginUpdate(ctx context.Context, userID int64, auto, noBackup b
 	// The backup runs without the lock: a POST meanwhile is refused at
 	// once while the update is being started, rather than held.
 	if !s.claimStart(v.Latest) {
-		return v, s.startUnderWay()
+		return v, fail(http.StatusConflict, "an update is being started: the server's backup runs")
 	}
 	s.updateMu.Unlock()
 	locked = false
