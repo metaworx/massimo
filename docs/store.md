@@ -2469,10 +2469,18 @@ Update without a backup goes on without one,
 `no_backup`, an audit row of its own.
 A new backup before an update takes the pin of an earlier one no update used,
 so that tries in a row, or the route's calls, keep one pinned.
-`massimo update` by hand has a running `serve` take it,
-with `MASSIMO_API_TOKEN` (`POST /api/v1/update/backup`),
-or makes it on the store where none answers,
-but never as root on a store that is another user's:
+`massimo update` by hand has this box's running `serve` take it
+(`POST /api/v1/update/backup`), found and proved by its node
+as the server backups' commands find it,
+with the key, the address and the TLS of the environment,
+and where nobody names a data directory or a settings file, as for root,
+of the service's settings file for what the environment leaves unset.
+Where no `serve` takes it, none answering or the key refused,
+the store's keys decide, read without writing:
+without a key the update goes on, with a line;
+with one the backup is made on the store, under the jobs' lock,
+carrying the service's settings file and TLS files,
+but never by root on a store that is another user's:
 it stops instead, and `-no-backup` installs without one.
 The update helper takes none: the server that wrote its request took it.
 

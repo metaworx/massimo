@@ -302,7 +302,7 @@ sudo massimo install -remove              # -purge: the settings, state, logs an
 binary back when the restarted server does not report the new version
 (`-rollback` goes back by hand);
 before it installs, the running server takes a backup of itself, kept 30 days,
-which needs `MASSIMO_API_TOKEN` in the environment ([docs/store.md](docs/store.md),
+asked with the key of the service's settings file ([docs/store.md](docs/store.md),
 "Before an update"):
 without a key for the server's backups it goes on,
 where the backup fails it stops, and `-no-backup` installs without one;

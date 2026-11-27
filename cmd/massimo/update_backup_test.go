@@ -7,6 +7,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"io"
 	"log/slog"
 	"net/http"
 	"net/http/httptest"
@@ -30,7 +31,8 @@ func TestBackupBeforeUpdateThroughServe(t *testing.T) {
 	answer := http.StatusCreated
 	var paths []string
 	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		paths = append(paths, r.Method+" "+r.URL.Path+" "+r.Header.Get("Authorization"))
+		body, _ := io.ReadAll(r.Body)
+		paths = append(paths, r.Method+" "+r.URL.Path+" "+r.Header.Get("Authorization")+" "+strings.TrimSpace(string(body)))
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(answer)
 		switch answer {
@@ -45,11 +47,13 @@ func TestBackupBeforeUpdateThroughServe(t *testing.T) {
 	}))
 	defer ts.Close()
 	var out bytes.Buffer
-	c := &backupCLI{dir: t.TempDir(), api: &serveAPI{base: ts.URL, token: "tok", client: ts.Client()}, out: &out}
+	dir := t.TempDir()
+	storekit.Open(t, dir).Close()
+	c := &backupCLI{dir: dir, api: &serveAPI{base: ts.URL, token: "tok", client: ts.Client()}, out: &out}
 	if err := c.beforeUpdate(ctx, "v0.17.0"); err != nil || !strings.Contains(out.String(), "backup before the update 54277e08f80e") || !strings.Contains(out.String(), "copy local: ok") {
 		t.Fatalf("made: %v\n%s", err, out.String())
 	}
-	if len(paths) != 1 || paths[0] != "POST /api/v1/update/backup Bearer tok" {
+	if len(paths) != 1 || paths[0] != `POST /api/v1/update/backup Bearer tok {"to":"v0.17.0"}` {
 		t.Fatalf("asked %v", paths)
 	}
 	out.Reset()

@@ -78,6 +78,8 @@ var serialTests = map[string]string{
 	"TestDataDirOrder":                             "sets serviceDefaults and MASSIMO_DATA",
 	"TestNoServiceUserOnWindows":                   "swaps the service's paths (serviceFiles)",
 	"TestServiceUserDefaults":                      "swaps euid and the service's paths (serviceFiles)",
+	"TestUpdateSettingsAreTheService":              "swaps the service's paths (serviceFiles), sets the API's and TLS variables",
+	"TestBackupBeforeUpdateAsRoot":                 "swaps euid",
 	"TestServiceEndWithoutStop":                    "swaps theService, sets ProgramData (tempServiceLog)",
 	"TestServiceStopWaitsForServe":                 "swaps theService, sets ProgramData (tempServiceLog)",
 	"TestServiceStopClosesTheStore":                "swaps theService, sets the Cube's address",

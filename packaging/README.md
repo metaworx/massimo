@@ -1040,9 +1040,9 @@ for as long as the line needs but given up after a minute without data,
 and checks its SHA-256 against the manifest,
 runs `<new binary> version` to make sure it starts here,
 has the running server take a backup of itself,
-which needs the owner's `MASSIMO_API_TOKEN` in root's environment
+asked with the key, the address and the TLS of `/etc/massimo/env`
 (root writes no store of the service's user,
-so with the service stopped it stops here;
+so where a key is set and the service is stopped it stops here;
 without a key for the server's backups it goes on, `-no-backup` skips it;
 docs/store.md, "Before an update"),
 keeps the old binary as `/usr/local/bin/massimo.prev` and renames the new one into place.
