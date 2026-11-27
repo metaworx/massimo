@@ -24,7 +24,7 @@ import time
 
 from playwright.sync_api import Error as PlaywrightError
 
-from helpers import hold, wait_held, wait_until
+from helpers import hold, scaled, wait_held, wait_until
 
 UNTIL = {"en": "12/24, 18:00", "de": "24.12., 18:00"}
 ON_MORE = {"en": "Holiday until {}", "de": "Urlaub bis {}"}
@@ -320,7 +320,7 @@ def test_a_holiday_shows_its_end(page, case, reads):
 # button and of its tools, whether More wraps under AUTO, and, for each
 # row of its open device list whose right column shows a value, where
 # the last value of that column ends and where the row does (a row
-# hidden outside expert mode left out).
+# hidden outside expert mode left out), and the ages its values say.
 HOLIDAY_ROW = """(sel) => {
   const tile = document.querySelector(sel);
   const box = (el) => el.getBoundingClientRect();
@@ -334,7 +334,8 @@ HOLIDAY_ROW = """(sel) => {
   });
   return { first: first.top, tools: box(tile.querySelector('.tile-tools .tool-btn')).top,
            wrapped: box(tile.querySelector('.mode-row .more-sum')).top >= first.bottom, rows,
-           label: tile.querySelector('.mode-row .more-sum').textContent.trim() };
+           label: tile.querySelector('.mode-row .more-sum').textContent.trim(),
+           ages: [...new Set([...tile.querySelectorAll('.devices .device-vals .age-text')].map((a) => a.textContent))] };
 }"""
 
 
@@ -345,21 +346,26 @@ def test_a_holiday_keeps_the_tools_up_and_the_values_at_the_edge(page, case, rea
     of the modes' row, level with AUTO, not centred on its two lines; in
     the open device list, each row's right column, Set and Actual, ends
     at the row's right edge, at 390 px and at 1100 px. Measured in a look
-    in which More says the holiday."""
+    in which More says the holiday, and the values are as old as a
+    server's are all day, two digits (Reads.age), not as old as the run:
+    once a run had lasted ten minutes, an age widened its cell (AP
+    SteadyTests v1.1, Block 14)."""
     modes = Modes(page, reads)
     modes.tell("vacation", "%d-12-24 18:00" % datetime.date.today().year)
     rid = modes.rid
+    age = reads.age(rid, 17.5 * 60, already=True)
     tile, sel = tile_of(page, rid)
     want = ON_MORE[case.lang].format(UNTIL[case.lang])
     tile.locator(".tile-info").click()
     page.wait_for_selector(sel + " .device .device-vals", timeout=5000)
     try:
-        end = time.time() + 5
+        end = time.time() + scaled(5)
         geo = page.evaluate(HOLIDAY_ROW, sel)
-        while geo["label"] != want and time.time() < end:
+        while (geo["label"] != want or geo["ages"] != [age]) and time.time() < end:
             page.wait_for_timeout(100)
             geo = page.evaluate(HOLIDAY_ROW, sel)
         assert geo["label"] == want, f"More says until when: {geo}"
+        assert geo["ages"] == [age], f"the values {age!r} old: {geo}"
         assert geo["wrapped"] or case.width > 480, f"on a phone More wraps under AUTO: {geo}"
         assert abs(geo["tools"] - geo["first"]) <= 1, f"the tools level with AUTO: {geo}"
         assert geo["rows"], f"a device row with Set and Actual: {geo}"

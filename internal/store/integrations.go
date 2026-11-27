@@ -584,6 +584,25 @@ func (i IntegrationIdentity) Linked() bool { return i.EffectiveUserID != i.RealU
 const integrationIdentityColumns = `id, uuid, integration_id, coalesce(subject, ''), name, effective_user_id, coalesce(real_user_id, effective_user_id),
 	system_generated, last_level, created_at, last_used_at`
 
+// identityUserRemoved is the condition, in a query of user_identities,
+// of an identity whose own user or the user it acts as is removed. The
+// removal of either removes the identity with it (DeleteUser). An older
+// store removed it only with the user it acts as, so that an integration's
+// user removed while linked left its identity acting as the linked user.
+// One whose linked user was removed only a link racing the removal of the
+// user it links to could leave, which LinkIntegrationUser no longer lets
+// through; the condition covers it as a guard.
+const identityUserRemoved = `EXISTS (SELECT 1 FROM users u WHERE u.id IN (user_identities.effective_user_id, user_identities.real_user_id)
+	AND u.deleted_at IS NOT NULL)`
+
+// liveIntegrationIdentity is the condition of an integration's identity
+// that acts for someone: not removed, and neither of its users removed
+// (identityUserRemoved). One that is not is no one's: no list shows it,
+// no link takes it, no stream goes on for it, and the next call of its
+// user removes it and makes it anew (IntegrationUser; AP LinkedRemoval,
+// D1-A).
+const liveIntegrationIdentity = `deleted_at IS NULL AND NOT ` + identityUserRemoved
+
 func scanIntegrationIdentity(row scanner) (IntegrationIdentity, error) {
 	var i IntegrationIdentity
 	var created, used sql.NullString
@@ -608,14 +627,28 @@ type IntegrationSeen struct {
 // IntegrationUser finds the user a call through integration i acts for,
 // making it at its first call: an identity with a user of the role
 // integration, without a password, named <uuid>:<subject>; a subject
-// that makes no such name (integrationName) is ErrBadName. Its name,
-// level and time of use are kept current, a name only where the call
-// brings one, and the display name of its user follows the name while
-// that is still the one reported before (copyReportedName). The subject
-// "system" is the integration's user for the calls no user started.
+// that makes no such name (integrationName), or none, is ErrBadName. Its
+// name, level and time of use are kept current, a name only where the
+// call brings one, and the display name of its user follows the name
+// while that is still the one reported before (copyReportedName). The
+// subject "system" is the integration's user for the calls no user
+// started.
+//
+// An identity whose own user was removed before the store removed the
+// identity with it, as an older store holds one, is removed here, and the
+// call made as a first call (AP LinkedRemoval, D1-A); so is one whose
+// linked user was removed, which only a link racing that removal could
+// leave, as a guard. A first call takes the integration's user of its
+// name again where that user is left without an identity, as after the
+// removal of the Massimo user it was linked to, with its role and state
+// (D2-A).
 func (s *Store) IntegrationUser(ctx context.Context, i Integration, seen IntegrationSeen) (IntegrationIdentity, error) {
 	if err := s.writable(); err != nil {
 		return IntegrationIdentity{}, err
+	}
+	if seen.Subject == "" {
+		// <uuid>: is the integration's own user, which holds its key.
+		return IntegrationIdentity{}, fmt.Errorf("%w: an integration's user without an id", ErrBadName)
 	}
 	tx, err := s.db.BeginTx(ctx, nil)
 	if err != nil {
@@ -623,6 +656,15 @@ func (s *Store) IntegrationUser(ctx context.Context, i Integration, seen Integra
 	}
 	defer tx.Rollback()
 	now := s.nowText()
+	res, err := tx.ExecContext(ctx, `UPDATE user_identities SET deleted_at = ?, updated_at = ?, origin = ?, version = version + 1
+		WHERE integration_id = ? AND subject = ? AND deleted_at IS NULL AND `+identityUserRemoved, now, now, s.nodeID, i.ID, seen.Subject)
+	if err != nil {
+		return IntegrationIdentity{}, fmt.Errorf("store: integration user: %w", err)
+	}
+	orphan, _ := res.RowsAffected()
+	// Every identity of the subject that is not removed is live now: the
+	// UPDATE above removed the others in this transaction, so deleted_at
+	// alone says it, here and in the read at the end.
 	id, err := scanIntegrationIdentity(tx.QueryRowContext(ctx, `SELECT `+integrationIdentityColumns+` FROM user_identities
 		WHERE integration_id = ? AND subject = ? AND deleted_at IS NULL`, i.ID, seen.Subject))
 	switch {
@@ -636,7 +678,7 @@ func (s *Store) IntegrationUser(ctx context.Context, i Integration, seen Integra
 		}
 		if _, err := tx.ExecContext(ctx, `INSERT INTO user_identities (uuid, effective_user_id, integration_id, subject, name, real_user_id, system_generated,
 			last_level, created_at, bound_at, last_used_at, updated_at, origin) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-			newUUID(), own.ID, i.ID, seen.Subject, seen.Name, own.ID, seen.SystemGenerated, seen.Level, now, now, now, now, s.nodeID); err != nil {
+			newUUID(), own, i.ID, seen.Subject, seen.Name, own, seen.SystemGenerated, seen.Level, now, now, now, now, s.nodeID); err != nil {
 			return IntegrationIdentity{}, fmt.Errorf("store: integration user: %w", err)
 		}
 	case err != nil:
@@ -662,18 +704,40 @@ func (s *Store) IntegrationUser(ctx context.Context, i Integration, seen Integra
 	if err := tx.Commit(); err != nil {
 		return IntegrationIdentity{}, fmt.Errorf("store: integration user: %w", err)
 	}
+	if orphan > 0 {
+		s.log.Info("store: an integration's user whose own or linked user was removed acted for nobody; its call took it as a first call",
+			"integration", i.UUID, "user", seen.Subject)
+	}
 	return out, nil
 }
 
-// integrationUserTx makes the user of an integration's user's first call,
-// named <uuid>:<subject>, the subject lower case.
-func (s *Store) integrationUserTx(ctx context.Context, tx *sql.Tx, i Integration, seen IntegrationSeen) (User, error) {
+// integrationUserTx is the id of the user of an integration's user's
+// first call, named <uuid>:<subject>, the subject lower case: the user of
+// that name of integration i that is not removed and that no identity has
+// as its own, as the removal of the Massimo user it was linked to leaves
+// it, taken again as the owner left it (AP LinkedRemoval, D2-A), else one
+// made with the role integration. A user of that name of no integration
+// or of another, one another identity has, or the integration's own user
+// or its system user (by id, whatever the case of the subject), is never
+// taken: the name is held, ErrUserExists.
+func (s *Store) integrationUserTx(ctx context.Context, tx *sql.Tx, i Integration, seen IntegrationSeen) (int64, error) {
+	name := integrationUserName(i.UUID, strings.ToLower(seen.Subject))
+	var left int64
+	err := tx.QueryRowContext(ctx, `SELECT id FROM users WHERE name = ? AND integration_id = ? AND deleted_at IS NULL AND id NOT IN (?, ?)
+		AND id NOT IN (SELECT coalesce(real_user_id, effective_user_id) FROM user_identities WHERE integration_id IS NOT NULL AND deleted_at IS NULL)`,
+		name, i.ID, i.UserID, i.SystemUserID).Scan(&left)
+	switch {
+	case err == nil:
+		return left, nil
+	case !errors.Is(err, sql.ErrNoRows):
+		return 0, fmt.Errorf("store: integration user %s: %w", name, err)
+	}
 	display := seen.Name
 	if display == "" {
 		display = seen.Subject
 	}
-	return s.addUserTx(ctx, tx, User{Name: integrationUserName(i.UUID, strings.ToLower(seen.Subject)), DisplayName: display, Role: RoleIntegration,
-		IntegrationID: i.ID}, 0)
+	made, err := s.addUserTx(ctx, tx, User{Name: name, DisplayName: display, Role: RoleIntegration, IntegrationID: i.ID}, 0)
+	return made.ID, err
 }
 
 // ErrBadLink is a link the store refuses: to a user of an integration,
@@ -681,14 +745,33 @@ func (s *Store) integrationUserTx(ctx context.Context, tx *sql.Tx, i Integration
 var ErrBadLink = errors.New("store: an integration's user links to a Massimo user of its own")
 
 // IntegrationIdentities lists an integration's users, the system user
-// first, then by name.
+// first, then by name; one whose own or linked user was removed is none
+// (liveIntegrationIdentity).
 func (s *Store) IntegrationIdentities(ctx context.Context, integrationID int64) ([]IntegrationIdentity, error) {
-	return s.integrationIdentities(ctx, `integration_id = ? AND deleted_at IS NULL`, integrationID)
+	return s.integrationIdentities(ctx, `integration_id = ? AND `+liveIntegrationIdentity, integrationID)
 }
 
-// AllIntegrationIdentities lists every integration's users.
+// AllIntegrationIdentities lists every integration's users, as
+// IntegrationIdentities does.
 func (s *Store) AllIntegrationIdentities(ctx context.Context) ([]IntegrationIdentity, error) {
-	return s.integrationIdentities(ctx, `integration_id IS NOT NULL AND deleted_at IS NULL`)
+	return s.integrationIdentities(ctx, `integration_id IS NOT NULL AND `+liveIntegrationIdentity)
+}
+
+// IntegrationIdentityByID returns the integration's identity of row id
+// while it acts for someone (liveIntegrationIdentity), and false where it
+// does not: removed, or either of its users removed. It reads and writes
+// nothing else, for an event stream that asks at each keep-alive whether
+// its caller is still let in.
+func (s *Store) IntegrationIdentityByID(ctx context.Context, id int64) (IntegrationIdentity, bool, error) {
+	out, err := scanIntegrationIdentity(s.db.QueryRowContext(ctx, `SELECT `+integrationIdentityColumns+` FROM user_identities
+		WHERE id = ? AND integration_id IS NOT NULL AND `+liveIntegrationIdentity, id))
+	if errors.Is(err, sql.ErrNoRows) {
+		return IntegrationIdentity{}, false, nil
+	}
+	if err != nil {
+		return IntegrationIdentity{}, false, fmt.Errorf("store: integration user %d: %w", id, err)
+	}
+	return out, true, nil
 }
 
 func (s *Store) integrationIdentities(ctx context.Context, where string, args ...any) ([]IntegrationIdentity, error) {
@@ -713,13 +796,22 @@ func (s *Store) integrationIdentities(ctx context.Context, where string, args ..
 // calls then acting as that user; userID 0 unlinks it, its calls acting
 // as the user made at its first call again. The system user stays its
 // own, and a user of an integration is no Massimo user to link to
-// (ErrBadLink).
+// (ErrBadLink). One whose own or linked user was removed is no user to
+// link (liveIntegrationIdentity): ErrNoIntegration, as one never seen; a
+// removed user, or none, is no user to link to: ErrNoUser. Both are read
+// in the transaction that writes the link, so that a removal of either
+// does not fall between.
 func (s *Store) LinkIntegrationUser(ctx context.Context, integrationID int64, subject string, userID, by int64) (IntegrationIdentity, error) {
 	if err := s.writable(); err != nil {
 		return IntegrationIdentity{}, err
 	}
-	id, err := scanIntegrationIdentity(s.db.QueryRowContext(ctx, `SELECT `+integrationIdentityColumns+` FROM user_identities
-		WHERE integration_id = ? AND subject = ? AND deleted_at IS NULL`, integrationID, subject))
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return IntegrationIdentity{}, fmt.Errorf("store: integration user: %w", err)
+	}
+	defer tx.Rollback()
+	id, err := scanIntegrationIdentity(tx.QueryRowContext(ctx, `SELECT `+integrationIdentityColumns+` FROM user_identities
+		WHERE integration_id = ? AND subject = ? AND `+liveIntegrationIdentity, integrationID, subject))
 	if errors.Is(err, sql.ErrNoRows) {
 		return IntegrationIdentity{}, fmt.Errorf("%w: user %s", ErrNoIntegration, subject)
 	}
@@ -731,17 +823,23 @@ func (s *Store) LinkIntegrationUser(ctx context.Context, integrationID int64, su
 		if subject == "system" {
 			return IntegrationIdentity{}, fmt.Errorf("%w: the system user", ErrBadLink)
 		}
-		var ofIntegration int
-		if err := s.db.QueryRowContext(ctx, `SELECT count(*) FROM users WHERE id = ? AND integration_id IS NOT NULL`, userID).Scan(&ofIntegration); err != nil {
+		var ofIntegration bool
+		err := tx.QueryRowContext(ctx, `SELECT integration_id IS NOT NULL FROM users WHERE id = ? AND deleted_at IS NULL`, userID).Scan(&ofIntegration)
+		switch {
+		case errors.Is(err, sql.ErrNoRows):
+			return IntegrationIdentity{}, fmt.Errorf("%w: %d", ErrNoUser, userID)
+		case err != nil:
 			return IntegrationIdentity{}, fmt.Errorf("store: integration user: %w", err)
-		}
-		if ofIntegration > 0 {
+		case ofIntegration:
 			return IntegrationIdentity{}, ErrBadLink
 		}
 		target = userID
 	}
-	if _, err := s.db.ExecContext(ctx, `UPDATE user_identities SET effective_user_id = ?, created_by = coalesce(created_by, ?), updated_at = ?, origin = ?,
+	if _, err := tx.ExecContext(ctx, `UPDATE user_identities SET effective_user_id = ?, created_by = coalesce(created_by, ?), updated_at = ?, origin = ?,
 		version = version + 1 WHERE id = ?`, target, nullID(by), s.nowText(), s.nodeID, id.ID); err != nil {
+		return IntegrationIdentity{}, fmt.Errorf("store: integration user: %w", err)
+	}
+	if err := tx.Commit(); err != nil {
 		return IntegrationIdentity{}, fmt.Errorf("store: integration user: %w", err)
 	}
 	id.EffectiveUserID = target

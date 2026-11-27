@@ -570,3 +570,38 @@ func TestOnReceive(t *testing.T) {
 		t.Fatalf("hooked %d and %d lines, received %d, in another order", len(a), len(b), len(received))
 	}
 }
+
+// A silent fake has each line a client writes in Received as it comes,
+// not only the first, which waits unanswered, and answers them in their
+// order once it speaks again: a poll held, then a command after it.
+func TestSilentReceivesEveryLine(t *testing.T) {
+	t.Parallel()
+	greeting, err := LoadGreeting(fixture)
+	if err != nil {
+		t.Fatal(err)
+	}
+	s := &Server{Greeting: greeting}
+	addr, err := s.Start("127.0.0.1:0")
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { s.Close() })
+	c := dial(t, addr)
+	lines := testkit.NewWatch(cube.Message.String)
+	s.OnReceive(func(m cube.Message) { lines.Add(m) })
+	from := lines.Mark()
+	s.SetSilent(true)
+	for _, m := range []cube.Message{cube.CmdList, cube.CmdGetNTP} {
+		if _, err := c.conn.Write([]byte(m.Wire())); err != nil {
+			t.Fatal(err)
+		}
+	}
+	got, _ := lines.AwaitN(t, from, "both lines while silent", 2, nil)
+	if got[0].Type != 'l' || got[1].Type != 'f' {
+		t.Fatalf("received %v, want l: then f:", got)
+	}
+	s.SetSilent(false)
+	if l, f := c.read(), c.read(); l.Type != 'L' || f.Type != 'F' {
+		t.Fatalf("the answers %s and %s, want L then F", l, f)
+	}
+}

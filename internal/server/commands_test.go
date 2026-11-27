@@ -4,12 +4,10 @@
 package server
 
 import (
-	"database/sql"
 	"encoding/json"
 	"io"
 	"net/http"
 	"net/http/httptest"
-	"path/filepath"
 	"strings"
 	"sync"
 	"testing"
@@ -21,6 +19,7 @@ import (
 	"go.metaworx.ch/massimo/internal/store"
 	"go.metaworx.ch/massimo/internal/testkit"
 	"go.metaworx.ch/massimo/internal/testkit/cubewatch"
+	"go.metaworx.ch/massimo/internal/testkit/storekit"
 )
 
 // callWith sends a request with extra headers and returns the response.
@@ -303,12 +302,7 @@ func TestStepObserverDoesNotWaitOnTheStore(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	other, err := sql.Open("sqlite", "file:"+filepath.ToSlash(st.File())+"?_pragma=busy_timeout(5000)")
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer other.Close()
-	conn, err := other.Conn(t.Context())
+	conn, err := storekit.Raw(t, st).Conn(t.Context())
 	if err != nil {
 		t.Fatal(err)
 	}

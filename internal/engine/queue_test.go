@@ -103,6 +103,32 @@ func TestQueueWakeupAndOrdering(t *testing.T) {
 	}
 }
 
+// WakeTarget wakes the command's device itself after its room's wakeup,
+// and alone where the command wakes no room: a room's wakeup reaches only
+// the devices whose C line names the room (AP FakeGroup, Block 4).
+func TestQueueWakesTheTarget(t *testing.T) {
+	logger, logs := testkit.LogWatch(nil)
+	srv, q, _ := setup(t, Options{Logger: logger})
+	lines := cubewatch.Lines(srv)
+	m := cube.CmdSetGroup(0x0a0108, 3, false)
+	ctx := context.Background()
+	from := lines.Mark()
+	if r := q.Enqueue(Command{Target: 0x0a0108, RoomID: 3, Wakeup: true, WakeTarget: true, Lines: []cube.Message{m}}).Wait(ctx); r.Err != nil {
+		t.Fatal(r.Err)
+	}
+	if got, want := strs(lines.Since(from, cubewatch.Except('l'))...), []string{"z:1e,G,03", "z:1e,D,0a0108", m.String()}; strings.Join(got, " ") != strings.Join(want, " ") {
+		t.Fatalf("sent %v, want %v", got, want)
+	}
+	logs.Has(t, 0, "the device woken up", testkit.Msg("device woken up", "device", "0a0108", "command", "z:1e,D,0a0108", "reply", "A:"))
+	from = lines.Mark()
+	if r := q.Enqueue(Command{Target: 0x0a0108, WakeTarget: true, Lines: []cube.Message{m}}).Wait(ctx); r.Err != nil {
+		t.Fatal(r.Err)
+	}
+	if got, want := strs(lines.Since(from, cubewatch.Except('l'))...), []string{"z:1e,D,0a0108", m.String()}; strings.Join(got, " ") != strings.Join(want, " ") {
+		t.Fatalf("sent %v, want %v", got, want)
+	}
+}
+
 func TestQueueCoalescesByKey(t *testing.T) {
 	_, q, _ := setup(t, Options{Gap: 50 * time.Millisecond})
 	ctx := context.Background()

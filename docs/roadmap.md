@@ -45,7 +45,8 @@ GUIDELINES/wip/HANDOVER.md is the context a session needs to work here.
 5. **The UI when the server is gone**:
    a prominent notice, edits blocked, polling until it is back; brief ready.
 6. **Settings → Server** in the UI:
-   the stale threshold and `log.keep_days`,
+   the stale threshold, `log.keep_days`
+   and the window limits `window_warn_after` and `window_alert_after`,
    which the settings API already takes.
 7. **TLS, later**, each a plan of its own: UPnP, a local CA,
    a Pebble job in CI so that a test reaches an ACME server;
@@ -111,3 +112,6 @@ GUIDELINES/wip/HANDOVER.md is the context a session needs to work here.
     published on F-Droid and on Google Play.
 17. **An iOS app**:
     the same as the Android app; published on the App Store.
+18. **Rooms in the page, for v0.18**:
+    create a room, and move a device into a new room;
+    the page offers neither today (the owner, 2026-11-26).

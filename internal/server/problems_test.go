@@ -8,8 +8,10 @@ import (
 	"testing"
 	"time"
 
+	"go.metaworx.ch/massimo/internal/cubelan/fakecube"
 	"go.metaworx.ch/massimo/internal/protocol/cube"
 	"go.metaworx.ch/massimo/internal/testkit"
+	"go.metaworx.ch/massimo/internal/view"
 )
 
 // A Cube's devices with a problem are in its entry of the Cubes' list,
@@ -44,5 +46,66 @@ func TestCubeProblems(t *testing.T) {
 	getJSON(t, ts, "", "/api/v1/cubes", &all)
 	if len(all) != 1 || len(all[0].Problems) != 1 {
 		t.Fatalf("the list: %+v", all)
+	}
+}
+
+// A weak device whose battery flag has gone off is among its Cube's
+// problems, with its level: the device rows and tiles show the level,
+// not the flag (internal/battery).
+func TestCubeProblemsWeakBattery(t *testing.T) {
+	t.Parallel()
+	r := startServer(t, stored(), withOptions(Options{PollInterval: 100 * time.Millisecond}))
+	fc, ts := r.fc, r.ts
+	problem := func() *cubeProblem {
+		var c cubeView
+		if code := getJSON(t, ts, "", "/api/v1/cubes/KEQ0000100", &c); code != 200 {
+			t.Fatalf("GET the Cube: %d", code)
+		}
+		for i := range c.Problems {
+			if c.Problems[i].RFAddress == "0a010d" {
+				return &c.Problems[i]
+			}
+		}
+		return nil
+	}
+	on, off := true, false
+	if err := fc.SetState(0x0a010d, fakecube.State{Reported: &on, BatteryLow: &on}); err != nil {
+		t.Fatal(err)
+	}
+	testkit.Eventually(t, "the weak level", func() bool { p := problem(); return p != nil && p.Battery == "weak" })
+	m := logMark(t, ts)
+	if err := fc.SetState(0x0a010d, fakecube.State{BatteryLow: &off}); err != nil {
+		t.Fatal(err)
+	}
+	logAfter(t, m, "the flag gone", flagGone("0a010d"))
+	p := problem()
+	if p == nil || p.State == nil || p.State.BatteryLow || p.Battery != "weak" || p.Room == "" {
+		t.Fatalf("the flag gone: problem %+v, want 0a010d, weak", p)
+	}
+}
+
+// A device's battery is a problem while its level is weak or low,
+// whatever the Cube's flag says; only a device without a level goes by
+// the flag, as the web UI's battery mark does.
+func TestBatteryProblem(t *testing.T) {
+	t.Parallel()
+	for _, c := range []struct {
+		level string
+		flag  bool
+		want  bool
+	}{
+		{"weak", false, true}, // the flag seen, gone again
+		{"low", false, true},  // in the hour after the flag went off
+		{"weak", true, true},
+		{"low", true, true},
+		{"ok", true, false}, // a flag that flickered on
+		{"ok", false, false},
+		{"", true, true}, // no level: the flag
+		{"", false, false},
+	} {
+		d := view.Device{RFAddress: "0a010d", Reported: true, Battery: c.level, State: &view.State{BatteryLow: c.flag}}
+		if got := batteryProblem(d); got != c.want {
+			t.Errorf("level %q, flag %v: %v, want %v", c.level, c.flag, got, c.want)
+		}
 	}
 }

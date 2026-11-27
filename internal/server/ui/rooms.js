@@ -168,9 +168,14 @@ function resultText(label, res) {
   return text;
 }
 
+// errorText is a write's failure on a tile or a card: its label and the
+// error's message, which says the refusal in the page's language
+// (refusalText, app.js); and where the server named the room's members
+// without state but gave no code, which would name them itself, the
+// members with what to do.
 function errorText(label, e) {
   let text = t("result.error", { label, error: e.message });
-  if (e.data && e.data.no_state) {
+  if (e.data && e.data.no_state && !e.code) {
     text += " " + t("result.noState", { devices: e.data.no_state.join(", ") });
   }
   return text;
