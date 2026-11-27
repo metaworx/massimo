@@ -18,7 +18,7 @@ nothing and takes away what it made (test_server_backups.clean)."""
 import json
 
 from conftest import api_call
-from helpers import named_buttons, safe_route, show_view, wait_until
+from helpers import named_buttons, safe_route, show_view, wait_held, wait_until
 from test_server_backups import BACKUPS, CARD, KEYS, TARGETS, clean, data_dir, text
 
 DIALOG = "dialog.sb-restore-dialog"
@@ -387,6 +387,96 @@ def test_restore_restarts_and_offers_the_cube_restore(page, case, watch):
     finally:
         page.unroute(RESTORE)
         page.unroute("**/healthz")
+        page.unroute(PLAN)
+        clean()
+    show_view(page, "tiles")
+
+
+def test_choice_off_while_its_plan_runs(page, case):
+    """While the plan of the choice runs (held), the switches and Back are
+    off, so that the confirmation shows the choice that was planned; its
+    answer then shows the confirmation."""
+    uuid, _ = made_backup(case)
+    held, sent = [], []
+
+    def handle(route):
+        body = route.request.post_data_json
+        sent.append(body)
+        if body.get("scopes"):
+            held.append(route)
+        else:
+            route.fulfill(status=200, content_type="application/json", body=json.dumps(first_plan(uuid)))
+    safe_route(page, PLAN, handle)
+    try:
+        open_dialog(page, uuid)
+        page.fill("#sb-restore-key", "AGE-SECRET-KEY-1PLACEHOLDER")
+        page.locator("#sb-restore-open").click()
+        page.locator(".sb-restore-choose").wait_for(timeout=10000)
+        tick(page, "sb-restore-scope-settings")
+        page.locator("#sb-restore-next").click()
+        assert wait_held(page, held), "the choice's plan asked for"
+        for id in ("sb-restore-scope-settings", "sb-restore-scope-users", "sb-restore-scope-cube-KEQ0000100", "sb-restore-identity", "sb-restore-tls"):
+            assert page.locator(f"#{id}").is_disabled(), f"{id} off while the plan runs"
+        assert page.locator(".sb-restore-choose .form-cancel").is_disabled(), "Back off while the plan runs"
+        held[0].fulfill(status=200, content_type="application/json", body=json.dumps(first_plan(uuid, scopes=["settings"])))
+        confirm = page.locator(".sb-restore-confirm")
+        confirm.wait_for(timeout=10000)
+        assert sent[-1]["scopes"] == ["settings"], sent
+        assert confirm.locator(".sb-restore-what li").all_inner_texts() == [text(page, "serverbackup.restore.scope.settings")], "the choice planned"
+        page.keyboard.press("Escape")
+        assert wait_until(page, f"!document.querySelector('{DIALOG}').open", 5)
+    finally:
+        page.unroute(PLAN)
+        clean()
+    show_view(page, "tiles")
+
+
+def test_restore_away_while_it_runs(page, case):
+    """Another page shown while the restore runs (the browser's Back): the
+    dialog goes and the page is not held by it; Maintenance shown again
+    brings it back, its restore still running. Ended while another page
+    is shown, the dialog closes, and the next showing of Maintenance says
+    in the card how it went, the restore and why the server did not
+    restart; the showing after it no longer."""
+    uuid, _ = made_backup(case)
+    sent, held, posts = [], [], []
+    stub_plan(page, uuid, sent)
+
+    def restore(route):
+        posts.append(route.request.post_data_json)
+        held.append(route)
+    safe_route(page, RESTORE, restore)
+    blocked = "no service manager would start this server again"
+    try:
+        to_confirmation(page, uuid, "sb-restore-scope-settings")
+        page.locator("#sb-restore-run").click()
+        assert wait_held(page, held), "the restore sent"
+        page.go_back()
+        assert wait_until(page, "MassimoParts.pages.shown() !== 'maint'", 5), "another page"
+        assert wait_until(page, f"!document.querySelector('{DIALOG}').open && !document.querySelector('dialog:modal')", 5), \
+            "the dialog away, nothing modal holds the page"
+        show_view(page, "maint")
+        assert wait_until(page, f"document.querySelector('{DIALOG}').open", 5), "Maintenance shown again: the dialog back"
+        assert page.locator("#sb-restore-run").is_disabled(), "its restore still running"
+        page.go_back()
+        assert wait_until(page, f"!document.querySelector('{DIALOG}').open", 5), "away again"
+        held[0].fulfill(status=200, content_type="application/json", body=json.dumps({
+            "restart": {"started": False, "blocked": blocked}, "before_backup": "b-1", "before_backup_time": "2026-11-27T10:00:00Z",
+            "restored_at": "2026-11-27T10:00:05Z", "scopes": ["settings"], "serials": [], "report": {}, "files": [], "cubes": []}))
+        assert wait_until(page, f"!document.querySelector('{DIALOG} .sb-restore-step')", 10), "ended away: the dialog closed"
+        show_view(page, "maint")
+        want = text(page, "serverbackup.restore.doneSaid", what=text(page, "serverbackup.restore.scope.settings")) + " " + \
+            text(page, "serverbackup.restore.restartBlocked", blocked=blocked)
+        assert wait_until(page, f"document.querySelector('#sb-restored')?.textContent === {json.dumps(want)}", 10), \
+            page.locator(f"{CARD} .sb-status").inner_text()
+        assert not is_open(page), "the dialog closed"
+        assert len(posts) == 1, posts
+        show_view(page, "tiles")
+        show_view(page, "maint")
+        assert wait_until(page, "!document.querySelector('#sb-restored') || document.querySelector('#sb-restored').classList.contains('hidden')", 5), \
+            "the showing after it takes it back"
+    finally:
+        page.unroute(RESTORE)
         page.unroute(PLAN)
         clean()
     show_view(page, "tiles")

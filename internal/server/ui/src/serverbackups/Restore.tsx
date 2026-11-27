@@ -24,7 +24,7 @@
 
 import type { JSX, Ref } from "preact";
 import { useLayoutEffect, useRef } from "preact/hooks";
-import type { ServerRestorePlan, ServerRestoreReport } from "../api";
+import type { ServerRestoreReport } from "../api";
 import { Notice, ResultLine } from "../shared/badge";
 import { Modal } from "../shared/dialog";
 import { Field, Switch } from "../shared/field";
@@ -33,8 +33,8 @@ import { useLook } from "../shared/look";
 import { BusyButton, busyProps, useBusy } from "../shared/question";
 import { fmtWhen } from "../shared/time";
 import {
-  backToChoice, backToKey, chosenAny, closeRestore, forgetKeyFile, hasKey, openBackup, planChoice, readKeyFile, restoreRestart, rs, runCheck, runRestore,
-  SCOPES, tick, tickFile, toCubeRestore,
+  backToChoice, backToKey, choiceList, chosenAny, closeRestore, cubeName, forgetKeyFile, hasKey, openBackup, planChoice, readKeyFile, restoreRestart, rs,
+  runCheck, runRestore, SCOPES, tick, tickFile, toCubeRestore,
 } from "./restoring";
 
 /** countsOf sums a report's rows per scope: those taken from the backup and this server's that go. */
@@ -45,21 +45,6 @@ function countsOf(report?: ServerRestoreReport): Record<string, { restored: numb
     c.restored += tb.restored || 0;
     c.removed += (tb.removed || 0) - (tb.kept_removed || 0);
   }
-  return out;
-}
-
-/** cubeName is a Cube of the plan as a text names it: its name and serial. */
-function cubeName(p: ServerRestorePlan | null, serial: string): string {
-  const c = (p?.cubes || []).find((x) => x.serial === serial);
-  return c?.name ? t("serverbackup.restore.cube", { name: c.name, serial }) : serial;
-}
-
-/** choiceList is what is ticked, in the page's words: the scopes, each Cube, the identity, the env file and the TLS files. */
-function choiceList(): string[] {
-  const out = rs.scopes.map((s) => (s.startsWith("cube:") ? cubeName(rs.plan, s.slice(5)) : t("serverbackup.restore.scope." + s)));
-  if (rs.identity) out.push(t("serverbackup.restore.identityItem"));
-  if (rs.env) out.push(t("serverbackup.restore.envItem"));
-  if (rs.tls) out.push(t("serverbackup.restore.tlsItem"));
   return out;
 }
 
@@ -136,23 +121,25 @@ function KeyStep({ focus }: { focus: Ref<HTMLElement> }) {
   );
 }
 
-/** ScopeSwitch is a scope's switch, or a Cube's, with its line: its counts, or whether this server has the Cube. */
+/** ScopeSwitch is a scope's switch, or a Cube's, with its line: its counts, or whether this server has the Cube; off while the choice's plan runs. */
 function ScopeSwitch({ scope, label, line, off }: { scope: string; label: string; line: string; off?: boolean }) {
   useLook();
   const id = "sb-restore-scope-" + scope.replace(":", "-");
   return (
-    <Switch id={id} name={scope} label={label} checked={rs.scopes.includes(scope)} disabled={off} data={{ scope }} rowCls="sb-restore-scope"
+    <Switch id={id} name={scope} label={label} checked={rs.scopes.includes(scope)} disabled={off || rs.planning} data={{ scope }} rowCls="sb-restore-scope"
       onChange={(on) => tick(scope, on)}>
       <p class="muted small field-hint sb-restore-line">{line}</p>
     </Switch>
   );
 }
 
-/** ChooseStep is what the backup holds, as its plan answers it, to tick: the scopes, the Cubes, the identity and the files; the refusal; Restore…. */
+/** ChooseStep is what the backup holds, as its plan answers it, to tick: the scopes, the Cubes, the identity and the files; the refusal; Restore…, the choice and Back off while its plan runs. */
 function ChooseStep({ focus }: { focus: Ref<HTMLElement> }) {
   useLook();
   const send = useBusy();
-  const p = rs.plan as ServerRestorePlan;
+  const p = rs.plan;
+  if (!p) return null;
+  const planning = rs.planning;
   const restarts = !!p.restart?.available;
   const blocked = p.restart?.blocked || "";
   const counts = countsOf(p.report);
@@ -186,20 +173,20 @@ function ChooseStep({ focus }: { focus: Ref<HTMLElement> }) {
         <fieldset class="sb-restore-group sb-restore-files">
           <legend>{t("serverbackup.restore.also")}</legend>
           {other && (
-            <Switch id="sb-restore-identity" name="identity" label={t("serverbackup.restore.identity")} checked={rs.identity} disabled={!restarts}
+            <Switch id="sb-restore-identity" name="identity" label={t("serverbackup.restore.identity")} checked={rs.identity} disabled={!restarts || planning}
               rowCls="sb-restore-scope" onChange={(on) => tickFile("identity", on)}>
               <p class="small field-hint warn-text sb-restore-line">{t("serverbackup.restore.identityWarn")}</p>
               {p.identity?.answers && <p id="sb-restore-answers" class="small field-hint bad sb-restore-line" role="note">{t("serverbackup.restore.answers")}</p>}
             </Switch>
           )}
           {p.env && (
-            <Switch id="sb-restore-env" name="env" label={t("serverbackup.restore.env")} checked={rs.env} disabled={!!p.env_refused} rowCls="sb-restore-scope"
+            <Switch id="sb-restore-env" name="env" label={t("serverbackup.restore.env")} checked={rs.env} disabled={!!p.env_refused || planning} rowCls="sb-restore-scope"
               onChange={(on) => tickFile("env", on)}>
               {p.env_refused && <p id="sb-restore-env-off" class="muted small field-hint sb-restore-off sb-restore-line">{p.env_refused}</p>}
             </Switch>
           )}
           {tls > 0 && (
-            <Switch id="sb-restore-tls" name="tls" label={t("serverbackup.restore.tls", { n: tls })} checked={rs.tls} disabled={!!p.tls_refused}
+            <Switch id="sb-restore-tls" name="tls" label={t("serverbackup.restore.tls", { n: tls })} checked={rs.tls} disabled={!!p.tls_refused || planning}
               rowCls="sb-restore-scope" onChange={(on) => tickFile("tls", on)}>
               {p.tls_refused && <p id="sb-restore-tls-off" class="muted small field-hint sb-restore-off sb-restore-line">{p.tls_refused}</p>}
             </Switch>
@@ -210,7 +197,7 @@ function ChooseStep({ focus }: { focus: Ref<HTMLElement> }) {
       <Refusal />
       <ResultLine id="sb-restore-msg" cls="small cubes-msg" role="alert" res={rs.said} />
       <div class="actions">
-        <button type="button" class="form-cancel" onClick={backToKey}>{t("serverbackup.restore.back")}</button>
+        <button type="button" class="form-cancel" disabled={planning} onClick={backToKey}>{t("serverbackup.restore.back")}</button>
         <button type="submit" id="sb-restore-next" {...busyProps("primary", send.busy, !chosenAny())}>{t("serverbackup.restore.next")}</button>
       </div>
     </form>
@@ -220,7 +207,8 @@ function ChooseStep({ focus }: { focus: Ref<HTMLElement> }) {
 /** ConfirmStep names what the restore replaces, that a backup is taken first and whether the server then restarts; Back and Restore. */
 function ConfirmStep({ focus }: { focus: Ref<HTMLElement> }) {
   useLook();
-  const p = rs.plan as ServerRestorePlan;
+  const p = rs.plan;
+  if (!p) return null;
   const restarts = !!p.restart?.available;
   return (
     <div class="sb-restore-step sb-restore-confirm">
@@ -327,7 +315,7 @@ export function RestoreDialog() {
   };
   const Step = steps[step];
   return (
-    <Modal shown={!!b} cls="sb-restore-dialog" held={rs.running} onClose={closeRestore}
+    <Modal shown={!!b && !rs.away} cls="sb-restore-dialog" held={rs.running} onClose={closeRestore}
       title={b ? t(rs.mode === "check" ? "serverbackup.checkKey.title" : "serverbackup.restore.title", { when }) : ""}>
       {b && <Step focus={focus} />}
     </Modal>

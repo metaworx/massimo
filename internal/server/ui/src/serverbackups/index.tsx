@@ -21,7 +21,7 @@ import { mounter } from "../shared/region";
 import { can } from "../shared/me";
 import { onView } from "../shared/pages";
 import { Card } from "./Card";
-import { closeRestore, forgetRestore, quietRestore } from "./restoring";
+import { forgetRestore, pageShown, quietRestore } from "./restoring";
 import { loadShown } from "./send";
 import { dropMade, forgetServerBackups, quiet } from "./store";
 
@@ -44,10 +44,10 @@ onView("maint", () => {
   void loadShown();
 });
 
-// a key made's secret part is shown that once (D4-A): another page shown, or the card folded, takes it away; another page closes the restore's dialog, its key with it
+// a key made's secret part is shown that once (D4-A): another page shown, or the card folded, takes it away; another page closes the restore's dialog, its key with it, or takes it away while its restore runs
 document.addEventListener("viewshown", (ev) => {
-  if ((ev as CustomEvent<string>).detail === "maint") return;
-  dropMade();
-  closeRestore();
+  const maint = (ev as CustomEvent<string>).detail === "maint";
+  pageShown(maint);
+  if (!maint) dropMade();
 });
 onFold("sys-server-backups", dropMade);

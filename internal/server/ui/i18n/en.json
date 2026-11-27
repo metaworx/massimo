@@ -2401,6 +2401,7 @@
   "serverbackup.restore.restartByHand": "Restart the server afterwards: it cannot restart itself ({blocked}).",
   "serverbackup.restore.run": "Restore",
   "serverbackup.restore.doneTitle": "Restored, each whole:",
+  "serverbackup.restore.doneSaid": "Restored: {what}.",
   "serverbackup.restore.error": "The store is restored, but: {error}",
   "serverbackup.restore.secretsLost.one": "{n} secret did not open with the backup's key: enter it again.",
   "serverbackup.restore.secretsLost.other": "{n} secrets did not open with the backup's key: enter them again.",

@@ -2478,6 +2478,7 @@
   "serverbackup.restore.restartByHand": "Uruchom serwer ponownie potem: nie może sam się uruchomić ponownie ({blocked}).",
   "serverbackup.restore.run": "Przywróć",
   "serverbackup.restore.doneTitle": "Przywrócono, każde w całości:",
+  "serverbackup.restore.doneSaid": "Przywrócono: {what}.",
   "serverbackup.restore.error": "Baza jest przywrócona, ale: {error}",
   "serverbackup.restore.secretsLost.one": "{n} sekret nie otworzył się kluczem kopii: wpisz go ponownie.",
   "serverbackup.restore.secretsLost.few": "{n} sekrety nie otworzyły się kluczem kopii: wpisz je ponownie.",

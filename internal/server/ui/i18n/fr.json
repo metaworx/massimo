@@ -2403,6 +2403,7 @@
   "serverbackup.restore.restartByHand": "Redémarrez le serveur ensuite : il ne peut pas redémarrer de lui-même ({blocked}).",
   "serverbackup.restore.run": "Restaurer",
   "serverbackup.restore.doneTitle": "Restauré, chaque fois entièrement :",
+  "serverbackup.restore.doneSaid": "Restauré : {what}.",
   "serverbackup.restore.error": "La base est restaurée, mais : {error}",
   "serverbackup.restore.secretsLost.one": "{n} secret ne s'est pas ouvert avec la clé de la sauvegarde : saisissez-le à nouveau.",
   "serverbackup.restore.secretsLost.other": "{n} secrets ne se sont pas ouverts avec la clé de la sauvegarde : saisissez-les à nouveau.",

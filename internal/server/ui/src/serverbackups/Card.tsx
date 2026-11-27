@@ -10,7 +10,8 @@
  * backup.server Back up now and Upload a backup…; then the backups, the
  * targets and, for a holder of backup.server, the keys; for the owner
  * the dialog that restores a backup or checks it with the key, and, while
- * it is closed, how the server's restart after a restore goes. The card's head
+ * it is closed, how the server's restart after a restore goes and how a
+ * restore that ended while another page was shown went. The card's head
  * says that backups are off without a key, counts what failed and the
  * backups kept, and marks a target two of its periods behind.
  */
@@ -59,8 +60,9 @@ function Status() {
         {l && !noKey && <p id="sb-schedule" class="muted small">{t("serverbackup.schedule", { time: l.time || "" })}</p>}
         {sb.failed && <p class="small cubes-msg bad" role="status">{t("serverbackup.readFailed", { error: sb.failed })}</p>}
         <ResultLine id="sb-msg" cls="small cubes-msg" role="status" res={card.backups} />
+        {!rs.backup && <ResultLine id="sb-restored" cls="small cubes-msg" role="status" res={restoreRestart.outcome} />}
         {!rs.backup && restoreRestart.text && (
-          <p id="sb-restart" class={"small cubes-msg" + (restoreRestart.ok ? " ok" : " bad")} role="status">{restoreRestart.text()}</p>
+          <p id="sb-restart" class={"small cubes-msg" + (restoreRestart.on ? "" : restoreRestart.ok ? " ok" : " bad")} role="status">{restoreRestart.text()}</p>
         )}
       </div>
       {server && (

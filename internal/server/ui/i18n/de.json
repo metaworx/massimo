@@ -2401,6 +2401,7 @@
   "serverbackup.restore.restartByHand": "Den Server danach neu starten: Er kann sich nicht selbst neu starten ({blocked}).",
   "serverbackup.restore.run": "Wiederherstellen",
   "serverbackup.restore.doneTitle": "Wiederhergestellt, jeweils ganz:",
+  "serverbackup.restore.doneSaid": "Wiederhergestellt: {what}.",
   "serverbackup.restore.error": "Der Speicher ist wiederhergestellt, aber: {error}",
   "serverbackup.restore.secretsLost.one": "{n} Geheimnis ließ sich mit dem Schlüssel der Sicherung nicht öffnen: neu eingeben.",
   "serverbackup.restore.secretsLost.other": "{n} Geheimnisse ließen sich mit dem Schlüssel der Sicherung nicht öffnen: neu eingeben.",

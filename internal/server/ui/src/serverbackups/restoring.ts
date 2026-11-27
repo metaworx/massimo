@@ -20,8 +20,13 @@
  * list or done, the server's restart followed (shared/restart.ts) and
  * the Cubes the Cube restore could write offered. POST …/{id}/check-key
  * gives the check's verdict. An answer after the dialog was closed or
- * after a sign-out shows nothing; while the restore's request runs the
- * dialog stays open.
+ * after a sign-out shows nothing, and the plan of a choice changed since
+ * it was asked for is dropped: the choice is off while its plan runs.
+ * While the restore's request runs the dialog stays open, but for
+ * another page shown meanwhile (the browser's Back), which takes it
+ * away until Maintenance is shown again; ended there, the dialog closes
+ * and the card's line says how it went. The key goes from the page once
+ * the restore is done or the check has given its verdict.
  */
 
 import type { ServerBackup, ServerRestorePlan, ServerRestoreReport, ServerRestoreRequest, ServerRestoreResult } from "../api";
@@ -94,18 +99,32 @@ export const rs = live({
   verdict: null as KeyCheck | null,
   /** How the dialog's last request went, where it failed. */
   said: null as Outcome | null,
-  /** The restore's request runs: the dialog stays open. */
+  /** The plan of the choice runs: the choice and Back are off. */
+  planning: false,
+  /** The restore's request runs: the dialog stays open, but while another page is shown (away). */
   running: false,
+  /** Another page was shown while the restore's request runs: the dialog is away until Maintenance is shown again. */
+  away: false,
 });
 
-/** The server's restart after a restore, as the page follows it: its line, null for none, and whether it is followed now. */
+/**
+ * The card's lines of a restore while its dialog is closed: the server's
+ * restart as the page follows it, and the outcome of a restore that ended
+ * while another page was shown. Maintenance shown takes them back, but
+ * while the page follows the server and the first time after they came
+ * while another page was shown (keep).
+ */
 export const restoreRestart = live({
-  /** The line, said in the page's language at its drawing. */
+  /** The restart's line, said in the page's language at its drawing; null for none. */
   text: null as (() => string) | null,
   /** It went well so far. */
   ok: true,
   /** The page follows the server now. */
   on: false,
+  /** The outcome of a restore that ended while another page was shown; null for none. */
+  outcome: null as Outcome | null,
+  /** A line came while another page was shown: the next showing of Maintenance keeps it. */
+  keep: false,
 });
 
 /** The dialog's opening: an answer to an earlier opening shows nothing. */
@@ -114,11 +133,14 @@ let opening = 0;
 /** The end of the restart's following, null for none. */
 let stopFollow: (() => void) | null = null;
 
+/** The choice's changes: the plan of a choice is applied only where none came after it was asked for. */
+let choiceSeq = 0;
+
 /** clearDialog takes the dialog's state back, the key first. */
 function clearDialog(): void {
   Object.assign(rs, {
     key: "", file: null, backup: null, mode: "restore", step: "key", plan: null, scopes: [], identity: false, env: false, tls: false, chosen: null,
-    refused: "", refusedAll: false, missing: [], result: null, verdict: null, said: null, running: false,
+    refused: "", refusedAll: false, missing: [], result: null, verdict: null, said: null, planning: false, running: false, away: false,
   });
 }
 
@@ -138,6 +160,22 @@ export function closeRestore(): void {
 }
 
 /**
+ * pageShown follows the page shown: another than Maintenance closes the
+ * dialog, or, while the restore's request runs, takes it away, since its
+ * page is hidden; Maintenance shown again brings it back.
+ */
+export function pageShown(maint: boolean): void {
+  if (rs.running) rs.away = !maint;
+  else if (!maint) closeRestore();
+}
+
+/** forgetKey takes the key, pasted or read, from the page: the restore is done or the check has given its verdict. */
+function forgetKey(): void {
+  rs.key = "";
+  rs.file = null;
+}
+
+/**
  * forgetRestore forgets the dialog and the restart's line at a sign-out
  * (MassimoParts.signedOut), the key first, and ends the following, whose
  * reads the session's end stops anyway.
@@ -147,12 +185,29 @@ export function forgetRestore(): void {
   clearDialog();
   stopFollow?.();
   stopFollow = null;
-  Object.assign(restoreRestart, { text: null, ok: true, on: false });
+  Object.assign(restoreRestart, { text: null, ok: true, on: false, outcome: null, keep: false });
 }
 
-/** quietRestore takes the restart's line back as Maintenance is shown, but while the page follows the server. */
+/** quietRestore takes the card's lines of a restore back as Maintenance is shown, but while the page follows the server and the first time after a line came while another page was shown. */
 export function quietRestore(): void {
-  if (!restoreRestart.on) Object.assign(restoreRestart, { text: null, ok: true });
+  if (restoreRestart.on) return;
+  if (restoreRestart.keep) restoreRestart.keep = false;
+  else Object.assign(restoreRestart, { text: null, ok: true, outcome: null });
+}
+
+/** cubeName is a Cube of the plan as a text names it: its name and serial. */
+export function cubeName(p: ServerRestorePlan | null, serial: string): string {
+  const c = (p?.cubes || []).find((x) => x.serial === serial);
+  return c?.name ? t("serverbackup.restore.cube", { name: c.name, serial }) : serial;
+}
+
+/** choiceList is what is ticked, in the page's words: the scopes, each Cube, the identity, the env file and the TLS files. */
+export function choiceList(): string[] {
+  const out = rs.scopes.map((s) => (s.startsWith("cube:") ? cubeName(rs.plan, s.slice(5)) : t("serverbackup.restore.scope." + s)));
+  if (rs.identity) out.push(t("serverbackup.restore.identityItem"));
+  if (rs.env) out.push(t("serverbackup.restore.envItem"));
+  if (rs.tls) out.push(t("serverbackup.restore.tlsItem"));
+  return out;
 }
 
 /** keyText is the key as it is sent: the file read, else what is pasted. */
@@ -236,6 +291,7 @@ export async function openBackup(): Promise<boolean> {
 
 /** tick ticks a scope (settings, users, integrations, history or cube:<serial>) or takes it back, in the plan's order; the refusal shown goes. */
 export function tick(scope: string, on: boolean): void {
+  choiceSeq++;
   const order = [...SCOPES, ...(rs.plan?.cubes || []).map((c) => "cube:" + c.serial)];
   const set = new Set(rs.scopes);
   if (on) set.add(scope);
@@ -246,6 +302,7 @@ export function tick(scope: string, on: boolean): void {
 
 /** tickFile ticks the identity, the env file or the TLS files, or takes it back; the refusal shown goes. */
 export function tickFile(what: "identity" | "env" | "tls", on: boolean): void {
+  choiceSeq++;
   rs[what] = on;
   refuse("");
 }
@@ -260,11 +317,13 @@ export function chosenAny(): boolean {
  * goes on to the confirmation, or stays in the choice with the refusal
  * and its list. A choice of files alone has no plan of its own, since a
  * plan without scopes is every scope's: the first one's answer about
- * the files and the restart holds for it.
+ * the files and the restart holds for it. While the plan runs the
+ * choice and Back are off; its answer is applied only where the dialog
+ * still shows the choice it was asked for.
  */
 export async function planChoice(): Promise<boolean> {
   const b = rs.backup;
-  if (!b || !chosenAny()) return false;
+  if (!b || !chosenAny() || rs.planning) return false;
   rs.said = null;
   if (!rs.scopes.length) {
     rs.chosen = null;
@@ -272,9 +331,14 @@ export async function planChoice(): Promise<boolean> {
     return true;
   }
   const still = mine();
+  const seq = choiceSeq;
+  const body = bodyOf(rs.scopes);
+  // the same choice as was sent, shown still: else the answer is another's
+  const current = () => still() && seq === choiceSeq && rs.step === "choose" && JSON.stringify(bodyOf(rs.scopes)) === JSON.stringify(body);
+  rs.planning = true;
   try {
-    const p = await api<ServerRestorePlan>("POST", backupPath(b) + "/restore/plan", bodyOf(rs.scopes));
-    if (!still()) return false;
+    const p = await api<ServerRestorePlan>("POST", backupPath(b) + "/restore/plan", body);
+    if (!current()) return false;
     rs.chosen = p;
     if (p.refused) {
       refuse(p.refused, p.report);
@@ -284,8 +348,10 @@ export async function planChoice(): Promise<boolean> {
     rs.step = "confirm";
     return true;
   } catch (e) {
-    if (still()) rs.said = { text: t("serverbackup.restore.planFailed", { error: (e as Error).message }), ok: false };
+    if (current()) rs.said = { text: t("serverbackup.restore.planFailed", { error: (e as Error).message }), ok: false };
     return false;
+  } finally {
+    if (still()) rs.planning = false;
   }
 }
 
@@ -297,6 +363,8 @@ export function backToChoice(): void {
 
 /** backToKey goes back from the choice to the key, the plan forgotten. */
 export function backToKey(): void {
+  if (rs.planning) return;
+  choiceSeq++;
   Object.assign(rs, { said: null, step: "key", plan: null, chosen: null, scopes: [], identity: false, env: false, tls: false });
   refuse("");
 }
@@ -307,14 +375,17 @@ export function backToKey(): void {
  * of the store (409 with its report: rows missing, no owner left) goes
  * back to the choice with its list; another error stays in the
  * confirmation. A restore done, or one whose store changed before a file
- * failed (500 with the answer), shows its outcome; its restart started,
- * the page follows the server until it is back.
+ * failed (500 with the answer), shows its outcome, the key taken from
+ * the page; its restart started, the page follows the server until it is
+ * back. Ended while another page is shown, the dialog closes and the
+ * card says how it went (awayOutcome).
  */
 export async function runRestore(): Promise<void> {
   const b = rs.backup;
   if (!b || rs.running) return;
   const n = session();
   rs.running = true;
+  rs.away = false;
   rs.said = null;
   try {
     const before = await startedAt();
@@ -337,13 +408,39 @@ export async function runRestore(): Promise<void> {
       res = err.data; // the store restored, a file not put in place: the server restarts all the same
     }
     if (!stillSession(n)) return;
+    forgetKey();
     rs.result = res;
     rs.step = "done";
     if (res.restart?.started) followRestore(before);
     else void loadShown();
   } finally {
-    if (stillSession(n)) rs.running = false;
+    if (stillSession(n)) {
+      rs.running = false;
+      if (!isShown("maint")) awayOutcome();
+    }
   }
+}
+
+/**
+ * awayOutcome closes the dialog of a restore that ended while another
+ * page was shown, and has the card say, at the next showing of
+ * Maintenance, how it went: what it restored, an error after the store
+ * changed and why the server did not restart (its restart, started, has
+ * the card's line of its own), or why it was refused or failed.
+ */
+function awayOutcome(): void {
+  const r = rs.result;
+  let outcome: Outcome;
+  if (r) {
+    const lines = [t("serverbackup.restore.doneSaid", { what: choiceList().join(", ") })];
+    if (r.error) lines.push(t("serverbackup.restore.error", { error: r.error }));
+    if (!r.restart?.started) lines.push(t("serverbackup.restore.restartBlocked", { blocked: r.restart?.blocked || "" }));
+    outcome = { text: lines.join(" "), ok: !r.error && !!r.restart?.started };
+  } else {
+    outcome = { text: rs.refused ? t("serverbackup.restore.refused", { error: rs.refused }) : rs.said?.text || "", ok: false };
+  }
+  Object.assign(restoreRestart, { outcome, keep: true });
+  closeRestore();
 }
 
 /**
@@ -355,13 +452,15 @@ export async function runRestore(): Promise<void> {
 function followRestore(before: string): void {
   stopFollow?.();
   Object.assign(restoreRestart, { text: () => t("restart.restarting"), ok: true, on: true });
+  // ended while another page is shown, its line stays for the next showing of Maintenance
   stopFollow = followStart(before, Date.now() + RESTART_WAIT_MS, (now) => {
     stopFollow = null;
-    Object.assign(restoreRestart, { text: () => t("restart.back", { time: fmtInstant(new Date(Date.parse(now))) }), ok: true, on: false });
+    Object.assign(restoreRestart, { text: () => t("restart.back", { time: fmtInstant(new Date(Date.parse(now))) }), ok: true, on: false,
+      keep: restoreRestart.keep || !isShown("maint") });
     if (isShown("maint")) void loadShown();
   }, () => {
     stopFollow = null;
-    Object.assign(restoreRestart, { text: () => t("restart.notBack"), ok: false, on: false });
+    Object.assign(restoreRestart, { text: () => t("restart.notBack"), ok: false, on: false, keep: restoreRestart.keep || !isShown("maint") });
   });
 }
 
@@ -374,6 +473,7 @@ export async function runCheck(): Promise<boolean> {
   try {
     const v = await api<KeyCheck>("POST", backupPath(b) + "/check-key", { key_file: keyText() });
     if (!still()) return false;
+    forgetKey();
     rs.verdict = v;
     rs.step = "done";
     return true;

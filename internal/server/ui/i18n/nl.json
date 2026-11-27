@@ -2402,6 +2402,7 @@
   "serverbackup.restore.restartByHand": "Herstart de server daarna: hij kan zichzelf niet herstarten ({blocked}).",
   "serverbackup.restore.run": "Terugzetten",
   "serverbackup.restore.doneTitle": "Teruggezet, telkens helemaal:",
+  "serverbackup.restore.doneSaid": "Teruggezet: {what}.",
   "serverbackup.restore.error": "De opslag is teruggezet, maar: {error}",
   "serverbackup.restore.secretsLost.one": "{n} geheim ging niet open met de sleutel van de back-up: voer het opnieuw in.",
   "serverbackup.restore.secretsLost.other": "{n} geheimen gingen niet open met de sleutel van de back-up: voer ze opnieuw in.",

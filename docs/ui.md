@@ -2693,11 +2693,14 @@ The server's sign, when it says an update is out, opens it at Software update.
     where the server cannot restart itself, a note, and users and sign-in
     and the identity off.
     What every scope together would refuse is said, with the rows missing.
-    **Restore…** asks the plan of what is ticked and stays there with its refusal
+    **Restore…** asks the plan of what is ticked, the switches and **Back** off meanwhile,
+    and stays there with its refusal
     and the rows missing, or goes on to a confirmation that names what it replaces,
     that a backup is taken first and kept pinned for 30 days,
     and whether the server then restarts; **Back** returns to the choice.
-    **Restore** sends it (`POST …/{id}/restore`); the dialog stays open meanwhile.
+    **Restore** sends it (`POST …/{id}/restore`); the dialog stays open meanwhile,
+    but for another page shown (the browser's Back), which takes it away
+    until Maintenance is shown again.
     A refusal (`409`, rows missing or no owner left) goes back to the choice
     with its list.
     Done, the dialog lists what it restored, an error after the store changed,
@@ -2707,8 +2710,13 @@ The server's sign, when it says an update is out, opens it at Software update.
     back, or why it did not restart; then each Cube whose configuration the Cube
     restore could write is a link to it: Cube settings, that Cube chosen,
     at its Backup and restore.
+    The key goes from the page once the restore is done or the check has given
+    its verdict.
+    A restore that ends while another page is shown closes the dialog,
+    and the card's top says how it went at the next showing of Maintenance.
     While the dialog is closed, the card's top says how the restart goes,
-    until Maintenance is shown again.
+    until Maintenance is shown again, or the showing after where it ended
+    while another page was shown.
   - **Check with the key…** (the owner's) takes the key as Restore… does,
     then **Check** (`POST …/{id}/check-key`) gives the verdict:
     whether the key opens the backup and its store is whole,
