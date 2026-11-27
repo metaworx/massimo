@@ -306,6 +306,10 @@ A feed that ended (`w.End`) fails a wait at once, with its reason.
   often an item of the same watch, `w.Seen(m, isPoll)`.
 - **"At least n"** is `w.AwaitN`, not an `Eventually` on a `Count`,
   whose failure would not say what came.
+- **A count of tries** a retry loop makes is counted from the change too,
+  where the test changes what the tries meet:
+  `TestProxyRetriedUntilTheAddressIsThere` counts the listens since its error changed,
+  since the slot's own count reaches any number before the change.
 - **Once the action is over** - the process ended, the call returned
   with its log written - nothing of it is on its way any more:
   `w.Has` checks that an item came, `w.HasNot` that none did, at once.
