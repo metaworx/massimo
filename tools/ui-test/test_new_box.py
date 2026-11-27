@@ -117,7 +117,8 @@ def test_start_from_a_file(new_context, case, watch, guard):
     page.locator("#new-box-key").fill(KEY)
     page.locator("#new-box-open").click()
     page.locator("#new-box-plan").wait_for(state="visible")
-    assert bodies["plan"][-1] == {"key_file": KEY.strip(), "take_identity": False, "env": False, "tls": False}, f"the plan's body: {bodies['plan']}"
+    assert bodies["plan"][-1] == {"backup": HELD["uuid"], "key_file": KEY.strip(), "take_identity": False, "env": False, "tls": False}, \
+        f"the plan's body: {bodies['plan']}"
     assert "Upstairs (KEQ0000000)" in page.locator("#new-box-cubes").text_content(), "the Cubes"
     assert page.locator("#new-box-answers").is_visible(), "the old box still answers, warned of"
     assert page.locator("#new-box-env").is_visible() and page.locator("#new-box-tls").is_visible(), "the env file and the TLS files offered"
@@ -137,7 +138,7 @@ def test_start_from_a_file(new_context, case, watch, guard):
     while "restore" not in bodies and time.time() < end:
         page.wait_for_timeout(50)
     stage["health"] = "hold"  # the start before was read: the restart's follow is held
-    assert bodies.get("restore") == [{"key_file": KEY.strip(), "take_identity": False, "env": True, "tls": False}], \
+    assert bodies.get("restore") == [{"backup": HELD["uuid"], "key_file": KEY.strip(), "take_identity": False, "env": True, "tls": False}], \
         f"the restore's body: {bodies.get('restore')}"
     assert wait_until(page, "document.getElementById('new-box-msg').textContent.startsWith(t('newBox.restarting'))", 5), "it says the server restarts"
     assert page.locator("#new-box-key").input_value() == "", "the key's field emptied once sent"

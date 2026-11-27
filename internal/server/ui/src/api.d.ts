@@ -726,6 +726,11 @@ export interface Me {
    * UI does not ask for the first owner
    */
   kept_open?: boolean;
+  /**
+   * With setup, a store that holds no configured Cube, room or integration: the
+   * server may start from a backup (POST /api/v1/setup/backup)
+   */
+  new_box?: boolean;
   token?: Token;
   /**
    * The registered integration whose key it is; null for any other key, and on
@@ -2699,6 +2704,11 @@ export interface NewBoxTarget {
 }
 
 export interface NewBoxRestoreRequest {
+  /**
+   * The uuid of the backup handed, as POST /api/v1/setup/backup or …/fetch
+   * answered it; another handed since is 409
+   */
+  backup: string;
   /**
    * The key file's text: an age identity, or an OpenSSH ssh-ed25519 key without
    * a passphrase

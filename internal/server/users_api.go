@@ -675,6 +675,7 @@ func (s *Server) postUser(w http.ResponseWriter, r *http.Request) error {
 		s.log.Info("first owner created", "user", created.Name, "remote", s.clientIP(r))
 		// the owner is written: a client gone now leaves the line to be said all the same
 		out.OpenSetup = s.tellOpenSetup(context.WithoutCancel(ctx), created.Name, created.Role)
+		s.dropNewBox() // the window of a new box has closed: a backup handed goes (newbox.go)
 	} else {
 		s.log.Info("user added", "user", created.Name, "role", created.Role, "remote", s.clientIP(r))
 	}

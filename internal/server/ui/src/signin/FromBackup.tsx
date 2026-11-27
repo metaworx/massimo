@@ -18,7 +18,8 @@
  * which Massimo, what it holds, which keys open it and whether it comes
  * from a newer Massimo. The key, pasted into its field or read into it
  * from a file in the browser, goes in the body of the plan and of the
- * restore alone; the field is not controlled, and is emptied at each
+ * restore alone, which name the backup handed by its uuid, so that one
+ * handed meanwhile is refused; the field is not controlled, and is emptied at each
  * opening, at Back, when the card closes and once the restore is sent.
  * Open with the key plans the restore (…/plan): everything replaced, the
  * Cubes, and the switches of the backup's identity, with the old box's
@@ -257,7 +258,9 @@ export function FromBackup() {
       }
       setOpts(o);
       try {
-        setPlan(await api<ServerRestorePlan>("POST", SETUP + "/plan", { key_file: k, take_identity: o.identity, env: o.env, tls: o.tls }));
+        // the backup handed, by its uuid: another handed since is refused, so that the plan is of the one shown
+        const body = { backup: held?.uuid || "", key_file: k, take_identity: o.identity, env: o.env, tls: o.tls };
+        setPlan(await api<ServerRestorePlan>("POST", SETUP + "/plan", body));
       } catch (e) {
         setPlan(null);
         fails(e, "newBox.failed");
@@ -284,7 +287,9 @@ export function FromBackup() {
     restoring(true);
     let res: ServerRestoreResult | null = null;
     try {
-      res = await api<ServerRestoreResult>("POST", SETUP + "/restore", { key_file: k, take_identity: opts.identity, env: opts.env, tls: opts.tls });
+      // the backup planned, by its uuid: one handed since is refused, not restored unplanned
+      const body = { backup: plan?.backup?.uuid || held?.uuid || "", key_file: k, take_identity: opts.identity, env: opts.env, tls: opts.tls };
+      res = await api<ServerRestoreResult>("POST", SETUP + "/restore", body);
     } catch (e) {
       const err = e as Error & { status?: number; data?: ServerRestoreResult };
       if (err.status === 500 && err.data && err.data.restart) {

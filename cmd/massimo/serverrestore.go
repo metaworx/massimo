@@ -168,7 +168,7 @@ func (c *backupCLI) restore(ctx context.Context, ref string, a restoreArgs) erro
 		return fmt.Errorf("store restore: %w", err)
 	}
 	if fresh {
-		o.NoBackupFirst, o.NoUsers = true, true
+		o.NoBackupFirst, o.NoUsers, o.NoData = true, true, true
 		fmt.Fprintln(c.notes(), newBoxNote)
 	}
 	res, err := cat.Restore(ctx, o)
@@ -191,13 +191,18 @@ func (c *backupCLI) restore(ctx context.Context, ref string, a restoreArgs) erro
 }
 
 // newBoxNote is what store restore says on standard error of a new box.
-const newBoxNote = "store restore: a new box, without a regular user or a key: no backup of it is taken first"
+const newBoxNote = "store restore: a new box, without a regular user, a key, a Cube, a room or an integration: no backup of it is taken first"
 
 // freshStore reports whether st is a new box's: no regular user
-// (store.CountUsers) and no key the backups are encrypted for.
+// (store.CountUsers), no configured Cube, room or integration
+// (store.NewBoxHolds), which a restore without a backup first would lose,
+// and no key the backups are encrypted for.
 func freshStore(ctx context.Context, st *store.Store, cat *serverbackup.Catalogue) (bool, error) {
 	n, err := st.CountUsers(ctx)
 	if err != nil || n > 0 {
+		return false, err
+	}
+	if h, err := st.NewBoxHolds(ctx); err != nil || !h.Empty() {
 		return false, err
 	}
 	_, err = cat.Recipients(ctx)
@@ -211,13 +216,15 @@ func freshStore(ctx context.Context, st *store.Store, cat *serverbackup.Catalogu
 }
 
 // freshServe reports whether the running serve is a new box's: open, no
-// regular user, and no key of the server's backups. A serve that does not
-// say so, for any reason, is none: its own routes then answer.
+// regular user, no configured Cube, room or integration (who is in says
+// new_box), and no key of the server's backups. A serve that does not say
+// so, for any reason, is none: its own routes then answer.
 func (c *backupCLI) freshServe(ctx context.Context) bool {
 	var me struct {
-		Mode string `json:"mode"`
+		Mode   string `json:"mode"`
+		NewBox bool   `json:"new_box"`
 	}
-	if err := c.api.do(ctx, http.MethodGet, "/api/v1/me", nil, &me); err != nil || me.Mode != "open" {
+	if err := c.api.do(ctx, http.MethodGet, "/api/v1/me", nil, &me); err != nil || me.Mode != "open" || !me.NewBox {
 		return false
 	}
 	var ans struct {
@@ -304,11 +311,13 @@ func (c *backupCLI) restoreNewBox(ctx context.Context, file string, key []byte, 
 		return errors.New("store restore: this server is a new box, without a regular user or a key: it starts from every scope of the backup; give -scope all")
 	}
 	fmt.Fprintln(c.notes(), newBoxNote)
-	if _, _, err := c.api.upload(ctx, "/api/v1/setup/backup", file); err != nil {
+	uuid, _, err := c.api.upload(ctx, "/api/v1/setup/backup", file)
+	if err != nil {
 		return fmt.Errorf("store restore: the upload: %w", err)
 	}
-	fmt.Fprintf(c.out, "handed %s to the new box, which holds it for an hour\n", file)
-	body := map[string]any{"key_file": string(key), "take_identity": a.identity, "env": a.env, "tls": a.tls}
+	fmt.Fprintf(c.out, "handed %s to the new box as %s, which holds it for an hour\n", file, shortBackupID(uuid))
+	// the backup handed, by its uuid: one another client handed since is refused
+	body := map[string]any{"backup": uuid, "key_file": string(key), "take_identity": a.identity, "env": a.env, "tls": a.tls}
 	path := "/api/v1/setup/backup/restore"
 	if a.plan {
 		path = "/api/v1/setup/backup/plan"

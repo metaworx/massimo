@@ -197,7 +197,7 @@ func TestStoreRestoreThroughServe(t *testing.T) {
 	}
 }
 
-// A new box, a store without a regular user and without a key, restores
+// A new box, a store without a regular user, a key or data, restores
 // on the store without a backup of itself first, says so on standard
 // error, and takes the old box's users; a store with a key and still no
 // user takes its backup first, as one with users does, and says nothing
@@ -260,6 +260,22 @@ func TestStoreRestoreNewBox(t *testing.T) {
 	if olga, backups := look(keyed); !olga || backups != 1 {
 		t.Errorf("a store with a key: olga %v, %d backups of the store", olga, backups)
 	}
+
+	// A store with a Cube and neither a user nor a key is no new box (the
+	// security review of Block 11): it takes its backup first, which needs
+	// a key, and so refuses, changing nothing.
+	cubed := t.TempDir()
+	st = storekit.Open(t, cubed)
+	if _, err := st.AddCube(ctx, store.Cube{Serial: "KEQ0000001", Configured: true, Source: store.SourceUI}); err != nil {
+		t.Fatal(err)
+	}
+	st.Close()
+	if _, notes, err := restore(cubed); !errors.Is(err, serverbackup.ErrNoKey) || notes != "" {
+		t.Fatalf("a store with a Cube: %v, notes: %s", err, notes)
+	}
+	if olga, _ := look(cubed); olga {
+		t.Error("a store with a Cube took the backup's users")
+	}
 }
 
 // Through a new box's serve, open and without a key, store restore goes
@@ -279,7 +295,7 @@ func TestStoreRestoreNewBoxThroughServe(t *testing.T) {
 		w.Header().Set("Content-Type", "application/json")
 		switch r.Method + " " + r.URL.Path {
 		case "GET /api/v1/me":
-			json.NewEncoder(w).Encode(map[string]any{"mode": "open"})
+			json.NewEncoder(w).Encode(map[string]any{"mode": "open", "new_box": true})
 		case "GET /api/v1/server-backups":
 			json.NewEncoder(w).Encode(map[string]any{"backups": []any{}, "keys": 0})
 		case "POST /api/v1/setup/backup":
@@ -314,7 +330,7 @@ func TestStoreRestoreNewBoxThroughServe(t *testing.T) {
 	mu.Lock()
 	got := strings.Join(seen, "\n")
 	mu.Unlock()
-	if !strings.Contains(got, "POST /api/v1/setup/backup a backup") || !strings.Contains(got, `POST /api/v1/setup/backup/restore {"env":false,"key_file":"# created:`) ||
+	if !strings.Contains(got, "POST /api/v1/setup/backup a backup") || !strings.Contains(got, `POST /api/v1/setup/backup/restore {"backup":"01a21e07-8cd9-72f9-a4b2-54277e08f80e","env":false,"key_file":"# created:`) ||
 		strings.Contains(got, `"scopes"`) || strings.Contains(got, "/api/v1/server-backups/upload") || strings.Count(got, "POST /api/v1/setup/backup ") != 1 {
 		t.Errorf("requests:\n%s", got)
 	}

@@ -29,11 +29,20 @@ const oldBoxPassword = "violet harbour quietly turns"
 // fake Cube's row; the backup's file and the key file that opens it.
 func oldBoxBackup(t *testing.T) (file string, keyFile string) {
 	t.Helper()
+	return boxBackup(t, func(old *store.Store) {
+		if _, err := old.AddUserOpaque(t.Context(), store.User{Name: "olga", Role: store.RoleOwner}, oldBoxPassword, 0); err != nil {
+			t.Fatal(err)
+		}
+	})
+}
+
+// boxBackup is a backup of a box with the fake Cube's row, its users as
+// users makes them; the backup's file and the key file that opens it.
+func boxBackup(t *testing.T, users func(*store.Store)) (file string, keyFile string) {
+	t.Helper()
 	ctx := t.Context()
 	old := testStore(t, "")
-	if _, err := old.AddUserOpaque(ctx, store.User{Name: "olga", Role: store.RoleOwner}, oldBoxPassword, 0); err != nil {
-		t.Fatal(err)
-	}
+	users(old)
 	if _, err := old.AddCube(ctx, store.Cube{Serial: "KEQ0000100", Name: "Upstairs", Configured: true, Source: store.SourceEnv}); err != nil {
 		t.Fatal(err)
 	}
@@ -46,6 +55,14 @@ func oldBoxBackup(t *testing.T) (file string, keyFile string) {
 		t.Fatal(err)
 	}
 	return file, string(k.File(time.Now()))
+}
+
+// openBoxOptions are a new box's server's options: storeOptions without
+// the fake Cube's row, so that its store holds no Cube, room or
+// integration and may start from a backup.
+func openBoxOptions(t *testing.T, dir string) Options {
+	t.Helper()
+	return Options{Store: testStore(t, dir), DiscoveryAddr: "127.0.0.1:0", DiscoveryTargets: []string{"127.0.0.1:9"}, DiscoveryWait: 20 * time.Millisecond}
 }
 
 // lanCall sends a request as a client of the local network that is not
@@ -91,7 +108,7 @@ func TestNewBoxFromBackup(t *testing.T) {
 		t.Fatal(err)
 	}
 	dir := t.TempDir()
-	o := storeOptions(t, dir, "")
+	o := openBoxOptions(t, dir)
 	o.TrustedProxies = []netip.Prefix{netip.MustParsePrefix("127.0.0.1/32")}
 	var restarts atomic.Int32
 	o.Restart = RestartOptions{By: "systemd", Restart: func() error { restarts.Add(1); return nil }}
@@ -107,19 +124,26 @@ func TestNewBoxFromBackup(t *testing.T) {
 		json.Unmarshal([]byte(text), &v)
 		return v
 	}
-	key := jsonBody(map[string]any{"key_file": keyFile})
-
-	post("/api/v1/setup/backup/plan", key, 404)
+	post("/api/v1/setup/backup/plan", jsonBody(map[string]any{"backup": "01930000-0000-7000-8000-000000000001", "key_file": keyFile}), 404)
 	up := post("/api/v1/setup/backup", backup, 200)["backup"].(map[string]any)
 	if up["uuid"] == "" || up["newer"] != false || up["counts"].(map[string]any)["users"] != 1.0 || len(up["recipients"].([]any)) != 1 {
 		t.Fatalf("the backup handed %v", up)
 	}
+	id := up["uuid"].(string)
+	key := jsonBody(map[string]any{"backup": id, "key_file": keyFile})
 	post("/api/v1/setup/backup", []byte("no backup"), 400)
 	post("/api/v1/setup/backup/plan", nil, 400)
-	post("/api/v1/setup/backup/plan", jsonBody(map[string]any{"key_file": "AGE-SECRET-KEY-1NOPE"}), 400)
-	post("/api/v1/setup/backup/plan", jsonBody(map[string]any{"key_file": keyFile, "scopes": []string{"users"}}), 400)
+	post("/api/v1/setup/backup/plan", jsonBody(map[string]any{"key_file": keyFile}), 400)
+	post("/api/v1/setup/backup/plan", jsonBody(map[string]any{"backup": id, "key_file": "AGE-SECRET-KEY-1NOPE"}), 400)
+	post("/api/v1/setup/backup/plan", jsonBody(map[string]any{"backup": id, "key_file": keyFile, "scopes": []string{"users"}}), 400)
 	other, _ := serverbackup.GenerateKey(serverbackup.KindX25519)
-	post("/api/v1/setup/backup/plan", jsonBody(map[string]any{"key_file": string(other.File(time.Now()))}), 422)
+	post("/api/v1/setup/backup/plan", jsonBody(map[string]any{"backup": id, "key_file": string(other.File(time.Now()))}), 422)
+	// The plan and the restore are of the backup handed: another uuid is 409.
+	post("/api/v1/setup/backup/plan", jsonBody(map[string]any{"backup": "01930000-0000-7000-8000-000000000001", "key_file": keyFile}), 409)
+	post("/api/v1/setup/backup/restore", jsonBody(map[string]any{"backup": "01930000-0000-7000-8000-000000000001", "key_file": keyFile}), 409)
+	if restarts.Load() != 0 {
+		t.Fatal("a refused restore restarted the server")
+	}
 	plan := post("/api/v1/setup/backup/plan", key, 200)
 	restart := plan["restart"].(map[string]any)
 	if plan["identity"].(map[string]any)["this_box"] != false || plan["refused"] != "" || len(plan["scopes"].([]any)) != 5 || restart["available"] != true {
@@ -179,7 +203,7 @@ func TestNewBoxOnlyWhileOpen(t *testing.T) {
 	t.Parallel()
 	file, keyFile := oldBoxBackup(t)
 	backup, _ := os.ReadFile(file)
-	key := string(jsonBody(map[string]any{"key_file": keyFile}))
+	key := string(jsonBody(map[string]any{"backup": "01930000-0000-7000-8000-000000000001", "key_file": keyFile}))
 
 	users := startServer(t, withOptions(storeOptions(t, t.TempDir(), "secret")))
 	viewer := userToken(t, users.st, "vera", store.RoleViewer)
@@ -196,12 +220,20 @@ func TestNewBoxOnlyWhileOpen(t *testing.T) {
 	}
 
 	clock := testkit.NewClock(time.Date(2026, 11, 27, 10, 0, 0, 0, time.UTC))
-	o := storeOptions(t, t.TempDir(), "")
+	o := openBoxOptions(t, t.TempDir())
 	o.serverBackupClock = kitClock{clock}
 	open := startServer(t, withOptions(o))
-	if code, text := callAPI(t, open.ts, "POST", "/api/v1/setup/backup", "", string(backup)); code != 200 {
+	code, text := callAPI(t, open.ts, "POST", "/api/v1/setup/backup", "", string(backup))
+	if code != 200 {
 		t.Fatalf("hand the backup: %d %s", code, text)
 	}
+	var handed struct {
+		Backup struct {
+			UUID string `json:"uuid"`
+		} `json:"backup"`
+	}
+	json.Unmarshal([]byte(text), &handed)
+	key = string(jsonBody(map[string]any{"backup": handed.Backup.UUID, "key_file": keyFile}))
 	clock.Add(newBoxHeld + time.Minute)
 	if code, text := callAPI(t, open.ts, "POST", "/api/v1/setup/backup/plan", "", key); code != 404 || !strings.Contains(text, "hand it again") {
 		t.Errorf("a plan past the backup's time: %d %s", code, text)
@@ -226,7 +258,7 @@ func TestNewBoxFromTarget(t *testing.T) {
 	if err := os.WriteFile(filepath.Join(src, "notes.zip"), []byte("no backup"), 0o600); err != nil {
 		t.Fatal(err)
 	}
-	o := storeOptions(t, t.TempDir(), "")
+	o := openBoxOptions(t, t.TempDir())
 	o.Restart = RestartOptions{By: "systemd", Restart: func() error { return nil }}
 	r := startServer(t, withOptions(o))
 	target := map[string]any{"kind": "local", "config": map[string]string{"path": src}}
@@ -257,7 +289,7 @@ func TestNewBoxFromTarget(t *testing.T) {
 	if code, text := fetch("massimo-old.zip"); code != 200 || !strings.Contains(text, list.Backups[0].UUID) {
 		t.Fatalf("fetch: %d %s", code, text)
 	}
-	if code, text := callAPI(t, r.ts, "POST", "/api/v1/setup/backup/plan", "", string(jsonBody(map[string]any{"key_file": keyFile}))); code != 200 || !strings.Contains(text, `"refused": ""`) {
+	if code, text := callAPI(t, r.ts, "POST", "/api/v1/setup/backup/plan", "", string(jsonBody(map[string]any{"backup": list.Backups[0].UUID, "key_file": keyFile}))); code != 200 || !strings.Contains(text, `"refused": ""`) {
 		t.Errorf("plan of the backup fetched: %d %s", code, text)
 	}
 	// The kinds say which a new box cannot read from, for the card.
@@ -274,4 +306,143 @@ func TestNewBoxFromTarget(t *testing.T) {
 	if code, text := callAPI(t, r.ts, "POST", "/api/v1/setup/backup/list", "", string(jsonBody(sftp))); code != 400 || !strings.Contains(text, "start from the file") {
 		t.Errorf("an SFTP target: %d %s", code, text)
 	}
+}
+
+// handBackup hands a new box's server a backup file and answers its uuid.
+func handBackup(t *testing.T, r *rig, file string) string {
+	t.Helper()
+	b, err := os.ReadFile(file)
+	if err != nil {
+		t.Fatal(err)
+	}
+	code, text := callAPI(t, r.ts, "POST", "/api/v1/setup/backup", "", string(b))
+	if code != 200 {
+		t.Fatalf("hand the backup: %d %s", code, text)
+	}
+	var v struct {
+		Backup struct {
+			UUID string `json:"uuid"`
+		} `json:"backup"`
+	}
+	json.Unmarshal([]byte(text), &v)
+	return v.Backup.UUID
+}
+
+// A backup without an enabled regular owner starts no new box (the
+// security review of Block 11): one without users, whose restore left the
+// server open and restarted it again at each try, one whose owner is
+// disabled and one with a viewer alone, which left nobody to sign in as
+// the owner. Each plan says why, each restore is 409, the store stays as
+// it was and the server never restarts, however often it is tried.
+func TestNewBoxNeedsAnEnabledOwner(t *testing.T) {
+	t.Parallel()
+	ctx := t.Context()
+	cases := map[string]func(*store.Store){
+		"no users": func(*store.Store) {},
+		"a disabled owner": func(st *store.Store) {
+			if _, err := st.AddUser(ctx, store.User{Name: "olga", Role: store.RoleOwner, Disabled: true}, "", 0); err != nil {
+				t.Fatal(err)
+			}
+		},
+		"a viewer alone": func(st *store.Store) {
+			if _, err := st.AddUser(ctx, store.User{Name: "vera", Role: store.RoleViewer}, "", 0); err != nil {
+				t.Fatal(err)
+			}
+		},
+	}
+	o := openBoxOptions(t, t.TempDir())
+	var restarts atomic.Int32
+	o.Restart = RestartOptions{By: "systemd", Restart: func() error { restarts.Add(1); return nil }}
+	r := startServer(t, withOptions(o))
+	for name, users := range cases {
+		file, keyFile := boxBackup(t, users)
+		for try := range 3 {
+			id := handBackup(t, r, file)
+			body := string(jsonBody(map[string]any{"backup": id, "key_file": keyFile}))
+			code, text := callAPI(t, r.ts, "POST", "/api/v1/setup/backup/plan", "", body)
+			if code != 200 || !strings.Contains(text, "enabled owner") {
+				t.Fatalf("%s, try %d: plan %d %s", name, try, code, text)
+			}
+			if code, text := callAPI(t, r.ts, "POST", "/api/v1/setup/backup/restore", "", body); code != 409 || !strings.Contains(text, "no_owner") {
+				t.Fatalf("%s, try %d: restore %d %s", name, try, code, text)
+			}
+		}
+		if n, _ := o.Store.CountUsers(ctx); n != 0 {
+			t.Fatalf("%s: the store took %d users", name, n)
+		}
+		if h, _ := o.Store.NewBoxHolds(ctx); !h.Empty() {
+			t.Fatalf("%s: the store took %s", name, h)
+		}
+	}
+	if restarts.Load() != 0 {
+		t.Fatalf("the server restarted %d times", restarts.Load())
+	}
+}
+
+// Only a server that holds no configured Cube, room or integration starts
+// from a backup, since no backup of it is taken first (the security
+// review of Block 11): one kept open on purpose with a Cube is refused,
+// saying what it holds, and who is in says new_box only where it may.
+func TestNewBoxOnlyOnAnEmptyServer(t *testing.T) {
+	t.Parallel()
+	ctx := t.Context()
+	file, keyFile := oldBoxBackup(t)
+	backup, _ := os.ReadFile(file)
+	var me struct {
+		Mode   string `json:"mode"`
+		NewBox bool   `json:"new_box"`
+	}
+
+	empty := startServer(t, withOptions(openBoxOptions(t, t.TempDir())))
+	if code := getJSON(t, empty.ts, "", "/api/v1/me", &me); code != 200 || me.Mode != "open" || !me.NewBox {
+		t.Fatalf("an empty open server: %d %+v", code, me)
+	}
+
+	o := openBoxOptions(t, t.TempDir()) // with stored(), the fake Cube served as the store's row: a Cube
+	if err := o.Store.SetKeepOpen(ctx, true, 0); err != nil {
+		t.Fatal(err)
+	}
+	held := startServer(t, withOptions(o), stored())
+	me.NewBox, me.Mode = false, ""
+	if code := getJSON(t, held.ts, "", "/api/v1/me", &me); code != 200 || me.Mode != "open" || me.NewBox {
+		t.Fatalf("an open server with a Cube: %d %+v", code, me)
+	}
+	body := string(jsonBody(map[string]any{"backup": "01930000-0000-7000-8000-000000000001", "key_file": keyFile}))
+	for path, b := range map[string]string{"/api/v1/setup/backup": string(backup), "/api/v1/setup/backup/plan": body, "/api/v1/setup/backup/restore": body,
+		"/api/v1/setup/backup/list": `{"kind":"local"}`} {
+		if code, text := callAPI(t, held.ts, "POST", path, "", b); code != 409 || !strings.Contains(text, "holds 1 Cube") {
+			t.Errorf("%s on a server with a Cube: %d %s", path, code, text)
+		}
+	}
+	if left, _ := filepath.Glob(filepath.Join(o.Store.Dir(), ".serverbackup-*")); len(left) > 0 {
+		t.Errorf("left in the data directory: %v", left)
+	}
+}
+
+// A backup handed goes when the first owner is made, and one a server
+// before left goes at the start (the security review of Block 11).
+func TestNewBoxBackupGoesWithTheWindow(t *testing.T) {
+	t.Parallel()
+	file, _ := oldBoxBackup(t)
+	dir := t.TempDir()
+	o := openBoxOptions(t, dir)
+	stale := filepath.Join(dir, ".serverbackup-newbox-left")
+	if err := os.MkdirAll(stale, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	r := startServer(t, withOptions(o))
+	if _, err := os.Stat(stale); err == nil {
+		t.Error("the backup a server before left stayed")
+	}
+	handBackup(t, r, file)
+	if left, _ := filepath.Glob(filepath.Join(dir, ".serverbackup-newbox-*")); len(left) != 1 {
+		t.Fatalf("the backup held: %v", left)
+	}
+	if code, text := callAPI(t, r.ts, "POST", "/api/v1/users", "", `{"name":"first","role":"owner","password":"violet harbour quietly turns"}`); code != 201 {
+		t.Fatalf("the first owner: %d %s", code, text)
+	}
+	testkit.Eventually(t, "the backup held gone", func() bool {
+		left, _ := filepath.Glob(filepath.Join(dir, ".serverbackup-newbox-*"))
+		return len(left) == 0
+	})
 }

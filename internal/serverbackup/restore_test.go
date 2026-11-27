@@ -238,6 +238,45 @@ func TestRestoreNoUsers(t *testing.T) {
 	}
 }
 
+// A new box's rules, counted in the store's transaction (the security
+// review of Block 11): NoData refuses a store that holds a Cube, and
+// NoUsers with users and sign-in a backup without an enabled owner, the
+// plan and the restore alike, nothing changed.
+func TestRestoreNewBoxRules(t *testing.T) {
+	t.Parallel()
+	ctx := context.Background()
+	_, path, key := oldBox(t)
+	o := RestoreOptions{File: path, Key: key, Scopes: []string{ScopeAll}, NoUsers: true, NoData: true, NoBackupFirst: true}
+	held := newRestoreSide(t).c
+	if _, err := held.Store.AddCube(ctx, store.Cube{Serial: "KEQ0000001", Configured: true, Source: store.SourceUI}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := held.Plan(ctx, o); !errors.Is(err, store.ErrRestoreHasData) || !strings.Contains(err.Error(), "1 Cube") {
+		t.Errorf("plan on a store with a Cube: %v", err)
+	}
+	if res, err := held.Restore(ctx, o); !errors.Is(err, store.ErrRestoreHasData) || res.Committed {
+		t.Errorf("restore on a store with a Cube: %v", err)
+	}
+
+	empty := testStore(t)
+	disabled := testStore(t)
+	if _, err := disabled.AddUser(ctx, store.User{Name: "olga", Role: store.RoleOwner, Disabled: true}, "", 0); err != nil {
+		t.Fatal(err)
+	}
+	k, _ := GenerateKey(KindX25519)
+	for name, st := range map[string]*store.Store{"no users": empty, "a disabled owner": disabled} {
+		file, _ := write(t, st, Inputs{}, k.Recipient)
+		side := newRestoreSide(t).c
+		bo := RestoreOptions{File: file, Key: k.File(time.Now()), Scopes: []string{ScopeAll}, NoUsers: true, NoData: true, NoBackupFirst: true}
+		if p, err := side.Plan(ctx, bo); err != nil || !strings.Contains(p.Refused, "enabled owner") {
+			t.Errorf("%s: plan %q %v", name, p.Refused, err)
+		}
+		if res, err := side.Restore(ctx, bo); !errors.Is(err, store.ErrRestoreNoOwner) || res.Committed {
+			t.Errorf("%s: restore %v", name, err)
+		}
+	}
+}
+
 // A place this server cannot write refuses the restore before anything
 // is done, and the plan says so; a file that cannot be renamed into
 // place once the store is restored leaves the restore done, said, and

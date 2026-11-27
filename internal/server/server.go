@@ -885,6 +885,9 @@ func New(opts Options) *Server {
 	s.SetWindowLimits(0, 0)
 	if opts.Store != nil {
 		s.loadWindowLimits(context.Background())
+		if !opts.Store.ReadOnly() {
+			removeNewBoxLeft(opts.Store.Dir(), s.log) // a new box's window ended with the server before (newbox.go)
+		}
 	}
 	s.loadFound()
 	if opts.Store != nil {

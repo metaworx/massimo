@@ -9,17 +9,25 @@ package server
 // that user may instead hand the server a backup of another box with its
 // key, and the server takes every scope of it and restarts, with the
 // backup's users. The routes answer in that window alone, the principal's
-// mode read as the request came, and a restore is refused once a regular
-// user exists, the store counting again in the restore's own transaction
-// (serverbackup.RestoreOptions.NoUsers), so that a first owner made
-// meanwhile is never restored over. The backup comes as an upload, of at
+// mode read as the request came, and only on a server that holds no
+// configured Cube, room or integration, which a restore without a backup
+// first would lose (a server kept open on purpose may hold them); a
+// restore is refused once a regular user exists or such data came, the
+// store counting again in the restore's own transaction
+// (serverbackup.RestoreOptions.NoUsers, NoData), so that a first owner
+// made meanwhile is never restored over, and so is a backup without an
+// enabled owner, which would leave the box open, to be restored and
+// restarted again and again, or closed with nobody to sign in as its
+// owner. A plan and a restore name the backup handed by its uuid, so that
+// one handed meanwhile is not restored unplanned. The backup comes as an upload, of at
 // most maxServerBackupUpload bytes, or from a target the request
 // describes, used for that request alone to list its backups by their
 // manifests or to fetch the one picked, and never stored (the restore of
 // the settings brings the old box's targets back). It waits in a
 // temporary directory of the data directory, one at a time and for at
 // most newBoxHeld, and goes with the restore, the next one handed, its
-// time, or the window's end. The key comes in the body of the plan and of
+// time, the first owner made (dropNewBox) or the server's next start
+// (removeNewBoxLeft). The key comes in the body of the plan and of
 // the restore, held in memory for that request alone, never written, and
 // kept by no audit row (secretFields). No backup is taken first: a new
 // box has nothing to keep and no key to encrypt it for. The restart that
@@ -32,6 +40,7 @@ import (
 	"encoding/json"
 	"errors"
 	"io"
+	"log/slog"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -107,11 +116,14 @@ func (n *newBoxState) drop() {
 	}
 }
 
-// take is the file of the backup held at now; one held longer than
-// newBoxHeld goes, and none is 404.
-func (n *newBoxState) take(now time.Time) (string, error) {
+// take is the file of the backup held at now, which must be the one of
+// uuid, the backup its caller was answered when it handed it: another
+// handed since is 409, so that a plan and its restore are of one backup
+// (the security review of Block 11). One held longer than newBoxHeld
+// goes, and none is 404.
+func (n *newBoxState) take(now time.Time, uuid string) (string, error) {
 	n.mu.Lock()
-	path, at := n.path, n.at
+	path, at, held := n.path, n.at, n.m.UUID
 	n.mu.Unlock()
 	switch {
 	case path == "":
@@ -119,6 +131,8 @@ func (n *newBoxState) take(now time.Time) (string, error) {
 	case now.Sub(at) > newBoxHeld:
 		n.drop()
 		return "", fail(http.StatusNotFound, "the backup handed waited more than %s: hand it again", newBoxHeld)
+	case held != uuid:
+		return "", fail(http.StatusConflict, "the backup held is %s now, not %s: another was handed since; open it with the key again", held, uuid)
 	}
 	return path, nil
 }
@@ -142,29 +156,87 @@ func (s *Server) newBoxRoutes(api func(pattern, capability string, h func(http.R
 	api("POST /api/v1/setup/backup/restore", "owner", s.restoreNewBox)
 }
 
-// newBoxOpen checks that a request comes in the first owner's window:
-// a server with a store that is open, as the principal's mode says. On
-// a server with users the backup held goes, where no job holds it, and
-// the request is 409.
+// newBoxOpen checks that a request comes in the first owner's window of
+// a new box: a server with a store that is open, as the principal's mode
+// says, and that holds no configured Cube, room or integration
+// (store.NewBoxHolds), which a restore without a backup first would
+// lose: a server kept open on purpose, or one whose only users are an
+// integration's, may hold them (the security review of Block 11). On
+// a server with users the backup held goes; either refusal is 409.
 func (s *Server) newBoxOpen(r *http.Request) (*store.Store, error) {
 	st, err := s.sbStore()
 	if err != nil {
 		return nil, err
 	}
-	if principalOf(r).mode == modeOpen {
-		return st, nil
+	if principalOf(r).mode != modeOpen {
+		s.dropNewBox()
+		return nil, fail(http.StatusConflict, "%s", newBoxClosed)
 	}
-	if s.newBox.held() {
+	h, err := st.NewBoxHolds(r.Context())
+	if err != nil {
+		return nil, fail(http.StatusInternalServerError, "%v", err)
+	}
+	if !h.Empty() {
+		s.dropNewBox()
+		return nil, fail(http.StatusConflict, newBoxHolds, h)
+	}
+	return st, nil
+}
+
+// newBoxHolds is the refusal of a new box's route on a server that holds
+// what a restore without a backup first would lose.
+const newBoxHolds = "this server holds %s: a new box starts from a backup only while it holds no Cube, room or integration, " +
+	"since it takes no backup of itself first; make the owner, give a key, and restore from Maintenance → Server backups"
+
+// newBoxNew reports whether the server is a new box that may start from a
+// backup: open, with a store that holds no configured Cube, room or
+// integration; GET /api/v1/me says so (new_box), for the card's button.
+func (s *Server) newBoxNew(ctx context.Context, mode authMode) bool {
+	st := s.opts.Store
+	if mode != modeOpen || st == nil || st.ReadOnly() {
+		return false
+	}
+	h, err := st.NewBoxHolds(ctx)
+	return err == nil && h.Empty()
+}
+
+// dropNewBox removes the backup a new box was handed once its window has
+// closed (a first owner made, data found): at once where no job of the
+// server's backups runs, else once the one that runs has ended, within
+// newBoxHeld.
+func (s *Server) dropNewBox() {
+	if !s.newBox.held() {
+		return
+	}
+	select {
+	case s.sb.busy <- struct{}{}:
+		s.newBox.drop()
+		<-s.sb.busy
+		return
+	default:
+	}
+	go func() {
+		t := time.NewTimer(newBoxHeld)
+		defer t.Stop()
 		select {
 		case s.sb.busy <- struct{}{}:
 			s.newBox.drop()
 			<-s.sb.busy
-		default:
-			// A job runs: the backup goes at its time, or with the
-			// stale temporary files.
+		case <-t.C:
+		}
+	}()
+}
+
+// removeNewBoxLeft removes the temporary directories of backups handed to
+// a new box that a server before this one left in the data directory dir:
+// its window ended with it.
+func removeNewBoxLeft(dir string, log *slog.Logger) {
+	left, _ := filepath.Glob(filepath.Join(dir, newBoxDir))
+	for _, d := range left {
+		if err := os.RemoveAll(d); err != nil {
+			log.Warn("serverbackup: a backup handed to a new box not removed", "dir", d, "error", err)
 		}
 	}
-	return nil, fail(http.StatusConflict, "%s", newBoxClosed)
 }
 
 // readNewBoxBody reads a JSON body of at most maxNewBoxBody bytes into v;
@@ -443,10 +515,12 @@ func (s *Server) fetchNewBoxTarget(w http.ResponseWriter, r *http.Request) error
 	return nil
 }
 
-// newBoxRequest is the body of a new box's plan and restore: the key
-// file's text, and whether to take the backup's identity, its env file
-// and its TLS files; every scope is restored.
+// newBoxRequest is the body of a new box's plan and restore: the uuid of
+// the backup handed, as its upload or fetch answered it, the key file's
+// text, and whether to take the backup's identity, its env file and its
+// TLS files; every scope is restored.
 type newBoxRequest struct {
+	Backup       string `json:"backup"`
 	KeyFile      string `json:"key_file"`
 	TakeIdentity bool   `json:"take_identity"`
 	Env          bool   `json:"env"`
@@ -454,25 +528,29 @@ type newBoxRequest struct {
 }
 
 // newBoxOptions reads the body of a new box's plan or restore into the
-// options of a restore of every scope, with no backup first and refused
-// where the store has a regular user; a key that does not parse is 400.
-func (s *Server) newBoxOptions(w http.ResponseWriter, r *http.Request) (serverbackup.RestoreOptions, error) {
+// options of a restore of every scope, with no backup first, refused
+// where the store has a regular user or holds anything to lose, and the
+// uuid of the backup it is of; a key that does not parse is 400.
+func (s *Server) newBoxOptions(w http.ResponseWriter, r *http.Request) (serverbackup.RestoreOptions, string, error) {
 	var req newBoxRequest
 	if err := readNewBoxBody(w, r, &req); err != nil {
-		return serverbackup.RestoreOptions{}, err
+		return serverbackup.RestoreOptions{}, "", err
+	}
+	if req.Backup == "" {
+		return serverbackup.RestoreOptions{}, "", fail(http.StatusBadRequest, "give backup, the uuid its upload or fetch answered")
 	}
 	if req.KeyFile == "" {
-		return serverbackup.RestoreOptions{}, fail(http.StatusBadRequest, "give key_file, the text of the key that opens the backup")
+		return serverbackup.RestoreOptions{}, "", fail(http.StatusBadRequest, "give key_file, the text of the key that opens the backup")
 	}
 	if _, err := serverbackup.ParseIdentities([]byte(req.KeyFile)); err != nil {
-		return serverbackup.RestoreOptions{}, fail(http.StatusBadRequest, "%v", err)
+		return serverbackup.RestoreOptions{}, "", fail(http.StatusBadRequest, "%v", err)
 	}
 	o := serverbackup.RestoreOptions{Key: []byte(req.KeyFile), Scopes: []string{serverbackup.ScopeAll}, Identity: req.TakeIdentity, Env: req.Env,
-		TLS: req.TLS, NoBackupFirst: true, NoUsers: true}
+		TLS: req.TLS, NoBackupFirst: true, NoUsers: true, NoData: true}
 	if s.opts.RestoreTLSPlace != nil {
 		o.TLSPlace = s.opts.RestoreTLSPlace()
 	}
-	return o, nil
+	return o, req.Backup, nil
 }
 
 // newBoxRestart is whether the server can restart itself after a new
@@ -488,10 +566,14 @@ func (s *Server) newBoxRestart(r *http.Request) restartView {
 }
 
 // newBoxFail maps an error of a new box's plan or restore to a status: a
-// regular user made meanwhile is 409, else as restoreFail.
+// regular user made meanwhile, or data that came meanwhile, is 409, else
+// as restoreFail.
 func newBoxFail(err error) error {
-	if errors.Is(err, store.ErrHasUsers) {
+	switch {
+	case errors.Is(err, store.ErrHasUsers):
 		return fail(http.StatusConflict, "%s", newBoxClosed)
+	case errors.Is(err, store.ErrRestoreHasData):
+		return fail(http.StatusConflict, "%v", err)
 	}
 	return restoreFail(err)
 }
@@ -504,13 +586,13 @@ func (s *Server) planNewBox(w http.ResponseWriter, r *http.Request) error {
 	if _, err := s.newBoxOpen(r); err != nil {
 		return err
 	}
-	o, err := s.newBoxOptions(w, r)
+	o, uuid, err := s.newBoxOptions(w, r)
 	if err != nil {
 		return err
 	}
 	var p serverbackup.RestorePlan
 	err = s.sbJob(r.Context(), func() error {
-		path, err := s.newBox.take(s.sbClock().Now())
+		path, err := s.newBox.take(s.sbClock().Now(), uuid)
 		if err != nil {
 			return err
 		}
@@ -550,7 +632,7 @@ func (s *Server) restoreNewBox(w http.ResponseWriter, r *http.Request) error {
 	if _, err := s.newBoxOpen(r); err != nil {
 		return err
 	}
-	o, err := s.newBoxOptions(w, r)
+	o, uuid, err := s.newBoxOptions(w, r)
 	if err != nil {
 		return err
 	}
@@ -569,7 +651,7 @@ func (s *Server) restoreNewBox(w http.ResponseWriter, r *http.Request) error {
 	}
 	var res serverbackup.Restored
 	err = s.sbJob(r.Context(), func() error {
-		path, err := s.newBox.take(s.sbClock().Now())
+		path, err := s.newBox.take(s.sbClock().Now(), uuid)
 		if err != nil {
 			return err
 		}

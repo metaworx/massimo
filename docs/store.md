@@ -2455,16 +2455,23 @@ a file uploaded for it removed again where the server did not hold it.
 A new box starts from a backup in its first owner's window (AP ServerBackup, Block 11;
 docs/api-v1.md, "A new box from a backup"): every scope, no backup taken first,
 since the box has nothing to keep and no key yet,
-and the restore refused where the store has a regular user,
-counted in the restore's own transaction (`RestoreSelection.NoUsers`),
-so that a first owner another request made meanwhile is never restored over.
+and the restore refused, counted in the restore's own transaction,
+where the store has a regular user (`RestoreSelection.NoUsers`),
+so that a first owner another request made meanwhile is never restored over;
+where it holds a configured Cube, a room or an integration (`NoData`,
+`Store.NewBoxHolds`), which a restore without a backup first would lose;
+and, with users and sign-in, where the backup leaves no enabled regular owner
+(`NoUsers`, `ErrRestoreNoOwner`): the box would stay open, to be restored and
+restarted again, or have nobody to sign in as its owner.
 The backup handed waits in `.serverbackup-newbox-*` in the data directory,
-encrypted as it came, for at most an hour.
-`massimo store restore` on a new box, a store without a regular user and without a key,
+encrypted as it came, for at most an hour,
+and goes with the first owner made and at the server's next start.
+`massimo store restore` on a new box, a store without a regular user, a key,
+a configured Cube, a room or an integration,
 takes no backup first either and says so on standard error:
-on the store with `NoUsers` too, any scopes;
+on the store with `NoUsers` and `NoData` too, any scopes;
 through the box's open `serve` by these routes, a file and every scope (`-scope all`).
-Where a key or a regular user exists, it takes the backup first as before.
+Elsewhere it takes the backup first as before.
 
 #### Before an update
 

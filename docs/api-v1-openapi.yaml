@@ -417,6 +417,9 @@ paths:
         setup is true on an open server for a caller on the local
         network, which may create the first owner; kept_open is true on an
         open server while the setting auth.keep_open is on, and absent
+        otherwise; new_box is true where setup is and the store holds no
+        configured Cube, room or integration, so that the server may start
+        from a backup instead (POST /api/v1/setup/backup), and absent
         otherwise.
       responses:
         "200":
@@ -4850,9 +4853,11 @@ paths:
       description: |
         A new box started from a backup (docs/api-v1.md, "A new box from a
         backup"): only while the server is open, before its first regular
-        user, to every caller of the local network; once a regular user
-        exists, 401 without a session, 403 for a user who is not the owner,
-        409 for the owner. The body is the file, at most 8 GiB, refused
+        user, to every caller of the local network, and only while its store
+        holds no configured Cube, room or integration, since no backup of it
+        is taken first (409 naming what it holds; GET /api/v1/me says
+        new_box where it may); once a regular user exists, 401 without a
+        session, 403 for a user who is not the owner, 409 for the owner. The body is the file, at most 8 GiB, refused
         where it is no backup (400), of a newer format, or changed since it
         was made (422). It is held in a temporary directory of the data
         directory for the plan and the restore, for at most an hour, one
@@ -4990,8 +4995,10 @@ paths:
       x-capability: owner
       description: |
         As POST /api/v1/server-backups/{id}/restore/plan, of every scope
-        of the backup handed: changing nothing, refused where a regular
-        user exists, the store counting again (409). The server's restart,
+        of the backup handed, named by its uuid (backup; another handed
+        since is 409): changing nothing, refused where a regular user
+        exists or data came, the store counting again (409); a backup
+        without an enabled regular owner is answered in refused. The server's restart,
         which the restore of users and sign-in needs, is offered from the
         local network too. Open as POST /api/v1/setup/backup is.
       requestBody:
@@ -5034,11 +5041,14 @@ paths:
       summary: Start a new box from the backup held, then restart; only while the server is open
       x-capability: owner
       description: |
-        Every scope of the backup handed, each replaced whole in one
-        transaction, refused where a regular user exists, the store
-        counting again in that transaction (409), so that a first owner
-        made meanwhile stays; no backup taken first, since the box has
-        nothing to keep; opaque.key with the users, the backup's node.key
+        Every scope of the backup handed, named by its uuid (backup;
+        another handed since is 409), each replaced whole in one
+        transaction, refused where a regular user exists or data came,
+        the store counting again in that transaction (409), so that a
+        first owner made meanwhile stays, and refused for a backup without
+        an enabled regular owner (409, code no_owner), which would leave
+        the box open or with nobody to sign in as its owner; no backup
+        taken first, since the box has nothing to keep; opaque.key with the users, the backup's node.key
         and node id with take_identity, the env file with env and the TLS
         files with tls, each file replaced kept beside as
         <name>.before-restore. Then the server restarts, from the local
@@ -5946,6 +5956,7 @@ components:
           items: {type: string}
         setup: {type: boolean, description: The first owner can be created from here}
         kept_open: {type: boolean, description: "An open server kept open on purpose (the setting auth.keep_open): the web UI does not ask for the first owner"}
+        new_box: {type: boolean, description: "With setup, a store that holds no configured Cube, room or integration: the server may start from a backup (POST /api/v1/setup/backup)"}
         token: {$ref: "#/components/schemas/Token"}
         integration:
           type: object
@@ -7245,8 +7256,9 @@ components:
         secret: {type: string, description: Its secret field's value}
     NewBoxRestoreRequest:
       type: object
-      required: [key_file]
+      required: [backup, key_file]
       properties:
+        backup: {type: string, description: 'The uuid of the backup handed, as POST /api/v1/setup/backup or …/fetch answered it; another handed since is 409'}
         key_file: {type: string, description: 'The key file''s text: an age identity, or an OpenSSH ssh-ed25519 key without a passphrase'}
         take_identity: {type: boolean, description: Take the backup's node.key and node id; this box keeps its own without}
         env: {type: boolean, description: Put the backup's env file where this server reads its own}

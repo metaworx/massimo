@@ -585,6 +585,9 @@ the one that may create the first owner,
 an integration's users beside it or not.
 `kept_open` is true on an open server while the setting `auth.keep_open` is on,
 and absent otherwise: the web UI then does not ask for the first owner.
+`new_box` is true where `setup` is and the store holds no configured Cube,
+room or integration, and absent otherwise:
+the server may start from a backup instead ("A new box from a backup").
 `auth_version` 1 says the server hashes the password;
 2, that the user signs in by OPAQUE (below) and the server never sees it.
 
@@ -5266,6 +5269,11 @@ once a regular user exists they are `401` without a session,
 `403` for a user who is not the owner, and `409` for the owner,
 who restores from the routes above.
 The OpenAPI file gives them `x-capability: owner` for that.
+Since no backup of the box is taken first,
+they answer only while its store holds no configured Cube, room or integration,
+and are `409` otherwise, naming what it holds:
+a server kept open on purpose, or one whose only users are an integration's,
+may hold them; `GET /api/v1/me` says `new_box` where they answer.
 
 - `POST /api/v1/setup/backup`, the file as the body (at most 8 GiB),
   hands the server the backup, `400` for a file that is no backup,
@@ -5273,8 +5281,8 @@ The OpenAPI file gives them `x-capability: owner` for that.
   It waits in a temporary directory of the data directory, one at a time,
   for at most an hour:
   another backup handed replaces it, the restore removes it,
-  and so does a later request of these routes once the hour has passed
-  or a regular user exists;
+  and so do the first owner made, a later request of these routes
+  once the hour has passed, and the server's next start;
   a second upload while one is received is `409`.
   The answer is its manifest, read without the key,
   `{"backup": {"uuid": "0193…", "time": "…", "trigger": "scheduled",
@@ -5297,15 +5305,24 @@ The OpenAPI file gives them `x-capability: owner` for that.
 - `POST /api/v1/setup/backup/fetch`, the same with `"name"`, a file the list names,
   fetches that backup and holds it as an upload; `404` for a name it does not list.
 - `POST /api/v1/setup/backup/plan`,
-  `{"key_file": "…", "take_identity": false, "env": false, "tls": false}`,
+  `{"backup": "0193…", "key_file": "…", "take_identity": false, "env": false,
+  "tls": false}`,
   answers as `POST …/server-backups/{id}/restore/plan` does, for every scope,
   and changes nothing;
+  `backup` is the uuid the upload or the fetch answered,
+  so that the plan and the restore are of the backup planned:
+  another handed since is `409`;
   `404` where no backup was handed or the one handed waited more than an hour.
+  A backup without an enabled regular owner is refused (`refused`):
+  its restore would leave the box open, to be restored and restarted again,
+  or closed with nobody to sign in as its owner.
 - `POST /api/v1/setup/backup/restore`, the same body, restores every scope
   without a backup first, since the box has nothing to keep, and restarts the server,
   answering as `POST …/server-backups/{id}/restore` does.
-  The store counts its regular users again in the restore's own transaction:
-  a first owner made meanwhile by another request stays, and the restore is `409`.
+  The store counts its regular users, and what it holds, again in the restore's
+  own transaction: a first owner made meanwhile by another request stays,
+  and the restore is `409`; a backup without an enabled regular owner is `409`
+  with `"code": "no_owner"`, nothing changed and no restart.
   The restart, which the restore of users and sign-in needs,
   is started from the local network too, though an open server otherwise restarts
   only from the box itself (`POST /api/v1/restart`);
