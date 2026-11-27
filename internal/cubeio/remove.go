@@ -44,7 +44,7 @@ func RemoveCommands(snap *cubelan.Snapshot, rf cube.RFAddress, typ cube.DeviceTy
 		return engine.Command{}, del, false
 	}
 	unlink = engine.Command{Key: "unlink:" + rf.String(), Target: rf, RoomID: room, Wakeup: true,
-		Lines: unlinkFromRoom(snap, rf, typ, room, skip, false)}
+		Lines: unlinkFromRoom(snap, rf, typ, room, 0, skip, false)}
 	return unlink, del, true
 }
 

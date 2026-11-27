@@ -36,7 +36,8 @@ import re
 import pytest
 
 from conftest import TOKEN, URL, api_call
-from helpers import BUBBLE_STATUS, OPERATOR_PASSWORD, bubble, frames, named_buttons, open_fold, scroll_width, show_view, toggle_fold, wait_bubble_at, wait_held, wait_until
+from helpers import (BUBBLE_STATUS, OPERATOR_PASSWORD, boxes, bubble, frames, held_timers, named_buttons, open_fold, scroll_width, show_view,
+                     toggle_fold, wait_bubble_at, wait_held, wait_until)
 from test_first_owner import OPEN, owner_card, start_page, stub_creation
 from test_login import sign_in
 from test_password_eye import STATE, eye_of, fresh_page, reopen, say_reveal
@@ -361,7 +362,8 @@ def check_suggest(page, case, field, again, console):
     says_next(page, field, "words", "before the first press")
     eye = eye_of(page, field)
     if eye.count():
-        assert dice.bounding_box()["x"] + dice.bounding_box()["width"] <= eye.bounding_box()["x"] + 0.5, f"{field}: the dice before the eye"
+        d, e = boxes(page, dice, eye)
+        assert d["x"] + d["width"] <= e["x"] + 0.5, f"{field}: the dice before the eye: {d}, {e}"
     if again:
         assert dice_of(page, again).count() == 0, f"{again}: no dice on the second field"
     v = press(page, field)
@@ -804,51 +806,53 @@ def test_copy(page, case):
       if (s) s.textContent = '';
       hideBubble();
     }"""
-    page.evaluate(clear)
-    page.locator(line).click()
-    copied_here(page, line, v, "a click on the line")
-    page.evaluate(clear)
-    page.locator(line).focus()
-    page.keyboard.press("Enter")
-    copied_here(page, line, v, "Enter on the line")
-    page.evaluate(clear)
-    page.locator(line).focus()
-    page.keyboard.press("Space")
-    copied_here(page, line, v, "Space on the line")
-    page.evaluate(clear)
-    page.locator(icon).click()
-    copied_here(page, icon, v, "a click on the icon")
-    page.evaluate(clear)
-    page.locator(icon).focus()
-    page.keyboard.press("Enter")
-    copied_here(page, icon, v, "Enter on the icon")
-    page.evaluate(clear)
-    page.evaluate("""() => {
-      window.__clip = navigator.clipboard;
-      Object.defineProperty(navigator, "clipboard", { value: undefined, configurable: true });
-    }""")
-    try:
+    # "Copied" held until each look at it is done, not its 1400 ms; and still there as the dice is pressed below
+    with held_timers(page, "copied"):
+        page.evaluate(clear)
         page.locator(line).click()
-        copied_here(page, line, v, "without the clipboard, a click on the line", clipboard=False)
-        page.evaluate("() => { const s = document.getElementById('bubble-status'); if (s) s.textContent = ''; }")
+        copied_here(page, line, v, "a click on the line")
+        page.evaluate(clear)
+        page.locator(line).focus()
+        page.keyboard.press("Enter")
+        copied_here(page, line, v, "Enter on the line")
+        page.evaluate(clear)
+        page.locator(line).focus()
+        page.keyboard.press("Space")
+        copied_here(page, line, v, "Space on the line")
+        page.evaluate(clear)
+        page.locator(icon).click()
+        copied_here(page, icon, v, "a click on the icon")
+        page.evaluate(clear)
         page.locator(icon).focus()
         page.keyboard.press("Enter")
-        copied_here(page, icon, v, "without the clipboard, Enter on the icon", clipboard=False)
-    finally:
-        page.evaluate("""() => Object.defineProperty(navigator, "clipboard", { value: window.__clip, configurable: true })""")
-    assert page.evaluate("navigator.clipboard.readText()") == v, "the fallback copies"
-    assert value(page, "me-new") == v and page.evaluate(STATE, "me-new")["type"] == "text", "the suggestion still shown"
-    # copied, then the dice pressed while Copied still shows: the new suggestion, which nobody copied, is not marked so:
-    # the bubble goes with the element it was shown at
-    for what, sel in (("the line", line), ("its icon", icon)):
+        copied_here(page, icon, v, "Enter on the icon")
         page.evaluate(clear)
-        page.locator(sel).click()
-        where = wait_bubble_at(page, sel, words(page, "copy.done"))
-        assert where in ("above", "below"), f"{what}: Copied shows at it: {where}"
-        n = press(page, "me-new", value(page, "me-new"))
-        shown = bubble(page)
-        assert shown is None and page.locator(line).text_content() == n, \
-            f"{what} copied, then the dice: the new suggestion not marked Copied: {shown}"
+        page.evaluate("""() => {
+          window.__clip = navigator.clipboard;
+          Object.defineProperty(navigator, "clipboard", { value: undefined, configurable: true });
+        }""")
+        try:
+            page.locator(line).click()
+            copied_here(page, line, v, "without the clipboard, a click on the line", clipboard=False)
+            page.evaluate("() => { const s = document.getElementById('bubble-status'); if (s) s.textContent = ''; }")
+            page.locator(icon).focus()
+            page.keyboard.press("Enter")
+            copied_here(page, icon, v, "without the clipboard, Enter on the icon", clipboard=False)
+        finally:
+            page.evaluate("""() => Object.defineProperty(navigator, "clipboard", { value: window.__clip, configurable: true })""")
+        assert page.evaluate("navigator.clipboard.readText()") == v, "the fallback copies"
+        assert value(page, "me-new") == v and page.evaluate(STATE, "me-new")["type"] == "text", "the suggestion still shown"
+        # copied, then the dice pressed while Copied still shows: the new suggestion, which nobody copied, is not marked so:
+        # the bubble, held, goes with the element it was shown at
+        for what, sel in (("the line", line), ("its icon", icon)):
+            page.evaluate(clear)
+            page.locator(sel).click()
+            where = wait_bubble_at(page, sel, words(page, "copy.done"))
+            assert where in ("above", "below"), f"{what}: Copied shows at it: {where}"
+            n = press(page, "me-new", value(page, "me-new"))
+            shown = bubble(page)
+            assert shown is None and page.locator(line).text_content() == n, \
+                f"{what} copied, then the dice: the new suggestion not marked Copied: {shown}"
     toggle_fold(page, "#me-password")
     show_view(page, "tiles")
 

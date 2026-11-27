@@ -6,7 +6,7 @@ needs, where the browser gives it no clipboard, which gives the focus back
 where it was. And the bubble that says "Copied" (components.js
 showBubble): above its control, below it at the window's top, at the
 window's foot without one, said once for a screen reader."""
-from helpers import BUBBLE_STATUS, bubble, bubble_at, scaled, wait_bubble_at, wait_until
+from helpers import BUBBLE_STATUS, bubble, bubble_at, held_timers, scaled, wait_bubble_at, wait_until
 
 DONE = {"en": "Copied", "de": "Kopiert"}
 
@@ -33,11 +33,12 @@ def test_copy(page, case):
         assert text.get_attribute("role") == "button" and text.get_attribute("tabindex") == "0", "a button to the keyboard"
         assert "the serial" in (text.get_attribute("aria-label") or ""), "named by what it copies"
         page.evaluate("navigator.clipboard.writeText('')")
-        text.click()
-        assert wait_until(page, "navigator.clipboard.readText().then((t) => t === 'KEQ0000100')", 3), "a click copies"
-        where = wait_bubble_at(page, "#test-copy .mono", DONE[case.lang])
-        assert where == "above", f"Copied shows above it: {where}"
-        assert wait_until(page, BUBBLE_STATUS + " === %r" % DONE[case.lang], 3), "and is said"
+        with held_timers(page, "copied"):  # "Copied" until the checks are done, not its 1400 ms
+            text.click()
+            assert wait_until(page, "navigator.clipboard.readText().then((t) => t === 'KEQ0000100')", 3), "a click copies"
+            where = wait_bubble_at(page, "#test-copy .mono", DONE[case.lang])
+            assert where == "above", f"Copied shows above it: {where}"
+            assert wait_until(page, BUBBLE_STATUS + " === %r" % DONE[case.lang], 3), "and is said"
         page.evaluate("navigator.clipboard.writeText('')")
         page.locator("#test-copy .copy-icon").click()
         assert wait_until(page, "navigator.clipboard.readText().then((t) => t === 'KEQ0000100')", 3), "the icon copies"
