@@ -1,4 +1,4 @@
-# Testing the web UI (v1.32.0)
+# Testing the web UI (v1.33.0)
 
 An evaluation of a Cypress suite for the web UI, against the alternatives:
 what the Playwright smoke test covers today and what it cannot do well,
@@ -907,6 +907,27 @@ The suite's helpers for it are in `tools/ui-test/helpers.py`
   A read that the patterns of several changes match takes each of them,
   so a test's own change under another spelling of the pattern goes with them
   (Playwright runs the later of two routes alone).
+- **How old the values are** (`reads.age(rid, seconds, already=False)`,
+  AP SteadyTests v1.1, Block 14):
+  the server received the fake Cube's values when it connected,
+  at its set's start, and the page counts their age from then,
+  so an age grows with the run,
+  "≥ 7 Min." in a short one and "≥ 17 Min." in a long one,
+  and with it the width of what shows it.
+  A test whose look depends on an age, its text or the width it takes,
+  tells it: every value of the room's devices and of its virtual wall
+  thermostat received `seconds` before the page's now,
+  in the rooms' read (`reads.device`, the devices kept),
+  and with `already` a value that was there when the server connected,
+  which the page marks "≥",
+  by the Cube's `observed_since` (`reads.cube`, beside its other fields told).
+  It starts the page's reads and returns the age as the page says it,
+  which the test's look waits for, a look at a time (`settled`),
+  since a server's own event of a device draws the server's age
+  until keep's read is answered:
+  `test_rooms.py`'s device list, at two digits and the longest of each unit.
+  A test that tells the rooms' read a device's times itself
+  tells its `received` the same way (`test_stale_and_expert`'s 30 hours).
 - **A fold opened** (`open_fold`, `close_fold`, `toggle_fold` of `helpers.py`):
   a `<details>` fold's `toggle` event comes in a task of its own after the click,
   and a part that starts anew at it drops what the test did inside the fold before it:
@@ -1031,6 +1052,7 @@ the server's and the test's, in order,
   the structure checks' reconnect, twelve minutes after a change,
   and the refresh every six hours stay, and fall outside one test's time.
   What changes is their age:
+  every value's, counted from the set's start (`reads.age`, above);
   the window contact's window, open from the start (`greeting.txt`),
   counts as open long five minutes after its set started,
   and as open too long after ten (`window_warn_after`, `window_alert_after`),

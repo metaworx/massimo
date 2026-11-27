@@ -210,7 +210,8 @@ makes, sweeps and keeps it (`tools/workdir/README.md`; AP EmulatorRuns, D3-B).
   the test put in (`helpers.Reads`), so that the page's poll and the reads
   that events and actions start keep it:
   `reads.cube(serial, **fields)`, `reads.found(cube)`,
-  `reads.change(pattern, fn)` and `reads.clear(pattern)`;
+  `reads.change(pattern, fn)` and `reads.clear(pattern)`,
+  and `reads.age(rid, seconds, already)`, how old a room's values are;
 - `stream`: the page's event stream as the page took it, from a mark
   (`helpers.Stream`): `stream.mark()`, `stream.wait(what, kind, …)`,
   which on a timeout says what came since the mark, and `stream.since(mark)`.
@@ -1010,6 +1011,11 @@ Node is not needed.
   its action and waits with `stream.wait`,
   and finds the event's line by what the event names, not by `.first`.
 - A wait that returns whether it was met is asserted where it is called.
+- What a test's look depends on does not grow with the run:
+  a look at the values' ages, their text or their width,
+  tells them (`reads.age`),
+  since the page counts them from the server's start,
+  and a long run's ages have two digits where a short one's have one.
 - A test's own wait loop ends at `scaled(seconds)` of `helpers.py`,
   so that `UI_TEST_SCALE` stretches it as it does the kit's waits;
   a window that waits for nothing to come does not take it.

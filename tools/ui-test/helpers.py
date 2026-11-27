@@ -800,6 +800,36 @@ class Reads:
           return !r ? [] : r.devices.filter(isThermostat).map((d) => d.rf_address).concat(r.vwt ? [r.vwt.rf_address] : []); }""", rid):
             self.keep(rf)
 
+    def age(self, rid, seconds, already=False):
+        """How old the values of the room rid's devices are, its virtual
+        wall thermostat's among them, told: every time their entries in
+        the rooms' read say a value came (received), seconds before the
+        page's now, the devices kept (device). The server received the
+        fake Cube's values when it connected, at its set's start, and the
+        page counts their age from then, so without it an age grows with
+        the run, "≥ 17 Min." seventeen minutes in, and with it the width
+        of what shows it (AP SteadyTests v1.1, Block 14). already makes
+        them values that were there when the server connected, which the
+        page marks "≥": the Cube's observed_since told a second before
+        them, beside the Cube's other fields told (cube); else an hour
+        before them. The page reads the Cubes and the rooms at once;
+        returns the age as the page says it (fmtAge of app.js), which a
+        check waits for, a look at a time: a server's own event of a
+        device draws its own age until keep's read is answered."""
+        at, since, rfs = self.page.evaluate("""([rid, s, already]) => {
+          const r = state.rooms.find((x) => x.id === rid);
+          const at = Date.now() - s * 1000;
+          return [new Date(at).toISOString(), new Date(at - (already ? 1000 : 3600e3)).toISOString(),
+                  r.devices.concat(r.vwt ? [r.vwt] : []).map((d) => [d.rf_address, Object.keys(d.received || {})])];
+        }""", [rid, seconds, already])
+        serial = self.page.evaluate("state.serial")
+        self.cube(serial, **dict(self.cubes.get(serial, {}), observed_since=since))
+        for rf, fields in rfs:
+            if fields:
+                self.device(rf, received={f: at for f in fields})
+        self.page.evaluate("() => { loadCubes(); loadRooms(); }")
+        return self.page.evaluate("([at, already]) => fmtAge(Date.parse(at), already)", [at, already])
+
     def _rooms_told(self, rooms):
         rooms = rooms if isinstance(rooms, list) else []
         listed = {d.get("rf_address"): d for r in rooms for d in r.get("devices") or []}
