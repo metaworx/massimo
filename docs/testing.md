@@ -344,6 +344,9 @@ their tests import the kit, and an import back would be a cycle.
 The fake Cube's lines are watched in `internal/testkit/cubewatch`,
 a test-only package too,
 through the fake Cube's hook `OnReceive`, which changes nothing the fake does.
+The fake receives each line as it reads it,
+also while it is silent (`SetSilent`), when it holds every answer:
+a wait for a command written behind a poll the silence holds sees it come.
 `cubewatch` does not import the Cube client,
 so that the client's tests can use it;
 the client's events are a `testkit.ChanWatch`.
