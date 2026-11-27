@@ -1333,6 +1333,8 @@ held to the routes the server registers by a test
 `update` and `reboot` each include `restart`, since each restarts the server:
 their holder passes every check of `restart` as a holder of `restart` does,
 and `GET /api/v1/me` lists `restart` beside them.
+`backup.server` includes `backup.retry` alike: who makes,
+pushes and pulls the server's backups sees their state and retries one.
 The include is taken at the check, on the set the bounds leave
 (the role's set less the capabilities disabled for every role,
 an integration's ceiling and maximum, a call's level):
@@ -2036,6 +2038,80 @@ unzip payload.zip -d restored
 
 `age -d -i ~/.ssh/id_ed25519` opens one made for an `ssh-ed25519` line,
 and asks for the key's passphrase where it has one.
+
+#### The catalogue
+
+The store keeps what is known of the backups (migration 0100, section 5;
+`internal/store/serverbackups.go`), and `internal/serverbackup`'s `Catalogue`
+runs the jobs on it, for `serve` and for `massimo store` alike:
+
+- **The keys** a backup is encrypted for, each with its label, in plain in every
+  manifest. Only the owner adds and removes one (docs/api-v1.md, "Server backups").
+  A key the server made is pending until the owner types back the last six
+  characters of its identity, which it showed once; the store keeps the
+  recipient and a hash of those six, never the identity, and drops a pending
+  key after an hour. Pending keys encrypt nothing.
+- **The targets** the copies go to, each of a kind (`serverbackup.Kind`:
+  its fields, the card's form, and how to make one; `local` first, WebDAV, SFTP,
+  SMB and S3 after), with its fields as JSON and its one secret field sealed
+  with its `uuid` as the additional data, what it takes and its retention.
+  A target added is scanned: the backups it holds are added by their manifests,
+  read with ranged reads and without the key, so that a new box sees them at once;
+  a copy no longer there is `missing`.
+  Where a backup finds no target at all, the local one is made:
+  `backups/` in the data directory, every backup, the default retention.
+  A local target holds a copy on the same disk as the store,
+  which does not survive that disk.
+- **The backups**, one row each, its `uuid` the manifest's,
+  with the file's size and hash, the manifest as signed and its signature,
+  and **their copies**, one per target that holds the file, under the same name
+  (`massimo-<UTC time>-<uuid>.zip`).
+  A copy is put by a temporary name and renamed, so that one broken off leaves
+  nothing under the name.
+
+#### The schedule
+
+- One schedule makes each backup once (D11-A), daily at `serverbackup.time`,
+  `03:30` by default, in the box's local time:
+  after a change to summer time the night is 23 hours, after the change back 25,
+  and a time the change skips is the hour after it.
+- A run missed while the server was down is made five minutes after its start.
+- Nothing is made while no key is set.
+- Each target takes every backup, or the first of each day, week (Monday to
+  Sunday) or month of which it holds none, in the box's time.
+  A backup that no target takes, one made by hand on a daily target's day,
+  goes to the local targets.
+
+#### Retention
+
+Each target keeps its copies by restic's forget policy (D12-A),
+`{"last": N, "daily": D, "weekly": W, "monthly": M, "yearly": Y}`:
+the N newest, and the newest of each of the last D days, W weeks, M months and
+Y years that hold a copy; a copy any of them keeps is kept,
+and the others are deleted, the files with their rows.
+Beyond restic, a pinned backup is kept while it is pinned
+(one before an update or a restore for 30 days, one pinned by hand until it is
+unpinned), a copy pulled to local stays until it is deleted,
+a target's newest copy is never pruned, and a policy of zeros keeps everything,
+as restic refuses an empty one.
+A new target keeps 7 days, 4 weeks and 6 months.
+The prune runs after each copy to the target; a backup left without a copy goes
+from the catalogue.
+
+#### Retries and alerts
+
+A scheduled backup that fails is kept as `failed`, and so is a copy;
+each is tried again after 5 minutes, 30 minutes and 2 hours,
+the backup in its own row, with its `uuid`.
+After the third retry the failure is a warning in the log, `server_backup`,
+an alert of the log until a later success on its target,
+and the notification `server_backup_failed`, on by default,
+for the users who hold `backup.retry`.
+A backup made by hand that fails is not retried; its request says why.
+The next scheduled run replaces a scheduled backup that failed.
+A holder of `backup.retry` retries at once what failed: as the schedule made it,
+pruning no more than the schedule would, and revealing nothing,
+the file being encrypted (D13-A).
 
 ## 8. Migration of an installed box
 

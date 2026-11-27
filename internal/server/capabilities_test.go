@@ -21,7 +21,7 @@ import (
 // roleSets are the default roles' capabilities as docs/store.md section
 // 6 seeds them; owner has every one.
 var roleSets = map[string][]string{
-	store.RoleManager:     {"read", "preferences", "setpoint", "lock", "configure", "rename", "structure", "pair", "discover", "backup", "restore", "repair", "guests", "restart", "integrations"},
+	store.RoleManager:     {"read", "preferences", "setpoint", "lock", "configure", "rename", "structure", "pair", "discover", "backup", "restore", "repair", "guests", "restart", "integrations", "backup.retry"},
 	store.RoleOperator:    {"read", "preferences", "setpoint", "lock", "configure", "discover", "backup"},
 	store.RoleGuest:       {"read", "setpoint", "configure"},
 	store.RoleViewer:      {"read", "preferences"},
@@ -215,7 +215,15 @@ func TestRolesAgainstRoutes(t *testing.T) {
 			code, text := callAPI(t, ts, r.method, fillRoute(r.path), tok, body)
 			refused := code == 403 && strings.Contains(text, "capability")
 			// The users routes admit a guests holder too; the handlers narrow.
+			// A route of capOwner admits the owner alone.
 			want := role == store.RoleOwner || has[r.capability] || r.capability == capNone || r.capability == capAny || r.capability == "users" && has["guests"]
+			if r.capability == capOwner {
+				refused = code == 403 && errorOf(text) == ownerOnly
+				if want != !refused {
+					t.Errorf("%s: %s %s answered %d %s, want the owner's alone", role, r.method, r.path, code, text)
+				}
+				continue
+			}
 			if want && refused {
 				t.Errorf("%s: %s %s refused: %s", role, r.method, r.path, text)
 			}

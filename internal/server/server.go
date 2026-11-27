@@ -108,6 +108,7 @@ import (
 	"go.metaworx.ch/massimo/internal/protocol/cube"
 	"go.metaworx.ch/massimo/internal/proxy"
 	"go.metaworx.ch/massimo/internal/push"
+	"go.metaworx.ch/massimo/internal/serverbackup"
 	"go.metaworx.ch/massimo/internal/slogx"
 	"go.metaworx.ch/massimo/internal/store"
 	"go.metaworx.ch/massimo/internal/view"
@@ -353,6 +354,16 @@ type Options struct {
 	// X-Real-IP name the client (clientIP); empty, the headers are
 	// ignored.
 	TrustedProxies []netip.Prefix
+	// BackupTLSFiles are the TLS files a server backup carries beside
+	// the store and the settings file (SettingsFile), with their roles,
+	// read at each backup: what serve was started with (internal/serve,
+	// BackupTLSFiles); nil for none (serverbackups.go).
+	BackupTLSFiles func() []serverbackup.TLSFile
+	// serverBackupClock and serverBackupZone are the schedule's clock
+	// and the box's time zone, for the tests; nil for the real time and
+	// time.Local.
+	serverBackupClock notify.Clock
+	serverBackupZone  *time.Location
 }
 
 // ProxyListener describes one Cube-protocol listener of the server.
@@ -423,6 +434,8 @@ type Server struct {
 	// lists what applies only at the next one, and refused what the
 	// next start refuses (SetRefused).
 	restartGate restartGate
+	// sb is the state of the server's backups (serverbackups.go).
+	sb serverBackups
 	// reboot is the reboot that waits (reboot_api.go).
 	reboot    rebootPlan
 	pendingMu sync.Mutex
@@ -858,6 +871,7 @@ func New(opts Options) *Server {
 	}
 	s.streamKeepAlive.Store(int64(30 * time.Second))
 	s.pushSlots = make(chan struct{}, maxDeliveries)
+	s.sb = newServerBackups()
 	s.reboot.allowed = opts.Reboot.Allowed
 	s.SetStaleAfter(opts.StaleAfter)
 	s.SetStaleAfterWall(opts.StaleAfterWall)
@@ -948,6 +962,8 @@ func (s *Server) Run(ctx context.Context) error {
 	if s.opts.Store != nil {
 		s.wg.Add(1)
 		go func() { defer s.wg.Done(); s.updateLoop(ctx) }()
+		s.wg.Add(1)
+		go func() { defer s.wg.Done(); s.serverBackupLoop(ctx) }()
 	}
 	<-ctx.Done()
 	s.logStopping() // before the writer stops, which writes it
@@ -1443,7 +1459,7 @@ func (s *Server) routes() {
 	// wrapper authenticates, checks the capability, and maps the handler's
 	// error to a status.
 	api := func(pattern, capability string, h func(http.ResponseWriter, *http.Request) error) {
-		if capability != capNone && capability != capAny && !validCapability(capability) {
+		if capability != capNone && capability != capAny && capability != capOwner && !validCapability(capability) {
 			panic(fmt.Sprintf("route %s: unknown capability %q", pattern, capability))
 		}
 		action, audited := actions[pattern]
@@ -1615,6 +1631,7 @@ func (s *Server) routes() {
 	api("GET /api/v1/config", "settings", s.getConfig)
 	s.configRoutes(api)
 	s.repairRoutes(api)
+	s.serverBackupRoutes(api)
 	s.uiRoutes(mux)
 	s.mux = mux
 	// A write that another site's page sent is refused before it is

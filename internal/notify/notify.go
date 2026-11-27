@@ -34,6 +34,10 @@ const (
 	KindPaired      = "paired"       // a device joined by pairing
 	KindCubeFound   = "cube_found"   // discovery found a Cube that is not configured
 	KindUpdate      = "update"       // a newer release
+	// KindServerBackupFailed is a backup of the server, or its copy to a
+	// target, that failed and whose retries failed too; for a holder of
+	// backup.retry alone (internal/server, notifyNeeds).
+	KindServerBackupFailed = "server_backup_failed"
 )
 
 // PrefKey is the preference that holds a user's choices.
@@ -76,6 +80,8 @@ func Defaults() Prefs {
 		KindPaired:      {On: false},
 		KindCubeFound:   {On: false},
 		KindUpdate:      {On: false},
+		// a backup is worth a look as soon as its retries are spent
+		KindServerBackupFailed: {On: true},
 	}
 }
 

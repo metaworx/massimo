@@ -388,7 +388,7 @@ func TestIncludes(t *testing.T) {
 		t.Fatal("ui/src/model/cap.ts has no CAP_INCLUDES")
 	}
 	ui := map[string][]string{}
-	for _, e := range regexp.MustCompile(`([a-z.]+): \[([^\]]*)\]`).FindAllSubmatch(m[1], -1) {
+	for _, e := range regexp.MustCompile(`"?([a-z.]+)"?: \[([^\]]*)\]`).FindAllSubmatch(m[1], -1) {
 		for _, c := range regexp.MustCompile(`"([a-z.]+)"`).FindAllSubmatch(e[2], -1) {
 			ui[string(e[1])] = append(ui[string(e[1])], string(c[1]))
 		}

@@ -10,11 +10,14 @@ import (
 	"log/slog"
 	"net"
 	"net/http"
+	"os"
+	"path/filepath"
 	"strings"
 	"time"
 
 	"go.metaworx.ch/massimo/internal/certs"
 	"go.metaworx.ch/massimo/internal/env"
+	"go.metaworx.ch/massimo/internal/serverbackup"
 )
 
 // certWatch is how often a source checks its certificate: a renewal 30
@@ -157,4 +160,48 @@ func serveHTTP(ctx context.Context, hs *http.Server, ln net.Listener) error {
 	}
 	<-stopped
 	return nil
+}
+
+// BackupTLSFiles are the TLS files a server backup carries for o, with
+// their roles (AP ServerBackup, Block 2): files mode's certificate and
+// key, the self-signed pair in the data directory, or the regular files
+// of the ACME directory, the account key, the keys (.key) and the
+// certificates (any other); none for off. A file not there yet, a
+// certificate not ordered yet, is left out, so that the list is read at
+// each backup.
+func BackupTLSFiles(o TLS, dataDir string) []serverbackup.TLSFile {
+	var out []serverbackup.TLSFile
+	add := func(role serverbackup.Role, path string) {
+		if fi, err := os.Stat(path); err == nil && fi.Mode().IsRegular() {
+			out = append(out, serverbackup.TLSFile{Role: role, Path: path})
+		}
+	}
+	switch TLSMode(o.Mode, o.Cert, o.Key) {
+	case "files":
+		add(serverbackup.RoleTLSCert, o.Cert)
+		add(serverbackup.RoleTLSKey, o.Key)
+	case "self-signed":
+		cert, key := certs.SelfSignedPaths(dataDir)
+		add(serverbackup.RoleTLSCert, cert)
+		add(serverbackup.RoleTLSKey, key)
+	case "acme":
+		dir, _ := certs.ACMEPaths(dataDir, "")
+		entries, err := os.ReadDir(dir)
+		if err != nil {
+			return nil
+		}
+		for _, e := range entries {
+			name := e.Name()
+			switch {
+			case strings.HasPrefix(name, "."), !e.Type().IsRegular():
+			case name == certs.AccountKeyFile:
+				add(serverbackup.RoleACMEAccount, filepath.Join(dir, name))
+			case strings.HasSuffix(name, ".key"):
+				add(serverbackup.RoleACMEKey, filepath.Join(dir, name))
+			default:
+				add(serverbackup.RoleACMECert, filepath.Join(dir, name))
+			}
+		}
+	}
+	return out
 }

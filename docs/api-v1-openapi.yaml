@@ -3617,6 +3617,7 @@ paths:
                 update.channel: {value: alpha, default: alpha, set: false, in_effect: alpha, applies: now}
                 update.auto: {value: "off", default: "off", set: false, in_effect: "off", applies: now}
                 update.auto_window: {value: "03:00-05:00", default: "03:00-05:00", set: false, in_effect: "03:00-05:00", applies: now}
+                serverbackup.time: {value: "03:30", default: "03:30", set: false, in_effect: "03:30", applies: now}
                 poll_interval: {value: 10s, default: 10s, set: false, in_effect: 10s, applies: restart}
                 node.id: {value: 01a1ae5a-6bee-7ed4-bb4e-3baa2c43fe55, set: true, read_only: true}
         "401": {$ref: "#/components/responses/Unauthorized"}
@@ -3660,7 +3661,9 @@ paths:
         or night, whether the box installs a release itself, inside the
         window update.auto_window, HH:MM-HH:MM in the server's time, at
         least 30 minutes, its end past midnight allowed (03:00-05:00 by
-        default); null goes back to the default. Every value is checked before any is written. The
+        default); serverbackup.time, HH:MM in the server's time, the daily
+        time of the server's own backups (03:30 by default); null goes back
+        to the default. Every value is checked before any is written. The
         answer is that of GET.
       parameters: [{$ref: "#/components/parameters/idempotencyKey"}]
       requestBody:
@@ -4044,6 +4047,522 @@ paths:
           content:
             application/json:
               schema: {$ref: "#/components/schemas/Error"}
+  /api/v1/server-backups:
+    get:
+      summary: The server's backups with their copies, each target's state, the keys set and the schedule
+      x-capability: backup.retry
+      description: |
+        backup.server includes backup.retry. Newest first; a backup that
+        failed is a row too, with its tries and its next retry. A target
+        is behind where its last copy, or without one its creation, is
+        older than two of its periods (a day for every and daily, a week,
+        a month). Nothing is made while keys is 0.
+      responses:
+        "200":
+          description: The backups, the targets' states, how many keys, the daily time and the next run
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/ServerBackupList"}
+        "401": {$ref: "#/components/responses/Unauthorized"}
+        "403": {$ref: "#/components/responses/Forbidden"}
+        "429": {$ref: "#/components/responses/LockedOut"}
+    post:
+      summary: Make a server backup now
+      x-capability: backup.server
+      description: |
+        To the target named, a uuid or a name, alone; without one to every
+        target that takes it, or where none does to the local ones. Each
+        target that took a copy is pruned by its retention after.
+      parameters: [{$ref: "#/components/parameters/idempotencyKey"}]
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                label: {type: string, maxLength: 100, description: In plain in the manifest}
+                target: {type: string, description: A target's uuid or name}
+      responses:
+        "201":
+          description: The backup made and the steps that copied and pruned it; a copy that failed is in its copies
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/ServerBackupResult"}
+        "400": {$ref: "#/components/responses/BadRequest"}
+        "401": {$ref: "#/components/responses/Unauthorized"}
+        "403": {$ref: "#/components/responses/Forbidden"}
+        "404": {$ref: "#/components/responses/NotFound"}
+        "409":
+          description: No key is set
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/Error"}
+        "429": {$ref: "#/components/responses/LockedOut"}
+        "502":
+          description: The backup failed
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/Error"}
+  /api/v1/server-backups/upload:
+    post:
+      summary: Upload a server backup made elsewhere to the local target
+      x-capability: backup.server
+      description: |
+        The body is the file, at most 8 GiB. It is refused where it is no
+        backup (400), of a newer format, or changed since it was made, its
+        signature or its payload (422). It stays on the local target until
+        it is deleted (pulled), its trigger in the catalogue uploaded, its
+        manifest keeping the one it was made with.
+      requestBody:
+        required: true
+        content:
+          application/zip:
+            schema: {type: string, format: binary}
+      responses:
+        "201":
+          description: The backup as the catalogue now holds it
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/ServerBackupResult"}
+        "400": {$ref: "#/components/responses/BadRequest"}
+        "401": {$ref: "#/components/responses/Unauthorized"}
+        "403": {$ref: "#/components/responses/Forbidden"}
+        "413": {description: Larger than 8 GiB}
+        "422":
+          description: Of a newer format, or changed since it was made
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/Error"}
+        "429": {$ref: "#/components/responses/LockedOut"}
+  /api/v1/server-backups/{id}/pin:
+    put:
+      summary: Pin a server backup, or unpin it
+      x-capability: backup.server
+      description: A pinned backup is kept by every retention; without until it stays pinned until it is unpinned.
+      parameters: [{$ref: "#/components/parameters/serverBackupID"}]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [pinned]
+              properties:
+                pinned: {type: boolean}
+                until: {type: string, format: date-time}
+      responses:
+        "200":
+          description: The backup
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/ServerBackupResult"}
+        "400": {$ref: "#/components/responses/BadRequest"}
+        "401": {$ref: "#/components/responses/Unauthorized"}
+        "403": {$ref: "#/components/responses/Forbidden"}
+        "404": {$ref: "#/components/responses/NotFound"}
+        "429": {$ref: "#/components/responses/LockedOut"}
+  /api/v1/server-backups/{id}/check:
+    post:
+      summary: Read a server backup's copies back for their size and hash
+      x-capability: backup.server
+      description: |
+        Each copy read whole, without the key: its size, the file's hash,
+        and the payload's against the signed manifest. A copy that differs
+        is failed, one that is not there missing. With target, the copy
+        on that target alone.
+      parameters: [{$ref: "#/components/parameters/serverBackupID"}]
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                target: {type: string, description: A target's uuid or name}
+      responses:
+        "200":
+          description: The backup and a step per copy checked
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/ServerBackupResult"}
+        "401": {$ref: "#/components/responses/Unauthorized"}
+        "403": {$ref: "#/components/responses/Forbidden"}
+        "404": {$ref: "#/components/responses/NotFound"}
+        "429": {$ref: "#/components/responses/LockedOut"}
+  /api/v1/server-backups/{id}/file:
+    get:
+      summary: Download a server backup
+      x-capability: backup.server
+      description: From a target that holds it, the local ones first; a Range is answered.
+      parameters: [{$ref: "#/components/parameters/serverBackupID"}]
+      responses:
+        "200":
+          description: The file
+          content:
+            application/zip:
+              schema: {type: string, format: binary}
+        "206": {description: The range asked for}
+        "401": {$ref: "#/components/responses/Unauthorized"}
+        "403": {$ref: "#/components/responses/Forbidden"}
+        "404": {$ref: "#/components/responses/NotFound"}
+        "409":
+          description: No target holds a copy
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/Error"}
+        "429": {$ref: "#/components/responses/LockedOut"}
+  /api/v1/server-backups/{id}/retry:
+    post:
+      summary: Retry a failed server backup, or its failed copies
+      x-capability: backup.retry
+      description: |
+        A failed backup is made again in its row as the schedule made it,
+        or a backup's failed copies are made again from a copy that is
+        there; each target that took a copy is pruned after, as the
+        schedule would. It reveals nothing, the file being encrypted.
+      parameters: [{$ref: "#/components/parameters/serverBackupID"}, {$ref: "#/components/parameters/idempotencyKey"}]
+      responses:
+        "200":
+          description: The backup and the steps the retry took
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/ServerBackupResult"}
+        "401": {$ref: "#/components/responses/Unauthorized"}
+        "403": {$ref: "#/components/responses/Forbidden"}
+        "404": {$ref: "#/components/responses/NotFound"}
+        "409":
+          description: Nothing of the backup failed, or no key is set
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/Error"}
+        "429": {$ref: "#/components/responses/LockedOut"}
+  /api/v1/server-backups/{id}/copies/{target}:
+    put:
+      summary: Push a server backup to a target
+      x-capability: backup.server
+      description: From a copy that is there, the local ones first. The copy is pruned at the target's next prune, as any copy.
+      parameters: [{$ref: "#/components/parameters/serverBackupID"}, {$ref: "#/components/parameters/serverBackupTarget"}]
+      responses:
+        "200":
+          description: The backup with its copies
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/ServerBackupResult"}
+        "401": {$ref: "#/components/responses/Unauthorized"}
+        "403": {$ref: "#/components/responses/Forbidden"}
+        "404": {$ref: "#/components/responses/NotFound"}
+        "409":
+          description: No target holds a copy to push from
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/Error"}
+        "429": {$ref: "#/components/responses/LockedOut"}
+        "502":
+          description: The target refused the copy
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/Error"}
+    delete:
+      summary: Delete a server backup's copy on a target
+      x-capability: backup.server
+      description: The file is removed from the target; the backup goes from the catalogue with its last copy.
+      parameters: [{$ref: "#/components/parameters/serverBackupID"}, {$ref: "#/components/parameters/serverBackupTarget"}]
+      responses:
+        "200":
+          description: Deleted
+          content:
+            application/json:
+              schema: {type: object, properties: {ok: {type: boolean}}}
+        "401": {$ref: "#/components/responses/Unauthorized"}
+        "403": {$ref: "#/components/responses/Forbidden"}
+        "404": {$ref: "#/components/responses/NotFound"}
+        "429": {$ref: "#/components/responses/LockedOut"}
+        "502":
+          description: The target did not delete the file
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/Error"}
+  /api/v1/server-backups/{id}/copies/{target}/pull:
+    post:
+      summary: Pull a server backup from a target to the local target
+      x-capability: backup.server
+      description: The copy stays on the local target until it is deleted, whatever its retention.
+      parameters: [{$ref: "#/components/parameters/serverBackupID"}, {$ref: "#/components/parameters/serverBackupTarget"}]
+      responses:
+        "200":
+          description: The backup with its copies
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/ServerBackupResult"}
+        "401": {$ref: "#/components/responses/Unauthorized"}
+        "403": {$ref: "#/components/responses/Forbidden"}
+        "404": {$ref: "#/components/responses/NotFound"}
+        "409":
+          description: The target holds no copy, or it is the only local target
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/Error"}
+        "429": {$ref: "#/components/responses/LockedOut"}
+        "502":
+          description: The copy could not be read or written
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/Error"}
+  /api/v1/server-backup-targets:
+    get:
+      summary: The targets of the server's backups, with their fields but their secrets
+      x-capability: backup.server
+      responses:
+        "200":
+          description: The targets
+          content:
+            application/json:
+              schema:
+                type: array
+                items: {$ref: "#/components/schemas/ServerBackupTarget"}
+        "401": {$ref: "#/components/responses/Unauthorized"}
+        "403": {$ref: "#/components/responses/Forbidden"}
+        "429": {$ref: "#/components/responses/LockedOut"}
+    post:
+      summary: Add a target, which is scanned at once for the backups it holds
+      x-capability: backup.server
+      description: |
+        The kind's fields as GET …/kinds names them, its secret apart. A
+        path relative to the data directory is taken from there; the
+        retention is the default (7 days, 4 weeks, 6 months) where left
+        out. A name is unique without regard to case.
+      parameters: [{$ref: "#/components/parameters/idempotencyKey"}]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: "#/components/schemas/ServerBackupTargetRequest"}
+      responses:
+        "201":
+          description: The target, how many backups its scan found, the files it skipped, and why a scan failed
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  target: {$ref: "#/components/schemas/ServerBackupTarget"}
+                  found: {type: integer}
+                  skipped: {type: array, items: {type: string}}
+                  scan_error: {type: string}
+        "400": {$ref: "#/components/responses/BadRequest"}
+        "401": {$ref: "#/components/responses/Unauthorized"}
+        "403": {$ref: "#/components/responses/Forbidden"}
+        "409":
+          description: A target of that name exists
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/Error"}
+        "429": {$ref: "#/components/responses/LockedOut"}
+  /api/v1/server-backup-targets/kinds:
+    get:
+      summary: The kinds of target this server knows, with the fields of their forms
+      x-capability: backup.server
+      description: A field's text is serverbackup.field.<kind>.<key> in the web UI's languages; secret names the kind's secret field.
+      responses:
+        "200":
+          description: The kinds, by name
+          content:
+            application/json:
+              schema:
+                type: array
+                items: {$ref: "#/components/schemas/ServerBackupKind"}
+        "401": {$ref: "#/components/responses/Unauthorized"}
+        "403": {$ref: "#/components/responses/Forbidden"}
+        "429": {$ref: "#/components/responses/LockedOut"}
+  /api/v1/server-backup-targets/{uuid}:
+    put:
+      summary: Change a target
+      x-capability: backup.server
+      description: The fields given change, the others stay; secret replaces the secret, "" removes it. The kind does not change.
+      parameters: [{$ref: "#/components/parameters/serverBackupTargetUUID"}]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: "#/components/schemas/ServerBackupTargetRequest"}
+      responses:
+        "200":
+          description: The target
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  target: {$ref: "#/components/schemas/ServerBackupTarget"}
+        "400": {$ref: "#/components/responses/BadRequest"}
+        "401": {$ref: "#/components/responses/Unauthorized"}
+        "403": {$ref: "#/components/responses/Forbidden"}
+        "404": {$ref: "#/components/responses/NotFound"}
+        "409":
+          description: A target of that name exists
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/Error"}
+        "429": {$ref: "#/components/responses/LockedOut"}
+    delete:
+      summary: Remove a target from the catalogue
+      x-capability: backup.server
+      description: Its copies go from the catalogue, its files stay where they are; a backup left without a copy goes too.
+      parameters: [{$ref: "#/components/parameters/serverBackupTargetUUID"}]
+      responses:
+        "200":
+          description: Removed
+          content:
+            application/json:
+              schema: {type: object, properties: {ok: {type: boolean}}}
+        "401": {$ref: "#/components/responses/Unauthorized"}
+        "403": {$ref: "#/components/responses/Forbidden"}
+        "404": {$ref: "#/components/responses/NotFound"}
+        "429": {$ref: "#/components/responses/LockedOut"}
+  /api/v1/server-backup-targets/{uuid}/test:
+    post:
+      summary: Test a target, reached and written to
+      x-capability: backup.server
+      parameters: [{$ref: "#/components/parameters/serverBackupTargetUUID"}]
+      responses:
+        "200":
+          description: Whether the test passed, and why not
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  ok: {type: boolean}
+                  error: {type: string}
+        "401": {$ref: "#/components/responses/Unauthorized"}
+        "403": {$ref: "#/components/responses/Forbidden"}
+        "404": {$ref: "#/components/responses/NotFound"}
+        "429": {$ref: "#/components/responses/LockedOut"}
+  /api/v1/server-backup-keys:
+    get:
+      summary: The keys the server's backups are encrypted for
+      x-capability: backup.server
+      description: Their public parts; a pending key, made and not confirmed, with its end.
+      responses:
+        "200":
+          description: The keys, oldest first
+          content:
+            application/json:
+              schema:
+                type: array
+                items: {$ref: "#/components/schemas/ServerBackupKey"}
+        "401": {$ref: "#/components/responses/Unauthorized"}
+        "403": {$ref: "#/components/responses/Forbidden"}
+        "429": {$ref: "#/components/responses/LockedOut"}
+    post:
+      summary: Add a key, pasted or made; the owner's alone
+      x-capability: owner
+      description: |
+        recipient, a public key (age1pq1…, age1… or an ssh-ed25519 line),
+        or make, pq or classic, which makes a key and answers its secret
+        identity once, as text and as a key file: it is pending until its
+        last six characters are typed back (…/confirm), an hour at most,
+        and encrypts nothing until then. The server keeps the public part
+        and a hash of those six characters, never the identity. A box's
+        keys are all post-quantum or all classic: a key of the other kind
+        is refused with code mixed_kinds.
+      parameters: [{$ref: "#/components/parameters/idempotencyKey"}]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                label: {type: string, maxLength: 100}
+                recipient: {type: string}
+                make: {type: string, enum: [pq, classic]}
+      responses:
+        "201":
+          description: The key; a key made with its identity and key file, shown this once
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  key: {$ref: "#/components/schemas/ServerBackupKey"}
+                  identity: {type: string}
+                  key_file: {type: string}
+        "400": {$ref: "#/components/responses/BadRequest"}
+        "401": {$ref: "#/components/responses/Unauthorized"}
+        "403":
+          description: The caller is not the owner
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/Error"}
+        "409":
+          description: The key is there already, or of another kind than the box's (code mixed_kinds)
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  error: {type: string}
+                  code: {type: string, enum: [mixed_kinds]}
+        "429": {$ref: "#/components/responses/LockedOut"}
+  /api/v1/server-backup-keys/{uuid}/confirm:
+    post:
+      summary: Confirm a key made by its last six characters; the owner's alone
+      x-capability: owner
+      parameters: [{$ref: "#/components/parameters/serverBackupKeyUUID"}]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [last_six]
+              properties:
+                last_six: {type: string, minLength: 6, maxLength: 6, description: Without regard to case}
+      responses:
+        "200":
+          description: The key, no longer pending
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  key: {$ref: "#/components/schemas/ServerBackupKey"}
+        "400": {$ref: "#/components/responses/BadRequest"}
+        "401": {$ref: "#/components/responses/Unauthorized"}
+        "403":
+          description: The caller is not the owner
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/Error"}
+        "404": {description: 'No such key, or its hour is over'}
+        "422":
+          description: Not the key's last six characters
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/Error"}
+        "429": {$ref: "#/components/responses/LockedOut"}
+  /api/v1/server-backup-keys/{uuid}:
+    delete:
+      summary: Remove a key; the owner's alone
+      x-capability: owner
+      description: Later backups are not encrypted for it; those made before still are.
+      parameters: [{$ref: "#/components/parameters/serverBackupKeyUUID"}]
+      responses:
+        "200":
+          description: Removed
+          content:
+            application/json:
+              schema: {type: object, properties: {ok: {type: boolean}}}
+        "401": {$ref: "#/components/responses/Unauthorized"}
+        "403":
+          description: The caller is not the owner
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/Error"}
+        "404": {$ref: "#/components/responses/NotFound"}
+        "429": {$ref: "#/components/responses/LockedOut"}
 components:
   securitySchemes:
     bearer:
@@ -4091,6 +4610,30 @@ components:
       in: path
       required: true
       description: An integration's or a registration request's uuid
+      schema: {type: string}
+    serverBackupID:
+      name: id
+      in: path
+      required: true
+      description: A server backup's uuid
+      schema: {type: string}
+    serverBackupTarget:
+      name: target
+      in: path
+      required: true
+      description: A target of the server's backups, by its uuid or its name
+      schema: {type: string}
+    serverBackupTargetUUID:
+      name: uuid
+      in: path
+      required: true
+      description: A target's uuid
+      schema: {type: string}
+    serverBackupKeyUUID:
+      name: uuid
+      in: path
+      required: true
+      description: A server backup key's uuid
       schema: {type: string}
     ifMatch:
       name: If-Match
@@ -5864,3 +6407,124 @@ components:
         until:
           type: string
           description: "Vacation end, YYYY-MM-DD HH:MM on a half hour; required for vacation"
+    ServerBackupList:
+      type: object
+      properties:
+        backups: {type: array, items: {$ref: "#/components/schemas/ServerBackup"}}
+        targets: {type: array, items: {$ref: "#/components/schemas/ServerBackupTargetState"}}
+        keys: {type: integer, description: 'The keys set, not the pending ones; 0 makes no backup'}
+        time: {type: string, description: "The daily time, HH:MM in the box's time (setting serverbackup.time)"}
+        next_run: {type: string, format: date-time}
+    ServerBackupResult:
+      type: object
+      properties:
+        backup: {$ref: "#/components/schemas/ServerBackup"}
+        steps: {type: array, items: {$ref: "#/components/schemas/ServerBackupStep"}}
+    ServerBackupStep:
+      type: object
+      properties:
+        step: {type: string, enum: [make, copy, prune, scan, check, pull, upload]}
+        target: {type: string, description: The target's name}
+        ok: {type: boolean}
+        error: {type: string}
+        removed: {type: integer, description: What a prune removed}
+        added: {type: integer, description: What a scan added}
+    ServerBackup:
+      type: object
+      properties:
+        uuid: {type: string, description: 'The manifest''s, the same file on every target'}
+        time: {type: string, format: date-time}
+        trigger: {type: string, enum: [scheduled, manual, before-update, before-restore, uploaded]}
+        by: {type: string, description: Who asked; absent for the schedule and a scan}
+        state: {type: string, enum: [made, failed]}
+        size: {type: integer}
+        sha256: {type: string, description: 'The file''s; absent for one a scan found, until a check'}
+        label: {type: string}
+        version: {type: string, description: 'Massimo''s, of the server that made it'}
+        node: {type: string, description: The fingerprint of the box that made it}
+        this_box: {type: boolean, description: Signed by this box's node key}
+        manifest: {type: object, additionalProperties: true, description: 'manifest.json, plain and signed (docs/store.md, "Server backups")'}
+        pinned_until: {type: string, format: date-time, nullable: true}
+        error: {type: string, description: A failed one's last error}
+        tries: {type: integer}
+        next_try: {type: string, format: date-time, nullable: true}
+        copies: {type: array, items: {$ref: "#/components/schemas/ServerBackupCopy"}}
+    ServerBackupCopy:
+      type: object
+      properties:
+        target: {type: string, description: The target's uuid}
+        target_name: {type: string}
+        path: {type: string, description: The file's name on the target}
+        state: {type: string, enum: [there, failed, missing]}
+        pulled: {type: boolean, description: 'Put there by hand, kept until deleted'}
+        pushed_at: {type: string, format: date-time, nullable: true}
+        checked_at: {type: string, format: date-time, nullable: true}
+        error: {type: string}
+        tries: {type: integer}
+        next_try: {type: string, format: date-time, nullable: true}
+    ServerBackupTargetState:
+      type: object
+      properties:
+        uuid: {type: string}
+        name: {type: string}
+        kind: {type: string}
+        takes: {type: string, enum: [every, daily, weekly, monthly]}
+        enabled: {type: boolean}
+        last_success: {type: string, format: date-time, nullable: true, description: Its newest copy put there}
+        behind: {type: boolean, description: Two of its periods without a copy}
+    ServerBackupTarget:
+      allOf:
+        - {$ref: "#/components/schemas/ServerBackupTargetState"}
+        - type: object
+          properties:
+            config: {type: object, additionalProperties: {type: string}, description: The kind's fields but its secret}
+            has_secret: {type: boolean}
+            secret_lost: {type: boolean, description: Its sealed secret does not open; enter it again}
+            retention: {$ref: "#/components/schemas/ServerBackupPolicy"}
+            created_at: {type: string, format: date-time}
+            updated_at: {type: string, format: date-time}
+    ServerBackupTargetRequest:
+      type: object
+      properties:
+        name: {type: string, maxLength: 64}
+        kind: {type: string, description: A kind of GET …/kinds; fixed once added}
+        config: {type: object, additionalProperties: {type: string}}
+        secret: {type: string, description: 'The kind''s secret field; "" removes it, left out keeps it'}
+        takes: {type: string, enum: [every, daily, weekly, monthly], description: every where left out}
+        retention: {$ref: "#/components/schemas/ServerBackupPolicy"}
+        enabled: {type: boolean, description: true where left out}
+    ServerBackupPolicy:
+      type: object
+      description: restic's forget policy; all 0 keeps every copy. A pinned or pulled copy and a target's newest are kept whatever it says.
+      properties:
+        last: {type: integer, minimum: 0, maximum: 10000}
+        daily: {type: integer, minimum: 0, maximum: 10000}
+        weekly: {type: integer, minimum: 0, maximum: 10000}
+        monthly: {type: integer, minimum: 0, maximum: 10000}
+        yearly: {type: integer, minimum: 0, maximum: 10000}
+    ServerBackupKind:
+      type: object
+      properties:
+        name: {type: string}
+        secret: {type: string, description: 'The key of its secret field, given apart'}
+        fields:
+          type: array
+          items:
+            type: object
+            properties:
+              key: {type: string}
+              type: {type: string, enum: [text, number, path, secret, bool, choice]}
+              required: {type: boolean}
+              default: {type: string}
+              choices: {type: array, items: {type: string}}
+    ServerBackupKey:
+      type: object
+      properties:
+        uuid: {type: string}
+        label: {type: string}
+        recipient: {type: string, description: The public key}
+        fingerprint: {type: string}
+        kind: {type: string, enum: [pq, x25519, ssh-ed25519]}
+        pending: {type: boolean, description: Made and not confirmed yet; it encrypts nothing}
+        created_at: {type: string, format: date-time}
+        expires_at: {type: string, format: date-time, nullable: true, description: A pending key's end}

@@ -383,6 +383,9 @@ const maxDeliveries = 8
 // hands it to Web Push and to the other deliverers on goroutines of
 // their own, which the server's stop ends.
 func (s *Server) deliverNotification(userID int64, n notify.Notification) {
+	if c, ok := notifyNeeds[n.Kind]; ok && !s.userHolds(context.Background(), userID, c) {
+		return
+	}
 	s.logNotification(userID, n)
 	s.streamNotification(userID, n)
 	var ds []push.Deliverer

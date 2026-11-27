@@ -131,7 +131,7 @@ func TestParsePrefs(t *testing.T) {
 			t.Errorf("%s accepted", bad)
 		}
 	}
-	if got := Kinds(); len(got) != 11 || got[0] != KindBatteryLow {
+	if got := Kinds(); len(got) != 12 || got[0] != KindBatteryLow {
 		t.Errorf("kinds %v", got)
 	}
 }

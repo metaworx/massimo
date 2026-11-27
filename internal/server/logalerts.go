@@ -77,6 +77,10 @@ var settleRules = map[string]settleRule{
 	"backup": {by: []string{"backup"}},
 	// a restore failed: the next one done
 	"restore_done": {by: []string{"restore_done"}},
+	// a server backup, or its copy to a target, that failed and is not
+	// retried: a later success of its step on the same target
+	// (serverbackups.go)
+	"server_backup": {by: []string{"server_backup"}, match: serverBackupSettles},
 	// the proxy refused a client while the Cube was not yet connected
 	"proxy_refused": {by: []string{"connected", "proxy_connected"}},
 	// the proxy saw the original software's pairing go wrong

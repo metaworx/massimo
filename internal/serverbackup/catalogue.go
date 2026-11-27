@@ -22,6 +22,7 @@ import (
 	"log/slog"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"time"
 
@@ -56,6 +57,8 @@ var (
 	// ErrNoTarget is a target the catalogue does not hold, or one
 	// switched off.
 	ErrNoTarget = errors.New("serverbackup: no such target")
+	// ErrSameTarget is a pull from the local target to itself.
+	ErrSameTarget = errors.New("serverbackup: a copy is pulled from another target than the local one")
 )
 
 // Catalogue runs the jobs on a store's catalogue.
@@ -572,6 +575,10 @@ func (c *Catalogue) Pull(ctx context.Context, uuid, from string) (store.ServerBa
 	cp, ok := b.Copy(src.UUID)
 	if !ok || cp.State != store.CopyThere {
 		return b, Outcome{}, fmt.Errorf("%w on %s", ErrNoCopy, src.Name)
+	}
+	locals = slices.DeleteFunc(locals, func(t store.ServerBackupTarget) bool { return t.UUID == src.UUID })
+	if len(locals) == 0 {
+		return b, Outcome{}, fmt.Errorf("%w: %s is the local target", ErrSameTarget, src.Name)
 	}
 	tgt, err := c.Open(src)
 	if err != nil {

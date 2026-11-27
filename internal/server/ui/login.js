@@ -19,7 +19,7 @@
 // markup, what it alone allows.
 const CAPABILITIES = ["read", "preferences", "setpoint", "lock", "configure", "rename", "structure", "pair", "discover", "backup", "restore", "repair",
   "guests", "users", "roles", "roles.disable", "capabilities", "cubes", "cubes.reboot", "settings", "update", "restart", "reboot", "audit",
-  "auth", "integrations"];
+  "auth", "integrations", "backup.server", "backup.retry"];
 
 // DEFAULT_ROLES are the keys of the six default roles, for a role choice
 // that cannot read the roles.

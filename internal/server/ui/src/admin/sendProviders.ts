@@ -23,7 +23,7 @@ import { can } from "../shared/me";
 
 /** ADMIN_CAPS are the capabilities a role may not hold to be given to the users a provider creates (adminCapabilities in internal/server/oidc.go). */
 const ADMIN_CAPS = ["guests", "users", "passwords", "roles", "roles.disable", "capabilities", "cubes", "cubes.reboot", "settings", "update", "restart",
-  "reboot", "audit", "auth"];
+  "reboot", "audit", "auth", "backup.server", "backup.retry"];
 
 /**
  * autoRoleOptions are the roles a provider may give the users it

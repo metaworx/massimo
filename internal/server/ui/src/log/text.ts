@@ -280,6 +280,32 @@ function logConfigText(changes: Loose): string {
 }
 
 /**
+ * logServerBackupText is a server backup's line (internal/server,
+ * serverbackups.go): a backup made, copied to a target, pruned there,
+ * found there by a scan or checked, or one of these failed, with its try.
+ */
+function logServerBackupText(s: Loose): string {
+  const target = String(s.target || "\u2013");
+  const id = String(s.id || "\u2013");
+  if (s.outcome === "failed") {
+    return s.target
+      ? t("log.sum.serverBackupCopyFailed", { id, target, tries: String(s.tries ?? "\u2013") })
+      : t("log.sum.serverBackupFailed", { tries: String(s.tries ?? "\u2013") });
+  }
+  switch (s.step) {
+    case "make":
+      return t("log.sum.serverBackupMade", { id, trigger: logWord("log.serverBackupTrigger.", s.trigger) });
+    case "prune":
+      return t("log.sum.serverBackupPruned", { n: String(s.removed ?? 0), target });
+    case "scan":
+      return t("log.sum.serverBackupFound", { n: String(s.added ?? 0), target });
+    case "check":
+      return t("log.sum.serverBackupChecked", { id, target });
+  }
+  return t("log.sum.serverBackupCopied", { id, target });
+}
+
+/**
  * logSummaryText is what a line says of itself where it names no
  * differences: a connection's devices, rooms, firmware, budget and how
  * long the Cube was lost; a hello's budget; a list's rooms and devices; a
@@ -333,6 +359,8 @@ function logSummaryText(kind: string, s: Loose, serial: string): string {
       return t("log.sum.backupDeleted", { id: s.id });
     case "backups_pruned":
       return t("log.sum.backupsPruned", { n: s.removed });
+    case "server_backup":
+      return logServerBackupText(s);
     case "log_pruned":
       return t("log.sum.logPruned", { n: s.removed, days: s.keep_days });
     case "audit_pruned":

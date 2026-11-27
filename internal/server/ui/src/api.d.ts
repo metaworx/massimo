@@ -2263,3 +2263,166 @@ export interface Setpoint {
   /** Vacation end, YYYY-MM-DD HH:MM on a half hour; required for vacation */
   until?: string;
 }
+
+export interface ServerBackupList {
+  backups?: ServerBackup[];
+  targets?: ServerBackupTargetState[];
+  /** The keys set, not the pending ones; 0 makes no backup */
+  keys?: number;
+  /** The daily time, HH:MM in the box's time (setting serverbackup.time) */
+  time?: string;
+  /** @format date-time */
+  next_run?: string;
+}
+
+export interface ServerBackupResult {
+  backup?: ServerBackup;
+  steps?: ServerBackupStep[];
+}
+
+export interface ServerBackupStep {
+  step?: "make" | "copy" | "prune" | "scan" | "check" | "pull" | "upload";
+  /** The target's name */
+  target?: string;
+  ok?: boolean;
+  error?: string;
+  /** What a prune removed */
+  removed?: number;
+  /** What a scan added */
+  added?: number;
+}
+
+export interface ServerBackup {
+  /** The manifest's, the same file on every target */
+  uuid?: string;
+  /** @format date-time */
+  time?: string;
+  trigger?: "scheduled" | "manual" | "before-update" | "before-restore" | "uploaded";
+  /** Who asked; absent for the schedule and a scan */
+  by?: string;
+  state?: "made" | "failed";
+  size?: number;
+  /** The file's; absent for one a scan found, until a check */
+  sha256?: string;
+  label?: string;
+  /** Massimo's, of the server that made it */
+  version?: string;
+  /** The fingerprint of the box that made it */
+  node?: string;
+  /** Signed by this box's node key */
+  this_box?: boolean;
+  /** manifest.json, plain and signed (docs/store.md, "Server backups") */
+  manifest?: Record<string, unknown>;
+  /** @format date-time */
+  pinned_until?: string | null;
+  /** A failed one's last error */
+  error?: string;
+  tries?: number;
+  /** @format date-time */
+  next_try?: string | null;
+  copies?: ServerBackupCopy[];
+}
+
+export interface ServerBackupCopy {
+  /** The target's uuid */
+  target?: string;
+  target_name?: string;
+  /** The file's name on the target */
+  path?: string;
+  state?: "there" | "failed" | "missing";
+  /** Put there by hand, kept until deleted */
+  pulled?: boolean;
+  /** @format date-time */
+  pushed_at?: string | null;
+  /** @format date-time */
+  checked_at?: string | null;
+  error?: string;
+  tries?: number;
+  /** @format date-time */
+  next_try?: string | null;
+}
+
+export interface ServerBackupTargetState {
+  uuid?: string;
+  name?: string;
+  kind?: string;
+  takes?: "every" | "daily" | "weekly" | "monthly";
+  enabled?: boolean;
+  /**
+   * Its newest copy put there
+   * @format date-time
+   */
+  last_success?: string | null;
+  /** Two of its periods without a copy */
+  behind?: boolean;
+}
+
+export interface ServerBackupTarget extends ServerBackupTargetState {
+  /** The kind's fields but its secret */
+  config?: Record<string, string>;
+  has_secret?: boolean;
+  /** Its sealed secret does not open; enter it again */
+  secret_lost?: boolean;
+  retention?: ServerBackupPolicy;
+  /** @format date-time */
+  created_at?: string;
+  /** @format date-time */
+  updated_at?: string;
+}
+
+export interface ServerBackupTargetRequest {
+  name?: string;
+  /** A kind of GET …/kinds; fixed once added */
+  kind?: string;
+  config?: Record<string, string>;
+  /** The kind's secret field; "" removes it, left out keeps it */
+  secret?: string;
+  /** every where left out */
+  takes?: "every" | "daily" | "weekly" | "monthly";
+  retention?: ServerBackupPolicy;
+  /** true where left out */
+  enabled?: boolean;
+}
+
+/**
+ * restic's forget policy; all 0 keeps every copy. A pinned or pulled copy and a
+ * target's newest are kept whatever it says.
+ */
+export interface ServerBackupPolicy {
+  last?: number;
+  daily?: number;
+  weekly?: number;
+  monthly?: number;
+  yearly?: number;
+}
+
+export interface ServerBackupKind {
+  name?: string;
+  /** The key of its secret field, given apart */
+  secret?: string;
+  fields?: ({
+    key?: string;
+    type?: "text" | "number" | "path" | "secret" | "bool" | "choice";
+    required?: boolean;
+    default?: string;
+    choices?: string[];
+  })[];
+}
+
+export interface ServerBackupKey {
+  uuid?: string;
+  label?: string;
+  /** The public key */
+  recipient?: string;
+  fingerprint?: string;
+  kind?: "pq" | "x25519" | "ssh-ed25519";
+  /** Made and not confirmed yet; it encrypts nothing */
+  pending?: boolean;
+  /** @format date-time */
+  created_at?: string;
+  /**
+   * A pending key's end
+   * @format date-time
+   */
+  expires_at?: string | null;
+}

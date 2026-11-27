@@ -303,7 +303,7 @@ func TestCapabilityTableCoversRoutes(t *testing.T) {
 		}
 	}
 	for _, r := range routes {
-		if r.capability == capNone || r.capability == capAny {
+		if r.capability == capNone || r.capability == capAny || r.capability == capOwner {
 			continue
 		}
 		ms, ok := rows[r.capability]

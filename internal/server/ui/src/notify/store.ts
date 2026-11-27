@@ -39,6 +39,7 @@ export const KINDS: [string, Rule][] = [
   ["paired", { on: false }],
   ["cube_found", { on: false }],
   ["update", { on: false }],
+  ["server_backup_failed", { on: true }],
 ];
 
 /** The bounds of a delay and of the threshold, the server's. */

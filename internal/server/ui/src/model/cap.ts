@@ -20,7 +20,7 @@ export function capLabel(c: string): string {
  * internal/server/auth.go, AP StartConfiguration D37 and D40-A): its holder
  * passes every check of those it names, which no stored set lists.
  */
-export const CAP_INCLUDES: Record<string, string[]> = { update: ["restart"], reboot: ["restart"] };
+export const CAP_INCLUDES: Record<string, string[]> = { update: ["restart"], reboot: ["restart"], "backup.server": ["backup.retry"] };
 
 /**
  * includedHint is why a capability's switch shows on and cannot be changed
