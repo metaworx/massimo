@@ -863,7 +863,14 @@ func (c *Catalogue) Prune(ctx context.Context, t store.ServerBackupTarget) (int,
 				return removed, err
 			}
 		}
-		if err := tgt.Delete(ctx, paths[cand.UUID]); err != nil {
+		err := tgt.Delete(ctx, paths[cand.UUID])
+		if errors.Is(err, ErrRetained) {
+			// The target keeps it (its lock): the copy stays there,
+			// and the next prune tries again.
+			c.log().Warn("server backups: a copy the target keeps", "target", t.Name, "backup", cand.UUID, "error", err)
+			continue
+		}
+		if err != nil {
 			return removed, err
 		}
 		if _, err := c.Store.DeleteServerBackupCopy(ctx, cand.UUID, t.UUID); err != nil {

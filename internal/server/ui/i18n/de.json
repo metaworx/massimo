@@ -2178,5 +2178,13 @@
   "serverbackup.field.smb.path": "Ordner in der Freigabe",
   "serverbackup.field.smb.user": "Benutzer",
   "serverbackup.field.smb.password": "Passwort",
-  "serverbackup.field.smb.domain": "Domäne oder Arbeitsgruppe"
+  "serverbackup.field.smb.domain": "Domäne oder Arbeitsgruppe",
+  "serverbackup.kind.s3": "S3-kompatibler Speicher",
+  "serverbackup.field.s3.endpoint": "Endpunkt-URL",
+  "serverbackup.field.s3.region": "Region",
+  "serverbackup.field.s3.bucket": "Bucket",
+  "serverbackup.field.s3.prefix": "Ordner im Bucket (Präfix)",
+  "serverbackup.field.s3.path_style": "Adressierung über den Pfad (MinIO, eigene Server)",
+  "serverbackup.field.s3.access_key": "Zugriffsschlüssel-ID",
+  "serverbackup.field.s3.secret_key": "Geheimer Zugriffsschlüssel"
 }

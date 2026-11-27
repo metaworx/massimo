@@ -2251,5 +2251,13 @@
   "serverbackup.field.smb.path": "Folder w udziale",
   "serverbackup.field.smb.user": "Użytkownik",
   "serverbackup.field.smb.password": "Hasło",
-  "serverbackup.field.smb.domain": "Domena lub grupa robocza"
+  "serverbackup.field.smb.domain": "Domena lub grupa robocza",
+  "serverbackup.kind.s3": "Magazyn zgodny z S3",
+  "serverbackup.field.s3.endpoint": "Adres URL punktu końcowego",
+  "serverbackup.field.s3.region": "Region",
+  "serverbackup.field.s3.bucket": "Zasobnik (bucket)",
+  "serverbackup.field.s3.prefix": "Folder w zasobniku (prefiks)",
+  "serverbackup.field.s3.path_style": "Adresowanie przez ścieżkę (MinIO, własne serwery)",
+  "serverbackup.field.s3.access_key": "Identyfikator klucza dostępu",
+  "serverbackup.field.s3.secret_key": "Tajny klucz dostępu"
 }

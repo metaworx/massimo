@@ -2180,5 +2180,13 @@
   "serverbackup.field.smb.path": "Dossier dans le partage",
   "serverbackup.field.smb.user": "Utilisateur",
   "serverbackup.field.smb.password": "Mot de passe",
-  "serverbackup.field.smb.domain": "Domaine ou groupe de travail"
+  "serverbackup.field.smb.domain": "Domaine ou groupe de travail",
+  "serverbackup.kind.s3": "Stockage compatible S3",
+  "serverbackup.field.s3.endpoint": "URL du point de terminaison",
+  "serverbackup.field.s3.region": "Région",
+  "serverbackup.field.s3.bucket": "Bucket",
+  "serverbackup.field.s3.prefix": "Dossier dans le bucket (préfixe)",
+  "serverbackup.field.s3.path_style": "Adressage par chemin (MinIO, serveurs propres)",
+  "serverbackup.field.s3.access_key": "ID de clé d'accès",
+  "serverbackup.field.s3.secret_key": "Clé d'accès secrète"
 }

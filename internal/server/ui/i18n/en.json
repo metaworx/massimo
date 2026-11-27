@@ -2178,5 +2178,13 @@
   "serverbackup.field.smb.path": "Folder in the share",
   "serverbackup.field.smb.user": "User",
   "serverbackup.field.smb.password": "Password",
-  "serverbackup.field.smb.domain": "Domain or workgroup"
+  "serverbackup.field.smb.domain": "Domain or workgroup",
+  "serverbackup.kind.s3": "S3-compatible storage",
+  "serverbackup.field.s3.endpoint": "Endpoint URL",
+  "serverbackup.field.s3.region": "Region",
+  "serverbackup.field.s3.bucket": "Bucket",
+  "serverbackup.field.s3.prefix": "Folder in the bucket (prefix)",
+  "serverbackup.field.s3.path_style": "Path-style addressing (MinIO, own servers)",
+  "serverbackup.field.s3.access_key": "Access key ID",
+  "serverbackup.field.s3.secret_key": "Secret access key"
 }

@@ -2180,5 +2180,13 @@
   "serverbackup.field.smb.path": "Cartella nella condivisione",
   "serverbackup.field.smb.user": "Utente",
   "serverbackup.field.smb.password": "Password",
-  "serverbackup.field.smb.domain": "Dominio o gruppo di lavoro"
+  "serverbackup.field.smb.domain": "Dominio o gruppo di lavoro",
+  "serverbackup.kind.s3": "Archiviazione compatibile S3",
+  "serverbackup.field.s3.endpoint": "URL dell'endpoint",
+  "serverbackup.field.s3.region": "Regione",
+  "serverbackup.field.s3.bucket": "Bucket",
+  "serverbackup.field.s3.prefix": "Cartella nel bucket (prefisso)",
+  "serverbackup.field.s3.path_style": "Indirizzamento per percorso (MinIO, server propri)",
+  "serverbackup.field.s3.access_key": "ID chiave di accesso",
+  "serverbackup.field.s3.secret_key": "Chiave di accesso segreta"
 }

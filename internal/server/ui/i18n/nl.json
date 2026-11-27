@@ -2179,5 +2179,13 @@
   "serverbackup.field.smb.path": "Map in de share",
   "serverbackup.field.smb.user": "Gebruiker",
   "serverbackup.field.smb.password": "Wachtwoord",
-  "serverbackup.field.smb.domain": "Domein of werkgroep"
+  "serverbackup.field.smb.domain": "Domein of werkgroep",
+  "serverbackup.kind.s3": "S3-compatibele opslag",
+  "serverbackup.field.s3.endpoint": "Endpoint-URL",
+  "serverbackup.field.s3.region": "Regio",
+  "serverbackup.field.s3.bucket": "Bucket",
+  "serverbackup.field.s3.prefix": "Map in de bucket (prefix)",
+  "serverbackup.field.s3.path_style": "Adressering via het pad (MinIO, eigen servers)",
+  "serverbackup.field.s3.access_key": "Toegangssleutel-ID",
+  "serverbackup.field.s3.secret_key": "Geheime toegangssleutel"
 }

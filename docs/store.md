@@ -2148,6 +2148,9 @@ as restic refuses an empty one.
 A new target keeps 7 days, 4 weeks and 6 months.
 The prune runs after each copy to the target; a backup left without a copy goes
 from the catalogue.
+A copy the target refuses to delete for its lock (`ErrRetained`: an S3 bucket's
+object lock, a key that may not delete) is kept, with a warning in the log,
+and tried again at the next prune.
 
 #### Retries and alerts
 
@@ -2277,6 +2280,61 @@ so Windows' service account needs no rights on one.
   it never holds the password.
 - `make target-test` tests it against Samba with signing and encryption required
   (`tools/target-test/README.md`).
+
+#### The S3 target
+
+The kind `s3` keeps the copies in a bucket of an S3-compatible store (D10-A):
+AWS, MinIO, Backblaze B2, Wasabi, Cloudflare R2 and Hetzner among them.
+It speaks five calls of the S3 API, signed with AWS Signature Version 4,
+all with Go's standard library:
+`PUT`, `GET` with a range, `HEAD`, `DELETE` and `ListObjectsV2`.
+
+| Field | What it holds |
+|-------|---------------|
+| `endpoint` | the store's URL without a path, such as `https://s3.eu-central-1.amazonaws.com`; `https` where it names no scheme, `http` only where it says so |
+| `region` | the bucket's region, `us-east-1` by default; R2 takes `auto` |
+| `bucket` | the bucket, made with the store's own tools |
+| `prefix` | a folder in the bucket, empty for its top; the backups go directly under it, and keys below it are left alone |
+| `path_style` | the bucket reached by path, `https://host/bucket/…`, not by virtual host, `https://bucket.host/…`; MinIO needs it, and so do an endpoint given by its address and a bucket with dots over `https` |
+| `access_key` | the key's id |
+| `secret_key` | the key's secret, the kind's secret field, sealed by the store |
+
+- A copy is put in one `PUT`, under its final name:
+  S3 has no rename and needs none, since a `PUT` is atomic,
+  and one broken off or refused leaves nothing.
+  One `PUT` takes at most 5 GiB, so a larger backup is refused with its size.
+  The body is sent unsigned (`UNSIGNED-PAYLOAD`), since it is read once;
+  TLS carries it, and the check reads the copy back with its hash.
+- A copy is read by ranges, each a `GET` with `Range`,
+  and with `If-Match` on the version `HEAD` found,
+  so that an object replaced while it is read is refused.
+  A read that follows the one before fetches twice as much ahead, up to 8 MiB,
+  so that a copy read whole costs a few requests.
+- The list goes page by page, with its continuation token,
+  and holds the names a backup may have, directly under the prefix.
+- The card's test lists the bucket,
+  then writes, reads back and deletes a probe, `.massimo-check-<random>`.
+- The key needs `s3:ListBucket` on the bucket,
+  and `s3:PutObject`, `s3:GetObject` and `s3:DeleteObject` under the prefix.
+- A request that moves no byte for two minutes is broken off,
+  and so is an answer whose header takes as long; a redirect is not followed.
+  An error says the store's status, its code and its message,
+  and the bucket's region where the store names another.
+- **Object lock.**
+  A bucket with object lock is versioned,
+  and there a `DELETE` succeeds by hiding the object behind a delete marker:
+  the copy goes from the catalogue,
+  while the locked version stays in the bucket until its lock ends,
+  out of the key's reach, and the store's own tools bring it back.
+  A `DELETE` the store refuses keeps the copy (`ErrRetained`):
+  `AccessDenied`, a key that may not delete,
+  or an answer that speaks of a lock, a retention or WORM,
+  such as MinIO's for a locked version.
+  The prune warns, `server backups: a copy the target keeps`, and goes on;
+  a copy deleted by hand says why.
+- `TestS3Live` runs the target against a real store,
+  where `MASSIMO_TARGET_TEST_S3_ENDPOINT`, `_BUCKET`, `_REGION`, `_KEY`
+  and `_SECRET` are set, as `make target-test` sets them for its MinIO.
 
 ## 8. Migration of an installed box
 

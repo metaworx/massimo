@@ -32,11 +32,17 @@ type Target interface {
 	Open(ctx context.Context, name string) (File, int64, error)
 	// List returns the backups there (names ending in .zip).
 	List(ctx context.Context) ([]Entry, error)
-	// Delete removes name; a name not there is no error.
+	// Delete removes name; a name not there is no error, and one the
+	// target refuses to delete for its lock is ErrRetained.
 	Delete(ctx context.Context, name string) error
 	// Check proves the target reachable and writable (the card's Test).
 	Check(ctx context.Context) error
 }
+
+// ErrRetained is a delete the target refuses because it keeps the file,
+// such as an S3 bucket's object lock: the copy stays, and a prune keeps
+// it, with a warning, until a later prune deletes it.
+var ErrRetained = errors.New("serverbackup: the target keeps the file")
 
 // File is a copy opened for ranged reads.
 type File interface {
