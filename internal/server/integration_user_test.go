@@ -4,17 +4,15 @@
 package server
 
 import (
-	"database/sql"
 	"encoding/json"
-	"net/http/httptest"
 	"net/netip"
-	"path/filepath"
 	"slices"
 	"strings"
 	"testing"
 	"time"
 
 	"go.metaworx.ch/massimo/internal/store"
+	"go.metaworx.ch/massimo/internal/testkit/storekit"
 )
 
 // noWayInText is what a refused way in for an integration's user says.
@@ -51,14 +49,7 @@ func refusesWayIn(t *testing.T, s *Server, addr, token, name string) {
 // headers given.
 func meCaps(t *testing.T, s *Server, key string, headers map[string]string) []string {
 	t.Helper()
-	r := httptest.NewRequest("GET", "/api/v1/me", nil)
-	r.RemoteAddr = "192.168.1.20:5000"
-	r.Header.Set("Authorization", "Bearer "+key)
-	for k, v := range headers {
-		r.Header.Set(k, v)
-	}
-	rec := httptest.NewRecorder()
-	s.Handler().ServeHTTP(rec, r)
+	rec := sendFromWith(s, "GET", "/api/v1/me", "192.168.1.20:5000", key, "", headers)
 	var me meView
 	if json.Unmarshal(rec.Body.Bytes(), &me); rec.Code != 200 || me.Integration == nil {
 		t.Fatalf("/me with the integration's key: %d %s", rec.Code, rec.Body.String())
@@ -101,12 +92,7 @@ func TestIntegrationUserHasNoWayIn(t *testing.T) {
 // where an owner had given such a user a key, a password or an identity.
 func asAnIntegrations(t *testing.T, st *store.Store, name string, i store.Integration) {
 	t.Helper()
-	db, err := sql.Open("sqlite", "file:"+filepath.ToSlash(st.File())+"?_pragma=busy_timeout(5000)")
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer db.Close()
-	if _, err := db.ExecContext(t.Context(), `UPDATE users SET integration_id = ? WHERE name = ?`, i.ID, name); err != nil {
+	if _, err := storekit.Raw(t, st).ExecContext(t.Context(), `UPDATE users SET integration_id = ? WHERE name = ?`, i.ID, name); err != nil {
 		t.Fatal(err)
 	}
 }
@@ -168,12 +154,7 @@ func TestHeldCredentialsOfAnIntegrationsUser(t *testing.T) {
 	if _, err := st.UpdateUser(ctx, i.UUID+":", func(u *store.User) error { u.Role = store.RoleOwner; return nil }, 0); err != nil {
 		t.Fatal(err)
 	}
-	db, err := sql.Open("sqlite", "file:"+filepath.ToSlash(st.File())+"?_pragma=busy_timeout(5000)")
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer db.Close()
-	if _, err := db.ExecContext(ctx, `UPDATE integrations SET max_caps = '["read","users","auth"]' WHERE id = ?`, i.ID); err != nil {
+	if _, err := storekit.Raw(t, st).ExecContext(ctx, `UPDATE integrations SET max_caps = '["read","users","auth"]' WHERE id = ?`, i.ID); err != nil {
 		t.Fatal(err)
 	}
 	for _, c := range meCaps(t, s, key, nil) {
