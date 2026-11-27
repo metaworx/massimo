@@ -22,6 +22,7 @@ import (
 	"unicode/utf8"
 
 	"go.metaworx.ch/massimo/internal/cubeio"
+	"go.metaworx.ch/massimo/internal/cubelan"
 	"go.metaworx.ch/massimo/internal/engine"
 	"go.metaworx.ch/massimo/internal/protocol/cube"
 	"go.metaworx.ch/massimo/internal/roomorder"
@@ -65,12 +66,12 @@ func (s *Server) visibleRoom(rt *runtime, r *http.Request) (cube.RoomMeta, *cube
 	}
 	md := rt.client.Snapshot().Metadata()
 	if md == nil {
-		return cube.RoomMeta{}, nil, fail(http.StatusServiceUnavailable, "cube not connected yet")
+		return cube.RoomMeta{}, nil, refuse(http.StatusServiceUnavailable, codeCubeNotConnectedYet)
 	}
 	if room, ok := rt.hidden().Room(md, id); ok {
 		return room, md, nil
 	}
-	return cube.RoomMeta{}, nil, fail(http.StatusNotFound, "no room %d", id)
+	return cube.RoomMeta{}, nil, refuse(http.StatusNotFound, codeRoomUnknown, id)
 }
 
 // visibleDevice returns a device's configuration, or a 404 error.
@@ -81,7 +82,7 @@ func (s *Server) visibleDevice(rt *runtime, r *http.Request) (cube.RFAddress, *c
 	}
 	c := rt.client.Snapshot().Config(rf)
 	if c == nil || rt.hidden()[rf] {
-		return 0, nil, fail(http.StatusNotFound, "no device %s", rf)
+		return 0, nil, refuse(http.StatusNotFound, codeDeviceUnknown, rf.String())
 	}
 	return rf, c, nil
 }
@@ -121,8 +122,11 @@ func (s *Server) run(w http.ResponseWriter, r *http.Request, rt *runtime, cmd en
 	return nil
 }
 
-// commandError maps a queue result to an HTTP error, naming the room
-// members without state when a room command was discarded.
+// commandError maps a queue result to an HTTP error with the code of
+// its kind (errcodes.go), its English text the result's error as it
+// is, naming the room members without state when a room command was
+// discarded for that: by their addresses in no_state, and with the room
+// in params. An error of no kind known keeps no code.
 func (s *Server) commandError(rt *runtime, res engine.Result, roomCmd uint8) error {
 	if res.Err == nil {
 		return nil
@@ -137,13 +141,44 @@ func (s *Server) commandError(rt *runtime, res engine.Result, roomCmd uint8) err
 			for _, rf := range silent {
 				names = append(names, rf.String())
 			}
-			he := fail(status, "%v: the cube holds no state for room %d members %s (not reported since the cube's last restart); the cube refuses room commands until they report or are removed",
-				res.Err, roomCmd, strings.Join(names, ", ")).(*httpError)
+			msg := fmt.Sprintf("%v: the cube holds no state for room %d members %s (not reported since the cube's last restart); the cube refuses room commands until they report or are removed",
+				res.Err, roomCmd, strings.Join(names, ", "))
+			he := refuseSaying(status, msg, codeCommandDiscardedNoState, roomCmd, names).(*httpError)
 			he.noState = names
 			return he
 		}
 	}
+	msg := res.Err.Error()
+	switch {
+	case errors.Is(res.Err, engine.ErrSuperseded):
+		return refuseSaying(status, msg, codeCommandSuperseded)
+	case errors.Is(res.Err, engine.ErrDiscarded):
+		return refuseSaying(status, msg, codeCommandDiscarded)
+	case errors.Is(res.Err, engine.ErrUnwanted):
+		return refuseSaying(status, msg, codeCommandUnwanted)
+	case errors.Is(res.Err, cubelan.ErrNotConnected):
+		return refuseSaying(status, msg, codeCubeNotConnected)
+	case errors.Is(res.Err, cubelan.ErrBusy):
+		return refuseSaying(status, msg, codeCubeBusy)
+	case errors.Is(res.Err, context.DeadlineExceeded):
+		return refuseSaying(status, msg, codeCommandTimedOut)
+	}
 	return fail(status, "%v", res.Err)
+}
+
+// noThermostat refuses a request to room's thermostats, where the Cube
+// has none in the room (cubeio.RoomAddressee, roomThermostats find none),
+// with status (D4-A): room_thermostat_unplaced naming the first
+// thermostat the Cube's list has in the room, which the repair "Place in
+// its listed room" puts there; room_no_thermostat where the list has
+// none in it either.
+func noThermostat(rt *runtime, status int, room uint8) error {
+	for _, d := range cubeio.RoomMembers(rt.client.Snapshot(), room, rt.hidden()) {
+		if d.Type.IsThermostat() {
+			return refuse(status, codeRoomThermostatUnplaced, room, d.RFAddress.String())
+		}
+	}
+	return refuse(status, codeRoomNoThermostat, room)
 }
 
 // writeMetadata sends the metadata to the Cube and mirrors it into the
@@ -279,7 +314,7 @@ func (s *Server) updateDevice(w http.ResponseWriter, r *http.Request) error {
 	}()
 	md := rt.client.Snapshot().Metadata()
 	if md == nil {
-		return fail(http.StatusServiceUnavailable, "cube not connected yet")
+		return refuse(http.StatusServiceUnavailable, codeCubeNotConnectedYet)
 	}
 	idx := -1
 	for i, d := range md.Devices {
@@ -401,7 +436,7 @@ func (s *Server) moveDevice(ctx context.Context, r *http.Request, rt *runtime, m
 		}
 		newRoom = uint8(*roomID)
 		if _, ok := rt.hidden().Room(md, newRoom); !ok {
-			return placement{}, fail(http.StatusNotFound, "no room %d", newRoom)
+			return placement{}, refuse(http.StatusNotFound, codeRoomUnknown, newRoom)
 		}
 		if other, ok := secondWall(md, rf, newRoom); ok && c.Type == cube.DeviceWallThermostat && newRoom != cur.RoomID {
 			return placement{}, fail(http.StatusConflict, "room %d has a wall thermostat already (%s); a room takes one, as in the original software", newRoom, other)
@@ -488,7 +523,10 @@ func (s *Server) copySettings(ctx context.Context, rt *runtime, rf cube.RFAddres
 	if err := s.commandError(rt, res, 0); err != nil {
 		var he *httpError
 		if errors.As(err, &he) {
+			// Its words say more than the result's code: the page shows
+			// them as they are (AP ErrorCodes, Block 2 gives it a code).
 			he.msg = fmt.Sprintf("device %s is in room %d, but copying the room's settings stopped: %s", rf, room, he.msg)
+			he.code, he.params = nil, nil
 		}
 		return copied, err
 	}
@@ -511,7 +549,7 @@ func (s *Server) addDevice(ctx context.Context, r *http.Request, rt *runtime, md
 	room := uint8(*roomID)
 	target, ok := rt.hidden().Room(md, room)
 	if !ok {
-		return placement{}, fail(http.StatusNotFound, "no room %d", room)
+		return placement{}, refuse(http.StatusNotFound, codeRoomUnknown, room)
 	}
 	if c.Type == cube.DeviceCube {
 		return placement{}, fail(http.StatusBadRequest, "the cube itself is not in a room")
@@ -590,7 +628,7 @@ func (s *Server) removeDevice(w http.ResponseWriter, r *http.Request) error {
 	}
 	switch {
 	case hidden[rf] || c == nil && listed == nil:
-		return fail(http.StatusNotFound, "no device %s", rf)
+		return refuse(http.StatusNotFound, codeDeviceUnknown, rf.String())
 	case c != nil && c.Type == cube.DeviceCube:
 		return fail(http.StatusBadRequest, "%s is the cube itself", rf)
 	case md == nil || !rt.client.Connected():
@@ -878,7 +916,7 @@ func (s *Server) setRoomConfig(w http.ResponseWriter, r *http.Request) error {
 	}
 	radiators, walls := roomThermostats(rt, room.ID)
 	if len(radiators)+len(walls) == 0 {
-		return fail(http.StatusConflict, "room %d has no thermostat", room.ID)
+		return noThermostat(rt, http.StatusConflict, room.ID)
 	}
 	snap := rt.client.Snapshot()
 	names := map[cube.RFAddress]string{}
@@ -1183,7 +1221,7 @@ func (s *Server) setRoomProgram(w http.ResponseWriter, r *http.Request) error {
 	}
 	addr, ok := cubeio.RoomAddressee(rt.client.Snapshot(), room.ID, rt.hidden())
 	if !ok {
-		return fail(http.StatusConflict, "room %d has no thermostat", room.ID)
+		return noThermostat(rt, http.StatusConflict, room.ID)
 	}
 	radiators, walls := roomThermostats(rt, room.ID)
 	body, err := readBody(r)
@@ -1243,7 +1281,7 @@ func (s *Server) getRoomProgram(w http.ResponseWriter, r *http.Request) error {
 func writeRoomProgram(w http.ResponseWriter, rt *runtime, room uint8) error {
 	rp, ok := rt.programOfRoom(room)
 	if !ok {
-		return fail(http.StatusNotFound, "room %d has no thermostat", room)
+		return noThermostat(rt, http.StatusNotFound, room)
 	}
 	return writeProgram(w, rp)
 }

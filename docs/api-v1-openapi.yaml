@@ -5296,7 +5296,12 @@ components:
     Error:
       type: object
       properties:
-        error: {type: string}
+        error: {type: string, description: "The server's English text"}
+        code: {type: string, description: "What was refused, lower-case words joined by _, never renamed once released; absent for an error without one (docs/api-v1.md, \"Error codes\")"}
+        params:
+          type: object
+          additionalProperties: true
+          description: "The values the error names, by name: a room by its id, a device as the request named it, devices as radio addresses; absent where it names none"
         no_state:
           type: array
           items: {type: string}

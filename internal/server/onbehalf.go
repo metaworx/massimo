@@ -117,11 +117,12 @@ func parseOnBehalf(h string) (onBehalf, error) {
 }
 
 // onBehalfRefusal is a call through an integration refused, with a code the
-// integration can tell apart: bad_header, not_integration,
-// integration_disabled, instance_pending, user_disabled.
+// integration can tell apart (errcodes.go): bad_header, not_integration,
+// integration_disabled, instance_pending, user_disabled; nil for an error
+// of ours.
 type onBehalfRefusal struct {
 	status int
-	code   string
+	code   *errCode
 	msg    string
 }
 
@@ -145,22 +146,22 @@ func (s *Server) integrationPrincipal(ctx context.Context, r *http.Request, p *p
 	st := s.opts.Store
 	if st == nil || !p.named() {
 		if h != "" {
-			return nil, &onBehalfRefusal{http.StatusForbidden, "not_integration", "this key is no registered integration's; it acts for nobody"}
+			return nil, &onBehalfRefusal{http.StatusForbidden, codeNotIntegration, "this key is no registered integration's; it acts for nobody"}
 		}
 		return p, nil
 	}
 	integ, ok, err := st.IntegrationOfUser(ctx, p.user.ID)
 	if err != nil {
-		return nil, &onBehalfRefusal{http.StatusInternalServerError, "", err.Error()}
+		return nil, &onBehalfRefusal{http.StatusInternalServerError, nil, err.Error()}
 	}
 	if !ok {
 		if h != "" {
-			return nil, &onBehalfRefusal{http.StatusForbidden, "not_integration", "this key is no registered integration's; it acts for nobody"}
+			return nil, &onBehalfRefusal{http.StatusForbidden, codeNotIntegration, "this key is no registered integration's; it acts for nobody"}
 		}
 		return p, nil
 	}
 	if integ.State != store.IntegrationActive {
-		return nil, &onBehalfRefusal{http.StatusForbidden, "integration_disabled", "the integration " + integ.UUID + " is disabled"}
+		return nil, &onBehalfRefusal{http.StatusForbidden, codeIntegrationDisabled, "the integration " + integ.UUID + " is disabled"}
 	}
 	// 2 and 4: the role integration bounds every call through the
 	// integration, whatever role its own user was given, and so does its
@@ -173,32 +174,32 @@ func (s *Server) integrationPrincipal(ctx context.Context, r *http.Request, p *p
 	}
 	ob, err := parseOnBehalf(h)
 	if err != nil {
-		return nil, &onBehalfRefusal{http.StatusBadRequest, "bad_header", OnBehalfHeader + ": " + err.Error()}
+		return nil, &onBehalfRefusal{http.StatusBadRequest, codeBadHeader, OnBehalfHeader + ": " + err.Error()}
 	}
 	if ob.instance != integ.InstanceID {
 		if err := st.NotePendingInstance(ctx, integ.ID, ob.instance); err != nil {
 			s.log.Error("api: an integration's new installation id not recorded", "integration", integ.UUID, "error", err)
 		}
-		return nil, &onBehalfRefusal{http.StatusForbidden, "instance_pending", "the call came from another installation than the one accepted; the owner accepts it in the integration's settings"}
+		return nil, &onBehalfRefusal{http.StatusForbidden, codeInstancePending, "the call came from another installation than the one accepted; the owner accepts it in the integration's settings"}
 	}
 	id, err := st.IntegrationUser(ctx, integ, store.IntegrationSeen{Subject: ob.id, Name: ob.name, SystemGenerated: ob.systemGenerated, Level: ob.level})
 	if err != nil {
-		return nil, &onBehalfRefusal{http.StatusInternalServerError, "", err.Error()}
+		return nil, &onBehalfRefusal{http.StatusInternalServerError, nil, err.Error()}
 	}
 	now := time.Now()
 	own, ok, err := st.UserByID(ctx, id.RealUserID)
 	if err != nil || !ok {
-		return nil, &onBehalfRefusal{http.StatusInternalServerError, "", "the integration's user is missing"}
+		return nil, &onBehalfRefusal{http.StatusInternalServerError, nil, "the integration's user is missing"}
 	}
 	if own.Disabled || own.Expired(now) {
-		return nil, &onBehalfRefusal{http.StatusForbidden, "user_disabled", "the integration's user " + own.Name + " is disabled"}
+		return nil, &onBehalfRefusal{http.StatusForbidden, codeUserDisabled, "the integration's user " + own.Name + " is disabled"}
 	}
 	ownCaps, ownOff, roleOff, err := st.Effective(ctx, own.Role, capabilities)
 	if err != nil {
-		return nil, &onBehalfRefusal{http.StatusInternalServerError, "", err.Error()}
+		return nil, &onBehalfRefusal{http.StatusInternalServerError, nil, err.Error()}
 	}
 	if roleOff {
-		return nil, &onBehalfRefusal{http.StatusForbidden, "user_disabled", "the role " + own.Role + " is disabled"}
+		return nil, &onBehalfRefusal{http.StatusForbidden, codeUserDisabled, "the role " + own.Role + " is disabled"}
 	}
 	// 1: the user's role; 2 and 4 are in caps already. The capabilities
 	// disabled for every role that any role of the chain left out are
@@ -209,17 +210,17 @@ func (s *Server) integrationPrincipal(ctx context.Context, r *http.Request, p *p
 	if id.Linked() {
 		linked, ok, err := st.UserByID(ctx, id.EffectiveUserID)
 		if err != nil || !ok {
-			return nil, &onBehalfRefusal{http.StatusInternalServerError, "", "the linked user is missing"}
+			return nil, &onBehalfRefusal{http.StatusInternalServerError, nil, "the linked user is missing"}
 		}
 		if linked.Disabled || linked.Expired(now) {
-			return nil, &onBehalfRefusal{http.StatusForbidden, "user_disabled", "the linked user " + linked.Name + " is disabled"}
+			return nil, &onBehalfRefusal{http.StatusForbidden, codeUserDisabled, "the linked user " + linked.Name + " is disabled"}
 		}
 		linkedCaps, linkedOff, roleOff, err := st.Effective(ctx, linked.Role, capabilities)
 		if err != nil {
-			return nil, &onBehalfRefusal{http.StatusInternalServerError, "", err.Error()}
+			return nil, &onBehalfRefusal{http.StatusInternalServerError, nil, err.Error()}
 		}
 		if roleOff {
-			return nil, &onBehalfRefusal{http.StatusForbidden, "user_disabled", "the role " + linked.Role + " is disabled"}
+			return nil, &onBehalfRefusal{http.StatusForbidden, codeUserDisabled, "the role " + linked.Role + " is disabled"}
 		}
 		caps = intersect(caps, linkedCaps) // 3
 		off = union(off, linkedOff)
