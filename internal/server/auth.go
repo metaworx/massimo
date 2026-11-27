@@ -904,7 +904,7 @@ func (s *Server) principalFor(ctx context.Context, tok store.Token, now time.Tim
 		if !ok || integ.State != store.IntegrationActive {
 			return nil, &forbiddenError{msg: fmt.Sprintf("the integration of user %s is disabled", u.Name), code: codeIntegrationDisabled}
 		}
-		p.caps = intersect(intersect(p.caps, integrationCeiling), integ.MaxCaps)
+		p.caps = withinIntegration(p.caps, integ)
 	}
 	return p, nil
 }
@@ -912,9 +912,11 @@ func (s *Server) principalFor(ctx context.Context, tok store.Token, now time.Tim
 // stillAdmitted reports whether the caller an event stream was opened
 // for would be let in now: an open server still open, the one token of a
 // server without a store unchanged, a user's token neither revoked nor
-// expired, its user and role still allowed and holding read. A store
-// that cannot be read ends the stream, as authorize fails closed. The
-// stream asks at each keep-alive (server.go, events).
+// expired, its user and role still allowed and holding read, and for a
+// call through an integration for one of its users the chain again
+// (stillActsFor). A store that cannot be read ends the stream, as
+// authorize fails closed. The stream asks at each keep-alive (server.go,
+// events).
 func (s *Server) stillAdmitted(ctx context.Context, p *principal) bool {
 	if p == nil {
 		return false
@@ -941,7 +943,10 @@ func (s *Server) stillAdmitted(ctx context.Context, p *principal) bool {
 		}
 	}
 	np, err := s.principalFor(ctx, tok, now)
-	return err == nil && np.has("read")
+	if err != nil || !np.has("read") {
+		return false
+	}
+	return p.actsFor == nil || s.stillActsFor(ctx, p, np, now)
 }
 
 // touch records a token's use at most once an hour, and moves a

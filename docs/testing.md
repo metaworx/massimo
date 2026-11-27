@@ -663,6 +663,12 @@ and a file already there is opened as it is, as a restart's is.
 `internal/serve`'s `testStore`,
 and the tests of `cmd/massimo` that open a store for a server they build
 open their stores through it.
+`storekit.Raw(t, st)` opens a second connection to the file of `st`,
+past the store, as another process holds one,
+waiting for a lock as the store does, and closes it at the test's end:
+for a test that writes what the store never writes,
+such as a row an older version left,
+or that holds the file's lock while the store works.
 
 - **The template** is a store that `store.Open` makes in a temporary directory,
   at the version `test`, the first time a test asks for it:
