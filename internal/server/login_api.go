@@ -558,7 +558,18 @@ func (s *Server) meOf(r *http.Request, p *principal) (meView, error) {
 	}
 	u := viewUser(p.user, invitedBy)
 	u.Display, u.Integration = userDisplay(ctx, st.Namer(), p.user)
-	tok := viewToken(p.token)
+	// The token as this request leaves it: the row it was let in with is
+	// the one before its use was written (touch), so a key's idle end
+	// would count from its use before, days old maybe (AP KeyLife, Block
+	// 3). One ended in between is shown as it was let in.
+	cur, ok, err := st.TokenAlive(ctx, p.token.ID)
+	if err != nil {
+		return me, fail(http.StatusInternalServerError, "%v", err)
+	}
+	if !ok {
+		cur = p.token
+	}
+	tok := viewToken(cur)
 	// The role's set with what it includes, as every check takes it
 	// (principal.has).
 	me.User, me.Role, me.Capabilities, me.Token = &u, &roleRef{Key: role.Key, Name: role.Name, Disabled: role.Disabled}, heldCaps(setOf(caps), setOf(off)), &tok

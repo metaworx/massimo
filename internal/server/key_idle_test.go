@@ -153,8 +153,10 @@ func TestKeyIdle(t *testing.T) {
 		t.Fatalf("the session of an ended key is listed: %+v", list)
 	}
 
-	// The settings file's key, never used by this clock, lives and says it
-	// is kept from the limit.
+	// The settings file's key was last used at day 3, as the key was, so
+	// its next use at day 10, the list's read above, came exactly at the
+	// limit's edge, where the key was refused: kept from the limit, it was
+	// let in, lives and says it is kept from the limit.
 	if code, _ := callAPI(t, ts, "GET", "/api/v1/cubes", "secret", ""); code != 200 {
 		t.Fatalf("the settings file's key under the limit: %d", code)
 	}
@@ -175,6 +177,44 @@ func TestKeyIdle(t *testing.T) {
 	}
 	if code, text := callAPI(t, ts, "GET", "/api/v1/cubes", sessionSecret, ""); code != 200 {
 		t.Fatalf("the session, the limit raised: %d %s", code, text)
+	}
+}
+
+// GET /api/v1/me shows the key presented as this request leaves it (AP
+// KeyLife, Block 3): its use written, its idle end counts from now, not
+// from the use before, days old; and the list read next says the same.
+// The store's clock starts three days back and catches up with the real
+// time, as TestKeyIdle's does.
+func TestMeIdleEnd(t *testing.T) {
+	t.Parallel()
+	day := 24 * time.Hour
+	clock := testkit.NewClock(time.Now().UTC().Add(-3 * day).Truncate(time.Millisecond))
+	r := startServer(t, withOptions(storeOptionsAt(t, t.TempDir(), "secret", clock.Now)))
+	ts, st := r.ts, r.s.opts.Store
+	ctx := t.Context()
+	anna, err := st.AddUser(ctx, store.User{Name: "anna", Role: store.RoleOperator}, "", 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	key, secret, _ := st.AddKey(ctx, anna.ID, store.KeyOptions{Label: "Loxone"})
+	if err := st.TouchToken(ctx, key.ID, "192.0.2.10", time.Time{}); err != nil {
+		t.Fatal(err)
+	}
+	if err := st.SetSetting(ctx, store.KeyIdleDaysKey, 7); err != nil {
+		t.Fatal(err)
+	}
+	clock.Add(3 * day)
+	var me meView
+	getJSON(t, ts, secret, "/api/v1/me", &me)
+	want := clock.Now().Add(7 * day)
+	if me.Token == nil || me.Token.ID != key.ID || me.Token.IdleEndsAt == nil || !me.Token.IdleEndsAt.Equal(want) {
+		t.Fatalf("the key's idle end in /api/v1/me: %+v, want %v, a week from this use", me.Token, want)
+	}
+	if me.Token.LastUsedAt == nil || !me.Token.LastUsedAt.Equal(clock.Now()) || me.Token.LastUsedFrom != "127.0.0.1" {
+		t.Fatalf("the key's last use in /api/v1/me: %+v, want this one", me.Token)
+	}
+	if k := tokensOf(t, r, "secret", "anna")[key.ID]; k.IdleEndsAt == nil || !k.IdleEndsAt.Equal(want) {
+		t.Fatalf("the list after it: %+v, want %v", k, want)
 	}
 }
 

@@ -572,7 +572,9 @@ a revoke under the user's tokens is `409` too (below).
 With users, `user`, `role`, `capabilities` (the effective set:
 the role's minus the disabled capabilities, every one for `owner`,
 none for a disabled role, and what those include, `restart` beside
-`update` or `reboot` ("Authentication")) and `token`, the one presented;
+`update` or `reboot` ("Authentication")) and `token`, the one presented,
+as this request leaves it: its use written, so that a key's `idle_ends_at`
+counts from it (Tokens);
 outside users mode `user` and `role` are null and `capabilities` is every one.
 `setup` is true on an open server for a caller on the local network,
 the one that may create the first owner,
