@@ -5059,6 +5059,13 @@ with the fields of each one's form, the web UI's texts
 A field's `type` is `text`, `number`, `path` (a directory of this box,
 relative to the data directory), `secret`, `bool` or `choice` (with `choices`);
 `secret` names the kind's secret field, given apart and kept sealed.
+A field's `warn`, where it has one,
+is a pattern in the syntax RE2 and JavaScript share,
+of the values the card warns of beside the field,
+with the text `serverbackup.warn.<kind>.<key>`; it refuses nothing.
+The kind `webdav` takes `url`, `user` and the secret `password`,
+its `url` warned of where it is plain `http:` (`^[Hh][Tt][Tt][Pp]:`),
+since the password then travels in clear (docs/store.md, "WebDAV").
 `POST /api/v1/server-backup-targets` adds one,
 `{"name": "NAS", "kind": "local", "config": {"path": "/mnt/nas/massimo"},
 "secret": "…", "takes": "daily", "retention": {"daily": 7, "weekly": 4},

@@ -6543,6 +6543,7 @@ components:
               required: {type: boolean}
               default: {type: string}
               choices: {type: array, items: {type: string}}
+              warn: {type: string, description: 'A pattern, in the syntax RE2 and JavaScript share, of the values the card warns of beside the field, with the text serverbackup.warn.<kind>.<key>; it refuses nothing'}
     ServerBackupKey:
       type: object
       properties:

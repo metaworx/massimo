@@ -72,6 +72,10 @@ type Field struct {
 	Required bool
 	Default  string
 	Choices  []string
+	// Warn is a pattern, in the syntax RE2 and JavaScript share, of the
+	// values the card warns of beside the field, with the text
+	// serverbackup.warn.<kind>.<key>; it refuses nothing.
+	Warn string
 }
 
 // The types of a field. A kind has at most one secret field, whose
@@ -126,6 +130,13 @@ func (k Kind) valid() error {
 			return fmt.Errorf("serverbackup: kind %s: field %s: a choice without choices", k.Name, f.Key)
 		case f.Type == FieldSecret && f.Default != "":
 			return fmt.Errorf("serverbackup: kind %s: field %s: a secret has no default", k.Name, f.Key)
+		case f.Warn != "" && f.Type == FieldSecret:
+			return fmt.Errorf("serverbackup: kind %s: field %s: a secret, never shown, has no warning", k.Name, f.Key)
+		}
+		if f.Warn != "" {
+			if _, err := regexp.Compile(f.Warn); err != nil {
+				return fmt.Errorf("serverbackup: kind %s: field %s: its warning: %w", k.Name, f.Key, err)
+			}
 		}
 		if f.Default != "" {
 			if _, err := f.check(f.Default); err != nil {

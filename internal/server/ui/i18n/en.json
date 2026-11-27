@@ -2159,5 +2159,10 @@
   "notify.server_backup_failed.label": "A backup of the server fails",
   "notify.server_backup_failed.title": "Server backup failed",
   "notify.server_backup_failed.body": "A backup of the server, or its copy to a target, failed three retries. See Maintenance.",
-  "help.notify.server_backup_failed": "When a backup of the server, or its copy to a target, still fails after its three retries; for those who see the server's backups."
+  "help.notify.server_backup_failed": "When a backup of the server, or its copy to a target, still fails after its three retries; for those who see the server's backups.",
+  "serverbackup.kind.webdav": "WebDAV",
+  "serverbackup.field.webdav.url": "Folder URL",
+  "serverbackup.field.webdav.user": "User",
+  "serverbackup.field.webdav.password": "Password",
+  "serverbackup.warn.webdav.url": "Plain http: the password travels in clear, though the backups stay encrypted. Use https where the server offers it."
 }

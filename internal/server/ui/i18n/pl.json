@@ -2232,5 +2232,10 @@
   "notify.server_backup_failed.label": "Kopia zapasowa serwera się nie udaje",
   "notify.server_backup_failed.title": "Kopia serwera nie powiodła się",
   "notify.server_backup_failed.body": "Kopia zapasowa serwera lub jej kopia do miejsca docelowego nie powiodła się mimo trzech ponowień. Zobacz Konserwacja.",
-  "help.notify.server_backup_failed": "Gdy kopia zapasowa serwera lub jej kopia do miejsca docelowego nadal się nie udaje po trzech ponowieniach; dla tych, którzy widzą kopie zapasowe serwera."
+  "help.notify.server_backup_failed": "Gdy kopia zapasowa serwera lub jej kopia do miejsca docelowego nadal się nie udaje po trzech ponowieniach; dla tych, którzy widzą kopie zapasowe serwera.",
+  "serverbackup.kind.webdav": "WebDAV",
+  "serverbackup.field.webdav.url": "Adres URL folderu",
+  "serverbackup.field.webdav.user": "Użytkownik",
+  "serverbackup.field.webdav.password": "Hasło",
+  "serverbackup.warn.webdav.url": "Nieszyfrowane http: hasło jest przesyłane jawnym tekstem, choć kopie zapasowe pozostają zaszyfrowane. Użyj https, jeśli serwer to umożliwia."
 }

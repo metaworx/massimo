@@ -2406,6 +2406,12 @@ export interface ServerBackupKind {
     required?: boolean;
     default?: string;
     choices?: string[];
+    /**
+     * A pattern, in the syntax RE2 and JavaScript share, of the values the card
+     * warns of beside the field, with the text serverbackup.warn.<kind>.<key>;
+     * it refuses nothing
+     */
+    warn?: string;
   })[];
 }
 

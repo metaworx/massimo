@@ -2159,5 +2159,10 @@
   "notify.server_backup_failed.label": "Ein Backup des Servers schlägt fehl",
   "notify.server_backup_failed.title": "Server-Backup fehlgeschlagen",
   "notify.server_backup_failed.body": "Ein Backup des Servers oder seine Kopie auf ein Ziel ist auch nach drei Wiederholungen fehlgeschlagen. Siehe Wartung.",
-  "help.notify.server_backup_failed": "Wenn ein Backup des Servers oder seine Kopie auf ein Ziel nach drei Wiederholungen noch fehlschlägt; für alle, die die Backups des Servers sehen."
+  "help.notify.server_backup_failed": "Wenn ein Backup des Servers oder seine Kopie auf ein Ziel nach drei Wiederholungen noch fehlschlägt; für alle, die die Backups des Servers sehen.",
+  "serverbackup.kind.webdav": "WebDAV",
+  "serverbackup.field.webdav.url": "URL des Ordners",
+  "serverbackup.field.webdav.user": "Benutzer",
+  "serverbackup.field.webdav.password": "Passwort",
+  "serverbackup.warn.webdav.url": "Unverschlüsseltes http: Das Passwort wird im Klartext übertragen, die Backups bleiben verschlüsselt. Verwende https, wo der Server es anbietet."
 }

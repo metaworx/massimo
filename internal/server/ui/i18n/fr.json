@@ -2161,5 +2161,10 @@
   "notify.server_backup_failed.label": "Une sauvegarde du serveur échoue",
   "notify.server_backup_failed.title": "Sauvegarde du serveur en échec",
   "notify.server_backup_failed.body": "Une sauvegarde du serveur, ou sa copie vers une destination, a échoué malgré trois nouvelles tentatives. Voir Maintenance.",
-  "help.notify.server_backup_failed": "Quand une sauvegarde du serveur, ou sa copie vers une destination, échoue encore après ses trois nouvelles tentatives ; pour ceux qui voient les sauvegardes du serveur."
+  "help.notify.server_backup_failed": "Quand une sauvegarde du serveur, ou sa copie vers une destination, échoue encore après ses trois nouvelles tentatives ; pour ceux qui voient les sauvegardes du serveur.",
+  "serverbackup.kind.webdav": "WebDAV",
+  "serverbackup.field.webdav.url": "URL du dossier",
+  "serverbackup.field.webdav.user": "Utilisateur",
+  "serverbackup.field.webdav.password": "Mot de passe",
+  "serverbackup.warn.webdav.url": "http non chiffré : le mot de passe circule en clair, même si les sauvegardes restent chiffrées. Utilisez https si le serveur le propose."
 }

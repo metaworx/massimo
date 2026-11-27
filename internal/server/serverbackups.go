@@ -964,13 +964,15 @@ type kindView struct {
 }
 
 // fieldView is one field of a kind's form; its text is
-// serverbackup.field.<kind>.<key> in the web UI's languages.
+// serverbackup.field.<kind>.<key> in the web UI's languages, and that
+// of its warning, for a value Warn matches, serverbackup.warn.<kind>.<key>.
 type fieldView struct {
 	Key      string   `json:"key"`
 	Type     string   `json:"type"`
 	Required bool     `json:"required"`
 	Default  string   `json:"default,omitempty"`
 	Choices  []string `json:"choices,omitempty"`
+	Warn     string   `json:"warn,omitempty"`
 }
 
 // serverBackupKinds handles GET /api/v1/server-backup-targets/kinds: the
@@ -984,7 +986,7 @@ func (s *Server) serverBackupKinds(w http.ResponseWriter, r *http.Request) error
 			kv.Secret = f.Key
 		}
 		for _, f := range k.Fields {
-			kv.Fields = append(kv.Fields, fieldView{Key: f.Key, Type: f.Type, Required: f.Required, Default: f.Default, Choices: f.Choices})
+			kv.Fields = append(kv.Fields, fieldView{Key: f.Key, Type: f.Type, Required: f.Required, Default: f.Default, Choices: f.Choices, Warn: f.Warn})
 		}
 		out = append(out, kv)
 	}

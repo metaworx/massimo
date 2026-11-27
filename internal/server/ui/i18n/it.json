@@ -2161,5 +2161,10 @@
   "notify.server_backup_failed.label": "Un backup del server non riesce",
   "notify.server_backup_failed.title": "Backup del server non riuscito",
   "notify.server_backup_failed.body": "Un backup del server, o la sua copia su una destinazione, non è riuscito nemmeno dopo tre tentativi. Vedi Manutenzione.",
-  "help.notify.server_backup_failed": "Quando un backup del server, o la sua copia su una destinazione, non riesce ancora dopo i suoi tre tentativi; per chi vede i backup del server."
+  "help.notify.server_backup_failed": "Quando un backup del server, o la sua copia su una destinazione, non riesce ancora dopo i suoi tre tentativi; per chi vede i backup del server.",
+  "serverbackup.kind.webdav": "WebDAV",
+  "serverbackup.field.webdav.url": "URL della cartella",
+  "serverbackup.field.webdav.user": "Utente",
+  "serverbackup.field.webdav.password": "Password",
+  "serverbackup.warn.webdav.url": "http non cifrato: la password viaggia in chiaro, anche se i backup restano cifrati. Usa https se il server lo offre."
 }

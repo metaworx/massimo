@@ -2160,5 +2160,10 @@
   "notify.server_backup_failed.label": "Een back-up van de server mislukt",
   "notify.server_backup_failed.title": "Serverback-up mislukt",
   "notify.server_backup_failed.body": "Een back-up van de server, of zijn kopie naar een doel, is ook na drie nieuwe pogingen mislukt. Zie Onderhoud.",
-  "help.notify.server_backup_failed": "Als een back-up van de server, of zijn kopie naar een doel, na zijn drie nieuwe pogingen nog mislukt; voor wie de back-ups van de server ziet."
+  "help.notify.server_backup_failed": "Als een back-up van de server, of zijn kopie naar een doel, na zijn drie nieuwe pogingen nog mislukt; voor wie de back-ups van de server ziet.",
+  "serverbackup.kind.webdav": "WebDAV",
+  "serverbackup.field.webdav.url": "URL van de map",
+  "serverbackup.field.webdav.user": "Gebruiker",
+  "serverbackup.field.webdav.password": "Wachtwoord",
+  "serverbackup.warn.webdav.url": "Onversleuteld http: het wachtwoord gaat leesbaar over het netwerk, al blijven de back-ups versleuteld. Gebruik https als de server het aanbiedt."
 }
