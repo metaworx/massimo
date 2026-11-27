@@ -2275,6 +2275,8 @@ so Windows' service account needs no rights on one.
   "The attempted logon is invalid" for a refused password,
   "{Network Name Not Found}" for a share that is not there;
   it never holds the password.
+- `make target-test` tests it against Samba with signing and encryption required
+  (`tools/target-test/README.md`).
 
 ## 8. Migration of an installed box
 
