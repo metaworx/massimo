@@ -8,24 +8,29 @@ import (
 	"errors"
 	"flag"
 	"fmt"
+	"io"
 	"io/fs"
 	"os"
 	"path/filepath"
 	"sort"
 	"strconv"
+	"time"
 
+	"go.metaworx.ch/massimo/internal/serverbackup"
 	"go.metaworx.ch/massimo/internal/store"
 )
 
 // runStore handles massimo store backup|migrate|info|downgrade, the
-// commands that open serve's store directly (docs/store.md section 7).
-// They take -data like serve and run as the service user, beside a
-// running server, but for downgrade, which needs the store alone. Each
-// checks its arguments before it opens the store, which migrate creates,
-// so that its help and a mistake leave nothing behind.
+// commands that open serve's store directly (docs/store.md section 7),
+// and keygen|inspect|decrypt, the server backups' keys and files
+// (docs/store.md, "Server backups"), which open no store. They take
+// -data like serve and run as the service user, beside a running server,
+// but for downgrade, which needs the store alone. Each checks its
+// arguments before it opens the store, which migrate creates, so that
+// its help and a mistake leave nothing behind.
 func runStore(args []string) error {
 	usage := func() {
-		fmt.Fprint(os.Stderr, `usage: massimo [-data <dir>] store backup <file> | migrate | info | downgrade -to <version>
+		fmt.Fprint(os.Stderr, `usage: massimo [-data <dir>] store <command> [options] [args]
 
   backup <file>  write a consistent copy of massimo.db, also while serve runs
   migrate        create massimo.db or apply its pending migrations, without starting serve;
@@ -35,6 +40,18 @@ func runStore(args []string) error {
                  take massimo.db back to what a binary for that schema version opens
                  (its store info names it), for a rollback to an older release;
                  with the service stopped, a copy massimo.db.before-downgrade-<version> first
+  keygen -kind pq|classic [-out <file>]
+                 make a key for the server's backups: pq is post-quantum (age1pq1…,
+                 about 2000 characters), classic is X25519 (age1…, 62 characters,
+                 beside an ssh-ed25519 key); a server's keys are of one kind. The
+                 secret key goes to <file> (mode 0600, not replaced) or to standard
+                 output; the public key, which the server takes, is printed
+  inspect <file> a server backup's manifest, who signed it and its payload's hash,
+                 read without the key
+  decrypt <file> -key <file> -out <dir>
+                 open a server backup with its secret key (age's, or an OpenSSH
+                 ssh-ed25519 key) into <dir>, empty or new: massimo.db, opaque.key,
+                 node.key, env and tls/; age -d -i opens it as well
 
 `+dataDirUsage("store", "info"))
 	}
@@ -157,6 +174,12 @@ func runStore(args []string) error {
 		}
 		fmt.Printf("%s: schema version %d, now %d (min_reader %d), which a binary for version %d opens; the file as it was is %s\n",
 			d.Path, d.From, d.To, d.MinReader, *to, d.Copy)
+	case "keygen":
+		return storeKeygen(args[1:], usage, os.Stdout, os.Stderr)
+	case "inspect":
+		return storeInspect(args[1:], usage, dir, os.Stdout)
+	case "decrypt":
+		return storeDecrypt(args[1:], usage, os.Stdout)
 	case "help", "-h", "--help":
 		usage()
 	default:
@@ -172,4 +195,205 @@ func storeError(dir string, err error) error {
 		return fmt.Errorf("store: no %s in %s (give -data, or run serve once)", store.FileName, dir)
 	}
 	return err
+}
+
+// parseMixed parses set over args whose flags may come before and after
+// the arguments, as in "decrypt <file> -key <file>", and returns the
+// arguments.
+func parseMixed(set *flag.FlagSet, args []string) ([]string, error) {
+	var rest []string
+	for {
+		if err := set.Parse(args); err != nil {
+			return nil, err
+		}
+		if set.NArg() == 0 {
+			return rest, nil
+		}
+		rest = append(rest, set.Arg(0))
+		args = set.Args()[1:]
+	}
+}
+
+// storeKeygen is massimo store keygen -kind pq|classic [-out <file>]:
+// the kind has no default (AP ServerBackup, D17-C). The secret key goes
+// to the file, which is not replaced, or to stdout with a warning; the
+// public key is printed.
+func storeKeygen(args []string, usage func(), stdout, stderr io.Writer) error {
+	set := flag.NewFlagSet("store keygen", flag.ContinueOnError)
+	set.Usage = usage
+	kind := set.String("kind", "", "pq (post-quantum) or classic (X25519)")
+	out := set.String("out", "", "the file for the secret key, mode 0600; standard output without")
+	if err := set.Parse(args); err != nil {
+		return err
+	}
+	var k serverbackup.Kind
+	switch *kind {
+	case "pq":
+		k = serverbackup.KindPostQuantum
+	case "classic":
+		k = serverbackup.KindX25519
+	default:
+		usage()
+		return errors.New("store keygen: give -kind pq, post-quantum and about 2000 characters, or -kind classic, X25519, 62 characters and beside an ssh-ed25519 key")
+	}
+	if set.NArg() > 0 {
+		usage()
+		return errors.New("store keygen takes no argument; the file is -out <file>")
+	}
+	key, err := serverbackup.GenerateKey(k)
+	if err != nil {
+		return err
+	}
+	file := key.File(time.Now())
+	if *out == "" {
+		fmt.Fprintln(stderr, "store keygen: the secret key is on standard output; keep it safe and away from the server: without it no backup opens")
+		fmt.Fprintf(stderr, "public key: %s\n", key.Recipient.Line)
+		_, err := stdout.Write(file)
+		return err
+	}
+	if err := writeNewFile(*out, file); err != nil {
+		return fmt.Errorf("store keygen: %w", err)
+	}
+	fmt.Fprintf(stderr, "store keygen: the secret key is in %s; keep it safe and away from the server: without it no backup opens\n", *out)
+	fmt.Fprintln(stdout, key.Recipient.Line)
+	return nil
+}
+
+// writeNewFile writes b to path, which must not exist, mode 0600, and
+// removes it where the write fails.
+func writeNewFile(path string, b []byte) error {
+	f, err := os.OpenFile(path, os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0o600)
+	if err != nil {
+		return err
+	}
+	_, err = f.Write(b)
+	if cerr := f.Close(); err == nil {
+		err = cerr
+	}
+	if err != nil {
+		os.Remove(path)
+	}
+	return err
+}
+
+// storeInspect is massimo store inspect <file>: the manifest of a server
+// backup, the signature's verdict, this box being the one whose node.key
+// is in dir, and the payload checked against the manifest. A bad
+// signature or a changed payload is printed, then an error.
+func storeInspect(args []string, usage func(), dir string, stdout io.Writer) error {
+	set := flag.NewFlagSet("store inspect", flag.ContinueOnError)
+	set.Usage = usage
+	rest, err := parseMixed(set, args)
+	if err != nil {
+		return err
+	}
+	if len(rest) != 1 {
+		usage()
+		return errors.New("store inspect: give the backup's file")
+	}
+	f, size, err := openSized(rest[0])
+	if err != nil {
+		return fmt.Errorf("store inspect: %w", err)
+	}
+	defer f.Close()
+	m, sig, err := serverbackup.ReadManifest(f, size)
+	if err != nil {
+		return fmt.Errorf("store inspect: %s: %w", rest[0], err)
+	}
+	local, lerr := store.ReadNodePublicKey(dir)
+	printManifest(stdout, rest[0], m)
+	switch v := sig.Verdict(local); {
+	case v == serverbackup.Bad:
+		fmt.Fprintln(stdout, "signature:   bad: the manifest was changed since it was made")
+		return fmt.Errorf("store inspect: %w", serverbackup.ErrBadSignature)
+	case v == serverbackup.OtherBox && lerr != nil:
+		fmt.Fprintf(stdout, "signature:   good, by the box %s (this box's node.key was not read: whether it is this one is not known)\n", sig.Fingerprint)
+	default:
+		fmt.Fprintf(stdout, "signature:   good, by %s (%s)\n", v, sig.Fingerprint)
+	}
+	if _, _, err := serverbackup.Verify(f, size); err != nil {
+		fmt.Fprintln(stdout, "payload:     not the one the manifest names")
+		return fmt.Errorf("store inspect: %w", err)
+	}
+	fmt.Fprintln(stdout, "payload:     as the manifest names it")
+	return nil
+}
+
+// openSized opens path and returns its size.
+func openSized(path string) (*os.File, int64, error) {
+	f, err := os.Open(path)
+	if err != nil {
+		return nil, 0, err
+	}
+	fi, err := f.Stat()
+	if err != nil {
+		f.Close()
+		return nil, 0, err
+	}
+	return f, fi.Size(), nil
+}
+
+// printManifest prints a backup's manifest for store inspect.
+func printManifest(w io.Writer, path string, m serverbackup.Manifest) {
+	fmt.Fprintf(w, "file:        %s\n", path)
+	fmt.Fprintf(w, "backup:      %s (%s, format %d)\n", m.UUID, m.Kind, m.Format)
+	fmt.Fprintf(w, "made:        %s, %s\n", m.Created.Format(time.RFC3339), m.Trigger)
+	if m.Label != "" {
+		fmt.Fprintf(w, "label:       %s\n", m.Label)
+	}
+	fmt.Fprintf(w, "massimo:     %s, schema version %d (min_reader %d)\n", m.Version, m.Schema.Version, m.Schema.MinReader)
+	c := m.Counts
+	fmt.Fprintf(w, "holds:       %d users, %d integrations, %d Cubes, %d rooms, %d audit rows, %d log rows\n", c.Users, c.Integrations, c.Cubes, c.Rooms, c.Audit, c.Log)
+	files := "massimo.db, opaque.key, node.key"
+	if m.Files.Env {
+		files += ", env"
+	}
+	if m.Files.TLS > 0 {
+		files += fmt.Sprintf(", %d TLS files", m.Files.TLS)
+	}
+	fmt.Fprintf(w, "files:       %s\n", files)
+	for i, r := range m.Recipients {
+		head := "for:        "
+		if i > 0 {
+			head = "            "
+		}
+		fmt.Fprintf(w, "%s %s (%s, %s)\n", head, r.Label, r.Kind, r.Fingerprint)
+	}
+	fmt.Fprintf(w, "payload.age: %d bytes, SHA-256 %s\n", m.Payload.Size, m.Payload.SHA256)
+}
+
+// storeDecrypt is massimo store decrypt <file> -key <file> -out <dir>:
+// the backup opened with the secret key into an empty or new directory.
+func storeDecrypt(args []string, usage func(), stdout io.Writer) error {
+	set := flag.NewFlagSet("store decrypt", flag.ContinueOnError)
+	set.Usage = usage
+	keyFile := set.String("key", "", "the secret key's file")
+	out := set.String("out", "", "the directory to write into, empty or new")
+	rest, err := parseMixed(set, args)
+	if err != nil {
+		return err
+	}
+	if len(rest) != 1 || *keyFile == "" || *out == "" {
+		usage()
+		return errors.New("store decrypt: give the backup's file, -key <file> and -out <dir>")
+	}
+	kb, err := os.ReadFile(*keyFile)
+	if err != nil {
+		return fmt.Errorf("store decrypt: %w", err)
+	}
+	ids, err := serverbackup.ParseIdentities(kb)
+	if err != nil {
+		return fmt.Errorf("store decrypt: %s: %w", *keyFile, err)
+	}
+	f, size, err := openSized(rest[0])
+	if err != nil {
+		return fmt.Errorf("store decrypt: %w", err)
+	}
+	defer f.Close()
+	m, err := serverbackup.Open(f, size, ids, *out)
+	if err != nil {
+		return fmt.Errorf("store decrypt: %s: %w", rest[0], err)
+	}
+	fmt.Fprintf(stdout, "opened the backup %s of %s into %s\n", m.UUID, m.Created.Format(time.RFC3339), *out)
+	return nil
 }

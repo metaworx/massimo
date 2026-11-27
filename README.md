@@ -1216,6 +1216,19 @@ it undoes the newer migrations by their down parts,
 and leaves the file as it was as `massimo.db.before-downgrade-<version>`
 (docs/store.md, "Migrations").
 `update`'s rollback does it by itself.
+`store keygen -kind pq` or `-kind classic` makes a key for the server's backups,
+encrypted zips of the store and the files beside it.
+The kind has no default, and the two are not mixed:
+`pq` is post-quantum, `age1pq1…` and about 2000 characters long;
+`classic` is X25519, `age1…`, and goes beside an `ssh-ed25519` key.
+With `-out key.txt` the secret key goes to that file, mode 0600, never over one,
+and the public key the server takes is printed;
+without, the secret key goes to standard output.
+`store inspect <file>` prints a backup's manifest, which box signed it
+and whether its payload is intact, without the key;
+`store decrypt <file> -key key.txt -out <dir>` opens it into an empty directory,
+as `age -d -i key.txt` does with its `payload.age`.
+The details are in docs/store.md, "Server backups".
 
 `massimo user` manages the users of the store from the box (docs/api-v1.md,
 "Authentication"):

@@ -1806,12 +1806,108 @@ The exceptions are `user` (section 6) and `store` (stage (a):
 `store info` for the version and the counts,
 `store downgrade -to <N>` to take it back for an older binary, section 5,
 "Migrations"), which open the store directly.
+`store keygen`, `store inspect` and `store decrypt`
+handle the keys and the files of the server's backups,
+and open no store ("Server backups", below).
 
 A later mode `massimo -server <url> status` lets the commands use the server's
 API with a key instead of the Cube protocol,
 which gives them the server's names and hidden lists, the audit,
 and the no-direct-fallback behaviour the handover asks for.
 It is not part of the store stages.
+
+### Server backups
+
+A server backup holds the whole store and the files beside it,
+encrypted for the owner's keys (`internal/serverbackup`).
+It is one zip, stored without compression, of three files in this order:
+
+| File | What it is |
+|------|------------|
+| `manifest.json` | plain: what the backup is, without a name of a Cube, a room or a user |
+| `payload.age` | an [age](https://age-encryption.org/v1) file for the owner's recipients (`filippo.io/age`), of a deflated zip: `massimo.db`, `opaque.key`, `node.key`, `env` (the env file `serve` reads, where it has one) and `tls/<name>` (the TLS files) |
+| `manifest.sig` | the Ed25519 signature of `manifest.json`'s bytes by `node.key`, in base64 |
+
+The manifest is found through the zip's central directory,
+so a target lists its backups by ranged reads, without fetching a whole file,
+and the payload's size and hash are checked without the key.
+
+A backup is made in steps, and nothing of it is held whole in memory:
+the snapshot (`VACUUM INTO`, as `store backup <file>` writes it)
+goes to a temporary directory in the data directory;
+the payload is encrypted into a temporary `payload.age` and hashed as it is written;
+the snapshot is removed, the manifest signed,
+and the archive written whole (`internal/safefile`), mode 0600.
+The temporary files are removed whatever happens.
+It needs about twice the store free in the data directory
+and the store's size where the file goes;
+with less, it is refused with the numbers before anything is written.
+
+The manifest's fields, format 1:
+
+| Field | What it holds |
+|-------|---------------|
+| `format` | 1; a newer one is refused with "update first" |
+| `kind` | `store-snapshot`, a snapshot of the whole store; a later export would be a kind of its own |
+| `uuid` | the backup's, a UUIDv7, the same wherever a copy of it is |
+| `created` | when it was made, UTC |
+| `trigger` | `scheduled`, `manual`, `before-update` or `before-restore`; `uploaded` is a file that came in by upload, which keeps the trigger it was made with |
+| `label` | the owner's text, at most 100 characters, without control characters; left out where empty |
+| `version` | Massimo's version of the server that made it |
+| `schema` | the snapshot's `version` and `min_reader` |
+| `node` | the box that made it: `public_key`, `node.key`'s public part in base64, and its `fingerprint` |
+| `counts` | rows not removed: `users` (not an integration's), `integrations`, `cubes`, `rooms`, `audit`, `log` |
+| `files` | what the payload holds beside the store and its keys: `env`, whether the env file, and `tls`, how many TLS files |
+| `recipients` | for each recipient its `label`, `kind` (`pq`, `x25519` or `ssh-ed25519`) and `fingerprint` |
+| `payload` | `size` and `sha256` (hex) of `payload.age`, the encrypted file |
+
+The signature says who made a backup:
+this box, another box with its fingerprint, or bad.
+It is checked with the public key the manifest names,
+so it proves that nothing was changed since that box made it,
+not that a box is to be trusted.
+A bad signature, or a payload whose size or hash differs from the manifest's,
+is refused before the payload is opened.
+A fingerprint is `SHA256:` and the unpadded base64 of a SHA-256:
+of the node's 32-byte public key;
+of an `ssh-ed25519` key's wire form, as `ssh-keygen -l` shows it;
+of an age recipient's line.
+
+The keys are of two kinds, which do not go into one file,
+since a classic recipient beside a post-quantum one would open what that one keeps closed;
+age itself refuses the mix, and a box's recipients are all of one kind:
+
+- **Post-quantum**, `age1pq1…`, ML-KEM-768 with X25519, about 2000 characters:
+  a copy taken today stays closed to a quantum computer later.
+- **Classic**, X25519, `age1…`, 62 characters,
+  and the owner's own `ssh-ed25519` line, which goes beside it.
+
+The server keeps the recipients alone; the secret key stays with the owner,
+and only it opens a backup.
+On the command line:
+
+- `massimo store keygen -kind pq|classic [-out <file>]` makes a key;
+  the kind has no default.
+  The secret key goes to the file, mode 0600, never over one that exists,
+  or to standard output with a warning;
+  the public key, the line the server takes, is printed.
+  The file is as `age-keygen` writes it.
+- `massimo store inspect <file>` prints the manifest,
+  who signed it (this box being the one whose `node.key` is in the data directory),
+  and whether the payload is the one the manifest names; it needs no key.
+- `massimo store decrypt <file> -key <file> -out <dir>` checks the signature and the hash,
+  then writes the payload's files into an empty or new directory, mode 0600.
+  The key is an age key file or an OpenSSH `ssh-ed25519` private key without a passphrase.
+
+A backup opens without Massimo too, with `unzip` and age:
+
+```sh
+unzip -p backup.zip payload.age | age -d -i key.txt > payload.zip
+unzip payload.zip -d restored
+```
+
+`age -d -i ~/.ssh/id_ed25519` opens one made for an `ssh-ed25519` line,
+and asks for the key's passphrase where it has one.
 
 ## 8. Migration of an installed box
 

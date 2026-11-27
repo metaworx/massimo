@@ -142,3 +142,26 @@ func (s *Store) Sign(msg []byte) ([]byte, error) {
 	}
 	return ed25519.Sign(s.key.private, msg), nil
 }
+
+// VerifyNode reports whether sig is the signature Sign makes of msg with
+// the node key whose public part is publicKey: this box's or another's,
+// such as the one a server backup's manifest names.
+func VerifyNode(msg, sig []byte, publicKey ed25519.PublicKey) bool {
+	return len(publicKey) == ed25519.PublicKeySize && len(sig) == ed25519.SignatureSize && ed25519.Verify(publicKey, msg, sig)
+}
+
+// ReadNodePublicKey returns the public part of the node key in the data
+// directory dir, read without opening the store, so that a command can
+// tell this box's signature from another's.
+func ReadNodePublicKey(dir string) (ed25519.PublicKey, error) {
+	p := KeyPath(dir)
+	b, err := os.ReadFile(p)
+	if err != nil {
+		return nil, fmt.Errorf("store: %w", err)
+	}
+	k, err := parseKey(b)
+	if err != nil {
+		return nil, fmt.Errorf("store: %s: %w", p, err)
+	}
+	return k.public, nil
+}

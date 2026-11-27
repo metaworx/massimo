@@ -178,7 +178,7 @@ commands:
   config          show the settings in effect, with secrets redacted
   serve           keep the Cubes connected, serve the JSON API and act as a Cube on the LAN
   legacy          run the original MAX! software with filtered output
-  store           back up, migrate or describe serve's store, massimo.db (see its usage)
+  store           back up, migrate or describe serve's store, massimo.db; the server backups' keys and files (see its usage)
   tls             show the certificate serve presents, or make a new self-signed one (see its usage)
   user            add, list, disable and enable the users of serve's store, set passwords, make API keys (see its usage)
   install         install massimo serve as a service (systemd), or update or -remove it
