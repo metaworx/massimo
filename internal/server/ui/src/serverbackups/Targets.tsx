@@ -47,7 +47,7 @@ import { showCard } from "../shared/card";
 import { isShown, showView } from "../shared/pages";
 import { fmtWhen } from "../shared/time";
 import { addTarget, removeTarget, saveTarget, testTarget, trustHostKey } from "./send";
-import { card, DEFAULT_KEEP, KEEPS, type KeepKey, sb, TAKES, targetFormKey, targetUI } from "./store";
+import { card, DEFAULT_KEEP, hostAt, KEEPS, type KeepKey, sb, TAKES, targetFormKey, targetUI } from "./store";
 
 /** textOr is the text of key, else fallback where the texts have none (a kind or a field a later block adds without its text). */
 function textOr(key: string, fallback: string): string {
@@ -341,7 +341,7 @@ function useDrafts(tg: ServerBackupTarget, place: <T>(field: string) => Place<T>
   };
 }
 
-/** TargetForm is a target's settings in its panel: its fields, Test, Remove, which asks in place of the actions, Reset and Save; the secret written only, and asked for again while the kind's fields differ from those stored. */
+/** TargetForm is a target's settings in its panel: its fields, Test, Remove, which asks in place of the actions, Reset and Save; the secret written only, and asked for again while the kind's fields differ from those stored; the host's key its test stopped at. */
 function TargetForm({ tg }: { tg: ServerBackupTarget }) {
   useLook();
   const uuid = tg.uuid || "";
@@ -359,6 +359,13 @@ function TargetForm({ tg }: { tg: ServerBackupTarget }) {
   const submit = (ev: Event) => {
     ev.preventDefault();
     form.save(() => saveTarget(tg, bodyOf(v, kind, secret)));
+  };
+  // a host's key trusted: kept in a draft of other changes to the kind's fields, whose Save would otherwise send the host_key they hold;
+  // the focus on Test, where the host's key stood, which goes
+  const trusted = (key: string, before: Record<string, string>) => {
+    const cur = form.place<Record<string, string>>("config").slot(before).value;
+    if (configNorm(cur) !== configNorm(before)) v.config.set({ ...cur, host_key: key });
+    form.props.ref.current?.querySelector<HTMLElement>(".sb-target-test")?.focus();
   };
   return (
     <form {...form.props} class="sb-target-form" onSubmit={submit}>
@@ -381,6 +388,7 @@ function TargetForm({ tg }: { tg: ServerBackupTarget }) {
           )} />
       )}
       <ResultLine cls="small cubes-msg sb-target-msg" role="status" res={targetUI.of(uuid).said} />
+      <HostKey tg={tg} trusted={trusted} />
     </form>
   );
 }
@@ -400,17 +408,19 @@ function PublicKey({ tg }: { tg: ServerBackupTarget }) {
 
 /**
  * HostKey is the host's key that a target's test or its add's scan
- * stopped at (an SFTP target's, D8-A), until Maintenance is shown again:
- * one not trusted yet with its fingerprint and Trust this host key, which
- * saves it as the target's host_key; one other than the key trusted with
- * both and no button, since only the host can tell a host set up anew
- * from someone standing between: a key changed on purpose goes into the
- * form's Host key by hand.
+ * stopped at (an SFTP target's, D8-A), until Maintenance is shown again,
+ * the target is saved, or it names another host or port than the one
+ * reached, whose key it is not: one not trusted yet with its fingerprint
+ * and Trust this host key, which saves it as the target's host_key and
+ * hands it to trusted, with the config it was saved beside; one other
+ * than the key trusted with both and no button, since only the host can
+ * tell a host set up anew from someone standing between: a key changed
+ * on purpose goes into the form's Host key by hand.
  */
-function HostKey({ tg }: { tg: ServerBackupTarget }) {
+function HostKey({ tg, trusted }: { tg: ServerBackupTarget; trusted: (key: string, before: Record<string, string>) => void }) {
   useLook();
   const host = targetUI.of(tg.uuid || "").host;
-  if (!host) return null;
+  if (!host || host.at !== hostAt(tg.config)) return null;
   const id = "sb-target-" + tg.uuid + "-host";
   if (host.pinned) {
     return (
@@ -426,13 +436,16 @@ function HostKey({ tg }: { tg: ServerBackupTarget }) {
       <p id={id + "-text"} class="small warn-text"><Mark state="warn" /> {t("serverbackup.target.hostKeyNew")}</p>
       <p class="small sb-host-key-fp">{t("serverbackup.target.hostKeyShown")} <Copy cls="mono sb-host-key-shown" text={host.key} /></p>
       <div class="actions sb-host-key-actions">
-        <BusyButton cls="primary sb-host-key-trust" label={t("serverbackup.target.hostKeyTrust")} run={() => trustHostKey(tg, host.key)} />
+        <BusyButton cls="primary sb-host-key-trust" label={t("serverbackup.target.hostKeyTrust")} run={async () => {
+          const before = tg.config || {};
+          if (await trustHostKey(tg, host.key)) trusted(host.key, before);
+        }} />
       </div>
     </div>
   );
 }
 
-/** TargetPanel is a target's panel: its head with its name, its kind and its marks; its line; the public line of a key the server made for it; its form; the host's key its test stopped at. */
+/** TargetPanel is a target's panel: its head with its name, its kind and its marks; its line; the public line of a key the server made for it; its form. */
 function TargetPanel({ tg }: { tg: ServerBackupTarget }) {
   useLook();
   const uuid = tg.uuid || "";
@@ -443,7 +456,6 @@ function TargetPanel({ tg }: { tg: ServerBackupTarget }) {
       <p class="muted small sb-target-facts">{factsText(tg, tg.retention)}</p>
       {tg.public_key && <PublicKey tg={tg} />}
       <TargetForm tg={tg} />
-      <HostKey tg={tg} />
     </Fold>
   );
 }

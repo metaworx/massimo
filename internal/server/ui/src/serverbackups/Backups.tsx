@@ -104,7 +104,9 @@ function CopyRow({ b, target, c, alone, last, localThere }: {
  * DeleteBackup is Delete of a backup no target holds a copy of, one that
  * failed or whose copies are missing, for a holder of backup.server: it
  * asks in its place first, and the backup goes from the list (DELETE
- * …/{id}); refused, the question stays, the message under the backup.
+ * …/{id}), the focus going to the list's next backup, else the one
+ * before, else Back up now or Upload a backup…; refused, the question
+ * stays, the message under the backup.
  */
 function DeleteBackup({ b }: { b: ServerBackup }) {
   useLook();
@@ -113,7 +115,14 @@ function DeleteBackup({ b }: { b: ServerBackup }) {
   return (
     <Question text={t("serverbackup.deleteBackupAsk", { when: b.time ? fmtWhen(b.time) : "" })} yes={t("action.delete")} no={t("action.cancel")}
       boxRef={ask.box} onNo={() => ask.done()} onYes={async () => {
-        if (await deleteBackup(b)) ask.done(false);
+        // where the focus goes once the backup's fold has left the list, found while it is there
+        const fold = ask.box.current?.closest(".sb-backup");
+        const body = fold?.closest(".sb-backups")?.parentElement;
+        const next = (fold?.nextElementSibling || fold?.previousElementSibling)?.querySelector<HTMLElement>(":scope > summary")
+          || body?.querySelector<HTMLElement>("#sb-now:not([disabled])") || body?.querySelector<HTMLElement>("#sb-upload:not([disabled])");
+        if (!(await deleteBackup(b))) return;
+        ask.done(false);
+        next?.focus();
       }} />
   );
 }

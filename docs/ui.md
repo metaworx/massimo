@@ -2666,7 +2666,8 @@ The server's sign, when it says an update is out, opens it at Software update.
     with `backup.retry` **Retry** where something of it failed,
     and with `backup.server` **Delete** where no target holds a copy of it (it failed,
     or its copies are missing), which asks in its place first,
-    and the backup goes from the list.
+    and the backup goes from the list, the focus going to the next backup,
+    else the one before, else to **Back up now** or **Upload a backup…**.
     A holder of `backup.retry` alone sees the backups, their copies and the targets'
     state, with **Retry**, and nothing more.
     Each action says how it went under its backup.
@@ -2759,9 +2760,13 @@ The server's sign, when it says an update is out, opens it at Software update.
     which copies itself, to put into the host's `authorized_keys` for its user
     (AP ServerBackup, D8-A).
     The host's key that **Test** or the add's read stopped at stands under the form
-    until Maintenance is shown again: one not trusted yet with its fingerprint
-    and **Trust this host key**, which saves it as the target's Host key,
-    its other fields as stored, not as the form holds them;
+    until Maintenance is shown again, the target is saved,
+    or it names another host or port than the one reached, whose key it is not:
+    one not trusted yet with its fingerprint and **Trust this host key**,
+    which saves it as the target's Host key,
+    its other fields as stored, not as the form holds them,
+    puts it into the form's changes not saved, so that their Save keeps it,
+    and gives the focus to **Test**;
     one other than the key trusted, in red beside that one, with no button,
     since only the host tells a host set up anew from someone standing between:
     a key changed on purpose goes into Host key by hand.

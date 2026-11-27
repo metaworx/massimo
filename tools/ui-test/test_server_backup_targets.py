@@ -6,7 +6,8 @@ against the server run.sh starts, which offers every kind of target:
 an SFTP target's key line, which copies itself, and the host's key its
 test stops at, trusted with a button where none is and shown beside the
 one trusted, with no button, where it changed (the test's answer
-stubbed: no SSH server runs here); a WebDAV target's password asked for
+stubbed: no SSH server runs here), and gone once the target names
+another host, kept in the form after Trust; a WebDAV target's password asked for
 again when its URL changes, and plain http warned of; a backup whose
 copy is missing deleted, after a question, and a failed one's Delete
 refused with the question kept. As test_server_backups.py,
@@ -95,6 +96,7 @@ def test_sftp_key_and_host_key(page, case):
         host.locator(".sb-host-key-trust").click()
         assert msg_is(page, uuid, text(page, "serverbackup.target.hostKeyTrusted", name=name)), "it says so"
         assert host.count() == 0, "trusted: the host's key goes from the panel"
+        assert page.evaluate("document.activeElement.classList.contains('sb-target-test')"), "the focus on Test"
         now = target_now(uuid)
         assert now["config"] == dict(target["config"], host_key=HOST_KEY), f"host_key set, the rest as stored: {now['config']}"
         assert now["public_key"] == key, "its own key stays"
@@ -111,6 +113,66 @@ def test_sftp_key_and_host_key(page, case):
         assert page.evaluate("document.documentElement.scrollWidth") <= case.width, "no horizontal scroll"
         shown_maint(page)
         assert panel.locator(f"#sb-target-{uuid}-host").count() == 0, "Maintenance shown again: gone"
+    finally:
+        page.unroute(f"**/api/v1/server-backup-targets/{uuid}/test", route)
+        clean()
+    show_view(page, "tiles")
+
+
+def test_host_key_follows_its_host(page, case):
+    """The host's key a test met belongs to the host and port tested: a
+    change to another field, not saved, keeps the key trusted in the form,
+    so that its Save keeps the pin; a save of another host takes the key
+    away, as does a target read again that names another host (changed
+    through the API, read at the stream's resync), so that no Trust pins
+    one host's key to another."""
+    clean()
+    name = f"Moved {case.width} {case.lang}"
+    target = sftp_target(name)
+    uuid = target["uuid"]
+    route = safe_route(page, f"**/api/v1/server-backup-targets/{uuid}/test",
+                       lambda r: r.fulfill(status=200, content_type="application/json",
+                                           body=json.dumps({"ok": False, "error": "the host's key is not confirmed", "host_key": HOST_KEY})))
+    puts = []
+    page.on("request", lambda r: puts.append(r.post_data_json) if r.method == "PUT" and r.url.endswith("/" + uuid) else None)
+    try:
+        show_view(page, "maint")
+        panel = page.locator(f".sb-target[data-uuid='{uuid}']")
+        panel.wait_for(timeout=10000)
+        panel.locator(":scope > summary").click()
+        host = panel.locator(f"#sb-target-{uuid}-host")
+
+        def field(key):
+            """A field of the target's form."""
+            return panel.locator(f"#sb-target-{uuid}-field-{key}")
+
+        panel.locator(".sb-target-test").click()
+        host.wait_for(timeout=10000)
+        field("path").fill("elsewhere")
+        host.locator(".sb-host-key-trust").click()
+        assert msg_is(page, uuid, text(page, "serverbackup.target.hostKeyTrusted", name=name)), "trusted"
+        assert target_now(uuid)["config"]["host_key"] == HOST_KEY, "pinned"
+        assert field("host_key").input_value() == HOST_KEY and field("path").input_value() == "elsewhere", "the form keeps the pin beside its change"
+        assert page.evaluate("document.activeElement.classList.contains('sb-target-test')"), "the focus on Test"
+        panel.locator("button[type=submit]").click()
+        assert msg_is(page, uuid, text(page, "serverbackup.target.saved", name=name)), "saved"
+        assert puts[-1]["config"]["host_key"] == HOST_KEY and puts[-1]["config"]["path"] == "elsewhere", f"the pin sent with the change: {puts[-1]}"
+        assert target_now(uuid)["config"]["host_key"] == HOST_KEY, "still pinned"
+
+        panel.locator(".sb-target-test").click()
+        host.wait_for(timeout=10000)
+        field("host").fill("127.0.0.2")
+        assert host.count() == 1, "not saved yet: the key still the stored host's"
+        panel.locator("button[type=submit]").click()
+        assert msg_is(page, uuid, text(page, "serverbackup.target.saved", name=name)), "another host saved"
+        assert host.count() == 0, "its key goes: it was the other host's"
+
+        panel.locator(".sb-target-test").click()
+        host.wait_for(timeout=10000)
+        api_call("PUT", f"{TARGETS}/{uuid}", {"config": dict(target_now(uuid)["config"], host="127.0.0.3")})
+        page.evaluate("window.MassimoParts.serverEvent({kind: 'resync'})")
+        assert wait_until(page, f"document.querySelector('#sb-target-{uuid}-field-host')?.value === '127.0.0.3'", 10), "read again"
+        assert host.count() == 0, "a target read again with another host: its key goes"
     finally:
         page.unroute(f"**/api/v1/server-backup-targets/{uuid}/test", route)
         clean()
@@ -232,6 +294,8 @@ def test_backup_without_copy_deleted(page, case):
         assert wait_until(page, f"!document.querySelector(\".sb-backup[data-uuid='{gone['uuid']}']\")", 10), "gone from the list"
         assert gone["uuid"] not in backup_ids() and kept["uuid"] in backup_ids(), "and from the server, the other kept"
         assert page.locator("#sb-msg").inner_text() == text(page, "serverbackup.deletedLast", when=when), "it says so"
+        assert page.evaluate(f"document.activeElement === document.querySelector(\".sb-backup[data-uuid='{kept['uuid']}'] > summary\")"), \
+            "the focus on the backup before it, the list's last"
     finally:
         clean()
     show_view(page, "tiles")

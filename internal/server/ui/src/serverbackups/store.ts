@@ -71,10 +71,21 @@ export const card = live({
 /** Per backup, by its uuid: its fold open, and how its last action went. */
 export const backupUI = liveMap(() => ({ open: false, said: null as Outcome | null }));
 
-/** A host's key that a target's test or its add's scan stopped at (an SFTP target's, D8-A): the host's fingerprint, and the one trusted where the host's differs from it, "" where none is. */
+/**
+ * A host's key that a target's test or its add's scan stopped at (an
+ * SFTP target's, D8-A): the host's fingerprint, the one trusted where the
+ * host's differs from it ("" where none is), and where it was met
+ * (hostAt of the config tested): the key is that host's alone.
+ */
 export interface HostKey {
   key: string;
   pinned: string;
+  at: string;
+}
+
+/** hostAt is where a target's host key belongs: the host and port its config names, as a test reaches them. */
+export function hostAt(config?: Record<string, string>): string {
+  return (config?.host || "") + "\n" + (config?.port || "");
 }
 
 /** Per target, by its uuid: its panel open, how its last test went, and the host's key it stopped at. */

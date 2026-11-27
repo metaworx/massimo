@@ -32,7 +32,7 @@ import { isShown } from "../shared/pages";
 import { saveResponse } from "../shared/save";
 import { session, stillSession } from "../shared/session";
 import { fmtWhen } from "../shared/time";
-import { backupUI, card, dropMade, holdMade, type HostKey, sb, targetFormKey, targetUI } from "./store";
+import { backupUI, card, dropMade, holdMade, type HostKey, hostAt, sb, targetFormKey, targetUI } from "./store";
 
 /** The answer of a key added: the key, and for one made its secret part and the key file, once. */
 interface KeyAdded {
@@ -61,9 +61,9 @@ interface TargetTested extends HostKeyAnswer {
   error?: string;
 }
 
-/** hostOf is the host's key an answer names, null where it names none. */
-function hostOf(r: HostKeyAnswer): HostKey | null {
-  return r.host_key ? { key: r.host_key, pinned: r.pinned_host_key || "" } : null;
+/** hostOf is the host's key an answer names, met at the host and port of config, the one reached; null where it names none. */
+function hostOf(r: HostKeyAnswer, config?: Record<string, string>): HostKey | null {
+  return r.host_key ? { key: r.host_key, pinned: r.pinned_host_key || "", at: hostAt(config) } : null;
 }
 
 /** This page's own requests under way: an event's read waits for their reading. */
@@ -89,7 +89,12 @@ export async function loadList(): Promise<void> {
   }
 }
 
-/** loadTargets reads the targets with their fields, for a holder of backup.server; a target gone forgets its form and its panel. */
+/**
+ * loadTargets reads the targets with their fields, for a holder of
+ * backup.server; a target gone forgets its form and its panel, and one
+ * that names another host or port than the one its test reached forgets
+ * the host's key met there, which is not the new host's.
+ */
 export async function loadTargets(): Promise<void> {
   if (!can("backup.server")) return;
   const n = session();
@@ -101,6 +106,10 @@ export async function loadTargets(): Promise<void> {
       if (now.has(tg.uuid)) continue;
       forgetForms(targetFormKey(tg.uuid || ""));
       targetUI.forget(tg.uuid || "");
+    }
+    for (const tg of list) {
+      const ui = targetUI.of(tg.uuid || "");
+      if (ui.host && ui.host.at !== hostAt(tg.config)) ui.host = null;
     }
     sb.targets = list;
     sb.targetsLoaded = true;
@@ -294,19 +303,22 @@ export function addTarget(body: Record<string, unknown>): Promise<boolean> {
     if (r.target?.uuid) {
       const ui = targetUI.of(r.target.uuid);
       ui.open = true;
-      ui.host = hostOf(r);
+      ui.host = hostOf(r, r.target.config);
     }
     if (r.scan_error) return { text: t("serverbackup.target.scanFailed", { name, error: r.scan_error }), ok: false };
     return { text: r.found ? t("serverbackup.target.addedFound", { name, n: r.found }) : t("serverbackup.target.added", { name }), ok: true };
   }, "serverbackup.target.failed");
 }
 
-/** saveTarget sends a target's fields (PUT …/{uuid}), the secret only where one is typed. */
+/** saveTarget sends a target's fields (PUT …/{uuid}), the secret only where one is typed; saved, the host's key a test met goes, to be met again by the next test. */
 export function saveTarget(tg: ServerBackupTarget, body: Record<string, unknown>): Promise<boolean> {
   const name = String(body.name || tg.name || "");
   return act((res) => {
     targetUI.of(tg.uuid || "").said = res;
-  }, reloadJob, () => api("PUT", targetPath(tg), body), () => ({ text: t("serverbackup.target.saved", { name }), ok: true }), "serverbackup.target.failed");
+  }, reloadJob, () => api("PUT", targetPath(tg), body), () => {
+    targetUI.of(tg.uuid || "").host = null;
+    return { text: t("serverbackup.target.saved", { name }), ok: true };
+  }, "serverbackup.target.failed");
 }
 
 /** testTarget has the server reach the target and write to it (POST …/{uuid}/test), and says whether it works, keeping the host's key it stopped at to trust. */
@@ -317,7 +329,7 @@ export function testTarget(tg: ServerBackupTarget): Promise<boolean> {
   return act((res) => {
     targetUI.of(uuid).said = res;
   }, async () => undefined, () => api<TargetTested>("POST", targetPath(tg) + "/test"), (r) => {
-    targetUI.of(uuid).host = hostOf(r);
+    targetUI.of(uuid).host = hostOf(r, tg.config);
     return r.ok ? { text: t("serverbackup.target.works", { name }), ok: true } : { text: t("serverbackup.target.fails", { name, error: r.error || "" }), ok: false };
   }, "serverbackup.target.failed");
 }
