@@ -220,6 +220,17 @@ type backupCLI struct {
 	// lockWait is how long a job on the store waits for the jobs' lock
 	// that another job holds: serve's, or another command's.
 	lockWait time.Duration
+	// notesTo is where a note beside the output goes, standard error
+	// where nil (notes).
+	notesTo io.Writer
+}
+
+// notes is where a note beside the command's output goes.
+func (c *backupCLI) notes() io.Writer {
+	if c.notesTo != nil {
+		return c.notesTo
+	}
+	return os.Stderr
 }
 
 // defaultLockWait is how long a command's job waits for the jobs' lock.

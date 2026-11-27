@@ -934,6 +934,10 @@ This is open only while the new box has no user,
 to anyone on the local network who has the backup and its key,
 as making the first owner is
 (docs/api-v1.md, "A new box from a backup").
+On the box itself, `massimo store restore <file> -scope all -key key.txt` does the same,
+through the running service, or on the store with the service stopped:
+a new box, without a regular user or a key, takes no backup of itself first,
+and the command says so.
 
 ### Screenshots
 
@@ -1272,6 +1276,10 @@ the scopes named (`settings`, `users`, `integrations`, `cubes` or `cube:<serial>
 each file replaced kept beside as `<name>.before-restore`;
 `-plan` prints what it would do and changes nothing.
 The key is read into memory and written nowhere.
+A new box, without a regular user or a key, takes no backup of itself first
+and says so on standard error;
+through its open `serve` it takes a file and every scope, `-scope all`
+("Moving to a new box").
 On the store, without a `serve`, the restore needs the store alone:
 stop the service first.
 These five go through this box's running `serve`, with `MASSIMO_API_TOKEN`,

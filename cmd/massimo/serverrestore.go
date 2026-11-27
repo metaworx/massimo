@@ -9,7 +9,13 @@ package main
 // a running serve, its API with MASSIMO_API_TOKEN, where one answers, a
 // file uploaded first, so that the restore is that server's, which then
 // restarts; on the store otherwise, with serve stopped. The key is read
-// into memory and written nowhere.
+// into memory and written nowhere. A new box, a store without a regular
+// user and without a key (Block 11), takes no backup of itself first,
+// which it has nothing to keep in and no key to encrypt for, and says so
+// on standard error: on the store the restore then counts the users again
+// in its transaction (serverbackup.RestoreOptions.NoUsers), and through
+// an open serve it goes by the first owner's window's routes
+// (/api/v1/setup/backup…), which take every scope.
 
 import (
 	"context"
@@ -157,6 +163,14 @@ func (c *backupCLI) restore(ctx context.Context, ref string, a restoreArgs) erro
 		c.printRestore(planOf(p, st), true)
 		return nil
 	}
+	fresh, err := freshStore(ctx, st, cat)
+	if err != nil {
+		return fmt.Errorf("store restore: %w", err)
+	}
+	if fresh {
+		o.NoBackupFirst, o.NoUsers = true, true
+		fmt.Fprintln(c.notes(), newBoxNote)
+	}
 	res, err := cat.Restore(ctx, o)
 	if errors.Is(err, store.ErrRestoreMissing) {
 		c.printMissing(res.Report)
@@ -176,6 +190,45 @@ func (c *backupCLI) restore(ctx context.Context, ref string, a restoreArgs) erro
 	return nil
 }
 
+// newBoxNote is what store restore says on standard error of a new box.
+const newBoxNote = "store restore: a new box, without a regular user or a key: no backup of it is taken first"
+
+// freshStore reports whether st is a new box's: no regular user
+// (store.CountUsers) and no key the backups are encrypted for.
+func freshStore(ctx context.Context, st *store.Store, cat *serverbackup.Catalogue) (bool, error) {
+	n, err := st.CountUsers(ctx)
+	if err != nil || n > 0 {
+		return false, err
+	}
+	_, err = cat.Recipients(ctx)
+	switch {
+	case errors.Is(err, serverbackup.ErrNoKey):
+		return true, nil
+	case err != nil:
+		return false, err
+	}
+	return false, nil
+}
+
+// freshServe reports whether the running serve is a new box's: open, no
+// regular user, and no key of the server's backups. A serve that does not
+// say so, for any reason, is none: its own routes then answer.
+func (c *backupCLI) freshServe(ctx context.Context) bool {
+	var me struct {
+		Mode string `json:"mode"`
+	}
+	if err := c.api.do(ctx, http.MethodGet, "/api/v1/me", nil, &me); err != nil || me.Mode != "open" {
+		return false
+	}
+	var ans struct {
+		Keys *int `json:"keys"`
+	}
+	if err := c.api.do(ctx, http.MethodGet, "/api/v1/server-backups", nil, &ans); err != nil || ans.Keys == nil {
+		return false
+	}
+	return *ans.Keys == 0
+}
+
 // planOf is a plan of the catalogue as the command prints it.
 func planOf(p serverbackup.RestorePlan, st *store.Store) cliRestore {
 	var r cliRestore
@@ -192,6 +245,9 @@ func planOf(p serverbackup.RestorePlan, st *store.Store) cliRestore {
 // and for a plan removed again where the server did not hold it before,
 // so that a plan changes nothing.
 func (c *backupCLI) restoreThroughServe(ctx context.Context, ref, file string, key []byte, a restoreArgs) error {
+	if c.freshServe(ctx) {
+		return c.restoreNewBox(ctx, file, key, a)
+	}
 	uuid := ""
 	var err error
 	if file != "" {
@@ -208,7 +264,7 @@ func (c *backupCLI) restoreThroughServe(ctx context.Context, ref, file string, k
 			}
 		}
 		var targets []string
-		if uuid, targets, err = c.api.upload(ctx, file); err != nil {
+		if uuid, targets, err = c.api.upload(ctx, "/api/v1/server-backups/upload", file); err != nil {
 			return fmt.Errorf("store restore: the upload: %w", err)
 		}
 		fmt.Fprintf(c.out, "uploaded %s as %s\n", file, shortBackupID(uuid))
@@ -232,8 +288,40 @@ func (c *backupCLI) restoreThroughServe(ctx context.Context, ref, file string, k
 	if a.plan {
 		path += "/plan"
 	}
+	return c.sendRestore(ctx, path, body, a.plan)
+}
+
+// restoreNewBox restores through a new box's open serve, by the first
+// owner's window's routes: the file handed, then its plan or its restore
+// of every scope, no backup taken first; a backup of the catalogue, or
+// fewer scopes, are refused, since the routes take a file and every scope.
+func (c *backupCLI) restoreNewBox(ctx context.Context, file string, key []byte, a restoreArgs) error {
+	sel, _ := serverbackup.ParseScopes(a.scopes)
+	switch {
+	case file == "":
+		return errors.New("store restore: this server is a new box, without a regular user or a key: it starts from a backup file; give the file")
+	case len(sel.Scopes) != len(serverbackup.Scopes) || len(sel.Serials) > 0:
+		return errors.New("store restore: this server is a new box, without a regular user or a key: it starts from every scope of the backup; give -scope all")
+	}
+	fmt.Fprintln(c.notes(), newBoxNote)
+	if _, _, err := c.api.upload(ctx, "/api/v1/setup/backup", file); err != nil {
+		return fmt.Errorf("store restore: the upload: %w", err)
+	}
+	fmt.Fprintf(c.out, "handed %s to the new box, which holds it for an hour\n", file)
+	body := map[string]any{"key_file": string(key), "take_identity": a.identity, "env": a.env, "tls": a.tls}
+	path := "/api/v1/setup/backup/restore"
+	if a.plan {
+		path = "/api/v1/setup/backup/plan"
+	}
+	return c.sendRestore(ctx, path, body, a.plan)
+}
+
+// sendRestore sends a restore or its plan to the server and prints its
+// answer: a refusal of the store with what is missing, a failure after
+// the store's commit with what was restored.
+func (c *backupCLI) sendRestore(ctx context.Context, path string, body map[string]any, plan bool) error {
 	var r cliRestore
-	err = c.api.do(ctx, http.MethodPost, path, body, &r)
+	err := c.api.do(ctx, http.MethodPost, path, body, &r)
 	var ae *apiError
 	switch {
 	case errors.As(err, &ae) && ae.Status == http.StatusConflict:
@@ -242,7 +330,7 @@ func (c *backupCLI) restoreThroughServe(ctx context.Context, ref, file string, k
 		if json.Unmarshal(ae.Body, &refused) == nil {
 			c.printMissing(refused.Report)
 		}
-	case errors.As(err, &ae) && ae.Status == http.StatusInternalServerError && !a.plan:
+	case errors.As(err, &ae) && ae.Status == http.StatusInternalServerError && !plan:
 		// A failure after the store's commit: what was restored, and the
 		// restart, all the same.
 		if json.Unmarshal(ae.Body, &r) == nil && len(r.Scopes) > 0 {
@@ -252,13 +340,14 @@ func (c *backupCLI) restoreThroughServe(ctx context.Context, ref, file string, k
 	if err != nil {
 		return fmt.Errorf("store restore: %w", err)
 	}
-	c.printRestore(r, a.plan)
+	c.printRestore(r, plan)
 	return nil
 }
 
-// upload sends a backup file to the server's local target and answers
-// its uuid and the targets that hold a copy of it.
-func (a *serveAPI) upload(ctx context.Context, path string) (string, []string, error) {
+// upload sends a backup file to the server by the route given, the
+// local target's upload or a new box's (/api/v1/setup/backup), and
+// answers its uuid and the targets that hold a copy of it.
+func (a *serveAPI) upload(ctx context.Context, route, path string) (string, []string, error) {
 	f, err := os.Open(path)
 	if err != nil {
 		return "", nil, err
@@ -268,7 +357,7 @@ func (a *serveAPI) upload(ctx context.Context, path string) (string, []string, e
 	if err != nil {
 		return "", nil, err
 	}
-	req, err := http.NewRequestWithContext(ctx, http.MethodPost, a.base+"/api/v1/server-backups/upload", f)
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, a.base+route, f)
 	if err != nil {
 		return "", nil, err
 	}

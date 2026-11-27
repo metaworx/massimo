@@ -2460,6 +2460,11 @@ counted in the restore's own transaction (`RestoreSelection.NoUsers`),
 so that a first owner another request made meanwhile is never restored over.
 The backup handed waits in `.serverbackup-newbox-*` in the data directory,
 encrypted as it came, for at most an hour.
+`massimo store restore` on a new box, a store without a regular user and without a key,
+takes no backup first either and says so on standard error:
+on the store with `NoUsers` too, any scopes;
+through the box's open `serve` by these routes, a file and every scope (`-scope all`).
+Where a key or a regular user exists, it takes the backup first as before.
 
 #### Before an update
 
