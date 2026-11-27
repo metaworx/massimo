@@ -22,26 +22,6 @@ type cubeProblem struct {
 // has none yet. The state is the server's last, also while the Cube is
 // not connected.
 func (s *Server) problemsOf(rt *runtime) []cubeProblem {
-	return s.devicesWhere(rt, func(d view.Device) bool {
-		st := d.State
-		open := st.WindowOpen != nil && *st.WindowOpen
-		return st.Error || st.LinkError || batteryProblem(d) || open
-	})
-}
-
-// flaggedOf lists a Cube's visible devices with a flag of deviceFlags
-// set, as problemsOf does, whatever their battery level: the log's
-// alerts go by the Cube's flags (logalerts.go).
-func (s *Server) flaggedOf(rt *runtime) []cubeProblem {
-	return s.devicesWhere(rt, func(d view.Device) bool {
-		return d.State.Error || d.State.LinkError || d.State.BatteryLow
-	})
-}
-
-// devicesWhere lists a Cube's visible devices that have reported since
-// the Cube's restart and that keep takes, in the order the Cube reported
-// them, each with its room's name.
-func (s *Server) devicesWhere(rt *runtime, keep func(view.Device) bool) []cubeProblem {
 	snap := rt.client.Snapshot()
 	rooms := map[uint8]string{}
 	if md := snap.Metadata(); md != nil {
@@ -51,10 +31,14 @@ func (s *Server) devicesWhere(rt *runtime, keep func(view.Device) bool) []cubePr
 	}
 	var out []cubeProblem
 	for _, d := range rt.withBattery(s.withWindow(view.Devices(snap, rt.hidden(), s.staleness()))) {
-		if !d.Reported || d.State == nil || !keep(d) {
+		st := d.State
+		if !d.Reported || st == nil {
 			continue
 		}
-		out = append(out, cubeProblem{Device: d, Room: rooms[d.RoomID]})
+		open := st.WindowOpen != nil && *st.WindowOpen
+		if st.Error || st.LinkError || batteryProblem(d) || open {
+			out = append(out, cubeProblem{Device: d, Room: rooms[d.RoomID]})
+		}
 	}
 	return out
 }

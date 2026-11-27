@@ -12,10 +12,14 @@ package server
 // disconnect by the next connect, also one the link held. settleRules
 // lists them; a kind without a counterpart is settled by a mark alone,
 // and a hold and a lockout settle by themselves once they end. A device's
-// communication error, link error and low battery are in the log at info,
-// in its state's changes: each is an alert at warn while the device has
-// the flag, at the line that set it, a communication error with the type
-// of the most severe radiogram that failed while it stayed set.
+// communication error and link error are in the log at info, in its
+// state's changes: each is an alert at warn while the device has the
+// flag, at the line that set it, a communication error with the type of
+// the most severe radiogram that failed while it stayed set. A battery is
+// an alert by the server's level, not by the Cube's flag, which flickers
+// under the valve motor's load (internal/battery): its battery event at
+// warn once the level is low, settled by the next that has it ok; a weak
+// level's event is at info, no alert.
 
 import (
 	"context"
@@ -27,6 +31,7 @@ import (
 	"strconv"
 	"time"
 
+	"go.metaworx.ch/massimo/internal/battery"
 	"go.metaworx.ch/massimo/internal/protocol/cube"
 	"go.metaworx.ch/massimo/internal/store"
 )
@@ -117,6 +122,14 @@ var settleRules = map[string]settleRule{
 	// shown either or failed: a later re-send to the same room that every
 	// member shows (resend.go); any other write's only by a mark
 	"unconfirmed": {by: []string{"unconfirmed"}, match: resendSettles},
+	// a device's battery level low (battery.go): the same device's level
+	// ok again, by new batteries marked or by the server's rules
+	"battery": {by: []string{"battery"}, match: batteryOK},
+}
+
+// batteryOK: a later battery event of the same device whose level is ok.
+func batteryOK(alert, later *event) bool {
+	return later.Device == alert.Device && summaryText(later, "level") == string(battery.OK)
 }
 
 // resendSettles: a later re-send of a setpoint to the same room that
@@ -126,8 +139,9 @@ func resendSettles(alert, later *event) bool {
 		summaryText(alert, "write") == writeSetpoint && summaryText(alert, "room") != ""
 }
 
-// deviceFlags are a device's state's flags that are alerts while set.
-var deviceFlags = []string{"error", "link_error", "battery_low"}
+// deviceFlags are a device's state's flags that are alerts while set;
+// the battery's flag is none, its level's events are (battery.go).
+var deviceFlags = []string{"error", "link_error"}
 
 // summaryText is a summary's value as text, "" for none.
 func summaryText(ev *event, key string) string {
@@ -295,8 +309,8 @@ func (s *Server) logAlerts(ctx context.Context, st *store.Store, audit bool) ([]
 // the device's last ones that has it, where it was set before them.
 func (s *Server) flagAlerts(ctx context.Context, st *store.Store, id int64, rt *runtime) ([]logAlert, error) {
 	var out []logAlert
-	for _, p := range s.flaggedOf(rt) {
-		set := map[string]bool{"error": p.State.Error, "link_error": p.State.LinkError, "battery_low": p.State.BatteryLow}
+	for _, p := range s.problemsOf(rt) {
+		set := map[string]bool{"error": p.State.Error, "link_error": p.State.LinkError}
 		var states []event
 		for _, flag := range deviceFlags {
 			if !set[flag] {
