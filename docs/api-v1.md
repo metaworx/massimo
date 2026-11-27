@@ -599,7 +599,12 @@ a user whose role is disabled logs in and is then refused every route.
 The server hashes at most one password a core at once, four at the most,
 with eight more waiting;
 a login beyond them is `503` with `Retry-After`, and so is a user add or a
-password change (`docs/store.md` section 6, "The lockout").
+password change (`docs/store.md` section 6, "The lockout"),
+and one whose client went away while it waited for its turn.
+Any other request of the users' routes whose client went away before the
+store answered, a token's revoke the client gave up on among them,
+is audited as `failed` with "the client went away before the answer",
+a `503` no client reads, and never as a password check that waited.
 `409` on a server without users, where the first owner is created with
 `POST /api/v1/users` or `massimo user add`,
 and on one without a store (`serve -addr`), which takes the API token.
