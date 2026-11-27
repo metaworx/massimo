@@ -437,12 +437,14 @@ func TestPlanMovesDeviceBetweenRooms(t *testing.T) {
 	if len(p.Steps) != 3 || !strings.Contains(whats[0], "room 6→3") || !strings.Contains(whats[1], "leave room 6 (0 partners)") || !strings.Contains(whats[2], "join room 3 (1 partners)") {
 		t.Fatalf("steps %v", whats)
 	}
+	// Leaving room 6, which its C line names, after room 6's wakeup alone;
+	// joining room 3 after room 3's and its own (AP FakeGroup, Block 4).
 	out := p.Steps[1].Command
-	if out.RoomID != 6 || !out.Wakeup || len(out.Lines) != 1 || out.Lines[0].String() != "s:AAAjAAAACgENAAY=" {
+	if out.RoomID != 6 || !out.Wakeup || out.WakeTarget || len(out.Lines) != 1 || out.Lines[0].String() != "s:AAAjAAAACgENAAY=" {
 		t.Fatalf("leave %+v", out)
 	}
 	in := p.Steps[2].Command
-	if in.RoomID != 3 || !in.Wakeup || len(in.Lines) != 3 {
+	if in.RoomID != 3 || !in.Wakeup || !in.WakeTarget || len(in.Lines) != 3 {
 		t.Fatalf("join %+v", in)
 	}
 	// 00 04 20 000000 0a0108 03 0a010d 01: one radiogram with the room

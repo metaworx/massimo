@@ -1054,9 +1054,10 @@ nor does an integration's user, whatever its role.
 
 `DELETE /api/v1/users/{name}` removes a user: its sessions and keys are revoked,
 its preferences removed,
-and its row stays for the audit under the name `<name>-del-YYYYMMDD-HHNN`
-of the removal in UTC (`-<id>` added where that is taken),
-which frees the name; `{"ok": true, "name": "anna"}`.
+an integration's user's link ended,
+and its row stays for the audit with its name,
+which is free again (docs/store.md, migration 0024);
+`{"ok": true, "name": "anna"}`.
 The last enabled owner without an end date stays (`409`);
 a user cannot remove itself.
 An integration's own user, `<uuid>:`, which holds its key,
@@ -1380,8 +1381,18 @@ on a server with regular users: on an open server the header is not read
   no key, password, record, identity, link, name or field of that user's
   (AP AccessEnds, D41-A4 and A5);
   that user changes them signed in itself.
-  Disabling one stops its calls, a linked one's too;
-  removing one does not, where it is linked: disable it, or unlink it.
+  Disabling one stops its calls, a linked one's too.
+  Removing one ends its link (AP AccessEnds, D54-A):
+  its next call makes it anew, unlinked, with the role `integration`,
+  also where a version before kept the link of one removed,
+  without a migration (AP LinkedRemoval, D1-A).
+  Removing the Massimo user it is linked to unlinks it:
+  its next call acts as its own user again,
+  with the role and the state the owner left it (D2-A).
+  An event stream opened for one ends at its next keep-alive,
+  once it is removed, disabled, unlinked or linked anew,
+  or its own or its linked user is removed, disabled or past its end
+  ("GET /api/v1/cubes/{sn}/events").
   Its own user and its system user are not removed ("Users", above).
 - **Without the header** the key acts as the integration itself:
   its role and its maximum (an integration's own polls and stream),
@@ -2007,7 +2018,9 @@ among them.
 
 `problems` lists, where there are any, the Cube's visible devices with a problem,
 as `GET …/devices` shows them, each with its room's name (`room`):
-a communication or link error, a low battery, a window open (with its `window` times);
+a communication or link error, a battery level (`battery`) weak or low,
+or the Cube's flag (`battery_low`) where the server keeps no level,
+a window open (with its `window` times);
 a client that shows every Cube's problems, such as the web UI's header,
 needs no other request.
 It is the server's last state, also while the Cube is not connected.
@@ -3185,8 +3198,11 @@ A metadata write; answers `{"ok": true}`.
 Rename a device and/or move it to another room:
 `{"name": "Thermostat Küche", "room_id": 2}`, either field alone is fine.
 A move is done as the original software moved one in its capture of 2026-11-04:
-after a wakeup of the old room, one `r:` for each other member whose error flag is set,
-0x23 remove group,
+after a wakeup of the old room, and of the device itself (`z:1e,D,<rf>`)
+where its C line names another room or none,
+one `r:` for each other member whose error flag is set,
+0x23 remove group naming the room the device's C line names,
+left out where it names none,
 one 0x21 remove link partner radiogram with the room flag naming the device,
 which every member of the room takes,
 addressed to the first of the room's order, as a room command is
@@ -3196,8 +3212,14 @@ else its wall thermostat, else its first radiator thermostat,
 one the Cube holds no valid state for passed over,
 one to each window contact among its partners,
 and one to the device for each partner;
-then, after a wakeup of the new room, the same with 0x20 add link partner
-and 0x22 set group; then the metadata is written.
+then, after a wakeup of the new room and of the device,
+the same with 0x20 add link partner and 0x22 set group;
+then the metadata is written.
+The Cube takes a 0x23 only for the room the device's C line names,
+and a room's wakeup reaches only the devices whose C line names the room
+(seen on the test Cube on 2026-11-26, docs/cube-protocol.md):
+so the device is woken itself before a half whose room's wakeup misses it,
+and a device listed in no room whose C line names none leaves nothing.
 `room_id` must name an existing room; 0 is refused,
 a device outside every room would be a device that blocks no room but cannot be
 addressed by one either.
@@ -3206,7 +3228,8 @@ A device that is paired but in no room yet (`"unlisted": true`,
 such as one just paired, see Pairing) needs `room_id`;
 `name` alone answers `409`.
 It is added to the room as the original software adds a new device:
-after a wakeup of the room (`z:1e,G,<room>`)
+after a wakeup of the room (`z:1e,G,<room>`) and of the device,
+which is in no room's group yet (`z:1e,D,<rf>`),
 and one `r:` for each member whose error flag is set,
 one 0x20 add link partner radiogram with the room flag naming the device,
 addressed as in a move, which every member of the room takes,
@@ -3961,6 +3984,8 @@ the flagged devices its direct lines address, as the queue's prelude does
 for every command (D204-A),
 the room woken up before it (`z:1e,G,<room>`, not among `lines`),
 and its `lines` as they go to the Cube;
+a move's halves wake the device itself as well where a room's wakeup
+misses it (`z:1e,D,<rf>`, not among `lines` either, `PUT …/devices/{rf}`);
 a metadata write is a step of its own.
 `radiograms` counts the `s:` lines,
 `duty_cost_pct` is about what they cost of the hourly radio budget (1.25 % each),
@@ -3970,7 +3995,8 @@ and `held_slots` those that stay taken until the members' next wakeup,
 about ten minutes: a room radiogram's but its addressee's.
 `resets` counts the `r:` lines, those the queue sends before each step included,
 by the device list as it is now, which cost no radio time;
-`wakeups` the room wakeups; `metadata` a metadata write, no radio.
+`wakeups` the wakeups, a room's and a device's own;
+`metadata` a metadata write, no radio.
 `budget` is what the Cube last reported.
 `untested` marks a repair not yet run on hardware.
 `refused` says why a run would be refused now:
@@ -4247,6 +4273,7 @@ of the same Cube, or of the server for the server's own:
 | `restart`, `reboot`, `update` not started | `server_started`; for `update`, also an `update` started |
 | `error_watch` `back` or `lasting` | the same device's `error_watch` `clear` of the same `flag` |
 | `unconfirmed`, a room's setpoint or its re-send not confirmed, its re-send failed | an `unconfirmed` of the same `target` whose `outcome` is `resend_confirmed` |
+| `battery`, a device's battery level `low` | a `battery` of the same device whose `level` is `ok`: new batteries marked, or the server's rules (see the devices' `battery`) |
 
 Any other, such as `proxy_discarded`, `proxy_delete_refused` and `open_setup`,
 is settled only by a person's mark.
@@ -4254,7 +4281,11 @@ The alerts the signed-in user marked seen are left out:
 the preference `log.seen` (see "Preferences"),
 which the web UI writes and opening the log does not;
 a browser without a user keeps its marks itself and asks with `after`.
-A device's communication error, link error and low battery are in the log at info,
+A device's battery is an alert by its level, not by the Cube's flag,
+which flickers under the valve motor's load:
+its `battery` event at warn once the level is `low` (the table above);
+a `weak` level's event is at info, and no alert.
+A device's communication error and link error are in the log at info,
 in its state's changes:
 each is an alert at warn while the device has it,
 at the state line that set it (`flag`),
@@ -4630,6 +4661,9 @@ At each keep-alive, every 30 seconds,
 the server asks whether the stream's caller would be let in now,
 and ends the stream when not:
 a key revoked or expired, a user or role disabled,
+for a call through an integration for one of its users
+a chain that no longer lets it in or that acts as another user now
+("Acting for an integration's users"),
 a server that was open when the stream opened and has a user since,
 or, without a store, another token.
 The client's next ticket then asks it to sign in.

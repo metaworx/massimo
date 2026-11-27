@@ -480,3 +480,138 @@ func TestControl(t *testing.T) {
 		}
 	}
 }
+
+// greetedConfig is rf's configuration in a greeting's C line, nil for
+// none.
+func greetedConfig(t *testing.T, greeting []cube.Message, rf cube.RFAddress) *cube.DeviceConfig {
+	t.Helper()
+	for _, m := range greeting {
+		if m.Type == 'C' && strings.HasPrefix(m.Data, rf.String()+",") {
+			cfg, err := cube.ParseConfig(m.Data)
+			if err != nil {
+				t.Fatal(err)
+			}
+			return cfg
+		}
+	}
+	return nil
+}
+
+// Set group (0x22) names its group in the device's C line, as c: and a
+// new connection's greeting read it, a room the list does not have too;
+// the device takes its new room's commands from then on and no longer its
+// old room's (AP FakeGroup, Block 2).
+func TestApplySetGroup(t *testing.T) {
+	t.Parallel()
+	s := startRooms(t, &Server{})
+	c := dial(t, s.ln.Addr().String())
+	c.send(cube.CmdSetGroup(0x0a0204, 1, false))
+	if cfg := c.config(0x0a0204); cfg.RoomID != 1 {
+		t.Fatalf("c: after 0x22 of room 1: room %d", cfg.RoomID)
+	}
+	if cfg := greetedConfig(t, dial(t, s.ln.Addr().String()).greet, 0x0a0204); cfg == nil || cfg.RoomID != 1 {
+		t.Fatalf("a new greeting's C line after 0x22 of room 1: %+v", cfg)
+	}
+	c.send(must(cube.CmdSetTemperature(cube.Target{RFAddress: 0x0a0202, RoomID: 1, Room: true}, 23, cube.ModeManual, cube.Until{})))
+	c.send(must(cube.CmdSetTemperature(cube.Target{RFAddress: 0x0a0205, RoomID: 2, Room: true}, 17, cube.ModeManual, cube.Until{})))
+	if st := c.states()[0x0a0204]; st.Setpoint == nil || *st.Setpoint != 23 {
+		t.Fatalf("0a0204 after room 1's and room 2's setpoints: %+v, want room 1's 23 °C", st)
+	}
+	c.send(cube.CmdSetGroup(0x0a0204, 7, false))
+	if cfg := c.config(0x0a0204); cfg.RoomID != 7 {
+		t.Fatalf("c: after 0x22 of room 7, which the list does not have: room %d", cfg.RoomID)
+	}
+	if st := c.states()[0x0a0204]; st.Error {
+		t.Fatalf("0a0204 flagged: %+v", st)
+	}
+}
+
+// Remove group (0x23) naming the room the device's C line names leaves it
+// in no room, no flag set; naming another room the device refuses it, as
+// on the test Cube: the room stays, and the device's entry carries the
+// error flag with 0x23 as the radiogram that failed (D13-A).
+func TestApplyRemoveGroup(t *testing.T) {
+	t.Parallel()
+	t.Run("of its room", func(t *testing.T) {
+		t.Parallel()
+		s := startRooms(t, &Server{})
+		c := dial(t, s.ln.Addr().String())
+		c.send(cube.CmdSetGroup(0x0a0204, 2, true))
+		if cfg := c.config(0x0a0204); cfg.RoomID != 0 {
+			t.Fatalf("c: after 0x23 of its room 2: room %d", cfg.RoomID)
+		}
+		again := dial(t, s.ln.Addr().String())
+		if cfg := greetedConfig(t, again.greet, 0x0a0204); cfg == nil || cfg.RoomID != 0 {
+			t.Fatalf("a new greeting's C line after 0x23 of its room: %+v", cfg)
+		}
+		if st := again.states()[0x0a0204]; st.Error {
+			t.Fatalf("0a0204 flagged: %+v", st)
+		}
+		c.send(must(cube.CmdSetTemperature(cube.Target{RFAddress: 0x0a0205, RoomID: 2, Room: true}, 17, cube.ModeManual, cube.Until{})))
+		if st := c.states(); *st[0x0a0204].Setpoint != 20 || *st[0x0a0205].Setpoint != 17 {
+			t.Fatalf("room 2's setpoint reached 0a0204 in no room: %+v %+v", st[0x0a0204], st[0x0a0205])
+		}
+	})
+	t.Run("of another room", func(t *testing.T) {
+		t.Parallel()
+		s := startRooms(t, &Server{})
+		c := dial(t, s.ln.Addr().String())
+		c.send(cube.CmdSetGroup(0x0a0204, 1, true))
+		if cfg := c.config(0x0a0204); cfg.RoomID != 2 {
+			t.Fatalf("c: after 0x23 of room 1, 0a0204 in room 2: room %d", cfg.RoomID)
+		}
+		again := dial(t, s.ln.Addr().String())
+		if cfg := greetedConfig(t, again.greet, 0x0a0204); cfg == nil || cfg.RoomID != 2 {
+			t.Fatalf("a new greeting's C line after 0x23 of another room: %+v", cfg)
+		}
+		st := again.states()[0x0a0204]
+		if !st.Error || st.FailedRadiogram == nil || *st.FailedRadiogram != cube.RadiogramRemoveGroupAddress {
+			t.Fatalf("0a0204 after a refused 0x23: %+v, want the error flag with 0x23 failed", st)
+		}
+		if *st.Setpoint != 20 || st.Mode != cube.ModeAuto {
+			t.Fatalf("the refused 0x23 changed the state: %+v", st)
+		}
+	})
+}
+
+// The joined device takes its group as a listed one, in c: and in a new
+// greeting, and refuses a 0x23 of another room; a t: and a new join put
+// it back in no room, its flag gone.
+func TestApplyGroupOfTheJoinedDevice(t *testing.T) {
+	t.Parallel()
+	greeting, err := LoadGreeting(fixture)
+	if err != nil {
+		t.Fatal(err)
+	}
+	const rf cube.RFAddress = 0x0a0b0c
+	pair, err := PairingFrom(greeting, 0x0a010d, rf, "TEQ0000001", time.Millisecond)
+	if err != nil {
+		t.Fatal(err)
+	}
+	s := &Server{Greeting: greeting, Pair: pair, Apply: true}
+	addr, err := s.Start("127.0.0.1:0")
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { s.Close() })
+	c := dial(t, addr)
+	join(t, c, pair)
+	c.send(cube.CmdSetGroup(rf, 6, false))
+	if cfg := c.config(rf); cfg.RoomID != 6 {
+		t.Fatalf("c: after 0x22 of room 6: room %d", cfg.RoomID)
+	}
+	if cfg := greetedConfig(t, dial(t, addr).greet, rf); cfg == nil || cfg.RoomID != 6 {
+		t.Fatalf("a new greeting's C line after 0x22 of room 6: %+v", cfg)
+	}
+	c.send(cube.CmdSetGroup(rf, 1, true))
+	if cfg, st := c.config(rf), c.states()[rf]; cfg.RoomID != 6 || !st.Error {
+		t.Fatalf("after 0x23 of room 1: room %d, %+v; want room 6, flagged", cfg.RoomID, st)
+	}
+	if a := c.send(cube.CmdDeleteDevices(true, rf)); a.Type != 'A' {
+		t.Fatalf("t: answered %s", a)
+	}
+	join(t, c, pair)
+	if cfg, st := c.config(rf), c.states()[rf]; cfg.RoomID != 0 || st.Error {
+		t.Fatalf("after a t: and a new join: room %d, %+v; want no room, no flag", cfg.RoomID, st)
+	}
+}

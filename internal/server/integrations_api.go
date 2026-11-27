@@ -476,6 +476,9 @@ func (s *Server) putIntegrationUser(w http.ResponseWriter, r *http.Request) erro
 	switch {
 	case errors.Is(err, store.ErrBadLink):
 		return fail(http.StatusBadRequest, "%v", err)
+	case errors.Is(err, store.ErrNoUser):
+		// Removed since it was looked up above.
+		return fail(http.StatusNotFound, "no user %s", *req.User)
 	case err != nil:
 		return integrationFail(err)
 	}
