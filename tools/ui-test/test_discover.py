@@ -9,7 +9,7 @@ import json
 
 import pytest
 
-from helpers import FOUND2, SEARCHING, choose_cube, cube_item, found_text, open_found, scroll_width, show_view, wait_held, wait_until
+from helpers import FOUND2, SEARCHING, choose_cube, cube_item, found_text, held_timers, open_found, scroll_width, show_view, wait_held, wait_until
 
 GATEWAY = {"en": "gateway", "de": "Gateway"}
 VIA_PROXY = {"en": "via proxy at {address}", "de": "über Proxy {address}"}
@@ -57,18 +57,19 @@ def test_search_held_then_answered(page, case):
     assert SEARCHING[case.lang] in cube_item(page, "__discover").text_content(), "the entry says searching"
     assert page.locator("#toast").is_hidden(), "no toast yet"
     assert cube_item(page, "__discover").is_disabled(), "search entry disabled while searching"
-    # Released before the route goes: a page without routes stops
-    # intercepting, and Playwright would let the held request through.
-    if held:
-        held[0].continue_()  # on to the server, which asks the fake Cube
-    page.unroute("**/api/v1/cubes/discover")
-    assert wait_until(page, "!document.querySelector(\"#cube-menu button[data-value='__discover']\").disabled", 10), "search done"
     toast = page.locator("#toast")
-    assert toast.is_visible() and page.locator("#toast-body").inner_text() == found_text(case.lang, 1), "the outcome in the toast"
-    assert page.locator("#toast-action").inner_text() == page.evaluate("t('discover.show')"), "with Show"
-    assert page.locator("#cube-search").count() == 0, "no line beside the Cube choice"
-    page.locator("#toast-close").click()
-    assert toast.is_hidden(), "× closes it"
+    with held_timers(page, "toast"):  # shown until its × is clicked, not until its 8 s are up
+        # Released before the route goes: a page without routes stops
+        # intercepting, and Playwright would let the held request through.
+        if held:
+            held[0].continue_()  # on to the server, which asks the fake Cube
+        page.unroute("**/api/v1/cubes/discover")
+        assert wait_until(page, "!document.querySelector(\"#cube-menu button[data-value='__discover']\").disabled", 10), "search done"
+        assert toast.is_visible() and page.locator("#toast-body").inner_text() == found_text(case.lang, 1), "the outcome in the toast"
+        assert page.locator("#toast-action").inner_text() == page.evaluate("t('discover.show')"), "with Show"
+        assert page.locator("#cube-search").count() == 0, "no line beside the Cube choice"
+        page.locator("#toast-close").click()
+        assert toast.is_hidden(), "× closes it"
     opt = cube_item(page, "found:KEQ0000000")
     assert opt.count() == 1 and not opt.is_disabled(), "found Cube in the choice, which opens System settings with cubes"
     assert page.evaluate("state.serial") == serial, "the selected Cube stays"
@@ -269,11 +270,12 @@ def test_found_cube_in_another_network(page, case, found_event):
 def test_search_toast_shows_the_found(page, case):
     """Show in the search's toast opens System settings → Cubes with the
     found Cubes' fold open, and closes the toast."""
-    choose_cube(page, "__discover")
-    page.locator("#toast-action").wait_for(state="visible", timeout=10000)
-    page.locator("#toast-action").click()
-    assert wait_until(page, "MassimoParts.pages.shown() === 'system'", 3), "Show opens System settings"
-    assert page.locator("#toast").is_hidden(), "and closes the toast"
+    with held_timers(page, "toast"):  # shown until Show is clicked, not until its 8 s are up
+        choose_cube(page, "__discover")
+        page.locator("#toast-action").wait_for(state="visible", timeout=10000)
+        page.locator("#toast-action").click()
+        assert wait_until(page, "MassimoParts.pages.shown() === 'system'", 3), "Show opens System settings"
+        assert page.locator("#toast").is_hidden(), "and closes the toast"
     assert page.locator(".cube-found-row[data-serial='KEQ0000000']").is_visible(), "the found Cube, the fold open"
     assert scroll_width(page) <= case.width, "no horizontal scroll"
     show_view(page, "tiles")

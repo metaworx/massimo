@@ -96,6 +96,15 @@ its decompiled code or public analyses, and says so.
   Massimo calls it the communication error, as the original software's UI does
   ("Communication error!", "Kommunikationsstörung!"),
   and byte 6's 0x40, which the original names `transmitError`, the link error.
+- **Set group (0x22), remove group (0x23) and wakeups**
+  (the test Cube, 2026-11-26 and 27, one radiator thermostat):
+  0x22 sets the room byte of the device's C line, to a room the list lacks too;
+  0x23 sets it to 0 only where it names the room the byte names,
+  and naming another room the device refuses it and is flagged with 0x23.
+  A room's wakeup reaches only the devices whose C line names the room,
+  a device wakeup (`z:1e,D,<rf>`) the device itself;
+  a wakeup keeps a device awake about a minute, with `05` as with `1e`,
+  and only on the LAN connection that sent it.
 - **Key lock state** is bit 0x20 of the second flags byte of an L entry.
 - **Network configuration over UDP 23272**:
   `c` reads the stored static configuration and the DHCP flag,
@@ -406,9 +415,14 @@ A metadata write longer than one block of 1900 base64 characters numbers its
 `m:` lines in decimal, two digits below 10, as the original software 1.4.6
 builds them (`"0" + i`), so the eleventh block is `m:10`, not `m:0a`;
 from the bytecode only, since no Cube here needs more than one block.
-The `z:` duration `1e` has been read as 30 s; the original software 1.4.6 names
-the field `durationInMinutes`, and the byte is the same either way, so the unit
-is open.
+The `z:` duration `1e` was read as 30 s; the original software 1.4.6 names
+the field `durationInMinutes`.
+Measured on the test Cube on 2026-11-26 and 27 (firmware 1.1.3,
+"Lessons from the hardware days"), a wakeup kept a radiator thermostat awake
+about a minute, ending between 60 and 70 s, with `05` as with `1e`:
+neither 30 s nor 30 minutes, and the value did not set the window.
+What the byte means is left to AP ClockWakeup;
+`cube.CmdWakeup` still takes it as seconds.
 The software wakes a room only before configuration writes and 0x82,
 never before 0x40, and only a room with a radiator thermostat.
 A day of the week programme with more than 7 switch points goes as two 0x10
@@ -592,6 +606,29 @@ then wakeup of the new room,
 0x10 × 7, 0x11, `m:` with the device in the new room.
 Links are therefore the only per-device data that is not readable from the Cube;
 a restore derives them from the room layout.
+
+Massimo moves a device the same way (`PUT …/devices/{rf}`, the placement repair,
+a restore whose room differs, and the add of a device whose C line names a room;
+`cubeio.MoveCommands`), but for two things the test Cube showed on 2026-11-26
+("Lessons from the hardware days"), since AP FakeGroup (Block 4, 2026-11-27):
+
+- **The 0x23 names the room the device's C line names**, not the room list's,
+  and is left out where the C line names none:
+  a device refuses a 0x23 of another room and is flagged with it.
+- **The device is woken itself** (`z:1e,D,<rf>`, after the room's wakeup),
+  since a room's wakeup reaches only the devices whose C line names the room:
+  before the unlink half where its C line names another room than the one it
+  leaves, or none, and before the link half always,
+  the device not being in the new room's group yet.
+
+So a move of a device whose C line names room A, the room it is listed in,
+into an empty room B sends `z:1e,G,<A>`, an `r:` for each flagged member of A,
+0x23 A and the 0x21s of A's partners;
+then `z:1e,G,<B>`, `z:1e,D,<rf>` and 0x22 B, no partner to link in B;
+then `m:` and `c:<rf>`, and the copy of the room's settings unless
+`"copy": false`.
+Whether a device's wakeup right after its room's keeps the room's wakeup for
+the other members is *unverified*.
 
 The Cube takes a link radiogram with the room flag (0x20, 0x21) as one delivery
 per member of the room's group, about one memory slot each (2026-11-15, Cube
@@ -788,6 +825,28 @@ so removing the room seems to restore an older value; keep the parking room,
 with the devices in it, instead.
 The device types of the three are shutter contacts;
 their serials start with IEQ.
+
+Set group and remove group on the test Cube
+(2026-11-26, firmware 1.1.3, through the proxy of the owner's service,
+a radiator thermostat alone in its room, its C line read after each step):
+
+- **0x23 naming the room the C line names**, after that room's wakeup,
+  set the room byte to 0 within 45 s; no flag, its slot back.
+- **0x23 naming another room**, after a wakeup of the device's own room,
+  was refused by the device: the byte stayed for the 4 minutes watched,
+  and the Cube flagged the device with byte 4 0x23 (below);
+  an `r:` cleared the flag.
+- **0x22** set the byte to its group once the device heard it,
+  also to a room the Cube's room and device list did not have yet,
+  which an `m:` then added.
+- A 0x23 to a flagged device without an `r:` first was discarded (`S:…,1,…`),
+  as a 0x11 to one was (above).
+
+So the room byte follows a 0x22, and a 0x23 of the room it names;
+a 0x23 of any other room changes nothing and flags the device.
+What a 0x23 does that names room 0 was not tried.
+Massimo's moves follow it since AP FakeGroup (Block 4, above),
+and `massimo fakecube` does the same (README.md).
 
 After a 0x40 set-temperature command the Cube writes the new setpoint into a
 member's L entry when the member acknowledges it,
@@ -1211,6 +1270,10 @@ kept here because they cost time to learn.
     the next C lines, 6 minutes later.
     One slot was still held 12 minutes after the move and was free 3½
     minutes after that.
+    The test Cube showed the same pattern on 2026-11-26 (the next entry):
+    a device refuses a 0x23 of a room its C line does not name,
+    and a 0x22 after the new room's wakeup does not reach a device that is
+    not in that room's group yet.
     The move back sent one radiogram out of the empty room and the link
     half into the old one; the Cube discarded one of its lines,
     took it after an `r:` and one more send,
@@ -1242,6 +1305,58 @@ kept here because they cost time to learn.
     20 °C, with the link error set; 30 s later its link error was clear
     and its setpoint its room's, 4.5 °C, from its wall thermostat partner,
     with nothing sent by the Cube.
+- Set group, remove group and wakeups on the test Cube
+  (2026-11-26 and 27, firmware 1.1.3, one radiator thermostat alone in its room;
+  through the proxy of the owner's service on 2026-11-26,
+  later straight to the Cube with the service stopped;
+  each probe a 0x22 that set the room the C line named already,
+  which changes nothing):
+  - **A room's wakeup reaches only the devices whose C line names the room.**
+    After a 0x23 had left the thermostat in no group,
+    the original software's move of it into a new room
+    (`z:1e,G,<old room>`, 0x23 of the old room, `m:` without it,
+    `z:1e,G,<new room>`, 0x22 of the new room, `c:`, `z:1e,G,<new room>`, 0x11)
+    was accepted line by line but for the 0x11, which the Cube discarded;
+    the thermostat took neither the 0x23 nor the 0x22 and was flagged with 0x23,
+    its C line in no room, the Cube's room and device list without it,
+    while the original software showed it in the new room.
+    A device wakeup, `z:1e,D,<rf>`, woke it: accepted with `A:`,
+    2 to 3 % of the duty cycle, a slot held for at least a minute, no flag;
+    the 0x22 right after it took.
+    The same thermostat in no group took a room setpoint addressed through it,
+    as Massimo addresses a room, at 17 % of the duty cycle in one radiogram;
+    whether a member the address does not name takes it was not tested.
+  - **A wakeup keeps a device awake about a minute, whatever its value.**
+    On one standing LAN connection (2026-11-27, the readings from `r:` answers
+    every 2 s), radiograms 10 to 60 s after `z:1e,G,<room>` were cheap
+    (0 to 1 point of the duty cycle, the slot back in 2 to 5 s)
+    and the one at 70 s was not (4 → 12 %, the slot not back within 8 s);
+    after `z:05,G,<room>` the same, cheap up to 60 s and 16 → 24 % at 70 s.
+    Through the service's proxy on 2026-11-26 the window ended between
+    45 and 60 s in one run,
+    and in another a radiogram at 70 s was cheap and one at 4 minutes not.
+    So it ends near one minute, a few seconds either way,
+    and the value does not set it, at least from `05` to `1e`.
+    Radiograms 10 or 15 s apart inside the window did not prolong it.
+  - **A wakeup ends with its LAN connection**, or at a new client's greeting:
+    sent on a connection of its own that closed at once,
+    no wakeup held, `z:05`, `z:1e` and `z:3c` alike,
+    the first radiogram 12 to 17 s later costing 5 to 6 points each.
+    Massimo's server and the original software keep one connection,
+    so their wakeups hold;
+    `massimo cube`, a connection per call, cannot use one.
+  - **What the radio costs:**
+    a wakeup about 3 points of the duty cycle,
+    a radiogram to a sleeping device 8 to 11;
+    one radiogram stayed pending 56 s and cost 59 points
+    (through the proxy, an `r:` every 2 s), why is not known.
+    Two `r:` lines while a radiogram was pending added nothing
+    (9 points against 11 without): `r:` does not make the Cube send it again.
+  - **The duty cycle is the air time of the last hour**:
+    it held at 46 % for the 30 minutes read with nothing sent,
+    each entry leaving the count an hour after it was spent.
+  - **`r:` takes the address in base64**:
+    one with the address in hex was refused (`S:…,1,…`).
 
 ## Open questions
 

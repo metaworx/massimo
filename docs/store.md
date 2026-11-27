@@ -1853,6 +1853,22 @@ characters>` before 0024) of the role `integration`.
 `effective_user_id` is the user its calls act as: its own,
 or the Massimo user the owner linked it to,
 several of an integration's users to one where wanted.
+Removing a user removes the identities that act as it,
+an integration's user's own too, linked or not (AP AccessEnds, D54-A).
+The integration's next call for that user makes its identity anew, unlinked:
+with its user `<uuid>:<the id>` made anew where that was removed,
+or, where the Massimo user it was linked to was removed and it is left,
+with that user again, as the owner left it (AP LinkedRemoval, D2-A);
+never with a user of that name of no integration or of another,
+nor with one another identity has.
+An identity whose own user was removed while the identity stayed,
+as an older store holds one, acts for nobody:
+no list shows it, no link takes it and no stream goes on for it,
+and the next call removes it and makes it anew so, without a migration (D1-A).
+One whose linked user was removed only a link racing that removal could leave,
+which the link no longer lets through, since it reads its target
+in the transaction that writes it;
+it is treated so all the same.
 The log and the audit write both: whose rights a row was made with
 (`effective_user_id`), and who made it (`real_user_id`).
 A call's capabilities are what the user's role, the role `integration`,

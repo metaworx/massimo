@@ -5,8 +5,8 @@
 too long for the Cube marked and not sent until shortened, D201),
 put into a room with the room's state and settings, which the form's
 outcome names, and removed from the Cube again in the room's Devices tab; a device paired while the page was not
-looking is put into a room from Devices without a room, and another
-removed from there. The fake Cube's device joins two seconds after n:
+looking is put into a room from Devices without a room, where it takes
+the room's setpoint, and another removed from there. The fake Cube's device joins two seconds after n:
 (run.sh, -pair) and again after it was removed, so every case pairs it;
 each test stops pairing and removes the device again at its end, as the
 four cases share the server. The fake Cube's lines are the Go tests'
@@ -20,7 +20,7 @@ import urllib.request
 
 import pytest
 
-from helpers import named_buttons, scroll_width, show_view, wait_until
+from helpers import boxes, named_buttons, scroll_width, show_view, wait_until
 
 URL = os.environ.get("UI_TEST_URL", "http://127.0.0.1:8119/").rstrip("/")
 TOKEN = os.environ.get("UI_TEST_TOKEN", "")
@@ -42,6 +42,8 @@ TOO_LONG = {"en": False, "de": True}
 LONG = {"en": "longer than 32 bytes", "de": "länger als 32 Bytes"}
 SHORT = "Wohnzimmer Heizkörper 1"
 IN_ROOM = "state.rooms.some((r) => r.id === %d && r.devices.some((d) => d.rf_address === '" + DEV + "'))"
+# A device's mode and setpoint in a room of the page, null for none.
+SHOWS = "(((state.rooms.find((r) => r.id === %d) || {devices: []}).devices.find((d) => d.rf_address === %s) || {}).state || null)"
 GONE = "!state.rooms.some((r) => r.devices.some((d) => d.rf_address === '" + DEV + "')) && !state.unlisted.some((d) => d.rf_address === '" + DEV + "')"
 
 
@@ -126,8 +128,8 @@ def check_name_mark(page, case, form, long, submit=False):
     assert name.get_attribute("aria-describedby") == hint.get_attribute("id"), "the limit is the field's description"
     assert hint.evaluate("(el) => getComputedStyle(el).color") == colour_of(page, "--warn"), "the limit in amber"
     assert name.evaluate("(el) => getComputedStyle(el).borderTopColor") == colour_of(page, "--bad"), "the box in red"
-    box, before = name.bounding_box(), hint.bounding_box()
-    assert before["y"] + before["height"] <= box["y"] + 1, "the limit above the box"
+    box, before = boxes(page, name, hint)  # at one moment: the page may draw between two reads
+    assert before["y"] + before["height"] <= box["y"] + 1, f"the limit above the box: {before} over {box}"
     assert scroll_width(page) <= case.width, "no horizontal scroll with the limit"
     if not submit:
         return
@@ -246,6 +248,31 @@ def test_put_into_a_room_from_devices_without_a_room(page, case, clean):
     if SERVE_LOG:
         new = serve_log()[len(before):]
         assert "settings copied" not in new, "nothing copied with the switch off"
+    takes_the_rooms_setpoint(page, room["id"], before)
+
+
+def takes_the_rooms_setpoint(page, room, before):
+    """A room setpoint reaches the device put into the room, which the
+    Cube's room command reaches once the set group radiogram (0x22) named
+    the room in its C line, as the fake Cube takes it (AP FakeGroup,
+    Block 3). The room's state, its other thermostat's, is put back."""
+    other = page.evaluate("(state.rooms.find((r) => r.id === %d).devices.find((d) => d.rf_address !== '%s' && d.state) || {}).rf_address"
+                          % (room, DEV))
+    assert other, "another thermostat in the room, whose state is put back"
+    was = page.evaluate(SHOWS % (room, json.dumps(other)))
+    temp = 22.5 if was.get("setpoint") != 22.5 else 23.0
+    try:
+        status, answer = api("PUT", CUBE + "/rooms/%d/setpoint" % room, {"mode": "manual", "temp": temp})
+        assert status == 200, f"the room's setpoint: {status} {answer}"
+        shows = "(() => { const s = %s; return !!s && s.mode === 'manual' && s.setpoint === %s; })()" % (SHOWS % (room, json.dumps(DEV)), temp)
+        assert wait_until(page, shows, 30), \
+            f"the room's manual {temp} °C reached the device: {page.evaluate(SHOWS % (room, json.dumps(DEV)))}{reconnected(len(before))}"
+    finally:
+        back = {"mode": was["mode"] if was.get("mode") in ("auto", "manual") else "auto", "temp": was["setpoint"]}
+        status, answer = api("PUT", CUBE + "/rooms/%d/setpoint" % room, back)
+        assert status == 200, f"the room's state put back: {status} {answer}"
+    shows = "(() => { const s = %s; return !!s && s.mode === %s && s.setpoint === %s; })()" % (SHOWS % (room, json.dumps(other)), json.dumps(back["mode"]), back["temp"])
+    assert wait_until(page, shows, 30), f"the room's state back at {back}: {page.evaluate(SHOWS % (room, json.dumps(other)))}"
 
 
 def test_remove_from_devices_without_a_room(page, case, clean):
@@ -312,7 +339,7 @@ def test_pairing_time_at_most_255(page, case, clean):
     assert secs.get_attribute("aria-describedby") == hint.get_attribute("id"), "the range is the field's description"
     assert hint.evaluate("(el) => getComputedStyle(el).color") == colour_of(page, "--warn"), "the range in amber"
     assert secs.evaluate("(el) => getComputedStyle(el).borderTopColor") == colour_of(page, "--bad"), "the box in red"
-    box, before = secs.bounding_box(), hint.bounding_box()
+    box, before = boxes(page, secs, hint)  # at one moment: the page may draw between two reads
     assert before["x"] + before["width"] <= box["x"] + 1, "the range before the box"
     assert before["y"] < box["y"] + box["height"] and box["y"] < before["y"] + before["height"], "on the box's line"
     assert scroll_width(page) <= case.width, "no horizontal scroll with the range"

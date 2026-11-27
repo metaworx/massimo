@@ -29,32 +29,51 @@ func linkPair(a, b cube.DeviceType) bool {
 // removal's unlink half for the old room (unlinkFromRoom) with a 0x23
 // first (D160-A) and the device's own side; in, the placement's link
 // half for the new room (linkIntoRoom). Each half goes after a wakeup
-// of its room and carries its room's number. A device in no
-// room has no partner to leave: out is the 0x23 alone, without a
-// wakeup. The metadata write that records the new room is not
-// included. A device in skip, a hidden one, is no partner: every write
-// keeps away from it.
+// of its room and carries its room's number.
+//
+// As the test Cube showed (firmware 1.1.3, 2026-11-26, AP FakeGroup,
+// Block 4): the 0x23 names the room the device's C line in snap names,
+// as a device refuses one of another room, and is left out where the
+// line names none, or snap has none; and a room's wakeup reaches only
+// the devices whose C line names the room, so the device is woken itself
+// (engine.Command.WakeTarget) before the out half where its C line
+// names another room than oldRoom, and before the in half always, not
+// being in the new room's group yet.
+//
+// A device in no room (oldRoom 0) has no partner to leave: out is the
+// 0x23 alone, without a room's wakeup, and has no lines where its C line
+// names no room either; the caller leaves an out without lines out. The
+// metadata write that records the new room is not included. A device in
+// skip, a hidden one, is no partner: every write keeps away from it.
 func MoveCommands(snap *cubelan.Snapshot, rf cube.RFAddress, typ cube.DeviceType, oldRoom, newRoom uint8, newMembers []cube.DeviceMeta, skip view.Hidden) (out, in engine.Command) {
-	outLines := []cube.Message{cube.CmdSetGroup(rf, oldRoom, true)}
-	if oldRoom != 0 {
-		outLines = unlinkFromRoom(snap, rf, typ, oldRoom, skip, true)
+	var group uint8 // the room the device's C line names: the group its 0x23 removes
+	if c := snap.Config(rf); c != nil {
+		group = c.RoomID
 	}
-	out = engine.Command{Key: "move-out:" + rf.String(), Target: rf, RoomID: oldRoom, Wakeup: oldRoom != 0, Lines: outLines}
-	in = engine.Command{Key: "move-in:" + rf.String(), Target: rf, RoomID: newRoom, Wakeup: true,
+	var outLines []cube.Message
+	switch {
+	case oldRoom != 0:
+		outLines = unlinkFromRoom(snap, rf, typ, oldRoom, group, skip, true)
+	case group != 0:
+		outLines = []cube.Message{cube.CmdSetGroup(rf, group, true)}
+	}
+	out = engine.Command{Key: "move-out:" + rf.String(), Target: rf, RoomID: oldRoom, Wakeup: oldRoom != 0, WakeTarget: group != oldRoom, Lines: outLines}
+	in = engine.Command{Key: "move-in:" + rf.String(), Target: rf, RoomID: newRoom, Wakeup: true, WakeTarget: true,
 		Lines: linkIntoRoom(snap, rf, typ, newRoom, newMembers, skip)}
 	return out, in
 }
 
 // unlinkFromRoom is the unlink half of a removal and of a move: one r:
 // for each other member of room whose error flag is set (D161-B), then,
-// for a move, 0x23 for the device, then the 0x21s that unlink it from
-// its partners (linkLines), for a move on its own side too. The members
-// are the metadata's, the devices in skip left out.
-func unlinkFromRoom(snap *cubelan.Snapshot, rf cube.RFAddress, typ cube.DeviceType, room uint8, skip view.Hidden, move bool) []cube.Message {
+// for a move, 0x23 for the device naming group, the room its C line
+// names, where it names one, then the 0x21s that unlink it from its
+// partners (linkLines), for a move on its own side too. The members are
+// the metadata's, the devices in skip left out.
+func unlinkFromRoom(snap *cubelan.Snapshot, rf cube.RFAddress, typ cube.DeviceType, room, group uint8, skip view.Hidden, move bool) []cube.Message {
 	members := RoomMembers(snap, room, skip)
 	lines := flaggedResets(snap, members, rf)
-	if move {
-		lines = append(lines, cube.CmdSetGroup(rf, room, true))
+	if move && group != 0 {
+		lines = append(lines, cube.CmdSetGroup(rf, group, true))
 	}
 	return append(lines, linkLines(snap, RoomMaster(snap, room), rf, typ, room, members, false, move)...)
 }

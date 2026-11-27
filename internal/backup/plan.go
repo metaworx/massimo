@@ -526,7 +526,9 @@ func (p *Plan) planDevice(f *File, snap *cubelan.Snapshot, cur cube.DeviceMeta, 
 // does: unlink it from every device of the old room in both directions
 // and remove its group, then link it with every device of the new room
 // in both directions and set the new group. Each half follows a wakeup
-// of the room concerned.
+// of the room concerned, and the device's own where that room's would
+// miss it (cubeio.MoveCommands); a device whose C line names no room
+// has nothing to leave.
 func (p *Plan) planMove(f *File, snap *cubelan.Snapshot, want Device, name string, oldRoom uint8) {
 	rf, typ := want.RFAddress, want.Type
 	// New partners: the backup's layout of the new room, limited to
@@ -548,7 +550,9 @@ func (p *Plan) planMove(f *File, snap *cubelan.Snapshot, want Device, name strin
 	if oldRoom == 0 {
 		left = 0
 	}
-	p.add(fmt.Sprintf("%s %q: leave room %d (%d partners)", rf, name, oldRoom, left), out)
+	if len(out.Lines) > 0 { // nothing to leave where its C line names no room
+		p.add(fmt.Sprintf("%s %q: leave room %d (%d partners)", rf, name, oldRoom, left), out)
+	}
 	p.add(fmt.Sprintf("%s %q: join room %d (%d partners)", rf, name, want.RoomID, cubeio.PartnerCount(members, rf, typ)), in)
 }
 

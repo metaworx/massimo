@@ -508,7 +508,9 @@ func TestRepairResendRefused(t *testing.T) {
 
 // A device the metadata lists in room 1 whose C line names no room is
 // placed there with the placement's link half, the metadata left as it
-// is; one whose C line names room 6 is moved from there.
+// is; one whose C line names room 6 is moved from there. The link half
+// wakes the device itself after room 1, whose group it is not in yet,
+// which the preview counts.
 func TestRepairPlace(t *testing.T) {
 	t.Parallel()
 	t.Run("from no room", func(t *testing.T) {
@@ -519,13 +521,13 @@ func TestRepairPlace(t *testing.T) {
 		received := cubewatch.Lines(fc)
 		sent := received.Mark()
 		p, code, out := runRepairOf(t, ts, "/api/v1/cubes/KEQ0000100/devices/0d0e0f/repair/place", "")
-		if p.Action != "move" || len(p.Steps) != 1 || p.Radiograms != 4 {
+		if p.Action != "move" || len(p.Steps) != 1 || p.Radiograms != 4 || p.Wakeups != 2 { // room 1's and the contact's own
 			t.Fatalf("preview %+v", p)
 		}
 		if code != 200 || out["confirmation"] != "pending" {
 			t.Fatalf("run: %d %v", code, out)
 		}
-		sameLines(t, received, sent, []string{"z:1e,G,01",
+		sameLines(t, received, sent, []string{"z:1e,G,01", "z:1e,D,0d0e0f",
 			linkPartner(room1(0x0a010a), true, copyContact, cube.DeviceShutterContact),
 			linkPartner(direct(copyContact), true, 0x0a010a, cube.DeviceRadiatorThermostat),
 			linkPartner(direct(copyContact), true, copyWall, cube.DeviceWallThermostat),
@@ -545,7 +547,7 @@ func TestRepairPlace(t *testing.T) {
 			cube.CmdSetGroup(copyWall, 6, true).String(),
 			linkPartner(cube.Target{RFAddress: 0x0a010d, RoomID: 6, Room: true}, false, copyWall, cube.DeviceWallThermostat),
 			linkPartner(direct(copyWall), false, 0x0a010d, cube.DeviceRadiatorThermostat),
-			"z:1e,G,01",
+			"z:1e,G,01", "z:1e,D,0c0d0e",
 			linkPartner(room1(0x0a010a), true, copyWall, cube.DeviceWallThermostat),
 			linkPartner(direct(copyWall), true, 0x0a010a, cube.DeviceRadiatorThermostat),
 			cube.CmdSetGroup(copyWall, 1, false).String(),
