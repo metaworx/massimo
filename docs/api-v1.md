@@ -3591,7 +3591,7 @@ also while discovery does not hear it and `GET /api/v1/cubes` does not list it:
 Their backups are listed, downloaded, compared and deleted through
 `GET …/backups` and its routes (above).
 The served Cubes are not in it, and a server without a store lists none (`[]`).
-Web UI: System settings → Backup and restore draws a fold for each.
+Web UI: Maintenance → Cube backups draws a fold for each.
 Capability `backup`.
 
 ### POST /api/v1/cubes/{sn}/restore/plan

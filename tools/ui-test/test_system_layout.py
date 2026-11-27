@@ -6,8 +6,8 @@ section buttons, folding kept in the browser, back to top, the columns
 where there is room, and a Cube's panel in two columns."""
 from helpers import ApiReads, named_buttons, scroll_settled, scroll_width, show_view, wait_until
 
-CARDS = ["sys-cubes", "sys-users", "sys-providers", "sys-integrations", "sys-roles", "sys-caps", "sys-backup"]
-MAINT_CARDS = ["sys-software", "sys-maint"]  # Maintenance's page (AP GlobalMenu, Block 4)
+CARDS = ["sys-cubes", "sys-users", "sys-providers", "sys-integrations", "sys-roles", "sys-caps"]
+MAINT_CARDS = ["sys-software", "sys-maint", "sys-backup"]  # Maintenance's page (AP GlobalMenu, Block 4; AP ServerBackup, Block 3)
 
 
 def card_ids(page):
@@ -31,7 +31,7 @@ def test_cards_and_contents(page, case):
     menu, and no row of section buttons; the cards flow in two columns at
     1100 px and stack at 390; nothing overflows."""
     show_view(page, "system")
-    assert card_ids(page) == CARDS, "Cubes first, Backup and restore last"
+    assert card_ids(page) == CARDS, "Cubes first, Capabilities for every role last"
     assert page.locator("#system .toc").count() == 0, "no row of section buttons"
     toc = open_sections(page).locator(".toc-link")
     assert toc.count() == len(CARDS), "a menu item per card"
@@ -49,12 +49,12 @@ def test_cards_and_contents(page, case):
 
 
 def test_maintenance_page_cards(page, case):
-    """Maintenance's page holds Software update and Maintenance, as wide as
-    the page, each with an item in its sections menu; System settings has
-    neither."""
+    """Maintenance's page holds Software update, Maintenance and Cube
+    backups, as wide as the page, each with an item in its sections menu;
+    System settings has none of them."""
     show_view(page, "maint")
     got = page.evaluate("[...document.querySelectorAll('#maint-page .section-card')].map((c) => c.id)")
-    assert got == MAINT_CARDS, f"Software update, then Maintenance: {got}"
+    assert got == MAINT_CARDS, f"Software update, then Maintenance, then Cube backups: {got}"
     menu = page.locator("#maint-page .sec-menu")
     menu.locator("summary").click()
     toc = menu.locator(".toc-link")
@@ -63,7 +63,7 @@ def test_maintenance_page_cards(page, case):
     width = page.locator("#maint-page").bounding_box()["width"]
     for card in MAINT_CARDS:
         assert page.locator("#" + card).bounding_box()["width"] >= width - 2, f"{card} as wide as the page"
-    assert page.locator("#system #sys-software, #system #sys-maint").count() == 0, "neither in System settings"
+    assert page.locator("#system #sys-software, #system #sys-maint, #system #sys-backup").count() == 0, "none in System settings"
     assert scroll_width(page) <= case.width, "no horizontal scroll on Maintenance"
 
 
@@ -150,7 +150,8 @@ def test_header_and_page_bar_stay(page, case):
     # (api/v1/integrations/found), which may come after the roles
     assert reads.answered(), f"every read of System settings answered: {[r.url for r in reads.open]}"
     tall = page.evaluate("document.documentElement.scrollHeight")
-    page.evaluate("document.getElementById('sys-backup').scrollIntoView({block: 'start'})")
+    # to the page's end: its last card sits in the flow's second column at 1100 px
+    page.evaluate("window.scrollTo({top: document.documentElement.scrollHeight, behavior: 'instant'})")
     assert wait_until(page, "document.body.classList.contains('scrolled')", 3), "the page counts as scrolled"
     assert abs(page.evaluate("document.documentElement.scrollHeight") - tall) <= 1, \
         "the page as long scrolled as not, the compacted header keeping its height as margin"

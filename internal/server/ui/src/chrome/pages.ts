@@ -9,8 +9,8 @@
  * before), handed to the pages' store (shared/pages.ts definePages) as the
  * chrome starts: each page's view, its address, the elements it shows, and
  * who may open it (System settings with one of its capabilities,
- * Maintenance with one of those or update, restart or reboot, Software
- * update being for all of them, the Cube's settings with cubes or with
+ * Maintenance with one of those or backup, update, restart or reboot,
+ * Software update being for all of them, the Cube's settings with cubes or with
  * pair, its pairing alone, System info with read); the personal page's
  * cards with addresses of their own (those of the pages they were), My
  * profile for a user alone (profileOf of shared/me.ts); and the pages of

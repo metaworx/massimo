@@ -4,8 +4,8 @@
 /**
  * @file internal/server/ui/src/backups/Backups.tsx
  *
- * Backup and restore as parts, a box per Cube and place: on Cube settings
- * the chosen Cube's, in System settings a fold per Cube, each built once
+ * The Cubes' backups as parts, a box per Cube and place: on Cube settings
+ * the chosen Cube's, in Maintenance's Cube backups a fold per Cube, each built once
  * and updated in place, so that a fold open, a question asked and the
  * format chosen stay when data comes in. A box holds the format, Download
  * backup, Take a backup now where the server keeps backups, Restore from
@@ -145,7 +145,7 @@ function PlanBox({ place, serial }: { place: string; serial: string }) {
 }
 
 /** The page of each place's boxes. */
-const placeView: Record<string, string> = { cube: "cube", sys: "system" };
+const placeView: Record<string, string> = { cube: "cube", sys: "maint" };
 
 /**
  * Box is a Cube's box for a place ("cube" or "sys"), which its ids carry,
@@ -200,7 +200,7 @@ export function keptText(serial: string): string {
   return b.loaded && b.history ? tn("backup.badge.kept", b.list.length) : "";
 }
 
-/** CubeFold is a Cube's fold in System settings: the cube, its name and serial, its network sign after them, the count kept, and its box. */
+/** CubeFold is a Cube's fold in Cube backups: the cube, its name and serial, its network sign after them, the count kept, and its box. */
 function CubeFold({ c }: { c: Cube }) {
   useLook();
   const ui = foldUI.of(c.serial);
@@ -220,7 +220,7 @@ function CubeFold({ c }: { c: Cube }) {
 }
 
 /**
- * UnservedFold is the fold in System settings of a Cube the server keeps
+ * UnservedFold is the fold in Cube backups of a Cube the server keeps
  * backups of and does not serve: the cube, its name where its row has
  * one, its serial, that it is not served and the count kept in its head,
  * closed at first, and its box without what needs the Cube served.
@@ -239,10 +239,11 @@ function UnservedFold({ c }: { c: UnservedCube }) {
 }
 
 /**
- * SystemBackups is System settings' card: a fold per Cube served, or that
- * none is configured, then a fold per Cube not served that has backups.
+ * CubeFolds is what Maintenance's Cube backups holds: a fold per Cube
+ * served, or that none is configured, then a fold per Cube not served
+ * that has backups.
  */
-export function SystemBackups() {
+export function CubeFolds() {
   useLook();
   const others = unserved();
   return (

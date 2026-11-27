@@ -1897,6 +1897,7 @@
   "help.putCopy": "Geeft het apparaat de stand en de instellingen van de ruimte. Zijn modus en setpoint zijn wat de thermostaten van de ruimte vóór zijn komst toonden, zodat een ruimte in handmatig handmatig blijft, en auto volgens het weekprogramma waar ze dat volgen. Zijn instellingen zijn die van de ruimte, instelling voor instelling en dag voor dag van het weekprogramma: wat de meeste andere thermostaten van de ruimte delen, anders wat het hoofdapparaat, de wandthermostaat of de eerste radiatorthermostaat heeft; een thermostaat waarvan de Cube geen stand heeft, wordt overgeslagen. De temperaturen gaan naar het apparaat en de thermostaten van de ruimte met een stand, de klepinstellingen en de afwijkende dagen naar het apparaat. Dat kost radiobudget: ongeveer een tiende van dat van een uur voor de temperaturen en de klepinstellingen, en 8 % voor elke afwijkende dag van het programma, dus tot twee derde voor een nieuwe thermostaat. Uitgeschakeld behoudt het apparaat zijn eigen stand en instellingen.",
 
   "backup.title": "Back-up en herstel",
+  "backup.cubesTitle": "Cube-back-ups",
   "help.backup": "Een back-up bevat de kamers, namen, apparaatinstellingen en weekprogramma's van de Cube. 'Back-up downloaden' slaat de Cube op zoals hij nu is. De server bewaart ook back-ups: na een wijziging, handmatig en voor elk herstel. 'Herstellen…' toont wat er verzonden zou worden voordat er iets wordt verzonden.",
   "backup.format": "Formaat",
   "backup.download": "Back-up downloaden",

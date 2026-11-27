@@ -1,24 +1,26 @@
 # SPDX-License-Identifier: AGPL-3.0-or-later
 # Copyright (C) 2026 The Massimo Authors
-"""Backup and restore, a box per Cube (AP GlobalMenu, Block 5), against
+"""The Cubes' backups, a box per Cube (AP GlobalMenu, Block 5), against
 the server run.sh starts, whose store holds the fake Cube. On Cube
-settings the chosen Cube's box: the backup as it is now downloads, one
-taken by hand shows in the list and downloads, its plan says that the
-Cube holds it already, it compares with the one before, and it is
-deleted again. In System settings a fold per Cube, a single Cube's
-open, each with its count; a fold kept as it was when the page is shown
-again. A load onto either page shows the Cube's list, read once, though
-the page is shown before it knows its Cubes; under a clean Cube's list
-a line says why no newer backup follows, and none does while one is
-pending. A Cube the server keeps backups of and does not serve, by the
-server's list of them, has a fold after the served Cubes', without what
-needs the Cube served. The four cases share the server, so each removes
-what it took."""
+settings, in Backup and restore, the chosen Cube's box: the backup as
+it is now downloads, one taken by hand shows in the list and downloads,
+its plan says that the Cube holds it already, it compares with the one
+before, and it is deleted again. On Maintenance, in Cube backups (AP
+ServerBackup, Block 3), a fold per Cube, a single Cube's open, each
+with its count; a fold kept as it was when the page is shown again; a
+role with backup alone has Maintenance with Cube backups and no System
+settings. A load onto either page shows the Cube's list, read once,
+though the page is shown before it knows its Cubes; under a clean
+Cube's list a line says why no newer backup follows, and none does
+while one is pending. A Cube the server keeps backups of and does not
+serve, by the server's list of them, has a fold after the served
+Cubes', without what needs the Cube served. The four cases share the
+server, so each removes what it took."""
 import json
 from datetime import datetime, timedelta, timezone
 
 from conftest import api_call
-from helpers import assert_busy, busy_state, hold, named_buttons, safe_route, show_view, wait_held, wait_until
+from helpers import VIEWER, assert_busy, busy_state, css_hidden, hold, named_buttons, open_main_menu, safe_route, show_view, wait_held, wait_until
 
 SERIAL = "KEQ0000100"
 SECOND = "KEQ0000200"
@@ -92,12 +94,12 @@ def test_backup_box_on_cube_settings(page, case):
     show_view(page, "tiles")
 
 
-def test_backup_folds_in_system_settings(page, case):
+def test_backup_folds_on_maintenance(page, case):
     """One Cube: one fold, open, its sign, name, serial and count in its
     head, its box; a second Cube added: two folds, the first kept open as
     it was, the second closed with a box of its own; the card counts every
     Cube's backups."""
-    show_view(page, "system")
+    show_view(page, "maint")
     folds = page.locator("#backups-cubes > .backup-fold")
     assert wait_until(page, "document.querySelectorAll('#backups-cubes > .backup-fold').length === 1", 5), "one fold"
     first = folds.first
@@ -118,7 +120,7 @@ def test_backup_folds_in_system_settings(page, case):
         page.evaluate("loadCubes()")
         assert wait_until(page, f"state.cubes.some((c) => c.serial === '{SECOND}')", 5), "the second Cube listed"
         show_view(page, "tiles")
-        show_view(page, "system")
+        show_view(page, "maint")
         assert wait_until(page, "document.querySelectorAll('#backups-cubes > .backup-fold').length === 2", 5), "two folds"
         assert folds.first.get_attribute("data-kept") == "yes" and folds.first.get_attribute("open") is not None, \
             "the first kept as it was, open"
@@ -134,6 +136,43 @@ def test_backup_folds_in_system_settings(page, case):
     finally:
         api_call("DELETE", "api/v1/cubes/" + SECOND)
         page.evaluate("loadCubes()")
+    show_view(page, "tiles")
+
+
+def test_backup_alone_has_maintenance(page, case):
+    """A role with backup alone (/me stubbed; the owner's token still
+    answers the reads): ☰ has Maintenance and no System settings;
+    Maintenance holds Cube backups, by its title, with the Cube's fold
+    and its list, and not the Maintenance card, its sections menu naming
+    Cube backups; System settings does not open."""
+    me = dict(VIEWER, capabilities=["read", "preferences", "backup"])
+    page.route("**/api/v1/me", lambda route: route.fulfill(status=200, content_type="application/json", body=json.dumps(me)))
+    try:
+        page.evaluate("loadMe()")
+        assert wait_until(page, "document.body.classList.contains('no-system') && !document.body.classList.contains('no-maint')"
+                                " && !document.body.classList.contains('no-backup')", 5), "backup alone: Maintenance, no System settings"
+        open_main_menu(page)
+        assert page.locator("#menu-maint").is_visible(), "Maintenance in ☰"
+        assert css_hidden(page, "#menu-system"), "System settings not in ☰"
+        page.keyboard.press("Escape")
+        show_view(page, "maint")
+        card = page.locator("#sys-backup")
+        assert card.is_visible(), "Cube backups on Maintenance"
+        assert card.locator(".section-title").inner_text() == page.evaluate("t('backup.cubesTitle')"), "by its title"
+        assert css_hidden(page, "#sys-maint"), "not the Maintenance card"
+        assert wait_until(page, f"document.querySelector('{SYS_BOX} .backups-list')?.children.length > 0", 10), "the Cube's fold with its list"
+        menu = page.locator("#maint-page .sec-menu")
+        menu.locator("summary").click()
+        toc = menu.locator(".toc-link")
+        shown = [toc.nth(i).get_attribute("data-target") for i in range(toc.count()) if toc.nth(i).is_visible()]
+        assert "sys-backup" in shown and "sys-maint" not in shown, f"the sections menu names Cube backups and not Maintenance: {shown}"
+        page.keyboard.press("Escape")
+        page.evaluate("MassimoParts.pages.showView('system')")
+        assert page.locator("#system").is_hidden(), "System settings does not open"
+    finally:
+        page.unroute("**/api/v1/me")
+        page.evaluate("loadMe()")
+    assert wait_until(page, "!document.body.classList.contains('no-system')", 5), "the owner has System settings again"
     show_view(page, "tiles")
 
 
@@ -173,12 +212,12 @@ def test_back_up_now_turns_until_answered(page, case):
 # cases A, B, E and H), and the one that had a Cube to read from at once:
 # the address, the Cube stored or none ('massimo.serial'), the page's
 # section and the box of the Cube.
-LOADS = [("#system", False, "#system", SYS_BOX), ("#system", True, "#system", SYS_BOX),
+LOADS = [("#maintenance", False, "#maint-page", SYS_BOX), ("#maintenance", True, "#maint-page", SYS_BOX),
          ("#cube", False, "#cube-page", BOX), ("#cube", True, "#cube-page", BOX)]
 
 
 def test_backup_lists_after_a_load_onto_their_page(page, case):
-    """A load onto System settings without a Cube stored, as a first open
+    """A load onto Maintenance without a Cube stored, as a first open
     is, a reload onto it with the Cube stored, as checkVersion's after an
     update is, and a reload onto Cube settings without and with a stored
     Cube: each shows the Cube's list, though the page shows its page
@@ -204,8 +243,8 @@ def test_backup_lists_after_a_load_onto_their_page(page, case):
 
 def test_clean_cube_says_why_no_backup_follows(page, case, reads):
     """Under a list with backups and nothing pending (the list's changed
-    and due taken out of the server's answer), on Cube settings and in
-    System settings, the line that nothing changed since the newest
+    and due taken out of the server's answer), on Cube settings and on
+    Maintenance, the line that nothing changed since the newest
     backup; with a backup pending (changed and due put in), the pending
     line instead, and no such line."""
     assert kept(), "the Cube has run.sh's backup by hand"
@@ -225,14 +264,14 @@ def test_clean_cube_says_why_no_backup_follows(page, case, reads):
     line = " .backups-list .backup-clean"
     try:
         reads.change(LIST, clean)
-        for view, box in (("cube", BOX), ("system", SYS_BOX)):
+        for view, box in (("cube", BOX), ("maint", SYS_BOX)):
             show_view(page, view)
             assert rows(page, len(kept()), box), f"{view}: the list loaded"
             assert wait_until(page, f"document.querySelector('{box}{line}')?.textContent === {text!r}", 5), f"{view}: the clean Cube's line"
             assert page.locator(box + " .backup-pending").is_hidden(), f"{view}: nothing pending"
         reads.clear(LIST)
         reads.change(LIST, pending)
-        for view, box in (("cube", BOX), ("system", SYS_BOX)):
+        for view, box in (("cube", BOX), ("maint", SYS_BOX)):
             show_view(page, "tiles")
             show_view(page, view)
             assert wait_until(page, f"!document.querySelector('{box} .backup-pending').classList.contains('hidden')", 5), f"{view}: the pending line"
@@ -316,7 +355,7 @@ def test_backups_of_a_cube_not_served(page, case, reads):
         page.evaluate("loadCubes()")
         assert page.evaluate(f"!state.found.some((c) => c.serial === '{OTHER}') && state.found.some((c) => c.serial === '{EMPTY}')"), \
             "the Cube not served is no found Cube"
-        show_view(page, "system")
+        show_view(page, "maint")
         assert wait_until(page, f"[...document.querySelectorAll('{folds}')].map((f) => f.dataset.serial).join() === '{SERIAL},{OTHER}'", 10), \
             "the served Cube's fold, then the one not served with backups, none for the found one without"
         fold = page.locator(f'{folds}[data-serial="{OTHER}"]')

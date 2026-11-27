@@ -45,18 +45,19 @@ function canManageUsers() {
   return hasCap("users") || hasCap("guests") || hasCap("passwords") || hasCap("integrations");
 }
 
-// hasSystem reports whether the signed-in user sees System settings: one
-// of the capabilities of its panels, Cubes, backups, users, roles, and
-// the software's update, the server's restart and the computer's reboot.
+// hasSystem reports whether the signed-in user sees System settings or
+// Maintenance: one of the capabilities of their cards, Cubes, users,
+// roles, the Cubes' backups, and the software's update, the server's
+// restart and the computer's reboot.
 function hasSystem() {
   return ["cubes", "pair", "backup", "roles", "capabilities", "auth", "integrations", "update", "restart", "reboot"].some(hasCap) || canManageUsers();
 }
 
 // hasSettingsPage reports whether the signed-in user may open System
 // settings: one of its cards' capabilities, without those only
-// Maintenance's cards use (update, restart, reboot).
+// Maintenance's cards use (backup, update, restart, reboot).
 function hasSettingsPage() {
-  return ["cubes", "pair", "backup", "roles", "capabilities", "auth", "integrations"].some(hasCap) || canManageUsers();
+  return ["cubes", "pair", "roles", "capabilities", "auth", "integrations"].some(hasCap) || canManageUsers();
 }
 
 // isSelf reports whether a user is the signed-in one.

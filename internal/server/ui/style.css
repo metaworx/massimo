@@ -810,7 +810,7 @@ body.scrolled .nav .top-btn { display: inline-flex; }
 .cube-page .panel.cube-panel > summary::before { display: none; }
 /* its Backup and restore under the panel (backup.js renderCubeBackup) */
 .cube-page > .section-card { margin-top: 16px; }
-/* System settings → Backup and restore: a fold per Cube, its head as a
+/* Maintenance → Cube backups: a fold per Cube, its head as a
    Cube's in the Cubes card, its sign before its name */
 .backups-cubes { display: grid; gap: 8px; }
 .backup-fold > summary > .conn-sign, .backup-fold > summary > .cube-icon { width: 18px; height: 18px; flex: none; }
@@ -831,8 +831,9 @@ body.scrolled .nav .top-btn { display: inline-flex; }
 .cube-differs { border-left: 3px solid var(--warn); padding: 2px 0 2px 10px; margin: 0 0 10px; }
 .cube-differs p { margin: 0 0 6px; overflow-wrap: anywhere; }
 .cube-form input[type="text"] { min-width: 0; max-width: 100%; }
-/* System settings → Backup and restore (backup.js): the stored backups, each
-   a row with its actions, and a restore's plan */
+/* a Cube's box, on Maintenance → Cube backups and on Cube settings
+   (ui/src/backups/): the stored backups, each a row with its actions,
+   and a restore's plan */
 .backup-bar { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; margin-bottom: 6px; }
 .settings .backup-bar .field { margin: 0; }
 .backups-list { margin: 8px 0 14px; }

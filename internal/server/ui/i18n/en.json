@@ -1896,6 +1896,7 @@
   "help.putCopy": "Gives the device the room's state and settings. Its mode and setpoint are what the room's thermostats showed before it came, so that a room in manual stays in manual, and auto on the week programme where they follow it. Its settings are the room's, setting by setting and day by day of the week programme: what most of the room's other thermostats share, else what its master, its wall thermostat or its first radiator thermostat has; a thermostat the Cube has no state for is passed over. The temperatures go to the device and the room's thermostats with a state, the valve settings and the days that differ to the device. It costs radio budget: about a tenth of an hour's for the temperatures and the valve settings, and 8 % for each day of the programme that differs, so up to two thirds for a new thermostat. Switched off, the device keeps its own state and settings.",
 
   "backup.title": "Backup and restore",
+  "backup.cubesTitle": "Cube backups",
   "help.backup": "A backup holds the Cube's rooms, names, device settings and week programmes. Download backup saves the Cube as it is now. The server keeps backups too: after a change, by hand and before every restore. Restore… shows what it would send before anything is sent.",
   "backup.format": "Format",
   "backup.download": "Download backup",

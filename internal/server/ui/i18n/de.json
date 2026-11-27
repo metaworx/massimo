@@ -1896,6 +1896,7 @@
   "help.putCopy": "Gibt dem Gerät den Zustand und die Einstellungen des Raums. Sein Modus und sein Sollwert sind, was die Thermostate des Raums vor ihm zeigten, sodass ein Raum in manuell manuell bleibt, und Auto nach Wochenprogramm, wo sie diesem folgen. Seine Einstellungen sind die des Raums, Einstellung für Einstellung und Tag für Tag des Wochenprogramms: was die meisten anderen Thermostate des Raums teilen, sonst was sein Hauptgerät, sein Wandthermostat oder sein erster Heizkörperthermostat hat; ein Thermostat, für den der Cube keinen Zustand hat, wird übergangen. Die Temperaturen gehen an das Gerät und die Thermostate des Raums mit einem Zustand, die Ventileinstellungen und die abweichenden Tage an das Gerät. Das kostet Funkbudget: etwa ein Zehntel einer Stunde für die Temperaturen und die Ventileinstellungen und 8 % für jeden abweichenden Tag des Programms, für ein neues Thermostat also bis zu zwei Drittel. Ausgeschaltet behält das Gerät seinen eigenen Zustand und seine eigenen Einstellungen.",
 
   "backup.title": "Sichern und Zurückspielen",
+  "backup.cubesTitle": "Cube-Sicherungen",
   "help.backup": "Eine Sicherung enthält die Räume, Namen, Geräteeinstellungen und Wochenprogramme des Cubes. „Sicherung herunterladen“ speichert den Cube, wie er jetzt ist. Auch der Server bewahrt Sicherungen auf: nach einer Änderung, von Hand und vor jedem Zurückspielen. „Zurückspielen…“ zeigt, was gesendet würde, bevor etwas gesendet wird.",
   "backup.format": "Format",
   "backup.download": "Sicherung herunterladen",

@@ -1953,6 +1953,7 @@
   "help.putCopy": "Nadaje urządzeniu stan i ustawienia pomieszczenia. Jego tryb i nastawa to to, co pokazywały termostaty pomieszczenia przed jego dodaniem, tak aby pomieszczenie w trybie ręcznym w nim pozostało, oraz auto według programu tygodniowego tam, gdzie go realizują. Jego ustawienia to ustawienia pomieszczenia, ustawienie po ustawieniu i dzień po dniu programu tygodniowego: to, co wspólne dla większości pozostałych termostatów pomieszczenia, a w przeciwnym razie to, co ma jego termostat główny, termostat ścienny lub pierwszy termostat grzejnikowy; termostat, dla którego Cube nie ma stanu, jest pomijany. Temperatury trafiają do urządzenia i termostatów pomieszczenia mających stan, ustawienia zaworu i różniące się dni do urządzenia. Kosztuje to budżet radiowy: około jednej dziesiątej budżetu godziny na temperatury i ustawienia zaworu oraz 8 % na każdy różniący się dzień programu, czyli do dwóch trzecich dla nowego termostatu. Po wyłączeniu urządzenie zachowuje własny stan i ustawienia.",
 
   "backup.title": "Kopia zapasowa i przywracanie",
+  "backup.cubesTitle": "Kopie zapasowe Cube'ów",
   "help.backup": "Kopia zapasowa zawiera pokoje, nazwy, ustawienia urządzeń i programy tygodniowe Cube'a. „Pobierz kopię zapasową” zapisuje Cube'a w obecnym stanie. Serwer również przechowuje kopie: po zmianie, ręcznie i przed każdym przywróceniem. „Przywróć…” pokazuje, co zostałoby wysłane, zanim cokolwiek zostanie wysłane.",
   "backup.format": "Format",
   "backup.download": "Pobierz kopię zapasową",

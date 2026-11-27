@@ -615,7 +615,8 @@ The compacted header has **↑**, back to the top, first of the page buttons: �
   **Log**;
   **Cube settings**, the chosen Cube's, for a role with `cubes` or with `pair`,
   **System settings**, for a role with one of its capabilities,
-  **Maintenance**, for those and a role with `update`, `restart` or `reboot`,
+  **Maintenance**,
+  for those and a role with `backup`, `update`, `restart` or `reboot`,
   and **System info**, for every role with `read`;
   **Personal settings**, its tooltip naming whose they are, by display name and login,
   in the app **Select server…**, back to the app's servers,
@@ -1816,7 +1817,7 @@ and puts the focus into them.
 A panel is drawn in one place at a time:
 while Cube settings is shown, System settings' list does not hold it.
 Under the panel the Cube's **Backup and restore** (with `backup`),
-as System settings → Backup and restore shows it for each Cube.
+as Maintenance → Cube backups shows it for each Cube.
 
 ## System info
 
@@ -1936,11 +1937,15 @@ as after a restart, the readings start anew, their count at none.
 
 ☰ → **System settings** holds what is the server's,
 each part for a role with its capability;
-a role with none of them (the viewer's, a guest's) has no such entry in ☰.
+a role with none of them has no such entry in ☰:
+the viewer's, a guest's, the operator's.
+The Cubes' backups are on Maintenance (**Cube backups**),
+so a role with `backup` and none of these, the operator's, has Maintenance
+and no System settings.
 
 The page is a card per part, as wide as the page:
 Cubes first, then Users, Roles,
-**Capabilities for every role**, and Backup and restore last;
+and **Capabilities for every role** last;
 from 900 px Users, Roles and Capabilities flow in two columns,
 none split, the break where their heights put it.
 The page's row stays under the header while the page scrolls,
@@ -2367,70 +2372,15 @@ settings forms and have none of it.
   a switch per capability, which switches it off for every role but the owner,
   saved at once and off while its request runs;
   refused, it shows the capability as stored again and the roles' line says why.
-- **Backup and restore** (with `backup`):
-  a fold per Cube, the cube, its name and serial, its sign,
-  and how many backups the server keeps of it in its head, a single Cube's open;
-  the card's head counts them all.
-  In each, and on Cube settings for the chosen Cube,
-  **Download backup** saves the Cube as it is now, as YAML or JSON (**Format**).
-  The server keeps the Cube's backups in its store,
-  listed newest first with why each was taken (after a change, by hand,
-  before a restore, or the file a restore was sent), its size and who asked:
-  one follows by itself an hour after the Cube's configuration last changed,
-  at the latest two hours after the first change (the settings `backups.*`,
-  docs/api-v1.md, "Backups"), also across a restart of the server,
-  which takes a pending one as it stops,
-  and a line says when while one is pending;
-  while none is, a line under a list of backups says that nothing changed
-  since the newest one, and that the server takes one after a change.
-  Each list is read when its page is shown,
-  and after a load onto the page once the page knows its Cubes.
-  **Take a backup now** keeps one by hand.
-  Each row has **Download**, **Compare with the one before**,
-  which lists what changed as the restore would send it,
-  and, with `restore`, **Restore…** and **Delete**, which asks first.
-  **Restore from file…** (with `restore`) takes a backup file instead.
-  A restore first shows its plan, the steps with the radio ones marked,
-  the notes and what the radio commands cost of the hourly budget,
-  and sends nothing until **Send N commands**;
-  then each step is marked as the Cube took it, and the end is said.
-  A Cube's boxes on both pages show the same restore,
-  and a fold open, a deletion asking, the format chosen and a restore shown
-  stay while the lists are read again;
-  while a restore runs, its Cube's **Restore…** and **Restore from file…** are off
-  in both places, so that it stays in sight, and a stored backup's plan closes
-  once the list no longer has the backup;
-  where the page's connection to the server was cut so long that the server
-  answers a resync, a restore still running is shown as one whose end the page
-  did not see, the log saying how it ended, and the buttons are back.
-  A Cube that is not in the server's store (a run with `-addr`) has no list;
-  its download and the restore from a file work as before.
-  After the served Cubes' folds,
-  each Cube the server keeps backups of and does not serve,
-  one taken out of the configuration or only found on the network,
-  also one no longer on the network,
-  has a fold of its own (`GET /api/v1/backups/unserved`,
-  read when the page is shown and after a delete),
-  closed at first, with its name where it has one, marked **not served**,
-  with its count kept;
-  the card's head counts its backups too.
-  Its box has the format,
-  its backups with **Download**, **Compare with the one before** and,
-  with `restore`, **Delete**,
-  and a note that a backup of it goes onto another Cube by downloading it
-  and that Cube's **Restore from file…**;
-  it has no **Download backup**, **Take a backup now**,
-  **Restore…** or **Restore from file…**.
-  A Cube without backups has no such fold,
-  and the last backup deleted takes it away.
 
 ## Maintenance
 
 ☰ → **Maintenance** keeps the server itself going,
-in two cards as wide as the page, **Software update** and **Maintenance**,
+in three cards as wide as the page, **Software update**, **Maintenance**
+and **Cube backups**,
 under the page's row with **Sections** at its right end, as System settings has.
 It is for every role that has System settings, Software update being for all of them,
-and for one with `update`, `restart` or `reboot` alone;
+and for one with `backup`, `update`, `restart` or `reboot` alone;
 a viewer has no such entry in ☰.
 The server's sign, when it says an update is out, opens it at Software update.
 
@@ -2684,6 +2634,62 @@ The server's sign, when it says an update is out, opens it at Software update.
   An event's read of the settings or of the reboot waits
   while this page's own request of them is under way and is made once when it has ended,
   and its answer shows nothing where one was made meanwhile.
+- **Cube backups** (with `backup`):
+  a fold per Cube, the cube, its name and serial, its sign,
+  and how many backups the server keeps of it in its head, a single Cube's open;
+  the card's head counts them all.
+  In each, and on Cube settings for the chosen Cube,
+  **Download backup** saves the Cube as it is now, as YAML or JSON (**Format**).
+  The server keeps the Cube's backups in its store,
+  listed newest first with why each was taken (after a change, by hand,
+  before a restore, or the file a restore was sent), its size and who asked:
+  one follows by itself an hour after the Cube's configuration last changed,
+  at the latest two hours after the first change (the settings `backups.*`,
+  docs/api-v1.md, "Backups"), also across a restart of the server,
+  which takes a pending one as it stops,
+  and a line says when while one is pending;
+  while none is, a line under a list of backups says that nothing changed
+  since the newest one, and that the server takes one after a change.
+  Each list is read when its page is shown,
+  and after a load onto the page once the page knows its Cubes.
+  **Take a backup now** keeps one by hand.
+  Each row has **Download**, **Compare with the one before**,
+  which lists what changed as the restore would send it,
+  and, with `restore`, **Restore…** and **Delete**, which asks first.
+  **Restore from file…** (with `restore`) takes a backup file instead.
+  A restore first shows its plan, the steps with the radio ones marked,
+  the notes and what the radio commands cost of the hourly budget,
+  and sends nothing until **Send N commands**;
+  then each step is marked as the Cube took it, and the end is said.
+  A Cube's boxes on both pages show the same restore,
+  and a fold open, a deletion asking, the format chosen and a restore shown
+  stay while the lists are read again;
+  while a restore runs, its Cube's **Restore…** and **Restore from file…** are off
+  in both places, so that it stays in sight, and a stored backup's plan closes
+  once the list no longer has the backup;
+  where the page's connection to the server was cut so long that the server
+  answers a resync, a restore still running is shown as one whose end the page
+  did not see, the log saying how it ended, and the buttons are back.
+  A Cube that is not in the server's store (a run with `-addr`) has no list;
+  its download and the restore from a file work as before.
+  After the served Cubes' folds,
+  each Cube the server keeps backups of and does not serve,
+  one taken out of the configuration or only found on the network,
+  also one no longer on the network,
+  has a fold of its own (`GET /api/v1/backups/unserved`,
+  read when the page is shown and after a delete),
+  closed at first, with its name where it has one, marked **not served**,
+  with its count kept;
+  the card's head counts its backups too.
+  Its box has the format,
+  its backups with **Download**, **Compare with the one before** and,
+  with `restore`, **Delete**,
+  and a note that a backup of it goes onto another Cube by downloading it
+  and that Cube's **Restore from file…**;
+  it has no **Download backup**, **Take a backup now**,
+  **Restore…** or **Restore from file…**.
+  A Cube without backups has no such fold,
+  and the last backup deleted takes it away.
 
 ## In the apps
 
@@ -2756,8 +2762,9 @@ At start the server replaces each marker, such as `<!-- partials: system -->`,
 with its frames from `ui/partials/`, in the order `uiPartials` in
 `internal/server/ui.go` lists them, and serves the result at `/`:
 the header, My settings' notes, System settings' section cards
-(in three markers, before, in and after the cards that flow in two columns),
-Maintenance's two cards, System info's card, the Cube page,
+(in two markers, before and in the cards that flow in two columns),
+Maintenance's cards, the server's own first and Cube backups last,
+System info's card, the Cube page,
 the devices without a room and the toast.
 A frame that would be one element, the place a part draws into,
 is in `index.html` itself.
@@ -2804,7 +2811,7 @@ A region's root is drawn once into its place in the skeleton (`mounter` of `shar
 | the Cubes | `cubes/` | `#cubes-list`, `#cube-page-body` | `cubes.render`, `cubes.polled`, `cubes.openFound`, `cubes.pairingEvent`, `cubes.pairingJoined` (app.js, home.js) |
 | the users, roles and providers | `admin/` | `#sys-users-body`, `#sys-roles-body`, `#sys-caps-body`, `#sys-providers-body` | `users.load` (My profile) |
 | the integrations | `integrations/` | `#sys-integrations-body` | — |
-| Backup and restore | `backups/` | `#backups-cubes`, `#cube-backup-body` | `backups.cubeChanged`, `backups.restoreEvent`, `backups.resynced` (app.js) |
+| the Cubes' backups: Cube backups, and Cube settings' Backup and restore | `backups/` | `#backups-cubes`, `#cube-backup-body` | `backups.cubeChanged`, `backups.restoreEvent`, `backups.resynced` (app.js) |
 | the log | `log/` | `#logview` | `log.mount`, `log.event`, `log.render`, `log.load`, `log.poll`, `log.prune`, `log.cubesPolled`, `log.cubeChanged`, `log.selects`, `log.choicesChanged`, `log.loadAlerts`, `log.sign`, `log.kinds` (app.js); `log.focusHead` (the sign-in's first owner's toast); `log.state`, `log.alerts`, `log.matches`, `log.ofChoices`, `log.rangeStart`, `log.upperFirst` (the UI tests) |
 | Software update | `software/` | `#sys-software-body` | `software.load` (header.js) |
 | Maintenance | `maintenance/` | `#sys-maint-body` | — |
@@ -2854,7 +2861,7 @@ which reads the written name alone), by the places the table names, each of them
 
 | Field | Written by | A part reads it as |
 |---|---|---|
-| `state.cubes`, `state.found` | `loadCubes`, `addFound` (home.js, the stream's `cube_found`), `clearCubeData` | a signal: the header, the Cubes, Backup and restore, the log's choices, the House tile's name |
+| `state.cubes`, `state.found` | `loadCubes`, `addFound` (home.js, the stream's `cube_found`), `clearCubeData` | a signal: the header, the Cubes, Cube backups' folds, the log's choices, the House tile's name |
 | `state.serial`, `state.tz`, `state.serverDown`, `state.newVersion` | `state.serial` by `init` (the Cube stored), `loadCubes` and `selectCube`; `state.tz` by `loadTimeZone`; `state.serverDown` by `serverReached`, `state.newVersion` by `checkVersion` (header.js) | a signal |
 | `state.rooms` | `loadRooms`, `clearCubeData`; a room's `devices`, `vwt`, `ready`, `stale` by `updateDevice` (rooms.js) | the list a signal, each room a `live` item, so that a state event draws its tile alone; a reader across all rooms (the House tile, a room's copy, the log's names, `rfLabel`) reads the devices `untracked` and follows the list; the House tile's lowest and highest read each room's `vwt`, in a part of their own |
 | `state.unlisted`, `state.roomsOf` | `loadRooms`, `clearCubeData`; `state.unlisted` also by `updateDevice` (rooms.js) | a signal |
@@ -3643,8 +3650,10 @@ integration's a `Choices` under a legend, of the class `integration-caps`,
 an integration's name and its maximum each a `useForm` of the key
 `integrations:<uuid>:name` and `:max`, Acts as a `Select` with its draft beside Link,
 Refuse and Revoke a `useAsk` with a `Question`.
-Backup and restore (`ui/src/backups/`) draws System settings' folds into `#backups-cubes`
-and Cube settings' box into `#cube-backup-body`, a box per Cube and place,
+The Cubes' backups (`ui/src/backups/`) draw Maintenance's folds, Cube backups,
+into `#backups-cubes`, when Maintenance is shown,
+and Cube settings' box, Backup and restore, into `#cube-backup-body`,
+a box per Cube and place,
 and registers `cubeChanged`, `restoreEvent` and `resynced`, which `app.js` calls
 at a change of the Cube chosen, at the stream's restore events and at its resync;
 `store.ts` keeps what a Cube has by its serial, live, so that its boxes on both pages

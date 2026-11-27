@@ -131,7 +131,7 @@ PAGES = {
     "appearance": "#prefs .appearance",
     "cube-settings": "#cube-page",                  # Cube settings, the chosen Cube's panel
     "system": "#system",                            # System settings
-    "maintenance": "#maint-page",                   # Maintenance: Software update and its card
+    "maintenance": "#maint-page",                   # Maintenance: Software update, its card and Cube backups
     "system-info": "#info-page",                    # System info, a page of its own
     "cube-found": "header.top",                     # the Cube choice, the found Cubes' sign in its pill
     "cubes": "#system .cubes-settings",

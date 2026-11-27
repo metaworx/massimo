@@ -102,7 +102,7 @@ export interface MassimoParts {
   suggestPassword: typeof suggestPassword;
   /** The pages of the main area: which is shown, its address, who may open it (shared/pages.ts; app.js, home.js, login.js and header.js call it). */
   pages: typeof pagesPart;
-  /** Backup and restore: Cube settings' box and System settings' fold per Cube (backups/). */
+  /** The Cubes' backups: Cube settings' box and Maintenance's fold per Cube in Cube backups (backups/). */
   backups: BackupsPart;
   /** Where the page's chrome says that settings are unsaved: a section's pill, ☰'s mark joined with the log's, a menu item's disk (chrome/). */
   chrome: ChromePart;

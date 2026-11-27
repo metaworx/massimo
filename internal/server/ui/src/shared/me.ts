@@ -96,14 +96,14 @@ export function canManageUsersOf(m: Me | null = me.value): boolean {
   return can("users", m) || can("guests", m) || can("passwords", m) || can("integrations", m);
 }
 
-/** systemOf reports whether who is in sees System settings or Maintenance: a capability of one of their cards (hasSystem of login.js). */
+/** systemOf reports whether who is in sees System settings or Maintenance: a capability of one of their cards, Maintenance's Cube backups among them (hasSystem of login.js). */
 export function systemOf(m: Me | null = me.value): boolean {
   return ["cubes", "pair", "backup", "roles", "capabilities", "auth", "integrations", "update", "restart", "reboot"].some((c) => can(c, m)) || canManageUsersOf(m);
 }
 
-/** settingsPageOf reports whether who is in may open System settings: a capability of one of its cards, not of Maintenance's alone (hasSettingsPage of login.js). */
+/** settingsPageOf reports whether who is in may open System settings: a capability of one of its cards, not of Maintenance's alone (backup, update, restart, reboot; hasSettingsPage of login.js). */
 export function settingsPageOf(m: Me | null = me.value): boolean {
-  return ["cubes", "pair", "backup", "roles", "capabilities", "auth", "integrations"].some((c) => can(c, m)) || canManageUsersOf(m);
+  return ["cubes", "pair", "roles", "capabilities", "auth", "integrations"].some((c) => can(c, m)) || canManageUsersOf(m);
 }
 
 /** isMe reports whether a user is the one signed in (isSelf of login.js). */

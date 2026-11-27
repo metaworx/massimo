@@ -609,8 +609,8 @@ def integrations(page):
     page.locator("#integrations-found .register-address input").wait_for(state="visible")
 
 
-def backups_system(page):
-    system(page)
+def backups_maint(page):
+    maint(page)
     page.locator("#backups-cubes .backup-fold[open] .backup-take").wait_for(state="visible")
 
 
@@ -970,7 +970,7 @@ REGIONS = (
         View("a request, an integration's panel with a user, Register's address", integrations),
     )),
     Region("backups", ("#sys-backup-body", "#cube-backup-body"), (
-        View("System settings, the Cube's fold open", backups_system),
+        View("Maintenance, the Cube's fold open", backups_maint),
         View("Cube settings", backups_cube),
         # Passed on the page before the move as well: none of SOURCES drew
         # a Cube's backups again, where since AP UiParts' Block 15 a load of

@@ -2664,7 +2664,8 @@ Implemented on 2026-11-07 (AP StoreBackups v1.0).
   and `GET /api/v1/backups/unserved` lists the rows not served that keep backups,
   with the count and the newest's time,
   both from one grouped query by serial (`KeptBackups`).
-- UI: Settings → Backup and restore: the download as YAML or JSON,
+- UI: Maintenance → Cube backups, and Cube settings → Backup and restore
+  for the chosen Cube: the download as YAML or JSON,
   a backup by hand, the list with download, the comparison with the one before,
   restore and delete, a restore from a file; a restore shows its plan first,
   then each step as the Cube took it.
