@@ -87,6 +87,70 @@ func TestUnsettled(t *testing.T) {
 	}
 }
 
+// A battery's low level is settled by a later battery event of the same
+// device at ok, not by another device's, nor by a weak one.
+func TestBatterySettles(t *testing.T) {
+	t.Parallel()
+	now := time.Now()
+	ev := func(id int64, device, level, to string) event {
+		return event{ID: id, Kind: "battery", Level: level, CubeSerial: "KEQ0000100", Device: device, Summary: map[string]any{"level": to},
+			Time: now.Add(time.Duration(id-100) * time.Second)}
+	}
+	lines := []event{ev(1, "0a0101", "warn", "low"), ev(3, "0a0102", "warn", "low"), ev(6, "0a0101", "warn", "low")}
+	settling := []event{
+		ev(2, "0a0101", "info", "ok"),
+		ev(4, "0a0103", "info", "ok"),   // another device's
+		ev(5, "0a0102", "info", "weak"), // not ok
+	}
+	var got []int64
+	for _, a := range unsettled(lines, settling, now) {
+		got = append(got, a.ID)
+	}
+	if want := []int64{3, 6}; !slices.Equal(got, want) {
+		t.Fatalf("unsettled %v, want %v", got, want)
+	}
+}
+
+// GET /api/v1/log/alerts over a device's battery: its level's event at
+// low is an alert, at warn; another device's level back at ok leaves it,
+// the device's own settles it; a weak level's event, at info, is none.
+func TestLogAlertsBatteryLevel(t *testing.T) {
+	t.Parallel()
+	r := startServer(t, stored(), withOptions(Options{PollInterval: 100 * time.Millisecond}))
+	ts, st := r.ts, r.st
+	ctx := t.Context()
+	row, _, _ := st.Cube(ctx, "KEQ0000100")
+	add := func(device, level, to string) {
+		t.Helper()
+		ev := event{Kind: "battery", Source: "device", Device: device, Level: level, Time: time.Now(), Summary: map[string]any{"level": to}}
+		ev.settle()
+		if err := st.InsertEvent(ctx, storedEvent(row.ID, ev)); err != nil {
+			t.Fatal(err)
+		}
+	}
+	alerts := func() []logAlert {
+		var out logAlertsView
+		if code := getJSON(t, ts, "", "/api/v1/log/alerts", &out); code != 200 {
+			t.Fatalf("GET the alerts: %d", code)
+		}
+		return out.Alerts
+	}
+	add("0a010d", "info", "weak")
+	add("0a010d", "warn", "low")
+	got := alerts()
+	if len(got) != 1 || got[0].Kind != "battery" || got[0].Device != "0a010d" || got[0].Level != "warn" {
+		t.Fatalf("the low level: %+v, want its battery event alone", got)
+	}
+	add("0a0108", "info", "ok")
+	if got := alerts(); len(got) != 1 {
+		t.Fatalf("another device ok: %+v, want the low level still", got)
+	}
+	add("0a010d", "info", "ok")
+	if got := alerts(); len(got) != 0 {
+		t.Fatalf("the device ok again: %+v, want none", got)
+	}
+}
+
 // settings_read's line holds all that its read found, so that a later
 // one settles it, a warning too, and the newest is the alert while it
 // warns; a start settles it, and the start's own notes, a warning after
@@ -222,11 +286,16 @@ func TestLogAlertsRoute(t *testing.T) {
 	last := greeting[len(greeting)-1]
 	raw, _ := base64.StdEncoding.DecodeString(last.Data)
 	flagged := append([]byte(nil), raw...)
-	copy(flagged, []byte{0x0b, 0x0a, 0x01, 0x0d, 0x09, 0x12 | 0x08, 0x01, 30, 42, 0, 0, 0}) // 0a010d: a transmit error
+	// 0a010d: a transmit error, and its battery flag, which is no alert:
+	// the battery's alerts are its level's (TestLogAlertsBatteryLevel)
+	copy(flagged, []byte{0x0b, 0x0a, 0x01, 0x0d, 0x09, 0x12 | 0x08, 0x01 | 0x80, 30, 42, 0, 0, 0})
 	fc.SetDeviceList(cube.Message{Type: 'L', Data: base64.StdEncoding.EncodeToString(flagged)})
 	testkit.Eventually(t, "the transmit error", func() bool {
-		return getJSON(t, ts, "", "/api/v1/log/alerts", &out) == 200 && len(out.Alerts) == 2
+		return getJSON(t, ts, "", "/api/v1/log/alerts", &out) == 200 && len(out.Alerts) >= 2
 	})
+	if len(out.Alerts) != 2 {
+		t.Fatalf("the transmit error and the battery flag: %+v, want the restart's and the error's alone", out.Alerts)
+	}
 	a := out.Alerts[0]
 	if a.Kind != "state" || a.Flag != "error" || a.Device != "0a010d" || a.Level != "warn" || a.CubeSerial != "KEQ0000100" || a.ID <= restart || out.Level != "error" {
 		t.Fatalf("the transmit error: %+v", out)

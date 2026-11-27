@@ -1845,6 +1845,7 @@
   "users.createKey": "Crea la chiave",
   "users.keyCreated": "Chiave «{label}» creata; è mostrata una volta nel pannello.",
   "users.keyShown": "La nuova chiave, mostrata una volta; inviala come Authorization: Bearer <chiave>:",
+  "users.keyCopy": "Copia la chiave",
   "roles.title": "Ruoli",
   "roles.add": "Aggiungi un ruolo",
   "roles.key": "Chiave",

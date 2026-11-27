@@ -1894,6 +1894,7 @@
   "users.createKey": "Utwórz klucz",
   "users.keyCreated": "Klucz „{label}” utworzony; jest pokazany raz w panelu.",
   "users.keyShown": "Nowy klucz, pokazany raz; wysyłaj go jako Authorization: Bearer <klucz>:",
+  "users.keyCopy": "Kopiuj klucz",
   "roles.title": "Role",
   "roles.add": "Dodaj rolę",
   "roles.key": "Klucz",

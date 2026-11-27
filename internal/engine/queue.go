@@ -51,6 +51,12 @@ type Command struct {
 	// software does before configuration writes.
 	RoomID uint8
 	Wakeup bool
+	// WakeTarget sends z: for the Target device itself, after the room's
+	// wakeup: a room's wakeup reaches only the devices whose C line names
+	// the room (the test Cube, firmware 1.1.3, 2026-11-26,
+	// docs/cube-protocol.md), so a device in no group, or in another,
+	// hears the command's radiograms only after a wakeup of its own.
+	WakeTarget bool
 	// Lines are sent in order. s: and r: lines are radio commands and
 	// consume budget; everything else is a plain Cube command.
 	Lines []cube.Message
@@ -414,6 +420,19 @@ func (q *Queue) sleep(ctx context.Context, d time.Duration) {
 
 func isRadio(m cube.Message) bool { return m.Type == 's' || m.Type == 'r' }
 
+// wakeUp sends a wakeup of the queue's duration to target in scope, a room
+// or a device, logs it as what with attrs, and keeps the gap after it.
+func (q *Queue) wakeUp(ctx context.Context, scope cube.WakeupScope, target, what string, attrs ...any) error {
+	wake := cube.CmdWakeup(q.opts.WakeupSeconds, scope, target)
+	reply, err := q.gw.Send(ctx, wake)
+	if err != nil {
+		return fmt.Errorf("wakeup: %w", err)
+	}
+	q.opts.Logger.Info(what, append(attrs, "command", wake.String(), "reply", reply.String())...)
+	q.sleep(ctx, q.opts.Gap)
+	return nil
+}
+
 // execute runs one command with the budget policy and the preludes the
 // original software uses.
 func (q *Queue) execute(ctx context.Context, cmd Command) Result {
@@ -440,9 +459,9 @@ func (q *Queue) execute(ctx context.Context, cmd Command) Result {
 	// A command of r: lines alone, the Cube's bookkeeping, takes no memory
 	// slot and no air time (docs/cube-protocol.md), so it passes both
 	// holds: an automatic reset does not wait behind a Cube whose slots are
-	// few (AP RadioHealth v1.2, D183-B). A room's wakeup is radio traffic,
-	// and waits.
-	if needsRadio && !cmd.Passthrough && (radiograms || cmd.Wakeup) {
+	// few (AP RadioHealth v1.2, D183-B). A wakeup is radio traffic, and
+	// waits.
+	if needsRadio && !cmd.Passthrough && (radiograms || cmd.Wakeup || cmd.WakeTarget) {
 		if err := q.waitForBudget(ctx); err != nil {
 			return Result{Err: err, Budget: q.gw.Budget()}
 		}
@@ -451,13 +470,14 @@ func (q *Queue) execute(ctx context.Context, cmd Command) Result {
 		return Result{Err: ErrUnwanted, Budget: q.gw.Budget()}
 	}
 	if cmd.Wakeup && !cmd.Passthrough {
-		wake := cube.CmdWakeup(q.opts.WakeupSeconds, cube.WakeupRoom, fmt.Sprintf("%02x", cmd.RoomID))
-		reply, err := q.gw.Send(ctx, wake)
-		if err != nil {
-			return Result{Err: fmt.Errorf("wakeup: %w", err), Budget: q.gw.Budget()}
+		if err := q.wakeUp(ctx, cube.WakeupRoom, fmt.Sprintf("%02x", cmd.RoomID), "room woken up", "room", cmd.RoomID); err != nil {
+			return Result{Err: err, Budget: q.gw.Budget()}
 		}
-		q.opts.Logger.Info("room woken up", "room", cmd.RoomID, "command", wake.String(), "reply", reply.String())
-		q.sleep(ctx, q.opts.Gap)
+	}
+	if cmd.WakeTarget && cmd.Target != 0 && !cmd.Passthrough {
+		if err := q.wakeUp(ctx, cube.WakeupDevice, cmd.Target.String(), "device woken up", "device", cmd.Target); err != nil {
+			return Result{Err: err, Budget: q.gw.Budget()}
+		}
 	}
 	// The prelude's resets, as PreludeOf names them, by which a repair's
 	// preview counts them too (AP RadioHealth v1.3, D204-A).

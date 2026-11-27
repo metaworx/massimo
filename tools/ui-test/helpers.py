@@ -18,11 +18,17 @@ keeps a log of the test's own lines; wait_log_live waits until the log
 takes the stream's state events; safe_route is the one route handler
 that lets go a request the page no longer waits for; undo is a cleanup
 that says what it could not undo; held_poll holds the page's poll while
-a test measures what the page does by itself; pause_clock pauses
-Playwright's clock at the page's now. open_fold, close_fold and
+a test measures what the page does by itself; held_timers holds the
+page's timed states, "Copied", the toast and the settings' push, while a
+test checks them; pause_clock pauses Playwright's clock at the page's
+now. open_fold, close_fold and
 toggle_fold take a fold's toggle event before a test acts inside it.
 wait_started waits for the page's start, the page fixture's and
-owner_page's, and says on a timeout which read it waited for.
+owner_page's, and says on a timeout which read it waited for. boxes
+reads several elements' boxes at one moment, for a check that compares
+where they are. grant_clipboard and copies check what a shared Copy
+puts into the clipboard and how it is named; icon_after_last_line
+where its icon sits.
 
 Every wait of this kit, and the page fixture's, lasts its seconds times
 UI_TEST_SCALE (scaled), a positive number, 1 where it is not set: a
@@ -68,6 +74,7 @@ PANEL_TEXTS = {"en": ["Address", "Hidden devices", "Save"], "de": ["Adresse", "A
 NAME_BAD = {"en": "Only the letters a to z, digits and . _ - @, without spaces, starting with a letter or a digit; at most 64 characters.",
             "de": "Nur die Buchstaben a bis z, Ziffern und . _ - @, ohne Leerzeichen, am Anfang ein Buchstabe oder eine Ziffer; höchstens 64 Zeichen."}
 NAME_TAKEN = {"en": "There is already a user named {name}.", "de": "Es gibt schon einen Benutzer {name}."}
+KEY_COPY = {"en": "Copy the key", "de": "Den Schlüssel kopieren"}
 NOT_A_SCHEME = {"en": "Not a Massimo colour scheme: unknown format", "de": "Kein Massimo-Farbschema: unbekanntes Format"}
 
 
@@ -302,12 +309,29 @@ def hold(page, pattern, method, held, sent):
 
 
 def wait_held(page, held, seconds=5, n=1):
-    """Waits until n held requests, one by default, have reached their
-    route, for seconds (scaled)."""
+    """Waits until held holds n requests, one by default, for seconds
+    (scaled): the requests held (hold), a route's of the test's that
+    notes each it answers, or the page's own as it sends them
+    (sent_requests). A check of a request waits for the request itself,
+    not for what the page draws before it sends it (docs/ui-testing.md,
+    section 9, "The request itself")."""
     end = time.time() + scaled(seconds)
     while len(held) < n and time.time() < end:
         page.wait_for_timeout(100)
     return len(held) >= n
+
+
+def sent_requests(page, method, pattern):
+    """The page's requests of method whose URL pattern matches
+    (route_matches), from now on, in a list that grows as the page sends
+    them, each Playwright's Request (its url, its post_data_json); a
+    route of the test's or the server answers them as before. For a
+    request that no route of the test's notes: the settings the page
+    pushes by itself a second after a sign-in, and the stream's tickets
+    (test_sign_in_resend.py); wait_held waits for the next."""
+    sent = []
+    page.on("request", lambda r: sent.append(r) if r.method == method and route_matches(pattern, r.url) else None)
+    return sent
 
 
 @contextlib.contextmanager
@@ -328,6 +352,103 @@ def held_poll(page):
     finally:
         if not page.is_closed():
             page.evaluate("startPolling()")
+
+
+# --- a timed state held ---------------------------------------------------
+
+# The page's timers that held_timers holds, by kind, each with what the
+# page shows or sends while it runs:
+# - copied: "Copied" on a copy control, the class copied, taken back
+#   1400 ms after the copy (copied() of components.js, el.copiedTimer);
+# - toast: the page's toast, hidden 8 to 30 s after it is shown
+#   (showToast of components.js, toastState.timer);
+# - push: the settings' push to the server, sent 1 s after a change or
+#   the end of a sign-in that held it (schedulePreferences of login.js,
+#   prefsSync.timer).
+TIMED = ("copied", "toast", "push")
+
+# The hold, in the page: an observer of the classes clears the timer of
+# each control that shows "Copied" and of the toast shown, once the page
+# has set it; the push's timer is cleared as the page sets it, the push
+# noted as due. The page's own code is not changed: a later copy, a toast
+# closed by its ×, a push taken by a sign-in all go as they do.
+HOLD_TIMED = """(kinds) => {
+  const k = window.__uiTest || (window.__uiTest = {});
+  if (k.timed) throw new Error("held_timers: a hold is on already");
+  const h = k.timed = { kinds, observer: null, due: false };
+  const sweep = () => {
+    if (kinds.includes("copied")) for (const el of document.querySelectorAll(".copied")) {
+      clearTimeout(el.copiedTimer);
+      el.copiedTimer = 0;
+    }
+    const toast = document.getElementById("toast");
+    if (kinds.includes("toast") && toast && !toast.classList.contains("hidden") && toastState.timer) {
+      clearTimeout(toastState.timer);
+      toastState.timer = null;
+    }
+  };
+  sweep();
+  if (kinds.includes("copied") || kinds.includes("toast")) {
+    h.observer = new MutationObserver(sweep);
+    h.observer.observe(document.documentElement, { subtree: true, attributes: true, attributeFilter: ["class"] });
+  }
+  if (kinds.includes("push")) {
+    if (prefsSync.timer) {
+      clearTimeout(prefsSync.timer);
+      h.due = true;
+    }
+    Object.defineProperty(prefsSync, "timer", { configurable: true,
+      get: () => (h.due ? -1 : null),
+      set: (t) => {
+        if (t) clearTimeout(t);
+        h.due = !!t;
+      } });
+  }
+}"""
+
+# The hold's end: what it held goes at once, as its timer would have by
+# then: "Copied" taken back, the toast hidden, a push that came due sent.
+END_TIMED = """() => {
+  const k = window.__uiTest || {};
+  const h = k.timed;
+  if (!h) return false;
+  k.timed = null;
+  if (h.observer) h.observer.disconnect();
+  if (h.kinds.includes("copied")) for (const el of document.querySelectorAll(".copied")) el.classList.remove("copied");
+  const toast = document.getElementById("toast");
+  if (h.kinds.includes("toast") && toast && !toast.classList.contains("hidden")) hideToast();
+  if (h.kinds.includes("push")) {
+    Object.defineProperty(prefsSync, "timer", { configurable: true, writable: true, value: null });
+    if (h.due) prefsSync.timer = setTimeout(pushPreferences, 0);
+  }
+  return true;
+}"""
+
+
+@contextlib.contextmanager
+def held_timers(page, *kinds):
+    """The page's timed states of kinds (TIMED) held for the with block:
+    "Copied" on a copy control (copied), the toast (toast) and the
+    settings' push (push) stay or wait until the block ends, not until a
+    product timer that a slow runner, or the retry's trace, outlasts:
+    "Copied" fades after 1400 ms, which a copy, a page shown again and its
+    reads did not fit in (test_maint_updates.py, AP SteadyTests, Block
+    13). The page's code is not changed and nothing else of it stops: a
+    later copy, a × on the toast, a push a sign-in takes go as they do.
+    At the end what it held goes at once, as its timer would have by then.
+    It holds within one document, as a mark does: a block whose page was
+    loaded anew meanwhile fails at its end, and a hold already on fails."""
+    unknown = [k for k in kinds if k not in TIMED]
+    if unknown or not kinds:
+        raise ValueError(f"held_timers holds {', '.join(TIMED)}, not {', '.join(unknown) or 'nothing'}")
+    page.evaluate(HOLD_TIMED, list(kinds))
+    try:
+        yield
+    except BaseException:
+        if not page.is_closed():
+            page.evaluate(END_TIMED)
+        raise
+    assert page.evaluate(END_TIMED), f"the page's {', '.join(kinds)} held until the end: its document was loaded anew meanwhile"
 
 
 # --- what the page reads and what its stream brings -------------------
@@ -682,6 +803,36 @@ class Reads:
           return !r ? [] : r.devices.filter(isThermostat).map((d) => d.rf_address).concat(r.vwt ? [r.vwt.rf_address] : []); }""", rid):
             self.keep(rf)
 
+    def age(self, rid, seconds, already=False):
+        """How old the values of the room rid's devices are, its virtual
+        wall thermostat's among them, told: every time their entries in
+        the rooms' read say a value came (received), seconds before the
+        page's now, the devices kept (device). The server received the
+        fake Cube's values when it connected, at its set's start, and the
+        page counts their age from then, so without it an age grows with
+        the run, "≥ 17 Min." seventeen minutes in, and with it the width
+        of what shows it (AP SteadyTests v1.1, Block 14). already makes
+        them values that were there when the server connected, which the
+        page marks "≥": the Cube's observed_since told a second before
+        them, beside the Cube's other fields told (cube); else an hour
+        before them. The page reads the Cubes and the rooms at once;
+        returns the age as the page says it (fmtAge of app.js), which a
+        check waits for, a look at a time: a server's own event of a
+        device draws its own age until keep's read is answered."""
+        at, since, rfs = self.page.evaluate("""([rid, s, already]) => {
+          const r = state.rooms.find((x) => x.id === rid);
+          const at = Date.now() - s * 1000;
+          return [new Date(at).toISOString(), new Date(at - (already ? 1000 : 3600e3)).toISOString(),
+                  r.devices.concat(r.vwt ? [r.vwt] : []).map((d) => [d.rf_address, Object.keys(d.received || {})])];
+        }""", [rid, seconds, already])
+        serial = self.page.evaluate("state.serial")
+        self.cube(serial, **dict(self.cubes.get(serial, {}), observed_since=since))
+        for rf, fields in rfs:
+            if fields:
+                self.device(rf, received={f: at for f in fields})
+        self.page.evaluate("() => { loadCubes(); loadRooms(); }")
+        return self.page.evaluate("([at, already]) => fmtAge(Date.parse(at), already)", [at, already])
+
     def _rooms_told(self, rooms):
         rooms = rooms if isinstance(rooms, list) else []
         listed = {d.get("rf_address"): d for r in rooms for d in r.get("devices") or []}
@@ -901,6 +1052,68 @@ def css_hidden(page, selector):
     """Whether the page's style hides an element (display none), shown or
     not where it sits: an item of a closed menu is not."""
     return page.locator(selector).evaluate("(e) => getComputedStyle(e).display === 'none'")
+
+
+def grant_clipboard(page):
+    """The page's origin may read and write the browser's clipboard, which
+    is emptied: for a test of what a copy put there (copies)."""
+    page.context.grant_permissions(["clipboard-read", "clipboard-write"], origin=page.evaluate("location.origin"))
+    page.evaluate("navigator.clipboard.writeText('')")
+
+
+def copies(page, sel, value, name):
+    """The shared Copy with its icon whose text is the element sel
+    (src/shared/copy.tsx; the icon the button right after it in its
+    copy-pair), the clipboard granted (grant_clipboard): a button to the
+    keyboard, it and its icon named name for a screen reader and as the
+    tooltip, value in neither; a click on it, Enter and Space on it, and
+    a click on its icon each put value into the clipboard, emptied before
+    each."""
+    assert value, f"{sel}: something to copy"
+    text, icon = page.locator(sel), page.locator(sel + " + .copy-icon")
+    assert text.get_attribute("role") == "button" and text.get_attribute("tabindex") == "0", f"{sel}: a button to the keyboard"
+    named = [text.get_attribute("aria-label"), text.get_attribute("title"), icon.get_attribute("aria-label")]
+    assert named == [name] * 3, f"{sel}: it and its icon named {name!r}: {named}"
+    assert not any(value in (n or "") for n in named), f"{sel}: its name and tooltip do not tell what it copies"
+    for what, act in (("a click on it", text.click), ("Enter on it", lambda: (text.focus(), page.keyboard.press("Enter"))),
+                      ("Space on it", lambda: (text.focus(), page.keyboard.press("Space"))), ("a click on its icon", icon.click)):
+        page.evaluate("navigator.clipboard.writeText('')")
+        act()
+        assert wait_until(page, "navigator.clipboard.readText().then((t) => t === %r)" % value, 3), f"{sel}: {what} copies it"
+
+
+# The copy icon of the text sel and the text's last line: where the icon
+# is, the last line's box (a range over the text, so that a text a flex
+# item made a block of gives its lines too) and how many lines it takes.
+ICON_PLACE = """(sel) => {
+  const el = document.querySelector(sel);
+  const range = document.createRange();
+  range.selectNodeContents(el);
+  const lines = [...range.getClientRects()].filter((r) => r.width > 0);
+  const icon = el.nextElementSibling;
+  if (!lines.length || !icon || !icon.classList.contains("copy-icon")) return { lines: lines.length, icon: null };
+  const box = (b) => ({ left: b.left, right: b.right, top: b.top, bottom: b.bottom });
+  return { lines: lines.length, last: box(lines[lines.length - 1]), icon: box(icon.getBoundingClientRect()) };
+}"""
+
+
+def icon_after_last_line(page, sel):
+    """Whether the copy icon of the text sel follows the text's last
+    line, however many lines the text takes: after its end, its middle
+    within that line's height; or, where the text fills its last line,
+    at the start of the line below it (within its margin of the text's
+    left edge, its top within 8 px of that line's bottom), as an inline
+    icon wraps; never beside the text's lines, centred between them, as
+    a flex pair sets it. Also what was measured (no icon where the text
+    has none, or no text)."""
+    m = page.evaluate(ICON_PLACE, sel)
+    if m["icon"] is None:
+        return False, m
+    icon, last = m["icon"], m["last"]
+    mid = (icon["top"] + icon["bottom"]) / 2
+    after = icon["left"] >= last["right"] - 0.5 and last["top"] - 0.5 <= mid <= last["bottom"] + 0.5
+    below = icon["left"] <= last["left"] + 8 and last["bottom"] - 0.5 <= icon["top"] <= last["bottom"] + 8
+    return after or below, m
 
 
 CUBE_ITEM = "#cube-menu .menu-items button[data-value='%s']"
@@ -1152,6 +1365,46 @@ def focus_in_turn(page, click, focused):
 def frames(page):
     """Two frames and a task: a part drawn again after a change has been drawn."""
     page.evaluate("() => new Promise((done) => requestAnimationFrame(() => requestAnimationFrame(() => setTimeout(done, 0))))")
+
+
+# --- one moment ------------------------------------------------------------
+
+# The boxes of elements read in one turn of the page's, each as
+# Playwright's bounding_box gives it (x, y, width and height in the
+# viewport's pixels), None for one that is not drawn, "gone" for one that
+# left the document after it was found.
+BOXES = """(els) => els.map((e) => {
+  if (!e.isConnected) return "gone";
+  if (!e.getClientRects().length) return null;
+  const r = e.getBoundingClientRect();
+  return { x: r.x, y: r.y, width: r.width, height: r.height };
+})"""
+
+
+def boxes(page, *targets, seconds=5):
+    """The boxes of targets, each a selector or a Locator, read at one
+    moment of the page's, in one evaluate, each as bounding_box gives it
+    (None for an element not drawn): for a check that compares where
+    elements are, since the page may draw between two calls. The server's
+    poll drew a device's values above the pairing form between the form's
+    two bounding_box() calls, and the limit, read second, came out 78 px
+    below the box it sits above (test_pairing.py, AP SteadyTests, Block
+    13). Each target is found as bounding_box finds it, one element,
+    waited for; where one was drawn anew between its finding and the read,
+    all are found and read again, within seconds (scaled)."""
+    end = time.monotonic() + scaled(seconds)
+    while True:
+        handles = [(page.locator(t) if isinstance(t, str) else t).element_handle() for t in targets]
+        try:
+            got = page.evaluate(BOXES, handles)
+        finally:
+            for h in handles:
+                h.dispose()
+        if "gone" not in got:
+            return got
+        if time.monotonic() >= end:
+            gone = [str(t) for t, b in zip(targets, got) if b == "gone"]
+            raise AssertionError(f"the boxes at one moment: {', '.join(gone)} drawn anew at every read for {scaled(seconds):g} s")
 
 
 # --- a fold ---------------------------------------------------------------
