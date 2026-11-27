@@ -150,8 +150,58 @@ func davURL(raw string) (*url.URL, error) {
 	return u, nil
 }
 
-// at is the URL of name in the folder.
-func (w *WebDAV) at(name string) *url.URL { return w.base.JoinPath(name) }
+// at is the URL of the file name in the folder, name escaped as one
+// segment of the path. A name that would reach the folder itself or
+// another one, such as "", "..", one with a slash, or one the URL would
+// read otherwise, is refused: a DELETE of the folder would remove it with
+// everything in it.
+func (w *WebDAV) at(name string) (*url.URL, error) {
+	if name == "" || name == "." || name == ".." || strings.ContainsAny(name, "/\\") {
+		return nil, fmt.Errorf("serverbackup: webdav %s: %q is no name of a file in the folder", w.base.Host, name)
+	}
+	u := w.base.JoinPath(url.PathEscape(name))
+	if rest, ok := strings.CutPrefix(u.Path, w.base.Path); !ok || rest != name {
+		return nil, fmt.Errorf("serverbackup: webdav %s: %q is no name of a file in the folder", w.base.Host, name)
+	}
+	return u, nil
+}
+
+// davTemp reports whether a name is one of this target's temporary
+// names: a put's, ".<name>.<hex>.tmp" of a backup or of Check's probe,
+// or the probe's own, ".check-<hex>.tmp"; so that a stale one is ours
+// to remove, and nobody else's file is.
+func davTemp(n string) bool {
+	stem, ok := strings.CutPrefix(n, ".")
+	if !ok {
+		return false
+	}
+	if stem, ok = strings.CutSuffix(stem, davTempSuffix); !ok {
+		return false
+	}
+	if davProbe(stem) {
+		return true
+	}
+	i := strings.LastIndexByte(stem, '.')
+	if i < 0 || !isHex(stem[i+1:]) {
+		return false
+	}
+	base := stem[:i]
+	if probe, ok := strings.CutSuffix(base, davTempSuffix); ok && davProbe(probe) {
+		return true
+	}
+	return CheckName(base) == nil
+}
+
+// davProbe reports whether s is "check-<hex>", the stem of Check's probe.
+func davProbe(s string) bool {
+	h, ok := strings.CutPrefix(s, "check-")
+	return ok && isHex(h)
+}
+
+// isHex reports whether s is lower-case hexadecimal digits, one at least.
+func isHex(s string) bool {
+	return s != "" && strings.Trim(s, "0123456789abcdef") == ""
+}
 
 // Put sends r, size bytes, to a hidden temporary name beside name and
 // moves it there with Overwrite: F, so that a put broken off leaves
@@ -197,7 +247,11 @@ func (w *WebDAV) send(ctx context.Context, name, tmp string, r io.Reader, size i
 	if size > 0 {
 		body = &sendBody{r: r, left: size, size: size, st: st}
 	}
-	resp, err := w.do(ctx, http.MethodPut, w.at(tmp), body, size, map[string]string{
+	u, err := w.at(tmp)
+	if err != nil {
+		return err
+	}
+	resp, err := w.do(ctx, http.MethodPut, u, body, size, map[string]string{
 		"Content-Type": "application/octet-stream",
 		// a refusal (401, 507) comes before the body is sent
 		"Expect": "100-continue",
@@ -217,7 +271,15 @@ func (w *WebDAV) send(ctx context.Context, name, tmp string, r io.Reader, size i
 func (w *WebDAV) move(ctx context.Context, from, to string, size int64) error {
 	ctx, cancel := context.WithTimeout(ctx, davRequestTimeout)
 	defer cancel()
-	resp, err := w.do(ctx, "MOVE", w.at(from), nil, 0, map[string]string{"Destination": w.at(to).String(), "Overwrite": "F"})
+	src, err := w.at(from)
+	if err != nil {
+		return err
+	}
+	dst, err := w.at(to)
+	if err != nil {
+		return err
+	}
+	resp, err := w.do(ctx, "MOVE", src, nil, 0, map[string]string{"Destination": dst.String(), "Overwrite": "F"})
 	if err != nil {
 		return w.failed(ctx, "MOVE", to, err)
 	}
@@ -242,7 +304,7 @@ func (w *WebDAV) move(ctx context.Context, from, to string, size int64) error {
 
 // prepare makes the folder where it is missing, and removes the
 // temporary files that puts a crash broke off left there, once they are
-// older than a day.
+// older than a day: names of this target's own (davTemp) alone.
 func (w *WebDAV) prepare(ctx context.Context) error {
 	entries, found, err := w.propfind(ctx, w.base, "1")
 	if err != nil {
@@ -253,7 +315,7 @@ func (w *WebDAV) prepare(ctx context.Context) error {
 	}
 	now := time.Now()
 	for _, e := range entries {
-		if !e.dir && strings.HasPrefix(e.name, ".") && strings.HasSuffix(e.name, davTempSuffix) && !e.time.IsZero() && now.Sub(e.time) > partStale {
+		if !e.dir && davTemp(e.name) && !e.time.IsZero() && now.Sub(e.time) > partStale {
 			w.remove(ctx, e.name)
 		}
 	}
@@ -318,7 +380,11 @@ func (w *WebDAV) Open(ctx context.Context, name string) (File, int64, error) {
 
 // size is the size of name, from PROPFIND at depth 0.
 func (w *WebDAV) size(ctx context.Context, name string) (int64, error) {
-	es, found, err := w.propfind(ctx, w.at(name), "0")
+	u, err := w.at(name)
+	if err != nil {
+		return 0, err
+	}
+	es, found, err := w.propfind(ctx, u, "0")
 	switch {
 	case err != nil:
 		return 0, err
@@ -396,7 +462,11 @@ func (w *WebDAV) removeTemp(ctx context.Context, tmp string) {
 func (w *WebDAV) removeOnce(ctx context.Context, name string) (int, error) {
 	ctx, cancel := context.WithTimeout(ctx, davRequestTimeout)
 	defer cancel()
-	resp, err := w.do(ctx, http.MethodDelete, w.at(name), nil, 0, nil)
+	u, err := w.at(name)
+	if err != nil {
+		return 0, err
+	}
+	resp, err := w.do(ctx, http.MethodDelete, u, nil, 0, nil)
 	if err != nil {
 		return 0, w.failed(ctx, "DELETE", name, err)
 	}
@@ -664,8 +734,12 @@ func (f *davFile) ReadAt(p []byte, off int64) (int, error) {
 // fetch GETs the range from off, want bytes and davChunk at least.
 func (f *davFile) fetch(off int64, want int) error {
 	end := min(off+max(int64(want), davChunk), f.size)
+	u, err := f.w.at(f.name)
+	if err != nil {
+		return err
+	}
 	ctx, st, done := watch(f.ctx, f.w.stall)
-	resp, err := f.w.do(ctx, http.MethodGet, f.w.at(f.name), nil, 0, map[string]string{"Range": fmt.Sprintf("bytes=%d-%d", off, end-1)})
+	resp, err := f.w.do(ctx, http.MethodGet, u, nil, 0, map[string]string{"Range": fmt.Sprintf("bytes=%d-%d", off, end-1)})
 	if err != nil {
 		done()
 		return f.w.failed(ctx, "GET", f.name, err)

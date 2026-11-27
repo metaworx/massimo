@@ -2160,7 +2160,10 @@ reached with the standard library alone (`internal/serverbackup/webdav.go`):
 - A copy is put (`PUT`) to a hidden name beside its own,
   `.<name>.<random>.tmp`, and moved (`MOVE`, `Overwrite: F`) to its name,
   so that a put broken off leaves nothing under the name;
-  its temporary file is deleted, or by a later put once it is a day old.
+  its temporary file is deleted, or by a later put once it is a day old;
+  a hidden file of a name not of that form stays, whoever made it.
+  A name goes into the URL escaped, as one part of its path,
+  and one that would name the folder itself or another is refused.
   A put asks `Expect: 100-continue`,
   so that a refusal, a quota spent among them, comes before the file is sent.
 - A file of the name that is there already is not replaced:

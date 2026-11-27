@@ -183,8 +183,21 @@ func TestWebDAVURL(t *testing.T) {
 			t.Errorf("%q: %v %v, want %s", raw, w, err, want)
 		}
 	}
-	if w, _ := NewWebDAV("https://dav.example.org/My Backups", "anna", nil); w.at("a.zip").String() != "https://dav.example.org/My%20Backups/a.zip" {
-		t.Errorf("a file's URL %s", w.at("a.zip"))
+	w, _ := NewWebDAV("https://dav.example.org/My Backups", "anna", nil)
+	for name, want := range map[string]string{
+		"a.zip":       "https://dav.example.org/My%20Backups/a.zip",
+		".50%.tmp":    "https://dav.example.org/My%20Backups/.50%25.tmp",
+		"a b?c#d.zip": "https://dav.example.org/My%20Backups/a%20b%3Fc%23d.zip",
+		"%2e%2e":      "https://dav.example.org/My%20Backups/%252e%252e",
+	} {
+		if u, err := w.at(name); err != nil || u.String() != want {
+			t.Errorf("the URL of %q: %v %v, want %s", name, u, err, want)
+		}
+	}
+	for _, name := range []string{"", ".", "..", "a/b", "../a.zip", `a\b`} {
+		if u, err := w.at(name); err == nil {
+			t.Errorf("the URL of %q: %s", name, u)
+		}
 	}
 	for _, raw := range []string{"", "ftp://dav.example.org/", "https://anna:pw@dav.example.org/", "https://dav.example.org/?a=b",
 		"https://dav.example.org/#x", "https:///backups", "https://dav example.org/"} {
@@ -317,6 +330,47 @@ func TestWebDAVPutBrokenOff(t *testing.T) {
 	}
 	if got := rig.names(t, "/b"); got == nil || len(got) != 0 {
 		t.Fatalf("left behind: %v", got)
+	}
+}
+
+// A stale file whose name is no temporary name of the target's stays,
+// whatever its name: one the URL would read as an escape, ".50%.tmp",
+// once made a put DELETE the folder itself, with everything in it.
+func TestWebDAVStaleOthersStay(t *testing.T) {
+	t.Parallel()
+	ctx := t.Context()
+	dir := t.TempDir()
+	if err := os.Mkdir(filepath.Join(dir, "b"), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	old := time.Now().Add(-2 * partStale)
+	for _, name := range []string{".50%.tmp", ".notes.tmp", ".x.zip.tmp", ".x.zip.XY.tmp", "keep.zip", ".check-0a1b.tmp", ".check-0a1b.tmp.2c3d.tmp"} {
+		p := filepath.Join(dir, "b", name)
+		if err := os.WriteFile(p, []byte("x"), 0o600); err != nil {
+			t.Fatal(err)
+		}
+		os.Chtimes(p, old, old)
+	}
+	rig := newDAV(t, webdav.Dir(dir), nil)
+	w := rig.target(t, "/dav/b", davPass)
+	if err := w.Put(ctx, "a.zip", strings.NewReader("abc"), 3); err != nil {
+		t.Fatal(err)
+	}
+	if err := w.Check(ctx); err != nil {
+		t.Fatal(err)
+	}
+	want := []string{".50%.tmp", ".notes.tmp", ".x.zip.XY.tmp", ".x.zip.tmp", "a.zip", "keep.zip"}
+	if got := rig.names(t, "/b"); !slices.Equal(got, want) {
+		t.Fatalf("the folder holds %v, want %v", got, want)
+	}
+	for name, ours := range map[string]bool{
+		".a.zip.0123abcd.tmp": true, ".check-0a1b.tmp": true, ".check-0a1b.tmp.2c3d.tmp": true,
+		".a.zip.tmp": false, ".a.zip.0123.part": false, "a.zip.0123.tmp": false, ".50%.tmp": false,
+		".a.txt.0123.tmp": false, ".check-.tmp": false, ".a.zip.0X23.tmp": false, ".tmp": false,
+	} {
+		if davTemp(name) != ours {
+			t.Errorf("davTemp(%q) = %v", name, !ours)
+		}
 	}
 }
 
