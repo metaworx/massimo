@@ -22,8 +22,8 @@ import (
 	"golang.org/x/crypto/ssh"
 )
 
-// Kind is the kind of a recipient.
-type Kind string
+// KeyKind is the kind of a recipient (Kind is a kind of target).
+type KeyKind string
 
 // The kinds of recipient. A file's recipients are all post-quantum or
 // all classic, as age requires (CheckKinds).
@@ -31,16 +31,16 @@ const (
 	// KindPostQuantum is age's hybrid of ML-KEM-768 and X25519,
 	// age1pq1…, about 2000 characters: it stays closed to a quantum
 	// computer.
-	KindPostQuantum Kind = "pq"
+	KindPostQuantum KeyKind = "pq"
 	// KindX25519 is age's classic X25519 key, age1…, 62 characters.
-	KindX25519 Kind = "x25519"
+	KindX25519 KeyKind = "x25519"
 	// KindSSH is an OpenSSH Ed25519 public key, ssh-ed25519 …, the
 	// owner's own; classic, as X25519 is.
-	KindSSH Kind = "ssh-ed25519"
+	KindSSH KeyKind = "ssh-ed25519"
 )
 
 // PostQuantum reports whether a recipient of the kind is post-quantum.
-func (k Kind) PostQuantum() bool { return k == KindPostQuantum }
+func (k KeyKind) PostQuantum() bool { return k == KindPostQuantum }
 
 // ErrMixedKinds is CheckKinds' error for post-quantum and classic
 // recipients together, which age refuses in one file: a classic one
@@ -56,7 +56,7 @@ type Recipient struct {
 	// Line is the key in its canonical form: age1pq1…, age1…, or
 	// ssh-ed25519 and the key, without the comment.
 	Line string
-	Kind Kind
+	Kind KeyKind
 	// Fingerprint is "SHA256:" and the unpadded base64 of the SHA-256
 	// of the key: for ssh-ed25519 of its wire form, which ssh-keygen -l
 	// shows; for age of the line.
@@ -141,7 +141,7 @@ type Key struct {
 
 // GenerateKey makes a post-quantum (KindPostQuantum) or a classic X25519
 // (KindX25519) identity; no other kind.
-func GenerateKey(kind Kind) (Key, error) {
+func GenerateKey(kind KeyKind) (Key, error) {
 	var id, rec string
 	switch kind {
 	case KindPostQuantum:

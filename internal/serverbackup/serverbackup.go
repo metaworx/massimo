@@ -131,9 +131,9 @@ type Files struct {
 
 // RecipientInfo is a recipient as the manifest names it.
 type RecipientInfo struct {
-	Label       string `json:"label"`
-	Kind        Kind   `json:"kind"`
-	Fingerprint string `json:"fingerprint"`
+	Label       string  `json:"label"`
+	Kind        KeyKind `json:"kind"`
+	Fingerprint string  `json:"fingerprint"`
 }
 
 // Payload is payload.age's size and SHA-256, in hex: the encrypted
@@ -164,6 +164,9 @@ type Inputs struct {
 	Version string
 	// Time is when the backup is made; zero is now.
 	Time time.Time
+	// UUID is the backup's, as the catalogue keeps it for a backup that
+	// is retried (internal/store, ServerBackup); "" makes a new UUIDv7.
+	UUID string
 }
 
 // MaxLabel is the longest label, in characters.
@@ -232,8 +235,11 @@ func Write(ctx context.Context, in Inputs, recipients []Recipient, out string) (
 	}
 	created = created.UTC().Truncate(time.Millisecond)
 	id, err := uuid.NewV7()
+	if in.UUID != "" {
+		id, err = uuid.Parse(in.UUID)
+	}
 	if err != nil {
-		return Manifest{}, fmt.Errorf("serverbackup: %w", err)
+		return Manifest{}, fmt.Errorf("serverbackup: the backup's uuid: %w", err)
 	}
 
 	tmp, err := os.MkdirTemp(dir, tempPrefix+"*")

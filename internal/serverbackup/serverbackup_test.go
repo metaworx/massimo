@@ -48,7 +48,7 @@ func testStore(t *testing.T) *store.Store {
 
 // keyOf makes a recipient of kind, labelled, and the identities that
 // open what is encrypted for it, read as a key file is.
-func keyOf(t *testing.T, kind Kind, label string) (Recipient, []age.Identity) {
+func keyOf(t *testing.T, kind KeyKind, label string) (Recipient, []age.Identity) {
 	t.Helper()
 	var file []byte
 	var r Recipient
@@ -158,7 +158,7 @@ func noTemporaries(t *testing.T, st *store.Store, out string) {
 // A backup made for each kind of recipient reads without the key, opens
 // with it, and gives back the store, its key files and the files beside.
 func TestRoundTrip(t *testing.T) {
-	for _, kind := range []Kind{KindPostQuantum, KindX25519, KindSSH} {
+	for _, kind := range []KeyKind{KindPostQuantum, KindX25519, KindSSH} {
 		t.Run(string(kind), func(t *testing.T) {
 			st := testStore(t)
 			r, ids := keyOf(t, kind, "laptop")

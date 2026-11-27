@@ -227,7 +227,7 @@ func storeKeygen(args []string, usage func(), stdout, stderr io.Writer) error {
 	if err := set.Parse(args); err != nil {
 		return err
 	}
-	var k serverbackup.Kind
+	var k serverbackup.KeyKind
 	switch *kind {
 	case "pq":
 		k = serverbackup.KindPostQuantum
