@@ -16,7 +16,7 @@ import os
 
 from conftest import api_call
 from helpers import named_buttons, safe_route, show_view, wait_until
-from test_server_backups import BACKUPS, CARD, TARGETS, backup_ids, clean, data_dir, key_set, shown_maint, text
+from test_server_backups import BACKUPS, CARD, KEEP, TARGETS, backup_ids, clean, data_dir, key_set, shown_maint, text
 
 # The fingerprints a stubbed test answers: the host's key, and another one trusted before.
 HOST_KEY = "SHA256:" + "A" * 43
@@ -28,7 +28,7 @@ def sftp_target(name):
     where nothing listens, so that the add's read fails at once; the
     server makes its key. The target, with its public_key."""
     config = {"host": "127.0.0.1", "port": "1", "user": "backup", "path": "massimo"}
-    return api_call("POST", TARGETS, {"name": name, "kind": "sftp", "config": config})["target"]
+    return api_call("POST", TARGETS, {"name": name, "kind": "sftp", "config": config, "retention": KEEP})["target"]
 
 
 def target_now(uuid):
@@ -128,7 +128,7 @@ def test_secret_asked_again_and_http_warned(page, case):
     clean()
     name = f"Dav {case.width} {case.lang}"
     target = api_call("POST", TARGETS, {"name": name, "kind": "webdav", "config": {"url": "http://127.0.0.1:1/dav", "user": "backup"},
-                                        "secret": "first"})["target"]
+                                        "secret": "first", "retention": KEEP})["target"]
     uuid = target["uuid"]
     puts = []
     page.on("request", lambda r: puts.append(r.post_data_json) if r.method == "PUT" and r.url.endswith("/" + uuid) else None)
@@ -199,8 +199,9 @@ def test_backup_without_copy_deleted(page, case):
     clean()
     key_set()
     where = data_dir(f"sb-gone-{case.width}-{case.lang}")
-    # the last ten kept, so that the second backup prunes nothing of the first
-    target = api_call("POST", TARGETS, {"name": "Gone", "kind": "local", "config": {"path": where}, "retention": {"last": 10}})["target"]
+    # the last 50 kept (KEEP), so that neither the second backup nor the
+    # schedule's run made up meanwhile prunes anything of the first
+    target = api_call("POST", TARGETS, {"name": "Gone", "kind": "local", "config": {"path": where}, "retention": KEEP})["target"]
     gone = api_call("POST", BACKUPS, {"label": "gone"})["backup"]
     kept = api_call("POST", BACKUPS, {"label": "kept"})["backup"]
     copy = next(c for c in gone["copies"] if c["target"] == target["uuid"])

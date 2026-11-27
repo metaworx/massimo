@@ -34,6 +34,12 @@ BODY = "#sys-server-backups-body"
 KEYS = "api/v1/server-backup-keys"
 TARGETS = "api/v1/server-backup-targets"
 BACKUPS = "api/v1/server-backups"
+# The retention of every target a test makes: the last 50. The server
+# makes up the schedule's run it missed five minutes after its start
+# (serverBackupLoop), which may come during a test and add a backup, and
+# a target's default retention, the newest of each day alone, would then
+# prune the test's own.
+KEEP = {"last": 50}
 
 
 def data_dir(*parts):
@@ -241,6 +247,7 @@ def test_target_added_tested_and_backup_made(page, case):
         assert path.get_attribute("placeholder") == "backups", "its field from the kinds, its default as placeholder"
         page.fill("#sb-target-new-name", name)
         path.fill(where)
+        page.fill("#sb-target-new-keep-last", str(KEEP["last"]))
         named_buttons(page, "the new target's form")
         page.locator("#sb-target-new button[type=submit]").click()
         assert wait_until(page, "document.querySelectorAll('.sb-target').length >= 1", 10), "its panel"
@@ -326,6 +333,7 @@ def test_kind_form(page, case):
         page.fill("#sb-target-new-secret", "s3cret")
         page.select_option("#sb-target-new-kind", "local")
         page.fill("#sb-target-new-name", f"Kind {case.width} {case.lang}")
+        page.fill("#sb-target-new-keep-last", str(KEEP["last"]))
         page.locator("#sb-target-new button[type=submit]").click()
         assert wait_until(page, "!document.querySelector('#sb-target-new form')", 10), "added"
         assert sent and "secret" not in sent[-1] and sent[-1]["kind"] == "local", f"no secret sent for the local kind: {sent}"
@@ -341,7 +349,7 @@ def test_unknown_kind_keeps_its_fields(page, case):
     stub_kinds(page, [])
     clean()
     where = data_dir(f"sb-usb-{case.width}-{case.lang}")
-    target = api_call("POST", TARGETS, {"name": "USB", "kind": "local", "config": {"path": where}})["target"]
+    target = api_call("POST", TARGETS, {"name": "USB", "kind": "local", "config": {"path": where}, "retention": KEEP})["target"]
     puts = []
     page.on("request", lambda r: puts.append(r.post_data_json) if r.method == "PUT" and r.url.endswith(target["uuid"]) else None)
     try:
@@ -372,8 +380,10 @@ def test_copy_failed_retried_by_backup_retry_alone(page, case):
     target mended through the API, Retry puts the copy there."""
     clean()
     key_set()
-    here = api_call("POST", TARGETS, {"name": "Here", "kind": "local", "config": {"path": data_dir(f"sb-here-{case.width}-{case.lang}")}})["target"]
-    broken = api_call("POST", TARGETS, {"name": "Broken", "kind": "local", "config": {"path": data_dir("massimo.db", "sb")}})["target"]
+    here = api_call("POST", TARGETS, {"name": "Here", "kind": "local", "config": {"path": data_dir(f"sb-here-{case.width}-{case.lang}")},
+                                      "retention": KEEP})["target"]
+    broken = api_call("POST", TARGETS, {"name": "Broken", "kind": "local", "config": {"path": data_dir("massimo.db", "sb")},
+                                        "retention": KEEP})["target"]
     made = api_call("POST", BACKUPS, {})["backup"]
     states = {c["target"]: c["state"] for c in made["copies"]}
     assert states.get(here["uuid"]) == "there" and states.get(broken["uuid"]) == "failed", states
