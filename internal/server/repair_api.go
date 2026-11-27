@@ -114,7 +114,8 @@ type repairPlan struct {
 	Held  int `json:"held_slots"`
 	// Resets counts the r: lines, those the queue's prelude sends before
 	// each command included (engine.PreludeOf), which cost no radio
-	// time; Wakeups the room wakeups before the commands.
+	// time; Wakeups the wakeups before the commands, a room's and a
+	// device's own.
 	Resets   int  `json:"resets"`
 	Wakeups  int  `json:"wakeups"`
 	Metadata bool `json:"metadata"`
@@ -267,7 +268,10 @@ func (s *Server) repairView(rt *runtime, a *repairAction) repairPlan {
 			step.Room = st.cmd.RoomID
 			v.Wakeups++
 		}
-		fmt.Fprintf(h, "%d %v %s\n", st.cmd.RoomID, st.cmd.Wakeup, strings.Join(step.Lines, " "))
+		if st.cmd.WakeTarget {
+			v.Wakeups++ // the device's own (engine.Command.WakeTarget)
+		}
+		fmt.Fprintf(h, "%d %v %v %s\n", st.cmd.RoomID, st.cmd.Wakeup, st.cmd.WakeTarget, strings.Join(step.Lines, " "))
 		v.Steps = append(v.Steps, step)
 	}
 	if a.metadata != nil {
@@ -734,7 +738,7 @@ func (s *Server) buildPlace(r *http.Request, rt *runtime) (*repairAction, error)
 	if c.Type.IsThermostat() {
 		a.hold = to
 	}
-	if c.RoomID != 0 {
+	if len(out.Lines) > 0 { // its C line names a room
 		a.steps = append(a.steps, repairCmd{what: fmt.Sprintf("unlink %s from room %d", c.RFAddress, c.RoomID), cmd: out})
 	}
 	a.steps = append(a.steps, repairCmd{what: fmt.Sprintf("link %s into room %d", c.RFAddress, to), cmd: in})

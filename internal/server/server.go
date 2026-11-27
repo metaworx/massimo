@@ -1808,8 +1808,8 @@ type cubeView struct {
 	MAC      string     `json:"mac,omitempty"`
 	LastSeen *time.Time `json:"last_seen,omitempty"`
 	// Problems are the Cube's devices with a problem, for a client that
-	// shows every Cube's (the web UI's header): a radio fault, a low
-	// battery, a window open, with its times (problems.go).
+	// shows every Cube's (the web UI's header): a radio fault, a weak or
+	// low battery, a window open, with its times (problems.go).
 	Problems []cubeProblem `json:"problems,omitempty"`
 	// FoundAddress is the host discovery last found the Cube at, which
 	// may differ from Address: the server connects through a proxy, or

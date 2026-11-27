@@ -6,6 +6,7 @@ package cubeio
 import (
 	"encoding/base64"
 	"slices"
+	"strings"
 	"testing"
 	"time"
 
@@ -303,4 +304,91 @@ func TestUnlinkAndRelinkPassOverTheDead(t *testing.T) {
 			t.Errorf("the re-link of %s after the unlinks: %v, want first %s", c.rf, got, room(c.to, c.rf, c.typ, true))
 		}
 	}
+}
+
+// inRoom is the rooms fixture's snapshot with rf's C line in room, the
+// metadata as it is.
+func inRoom(t *testing.T, rf cube.RFAddress, room uint8) *cubelan.Snapshot {
+	t.Helper()
+	greeting, err := fakecube.RoomsFixture()
+	if err != nil {
+		t.Fatal(err)
+	}
+	for i, m := range greeting {
+		if m.Type != 'C' || !strings.HasPrefix(m.Data, rf.String()+",") {
+			continue
+		}
+		raw, err := base64.StdEncoding.DecodeString(m.Data[len(rf.String())+1:])
+		if err != nil {
+			t.Fatal(err)
+		}
+		raw[5] = room
+		greeting[i].Data = rf.String() + "," + base64.StdEncoding.EncodeToString(raw)
+	}
+	snap, err := cubelan.SnapshotOf(greeting, time.Now())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if c := snap.Config(rf); c == nil || c.RoomID != room {
+		t.Fatalf("%s's C line %+v, want room %d", rf, c, room)
+	}
+	return snap
+}
+
+// A move's 0x23 names the room the device's C line names, as the test
+// Cube takes one only for the device's own group (AP FakeGroup, Block 4),
+// and none where the line names no room; the device is woken itself
+// before a half whose room's wakeup misses it: the out half where its C
+// line names another room than the one left, the in half always. 0a0204
+// is listed in room 2 and moves into room 1.
+func TestMoveCommandsNameTheCLinesRoom(t *testing.T) {
+	const moved cube.RFAddress = 0x0a0204
+	unlink := func(snap *cubelan.Snapshot) []string {
+		return lineStrings(linkLines(snap, RoomMaster(snap, 2), moved, cube.DeviceRadiatorThermostat, 2, RoomMembers(snap, 2, nil), false, true))
+	}
+	for _, c := range []struct {
+		name          string
+		cLine, from   uint8
+		group         uint8 // the 0x23's, 0 for none
+		wakeRoom, own bool  // out's wakeups: room from's, the device's
+	}{
+		{"its C line in the room it leaves", 2, 2, 2, true, false},
+		{"its C line in another room", 3, 2, 3, true, true},
+		{"its C line in no room", 0, 2, 0, true, true},
+		{"listed in no room, its C line in a room", 2, 0, 2, false, true},
+		{"in no room at all", 0, 0, 0, false, false},
+	} {
+		t.Run(c.name, func(t *testing.T) {
+			snap := inRoom(t, moved, c.cLine)
+			out, in := MoveCommands(snap, moved, cube.DeviceRadiatorThermostat, c.from, 1, RoomMembers(snap, 1, nil), nil)
+			var want []string
+			if c.group != 0 {
+				want = append(want, cube.CmdSetGroup(moved, c.group, true).String())
+			}
+			if c.from != 0 {
+				want = append(want, unlink(snap)...)
+			}
+			if got := lineStrings(out.Lines); !slices.Equal(got, want) {
+				t.Fatalf("out:\n%v\nwant\n%v", got, want)
+			}
+			if len(out.Lines) > 0 && (out.Wakeup != c.wakeRoom || out.WakeTarget != c.own || out.RoomID != c.from) {
+				t.Fatalf("out's wakeups: room %d %v, the device %v; want room %d %v, the device %v", out.RoomID, out.Wakeup, out.WakeTarget, c.from, c.wakeRoom, c.own)
+			}
+			if !in.Wakeup || in.RoomID != 1 || !in.WakeTarget {
+				t.Fatalf("in: %+v, want room 1's wakeup and the device's own", in)
+			}
+			if last := in.Lines[len(in.Lines)-1].String(); last != cube.CmdSetGroup(moved, 1, false).String() {
+				t.Fatalf("in ends with %s, not the 0x22 of room 1", last)
+			}
+		})
+	}
+}
+
+// lineStrings is lines as they go to the Cube.
+func lineStrings(lines []cube.Message) []string {
+	out := make([]string, len(lines))
+	for i, l := range lines {
+		out[i] = l.String()
+	}
+	return out
 }
