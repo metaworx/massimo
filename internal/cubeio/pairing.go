@@ -87,10 +87,12 @@ func (w Writer) StopPairing(ctx context.Context) error {
 // AddDevice puts a paired device that is in no room yet into room with
 // the placement's link half (linkIntoRoom), as the original software
 // placed one in its capture of 2026-11-04: after a wakeup of the room,
-// one 0x20 add-link-partner radiogram with the room flag naming the
-// device, to the room's addressee, which every member of the room
-// takes, one to each window contact among its partners, and one to the
-// device for each partner, then 0x22 set group; then the metadata write
+// and of the device itself, which is in no room's group yet (AP
+// FakeGroup, Block 4), one 0x20 add-link-partner radiogram with the
+// room flag naming the device, to the room's addressee, which every
+// member of the room takes, one to each window contact among its
+// partners, and one to the device for each partner, then 0x22 set
+// group; then the metadata write
 // that lists it with its name, and a re-read of its C line. A device
 // whose C line names another room (paired long ago, never listed) is
 // first unlinked from that room as in a move. members are the devices
@@ -109,7 +111,7 @@ func (w Writer) AddDevice(ctx context.Context, md *cube.Metadata, c *cube.Device
 	}
 	out, in := MoveCommands(w.Client.Snapshot(), c.RFAddress, c.Type, c.RoomID, room, members, skip)
 	cmds := []engine.Command{in}
-	if c.RoomID != 0 {
+	if len(out.Lines) > 0 { // its C line names a room
 		cmds = []engine.Command{out, in}
 	}
 	for i, cmd := range cmds {
