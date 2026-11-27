@@ -1010,8 +1010,8 @@ after `n:`, a copy of the greeting's 0a010d as 0abcde in no room,
 and joins again after it was removed (a fourth field sets the delay);
 once it joined, a new connection's greeting lists it too,
 its C line and its entry in the device list, until a `t:` deletes it.
-Put into a room, its C line keeps room 0, since the fake does not apply
-the set group radiogram (0x22); the room comes from the room and device list.
+Put into a room, its C line names the room, as the Cube's does once the
+device took the set group radiogram (0x22).
 An `m:` the fake can read, its blocks since `00`,
 is the room and device list of every greeting after it, as a Cube keeps it.
 `-free-slots 50` makes the S replies and the greeting's H line say 50 free memory slots,
@@ -1024,7 +1024,11 @@ The fake carries out the radio commands it acknowledges, as the devices do:
 a setpoint or mode (to every thermostat of the room for a room command),
 a boost, which ends by itself after the device's boost time (`-boost-for` to
 shorten it), a day's programme, the preset temperatures, the valve settings,
-the key lock and a wall thermostat's display;
+the key lock, a wall thermostat's display and the device's group:
+set group (0x22) names its room in the device's C line,
+and remove group (0x23) clears it where it names the room the C line names,
+while a device refuses one naming another room and is flagged with it,
+as the test Cube showed (docs/cube-protocol.md);
 the device list and the C lines then show the change,
 also in a new connection's greeting.
 `-apply-after 30s` applies each command that long after the S reply,

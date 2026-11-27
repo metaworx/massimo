@@ -10,7 +10,7 @@ its page, on the page shown nothing. A role with one settings page alone
 sees its title."""
 import json
 
-from helpers import VIEWER, css_hidden, scroll_width, show_view, wait_until
+from helpers import VIEWER, boxes, css_hidden, scroll_width, show_view, wait_until
 
 PAGES = {"cube": ("#cube-page", "nav.cubeTitle"), "system": ("#system", "nav.settingsTitle"), "maint": ("#maint-page", "nav.maintTitle"),
          "info": ("#info-page", "nav.infoTitle")}
@@ -48,6 +48,11 @@ def test_each_settings_page_holds_them_all(page, case):
         assert title.text_content() == name and title.bounding_box()["width"] <= 1, f"{view}'s title hidden, still its name"
         assert page.locator(section).get_attribute("aria-labelledby") == title.get_attribute("id"), f"{view} named by its title"
         menu_bg = page.evaluate("getComputedStyle(document.querySelector('#nav-menu > summary')).backgroundColor")
+        # the row's boxes at one moment: the page may draw between two reads
+        n, menu = len(PAGES), bar.locator(".sec-menu")
+        read = boxes(page, bar, *(got.nth(i) for i in range(n)), *(got.nth(i).locator(".page-link-label") for i in range(n)),
+                     *([menu] if menu.count() else []))
+        bar_box, link_boxes, label_boxes, m = read[0], read[1:1 + n], read[1 + n:1 + 2 * n], (read[1 + 2 * n:] or [None])[0]
         xs[view] = []
         for i, other in enumerate(PAGES):
             b = got.nth(i)
@@ -59,8 +64,7 @@ def test_each_settings_page_holds_them_all(page, case):
             assert (b.get_attribute("aria-current") == "page") == here, f"only {view} marked current on its page"
             bg = b.evaluate("(e) => getComputedStyle(e).backgroundColor")
             assert (bg == menu_bg) == here, f"{other} filled as ☰ is only on its own page ({bg}, ☰ {menu_bg})"
-            label = b.locator(".page-link-label").bounding_box()
-            box = b.bounding_box()
+            label, box = label_boxes[i], link_boxes[i]
             if case.width >= NARROW or here:
                 assert label["width"] > 10, f"{other}'s name shown on {view}"
                 if case.lang == "en":  # every English name fits at 390 px (the others, D159-A, are cut)
@@ -69,16 +73,13 @@ def test_each_settings_page_holds_them_all(page, case):
             else:
                 assert label["width"] <= 1 and box["width"] <= 41, f"{other} its icon alone on a phone: {box}"
             xs[view].append(box["x"])
-        bar_box = bar.bounding_box()
         assert bar_box["height"] <= 53, f"{view}'s row one line: {bar_box}"
-        last = got.last.bounding_box()
-        wide[view] = got.nth(list(PAGES).index(view)).bounding_box()["width"]
+        last = link_boxes[-1]
+        wide[view] = link_boxes[list(PAGES).index(view)]["width"]
         ends[view] = last["x"] + last["width"]
         if case.width < NARROW:
             assert ends[view] <= bar_box["x"] + bar_box["width"] - 48 + 1, f"the sections menu's place kept on {view}"
-        menu = bar.locator(".sec-menu")
-        if menu.count():
-            m = menu.bounding_box()
+        if m is not None:
             assert last["x"] + last["width"] <= m["x"], f"the buttons left of {view}'s sections menu"
             assert abs(m["x"] + m["width"] - (bar_box["x"] + bar_box["width"])) <= 2, f"{view}'s sections menu at the right end"
             assert abs(m["y"] - last["y"]) <= 3, f"{view}'s sections menu on the buttons' line"

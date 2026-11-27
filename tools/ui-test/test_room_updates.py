@@ -30,7 +30,7 @@ from datetime import datetime, timedelta, timezone
 
 import pytest
 
-from helpers import frames, held_poll, hold, mark, replaced, wait_held, wait_until
+from helpers import boxes, frames, held_poll, hold, mark, replaced, wait_held, wait_until
 from helpers import settled as looked_until
 
 
@@ -788,8 +788,8 @@ def test_house_lowest_and_highest(page, case):
     text = page.locator(RANGE).inner_text()
     names = [n for n in page.evaluate("state.rooms.map((r) => r.name)") if n and n in text]
     assert not names, f"no room's name in the rows: {names}"
-    box = {(row, which): page.locator("%s .%s .range-%s" % (RANGE, row, which)).bounding_box()
-           for row in ("range-is", "range-set") for which in ("low", "high")}
+    cells = [(row, which) for row in ("range-is", "range-set") for which in ("low", "high")]
+    box = dict(zip(cells, boxes(page, *("%s .%s .range-%s" % (RANGE, row, which) for row, which in cells))))
     one_line = abs(box["range-is", "low"]["y"] - box["range-set", "low"]["y"]) < 1
     if width >= 1100:
         assert one_line, f"one line at {width} px: {box}"

@@ -6,8 +6,8 @@ page 👤 opens, the page shown in the address, each page's own scroll
 position, and expert mode's line of the chosen Cube's radio budget."""
 import json
 
-from helpers import (CUBES, VIEWER, assert_busy, css_hidden, held_poll, hold, open_personal_page, scaled, scroll_settled, scroll_width,
-                     settled, show_view, wait_held, wait_until)
+from helpers import (CUBES, VIEWER, assert_busy, boxes, css_hidden, held_poll, hold, open_personal_page, scaled, scroll_settled,
+                     scroll_width, settled, show_view, wait_held, wait_until)
 
 # The symbol a page button shows, drawn in an svg of its own outside the
 # header, so that its size does not depend on whether the button is shown;
@@ -54,7 +54,7 @@ def test_personal_page_says_who_is_in(page, case):
         f"the page names the key's user and label: {line.inner_text()!r}"
     logout = page.locator("#logout-btn")
     assert logout.inner_text() == FORGET_KEY[case.lang], "an API key is only forgotten"
-    out, menu = box(page, "#logout-btn"), box(page, "#me .sec-menu > summary")
+    out, menu = boxes(page, "#logout-btn", "#me .sec-menu > summary")
     assert out["x"] + out["width"] <= menu["x"] and abs(out["y"] - menu["y"]) <= 2, f"Forget key left of ☰, on its row: {out} {menu}"
     assert menu["x"] + menu["width"] <= case.width, "☰ at the right end"
     page.locator("#me .sec-menu > summary").click()
@@ -170,16 +170,6 @@ def test_an_address_the_user_may_not_open_shows_rooms(page, case):
         page.unroute("**/api/v1/me")
 
 
-def box(page, selector):
-    return page.locator(selector).bounding_box()
-
-
-def edge(page, selector):
-    """An element's lower edge."""
-    b = box(page, selector)
-    return b["y"] + b["height"]
-
-
 def active(page, selector):
     return page.locator(selector).evaluate("(e) => e.classList.contains('active')")
 
@@ -191,8 +181,8 @@ def test_header_order(page, case):
     and ☰ alone, all on one lower edge, the Cube choice as near to 🏠 as
     the pages are to each other (AP GlobalMenu, D199-A to D201-A)."""
     order = ["h1", ".pile", "#cube-choice", "#view-tiles", "#nav-menu > summary"]
-    b = {sel: box(page, sel) for sel in order}
-    row = box(page, ".top-line")
+    *at_once, row = boxes(page, *order, ".top-line")  # at one moment: the page may draw between two reads
+    b = dict(zip(order, at_once))
     assert page.locator("#cube-choice .picker-icon .cube-icon.tone-ok use[href='#icon-cube3d']").count() == 1, \
         "the cube before the Cube's name, green while connected"
     assert page.locator("#cube-choice .conn-sign").count() == 0, "no network sign in the closed choice"
@@ -206,7 +196,7 @@ def test_header_order(page, case):
     bottom = b["#view-tiles"]["y"] + b["#view-tiles"]["height"]
     assert all(abs(b[sel]["y"] + b[sel]["height"] - bottom) <= 1 for sel in order[1:]), f"on one lower edge: {b}"
     assert b[".pile"]["x"] - (b["h1"]["x"] + b["h1"]["width"]) > 16, f"the pile away from the logo, at the right: {b}"
-    pages = box(page, "#nav-menu > summary")["x"] - (b["#view-tiles"]["x"] + b["#view-tiles"]["width"])
+    pages = b["#nav-menu > summary"]["x"] - (b["#view-tiles"]["x"] + b["#view-tiles"]["width"])
     choice = b["#view-tiles"]["x"] - (b["#cube-choice"]["x"] + b["#cube-choice"]["width"])
     assert abs(choice - pages) <= 1, f"the Cube choice as near to 🏠 as the pages to each other: {choice} vs {pages}"
 
@@ -247,11 +237,11 @@ def test_header_folds_step_by_step(page, case):
             label = page.locator("#cube-choice .picker-label")
             assert label.is_hidden() == (step >= 2), f"at {w} px the Cube choice a cube button: {step >= 2}"
             assert page.locator("#cube-choice .cube-icon").is_visible(), f"at {w} px the cube always"
-            pile, home = box(page, ".pile"), box(page, "#view-tiles")
+            pile, home, problems, row = boxes(page, ".pile", "#view-tiles", "#cube-problems .problems-sum", ".top-line")
             on_next = pile["y"] >= home["y"] + home["height"] - 1
             assert on_next == (step == 3), f"at {w} px the pile on the next row: {step == 3}"
             if step == 3:
-                assert abs(box(page, "#cube-problems .problems-sum")["x"] - box(page, ".top-line")["x"]) <= 1, "at the left"
+                assert abs(problems["x"] - row["x"]) <= 1, f"at the left: {problems} in {row}"
         assert last == 3, "every step at 320 px"
         page.evaluate("document.body.classList.remove('scrolled')")
         name = page.evaluate("(() => { const c = state.cubes.find((x) => x.serial === state.serial); return c.name || c.serial; })()")
@@ -265,11 +255,8 @@ def test_header_folds_step_by_step(page, case):
 
 
 # The drawing shown in the header's brand, the logo or the M: its box.
-BRAND_BOX = """() => {
-  const svg = [...document.querySelectorAll('.top .brand-name svg')].find((e) => e.getBoundingClientRect().width > 0);
-  const b = svg.getBoundingClientRect();
-  return {top: b.top, bottom: b.bottom, height: b.height, width: b.width};
-}"""
+# The logo's drawing in the header, the logo or its M, whichever is shown.
+BRAND_SVG = ".top .brand-name svg >> visible=true"
 
 VERSION_TITLE = {"en": "{v} (server version) · click to copy", "de": "{v} (Server-Version) · Klick kopiert"}
 
@@ -293,13 +280,15 @@ def test_version_in_the_menu(page, case, reads):
     v.wait_for(state="visible")
     first = page.locator("#nav-menu .menu-items > *").first
     assert first.evaluate("(e) => e.contains(document.getElementById('version-short'))"), "☰'s first row"
-    assert v.bounding_box()["y"] < page.locator("#menu-log").bounding_box()["y"], "above the log"
+    version, log = boxes(page, v, "#menu-log")
+    assert version["y"] < log["y"], f"above the log: {version}, {log}"
     assert v.evaluate("(e) => e.scrollWidth <= e.clientWidth + 1"), "whole"
     assert v.get_attribute("title") == VERSION_TITLE[case.lang].format(v=BUILD), "the tooltip is the whole version"
     icon = first.locator(".menu-brand .brand-mark")
     assert wait_until(page, "!!document.querySelector('#nav-menu .menu-brand .brand-mark')", 5), "Massimo's icon drawn"
     assert icon.is_visible() and first.locator(".menu-brand .brand-logo").is_hidden(), "the icon, not the logo"
-    assert icon.bounding_box()["x"] + icon.bounding_box()["width"] <= v.bounding_box()["x"], "before the version"
+    mark, version = boxes(page, icon, v)
+    assert mark["x"] + mark["width"] <= version["x"], f"before the version: {mark}, {version}"
     assert first.evaluate("(e) => e.nextElementSibling.tagName") == "HR", "a rule under the row"
     assert page.locator("#login-version").is_hidden(), "not the sign-in card's while signed in"
     page.keyboard.press("Escape")
@@ -310,11 +299,10 @@ def test_header_on_one_baseline(page, case):
     is short) with its bottom edge, the letters' baseline, the pill of the
     pile, the Cube choice and the page buttons end there; the M is as tall
     as the page buttons."""
-    brand = page.evaluate(BRAND_BOX)
-    button = box(page, "#view-tiles")
+    brand, button, pill, cube = boxes(page, page.locator(BRAND_SVG).first, "#view-tiles", "#cube-problems .problems-sum", "#cube-choice")
     assert abs(brand["height"] - button["height"]) <= 1, f"the M as tall as the page buttons: {brand} vs {button}"
     bottom = button["y"] + button["height"]
-    ends = {"logo": brand["bottom"], "pill": edge(page, "#cube-problems .problems-sum"), "cube": edge(page, "#cube-choice")}
+    ends = {name: b["y"] + b["height"] for name, b in (("logo", brand), ("pill", pill), ("cube", cube))}
     assert all(abs(y - bottom) <= 1 for y in ends.values()), f"on the buttons' lower edge {bottom}: {ends}"
 
 
@@ -368,7 +356,8 @@ def test_expert_line_of_the_cube(page, case, reads):
     assert times.count() == 2, "how long ago the Cube was read and the server replied"
     labels = [times.nth(i).locator("span").first.inner_text() for i in range(2)]
     assert labels == page.evaluate("[t('header.cubeRead'), t('header.serverReplied')]"), f"named so: {labels}"
-    assert box(page, "#stats-cube")["x"] < times.first.bounding_box()["x"], "after the Cube's name"
+    cube, read = boxes(page, "#stats-cube", times.first)
+    assert cube["x"] < read["x"], f"after the Cube's name: {cube}, {read}"
     text = line.inner_text()
     assert DUTY[case.lang] in text and "%" in text, f"the duty cycle ({text!r})"
     assert page.locator("#stat-queued").is_hidden(), "queued only while commands wait"
@@ -575,7 +564,7 @@ def test_refresh_now_keeps_the_list_open(page, case):
         cells = first.locator(".read-times > span")
         labels = [cells.nth(i).inner_text() for i in (0, 2, 4)]
         assert labels == page.evaluate("['header.cubeRead', 'header.serverReplied', 'header.timeNow'].map((k) => t(k))"), f"the labels: {labels}"
-        rights = [cells.nth(i).bounding_box() for i in (1, 3, 5)]
+        rights = boxes(page, *(cells.nth(i) for i in (1, 3, 5)))
         assert max(b["x"] + b["width"] for b in rights) - min(b["x"] + b["width"] for b in rights) <= 1, f"the times right-aligned: {rights}"
         ys = [b["y"] for b in rights]
         assert ys == sorted(ys) and ys[1] - ys[0] > 8, f"a row each: {ys}"

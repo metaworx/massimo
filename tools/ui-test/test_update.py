@@ -405,6 +405,7 @@ def test_automatic_updates(page):
 
     sel.select_option("night")
     assert wait_until(page, "!!document.getElementById('update-window-start')", 5), "the window comes up"
+    assert wait_held(page, puts), "night is written: the window comes up before its PUT"  # the request itself, not the window
     assert puts == [{"update.auto": "night"}], "night is stored: %r" % puts
     night = page.evaluate("t('update.autoNight', {from: '03:00', to: '05:00'})")
     assert wait_until(page, "document.getElementById('update-auto-note').textContent === %s" % json.dumps(night), 5), \
@@ -422,7 +423,8 @@ def test_automatic_updates(page):
     start.fill("23:30")
     start.blur()
     assert wait_until(page, "document.getElementById('update-window-start').value === '23:30'", 5), "the start kept"
-    assert held_true(page, lambda: {"update.auto_window": "23:30-05:00"} in puts), "the window is stored as the field is left: %r" % puts
+    assert wait_held(page, puts, n=2), "the window is written as the field is left: %r" % puts
+    assert puts[1:] == [{"update.auto_window": "23:30-05:00"}], "the window is stored as the field is left: %r" % puts
     unroute_channel(page)
 
 
@@ -440,17 +442,6 @@ def test_automatic_updates_wait_for_the_settings_file(page):
         "the line says the try waits for the file: %r" % page.locator("#update-window-start").evaluate("e => e.closest('.field').textContent")
     assert page.locator("#update-window-start").get_attribute("aria-describedby") == "update-auto-next", "the start is described by it"
     unroute_channel(page)
-
-
-def held_true(page, cond, tries=100):
-    """Waits until cond(), a test of what the stubs saw, holds, letting the
-    page run between tries (the stubs answer only then); reports whether
-    it did."""
-    for _ in range(tries):
-        if cond():
-            return True
-        page.wait_for_timeout(50)
-    return cond()
 
 
 def test_automatic_updates_blocked(page):
@@ -734,7 +725,8 @@ def test_install_now_asks_in_the_banner_while_refused(page):
         install_now_asks(page, "update-ask", puts)
         page.locator("#update-ask-now").click()
         page.locator("#update-ask .confirm-yes").click()
-        assert held_true(page, lambda: puts == [{"version": "v0.0.2-test", "answer": "now"}]), "Install now answered: %r" % puts
+        assert wait_held(page, puts), "Install now sent: %r" % puts
+        assert puts == [{"version": "v0.0.2-test", "answer": "now"}], "Install now answered: %r" % puts
         page.locator("#update-ask").wait_for(state="hidden", timeout=10000)  # at the following's first read, 3 s on
     finally:
         unroute_ask(page)
@@ -783,7 +775,8 @@ def test_install_now_at_once(page, watch, place, refused):
             page.locator("#update-check").click()
         page.locator(f"#{place}").wait_for(state="visible")
         page.locator(f"#{place}-now").click()
-        assert held_true(page, lambda: puts == [{"version": "v0.0.2-test", "answer": "now"}]), "Install now answered at once: %r" % puts
+        assert wait_held(page, puts), "Install now sent at once: %r" % puts
+        assert puts == [{"version": "v0.0.2-test", "answer": "now"}], "Install now answered at once: %r" % puts
         assert page.locator(".update-ask .confirm-box, .update-card-ask .confirm-box").count() == 0, "asked nothing"
     finally:
         unroute_ask(page)
