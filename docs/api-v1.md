@@ -518,6 +518,21 @@ whose `error` names the link that refused:
 |------|--------|--------|-----------------|
 | `room_name_needed` | 409 | `room` | a listing into a room the Cube's list does not have, without `room_name`; `room` is also at the top level |
 
+**An API key's life and its new secret** (AP KeyLife; see "Tokens"):
+
+| Code | Status | Params | Refused because |
+|------|--------|--------|-----------------|
+| `key_end_passed` | 400 | `expires_at` | `POST …/tokens` or `PUT …/tokens/{id}` with an end date not in the future, `expires_at` as the server read it |
+| `end_date_year_one` | 400 | `expires_at` | an `expires_at` that reads as the zero time (`0001-01-01T00:00:00Z`), which would else mean none: a key's or a user's |
+| `key_keep_forbidden` | 403 | `user` | `idle_exempt` at `POST …/tokens` or `PUT …/tokens/{id}` from a caller that does not manage the key's user |
+| `key_life_session` | 400 | `token` | `PUT …/tokens/{id}` of a session, whose life is its own 30 days |
+| `key_life_integration_kept` | 400 | – | `idle_exempt: true` for an integration's key, always held to the idle limit |
+| `key_life_own_key` | 403 | – | `PUT …/tokens/{id}` whose bearer is that very key |
+| `new_secret_session` | 400 | `token` | `POST …/tokens/{id}/rekey` of a session |
+| `new_secret_integration` | 403 | – | `POST …/tokens/{id}/rekey` of an integration's key |
+| `new_secret_own_key` | 403 | – | `POST …/tokens/{id}/rekey` whose bearer is that very key |
+| `new_secret_ended` | 409 | `key` | `POST …/tokens/{id}/rekey` of a key that has ended, by its end date or unused |
+
 ## Routes
 
 ### GET /healthz

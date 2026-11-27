@@ -814,9 +814,10 @@ def test_a_keys_end_date(page, case, watch):
     again; a key made with the field empty sends none. Change… shows the
     date, Save off until it is changed; a new date is one PUT and the line
     follows; one that has passed is refused by the server, the form
-    staying open and the users' line saying why; No end empties the field
-    and Save sends null, the line gone, and the key stored without an
-    end."""
+    staying open and the users' line saying why in the page's language,
+    by the refusal's code (key_end_passed, AP ErrorCodes); No end empties
+    the field and Save sends null, the line gone, and the key stored
+    without an end."""
     prefix = f"ui-test-end-{case.width}-{case.lang}-"
     revoke_keys(prefix)
     puts, posts = [], []
@@ -871,10 +872,14 @@ def test_a_keys_end_date(page, case, watch):
         made.locator(".change-key").click()
         form.wait_for()
         end.fill("2020-01-01T00:00")
-        with page.expect_response(lambda r: r.request.method == "PUT" and "/users/operator/tokens/" in r.url and r.status == 400):
+        with page.expect_response(lambda r: r.request.method == "PUT" and "/users/operator/tokens/" in r.url and r.status == 400) as refused:
             save.click()
-        assert wait_until(page, "document.getElementById('users-msg').textContent.includes('has passed')", 5), \
-            f"the users' line says why: {page.locator('#users-msg').text_content()}"
+        body = refused.value.json()
+        assert body.get("code") == "key_end_passed" and body.get("params", {}).get("expires_at"), f"the refusal's code: {body}"
+        said = page.evaluate("(p) => t('err.key_end_passed', p)", body["params"])
+        assert body["params"]["expires_at"] in said and said != body["error"], f"the page's own text of the code: {said!r}"
+        assert wait_until(page, "document.getElementById('users-msg').textContent.includes(%r)" % said, 5), \
+            f"the users' line says why in the page's language: {page.locator('#users-msg').text_content()}"
         assert form.is_visible(), "the form left open"
 
         # No end: the field emptied, null sent, the line gone
