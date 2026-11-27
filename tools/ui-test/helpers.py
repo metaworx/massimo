@@ -22,7 +22,9 @@ a test measures what the page does by itself; pause_clock pauses
 Playwright's clock at the page's now. open_fold, close_fold and
 toggle_fold take a fold's toggle event before a test acts inside it.
 wait_started waits for the page's start, the page fixture's and
-owner_page's, and says on a timeout which read it waited for.
+owner_page's, and says on a timeout which read it waited for. bubble,
+bubble_at and wait_bubble_at look at the page's bubble (showBubble of
+components.js), where it shows against its control.
 
 Every wait of this kit, and the page fixture's, lasts its seconds times
 UI_TEST_SCALE (scaled), a positive number, 1 where it is not set: a
@@ -1152,6 +1154,72 @@ def focus_in_turn(page, click, focused):
 def frames(page):
     """Two frames and a task: a part drawn again after a change has been drawn."""
     page.evaluate("() => new Promise((done) => requestAnimationFrame(() => requestAnimationFrame(() => setTimeout(done, 0))))")
+
+
+# --- the bubble -------------------------------------------------------------
+
+# The page's bubble (components.js showBubble) while it shows: its text,
+# its box, the window's size, its aria-hidden and its z-index; null while
+# it does not show. #bubble is made at the page's first bubble.
+BUBBLE = """() => {
+  const b = document.getElementById('bubble');
+  if (!b || !b.getClientRects().length) return null;
+  const r = b.getBoundingClientRect();
+  return { text: b.textContent, left: r.left, right: r.right, top: r.top, bottom: r.bottom,
+           width: document.documentElement.clientWidth, height: document.documentElement.clientHeight,
+           hidden: b.getAttribute('aria-hidden'), z: Number(getComputedStyle(b).zIndex) };
+}"""
+
+# What the page's live region of bubbles says, "" while it is not there:
+# showBubble makes #bubble-status at the page's first bubble, which may
+# come once the clipboard has answered, so a wait that reads it before
+# then must not throw (wait_until does not retry an expression that
+# throws).
+BUBBLE_STATUS = "(document.getElementById('bubble-status') || {textContent: ''}).textContent"
+
+# Where the bubble saying text shows against the element of sel: "above"
+# or "below" it, at most 8 px from it, centred on it or, where the window
+# has no room for that, at the window's edge on its side, and inside the
+# window; else what is wrong.
+BUBBLE_AT = """([sel, text]) => {
+  const b = document.getElementById('bubble');
+  const el = document.querySelector(sel);
+  if (!el) return 'no element ' + sel;
+  if (!b || !b.getClientRects().length) return 'no bubble';
+  if (b.textContent !== text) return 'it says ' + JSON.stringify(b.textContent);
+  const r = b.getBoundingClientRect(), c = el.getBoundingClientRect();
+  const w = document.documentElement.clientWidth, h = document.documentElement.clientHeight;
+  if (r.left < -0.5 || r.right > w + 0.5 || r.top < -0.5 || r.bottom > h + 0.5) return 'outside the window: ' + JSON.stringify(r);
+  const off = (r.left + r.right) / 2 - (c.left + c.right) / 2;
+  if (Math.abs(off) > 1 && !(off > 0 ? r.left <= 8.5 : r.right >= w - 8.5)) return 'not centred on it: ' + off.toFixed(1) + ' px';
+  if (r.bottom <= c.top + 0.5 && c.top - r.bottom <= 8) return 'above';
+  if (r.top >= c.bottom - 0.5 && r.top - c.bottom <= 8) return 'below';
+  return 'far from it: ' + JSON.stringify({ bubble: r, it: c });
+}"""
+
+
+def bubble(page):
+    """The page's bubble while it shows (BUBBLE), None while it does not."""
+    return page.evaluate(BUBBLE)
+
+
+def bubble_at(page, sel, text):
+    """Where the bubble saying text shows against the element of sel:
+    "above" or "below" it, else what is wrong (BUBBLE_AT)."""
+    return page.evaluate(BUBBLE_AT, [sel, text])
+
+
+def wait_bubble_at(page, sel, text, seconds=3):
+    """Waits, for seconds (scaled), until the bubble says text above or
+    below the element of sel, and returns where, or what was wrong at the
+    last look. The bubble shows for 1.4 s, so a test looks right after
+    what shows it."""
+    end = time.time() + scaled(seconds)
+    while True:
+        where = bubble_at(page, sel, text)
+        if where in ("above", "below") or time.time() >= end:
+            return where
+        page.wait_for_timeout(50)
 
 
 # --- a fold ---------------------------------------------------------------

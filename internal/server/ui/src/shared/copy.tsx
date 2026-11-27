@@ -8,9 +8,10 @@
  * text that copies itself on a click, Enter or Space, a copy icon, and
  * something with its copy icon beside it; each named by what it copies, for a screen reader
  * and as its tooltip. The page's copyText and copied do the copying and
- * say that it was done. A text that copies itself may be quiet: its words
- * hidden from a screen reader, its name alone saying what it copies (a
- * suggested password, AP AccessEnds, D52-A).
+ * say that it was done, in the page's bubble (showBubble). A text that
+ * copies itself may be quiet: its words hidden from a screen reader, its
+ * name alone saying what it copies (a suggested password, AP AccessEnds,
+ * D52-A).
  */
 
 import type { ComponentChildren, TargetedKeyboardEvent } from "preact";

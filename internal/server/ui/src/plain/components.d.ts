@@ -6,8 +6,8 @@
  *
  * The globals of the plain script ui/components.js that the parts call:
  * the signs' drawings, the blink of a mark, a menu that drops down with
- * its arrow keys, the clipboard, the result line of an action, a button
- * busy while it sends and the page's toast.
+ * its arrow keys, the clipboard, the bubble of a short text, the result
+ * line of an action, a button busy while it sends and the page's toast.
  * The builders of elements stay out: a part draws its own.
  */
 
@@ -37,8 +37,13 @@ declare global {
   function menuArrows(details: HTMLDetailsElement, selector: string): void;
   /** Puts text on the clipboard; whether it did. */
   function copyText(text: string): Promise<boolean>;
-  /** Says on el and to a screen reader that something was copied. */
+  /** Says in a bubble above el, and to a screen reader, that something was copied, or that it could not be. */
   function copied(el: HTMLElement, ok: boolean): void;
+  /**
+   * Shows text for a moment (ms, 1.4 s by default) in a bubble above ctrl, or below it where the window
+   * has no room above, or at the window's bottom centre without one; said once to a screen reader.
+   */
+  function showBubble(text: string, ctrl?: HTMLElement | null, opts?: { ms?: number }): void;
   /** Says how an action went in a message element; no text hides it. */
   function showResult(el: HTMLElement, text: string, ok?: boolean): void;
   /** Runs fn, which sends a request, with btn busy; nothing while it is busy. */
