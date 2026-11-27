@@ -2376,6 +2376,10 @@ The env file and the TLS files are restored only where ticked, each on its own,
 since a new box's paths can differ: the env file goes where this server reads its own,
 the TLS files where it keeps its own (files mode's, else the self-signed pair's place,
 and the ACME directory). Each file replaced stays beside as `<name>.before-restore`.
+A place this server cannot write refuses the restore, and the plan says so:
+under the systemd unit's protection (`ProtectSystem=strict`) only the data
+directory and the log's are writable to `serve`, so `/etc/massimo/env` and
+`/etc/massimo/cert.pem` are put in place by hand, from `massimo store decrypt`.
 
 A restore, in this order:
 
@@ -2386,8 +2390,15 @@ A restore, in this order:
    update first. One of an older schema is migrated there, on its copy alone.
 2. It is planned: run in a transaction and rolled back.
    A refusal takes no backup.
-3. A local backup is taken, pinned for 30 days (`before-restore`).
-4. The scopes are replaced whole, in one transaction:
+   Users and sign-in, or the identity, are refused where the server cannot
+   restart itself, since it keeps their keys in memory.
+3. Every file is written beside its place, with a copy of the file it replaces,
+   so that nothing but renames is left once the store is restored;
+   one that cannot be written refuses the restore here.
+4. A local backup is taken, pinned for 30 days (`before-restore`).
+   What the server writes from then until the store's commit, a few seconds,
+   is in neither: the answer names both times (`before_backup_time`, `restored_at`).
+5. The scopes are replaced whole, in one transaction:
    - A row of the backup takes the id of the live row of its uuid, or of its natural key
      (a role's key, a Cube's serial, a target's name, a key's fingerprint),
      or a new one; its references follow through a map of the backup's ids to this
@@ -2403,16 +2414,23 @@ A restore, in this order:
      removed: a user who left since the backup stays in the audit's rows.
      What the schema removes with it (`ON DELETE CASCADE`) goes,
      the sessions of a user removed among them.
+     A target that holds a copy of a pinned backup stays whatever the backup says,
+     so that the backup taken first keeps its copy and undoes the restore by its id.
+   - The audit's and the log's rows take ids above those this store gave,
+     as new rows would, so that the newest line a user saw (`log.seen`)
+     hides nothing that comes after.
    - Users and sign-in that would leave no owner, where there was one, is refused.
    - The sealed secrets of the rows taken are opened with the backup's
      `opaque.key` and sealed with this store's.
      With users and sign-in, `opaque.key` travels too, since a password of
      version 2 opens with it alone: every sealed secret, the live ones too,
      is then sealed with the backup's (D7-A).
-5. The files go in place: `opaque.key` with users and sign-in,
+6. The files are renamed into place: `opaque.key` with users and sign-in,
    `node.key` with the identity, the env file and the TLS files where ticked.
-6. The server restarts, as `POST /api/v1/restart` does:
+7. The server restarts, as `POST /api/v1/restart` does:
    it keeps `opaque.key` and its node in memory.
+   It restarts also where a file failed after the store's commit,
+   which the answer then names.
 
 This box keeps its `node.key` unless "take the backup's identity" is ticked;
 the plan says whether the box that made the backup still answers on the network,

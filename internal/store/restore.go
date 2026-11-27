@@ -96,6 +96,11 @@ type scopeTable struct {
 	// null are the columns a row taken from the backup is written
 	// without.
 	null []string
+	// keep selects, over this store, the live rows the backup lacks that
+	// stay as they are, {now} the store's time: a target that holds a
+	// copy of a pinned backup, the one taken before the restore among
+	// them, so that its copies stay in the catalogue.
+	keep string
 	// keepLive leaves out a row of the backup that a live row outside
 	// the scopes holds a unique value of: a push subscription's endpoint
 	// that a session's subscription holds now, which registers itself
@@ -112,12 +117,17 @@ const (
 	cubeIDs        = `SELECT id FROM {db}.cubes WHERE ` + cubeSerials
 )
 
+// pinnedCopyTargets are the targets that hold a copy of a backup pinned
+// now.
+const pinnedCopyTargets = `id IN (SELECT c.target_id FROM main.server_backup_copies c JOIN main.server_backups b ON b.id = c.backup_id
+	WHERE c.state = 'there' AND b.pinned_until > {now})`
+
 // scopeTables places every row of every table of the store in one scope,
 // or among the rows never restored. A table added later is placed here
 // (TestEveryTableInAScope), or a restore would leave it out.
 var scopeTables = []scopeTable{
 	{table: "settings", scope: ScopeSettings, where: `key NOT IN ('` + NodeIDKey + `', '` + TenantIDKey + `')`},
-	{table: "server_backup_targets", scope: ScopeSettings, match: []string{"name"}},
+	{table: "server_backup_targets", scope: ScopeSettings, match: []string{"name"}, keep: pinnedCopyTargets},
 	{table: "server_backup_keys", scope: ScopeSettings, match: []string{"fingerprint"}},
 
 	{table: "roles", scope: ScopeUsers, match: []string{"key"}},
@@ -439,6 +449,7 @@ type restorer struct {
 	order    []string            // the tables restored, in scopeTables' order
 	mapped   map[string]bool     // the tables whose ids the map holds
 	own      map[string]bool     // the tables restored whose rows take mapped ids
+	offset   map[string]int64    // the tables restored whole whose ids go above the live ones by this
 	temps    []string            // the temporary tables made
 	kept     map[string]int      // the rows kept removed per table
 	old      map[string]bool     // the tables whose removed rows are kept aside
@@ -462,6 +473,22 @@ func where(e scopeTable, db string) string {
 		return "1"
 	}
 	return "(" + strings.ReplaceAll(e.where, "{db}", db) + ")"
+}
+
+// keptLive selects the live rows of a table that the backup lacks and
+// that stay as they are (scopeTable.keep); "0" none. It reads the map,
+// so it holds once the maps are built.
+func (r *restorer) keptLive(table string) string {
+	var parts []string
+	for _, e := range r.entries() {
+		if e.table == table && e.keep != "" {
+			parts = append(parts, "("+strings.ReplaceAll(e.keep, "{now}", "'"+r.s.nowText()+"'")+")")
+		}
+	}
+	if len(parts) == 0 || !r.own[table] {
+		return "0"
+	}
+	return "(" + strings.Join(parts, " OR ") + ` AND id NOT IN (SELECT new FROM temp.restore_map WHERE tbl = '` + table + `' AND mine = 1 AND matched = 1))`
 }
 
 // selOf is the rows of a table restored, over db: every entry's selection.
@@ -729,14 +756,25 @@ func (r *restorer) matchFor(table string) []string {
 // restored whose rows have an id and a uuid, and of every table a
 // restored row names.
 func (r *restorer) buildMaps(ctx context.Context) error {
-	r.mapped, r.own = map[string]bool{}, map[string]bool{}
+	r.mapped, r.own, r.offset = map[string]bool{}, map[string]bool{}, map[string]int64{}
 	for _, t := range r.order {
 		ti := r.info[t]
-		// A table restored whole that nothing names keeps the backup's
-		// ids: every live row goes, and no reference is to follow.
+		// A table restored whole that nothing names, the audit and the
+		// log, needs no map: every live row goes, and no reference is to
+		// follow. Its ids go above the live ones all the same, as a new
+		// row's would, so that what was seen of the log before
+		// (preferences' log.seen, the newest id seen) does not hide what
+		// comes after.
 		whole := r.selOf(t, "bk") == "(1)" && len(r.children[t]) == 0
-		if ti.identified() && !whole {
+		switch {
+		case ti.identified() && !whole:
 			r.mapped[t], r.own[t] = true, true
+		case whole && ti.col("id").pk:
+			base, err := r.idBase(ctx, t)
+			if err != nil {
+				return err
+			}
+			r.offset[t] = base
 		}
 		for _, fk := range ti.fks {
 			if r.info[fk.parent].identified() {
@@ -829,7 +867,7 @@ func (r *restorer) counts(ctx context.Context) error {
 	for _, e := range r.entries() {
 		qt := q(e.table)
 		bkSel := `SELECT rowid FROM bk.` + qt + ` WHERE ` + where(e, "bk")
-		liveSel := `SELECT rowid FROM main.` + qt + ` WHERE ` + where(e, "main")
+		liveSel := `SELECT rowid FROM main.` + qt + ` WHERE ` + where(e, "main") + ` AND NOT ` + r.keptLive(e.table)
 		restored, err := r.count(ctx, `SELECT count(*) FROM (`+bkSel+`)`)
 		if err != nil {
 			return err
@@ -986,7 +1024,7 @@ func (r *restorer) replace(ctx context.Context) error {
 	// The live selections first: a selection reads other tables, which
 	// the removal changes.
 	for _, t := range r.order {
-		if err := r.temp(ctx, "restore_live_"+t, `AS SELECT rowid AS rid FROM main.`+q(t)+` WHERE `+r.selOf(t, "main")); err != nil {
+		if err := r.temp(ctx, "restore_live_"+t, `AS SELECT rowid AS rid FROM main.`+q(t)+` WHERE `+r.selOf(t, "main")+` AND NOT `+r.keptLive(t)); err != nil {
 			return err
 		}
 		if r.own[t] && r.info[t].has("deleted_at") {
@@ -1025,6 +1063,8 @@ func (r *restorer) replace(ctx context.Context) error {
 				exprs = append(exprs, `(SELECT m.new FROM temp.restore_map m WHERE m.tbl = '`+fk.parent+`' AND m.old = b.`+q(c.name)+`)`)
 			case c.name == "id" && r.own[t]:
 				exprs = append(exprs, `(SELECT m.new FROM temp.restore_map m WHERE m.tbl = '`+t+`' AND m.old = b.id)`)
+			case c.name == "id" && r.offset[t] > 0:
+				exprs = append(exprs, fmt.Sprintf(`b.id + %d`, r.offset[t]))
 			default:
 				exprs = append(exprs, `b.`+q(c.name))
 			}

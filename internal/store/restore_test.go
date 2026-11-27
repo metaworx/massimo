@@ -415,3 +415,50 @@ func TestRestoreKeepsAnOwner(t *testing.T) {
 		t.Fatal("the refused restore removed the owner")
 	}
 }
+
+// maxID is a table's largest id.
+func maxID(t *testing.T, s *Store, table string) int64 {
+	t.Helper()
+	var n int64
+	if err := s.db.QueryRow(`SELECT coalesce(max(id), 0) FROM ` + table).Scan(&n); err != nil {
+		t.Fatal(err)
+	}
+	return n
+}
+
+// The history restored goes above the ids this store gave, the log's
+// and the audit's, so that the newest id a user saw (log.seen) hides
+// nothing that comes after; a new row follows it.
+func TestRestoreHistoryAbove(t *testing.T) {
+	t.Parallel()
+	ctx := context.Background()
+	a := newRestoreBox(t)
+	s := a.s
+	line := Event{Kind: "server_started", Source: "system", Data: []byte(`{}`)}
+	if err := s.InsertEvent(ctx, line); err != nil {
+		t.Fatal(err)
+	}
+	from := backupDir(t, s)
+	for range 5 {
+		s.InsertEvent(ctx, line)
+		s.Audit(ctx, AuditEntry{Action: "login"})
+	}
+	logSeen, auditSeen := maxID(t, s, "log"), maxID(t, s, "audit")
+	if _, err := s.Restore(ctx, RestoreSelection{Scopes: []string{ScopeHistory}, Source: from}); err != nil {
+		t.Fatal(err)
+	}
+	for tb, seen := range map[string]int64{"log": logSeen, "audit": auditSeen} {
+		var low int64
+		var n int
+		s.db.QueryRow(`SELECT coalesce(min(id), 0), count(*) FROM `+tb).Scan(&low, &n)
+		if n == 0 || low <= seen {
+			t.Errorf("%s: %d rows from id %d, at or below %d, the newest before", tb, n, low, seen)
+		}
+	}
+	if err := s.InsertEvent(ctx, line); err != nil {
+		t.Fatal(err)
+	}
+	if id := maxID(t, s, "log"); id <= logSeen {
+		t.Errorf("a new line has the id %d, at or below %d", id, logSeen)
+	}
+}

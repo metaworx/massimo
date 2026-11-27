@@ -129,12 +129,19 @@ type RestorePlan struct {
 type Restored struct {
 	// Before is the pinned local backup taken first, and Steps what its
 	// making did; zero with NoBackupFirst.
-	Before    store.ServerBackup `json:"-"`
-	Steps     []Outcome          `json:"-"`
-	Selection Selection          `json:"selection"`
-	Report    store.RestoreReport
+	Before    store.ServerBackup  `json:"-"`
+	Steps     []Outcome           `json:"-"`
+	Selection Selection           `json:"selection"`
+	Report    store.RestoreReport `json:"report"`
 	// Files are the files put in place.
 	Files []PlannedFile `json:"files"`
+	// Committed says that the server was changed: the store's restore
+	// committed, or a file put in place. From then on the server is to
+	// restart, also where an error follows (Restore's error).
+	Committed bool `json:"-"`
+	// At is when the store was restored. What the server wrote between
+	// the backup taken first (Before.Time) and then is in neither.
+	At time.Time `json:"-"`
 }
 
 // KeyCheck is what CheckKey found: the backup opened with the key, its
@@ -320,7 +327,37 @@ func (c *Catalogue) placeFiles(ob *openedBackup, sel Selection, o RestoreOptions
 			return nil, errors.New("serverbackup: the backup holds no TLS files")
 		}
 	}
+	for _, f := range out {
+		if err := writable(filepath.Dir(f.To)); err != nil {
+			return nil, fmt.Errorf("serverbackup: this server cannot write %s (%v); a service's protection keeps such a place read-only to it "+
+				"(the systemd unit's ProtectSystem): put the file in place by hand, from massimo store decrypt", f.To, err)
+		}
+	}
 	return out, nil
+}
+
+// writable reports whether this process may make a file in dir, a
+// directory made where it is missing as the restore would: by making a
+// hidden empty file there and removing it, which also finds a read-only
+// file system.
+func writable(dir string) error {
+	probe := dir
+	for {
+		if _, err := os.Stat(probe); err == nil {
+			break
+		}
+		parent := filepath.Dir(probe)
+		if parent == probe {
+			break
+		}
+		probe = parent
+	}
+	f, err := os.CreateTemp(probe, ".massimo-restore-check-*")
+	if err != nil {
+		return err
+	}
+	f.Close()
+	return os.Remove(f.Name())
 }
 
 // envTarget reports whether path is a place for the env file: a regular
@@ -429,6 +466,17 @@ func (c *Catalogue) Restore(ctx context.Context, o RestoreOptions) (Restored, er
 			return res, err
 		}
 	}
+	// Every file is written beside its place before anything changes,
+	// so that nothing but a rename is left once the store is restored.
+	staged, err := stageFiles(files, data)
+	if err != nil {
+		return res, err
+	}
+	defer func() {
+		for _, st := range staged {
+			st.discard()
+		}
+	}()
 	if !o.NoBackupFirst {
 		b, outs, err := c.Make(ctx, MakeRequest{Trigger: TriggerBeforeRestore, UserID: o.UserID, Local: true, PinFor: PinBefore})
 		res.Before, res.Steps = b, outs
@@ -442,15 +490,24 @@ func (c *Catalogue) Restore(ctx context.Context, o RestoreOptions) (Restored, er
 			return res, err
 		}
 	}
-	for i, f := range files {
-		before, err := putFile(f.To, data[i])
+	res.Committed, res.At = true, c.now()
+	var failed []error
+	rename := safefile.Rename
+	if c.renameStaged != nil {
+		rename = c.renameStaged
+	}
+	for i := range staged {
+		f, err := staged[i].commit(rename)
 		if err != nil {
-			return res, fmt.Errorf("serverbackup: the store is restored, but %s is not: %w", f.To, err)
+			failed = append(failed, fmt.Errorf("%s: %w", f.To, err))
+			continue
 		}
-		f.Before = before
 		res.Files = append(res.Files, f)
 	}
 	c.log().Info("server restored from a backup", "backup", ob.m.UUID, "scopes", strings.Join(ss.Scopes, ","), "files", len(res.Files))
+	if len(failed) > 0 {
+		return res, fmt.Errorf("serverbackup: the store is restored, but not every file: %w", errors.Join(failed...))
+	}
 	return res, nil
 }
 
@@ -475,30 +532,108 @@ func readInner(dir, name string) ([]byte, error) {
 	return b, nil
 }
 
-// putFile writes data at path whole (internal/safefile), keeping the
-// file it replaces beside as path.before-restore, which it returns; a
-// file that is already data is left, and "" returned.
-func putFile(path string, data []byte) (string, error) {
-	old, err := os.ReadFile(path)
-	switch {
-	case err == nil && bytes.Equal(old, data):
-		return "", nil
-	case err != nil && !errors.Is(err, fs.ErrNotExist):
-		return "", err
-	}
-	before := ""
-	if err == nil {
-		before = path + BeforeRestoreSuffix
-		if err := safefile.Write(before, old, safefile.Options{Mode: 0o600}); err != nil {
-			return "", err
+// stagedFile is a file of a restore written beside its place: the new
+// one, and a copy of the one it replaces, each renamed into place once
+// the store is restored.
+type stagedFile struct {
+	f         PlannedFile
+	tmp       string // the new file; "" where the place holds it already
+	tmpBefore string // the copy of the file replaced; "" for none
+}
+
+// stageFiles writes each file beside its place, mode the replaced
+// file's or 0600, with a copy of the replaced one, fsynced; where one
+// fails, those written are removed and nothing else has changed.
+func stageFiles(files []PlannedFile, data [][]byte) ([]stagedFile, error) {
+	var out []stagedFile
+	fail := func(err error) ([]stagedFile, error) {
+		for _, st := range out {
+			st.discard()
 		}
-	} else if err := os.MkdirAll(filepath.Dir(path), 0o700); err != nil {
+		return nil, fmt.Errorf("serverbackup: %w", err)
+	}
+	for i, f := range files {
+		st := stagedFile{f: f}
+		old, err := os.ReadFile(f.To)
+		mode := os.FileMode(0o600)
+		switch {
+		case err == nil && bytes.Equal(old, data[i]):
+			out = append(out, st)
+			continue
+		case err == nil:
+			if fi, err := os.Stat(f.To); err == nil {
+				mode = fi.Mode().Perm()
+			}
+			if st.tmpBefore, err = writeBeside(f.To, old, 0o600); err != nil {
+				return fail(err)
+			}
+		case !errors.Is(err, fs.ErrNotExist):
+			return fail(err)
+		default:
+			if err := os.MkdirAll(filepath.Dir(f.To), 0o700); err != nil {
+				return fail(err)
+			}
+		}
+		if st.tmp, err = writeBeside(f.To, data[i], mode); err != nil {
+			st.discard()
+			return fail(err)
+		}
+		out = append(out, st)
+	}
+	return out, nil
+}
+
+// writeBeside writes b to a new hidden file beside path, fsynced, and
+// returns its name.
+func writeBeside(path string, b []byte, mode os.FileMode) (string, error) {
+	f, err := os.CreateTemp(filepath.Dir(path), "."+filepath.Base(path)+".restore-*")
+	if err != nil {
 		return "", err
 	}
-	if err := safefile.Write(path, data, safefile.Options{}); err != nil {
+	_, err = f.Write(b)
+	if err == nil {
+		err = f.Chmod(mode)
+	}
+	if err == nil {
+		err = f.Sync()
+	}
+	if cerr := f.Close(); err == nil {
+		err = cerr
+	}
+	if err != nil {
+		os.Remove(f.Name())
 		return "", err
 	}
-	return before, nil
+	return f.Name(), nil
+}
+
+// commit renames the staged files into place: the copy of the file
+// replaced to path.before-restore first, then the new one over path.
+func (st *stagedFile) commit(rename func(from, to string, wait time.Duration) error) (PlannedFile, error) {
+	f := st.f
+	if st.tmpBefore != "" {
+		before := f.To + BeforeRestoreSuffix
+		if err := rename(st.tmpBefore, before, 0); err != nil {
+			return f, err
+		}
+		st.tmpBefore, f.Before = "", before
+	}
+	if st.tmp != "" {
+		if err := rename(st.tmp, f.To, 0); err != nil {
+			return f, err
+		}
+		st.tmp = ""
+	}
+	return f, nil
+}
+
+// discard removes what is still staged.
+func (st stagedFile) discard() {
+	for _, p := range []string{st.tmp, st.tmpBefore} {
+		if p != "" {
+			os.Remove(p)
+		}
+	}
 }
 
 // CheckKey opens a backup with the key into a temporary directory and

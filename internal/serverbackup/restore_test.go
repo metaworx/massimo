@@ -11,6 +11,7 @@ import (
 	"log/slog"
 	"os"
 	"path/filepath"
+	"runtime"
 	"slices"
 	"strings"
 	"testing"
@@ -166,7 +167,10 @@ func TestRestoreFromAnotherBox(t *testing.T) {
 	if err := st.CheckPassword(ctx, "olga", "olga's secret"); err != nil {
 		t.Errorf("olga: %v", err)
 	}
-	if bs, _ := st.ServerBackups(ctx); len(bs) != 1 || bs[0].Trigger != string(TriggerBeforeRestore) {
+	// The settings took the old box's targets, none: the local target
+	// that holds the pinned backup taken first stays, with its copy, so
+	// that the restore can be undone by that backup's id.
+	if bs, _ := st.ServerBackups(ctx); len(bs) != 1 || bs[0].Trigger != string(TriggerBeforeRestore) || len(bs[0].Copies) != 1 || bs[0].Copies[0].State != store.CopyThere {
 		t.Errorf("the catalogue %+v", bs)
 	}
 
@@ -183,6 +187,63 @@ func TestRestoreFromAnotherBox(t *testing.T) {
 	oldNode, _ := os.ReadFile(store.KeyPath(old.Dir()))
 	if b, _ := os.ReadFile(store.KeyPath(dir)); !bytes.Equal(b, oldNode) {
 		t.Error("node.key not taken with the identity")
+	}
+}
+
+// A place this server cannot write refuses the restore before anything
+// is done, and the plan says so; a file that cannot be renamed into
+// place once the store is restored leaves the restore done, said, and
+// nothing staged behind.
+func TestRestoreFilePlaces(t *testing.T) {
+	t.Parallel()
+	if runtime.GOOS == "windows" || os.Geteuid() == 0 {
+		t.Skip("a directory's mode keeps out neither Windows' owner nor root")
+	}
+	ctx := context.Background()
+	_, path, key := oldBox(t)
+	side := newRestoreSide(t)
+	c := side.c
+	etc := filepath.Dir(side.env)
+	os.Chmod(etc, 0o500)
+	defer os.Chmod(etc, 0o700)
+	o := RestoreOptions{File: path, Key: key, Scopes: []string{ScopeUsers}, Env: true}
+	p, err := c.Plan(ctx, o)
+	if err != nil || !strings.Contains(p.Refused, "cannot write "+side.env) {
+		t.Fatalf("plan %q %v", p.Refused, err)
+	}
+	res, err := c.Restore(ctx, o)
+	if err == nil || res.Committed || !strings.Contains(err.Error(), "ProtectSystem") {
+		t.Fatalf("a read-only place: %+v %v", res, err)
+	}
+	if bs, _ := c.Store.ServerBackups(ctx); len(bs) != 0 {
+		t.Error("a refused restore took a backup")
+	}
+	if _, ok, _ := c.Store.User(ctx, "olga"); ok {
+		t.Error("a refused restore changed the store")
+	}
+	os.Chmod(etc, 0o700)
+
+	// The rename after the commit fails.
+	c.renameStaged = func(from, to string, _ time.Duration) error {
+		if to == side.env {
+			return errors.New("read-only file system")
+		}
+		return os.Rename(from, to)
+	}
+	res, err = c.Restore(ctx, o)
+	if err == nil || !res.Committed || !strings.Contains(err.Error(), "the store is restored, but not every file") {
+		t.Fatalf("a rename failing after the commit: %+v %v", res, err)
+	}
+	if _, ok, _ := c.Store.User(ctx, "olga"); !ok {
+		t.Error("the store was not restored")
+	}
+	if b, _ := os.ReadFile(side.env); string(b) != "MASSIMO_LISTEN=:9000\n" {
+		t.Errorf("env %q", b)
+	}
+	for _, d := range []string{etc, c.Store.Dir()} {
+		if left, _ := filepath.Glob(filepath.Join(d, ".*.restore-*")); len(left) > 0 {
+			t.Errorf("staged files left: %v", left)
+		}
 	}
 }
 

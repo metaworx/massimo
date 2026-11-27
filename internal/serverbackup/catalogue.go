@@ -84,6 +84,10 @@ type Catalogue struct {
 	Now      func() time.Time
 	Location *time.Location
 	Log      *slog.Logger
+
+	// renameStaged renames a restore's staged file into place, nil
+	// safefile.Rename; for the tests.
+	renameStaged func(from, to string, wait time.Duration) error
 }
 
 // dataDir is the store's directory, absolute: a target's relative path
