@@ -313,7 +313,8 @@ def test_automatic_updates(page):
 
     sel.select_option("night")
     assert wait_until(page, "!!document.getElementById('update-window-start')", 5), "the window comes up"
-    assert puts == [{"update.auto": "night"}], "night is stored: %r" % puts
+    # the window is drawn from the choice before its write goes: the write itself waited for
+    assert held_true(page, lambda: puts == [{"update.auto": "night"}]), "night is stored: %r" % puts
     night = page.evaluate("t('update.autoNight', {from: '03:00', to: '05:00'})")
     assert wait_until(page, "document.getElementById('update-auto-note').textContent === %s" % json.dumps(night), 5), \
         "the note names the window: %r" % note.text_content()
