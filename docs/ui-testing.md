@@ -1,4 +1,4 @@
-# Testing the web UI (v1.34.0)
+# Testing the web UI (v1.35.0)
 
 An evaluation of a Cypress suite for the web UI, against the alternatives:
 what the Playwright smoke test covers today and what it cannot do well,
@@ -1120,3 +1120,22 @@ the server's and the test's, in order,
   No test waited for the server's poll when the suite first ran without it
   (2026-11-26, 1100-en): the five that failed chose the poll's interval,
   which `-poll` makes read-only, and choose the refresh's now.
+- **The warnings seen** (`clear_preferences`, `conftest.py`, AP SteadyTests, Block 11):
+  before every page of the page fixture the token's user's preferences go,
+  its settings of the page, its schemes, its notification rules and its marks of the log,
+  so that a test starts from the defaults as a fresh browser does,
+  and then every warning of the log the server holds is marked seen
+  (`PUT /api/v1/me/preferences/log.seen`, `all` the newest alert's id).
+  A warning stays until a later event settles it or a person marks it
+  (`docs/api-v1.md`, `GET /api/v1/log/alerts`):
+  a `login_failed` until a sign-in of the same name,
+  which the ten tests that refuse a sign-in on purpose never make
+  (`test_login.py`, `test_oidc.py`, `test_opaque.py`; 1100-en, 2026-11-27).
+  Unseen, it put the amber mark on ☰ for every later page of the worker,
+  whose few pixels widened the header,
+  and the tests of ☰'s marks and of the header's folding failed on it
+  in whichever file came after one of those:
+  21 of the 33 failures of the soak's first run (2026-11-26).
+  A warning a test makes once its page has loaded is newer, and shows;
+  a test that reads the log's alerts answers them itself (`alerts_route`),
+  with ids above the server's.

@@ -27,7 +27,8 @@ browser context of its own from pytest-playwright, with the token in
 localStorage before the page loads, and `page` is the page loaded with
 its room tiles and its event stream open. The four cases share the one server of a worker,
 so a test that changes the server's store puts it back; the settings the page
-keeps on the server for the token's user are removed before every page.
+keeps on the server for the token's user are removed before every page,
+and every warning of the log there is marked seen (clear_preferences).
 The page fixture's default timeout and its waits, as every wait of
 helpers.py, last their seconds times UI_TEST_SCALE (helpers.scaled),
 which run.sh passes on and raises for its retry.
@@ -510,11 +511,20 @@ def clear_preferences():
     four cases share the server: its preferences are removed before
     every page, its notification rules and its marks of the log among
     them, so that a test starts from the defaults as a fresh browser
-    does."""
+    does. Then every warning of the log the server holds is marked seen,
+    log.seen up to the newest alert's id (AP SteadyTests, Block 11): a
+    warning stays until a later event settles it or a person marks it,
+    a refused sign-in's login_failed until a sign-in of the same name,
+    and one an earlier test left put the amber mark on ☰ for every later
+    page of the worker. A warning made once the page has loaded is
+    newer, and shows."""
     if not TOKEN:
         return
     for key in ("ui", "schemes", "notify", "log.seen"):
         api_call("DELETE", "api/v1/me/preferences/" + key)
+    alerts = (api_call("GET", "api/v1/log/alerts") or {}).get("alerts") or []
+    if alerts:
+        api_call("PUT", "api/v1/me/preferences/log.seen", {"all": max(a["id"] for a in alerts), "lines": []})
 
 
 @pytest.fixture
@@ -523,7 +533,8 @@ def page(context, case, watch, request):
     (helpers.wait_started: 30 s, longer than the page's own limit of a
     read, a timeout naming the reads still open) and, unless the test is
     marked used_ticket, the event stream open; the token's
-    user without preferences on the server (clear_preferences); marked
+    user without preferences on the server and every warning of the
+    log seen (clear_preferences); marked
     clock, under Playwright's clock. helpers.PAGE_KIT is in it before
     its own scripts, for the fixture stream, isolate_log and
     wait_log_live; what a route of safe_route's raises goes to the

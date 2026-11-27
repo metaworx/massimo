@@ -726,7 +726,8 @@ hence `failed_checks_forgotten`.
   and the owner signing in next with its key gets neither;
   a scheme deleted in one browser stays deleted when another that had it loads.
   Since the four cases share the server,
-  the page fixture removes the token's user's preferences before every page.
+  the page fixture removes the token's user's preferences before every page,
+  and marks every warning of the log seen (`docs/ui-testing.md`, section 9).
 - `test_log.py`:
   the log opens, and a state event with changes shows what changed;
   `state` chosen as the kind shows only state events,
