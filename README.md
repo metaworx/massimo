@@ -1238,10 +1238,17 @@ and `-label <text>` in plain in its manifest;
 `store push <id> <target>` copies one to a target
 and `store pull <id> <target>` fetches a target's copy to the local target,
 where it stays until it is deleted.
-These four go through this box's running `serve`, with `MASSIMO_API_TOKEN`,
+`store restore <file|id> -scope users,cube:KEQ0000000 -key key.txt` restores
+the scopes named (`settings`, `users`, `integrations`, `cubes` or `cube:<serial>`,
+`history`, `all`), each replaced whole, a pinned backup of the store taken first;
+`-identity` takes the backup's `node.key`, `-env` its env file and `-tls` its TLS files,
+each file replaced kept beside as `<name>.before-restore`;
+`-plan` prints what it would do and changes nothing.
+The key is read into memory and written nowhere.
+These five go through this box's running `serve`, with `MASSIMO_API_TOKEN`,
 found by the address it publishes in the data directory (`serve.api`)
 and proved by its node, and act on the store otherwise,
-one job at a time with serve's.
+one job at a time with serve's; a restore through `serve` restarts it.
 The details are in docs/store.md, "Server backups", and the API's in
 docs/api-v1.md, "Server backups".
 

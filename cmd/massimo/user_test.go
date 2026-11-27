@@ -411,6 +411,7 @@ func TestHelpCreatesNoStore(t *testing.T) {
 		{false, "user rename anna bob -no-password -password-stdin"},
 		{false, "store"}, {false, "store bogus"}, {false, "store backup"}, {false, "store backup -target nas"}, {false, "store backup x.db -target nas"},
 		{true, "store backups -h"}, {true, "store push -h"}, {false, "store backups"}, {false, "store push x"}, {false, "store pull x nas"},
+		{true, "store restore -h"}, {false, "store restore"}, {false, "store restore x"}, {false, "store restore x -key k"}, {false, "store restore x -key k -scope users"},
 		{false, "store migrate extra"}, {false, "store info extra"},
 	} {
 		f := strings.Fields(c.args)

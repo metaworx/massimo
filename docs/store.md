@@ -1900,7 +1900,8 @@ handle the keys and the files of the server's backups,
 and open no store ("Server backups", below).
 `store backup` without a file makes a server backup now
 (`-target <name>`, `-label <text>`), `store backups` lists them,
-`store push <id> <target>` and `store pull <id> <target>` copy one:
+`store push <id> <target>` and `store pull <id> <target>` copy one,
+`store restore <file|id> -scope <list> -key <file>` restores one by scope:
 these go through this box's running `serve`, its API with `MASSIMO_API_TOKEN`,
 so that the job is the server's, and open the store otherwise.
 `serve` publishes its API's address in the data directory, `serve.api`,
@@ -2422,6 +2423,13 @@ which the restore's answer offers for each Cube with the newest of its Cube back
 "Check with the key" opens a backup into a temporary directory the same way
 and runs `PRAGMA integrity_check` on its store, changing nothing:
 a backup nobody has opened is a hope, not a backup.
+
+On the command line,
+`massimo store restore <file|id> -scope <list> -key <file>`,
+with `-identity`, `-env`, `-tls` and `-plan`,
+goes through a running `serve` (its API with `MASSIMO_API_TOKEN`, a file uploaded
+first), so that the restore is that server's, and acts on the store otherwise,
+with `serve` stopped; `-plan` prints what it would do and changes nothing.
 
 ## 8. Migration of an installed box
 
