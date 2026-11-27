@@ -103,11 +103,13 @@ const trim = (v: string) => v.trim();
  * the list last gave it. open is the panel's: a password shown is hidden
  * again as the panel closes or opens. An integration's user gets no
  * password, a line in its place: it acts through its integration alone
- * (AP LooseEnds, D1); one it holds from before, its manager removes with
- * Remove the password. A new password is typed once (AP PasswordRules,
- * D51-A) and held to the rule, its line under it; a Save the rule refuses
- * sends nothing and puts the focus in it; left empty, the password stays
- * as it is and is not checked. The dice beside it suggests one (Block 4).
+ * (AP LooseEnds, D1); one it holds from before, whoever may set its
+ * password removes with Remove the password, which a holder of
+ * integrations, who manages it, may not (AP AccessEnds, D46-A). A new
+ * password is typed once (AP PasswordRules, D51-A) and held to the rule,
+ * its line under it; a Save the rule refuses sends nothing and puts the
+ * focus in it; left empty, the password stays as it is and is not
+ * checked. The dice beside it suggests one (Block 4).
  */
 function UserForm({ u, off, open }: { u: User; off: boolean; open: boolean }) {
   useLook();
@@ -154,8 +156,11 @@ function UserForm({ u, off, open }: { u: User; off: boolean; open: boolean }) {
   const words = () => [u.name, u.display_name || "", display.value.trim()];
   const admin = "admin-only" + hid(!manage);
   const ofIntegration = !!u.integration;
-  // a role chosen beyond the maximum of the user's integration, the stored one or one chosen before the list was read again: offered all the same (AP AccessEnds, D4)
-  const beyond = ofIntegration && !!u.may && !(u.may.roles || []).includes(role.value);
+  // a role beyond the maximum of the user's integration, offered all the same (AP AccessEnds, D4): the stored one as the server says (may.beyond), since
+  // may.roles leaves out a role within it the caller does not outrank too (D47-A); one chosen and not saved where the list read again offers it no more
+  const beyond = ofIntegration && !!u.may && (role.value === u.role ? !!u.may.beyond : !(u.may.roles || []).includes(role.value));
+  // the integration's own user, holding its key, and its system user stay: the integration's own removal keeps them
+  const own = ofIntegration && (!u.integration?.id || u.integration.id === "system");
   return (
     <form {...form.props} class={"user-form" + hid(off)} onSubmit={submit}>
       <TextField label={t("users.displayName")} id={id("display_name")} name="display_name" maxLength={64} draft={display} cls={hid(!manage && !self).trim() || undefined} />
@@ -169,7 +174,7 @@ function UserForm({ u, off, open }: { u: User; off: boolean; open: boolean }) {
       {ofIntegration ? (
         <>
           <p class="muted small user-no-sign-in">{t("users.integrationNoSignIn")}</p>
-          {manage && u.has_password && (
+          {mayPassword(u) && u.has_password && (
             <div class="actions">
               <BusyButton cls="remove-password" label={t("users.removePassword")} run={() => saveUser(u, { password: "" }, "", null)} />
             </div>
@@ -193,7 +198,7 @@ function UserForm({ u, off, open }: { u: User; off: boolean; open: boolean }) {
           }} />
       ) : (
         <FormFooter submit={t("action.save")} look={form.look} reset={form.reset} off={!changed}
-          extra={<button ref={ask.ref} type="button" class={"remove-user" + hid(!manage)} onClick={ask.ask}>{t("users.remove")}</button>} />
+          extra={<button ref={ask.ref} type="button" class={"remove-user" + hid(!manage || own)} onClick={ask.ask}>{t("users.remove")}</button>} />
       )}
     </form>
   );
@@ -400,11 +405,12 @@ function OpenServer() {
 
 /**
  * UsersCard is the section's body: the password sign-in, the users'
- * panels, the form that adds one, and the message line; on a server
- * without users its own section instead of the three (OpenServer), and
- * the line. The card's head counts the users, and on a server without
- * users says that it has no owner yet, whatever the users (AP
- * AccessEnds, D8).
+ * panels, the form that adds one where who is in may add a user, with
+ * users or guests, not with passwords or integrations alone (AP
+ * AccessEnds, D46-A), and the message line; on a server without users
+ * its own section instead of the three (OpenServer), and the line. The
+ * card's head counts the users, and on a server without users says that
+ * it has no owner yet, whatever the users (D8).
  */
 export function UsersCard() {
   useLook();
@@ -430,9 +436,11 @@ export function UsersCard() {
         {users.loaded && !list.length && <p class="muted small">{t("users.none")}</p>}
         {list.map((u) => <UserPanel key={u.name} u={u} />)}
       </div>
-      <Adder id="user-add" formId="user-new" label={t("users.add")} shown={adding.user} set={(v) => { adding.user = v; }}>
-        <NewUser />
-      </Adder>
+      {usersAdmin() !== "self" && (
+        <Adder id="user-add" formId="user-new" label={t("users.add")} shown={adding.user} set={(v) => { adding.user = v; }}>
+          <NewUser />
+        </Adder>
+      )}
       <ResultLine id="users-msg" cls="small cubes-msg" role="status" res={said.users} />
     </>
   );

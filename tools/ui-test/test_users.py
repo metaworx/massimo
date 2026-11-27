@@ -10,7 +10,8 @@ import re
 import pytest
 
 from conftest import URL, api_call
-from helpers import NAME_BAD, NAME_TAKEN, assert_busy, frames, hold, named_buttons, safe_route, scroll_width, show_view, sign_out, undo, wait_held, wait_until
+from helpers import (NAME_BAD, NAME_TAKEN, assert_busy, cleanup, close_fold, frames, hold, named_buttons, open_fold, safe_route, scroll_width, show_view, sign_out, stub_me,
+                     undo, wait_held, wait_until)
 
 
 def test_users_and_roles(page, case):
@@ -190,7 +191,7 @@ def test_an_integrations_role_choice_stays_within_its_maximum(page, case, reads)
     on the page before: every role offered."""
     within = ["guest", "integration"]
     stubbed = [dict(INTEGRATION_USERS[0], may=dict(INTEGRATION_USERS[0]["may"], roles=within)),
-               dict(INTEGRATION_USERS[1], role="owner", may=dict(INTEGRATION_USERS[1]["may"], roles=within))]
+               dict(INTEGRATION_USERS[1], role="owner", may=dict(INTEGRATION_USERS[1]["may"], roles=within, beyond=True))]
     reads.change("**/api/v1/users", lambda body: body + stubbed)
     held, routed = none_of_theirs(page)
     try:
@@ -919,6 +920,139 @@ def test_manager_sets_passwords_but_not_the_owners(new_context, case, watch, gua
         sign_out(page)
     finally:
         api_call("DELETE", "api/v1/users/" + name)
+
+
+def test_an_integrations_holder_manages_its_users(new_context, case, watch, guard):
+    """A user of a role of read and integrations alone, signed in:
+    System settings shows Users, which lists an integration's users and
+    the user itself, no regular user; an integration's user's panel
+    disables it and Save is answered 200, with no line under its role,
+    integration, which lies within the maximum; the integration's own
+    user and its system user offer no Remove; there is no Add a user, and
+    the Integrations card offers no Link; every button is named and
+    nothing overflows (AP AccessEnds, D46-A). The manager, which does not
+    outrank integration either, sees no line under that role. Fails on
+    the tree before, where Users was drawn for a holder of users, guests
+    or passwords alone."""
+    from test_integrations import HEADER, _end, raw_call
+    from test_login import sign_in
+    tag = f"{case.width}{case.lang}"
+    key, name, manager = f"igs{tag}", f"igs-{tag}", f"igm-{tag}"
+    instance = ("b9%04d%s" % (case.width, case.lang)).encode().hex().ljust(32, "0")[:32]
+    subject = ("b9u%04d%s" % (case.width, case.lang)).encode().hex().ljust(32, "c")[:32]
+    status, req = raw_call("POST", "api/v1/integrations/requests",
+                           {"kind": "homeassistant", "name": f"Home {tag}", "instance_id": instance, "url": "http://192.0.2.21:8123", "version": "2026.11.1"})
+    assert status == 201, "the request is taken"
+    uuid = req["id"]
+    theirs = [uuid + ":", uuid + ":system", uuid + ":" + subject]
+    api_call("POST", "api/v1/roles", {"key": key, "capabilities": ["read", "integrations"]})
+    api_call("POST", "api/v1/users", {"name": name, "role": key, "password": "holder-pass-1"})
+    api_call("POST", "api/v1/users", {"name": manager, "role": "manager", "password": "manager-pass-1"})
+    try:
+        api_call("POST", f"api/v1/integrations/{uuid}/approve", {"max_caps": ["read", "preferences", "setpoint"]})
+        status, got = raw_call("GET", f"api/v1/integrations/requests/{uuid}?code={req['code']}")
+        assert status == 200 and got["key"], "the key collected"
+        on_behalf = f"id={subject}; level=view; name=Anna; instance={instance}"
+        status, me = raw_call("GET", "api/v1/me", headers={"Authorization": "Bearer " + got["key"], HEADER: on_behalf})
+        assert status == 200 and me["acts_for"]["id"] == subject, "the integration's user made by its first call"
+        ctx = new_context()
+        page = ctx.new_page()
+        guard.page = page
+        page.set_default_timeout(5000)
+        page.on("pageerror", lambda e: watch.problems.append(f"page error: {e}"))
+        page.goto(URL)
+        sign_in(page, name, "holder-pass-1")
+        show_view(page, "system")
+        assert page.locator(".users-settings").is_visible(), "Users shown to a holder of integrations"
+        for user in theirs + [name]:
+            page.locator(f".user-panel[data-name='{user}']").wait_for()
+        listed = page.locator(".user-panel").evaluate_all("(ps) => ps.map((p) => p.dataset.name)")
+        assert all(u == name or ":" in u for u in listed), f"an integration's users and itself alone: {listed}"
+        assert page.locator("#user-add").count() == 0, "no Add a user"
+        for user in theirs[:2]:
+            own = f".user-panel[data-name='{user}']"
+            open_fold(page, own)
+            assert page.locator(f"{own} .remove-user").is_hidden(), f"{user}: no Remove for the integration's own users"
+            close_fold(page, own)
+        sel = f".user-panel[data-name='{theirs[2]}']"
+        panel = page.locator(sel)
+        open_fold(page, sel)
+        assert panel.locator("select[name='role']").is_visible() and panel.locator(".remove-user").is_visible(), "its role and Remove offered"
+        assert page.locator(f"[id='user-{theirs[2]}-role-hint']").count() == 0, "no line under integration, which lies within the maximum"
+        disabled = panel.locator("input[name='disabled']")
+        panel.locator("label.switch:has(input[name='disabled'])").click()
+        assert disabled.is_checked(), "Disabled switched on"
+        path = re.compile(r"/api/v1/users/" + uuid + r"(%3A|:)" + subject + r"$")
+        with page.expect_response(lambda r: r.request.method == "PUT" and path.search(r.url)) as answer:
+            panel.locator("form button[type=submit]").click()
+        assert answer.value.status == 200, f"Save answered {answer.value.status}"
+        assert wait_until(page, f"!!document.querySelector(\"{sel} > summary .flag.bad\")", 5), "the user marked disabled"
+        named_buttons(page, "System settings → Users, a holder of integrations")
+        assert scroll_width(page) <= case.width, "no horizontal scroll"
+        ig = f".integration-panel[data-uuid='{uuid}']"
+        page.locator(ig).wait_for()
+        open_fold(page, ig)
+        page.locator(f"{ig} .integration-user[data-id='{subject}']").wait_for()
+        assert page.locator(f"{ig} .link-integration-user").count() == 0, "no Link in Integrations for a holder of integrations alone"
+        sign_out(page)
+        sign_in(page, manager, "manager-pass-1")
+        show_view(page, "system")
+        own = f".user-panel[data-name='{theirs[0]}']"
+        page.locator(own).wait_for()
+        open_fold(page, own)
+        assert page.locator(f"{own} select[name='role']").is_visible(), "the manager offered its role"
+        assert page.locator(f"[id='user-{theirs[0]}-role-hint']").count() == 0, "no line under integration for the manager"
+        assert page.locator(f"{own} .remove-user").is_hidden(), "no Remove for the integration's own user"
+        sign_out(page)
+    finally:
+        cleanup(lambda: undo(f"the user {name}", lambda: api_call("DELETE", "api/v1/users/" + name)),
+                lambda: undo(f"the user {manager}", lambda: api_call("DELETE", "api/v1/users/" + manager)),
+                lambda: undo(f"the role {key}", lambda: api_call("DELETE", "api/v1/roles/" + key)),
+                lambda: _end(uuid),
+                lambda: undo(f"the user {theirs[2]}", lambda: api_call("DELETE", "api/v1/users/" + theirs[2])))
+
+
+def test_remove_the_password_follows_may_password(page, case, reads):
+    """An integration's user holding a password from before (the list
+    stubbed) whom the signed-in user may manage and whose password it may
+    not set (may.password false, as for a holder of integrations): its
+    panel offers Remove, and not Remove the password, which the server
+    would refuse. Fails where Remove the password followed may.manage."""
+    stubbed = [dict(INTEGRATION_USERS[1], has_password=True, may={"manage": True, "password": False, "roles": [], "beyond": False})]
+    reads.change("**/api/v1/users", lambda body: body + stubbed)
+    held, routed = none_of_theirs(page)
+    try:
+        show_view(page, "system")
+        sel = f".user-panel[data-name='{PHONE}']"
+        page.locator(sel).wait_for()
+        open_fold(page, sel)
+        assert page.locator(f"{sel} .remove-user").is_visible(), "Remove offered"
+        assert page.locator(f"{sel} .remove-password").count() == 0, "no Remove the password"
+        close_fold(page, sel)
+    finally:
+        page.unroute(held, routed)
+        reads.clear("**/api/v1/users")
+    show_view(page, "tiles")
+
+
+def test_add_a_user_for_users_or_guests_alone(page, case):
+    """Add a user is drawn for who may add a user, a holder of users or
+    guests, and goes for a holder of passwords or integrations alone, whom
+    the server refuses a new user (who is in read again as each, the
+    server's answer stubbed by stub_me). Fails where it was drawn for
+    every reader of Users."""
+    show_view(page, "system")
+    add = page.locator("#user-add")
+    add.wait_for()
+    try:
+        for caps, drawn in ((["read", "passwords"], False), (["read", "integrations"], False), (["read", "guests"], True), (["read", "users"], True)):
+            stub_me(page, caps)
+            assert wait_until(page, f"document.querySelectorAll('#user-add').length === {1 if drawn else 0}", 5), f"Add a user {'drawn' if drawn else 'gone'} with {caps}"
+            page.unroute("**/api/v1/me")
+    finally:
+        page.unroute("**/api/v1/me")
+        page.evaluate("loadMe()")
+    show_view(page, "tiles")
 
 
 def test_profile_offers_a_first_password(page, case):

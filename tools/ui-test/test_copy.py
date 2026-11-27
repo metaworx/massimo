@@ -8,6 +8,12 @@ from helpers import wait_until
 
 DONE = {"en": "Copied", "de": "Kopiert"}
 
+# What the page's status region of copies says, "" while it is not there:
+# copied() of components.js makes #copy-status at the page's first copy,
+# once the clipboard has answered, so a wait that reads it before then
+# must not throw (wait_until does not retry an expression that throws).
+COPY_STATUS = "(document.getElementById('copy-status') || {textContent: ''}).textContent"
+
 # A copyable serial with its icon, put at the top of the page.
 MAKE = """() => {
   const el = copyEl("KEQ0000100", { label: "the serial", icon: true });
@@ -34,7 +40,7 @@ def test_copy(page, case):
         text.click()
         assert wait_until(page, "navigator.clipboard.readText().then((t) => t === 'KEQ0000100')", 3), "a click copies"
         assert "copied" in text.get_attribute("class"), "Copied shows on it"
-        assert wait_until(page, "document.getElementById('copy-status').textContent === %r" % DONE[case.lang], 3), "and is said"
+        assert wait_until(page, COPY_STATUS + " === %r" % DONE[case.lang], 3), "and is said"
         page.evaluate("navigator.clipboard.writeText('')")
         page.locator("#test-copy .copy-icon").click()
         assert wait_until(page, "navigator.clipboard.readText().then((t) => t === 'KEQ0000100')", 3), "the icon copies"
@@ -58,7 +64,7 @@ def test_copy(page, case):
         page.locator("#test-copy .copy-icon").focus()
         page.keyboard.press("Enter")
         page.evaluate("""() => Object.defineProperty(navigator, "clipboard", { value: window.__clip, configurable: true })""")
-        assert wait_until(page, "document.getElementById('copy-status').textContent !== ''", 3)
+        assert wait_until(page, COPY_STATUS + " !== ''", 3)
         assert page.evaluate("document.activeElement === document.querySelector('#test-copy .copy-icon')"), "the focus back on the icon"
     finally:
         page.evaluate("document.getElementById('test-copy').remove()")

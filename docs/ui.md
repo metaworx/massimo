@@ -118,13 +118,22 @@ the form's own message line says nothing of it,
 so that nothing says "too short" once the line says the password can be set.
 The rule's refusal comes before the mismatch of the two fields.
 The first new password of each of the five forms has a dice beside its eye,
-before it, or at the field's end where there is no eye,
-labelled **Suggest a password** (AP PasswordRules, D14-A to D19-A):
+before it, or at the field's end where there is no eye
+(AP PasswordRules, D14-A to D19-A):
 a press fills the form with a suggestion, both fields where it has two,
 and shows it in the field as text, also where the eye is switched off,
 while the field holds it: edited, emptied or changed by its form (**Reset**, a
 save), submitted, or its fold or the card closed, it is a password's field
-again, the eye as it was; another press gives another.
+again, the eye as it was.
+The presses give five words and twenty characters by turns
+(AP AccessEnds, D44-A, D50-A, D51-A):
+five words at the first press, and again after a new start
+(**Reset**, a save, the fold closed, the card's next opening),
+then the other kind at each press, whatever the last one filled;
+a key leaves the turn as it is.
+The dice is labelled by what its next press gives,
+**Suggest five words** or **Suggest twenty characters**,
+for a screen reader and as its tooltip.
 A suggestion still drawn when another press, a key in either field, a submit
 or the form's **Reset** came fills nothing.
 A suggestion is five words of EFF's long list (`/ui/words-en.txt`,
@@ -141,44 +150,58 @@ written anew at each suggestion, so that a screen reader hears each.
 While the field holds the suggestion, a line right under the field, before
 the rule's line, shows it whole (AP PasswordRules, D58-A):
 the field shows about three and a half of five words at 390 px.
-It is in the page's font at 16 px, to be read and copied by hand, broken after a "-":
-twenty characters take one line, and five words one or two.
+It is in the page's font at 16 px, to be read and copied by hand, broken after a "-",
+and it copies itself as the page's other strings do (AP AccessEnds, D44-A):
+a tap or a click on it, or Enter or Space, copies the suggestion,
+**Copied** showing above it and said in the page's status region,
+over plain HTTP by the browser's copy command, as every copy of the page;
+its copy icon does the same,
+right after the words while they take one line,
+and at the line's right end, between its lines, once they wrap.
+Twenty characters take one line, and five words one or two;
+the icon and its gap take 30 px of the line's width.
 With the test machine's fonts (CI's differ),
-a field of Add a user at 390 px gives twenty characters a second line,
-and the first owner's card and Users at 390 px give five words a third,
-each in a draw of less than one in 10^13 (the widest letter twenty times;
-the list's widest word five times, which the UI test draws).
-A screen reader does not hear it (`aria-hidden`), and a page's translation
-leaves it alone (`translate="no"`):
-the field, text while it holds the suggestion, gives the value,
+five words take a third line in a draw of about one in 16 million
+in Add a user at 390 px, one in 70 million in a user's panel at 390 px,
+less than one in 10^10 in the first owner's card at 390 px
+and less than one in 10^13 in My profile at 390 px and wider forms
+(the list's widest word five times, which the UI test draws);
+twenty characters take a second line in each form at 390 px,
+in a draw of less than one in 10^13 (the widest letter twenty times).
+A screen reader does not hear the password (D52-A):
+the copy and its icon are both named **Copy the password**,
+and the words are hidden from a screen reader inside the copy (`aria-hidden`),
+since the field, text while it holds the suggestion, gives the value,
 the rule's line says that it was suggested,
-and a line read out inside the live regions of My profile and Users would
-speak the password as it appears.
-From the first press on, a row under the rule's line offers **Words** or
-**Characters**, which suggests one of that kind and is remembered in this
-browser, and, while the field holds the suggestion, **Copy**, which copies it
-and says so (over plain HTTP by the browser's copy command, as every copy of
-the page);
-the shown line keeps its place from the first press on too, two lines tall,
-empty while the suggestion is not shown.
-Neither is there before, so that a form keeps its height until the dice
-is used, and once there a key never takes them away, so that nothing under the
+and words read out inside the live regions of My profile and Users would
+speak the password as they appear;
+the line itself is not hidden, which a control inside it cannot be.
+A page's translation leaves the line alone (`translate="no"`).
+At a press a screen reader hears the rule's line, written anew
+("Suggested; this password can be set."), and the dice keeps the focus,
+named now for the press after.
+The shown line keeps its place from the first press on, two lines tall,
+empty while the suggestion is not shown;
+there is no row under the field (D49-A).
+The line is not there before, so that a form keeps its height until the dice
+is used, and once there a key never takes it away, so that nothing under the
 field moves between presses or while one types,
 but after one of those rarest draws, whose third line the first key gives back;
-they go with **Reset**, a save, the fold closed or the card's next opening,
-and the card's close empties the line, its fields keeping what they hold.
-Together they make a form 80 px taller at the first press (the line's place 52 px,
-the row 28 px):
-a first owner's card they make taller than the room the window leaves it
+it goes with **Reset**, a save, the fold closed or the card's next opening,
+and the card's close empties it, its fields keeping what they hold.
+It makes a form 52 px taller at the first press:
+a first owner's card it makes taller than the room the window leaves it
 (868 of 900 px) starts at its top and the page scrolls,
-in the app at 390 by 900 px in every language but English
-and in a browser at 390 px in French,
+in the app at 390 by 900 px in German and French,
+and in Dutch with the test machine's fonts (CI's differ),
 and one that still fits stays in the middle and moves up by half of it,
-40 px, the dice with it.
+26 px, the dice with it (D53-A):
+in the app in English, Italian and Polish, and in a browser in every language.
 The list is fetched at the first press that needs it, once,
 and taken only as 7,776 lines, each a word of `a-z` with `-` inside, none twice;
 a fetch that fails, or a file of another form, says so in the line
-("Word list not loaded"), and **Characters** still suggests.
+("No word list: press again for characters."),
+and the next press suggests twenty characters, which need no list.
 The sign-in takes any password a user has, of any length,
 and so does the upgrade of a user of version 1 at its sign-in (below).
 At the page's start and after a sign-out the page waits for the card:
@@ -2121,8 +2144,12 @@ settings forms and have none of it.
   A role with the capability `pair` but not `cubes`, the manager's by default,
   sees the Cubes' panels with the pairing alone;
   putting a device into a room needs `structure`.
-- **Users** (with `users`, `passwords`, or `guests` for the guests alone):
+- **Users** (with `users`, `passwords`, `guests` for the regular guests alone,
+  or `integrations` for an integration's users, AP AccessEnds, D46-A):
   a user changes only users whose role has no capability its own lacks,
+  and a holder of `integrations` also changes an integration's user
+  whatever its role but one stored as owner,
+  giving it only a role it outranks (D47-A),
   so nobody but an owner changes an owner, whose panel says so,
   and with `passwords` alone (a manager's) a panel offers the password alone;
   a user's role choice offers the roles the server says may be given to it
@@ -2163,7 +2190,7 @@ settings forms and have none of it.
   a settings form of its own, with **Cancel**,
   **Remove**, and **Assign** to the user, at a provider,
   by an e-mail or by the user ID there.
-  **Add a user** opens the form for one;
+  **Add a user**, for a holder of `users` or `guests`, opens the form for one;
   its name is checked 2 seconds after the last keystroke and when the field is left:
   the letters a to z, digits and `. _ - @`, starting with a letter or a digit,
   at most 64 characters, capitals taken as lower case, and not a name in use.
@@ -2263,7 +2290,10 @@ settings forms and have none of it.
   same name proposed, with **Link**, the choice following what is stored
   until it is changed, without the marks of a settings form (UnsavedMarks D25):
   Link also takes a proposal the select already shows, so it cannot be off
-  while nothing is changed, and it is a command; and **Revoke**, which asks first.
+  while nothing is changed, and it is a command;
+  for a holder of `users`, `guests` or `passwords`, which reads the users to link to:
+  a holder of `integrations` alone sees who each acts as, without Link
+  (AP AccessEnds, D46-A, Users alone); and **Revoke**, which asks first.
   A request's maximum and what it was registered as before stay as chosen
   while the integrations are read again, until it is approved or refused.
   Under them the Home Assistant installations the server saw on the LAN,
@@ -2297,13 +2327,26 @@ settings forms and have none of it.
   a line saying it has no sign-in of its own in their place,
   and **Remove the password** where it holds one from before;
   its role, disabled, its display name and Remove stay,
-  and a key it holds from before is listed with Revoke.
-  Its role choice offers the roles within its integration's maximum
-  and **integration**, which it is given back (AP AccessEnds, D3, D5);
+  and a key it holds from before is listed with Revoke;
+  the integration's own user and its system user offer no Remove:
+  removing the integration in Integrations keeps them.
+  Its role choice offers, of the roles the caller outranks,
+  those within its integration's maximum,
+  and **integration**, which it is given back by a caller that outranks it
+  (AP AccessEnds, D3, D5, D47-A);
   a role stored beyond the maximum stays chosen and offered,
   with the line under it that the user acts within that maximum all the same,
+  as the server says (`may.beyond`), never under a role within it the caller
+  does not outrank,
   until another is saved, and so does a role chosen and not yet saved
   where the list read again no longer offers it (D4).
+  A holder of `integrations` without `users` or `passwords`
+  sees Users with every integration's user but one stored as owner, and itself,
+  each in its panel as above, its controls as the server says (`may`):
+  the display name, the roles it outranks within the maximum, disabled,
+  the end, Remove, and Revoke and Remove of what it holds from before;
+  not Remove the password, which needs `users` or `passwords`,
+  and no Add a user (AP AccessEnds, D46-A, D47-A).
   My profile of one, in with such a key, says the same line in place of the
   password, and offers no new key and no Link.
   The log's lines, a command's detail and its audit row name who
@@ -3084,7 +3127,7 @@ for the first owner's toast and the log's `open_setup` line.
 | `localOf`, `isoOf` | `time.ts` | a `DateTime`'s value and the API's time as each other, for a field that shows a stored end and sends it (a user's end); the draft compares the field's minute, all it holds | `iso`; `local` |
 | `fmtWhen` | `time.ts` | an API time as date and time in the page's language, the hour of 24 (a backup's time, a device's in Notifications) | `iso` |
 | `Switch` | `field.tsx` | a checkbox drawn as a switch (`switchEl`), in its own row with its help where asked (`fieldRow` without a label) | `name`, `label`, `checked` and `onChange`, or `draft` and `show`; `row`, `help`, `rowCls` (classes its own row adds, a capability's `needs-…`), `cls` (the switch's classes), `id`, `disabled`, `title`, `aria` (its name where `label` is empty, which draws no text: My settings' "only on this device"), `data` (the checkbox's `data-` attributes), `badge` (inside the switch after its label, a capability's state), children after the switch |
-| `Choices` | `choices.tsx` | a choice of several among a list: a group of switches under its heading, All and None as buttons where asked (the configuration's Copy tab), under a legend (an integration's maximum) or without a heading (a role's capabilities, Capabilities for every role), or of checkboxes, All a checkbox first (`look` `check`, the House panel), or of radio buttons in a row where one option alone is chosen (`look` `one`, a suggested password's Words or Characters); an option locked shows whether it is chosen and is off (the owner's set, a capability while its request runs), an option held shows chosen and is off whatever is chosen, its why in a badge, and All chooses it not (a capability another chosen one includes) | `title`, `legend` (a fieldset under it), `label` (the group's name for a screen reader), `id`, `cls` (a class the group adds, `cap-grid`, `integration-caps`), `options` (`[value, label, disabled, { title, badge, lock, held }]`, the last for switches alone, `held` the why), `chosen`, `set(chosen)`, `all` (`{ all, none }`, their labels, `none` left out for All alone), `empty` (said where there is no option), `look` (`switch`, the default, `check` or `one`, its group named `id`) |
+| `Choices` | `choices.tsx` | a choice of several among a list: a group of switches under its heading, All and None as buttons where asked (the configuration's Copy tab), under a legend (an integration's maximum) or without a heading (a role's capabilities, Capabilities for every role), or of checkboxes, All a checkbox first (`look` `check`, the House panel); an option locked shows whether it is chosen and is off (the owner's set, a capability while its request runs), an option held shows chosen and is off whatever is chosen, its why in a badge, and All chooses it not (a capability another chosen one includes) | `title`, `legend` (a fieldset under it), `label` (the group's name for a screen reader), `id`, `cls` (a class the group adds, `cap-grid`, `integration-caps`), `options` (`[value, label, disabled, { title, badge, lock, held }]`, the last for switches alone, `held` the why), `chosen`, `set(chosen)`, `all` (`{ all, none }`, their labels, `none` left out for All alone), `empty` (said where there is no option), `look` (`switch`, the default, or `check`) |
 | `ChoiceGroup` | `choices.tsx` | the frame of a choice of several drawn as switches, which `Choices` is drawn with and a region uses where each switch is a part of its own (Capabilities for every role, each switch saved at once) | `id`, `cls`, `label` (the group's name for a screen reader), `legend` (a fieldset under it), `head`, the switches as children |
 | `Tabs` | `tabs.tsx` | a row of tabs: a tab list of buttons, each with its key in `data-tab`, the one shown active and selected, and what follows the list (a close button) | `cls` (the row's class), `listCls`, `label` (the list's name), `tabs` (`{ key, label, cls }`), `current`, `onPick(key)`, children after the list |
 | `Stepper` | `field.tsx` | a number field between − and +, the step within its range; its buttons are named for a temperature, half a degree less and more, and the first user of another unit adds their names | `value`, `set`, `min`, `max`, `step`, `id` and `cls` of the field, `hidden` (the whole kept in its place unseen), `disabled` (the field and its buttons off, the field no part of its form's check: one hidden with a value off its step), children after the + (a unit) |
@@ -3119,15 +3162,15 @@ for the first owner's toast and the log's `open_setup` line.
 | `FileButton` | `file.tsx` | a button that opens the browser's choice of a file of the types it accepts, the same file again too | `id` (the button's), `cls`, `label`, `accept`, `off`, `inputId` and `inputLabel` (the input's id and its name in the page's language: the Appearance card's Import…), `onFile(file)` |
 | `Adder` | `adder.tsx` | the end of a list that adds an item: the new item's form in its place while shown, the button that shows it hidden meanwhile, the focus in the form's first field when it comes, in the drawing's own turn, and back on the button when it goes (Users, Roles, Sign-in providers) | `id` (the button's), `formId` (the form's place), `label`, `shown`, `set(shown)`, the form as children |
 | `UserNameField`, `useNameCheck`, `wordNameError` | `username.tsx` | a new user's login name (Add a user, the first owner's form): checked 2 s after the last keystroke and when left, the store's rule and the names in use; a fixed name clears the line at once; the server's refusal worded alike | `label`, `id`, `msgId` (the line under it, which describes it), `value` and `set` (Add a user's), or neither, the field not controlled and read through `inputRef` (the first owner's, UiParts D210), `nc` (`useNameCheck(taken)`: `problem`, `say`, `check(v)`, `typed(v)`), `name` (the input's, Add a user's alone), `autocomplete`, `placeholder`, `inputRef`, `typed` (told of each keystroke and change event: the first owner's password line, whose rule takes the name) |
-| `PasswordInput`, `PasswordField`, `reveal` | `password.tsx` | a password's input with its eye, every password field's (AP MobileApp, D84-A): the button at the field's right end, inside its box, labelled Show password and Hide password, `aria-pressed`, that turns the type between `password` and `text`, the value, the caret and the `autocomplete` kept, the click keeping the focus in the field; hidden again at each change of `reset` (the card's openings, a fold's open state) and at the form's submit, in the capture before the form's handler, and when switched off, the type never turned inside a closed fold, but as it opens; no eye while `reveal`, the setting `auth.password_reveal` as `/healthz` says it (`MassimoParts.chrome.reveal`), is not `true`; the field in its row | `id`, `name`, `autocomplete`, `value` and `set`, or `inputRef`, `required`, `disabled`, `placeholder`, `reset`, `describedBy` (the line that describes it), `typed` (told of each keystroke and change event), `invalid`; the row's `label`, `hint`, `cls`, `rule` (the rule's context words: given, its line under the field, following the value, or the keystrokes, change events and the value at each refusal of a field not controlled, empty again at each change of `reset`), `refused` (the caller's count of the submits the rule refused: the line says so until the next key, the field marked invalid, while its value is still refused), `suggest` (with `rule`, the dice before the eye: a press fills the field with a suggestion, `shared/suggest.ts`, drawn again where the rule refuses it, a controlled field by `set`, one not controlled by its element and an input event, shows it as text while the field holds it, not after an edit, a change by the form, a submit or a new start, and whole in a line right under the field (`<id>-shown`, `aria-hidden`, `translate="no"`), writes the rule's line anew, and brings the row of Words or Characters, and Copy while the field holds the suggestion, under the rule's line; the shown line's place, two lines tall, and the row come with the first press, the place empty while the suggestion is not shown, the line emptied as the dialog the field is in closes; a suggestion drawn while another press, a key, a submit, a change from outside (Reset, a save), a new start or a sign-out came, or after either field changed, fills nothing; the row and the line's place, once there, stay through keys; the list not had says so, any other failure that no suggestion could be made), `also` (the form's other field: `set` filled with the suggestion, `get` what it holds) |
+| `PasswordInput`, `PasswordField`, `reveal` | `password.tsx` | a password's input with its eye, every password field's (AP MobileApp, D84-A): the button at the field's right end, inside its box, labelled Show password and Hide password, `aria-pressed`, that turns the type between `password` and `text`, the value, the caret and the `autocomplete` kept, the click keeping the focus in the field; hidden again at each change of `reset` (the card's openings, a fold's open state) and at the form's submit, in the capture before the form's handler, and when switched off, the type never turned inside a closed fold, but as it opens; no eye while `reveal`, the setting `auth.password_reveal` as `/healthz` says it (`MassimoParts.chrome.reveal`), is not `true`; the field in its row | `id`, `name`, `autocomplete`, `value` and `set`, or `inputRef`, `required`, `disabled`, `placeholder`, `reset`, `describedBy` (the line that describes it), `typed` (told of each keystroke and change event), `invalid`; the row's `label`, `hint`, `cls`, `rule` (the rule's context words: given, its line under the field, following the value, or the keystrokes, change events and the value at each refusal of a field not controlled, empty again at each change of `reset`), `refused` (the caller's count of the submits the rule refused: the line says so until the next key, the field marked invalid, while its value is still refused), `suggest` (with `rule`, the dice before the eye, labelled by what its next press gives, Suggest five words or Suggest twenty characters: a press fills the field with a suggestion, `shared/suggest.ts`, five words at the first press and at each new start, then twenty characters and five words by turns, each press turning it whatever it fills and a key leaving it, drawn again where the rule refuses it, a controlled field by `set`, one not controlled by its element and an input event, shows it as text while the field holds it, not after an edit, a change by the form, a submit or a new start, and whole in a line right under the field (`<id>-shown`, `translate="no"`), a `Copy` of it with its icon, `quiet`, keyed by the suggestion, both named Copy the password, and writes the rule's line anew; the shown line's place, two lines tall, comes with the first press, empty while the suggestion is not shown, the line emptied as the dialog the field is in closes; a suggestion drawn while another press, a key, a submit, a change from outside (Reset, a save), a new start or a sign-out came, or after either field changed, fills nothing; the line's place, once there, stays through keys; the list not had says so, any other failure that no suggestion could be made), `also` (the form's other field: `set` filled with the suggestion, `get` what it holds) |
 | `NewPassword`, `newPasswordProblem` | `password.tsx` | a new password typed twice (My profile's Change password, the first owner's form), each field with its eye, the rule's line under the first, free fields of the caller's own state, never a draft, or fields not controlled, read through their refs (the first owner's, UiParts D210); the pair's one check, the rule first (its line says it, the focus then in the first field), then the mismatch, then none typed | `ids` (the two inputs'), `names` (their name attributes, My profile's alone), `label` (the first's), `value`, `set`, `again`, `setAgain` and `inputRef` (the first's), or instead `inputRefs` (the two inputs' refs), `required`, `reset`, `context` (the rule's words), `refused` (the submits the rule refused), `suggest` (the first field's dice, its suggestion filling the second too); `password`, `again`, `context` |
 | `passwordProblem`, `passwordRefusal`, `serverNames`, `hostWord`, `passwordSaid`, `PasswordRule` | `password.tsx` | the rule of a new password, as Go's `internal/password` holds it (AP PasswordRules, D7-A, D50-A): `too_short` below 8 code points, `too_long` above 64, then `context` where it contains a word of the names given, `massimo` or `maxcube` (each name and each run of letters in it, of 4 letters or more, compared lower-cased a code point at a time), `""` where it may be set, the answers of its `testdata/cases.json`, which the UI test gives it through `MassimoParts.passwordProblem`; `passwordRefusal`, the rule with the server's names beside the user's, which every form asks; `serverNames`, the first label of the page's host (`hostWord`, none for an IP address or `localhost`, as Go's `HostWord` answers the hosts of `cases.json` through `MassimoParts.hostWord`) and in the app the name it gives the server; a refusal's words, while typed or for a refused submit; the line under a new password's field (D6-A), drawn by `PasswordField`'s `rule`: the hint with an i while empty, the refusal with a warning's sign or a tick, a refused submit until the next key, what it says of a suggestion (shown, the list not loaded, none found), never the password, a status region written only when what it says changes, its place the tallest of its texts | `password`, `context`; `password`, `names`; `host`; `answer`, `refused`; `id`, `value`, `context`, `refused`, `note`, `fresh` (raised at each suggestion: the line emptied and written again) |
-| `suggestPassword`, `words`, `chars`, `wordList`, `suggestKind`, `chooseKind` | `suggest.ts` | a suggested password (AP PasswordRules, D14-A to D19-A): five words of EFF's long list joined by "-" or twenty characters of the 56 letters and digits without `0 O o 1 l I`, picked by `crypto.getRandomValues` without bias (a word's 32-bit number at or above floor(2^32 / 7776) × 7776, a character's byte at or above 224, drawn again), drawn again where the rule given refuses it, at most 20 times, null after; the list `/ui/words-en.txt` fetched once at the first suggestion of words, a fetch running shared, taken only as 7,776 lines of the list's form (`a-z`, `-` inside, none twice), one that fails a `ListError`, tried again at the next; the kind chosen, a signal kept in this browser (`massimo.suggest`); `MassimoParts.suggestPassword`, so that the UI test draws a thousand | `kind`, `refused(password)`; `list`; —; —; —; `kind` |
+| `suggestPassword`, `words`, `chars`, `wordList` | `suggest.ts` | a suggested password (AP PasswordRules, D14-A to D19-A): five words of EFF's long list joined by "-" or twenty characters of the 56 letters and digits without `0 O o 1 l I`, picked by `crypto.getRandomValues` without bias (a word's 32-bit number at or above floor(2^32 / 7776) × 7776, a character's byte at or above 224, drawn again), drawn again where the rule given refuses it, at most 20 times, null after; the list `/ui/words-en.txt` fetched once at the first suggestion of words, a fetch running shared, taken only as 7,776 lines of the list's form (`a-z`, `-` inside, none twice), one that fails a `ListError`, tried again at the next; which kind a press asks for is its field's (`PasswordField`), nothing kept in the browser; `MassimoParts.suggestPassword`, so that the UI test draws a thousand | `kind`, `refused(password)`; `list`; —; — |
 | `toServers` | `app.ts` | back to the app's servers where the page is in the app (`appConnect` of `login.js`): ☰'s Select server, the sign-in's ☰ and Cancels, the first owner's Cancel | |
 | `toServerSettings`, `toAppSettings` | `app.ts` | to this server's settings and to the app's on the app's own page (`appServerSettings` and `appAppSettings` of `login.js`, contract version 5): ☰'s two entries after Select server | |
 | `app`, `readApp`, `appKeyId`, `signInRevoked` | `app.ts` | the app's status of the login by fingerprint, a signal read again at each opening of the sign-in, a fingerprint refused, the first owner's form and My profile shown (`login.status`), null in a browser; its key of this device's id, 0 for none; the ids of what the last sign-in's `setToken` revoked, `[]` in a browser (`tokenAnswer` of `login.js`) | `st` (the status) |
 | `KvList`, `CountList` | `kv.tsx` | a list of facts, a name and its value each, every fact given, the caller leaving out those it does not show; a list of counts by name, sorted, in columns | `facts` (`[name, value, mono]`); `counts` |
-| `Copy`, `CopyIcon`, `CopyPair` | `copy.tsx` | a text that copies itself, a copy icon (`copyEl`, `copyIcon`); something with its copy icon after it, a text or a link (an address served: an integration's, System info's) | `text`, `value` (what it copies, where it is not the text), `label` (named "Copy …"), `name` (its whole name in its place: the server's version), `icon`, `cls`, `id`; `get`, `label`; `get`, `label`, what it follows as children |
+| `Copy`, `CopyIcon`, `CopyPair` | `copy.tsx` | a text that copies itself, a copy icon (`copyEl`, `copyIcon`); something with its copy icon after it, a text or a link (an address served: an integration's, System info's) | `text`, `value` (what it copies, where it is not the text), `label` (named "Copy …"), `name` (its whole name in its place: the server's version, a suggested password's Copy the password), `icon`, `quiet` (the text hidden from a screen reader inside it, the name alone told, given only with `name`: a suggested password), `cls`, `id`; `get`, `label`; `get`, `label`, what it follows as children |
 | `Link` | `link.tsx` | a link in a tab of its own, the text alone for a url that is not http(s) | `url`, `text`, `cls` |
 | `DeviceIds` | `device.tsx` | a device's serial and radio address | `serial`, `rf`, `always` |
 | `fmtSetpoint`, `TEMP_OFF` | `setpoint.tsx` | a setpoint as the devices' displays show it, OFF for 4.5 °C without a unit, else as `fmtTemp` gives it, no ON for 30.5 °C, in every text that shows one (a tile's SET, a device row, More, a write's result, the log's "OFF (4.5 °C)"); the number fields keep 4.5; `fmtSetpoint` of `app.js` is the plain scripts' | `v`, `unit` |

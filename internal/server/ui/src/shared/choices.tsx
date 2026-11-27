@@ -10,8 +10,7 @@
  * the heading's row (the configuration's Copy tab), or under a legend (an
  * integration's maximum), or without a heading (a role's capabilities); or
  * as checkboxes in a row, All a checkbox of its own before them (the House
- * panel); or, where one option alone is chosen, as radio buttons in a row
- * (a suggested password's Words or Characters). An option may be locked (shown chosen or not, as it is, and off:
+ * panel). An option may be locked (shown chosen or not, as it is, and off:
  * the owner's set, a capability's switch while its request runs), or held
  * (shown chosen and off whatever is chosen, with why: a capability another
  * chosen one includes), and carry a tooltip and a badge (a capability
@@ -49,9 +48,7 @@ export type Choice = [value: string, label: string, disabled?: boolean, more?: C
  * legend a fieldset under that legend; without a heading, a legend or All
  * it draws no head; All chooses no held option. look "check" draws checkboxes (.checks), all.all the
  * label of All, a checkbox first, on while every option is chosen, and no
- * None (all.none left out), its options without more. look "one" draws
- * radio buttons in a row (.checks.one), a group of the name id, set told
- * of the one chosen alone, without All, None or more.
+ * None (all.none left out), its options without more.
  */
 export function Choices({ title, legend, label, id, cls, options, chosen, set, all, empty, look = "switch" }: {
   title?: string;
@@ -64,22 +61,11 @@ export function Choices({ title, legend, label, id, cls, options, chosen, set, a
   set: (chosen: string[]) => void;
   all?: { all: string; none?: string };
   empty?: string;
-  look?: "switch" | "check" | "one";
+  look?: "switch" | "check";
 }) {
   const free = options.filter(([, , off, more]) => !off && !more?.lock && !more?.held).map(([v]) => v);
   const every = free.every((v) => chosen.includes(v));
   const toggle = (v: string, on: boolean) => set(on ? [...chosen, v] : chosen.filter((x) => x !== v));
-  if (look === "one") {
-    return (
-      <div id={id} class={"checks one" + (cls ? " " + cls : "")} role="radiogroup" aria-label={label}>
-        {options.map(([v, l, off]) => (
-          <label key={v} class="check">
-            <input type="radio" name={id} value={v} checked={chosen.includes(v)} disabled={off} onChange={(ev) => { if (ev.currentTarget.checked) set([v]); }} /> {l}
-          </label>
-        ))}
-      </div>
-    );
-  }
   if (look === "check") {
     return (
       <div id={id} class="checks" role="group" aria-label={label}>

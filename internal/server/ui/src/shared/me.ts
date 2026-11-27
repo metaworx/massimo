@@ -91,9 +91,9 @@ export function can(c: string, m: Me | null = me.value): boolean {
   return (m.capabilities || []).includes(c);
 }
 
-/** canManageUsersOf reports whether who is in may use the users' routes: with users, guests or passwords (canManageUsers of login.js). */
+/** canManageUsersOf reports whether who is in may use the users' routes: with users, guests, passwords or integrations, the last for an integration's users (canManageUsers of login.js; AP AccessEnds, D46-A). */
 export function canManageUsersOf(m: Me | null = me.value): boolean {
-  return can("users", m) || can("guests", m) || can("passwords", m);
+  return can("users", m) || can("guests", m) || can("passwords", m) || can("integrations", m);
 }
 
 /** systemOf reports whether who is in sees System settings or Maintenance: a capability of one of their cards (hasSystem of login.js). */
