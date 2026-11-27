@@ -17,6 +17,7 @@ import (
 	"time"
 
 	"go.metaworx.ch/massimo/internal/store"
+	"go.metaworx.ch/massimo/internal/testkit/storekit"
 )
 
 // catalogue is a catalogue over a test store with a key, on a clock the
@@ -91,6 +92,29 @@ func TestMakeWithoutKeyOrTarget(t *testing.T) {
 	}
 	if entries, _ := filepath.Glob(filepath.Join(c2.Store.Dir(), tempPrefix+"*")); len(entries) != 0 {
 		t.Fatalf("temporaries left %v", entries)
+	}
+}
+
+// A store opened in its own directory, ".", as serve opens it when run
+// there without -data, makes the local target and its copy all the
+// same: the catalogue reads a target's relative path against the
+// directory made absolute, which a target asks for.
+func TestMakeInARelativeDirectory(t *testing.T) {
+	ctx := context.Background()
+	dir := t.TempDir()
+	t.Chdir(dir)
+	st := storekit.Open(t, ".")
+	r, _ := keyOf(t, KindX25519, "laptop")
+	if _, err := st.AddServerBackupKey(ctx, store.ServerBackupKey{Label: r.Label, Recipient: r.Line, Fingerprint: r.Fingerprint, Kind: string(r.Kind)}, "", 0); err != nil {
+		t.Fatal(err)
+	}
+	c := &Catalogue{Store: st, Version: "v0.0.0-test", Location: time.UTC, Log: slog.New(slog.DiscardHandler)}
+	b, outs, err := c.Make(ctx, MakeRequest{Trigger: TriggerManual})
+	if err != nil || len(b.Copies) != 1 || b.Copies[0].State != store.CopyThere {
+		t.Fatalf("make %+v %+v %v", b, outs, err)
+	}
+	if got, _ := filepath.Glob(filepath.Join(dir, DefaultLocalDir, "massimo-*.zip")); len(got) != 1 {
+		t.Fatalf("on disk %v", got)
 	}
 }
 

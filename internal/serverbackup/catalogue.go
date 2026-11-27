@@ -86,6 +86,17 @@ type Catalogue struct {
 	Log      *slog.Logger
 }
 
+// dataDir is the store's directory, absolute: a target's relative path
+// is relative to it, and a target takes only an absolute one. The store
+// is opened in "." where serve runs in its data directory without -data.
+func (c *Catalogue) dataDir() (string, error) {
+	dir, err := filepath.Abs(c.Store.Dir())
+	if err != nil {
+		return "", fmt.Errorf("serverbackup: the data directory %q: %w", c.Store.Dir(), err)
+	}
+	return dir, nil
+}
+
 func (c *Catalogue) now() time.Time {
 	if c.Now != nil {
 		return c.Now()
@@ -186,9 +197,15 @@ func (c *Catalogue) Open(t store.ServerBackupTarget) (Target, error) {
 	if err != nil {
 		return nil, fmt.Errorf("serverbackup: target %s: %w", t.Name, err)
 	}
+	dir := ""
 	for _, f := range k.Fields {
 		if v := cfg[f.Key]; f.Type == FieldPath && v != "" && !filepath.IsAbs(v) {
-			cfg[f.Key] = filepath.Join(c.Store.Dir(), v)
+			if dir == "" {
+				if dir, err = c.dataDir(); err != nil {
+					return nil, fmt.Errorf("serverbackup: target %s: %w", t.Name, err)
+				}
+			}
+			cfg[f.Key] = filepath.Join(dir, v)
 		}
 	}
 	var secret []byte
