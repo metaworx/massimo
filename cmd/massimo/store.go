@@ -24,7 +24,9 @@ import (
 // runStore handles massimo store backup|migrate|info|downgrade, the
 // commands that open serve's store directly (docs/store.md section 7),
 // and keygen|inspect|decrypt, the server backups' keys and files
-// (docs/store.md, "Server backups"), which open no store. They take
+// (docs/store.md, "Server backups"), which open no store; backup without
+// a file, backups, push and pull, the server's backups, go through a
+// running serve where one answers (serverbackups.go). They take
 // -data like serve and run as the service user, beside a running server,
 // but for downgrade, which needs the store alone. Each checks its
 // arguments before it opens the store, which migrate creates, so that
@@ -33,7 +35,19 @@ func runStore(args []string) error {
 	usage := func() {
 		fmt.Fprint(os.Stderr, `usage: massimo [-data <dir>] store <command> [options] [args]
 
-  backup <file>  write a consistent copy of massimo.db, also while serve runs
+  backup <file>  write a consistent copy of massimo.db, also while serve runs; plain, by hand
+  backup [-target <name>] [-label <text>]
+                 make a server backup now, encrypted for the server's keys, and copy it
+                 to the target named, or to every target that takes it
+  backups        the server backups, newest first, with their copies on the targets
+  push <id> <target>
+                 copy a server backup to a target, from a copy that is there
+  pull <id> <target>
+                 fetch a server backup's copy on a target to the local target, where
+                 it stays until it is deleted
+                 (backup, backups, push and pull go through a running serve, with
+                 MASSIMO_API_TOKEN, where one answers at MASSIMO_LISTEN, and act on
+                 the store otherwise)
   migrate        create massimo.db or apply its pending migrations, without starting serve;
                  a new one only where -data or MASSIMO_DATA names the directory
   info           the file's schema version, node and row counts
@@ -73,14 +87,42 @@ func runStore(args []string) error {
 	ctx := context.Background()
 	dir := dataDir()
 	switch args[0] {
-	case "backup":
+	case "backups":
 		rest, err := parse()
 		if err != nil {
 			return err
 		}
-		if len(rest) != 1 {
+		if len(rest) > 0 {
 			usage()
-			return errors.New("store backup: give the file to write")
+			return errors.New("store backups takes no argument")
+		}
+		return newBackupCLI(ctx, os.Stdout).list(ctx)
+	case "push", "pull":
+		rest, err := parse()
+		if err != nil {
+			return err
+		}
+		if len(rest) != 2 {
+			usage()
+			return fmt.Errorf("store %s: %w", args[0], errBackupArgs)
+		}
+		return newBackupCLI(ctx, os.Stdout).copy(ctx, rest[0], rest[1], args[0] == "pull")
+	case "backup":
+		set := flag.NewFlagSet("store backup", flag.ContinueOnError)
+		set.Usage = usage
+		target := set.String("target", "", "the target to copy the server backup to alone, by its name")
+		label := set.String("label", "", "the server backup's label, in plain in its manifest")
+		rest, err := parseMixed(set, args[1:])
+		if err != nil {
+			return err
+		}
+		if len(rest) == 0 {
+			// A server backup now, encrypted, to its targets.
+			return newBackupCLI(ctx, os.Stdout).make(ctx, *target, *label)
+		}
+		if len(rest) != 1 || *target != "" || *label != "" {
+			usage()
+			return errors.New("store backup: give the file to write a plain copy to, or no file and -target or -label for a server backup")
 		}
 		st, err := store.OpenReadOnly(dir, store.Options{})
 		if err != nil {

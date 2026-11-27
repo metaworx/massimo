@@ -1229,7 +1229,19 @@ and whether its payload is intact, without the key;
 `store decrypt <file> -key key.txt -out <dir>` opens it into an empty directory,
 as `age -d -i key.txt` does with its `payload.age`,
 and says which box made it.
-The details are in docs/store.md, "Server backups".
+`serve` makes such a backup each night at 03:30 (the setting `serverbackup.time`)
+once the owner has given a key, copies it to its targets
+(`backups/` in the data directory at first) and keeps each target's retention.
+`store backup` without a file makes one now, `-target <name>` to that target alone
+and `-label <text>` in plain in its manifest;
+`store backups` lists them with their copies,
+`store push <id> <target>` copies one to a target
+and `store pull <id> <target>` fetches a target's copy to the local target,
+where it stays until it is deleted.
+These four go through a running `serve`, with `MASSIMO_API_TOKEN`,
+where one answers at `MASSIMO_LISTEN`, and act on the store otherwise.
+The details are in docs/store.md, "Server backups", and the API's in
+docs/api-v1.md, "Server backups".
 
 `massimo user` manages the users of the store from the box (docs/api-v1.md,
 "Authentication"):

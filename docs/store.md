@@ -1898,6 +1898,14 @@ The exceptions are `user` (section 6) and `store` (stage (a):
 `store keygen`, `store inspect` and `store decrypt`
 handle the keys and the files of the server's backups,
 and open no store ("Server backups", below).
+`store backup` without a file makes a server backup now
+(`-target <name>`, `-label <text>`), `store backups` lists them,
+`store push <id> <target>` and `store pull <id> <target>` copy one:
+these go through a running `serve`, its API with `MASSIMO_API_TOKEN`,
+where one answers at the address of `MASSIMO_LISTEN` on this box
+(`https` where `MASSIMO_TLS` is on), so that the job is the server's,
+and open the store otherwise. They are the command line's first use of the API;
+the `-server <url>` mode below would widen it.
 
 A later mode `massimo -server <url> status` lets the commands use the server's
 API with a key instead of the Cube protocol,

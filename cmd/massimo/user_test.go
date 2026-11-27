@@ -382,6 +382,9 @@ func TestHelpCreatesNoStore(t *testing.T) {
 	dir := t.TempDir()
 	t.Chdir(dir)
 	t.Setenv(env.DataVar, "")
+	// store backup without a file asks the serve of MASSIMO_LISTEN first:
+	// one that answers nowhere
+	t.Setenv("MASSIMO_LISTEN", "127.0.0.1:1")
 	run := map[string]func([]string) error{
 		"user":  func(args []string) error { _, err := runUserWith(t, "", args...); return err },
 		"store": runStore,
@@ -406,7 +409,8 @@ func TestHelpCreatesNoStore(t *testing.T) {
 		{false, "user enable anna bob"}, {false, "user token anna"}, {false, "user tokens"},
 		{false, "user revoke"}, {false, "user revoke anna x"}, {false, "user rename anna"},
 		{false, "user rename anna bob -no-password -password-stdin"},
-		{false, "store"}, {false, "store bogus"}, {false, "store backup"},
+		{false, "store"}, {false, "store bogus"}, {false, "store backup"}, {false, "store backup -target nas"}, {false, "store backup x.db -target nas"},
+		{true, "store backups -h"}, {true, "store push -h"}, {false, "store backups"}, {false, "store push x"}, {false, "store pull x nas"},
 		{false, "store migrate extra"}, {false, "store info extra"},
 	} {
 		f := strings.Fields(c.args)
