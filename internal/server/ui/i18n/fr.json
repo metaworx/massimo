@@ -439,7 +439,7 @@
 
   "help.profilePassword": "Un mot de passe vous permet de vous connecter par votre nom dans n'importe quel navigateur. Il est enregistré par OPAQUE dans ce navigateur, le serveur ne le voit donc jamais ; un changement demande l'actuel. Enregistrer le définit.",
 
-  "help.profileTokens": "Chaque navigateur connecté en votre nom est une session ; une clé d'API connecte un programme. Révoquer en met fin aussitôt et déconnecte ce navigateur ou ce programme. Créer la clé en crée une, montrée une seule fois : copiez-la alors. Là où le serveur fait expirer les clés inutilisées, la ligne d'une clé dit quand ; Garder même inutilisée, proposé à qui gère votre utilisateur, l'en exempte. Une clé peut recevoir une date de fin, à sa création ou plus tard avec Modifier… ; elle est ensuite refusée.",
+  "help.profileTokens": "Chaque navigateur connecté en votre nom est une session ; une clé d'API connecte un programme. Révoquer en met fin aussitôt et déconnecte ce navigateur ou ce programme. Créer la clé en crée une, montrée une seule fois : copiez-la alors. Là où le serveur fait expirer les clés inutilisées, la ligne d'une clé dit quand ; Garder même inutilisée, proposé à qui gère votre utilisateur, l'en exempte. Une clé peut recevoir une date de fin, à sa création ou plus tard avec Modifier… ; elle est ensuite refusée. Nouveau secret donne à une clé un nouveau secret, affiché une fois ; elle garde son ID et son nom, et ce qui détenait l'ancien est refusé.",
 
   "help.profileLinked": "Lier vous connecte une fois chez le fournisseur ; le compte revenu est montré, et Lier là le fait vous connecter ici aussi. Lier à nouveau chez un fournisseur y remplace le lien. Supprimer met fin à un lien, mais pas à votre dernier moyen de connexion.",
   "help.roomName": "Le nom de la pièce, enregistré dans le Cube et affiché par tous les programmes qui communiquent avec lui.",
@@ -877,6 +877,7 @@
   "log.action.user.remove": "utilisateur retiré",
   "log.action.token.add": "clé ajoutée",
   "log.action.token.update": "clé modifiée",
+  "log.action.token.rekey": "nouveau secret pour la clé",
   "log.action.token.revoke": "clé révoquée",
   "log.action.role.add": "rôle ajouté",
   "log.action.role.update": "rôle modifié",
@@ -1815,6 +1816,11 @@
   "users.keyCreated": "Clé « {label} » créée ; elle est affichée une fois dans le panneau.",
   "users.keyShown": "La nouvelle clé, affichée une fois ; envoyez-la comme Authorization: Bearer <clé> :",
   "users.keyCopy": "Copier la clé",
+  "users.newSecret": "Nouveau secret",
+  "users.newSecretLabel": "nouveau secret pour {label}",
+  "users.newSecretAsk": "Un nouveau secret pour {label} : ce qui détient la clé maintenant est refusé. Le nouveau secret est affiché une fois.",
+  "users.newSecretShown": "Le nouveau secret de la clé {id}, affiché une fois :",
+  "users.newSecretMade": "La clé {id} a un nouveau secret ; il est affiché une fois dans le panneau.",
   "roles.title": "Rôles",
   "roles.add": "Ajouter un rôle",
   "roles.key": "Clé",

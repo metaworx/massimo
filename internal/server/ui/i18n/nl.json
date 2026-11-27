@@ -438,7 +438,7 @@
 
   "help.profilePassword": "Met een wachtwoord meld je je in elke browser aan met je naam. Het wordt met OPAQUE in deze browser geregistreerd, dus de server ziet het nooit; een wijziging vraagt het huidige. Opslaan stelt het in.",
 
-  "help.profileTokens": "Elke browser die als jou is aangemeld is een sessie; een API-sleutel meldt een programma aan. Intrekken beëindigt er een meteen en meldt die browser of dat programma af. Sleutel aanmaken maakt een sleutel die maar één keer getoond wordt: kopieer hem dan. Waar de server ongebruikte sleutels laat vervallen, zegt de regel van een sleutel wanneer; Ook ongebruikt bewaren, aangeboden aan wie je gebruiker beheert, zondert een sleutel daarvan uit. Een sleutel kan een einddatum krijgen, bij het aanmaken of later met Wijzigen…; daarna wordt hij geweigerd.",
+  "help.profileTokens": "Elke browser die als jou is aangemeld is een sessie; een API-sleutel meldt een programma aan. Intrekken beëindigt er een meteen en meldt die browser of dat programma af. Sleutel aanmaken maakt een sleutel die maar één keer getoond wordt: kopieer hem dan. Waar de server ongebruikte sleutels laat vervallen, zegt de regel van een sleutel wanneer; Ook ongebruikt bewaren, aangeboden aan wie je gebruiker beheert, zondert een sleutel daarvan uit. Een sleutel kan een einddatum krijgen, bij het aanmaken of later met Wijzigen…; daarna wordt hij geweigerd. Nieuw geheim geeft een sleutel een nieuw geheim, één keer getoond; hij houdt zijn id en naam, en wat het oude had, wordt geweigerd.",
 
   "help.profileLinked": "Koppelen meldt je één keer aan bij de provider; het teruggekomen account wordt getoond, en Koppelen daar laat het je ook hier aanmelden. Opnieuw koppelen bij een provider vervangt daar de koppeling. Verwijderen beëindigt een koppeling, maar niet je laatste manier om aan te melden.",
   "help.roomName": "De naam van de ruimte, opgeslagen in de Cube en zichtbaar in elk programma dat met de Cube praat.",
@@ -876,6 +876,7 @@
   "log.action.user.remove": "gebruiker verwijderd",
   "log.action.token.add": "sleutel toegevoegd",
   "log.action.token.update": "sleutel gewijzigd",
+  "log.action.token.rekey": "nieuw geheim voor sleutel",
   "log.action.token.revoke": "sleutel ingetrokken",
   "log.action.role.add": "rol toegevoegd",
   "log.action.role.update": "rol gewijzigd",
@@ -1814,6 +1815,11 @@
   "users.keyCreated": "Sleutel ‘{label}’ aangemaakt; hij wordt één keer in het paneel getoond.",
   "users.keyShown": "De nieuwe sleutel, één keer getoond; stuur hem mee als Authorization: Bearer <sleutel>:",
   "users.keyCopy": "Sleutel kopiëren",
+  "users.newSecret": "Nieuw geheim",
+  "users.newSecretLabel": "nieuw geheim voor {label}",
+  "users.newSecretAsk": "Een nieuw geheim voor {label}: wat de sleutel nu heeft, wordt geweigerd. Het nieuwe geheim wordt één keer getoond.",
+  "users.newSecretShown": "Het nieuwe geheim van sleutel {id}, één keer getoond:",
+  "users.newSecretMade": "Sleutel {id} heeft een nieuw geheim; het wordt één keer in het paneel getoond.",
   "roles.title": "Rollen",
   "roles.add": "Rol toevoegen",
   "roles.key": "Sleutel",

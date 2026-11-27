@@ -1494,9 +1494,12 @@ def test_server_page_this_devices_key(new_context, case, watch, guard):
     opened at #profile?key=<id> for a key the sign-in revoked, as the app
     revokes a key left before setToken answers {revoked}, the list is
     read after that revoke, so the key is not listed nor marked, and a
-    toast names it."""
+    toast names it. The phone's key offers no New secret, which would
+    leave the phone's kept login with the old one, another key of the
+    user's does (AP KeyLife, Block 5)."""
     key = api_call("POST", "api/v1/users/operator/tokens", {"label": f"ui-test-device-key-{case.width}-{case.lang}"})
     gone = api_call("POST", "api/v1/users/operator/tokens", {"label": f"ui-test-left-{case.width}-{case.lang}"})
+    other = api_call("POST", "api/v1/users/operator/tokens", {"label": f"ui-test-other-key-{case.width}-{case.lang}"})
     made = []  # the sign-in's session, revoked at the end
     try:
         status = {"can": True, "user": "operator", "ask": "start", "plain": False, "key_id": key["id"]}
@@ -1523,6 +1526,9 @@ def test_server_page_this_devices_key(new_context, case, watch, guard):
         made.append(session)
         current = page.locator(f"#profile-tokens li[data-id='{session}']")
         assert THIS_DEVICE[case.lang] in current.inner_text() and THIS_DEVICE_KEY[case.lang] not in current.inner_text(), "the session: this device"
+        page.locator(f"#profile-tokens li[data-id='{other['id']}']").wait_for()
+        assert row.locator(".new-secret").count() == 0, "no New secret on the phone's key"
+        assert page.locator(f"#profile-tokens li[data-id='{other['id']}'] .new-secret").count() == 1, "New secret on another key"
         rows = page.evaluate("[...document.querySelectorAll('#profile-tokens li[data-id]')].map((li) => [li.dataset.id, "
                              "(li.querySelector('.token-id') || {}).textContent])")
         assert rows and all(text == TOKEN_ID[case.lang].format(id=i) for i, text in rows), f"every row its id: {rows}"
@@ -1530,6 +1536,7 @@ def test_server_page_this_devices_key(new_context, case, watch, guard):
     finally:
         cleanup(lambda: undo("the device's key", lambda: api_call("DELETE", "api/v1/users/operator/tokens/%d" % key["id"])),
                 lambda: undo("the key left", lambda: api_call("DELETE", "api/v1/users/operator/tokens/%d" % gone["id"])),
+                lambda: undo("the other key", lambda: api_call("DELETE", "api/v1/users/operator/tokens/%d" % other["id"])),
                 *[lambda tid=tid: undo("the session", lambda: api_call("DELETE", "api/v1/users/operator/tokens/%d" % tid)) for tid in made])
 
 

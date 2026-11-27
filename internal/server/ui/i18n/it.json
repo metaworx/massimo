@@ -439,7 +439,7 @@
 
   "help.profilePassword": "Una password ti permette di accedere con il tuo nome in qualsiasi browser. Viene registrata con OPAQUE in questo browser, quindi il server non la vede mai; una modifica chiede quella attuale. Salva la imposta.",
 
-  "help.profileTokens": "Ogni browser connesso a tuo nome è una sessione; una chiave API connette un programma. Revoca ne termina una subito, disconnettendo quel browser o programma. Crea la chiave ne crea una, mostrata una sola volta: copiala allora. Dove il server fa scadere le chiavi inutilizzate, la riga di una chiave dice quando; Tieni anche se inutilizzata, offerto a chi gestisce il tuo utente, la esenta. Una chiave può avere una data di fine, alla creazione o più tardi con Modifica…; da allora è rifiutata.",
+  "help.profileTokens": "Ogni browser connesso a tuo nome è una sessione; una chiave API connette un programma. Revoca ne termina una subito, disconnettendo quel browser o programma. Crea la chiave ne crea una, mostrata una sola volta: copiala allora. Dove il server fa scadere le chiavi inutilizzate, la riga di una chiave dice quando; Tieni anche se inutilizzata, offerto a chi gestisce il tuo utente, la esenta. Una chiave può avere una data di fine, alla creazione o più tardi con Modifica…; da allora è rifiutata. Nuovo segreto dà a una chiave un nuovo segreto, mostrato una volta; la chiave mantiene ID e nome, e ciò che deteneva il vecchio viene rifiutato.",
 
   "help.profileLinked": "Collega ti fa accedere una volta presso il provider; l'account tornato viene mostrato, e Collega lì ti fa accedere con esso anche qui. Collegare di nuovo presso un provider vi sostituisce il collegamento. Rimuovi termina un collegamento, ma non il tuo ultimo modo di accedere.",
   "help.roomName": "Il nome del locale, memorizzato sul Cube e mostrato da ogni programma che comunica con esso.",
@@ -877,6 +877,7 @@
   "log.action.user.remove": "utente rimosso",
   "log.action.token.add": "chiave aggiunta",
   "log.action.token.update": "chiave modificata",
+  "log.action.token.rekey": "nuovo segreto per la chiave",
   "log.action.token.revoke": "chiave revocata",
   "log.action.role.add": "ruolo aggiunto",
   "log.action.role.update": "ruolo modificato",
@@ -1815,6 +1816,11 @@
   "users.keyCreated": "Chiave «{label}» creata; è mostrata una volta nel pannello.",
   "users.keyShown": "La nuova chiave, mostrata una volta; inviala come Authorization: Bearer <chiave>:",
   "users.keyCopy": "Copia la chiave",
+  "users.newSecret": "Nuovo segreto",
+  "users.newSecretLabel": "nuovo segreto per {label}",
+  "users.newSecretAsk": "Un nuovo segreto per {label}: ciò che detiene ora la chiave viene rifiutato. Il nuovo segreto è mostrato una volta.",
+  "users.newSecretShown": "Il nuovo segreto della chiave {id}, mostrato una volta:",
+  "users.newSecretMade": "La chiave {id} ha un nuovo segreto; è mostrato una volta nel pannello.",
   "roles.title": "Ruoli",
   "roles.add": "Aggiungi un ruolo",
   "roles.key": "Chiave",

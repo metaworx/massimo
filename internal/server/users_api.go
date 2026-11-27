@@ -1233,6 +1233,98 @@ func (s *Server) putToken(w http.ResponseWriter, r *http.Request) error {
 	return nil
 }
 
+// rekeyToken handles POST /api/v1/users/{name}/tokens/{id}/rekey: a live
+// API key gets a new secret, shown once in the answer, as POST …/tokens
+// answers, {"token", "id", "kind", "label", "created_at"} (AP KeyLife,
+// Block 5; MobileApp.D76-A, D81-A); its id, label, end date, exclusion,
+// maker and heirs stay (store.RekeyToken). The old secret is answered as
+// an ended token, not counted toward the lockout, and the key's session
+// ends unless it is the caller's own, made from that key. Who may: the
+// key's user or who manages it, as targetUser lets in, as for its end
+// date. A session is 400; the settings file's key 409, since the next
+// start would not add the file's token back, its hash being taken; an
+// integration's key 403, the integration learning its key by its
+// approval's code alone; the bearer that very key 403, a key changing
+// nothing of its own life (D4-A); an ended key 409; another user's token
+// 404. The command keeps the answer without token (withoutSecrets), and a
+// retry with its Idempotency-Key answers without it and gives no other.
+// Audited as token.rekey, with a change line and an Info line.
+func (s *Server) rekeyToken(w http.ResponseWriter, r *http.Request) error {
+	st, err := s.userStore()
+	if err != nil {
+		return err
+	}
+	u, _, err := s.targetUser(r, st, true)
+	if err != nil {
+		return err
+	}
+	id, err := strconv.ParseInt(r.PathValue("id"), 10, 64)
+	if err != nil {
+		return fail(http.StatusBadRequest, "bad token id %q", r.PathValue("id"))
+	}
+	tok, ok, err := st.Token(r.Context(), id)
+	if err != nil {
+		return userFail(err)
+	}
+	if !ok || tok.UserID != u.ID || !tok.DeletedAt.IsZero() {
+		return fail(http.StatusNotFound, "user %s has no token %d", u.Name, id)
+	}
+	if tok.Kind != store.TokenAPI {
+		return fail(http.StatusBadRequest, "token %d is a session: only an API key takes a new secret; a session ends with Revoke or a sign-out", id)
+	}
+	file, held, err := s.settingsKey(r.Context())
+	if err != nil {
+		return userFail(err)
+	}
+	if held && id == file.ID {
+		return fail(http.StatusConflict, settingsKeyKept)
+	}
+	if u.IntegrationID != 0 {
+		return fail(http.StatusForbidden, "the key of user %s is an integration's: it takes no new secret, since the integration learns its key by its approval's code alone; revoke it, and the integration registers again", u.Name)
+	}
+	p := principalOf(r)
+	if p.named() && p.token.ID == id {
+		return fail(http.StatusForbidden, "a key changes nothing of its own life, its secret included: sign in, or send another key")
+	}
+	if _, live, err := st.TokenAlive(r.Context(), id); err != nil {
+		return userFail(err)
+	} else if !live {
+		return fail(http.StatusConflict, rekeyEnded, id)
+	}
+	// The caller's own session, made from this key, stays.
+	var keep int64
+	if p.named() && p.token.Kind == store.TokenSession && p.token.ParentID == id {
+		keep = p.token.ID
+	}
+	auditTarget(r, "token:"+strconv.FormatInt(id, 10))
+	auditSubject(r, tokenSubject(tok, u))
+	got, secret, err := st.RekeyToken(r.Context(), id, keep)
+	if errors.Is(err, store.ErrSettingsKey) {
+		return fail(http.StatusConflict, settingsKeyKept) // the file read again since the check above
+	}
+	if errors.Is(err, store.ErrNoToken) {
+		// Ended or revoked since it was read.
+		return fail(http.StatusConflict, rekeyEnded, id)
+	}
+	if err != nil {
+		return userFail(err)
+	}
+	line := []any{"user", s.logUserName(r.Context(), u), "token", id, "remote", s.clientIP(r)}
+	if keep != 0 {
+		line = append(line, "kept_session", keep)
+	}
+	s.log.Info("api key given a new secret", line...)
+	v := viewToken(got)
+	writeJSON(w, http.StatusOK, map[string]any{"token": secret, "id": v.ID, "kind": v.Kind, "label": v.Label, "created_at": v.CreatedAt})
+	return nil
+}
+
+// rekeyEnded is the refusal of a new secret for a key that has ended, a
+// format with the key's id (AP KeyLife, Block 5): it lives again, and
+// takes one, once its end date is moved later or it is kept from the
+// idle limit.
+const rekeyEnded = "key %d has ended: only a live key takes a new secret; move its end date later or keep it from the idle limit first, or create another key"
+
 // keptFail is the refusal of idle_exempt, a key kept from the idle limit
 // or held to it again, to a caller that does not manage the key's user u
 // (AP KeyLife, D7-A): the limit is the policy of who sets it, and a user

@@ -8,6 +8,7 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"strconv"
 	"strings"
 	"sync"
 	"testing"
@@ -286,6 +287,43 @@ func TestTokenCreationKeepsNoSecret(t *testing.T) {
 	json.Unmarshal([]byte(text2), &again)
 	if resp2.StatusCode != 201 || resp2.Header.Get("Idempotent-Replayed") != "true" || again.Token != nil || again.ID != made.ID {
 		t.Errorf("replay: %d %q %s", resp2.StatusCode, resp2.Header.Get("Idempotent-Replayed"), text2)
+	}
+
+	// A new secret for the key (AP KeyLife, Block 5): its command keeps no
+	// secret either, and a retry with its Idempotency-Key answers without
+	// one and gives the key no other.
+	headers = map[string]string{"Idempotency-Key": "key-2"}
+	path := "/api/v1/users/anna/tokens/" + strconv.FormatInt(made.ID, 10) + "/rekey"
+	resp3, text3 := callWith(t, ts, "POST", path, "secret", "", headers)
+	var re rekeyed
+	if json.Unmarshal([]byte(text3), &re); resp3.StatusCode != 200 || re.Token == "" || re.ID != made.ID {
+		t.Fatalf("new secret: %d %s", resp3.StatusCode, text3)
+	}
+	rows = auditRows(t, ts, "secret", "?limit=1")
+	if len(rows) != 1 || rows[0].Action != "token.rekey" || rows[0].CommandID == 0 {
+		t.Fatalf("audit row of the new secret %+v", rows)
+	}
+	c, ok, err = s.opts.Store.Command(t.Context(), rows[0].CommandID)
+	if err != nil || !ok {
+		t.Fatalf("command row of the new secret: %v %v", ok, err)
+	}
+	if strings.Contains(string(c.Result), re.Token) || strings.Contains(string(rows[0].Detail), re.Token) {
+		t.Errorf("the command or audit row keeps the new secret: %s %s", c.Result, rows[0].Detail)
+	}
+	if _, code, body := commandByID(t, ts, "secret", rows[0]); code != 200 || strings.Contains(body, re.Token) {
+		t.Errorf("GET /api/v1/commands/{id} gives the new secret out: %d %s", code, body)
+	}
+	resp4, text4 := callWith(t, ts, "POST", path, "secret", "", headers)
+	var again2 struct {
+		Token *string `json:"token"`
+		ID    int64   `json:"id"`
+	}
+	json.Unmarshal([]byte(text4), &again2)
+	if resp4.StatusCode != 200 || resp4.Header.Get("Idempotent-Replayed") != "true" || again2.Token != nil || again2.ID != made.ID {
+		t.Errorf("replay of the new secret: %d %q %s", resp4.StatusCode, resp4.Header.Get("Idempotent-Replayed"), text4)
+	}
+	if code, text := callAPI(t, ts, "GET", "/api/v1/me", re.Token, ""); code != 200 {
+		t.Errorf("the replay gave the key another secret: %d %s", code, text)
 	}
 }
 

@@ -56,6 +56,7 @@
 //	DELETE /api/v1/me/token                          revoke the token that calls, a session or a key with its sessions
 //	GET  /api/v1/me                                  who the caller is and what the caller may do
 //	GET|POST /api/v1/users, /users/{name}, /users/{name}/tokens    the users and their tokens (users_api.go)
+//	POST /api/v1/users/{name}/tokens/{id}/rekey      a new secret for an API key, shown once, its id and label kept
 //	POST /api/v1/users/{name}/register               a registration by OPAQUE, its first step (opaque_api.go)
 //	GET|POST /api/v1/roles, /roles/{key}, /roles/{key}/disabled   the roles and their sets (roles_api.go)
 //	GET|PUT /api/v1/capabilities, /capabilities/{key}              the capabilities, disabled or not
@@ -1529,6 +1530,7 @@ func (s *Server) routes() {
 	api("GET /api/v1/users/{name}/tokens", "users", s.listTokens)
 	api("POST /api/v1/users/{name}/tokens", "users", s.postToken)
 	api("PUT /api/v1/users/{name}/tokens/{id}", "users", s.putToken)
+	api("POST /api/v1/users/{name}/tokens/{id}/rekey", "users", s.rekeyToken)
 	api("DELETE /api/v1/users/{name}/tokens/{id}", "users", s.deleteToken)
 	api("POST /api/v1/users/{name}/register", "users", s.registerOpaque)
 	api("GET /api/v1/users/{name}/identities", "users", s.listIdentities)

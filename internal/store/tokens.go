@@ -19,7 +19,11 @@ package store
 // KeyLife, Block 3); an end is a state read at each check, nothing
 // written, so a key lives again where the limit is raised, the key
 // excluded or its end date moved later (D6-A). Every place a token is let
-// in, counted or sent to holds to one rule, alive.
+// in, counted or sent to holds to one rule, alive. A live key takes a new
+// secret (RekeyToken, Block 5), its row and so its id, label, end date,
+// exclusion, maker and heirs kept, the old secret's hash kept in a
+// revoked row of its own, so that a client still sending it is an ended
+// token and no guess.
 
 import (
 	"context"
@@ -589,11 +593,103 @@ func (s *Store) settingsHash() string {
 // revokeSessionsOf revokes the live sessions made from the key keyID,
 // and what they subscribed to push.
 func revokeSessionsOf(ctx context.Context, tx execer, keyID int64, now, node string) error {
-	if _, err := tx.ExecContext(ctx, `DELETE FROM push_subscriptions WHERE token_id IN (SELECT id FROM tokens WHERE parent_id = ? AND deleted_at IS NULL)`, keyID); err != nil {
+	return revokeSessionsBut(ctx, tx, keyID, 0, now, node)
+}
+
+// revokeSessionsBut is revokeSessionsOf but for the session keep, which
+// stays with what it subscribed to push; 0 keeps none.
+func revokeSessionsBut(ctx context.Context, tx execer, keyID, keep int64, now, node string) error {
+	if _, err := tx.ExecContext(ctx, `DELETE FROM push_subscriptions WHERE token_id IN (SELECT id FROM tokens WHERE parent_id = ? AND deleted_at IS NULL AND id <> ?)`, keyID, keep); err != nil {
 		return err
 	}
-	_, err := tx.ExecContext(ctx, `UPDATE tokens SET deleted_at = ?, origin = ?, version = version + 1 WHERE parent_id = ? AND deleted_at IS NULL`, now, node, keyID)
+	_, err := tx.ExecContext(ctx, `UPDATE tokens SET deleted_at = ?, origin = ?, version = version + 1 WHERE parent_id = ? AND deleted_at IS NULL AND id <> ?`, now, node, keyID, keep)
 	return err
+}
+
+// RekeyToken gives the live API key id a new secret, and returns the key
+// with its life under the rule alive and the secret, shown once and never
+// stored (AP KeyLife, Block 5; MobileApp.D76-A). The key keeps its row,
+// so its id, label, end date, exclusion from the idle limit, maker and
+// heirs stay, and so do its last use and its making, which the idle clock
+// counts from; its hash is replaced in one transaction. The old hash is
+// kept in a revoked row of its own, an API key of the key's user and
+// label, made and revoked now, since the hash is unique and a revoked row
+// keeps its hash: a client still sending the old secret is so a token
+// that ended (TokenEnded), not a guess that counts toward the lockout
+// (MobileApp.D64-A). The key's session (a key has one at a time,
+// AddKeySession) is revoked unless it is keep, the caller's own, with
+// what it subscribed to push, and so is what the key itself subscribed:
+// whoever held the old secret holds nothing. ErrNoToken where id is no
+// live API key: none, a session, revoked, past its end date or ended
+// unused; ErrSettingsKey where it is the settings file's key, by the hash
+// Bootstrap last applied, whose secret is the file's: the next start
+// would not add it back, its hash being taken by the old secret's row
+// (D3-A); ErrIntegrationUser where it is an integration's key, which the
+// integration learns by its approval's code alone. A refusal changes
+// nothing. Who may give a key a new secret is the caller's question (the
+// server's).
+func (s *Store) RekeyToken(ctx context.Context, id, keep int64) (Token, string, error) {
+	if err := s.writable(); err != nil {
+		return Token{}, "", err
+	}
+	secret, err := NewSecret()
+	if err != nil {
+		return Token{}, "", err
+	}
+	r, err := s.rule(ctx, s.now()) // before the transaction, which holds the store's one connection
+	if err != nil {
+		return Token{}, "", err
+	}
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return Token{}, "", fmt.Errorf("store: new secret of key %d: %w", id, err)
+	}
+	defer tx.Rollback()
+	t, err := scanToken(tx.QueryRowContext(ctx, `SELECT `+tokenColumns+tokenJoins+` WHERE t.id = ? AND t.kind = ? AND `+alive,
+		append([]any{id, TokenAPI}, r.args()...)...))
+	if errors.Is(err, sql.ErrNoRows) {
+		return Token{}, "", fmt.Errorf("%w: no live API key %d", ErrNoToken, id)
+	}
+	if err != nil {
+		return Token{}, "", fmt.Errorf("store: new secret of key %d: %w", id, err)
+	}
+	if file := s.settingsHash(); file != "" && t.hash == file {
+		return Token{}, "", fmt.Errorf("%w: key %d", ErrSettingsKey, id)
+	}
+	var integration sql.NullInt64
+	if err := tx.QueryRowContext(ctx, `SELECT integration_id FROM users WHERE id = ?`, t.UserID).Scan(&integration); err != nil {
+		return Token{}, "", fmt.Errorf("store: new secret of key %d: %w", id, err)
+	}
+	if integration.Valid {
+		return Token{}, "", fmt.Errorf("%w: its key %d takes no new secret; revoked, the integration registers again", ErrIntegrationUser, id)
+	}
+	now := s.nowText()
+	res, err := tx.ExecContext(ctx, `UPDATE tokens SET hash = ?, origin = ?, version = version + 1 WHERE id = ? AND deleted_at IS NULL`, HashToken(secret), s.nodeID, id)
+	if err != nil {
+		return Token{}, "", fmt.Errorf("store: new secret of key %d: %w", id, err)
+	}
+	if n, _ := res.RowsAffected(); n == 0 {
+		return Token{}, "", fmt.Errorf("%w: no live API key %d", ErrNoToken, id)
+	}
+	if _, err := tx.ExecContext(ctx, `INSERT INTO tokens (uuid, user_id, kind, hash, label, created_at, origin, deleted_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+		newUUID(), t.UserID, TokenAPI, t.hash, t.Label, now, s.nodeID, now); err != nil {
+		return Token{}, "", fmt.Errorf("store: new secret of key %d: the old secret's row: %w", id, err)
+	}
+	if err := revokeSessionsBut(ctx, tx, id, keep, now, s.nodeID); err != nil {
+		return Token{}, "", fmt.Errorf("store: new secret of key %d: %w", id, err)
+	}
+	if err := removePushSubscriptions(ctx, tx, 0, id); err != nil {
+		return Token{}, "", fmt.Errorf("store: new secret of key %d: %w", id, err)
+	}
+	if err := tx.Commit(); err != nil {
+		return Token{}, "", fmt.Errorf("store: new secret of key %d: %w", id, err)
+	}
+	got, _, err := s.Token(ctx, id)
+	if err != nil {
+		return Token{}, "", err
+	}
+	r.apply(&got)
+	return got, secret, nil
 }
 
 // AddKeySession makes a session from the live API key keyID, with a

@@ -9,7 +9,7 @@ import re
 
 import pytest
 
-from conftest import URL, api_call
+from conftest import URL, address_failures, api_call
 from helpers import (KEY_COPY, NAME_BAD, NAME_TAKEN, assert_busy, cleanup, close_fold, copies, frames, grant_clipboard, hold, icon_after_last_line, named_buttons,
                      open_fold, safe_route, scroll_width, show_view, sign_out, undo, wait_held, wait_until)
 
@@ -163,6 +163,7 @@ def test_an_integrations_user_has_no_way_in(page, case, reads):
                 row = panel.locator(f".user-tokens li[data-id='{held_key['id']}']")
                 row.wait_for()
                 assert row.locator(".revoke-token").count() == 1, "the held key's Revoke"
+                assert row.locator(".new-secret").count() == 0, "no New secret on an integration's key (AP KeyLife, Block 5)"
                 row.locator(".change-key").click()
                 form = row.locator("form.token-change")
                 form.wait_for()
@@ -573,6 +574,8 @@ def test_settings_file_key_has_no_revoke(page, case):
             row.wait_for(timeout=5000)
             page.locator(f"{rows} li[data-id='{other['id']}']").wait_for(timeout=5000)
             assert row.locator(".revoke-token").count() == 0, f"{where}: no Revoke on the settings file's key"
+            assert row.locator(".new-secret").count() == 0, f"{where}: no New secret on the settings file's key (AP KeyLife, Block 5)"
+            assert page.locator(f"{rows} li[data-id='{other['id']}'] .new-secret").count() == 1, f"{where}: another key offers New secret"
             assert row.locator(".token-settings").inner_text() == FROM_SETTINGS[case.lang], f"{where}: it says where it comes from"
             assert page.locator(f"{rows} li[data-id='{other['id']}'] .revoke-token").count() == 1, f"{where}: another key offers Revoke"
             assert page.locator(f"{rows} .token-settings").count() == 1, f"{where}: that row alone says so"
@@ -786,6 +789,7 @@ def test_no_keep_for_who_manages_nobody(new_context, case, watch, guard):
         row = page.locator(f"#profile-tokens li[data-id='{key['id']}']")
         row.wait_for(timeout=5000)
         assert row.locator(".revoke-token").count() == 1, "its Revoke"
+        assert row.locator(".new-secret").count() == 1, "New secret on its own key (AP KeyLife, Block 5)"
         assert page.locator("#profile-tokens .create-key").count() == 1, "Create key"
         assert page.locator("#profile-tokens .key-keep").count() == 0, "no Keep while unused"
         row.locator(".change-key").click()
@@ -934,6 +938,8 @@ def test_a_keys_end_line(page, case, reads):
         assert row("expired").locator(".flag.bad").inner_text().strip() == want["ended"], "the badge Ended"
         assert row("expired").locator(".token-life").inner_text() == want["past"], "ended …"
         assert row("expired").locator(".token-end").count() == 0, "no ends … past it"
+        assert row("expired").locator(".new-secret").count() == 0, "no New secret on a key that ended (AP KeyLife, Block 5)"
+        assert row("dated").locator(".new-secret").count() == 1, "New secret on a live key"
         row("dated").locator(".change-key").click()
         row("dated").locator("form.token-change").wait_for()
         langs = ("en", "de", "fr", "it", "nl", "pl") if case.width == 390 else (case.lang,)
@@ -1028,6 +1034,92 @@ def test_a_half_typed_end_is_refused(page, case):
         with page.expect_request(lambda r: r.method == "PUT" and "/users/operator/tokens/" in r.url):
             save.click()
         assert puts == [{"expires_at": None}], f"No end sends null: {puts}"
+    finally:
+        revoke_keys(prefix)
+    show_view(page, "tiles")
+
+
+NEW_SECRET_SHOWN = {"en": "The new secret of key {id}, shown once:", "de": "Das neue Geheimnis von Schlüssel {id}, einmal gezeigt:"}
+NEW_SECRET_MADE = {"en": "Key {id} has a new secret; it is shown in the panel once.",
+                   "de": "Schlüssel {id} hat ein neues Geheimnis; es wird einmal im Panel gezeigt."}
+
+
+def test_new_secret(page, case):
+    """New secret on a key's row (AP KeyLife, Block 5; MobileApp.D76-A):
+    named by the key, it asks first, in place of the row's buttons, and
+    No takes the question back with nothing sent and the focus back on New
+    secret; Yes sends one POST …/rekey and shows the new secret in the box
+    of the key just made, under "The new secret of key {id}", copied as
+    the key just made is, the users' line saying so; the row keeps its id
+    and label, the key's session is listed no more, the focus is back on
+    New secret, and the old secret is refused, counted toward no lockout,
+    while the new one lets in. A session has none. Fails on the page
+    before: no New secret."""
+    from test_login import status_with
+    prefix = f"ui-test-rekey-{case.width}-{case.lang}-"
+    revoke_keys(prefix)
+    grant_clipboard(page)
+    key = api_call("POST", "api/v1/users/operator/tokens", {"label": prefix + "phone"})
+    # the session's label out of the prefix: it goes with its key, which revoke_keys revokes
+    session_label = f"ui-test-rekey-session-{case.width}-{case.lang}"
+    api_call("POST", "api/v1/login/key", {"label": session_label}, token=key["token"])
+    posts = []
+    page.on("request", lambda r: posts.append(r.url) if r.method == "POST" and r.url.endswith("/rekey") else None)
+    rows = ".user-panel[data-name='operator'] .user-tokens"
+    button = f"{rows} li[data-id='{key['id']}'] .new-secret"
+    try:
+        show_view(page, "system")
+        panel = page.locator(".user-panel[data-name='operator']")
+        panel.wait_for()
+        panel.locator("summary").click()
+        row = panel.locator(f".user-tokens li[data-id='{key['id']}']")
+        row.wait_for(timeout=5000)
+        session = panel.locator(".user-tokens li", has_text=session_label)
+        session.wait_for(timeout=5000)
+        assert session.locator(".new-secret").count() == 0, "a session has no New secret"
+        assert page.locator(button).inner_text() == page.evaluate("t('users.newSecret')"), "New secret"
+        assert page.locator(button).get_attribute("aria-label") == page.evaluate("(l) => t('users.newSecretLabel', { label: l })", prefix + "phone"), \
+            "named by the key"
+
+        # asked first; No sends nothing and gives the focus back
+        page.locator(button).click()
+        box = row.locator(".confirm-box")
+        box.wait_for()
+        assert box.locator(".confirm-text").inner_text() == page.evaluate("(l) => t('users.newSecretAsk', { label: l })", prefix + "phone"), "the question"
+        assert row.locator(".token-buttons").is_hidden(), "asked in place of the row's buttons"
+        assert wait_until(page, FOCUSED % f"li[data-id='{key['id']}'] .confirm-no", 3), "the focus on No"
+        named_buttons(page, "System settings → Users, New secret asked")
+        assert scroll_width(page) <= case.width, "no horizontal scroll with the question"
+        box.locator(".confirm-no").click()
+        assert wait_until(page, "!document.querySelector(%r)" % f"{rows} li[data-id='{key['id']}'] .confirm-box", 3), "No takes the question back"
+        assert wait_until(page, FOCUSED % button, 3), "the focus back on New secret"
+        assert posts == [], f"No sends nothing: {posts}"
+
+        # Yes: one POST, the new secret shown once and copied
+        page.locator(button).click()
+        with page.expect_response(lambda r: r.request.method == "POST" and r.url.endswith("/rekey")) as answer:
+            box.locator(".confirm-yes").click()
+        assert answer.value.status == 200, f"the new secret: {answer.value.status}"
+        what = NEW_SECRET_SHOWN[case.lang].format(id=key["id"])
+        assert wait_until(page, "(document.querySelector(%r) || {}).textContent === %r" % (".user-panel[data-name='operator'] .user-key-what", what), 5), \
+            f"shown under its words: {panel.locator('.user-key-what').text_content()!r}"
+        secret = panel.locator(".user-key").inner_text().strip()
+        assert panel.locator(".user-key-box").is_visible() and secret and secret != key["token"], "the new secret shown"
+        assert wait_until(page, FOCUSED % button, 3), "the focus back on New secret once it is taken"
+        copies(page, ".user-panel[data-name='operator'] .user-key", secret, KEY_COPY[case.lang])
+        assert wait_until(page, "document.getElementById('users-msg').textContent.includes(%r)" % NEW_SECRET_MADE[case.lang].format(id=key["id"]), 5), \
+            f"the users' line: {page.locator('#users-msg').text_content()}"
+        assert len(posts) == 1, f"one POST: {posts}"
+        assert row.locator(".token-label").inner_text() == prefix + "phone", "the row keeps its id and label"
+        assert wait_until(page, "![...document.querySelectorAll(%r)].some((li) => li.textContent.includes(%r))" % (f"{rows} li", session_label), 5), \
+            "the key's session is listed no more"
+
+        # the old secret refused, not counted; the new one lets in
+        assert status_with(key["token"]) == 401, "the old secret is refused"
+        assert not address_failures(), "and counts toward no lockout"
+        me = api_call("GET", "api/v1/me", token=secret)
+        assert me["token"]["id"] == key["id"], f"the new secret is the same key's: {me['token']}"
+        assert scroll_width(page) <= case.width, "no horizontal scroll"
     finally:
         revoke_keys(prefix)
     show_view(page, "tiles")

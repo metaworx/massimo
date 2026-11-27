@@ -407,7 +407,7 @@ CREATE TABLE tokens (
     id             INTEGER PRIMARY KEY,
     user_id        INTEGER NOT NULL REFERENCES users (id) ON DELETE CASCADE,
     kind           TEXT    NOT NULL CHECK (kind IN ('session', 'api')),
-    hash           TEXT    NOT NULL UNIQUE,      -- SHA-256 of the token, hex; the token itself is never stored
+    hash           TEXT    NOT NULL UNIQUE,      -- SHA-256 of the token, hex; the token itself is never stored; a new secret keeps the old one in a revoked row (AP KeyLife, Block 5)
     label          TEXT    NOT NULL DEFAULT '',  -- 'MASSIMO_API_TOKEN', 'Loxone', 'Firefox on the laptop'
     created_at     TEXT    NOT NULL,
     expires_at     TEXT,                         -- sessions: moved on every use; API keys: the end date, NULL for none (AP KeyLife, Block 4)
@@ -1104,6 +1104,11 @@ for the token itself,
 so a binary for 24 to 101 refuses a key past its end date too;
 one before Block 2 lets in that key's session, as the paragraph of 0100 says,
 which is its code's and not the file's, and `min_reader` stays 24.
+Nor does Block 5, a key's new secret:
+it writes the key's `tokens.hash` and a revoked row of the old hash,
+columns of 0001 that every binary reads as this one does,
+so a binary for 24 to 101 lets the new secret in
+and refuses the old one as a revoked token, and `min_reader` stays 24.
 On a store of 500 000 log rows (149 MB, a tenth with a user) a desktop took
 2.0 s for the raise, its copy `massimo.db.before-24` included, and 2.2 s for the
 down part, its copy included (`TestRaiseTimes` with
@@ -1680,6 +1685,34 @@ so that an end date left in its row, by a binary before that, ends nothing;
 `SetTokenLife` refuses that key (`ErrSettingsKey`),
 and the server finds it by `KeyByHash`, its hash among the keys not revoked,
 whatever else of its life, so that it refuses every change of it.
+
+A live key may take a new secret (AP KeyLife v1.0, Block 5; MobileApp.D76-A),
+the way back to a key whose secret is lost,
+since the store keeps its hash alone (D81-A),
+and the way to end whatever holds a secret that may have leaked.
+`RekeyToken` replaces the key's hash in one transaction,
+so the key keeps its row:
+its id, label, making, last use, end date, exclusion, maker and heirs.
+The old hash is kept in a revoked row of its own,
+an API key of the key's user and label, made and revoked at that moment,
+with no maker:
+the hash is unique, and a revoked row keeps its hash,
+so a client still sending the old secret is a token that ended (`TokenEnded`),
+not a guess that counts toward the lockout (MobileApp.D64-A);
+a hash replaced alone would make it one.
+The key's session (a key has one at a time, `AddKeySession`) is revoked
+with what it subscribed to push, unless it is the caller's own (`keep`),
+and what the key itself subscribed goes too:
+whoever held the old secret holds nothing.
+A key that is not live, by its revoke, its end date or the idle limit,
+takes none (`ErrNoToken`),
+and an integration's key none (`ErrIntegrationUser`):
+the integration learns its key by its approval's code alone.
+The settings file's key, known by the hash `Bootstrap` last applied,
+takes none (`ErrSettingsKey`, as for `SetTokenLife`; the API's `409`):
+the next start would not add the file's key back,
+its hash being taken by the old secret's row.
+Who may is the server's question, as for the end date.
 
 ### The sign-in by OPAQUE
 

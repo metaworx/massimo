@@ -446,7 +446,7 @@
 
   "help.profilePassword": "Hasło pozwala logować się nazwą w dowolnej przeglądarce. Jest rejestrowane przez OPAQUE w tej przeglądarce, więc serwer nigdy go nie widzi; zmiana wymaga obecnego. Zapisz je ustawia.",
 
-  "help.profileTokens": "Każda przeglądarka zalogowana jako ty to sesja; klucz API loguje program. Unieważnij kończy ją od razu, wylogowując tę przeglądarkę lub program. Utwórz klucz tworzy klucz, pokazany tylko raz: wtedy go skopiuj. Gdy serwer unieważnia nieużywane klucze, wiersz klucza mówi kiedy; Zachowaj mimo nieużywania, dostępne dla tego, kto zarządza twoim użytkownikiem, wyłącza z tego klucz. Klucz może mieć datę końca, przy tworzeniu lub później przez Zmień…; od tej chwili jest odrzucany.",
+  "help.profileTokens": "Każda przeglądarka zalogowana jako ty to sesja; klucz API loguje program. Unieważnij kończy ją od razu, wylogowując tę przeglądarkę lub program. Utwórz klucz tworzy klucz, pokazany tylko raz: wtedy go skopiuj. Gdy serwer unieważnia nieużywane klucze, wiersz klucza mówi kiedy; Zachowaj mimo nieużywania, dostępne dla tego, kto zarządza twoim użytkownikiem, wyłącza z tego klucz. Klucz może mieć datę końca, przy tworzeniu lub później przez Zmień…; od tej chwili jest odrzucany. Nowy sekret daje kluczowi nowy sekret, pokazany raz; klucz zachowuje swój identyfikator i nazwę, a to, co miało stary, zostaje odrzucone.",
 
   "help.profileLinked": "Powiąż loguje cię raz u dostawcy; konto, które wróci, jest pokazane, a Powiąż tam sprawia, że loguje cię także tutaj. Ponowne powiązanie u dostawcy zastępuje tam powiązanie. Usuń kończy powiązanie, ale nie twój ostatni sposób logowania.",
   "help.roomName": "Nazwa pomieszczenia, zapisana w Cube i widoczna w każdym programie, który się z nim komunikuje.",
@@ -912,6 +912,7 @@
   "log.action.user.remove": "usunięto użytkownika",
   "log.action.token.add": "dodano klucz",
   "log.action.token.update": "zmieniono klucz",
+  "log.action.token.rekey": "nowy sekret dla klucza",
   "log.action.token.revoke": "odwołano klucz",
   "log.action.role.add": "dodano rolę",
   "log.action.role.update": "zmieniono rolę",
@@ -1866,6 +1867,11 @@
   "users.keyCreated": "Klucz „{label}” utworzony; jest pokazany raz w panelu.",
   "users.keyShown": "Nowy klucz, pokazany raz; wysyłaj go jako Authorization: Bearer <klucz>:",
   "users.keyCopy": "Kopiuj klucz",
+  "users.newSecret": "Nowy sekret",
+  "users.newSecretLabel": "nowy sekret dla {label}",
+  "users.newSecretAsk": "Nowy sekret dla {label}: to, co teraz ma ten klucz, zostanie odrzucone. Nowy sekret jest pokazany raz.",
+  "users.newSecretShown": "Nowy sekret klucza {id}, pokazany raz:",
+  "users.newSecretMade": "Klucz {id} ma nowy sekret; jest pokazany raz w panelu.",
   "roles.title": "Role",
   "roles.add": "Dodaj rolę",
   "roles.key": "Klucz",
