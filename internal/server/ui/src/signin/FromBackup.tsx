@@ -14,7 +14,9 @@
  * drawn from what the server says of the kind, as Server backups' form
  * is, with their texts (serverbackup.field.<kind>.<key>), used to list
  * the target's backups (…/setup/backup/list) and to fetch the one picked
- * (…/fetch), and stored nowhere. Its manifest says when it was made, by
+ * (…/fetch), and stored nowhere: its fields and its secret are emptied
+ * once the backup is fetched, when the card closes and at a sign-out
+ * (the security review of Block 11). Its manifest says when it was made, by
  * which Massimo, what it holds, which keys open it and whether it comes
  * from a newer Massimo. The key, pasted into its field or read into it
  * from a file in the browser, goes in the body of the plan and of the
@@ -28,9 +30,9 @@
  * refusal is said, Start from this backup off with it. Start asks first,
  * then restores (…/restore) and follows the restart as Maintenance
  * follows one, by /healthz's start; then who is in is read: the server
- * has the backup's users, and the card turns to the sign-in saying so
- * (store.ts restoring and toSignIn), or, where the backup held none,
- * shows the first owner's form again. While a request runs the card is
+ * has the backup's users, since it restores no backup without an enabled
+ * owner, and the card turns to the sign-in saying so (store.ts restoring
+ * and toSignIn). While a request runs the card is
  * working: Back and the card's Select server are off, and Escape leaves
  * nothing (store.ts leaves). A refusal
  * for lack of a session turns the card to the sign-in, and a 409 reads
@@ -39,7 +41,7 @@
  */
 
 import { useLayoutEffect, useRef, useState } from "preact/hooks";
-import type { Me, NewBoxBackup, ServerBackupKind, ServerRestorePlan, ServerRestoreResult } from "../api";
+import type { NewBoxBackup, ServerBackupKind, ServerRestorePlan, ServerRestoreResult } from "../api";
 import type { Outcome } from "../shared/action";
 import { ResultLine } from "../shared/badge";
 import { hid } from "../shared/cls";
@@ -119,6 +121,7 @@ export function FromBackup() {
   const shown = card.ownerStep === "backup";
   const opened = card.opened;
   const open = card.shown;
+  const forgot = card.forgot;
   const focus = card.focus;
   const working = card.working;
   const [source, setSource] = useState<Source>("file");
@@ -138,6 +141,11 @@ export function FromBackup() {
   // the request under way, for its button's ring: one at a time, the card working meanwhile
   const [doing, setDoing] = useState("");
   const ask = useAsk<HTMLButtonElement>();
+  /** forgetTarget empties the target's fields and its secret, which serve for one list and one fetch. */
+  const forgetTarget = () => {
+    setConfig({});
+    setSecret("");
+  };
   const reset = () => {
     setSource("file");
     setKind("");
@@ -157,11 +165,19 @@ export function FromBackup() {
   useLayoutEffect(() => {
     if (opened) reset();
   }, [opened]);
-  // the card closed, by a sign-in, Skip for now or Escape: the key goes from its field
+  // the card closed, by a sign-in, Skip for now or Escape: the key goes from its field, and the target's fields and
+  // secret with it
   // biome-ignore lint/correctness/useExhaustiveDependencies: open is read from the card's store, which Biome takes for a stable import; the effect is for each closing, so it is listed.
   useLayoutEffect(() => {
-    if (!open && keyRef.current) keyRef.current.value = "";
+    if (open) return;
+    if (keyRef.current) keyRef.current.value = "";
+    forgetTarget();
   }, [open]);
+  // a sign-out empties the whole step (forgetCard)
+  // biome-ignore lint/correctness/useExhaustiveDependencies: forgot is read from the card's store, which Biome takes for a stable import; the effect is for each sign-out, so it is listed.
+  useLayoutEffect(() => {
+    if (forgot) reset();
+  }, [forgot]);
   // the source's choice in focus as the step is shown
   // biome-ignore lint/correctness/useExhaustiveDependencies: focus is read from the card's store, which Biome takes for a stable import; the effect is for each focus asked, so it is listed.
   useLayoutEffect(() => {
@@ -244,6 +260,10 @@ export function FromBackup() {
     run("fetch", async () => {
       try {
         took((await api<{ backup: NewBoxBackup }>("POST", SETUP + "/fetch", { ...target(), name: picked })).backup);
+        // fetched: the target's fields and secret served their purpose, and the server stores none of them
+        forgetTarget();
+        setFound(null);
+        setPicked("");
       } catch (e) {
         fails(e, "newBox.failed");
       }
@@ -317,20 +337,8 @@ export function FromBackup() {
       setSaid({ text: t("newBox.notBack"), ok: false });
       return;
     }
-    // who is in: the backup's users, and the card turns to the sign-in (askLogin, toSignIn); a backup without users
-    // leaves the server open, and the first owner's form comes back
-    try {
-      await apiRequest<Me>("GET", "api/v1/me");
-    } catch (e) {
-      if ((e as { status?: number }).status === 401) {
-        void askLogin();
-        return;
-      }
-    }
-    restoring(false);
-    card.working = false;
-    backupBack();
-    card.ownerSaid = { text: t("newBox.noUsers"), ok: false };
+    // who is in: the backup's users, since the server restores none without an enabled owner, so the read is refused
+    // without a session and the card turns to the sign-in (api, askLogin, toSignIn)
     void loadMe();
   };
   const field = (f: NonNullable<ServerBackupKind["fields"]>[number]) => {

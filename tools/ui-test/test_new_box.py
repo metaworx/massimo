@@ -31,6 +31,7 @@ PLAN = {"backup": {"uuid": HELD["uuid"], "time": HELD["time"], "trigger": "sched
 RESTORED = {"restart": {"started": True, "by": "systemd"}, "restored_at": "2026-11-27T10:00:00Z",
             "scopes": PLAN["scopes"], "serials": [], "report": PLAN["report"], "files": [], "cubes": []}
 SHOWN = "!document.getElementById('new-box').classList.contains('hidden')"
+NEW_BOX = dict(OPEN, new_box=True)
 
 
 def setup_routes(page, answers, bodies):
@@ -78,7 +79,7 @@ def test_start_from_a_file(new_context, case, watch, guard):
     in and the page starts. The key is in no storage of the browser. Fails
     on the page before: no Start from a backup…."""
     stage = {"me": "open", "health": "before"}
-    page = start_page(new_context, guard, watch, OPEN)
+    page = start_page(new_context, guard, watch, NEW_BOX)
 
     def me_users(route):
         if stage["me"] != "users":
@@ -172,7 +173,7 @@ def test_start_from_a_target(new_context, case, watch, guard):
     its backups listed with the target in the body, and the one picked
     fetched, after which its line shows. Fails on the page before: no
     Start from a backup…."""
-    page = start_page(new_context, guard, watch, OPEN)
+    page = start_page(new_context, guard, watch, NEW_BOX)
     owner_card(page)
     bodies = {}
     older = dict(HELD, uuid="01930000-0000-7000-8000-000000000002", time="2026-11-19T02:30:00Z", name="massimo-older.zip")
@@ -201,6 +202,30 @@ def test_start_from_a_target(new_context, case, watch, guard):
     assert bodies["fetch"][-1]["name"] == "massimo-newest.zip" and bodies["fetch"][-1]["secret"] == "nas-secret", f"the fetch's body: {bodies['fetch']}"
     assert_login_card_placed(page, "the start from a target")
     assert not sent(page, "POST", "/api/v1/server-backup-targets"), "no target stored"
+    assert wait_until(page, "document.getElementById('new-box-field-password').value === '' && document.getElementById('new-box-field-url').value === ''", 5), \
+        "the target's fields and secret emptied once fetched"
+    # the card closed: what was typed of a target goes with it
+    page.locator("#new-box-field-password").fill("nas-secret")
+    page.evaluate("() => { document.getElementById('login-dialog').close(); }")
+    assert wait_until(page, f"!({DIALOG_OPEN})", 5), "the card closed"
+    # in the drawing that follows the closing
+    assert wait_until(page, "document.getElementById('new-box-field-password') === null || document.getElementById('new-box-field-password').value === ''", 5), \
+        "the secret emptied when the card closes"
+
+
+def test_the_button_where_the_server_may(new_context, case, watch, guard):
+    """Start from a backup… shows where who is in says new_box, an open
+    server whose store holds no Cube, room or integration, and not on one
+    that holds them, such as a server kept open with its Cubes (the
+    security review of Block 11). Fails on the page before: the button on
+    every open server."""
+    page = start_page(new_context, guard, watch, OPEN)  # who is in without new_box: the store holds data
+    owner_card(page)
+    assert page.locator("#setup-from-backup").is_hidden(), "no start from a backup where the server holds data"
+    assert page.locator("#setup-skip").is_visible(), "the form's other ways there"
+    other = start_page(new_context, guard, watch, NEW_BOX)
+    owner_card(other)
+    assert other.locator("#setup-from-backup").is_visible(), "the start from a backup where the server may"
 
 
 def test_refusals_and_back(new_context, case, watch, guard):
@@ -209,7 +234,7 @@ def test_refusals_and_back(new_context, case, watch, guard):
     says so, Open with the key off; Back shows the first owner's form
     again, the focus on Start from a backup…, the key's field emptied.
     Fails on the page before: no Start from a backup…."""
-    page = start_page(new_context, guard, watch, OPEN)
+    page = start_page(new_context, guard, watch, NEW_BOX)
     owner_card(page)
     bodies = {}
     answers = {"upload": {"backup": HELD}, "plan": (422, {"error": "serverbackup: the key does not open the backup"}), "restore": PLAN}

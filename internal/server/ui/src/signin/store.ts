@@ -50,7 +50,7 @@ export type OwnerStep = "form" | "keep" | "backup";
 /** BANNER is the browser's key for the open server's warning hidden, per origin and so per server, while there is no owner (AP FirstOwner, D2, D38). */
 const BANNER = "massimo.openBanner";
 
-/** The card's state; opened counts the openings, succeeded the successes whose secret fields are to be emptied now (settled), shown says the card is open, owner says the first owner's form is shown instead of the ways, focus the focus asked for. */
+/** The card's state; opened counts the openings, succeeded the successes whose secret fields are to be emptied now (settled), shown says the card is open, owner says the first owner's form is shown instead of the ways, focus the focus asked for, forgot the sign-outs that emptied the start from a backup (forgetCard). */
 export const card = live({
   opened: 0,
   succeeded: 0,
@@ -72,6 +72,7 @@ export const card = live({
   keepFailed: null as string | null,
   waysOff: false,
   focus: { n: 0, on: "way" as FocusOn },
+  forgot: 0,
 });
 
 /** The control that asked for the first owner's card (shared/owner.ts askOwner), given the focus back when the card is left; null for none. */
@@ -395,7 +396,7 @@ export function keepEnded(): void {
   card.waysOff = false;
 }
 
-/** forgetCard forgets at a sign-out what the card holds of the last opening: a choice waited for, the lines (MassimoParts.signedOut). */
+/** forgetCard forgets at a sign-out what the card holds of the last opening: a choice waited for, the lines, and the start from a backup's key, target and secret (forgot, FromBackup.tsx; MassimoParts.signedOut). */
 export function forgetCard(): void {
   dropChoice();
   card.said = null;
@@ -403,4 +404,5 @@ export function forgetCard(): void {
   card.ownerSaid = null;
   card.keepSaid = null;
   card.providersSaid = null;
+  card.forgot++;
 }

@@ -2481,6 +2481,5 @@
   "newBox.fileFailed": "Maar een bestand is niet op zijn plaats gezet: {error}.",
   "newBox.blocked": "Hersteld, maar de server is niet herstart ({why}): herstart hem en meld je dan aan.",
   "newBox.notBack": "De server is binnen twee minuten niet terug: herlaad de pagina zodra hij draait.",
-  "newBox.signIn": "De server is gestart vanaf de back-up: meld je aan met een van zijn gebruikers.",
-  "newBox.noUsers": "De back-up bevat geen gebruikers: maak de eigenaar aan."
+  "newBox.signIn": "De server is gestart vanaf de back-up: meld je aan met een van zijn gebruikers."
 }

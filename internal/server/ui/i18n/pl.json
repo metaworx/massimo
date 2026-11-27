@@ -2559,6 +2559,5 @@
   "newBox.fileFailed": "Ale jeden plik nie został umieszczony: {error}.",
   "newBox.blocked": "Przywrócono, ale serwer nie uruchomił się ponownie ({why}): uruchom go ponownie, a potem się zaloguj.",
   "newBox.notBack": "Serwer nie wrócił w ciągu dwóch minut: przeładuj stronę, gdy będzie działał.",
-  "newBox.signIn": "Serwer uruchomił się z kopii: zaloguj się jednym z jej użytkowników.",
-  "newBox.noUsers": "Kopia nie zawiera użytkowników: utwórz właściciela."
+  "newBox.signIn": "Serwer uruchomił się z kopii: zaloguj się jednym z jej użytkowników."
 }

@@ -321,7 +321,9 @@ Keep it open writes the setting `auth.keep_open`, reads who is in,
 and closes the card as Skip for now does, Back and Select server off meanwhile;
 a refusal is said under the field, and one that says the server has users now
 turns the card to the sign-in.
-**Start from a backup…**, beside them, shows in the form's place, at its own height,
+**Start from a backup…**, beside them where who is in says `new_box`
+(a store without a Cube, a room or an integration, which a restore without
+a backup first would lose), shows in the form's place, at its own height,
 the start from another box's backup (AP ServerBackup, Block 11;
 docs/api-v1.md, "A new box from a backup"),
 titled so, its source in focus:
@@ -331,7 +333,9 @@ or **On a backup target**, its kind chosen of those the server reads from
 its fields drawn from what the server says of the kind, as Server backups' form is,
 the secret a password field,
 whose **List its backups** lists the target's backups and **Fetch this backup**
-fetches the one picked; the target is stored nowhere.
+fetches the one picked; the target is stored nowhere,
+and its fields and secret are emptied once the backup is fetched,
+when the card closes and at a sign-out.
 The backup's line says when it was made, by which Massimo,
 its users, Cubes and rooms, and under the key's field which keys it opens with;
 one of a newer Massimo says to update first, and is not opened.
@@ -350,7 +354,7 @@ Start from this backup asks first, then restores and follows the restart
 by `/healthz`'s start as Maintenance's restart does;
 then the card turns to the sign-in, saying that the backup's users sign in now,
 and the page signs in as before.
-A backup without users brings the first owner's form back, saying so.
+A backup without an enabled owner is refused by its plan, and so never restored.
 While a request of the step runs, Back and the card's Select server are off,
 and Escape leaves nothing;
 a refusal that says the server has users now turns the card to the sign-in.
@@ -4037,6 +4041,7 @@ Start from a backup… shows the third step (`FromBackup.tsx`, `card.ownerStep` 
 in place of both, outside their one place of one height,
 since what it shows grows with the backup;
 `backupAsk` and `backupBack` go there and back, the key's field emptied,
+a sign-out's `forgetCard` empties the whole step (`card.forgot`),
 and `restoring` marks a restore sent, so that the turn to the sign-in that follows
 the restart (`toSignIn`) says that the backup's users sign in now.
 Its requests take no session's number, as the card's other two:

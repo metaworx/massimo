@@ -38,8 +38,9 @@
  * card's ☰ closed first where it is open (AP LooseEnds, D3); and Keep it
  * open… shows the confirmation that keeps the server open (KeepOpen.tsx,
  * AP FirstOwner, Block 3) in the form's place, the two of one height,
- * where the server is not kept open already; and Start from a backup…
- * shows the start from another box's backup (FromBackup.tsx, AP
+ * where the server is not kept open already; and Start from a backup…,
+ * where who is in says the server may (new_box: its store holds no Cube,
+ * room or integration), shows the start from another box's backup (FromBackup.tsx, AP
  * ServerBackup, Block 11) in place of both, at its own height, since what
  * it shows grows with the backup. Its fields are not controlled, as the card's
  * (UiParts D210): no drawing writes what they hold, they are read at the
@@ -108,6 +109,9 @@ export function Owner() {
   const step = card.ownerStep;
   const working = card.working;
   const kept = keptOpen(me.value);
+  // the start from a backup where who is in says the server may (new_box): open, its store holding no Cube, room or
+  // integration, which a restore without a backup first would lose
+  const newBox = !!me.value?.new_box;
   const opened = card.opened;
   const succeeded = card.succeeded;
   const focus = card.focus;
@@ -261,7 +265,9 @@ export function Owner() {
           <div id="setup-more" class="login-owner-more">
             <button type="button" id="setup-skip" disabled={working} onClick={skip}>{t(card.byUser ? "setup.back" : "setup.skip")}</button>
             <button ref={keepRef} type="button" id="setup-keep-open" class={hid(kept).trim() || undefined} disabled={working} onClick={keepAsk}>{t("setup.keepOpen")}</button>
-            <button ref={backupRef} type="button" id="setup-from-backup" disabled={working} onClick={backupAsk}>{t("setup.fromBackup")}</button>
+            <button ref={backupRef} type="button" id="setup-from-backup" class={hid(!newBox).trim() || undefined} disabled={working} onClick={backupAsk}>
+              {t("setup.fromBackup")}
+            </button>
           </div>
         </div>
         <KeepOpen />

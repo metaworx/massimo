@@ -2482,6 +2482,5 @@
   "newBox.fileFailed": "Ma un file non è stato messo al suo posto: {error}.",
   "newBox.blocked": "Ripristinato, ma il server non si è riavviato ({why}): riavvialo, poi accedi.",
   "newBox.notBack": "Il server non è tornato entro due minuti: ricarica la pagina quando è attivo.",
-  "newBox.signIn": "Il server si è avviato dal backup: accedi con uno dei suoi utenti.",
-  "newBox.noUsers": "Il backup non contiene utenti: crea il proprietario."
+  "newBox.signIn": "Il server si è avviato dal backup: accedi con uno dei suoi utenti."
 }

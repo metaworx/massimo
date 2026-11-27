@@ -918,12 +918,16 @@ where multicast is missing, as in a container without it,
 
 A new box takes over from an old one by a server backup of the old box
 (`massimo store backup`, or Maintenance → Server backups) and its key.
-Install Massimo on the new box and open its page before anyone is made there:
-the sign-in card that asks for the first owner offers **Start from a backup…**.
+Install Massimo on the new box and open its page before anyone is made there
+and before a Cube is added:
+the sign-in card that asks for the first owner offers **Start from a backup…**
+while the new box holds no Cube, room or integration,
+since it takes no backup of itself first.
 Choose the backup's file, or the target that holds it (WebDAV, SMB, S3
 or a directory of the new box; for SFTP download the file first),
 paste its key or read it from its file, and **Open with the key**:
 the card says what the backup holds and what it replaces.
+A backup without an enabled owner is refused.
 **Start from this backup** takes every part of it, its users and sign-in,
 settings and targets, integrations, Cubes and history,
 then the server restarts and the old box's users sign in as before.

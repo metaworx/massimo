@@ -2480,6 +2480,5 @@
   "newBox.fileFailed": "But a file was not put in place: {error}.",
   "newBox.blocked": "Restored, but the server did not restart ({why}): restart it, then sign in.",
   "newBox.notBack": "The server has not come back within two minutes: reload the page once it runs.",
-  "newBox.signIn": "The server started from the backup: sign in with one of its users.",
-  "newBox.noUsers": "The backup holds no users: create the owner."
+  "newBox.signIn": "The server started from the backup: sign in with one of its users."
 }

@@ -2482,6 +2482,5 @@
   "newBox.fileFailed": "Mais un fichier n'a pas été mis en place : {error}.",
   "newBox.blocked": "Restauré, mais le serveur n'a pas redémarré ({why}) : redémarrez-le, puis connectez-vous.",
   "newBox.notBack": "Le serveur n'est pas revenu en deux minutes : rechargez la page dès qu'il tourne.",
-  "newBox.signIn": "Le serveur a démarré depuis la sauvegarde : connectez-vous avec l'un de ses utilisateurs.",
-  "newBox.noUsers": "La sauvegarde ne contient aucun utilisateur : créez le propriétaire."
+  "newBox.signIn": "Le serveur a démarré depuis la sauvegarde : connectez-vous avec l'un de ses utilisateurs."
 }

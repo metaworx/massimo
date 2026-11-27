@@ -2480,6 +2480,5 @@
   "newBox.fileFailed": "Aber eine Datei wurde nicht abgelegt: {error}.",
   "newBox.blocked": "Wiederhergestellt, aber der Server ist nicht neu gestartet ({why}): Starte ihn neu und melde dich dann an.",
   "newBox.notBack": "Der Server ist nach zwei Minuten nicht zurück: Lade die Seite neu, sobald er läuft.",
-  "newBox.signIn": "Der Server ist aus der Sicherung gestartet: Melde dich mit einem ihrer Benutzer an.",
-  "newBox.noUsers": "Die Sicherung enthält keine Benutzer: Lege den Eigentümer an."
+  "newBox.signIn": "Der Server ist aus der Sicherung gestartet: Melde dich mit einem ihrer Benutzer an."
 }
