@@ -1,4 +1,4 @@
-# Testing the web UI (v1.38.0)
+# Testing the web UI (v1.38.1)
 
 An evaluation of a Cypress suite for the web UI, against the alternatives:
 what the Playwright smoke test covers today and what it cannot do well,
@@ -1156,7 +1156,8 @@ the server's and the test's, in order,
   (8 of the 33 failures of the soak's first run, 2026-11-26).
   Every test that registers an integration takes its installation id from `own_id`,
   and the ids of its users there
-  (`test_integrations.py`, `test_users.py`, `test_admin_updates.py`'s `made_integrations`),
+  (`test_integrations.py`, `test_users.py`,
+  `test_admin_updates.py`'s `made_integrations`),
   and `test_notifications.py`'s push endpoint, which it removes, is one too.
   A name the test removes at its end, a user's or a provider's,
   may stay one of the case's.
@@ -1172,7 +1173,8 @@ the server's and the test's, in order,
   After every test the sessions it made are ended
   (`DELETE /api/v1/users/{name}/tokens/{id}`, as `undo`),
   those of every user but an integration's:
-  the fixture notes them before the test and ends the new ones once its contexts have closed,
+  the fixture notes them before the test
+  and ends the new ones once its contexts have closed,
   set up before them all, the page's too,
   since pytest sets up a conftest's autouse fixtures in the order of their names
   and `ended_sessions` comes before `guard`, which loads the page.
@@ -1195,7 +1197,8 @@ the server's and the test's, in order,
   the settings' stored values; the Cubes configured;
   the token's user's push subscriptions;
   and whether the set's Cube pairs,
-  since a pairing left running ends by its timer, in a later file, with a `pairing_ended` event.
+  since a pairing left running ends by its timer, in a later file,
+  with a `pairing_ended` event.
   After the file's last test, beside the check of the writes on their way,
   it reads them again,
   and a file where they differ fails at its last test's tear-down,
@@ -1206,7 +1209,8 @@ the server's and the test's, in order,
   What no API takes back is not counted, each in `LEFT_FOR_GOOD` with its reason:
   - the log's lines;
   - the log's warnings, which `clear_preferences` marks seen before every page (above);
-  - an integration registered, disabled at its end, with its users and its role's count of them:
+  - an integration registered, disabled at its end,
+    with its users and its role's count of them:
     a test registers it with an installation of its own (`own_id`, above);
   - a Cube a search found, which stays found while it answers a search,
     as the fake Cube does at every one:
