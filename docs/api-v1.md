@@ -939,9 +939,10 @@ nor does an integration's user, whatever its role.
 
 `DELETE /api/v1/users/{name}` removes a user: its sessions and keys are revoked,
 its preferences removed,
-and its row stays for the audit under the name `<name>-del-YYYYMMDD-HHNN`
-of the removal in UTC (`-<id>` added where that is taken),
-which frees the name; `{"ok": true, "name": "anna"}`.
+an integration's user's link ended,
+and its row stays for the audit with its name,
+which is free again (docs/store.md, migration 0024);
+`{"ok": true, "name": "anna"}`.
 The last enabled owner without an end date stays (`409`);
 a user cannot remove itself.
 An integration's own user, `<uuid>:`, which holds its key,
@@ -1265,8 +1266,18 @@ on a server with regular users: on an open server the header is not read
   no key, password, record, identity, link, name or field of that user's
   (AP AccessEnds, D41-A4 and A5);
   that user changes them signed in itself.
-  Disabling one stops its calls, a linked one's too;
-  removing one does not, where it is linked: disable it, or unlink it.
+  Disabling one stops its calls, a linked one's too.
+  Removing one ends its link (AP AccessEnds, D54-A):
+  its next call makes it anew, unlinked, with the role `integration`,
+  also where a version before kept the link of one removed,
+  without a migration (AP LinkedRemoval, D1-A).
+  Removing the Massimo user it is linked to unlinks it:
+  its next call acts as its own user again,
+  with the role and the state the owner left it (D2-A).
+  An event stream opened for one ends at its next keep-alive,
+  once it is removed, disabled, unlinked or linked anew,
+  or its own or its linked user is removed, disabled or past its end
+  ("GET /api/v1/cubes/{sn}/events").
   Its own user and its system user are not removed ("Users", above).
 - **Without the header** the key acts as the integration itself:
   its role and its maximum (an integration's own polls and stream),
@@ -4535,6 +4546,9 @@ At each keep-alive, every 30 seconds,
 the server asks whether the stream's caller would be let in now,
 and ends the stream when not:
 a key revoked or expired, a user or role disabled,
+for a call through an integration for one of its users
+a chain that no longer lets it in or that acts as another user now
+("Acting for an integration's users"),
 a server that was open when the stream opened and has a user since,
 or, without a store, another token.
 The client's next ticket then asks it to sign in.

@@ -20,11 +20,20 @@ import (
 
 // sendFrom answers a request with a body as if it came from addr.
 func sendFrom(s *Server, method, path, addr, token, body string) *httptest.ResponseRecorder {
+	return sendFromWith(s, method, path, addr, token, body, nil)
+}
+
+// sendFromWith is sendFrom with the headers given, such as an
+// integration's X-MassimoHA-On-Behalf-Of (as, onbehalf_test.go).
+func sendFromWith(s *Server, method, path, addr, token, body string, headers map[string]string) *httptest.ResponseRecorder {
 	r := httptest.NewRequest(method, path, strings.NewReader(body))
 	r.RemoteAddr = addr
 	r.Header.Set("Content-Type", "application/json")
 	if token != "" {
 		r.Header.Set("Authorization", "Bearer "+token)
+	}
+	for k, v := range headers {
+		r.Header.Set(k, v)
 	}
 	rec := httptest.NewRecorder()
 	s.Handler().ServeHTTP(rec, r)
