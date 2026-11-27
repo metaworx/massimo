@@ -136,6 +136,20 @@ Where the length is what the test checks,
 such as the second a late Cube gets (`TestSearchWaitsForALateAnswer`),
 the test keeps the product's.
 
+**A client's timeout against a local fake** is such a deadline
+where the fake's answer is to come:
+`internal/update`'s `shortAnswerWait` is 250 ms, scaled,
+since a slow runner's answers take longer.
+Where the timeout is what the test checks,
+it is given to the call the test checks alone:
+`TestDownloadOutlastsTheClientTimeout` reads the release with a client without one,
+and only its download gets the client's 250 ms, which it outlasts;
+the release's first answers took longer than that once on Windows.
+A Cube client's `ReplyTimeout` is a deadline for the fake's answers too,
+but the tests that shorten it wait it out where the fake is silent,
+and check the loss it brings against the poll's interval, which is not scaled:
+they keep the length they give.
+
 A test that waits longer than it needs to shows in CI:
 the jobs Vet and test, Race and Test (armv6, QEMU)
 name their 20 slowest tests and their 10 slowest packages in the run's summary

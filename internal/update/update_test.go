@@ -27,6 +27,8 @@ import (
 	"sync"
 	"testing"
 	"time"
+
+	"go.metaworx.ch/massimo/internal/testkit"
 )
 
 func TestCompare(t *testing.T) {
@@ -754,18 +756,21 @@ func slowBinary(t *testing.T, gh *fakeGitHub, tag, name string, body []byte, pie
 
 // The download of a binary is bounded by the context and by a pause in
 // the data, not by the client's time for the API's answers: a slow line
-// that keeps sending gets the binary.
+// that keeps sending gets the binary. The client's 250 ms is the
+// download's alone, which it outlasts; the release is read without it,
+// since a slow runner's first answers can take that long.
 func TestDownloadOutlastsTheClientTimeout(t *testing.T) {
 	pub, priv := testKey(t)
 	gh := newFakeGitHub(t)
 	body := bytes.Repeat([]byte("massimo"), 4096)
 	gh.add(t, priv, "v1.0.0", "main", map[string][]byte{"massimo-linux-amd64": body}, nil)
 	slowBinary(t, gh, "v1.0.0", "massimo-linux-amd64", body, 6, 100*time.Millisecond)
-	c := &Client{API: gh.srv.URL, Repo: Repo, HTTP: &http.Client{Timeout: 250 * time.Millisecond}, Key: pub}
+	c := &Client{API: gh.srv.URL, Repo: Repo, HTTP: gh.srv.Client(), Key: pub}
 	r, err := c.ByTag(context.Background(), "v1.0.0")
 	if err != nil {
 		t.Fatal(err)
 	}
+	c.HTTP = &http.Client{Timeout: 250 * time.Millisecond}
 	var buf bytes.Buffer
 	if err := c.Download(context.Background(), r, "massimo-linux-amd64", &buf); err != nil || !bytes.Equal(buf.Bytes(), body) {
 		t.Fatalf("a slow download: %v, %d of %d bytes", err, buf.Len(), len(body))
@@ -936,10 +941,11 @@ func TestDownloadRetriesItsStart(t *testing.T) {
 }
 
 // shortAnswerWait makes the wait for an answer short for one test, long
-// enough for the fake's answers under -race on a busy runner.
+// enough for the fake's answers under -race on a busy runner: a deadline
+// for an answer that comes, it takes the scale.
 func shortAnswerWait(t *testing.T) {
 	old := answerWait
-	answerWait = 250 * time.Millisecond
+	answerWait = testkit.Scale(250 * time.Millisecond)
 	t.Cleanup(func() { answerWait = old })
 }
 
