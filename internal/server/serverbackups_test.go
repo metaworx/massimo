@@ -273,7 +273,7 @@ func TestServerBackupRoutesRights(t *testing.T) {
 			}
 		}
 	}
-	if n != 21 {
+	if n != 24 {
 		t.Fatalf("%d routes", n)
 	}
 }

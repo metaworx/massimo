@@ -205,3 +205,19 @@ func BackupTLSFiles(o TLS, dataDir string) []serverbackup.TLSFile {
 	}
 	return out
 }
+
+// RestoreTLSPlace is where a restore of a server backup puts its TLS
+// files for o (AP ServerBackup, Block 5): files mode's certificate and
+// key, else the self-signed pair's place in the data directory, and the
+// ACME directory, whichever the box serves; the paths of the box that
+// made the backup are not taken, since a new box's can differ.
+func RestoreTLSPlace(o TLS, dataDir string) serverbackup.TLSPlace {
+	var p serverbackup.TLSPlace
+	p.ACMEDir, _ = certs.ACMEPaths(dataDir, "")
+	if TLSMode(o.Mode, o.Cert, o.Key) == "files" {
+		p.Cert, p.Key = o.Cert, o.Key
+	} else {
+		p.Cert, p.Key = certs.SelfSignedPaths(dataDir)
+	}
+	return p
+}

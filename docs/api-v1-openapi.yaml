@@ -4236,6 +4236,163 @@ paths:
             application/json:
               schema: {$ref: "#/components/schemas/Error"}
         "429": {$ref: "#/components/responses/LockedOut"}
+  /api/v1/server-backups/{id}/restore/plan:
+    post:
+      summary: What a restore of a server backup would do; the owner's alone
+      x-capability: owner
+      description: |
+        The backup opened with key_file, held in memory for the request
+        alone and never written, its store migrated beside where older;
+        then the restore run and rolled back: the rows per scope and
+        table, what is missing, the references cleared, the Cubes the
+        backup holds. Without scopes, every scope. A restore the store
+        would refuse is answered in refused, with the report's list. A
+        backup of another box says whether that box still answers on the
+        network (identity.answers, null where it was not looked for).
+      parameters: [{$ref: "#/components/parameters/serverBackupID"}]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: "#/components/schemas/ServerRestoreRequest"}
+      responses:
+        "200":
+          description: The plan
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/ServerRestorePlan"}
+        "400": {$ref: "#/components/responses/BadRequest"}
+        "401": {$ref: "#/components/responses/Unauthorized"}
+        "403":
+          description: The caller is not the owner
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/Error"}
+        "404": {$ref: "#/components/responses/NotFound"}
+        "409":
+          description: No target holds a copy
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/Error"}
+        "422":
+          description: The key does not open the backup, its file was changed, or its store is newer than this server's (update first)
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/Error"}
+        "429": {$ref: "#/components/responses/LockedOut"}
+  /api/v1/server-backups/{id}/restore:
+    post:
+      summary: Restore scopes of a server backup, then restart; the owner's alone
+      x-capability: owner
+      description: |
+        The scopes (settings, users, integrations, cubes, cube:<serial>,
+        history, all), each replaced whole in one transaction, a pinned
+        local backup taken first; opaque.key with users, the backup's
+        node.key and node id with take_identity, the env file with env and
+        the TLS files with tls, each file replaced kept beside as
+        <name>.before-restore. Then the server restarts, as POST
+        /api/v1/restart does, and the answer says so first; where it
+        cannot, restart says why, and the server is to be restarted by
+        hand. The Cubes restored are named, with the Cube backup the Cube
+        restore could write onto each (POST /api/v1/cubes/{sn}/restore).
+        The key is held in memory for the request alone, never written,
+        and kept by no audit row.
+      parameters: [{$ref: "#/components/parameters/serverBackupID"}]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: "#/components/schemas/ServerRestoreRequest"}
+      responses:
+        "200":
+          description: Restored
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/ServerRestoreResult"}
+        "400": {$ref: "#/components/responses/BadRequest"}
+        "401": {$ref: "#/components/responses/Unauthorized"}
+        "403":
+          description: The caller is not the owner
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/Error"}
+        "404": {$ref: "#/components/responses/NotFound"}
+        "409":
+          description: |
+            Refused: rows of other scopes missing (code missing), no owner
+            left (code no_owner), each with the report; or no key for the
+            backup taken first, no copy, a restart or an update under way
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  error: {type: string}
+                  code: {type: string, enum: [missing, no_owner]}
+                  report: {$ref: "#/components/schemas/ServerRestoreReport"}
+        "422":
+          description: The key does not open the backup, its file was changed, or its store is newer than this server's (update first)
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/Error"}
+        "429": {$ref: "#/components/responses/LockedOut"}
+  /api/v1/server-backups/{id}/check-key:
+    post:
+      summary: Check a server backup with the key; the owner's alone
+      x-capability: owner
+      description: |
+        The backup opened with key_file into a temporary directory, its
+        files listed and its store checked with PRAGMA integrity_check,
+        changing nothing; scopes and the other fields are not read.
+      parameters: [{$ref: "#/components/parameters/serverBackupID"}]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: "#/components/schemas/ServerRestoreRequest"}
+      responses:
+        "200":
+          description: What the check found
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  ok: {type: boolean, description: The store is sound}
+                  integrity: {type: array, items: {type: string}, description: '"ok", or what PRAGMA integrity_check found'}
+                  this_box: {type: boolean}
+                  files:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        name: {type: string}
+                        role: {type: string}
+                  backup:
+                    type: object
+                    properties:
+                      uuid: {type: string}
+                      time: {type: string, format: date-time}
+                      schema: {type: integer}
+        "400": {$ref: "#/components/responses/BadRequest"}
+        "401": {$ref: "#/components/responses/Unauthorized"}
+        "403":
+          description: The caller is not the owner
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/Error"}
+        "404": {$ref: "#/components/responses/NotFound"}
+        "409":
+          description: No target holds a copy
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/Error"}
+        "422":
+          description: The key does not open the backup, or its file was changed
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/Error"}
+        "429": {$ref: "#/components/responses/LockedOut"}
   /api/v1/server-backups/{id}/retry:
     post:
       summary: Retry a failed server backup, or its failed copies
@@ -6554,6 +6711,123 @@ components:
               default: {type: string}
               choices: {type: array, items: {type: string}}
               warn: {type: string, description: 'A pattern, in the syntax RE2 and JavaScript share, of the values the card warns of beside the field, with the text serverbackup.warn.<kind>.<key>; it refuses nothing'}
+    ServerRestoreRequest:
+      type: object
+      required: [key_file]
+      properties:
+        key_file: {type: string, description: 'The key file''s text: an age identity, or an OpenSSH ssh-ed25519 key without a passphrase'}
+        scopes:
+          type: array
+          items: {type: string}
+          description: settings, users, integrations, cubes (every Cube of the backup), cube:<serial>, history, or all; each item may list several, separated by commas
+        take_identity: {type: boolean, description: Take the backup's node.key and node id; this box keeps its own without}
+        env: {type: boolean, description: Put the backup's env file where this server reads its own}
+        tls: {type: boolean, description: Put the backup's TLS files where this server keeps its own}
+    ServerRestoreReport:
+      type: object
+      properties:
+        tables:
+          type: array
+          items:
+            type: object
+            properties:
+              scope: {type: string}
+              table: {type: string}
+              restored: {type: integer, description: Rows taken from the backup}
+              replaced: {type: integer, description: 'Of them, those that took a live row''s place'}
+              removed: {type: integer, description: Live rows the backup lacks}
+              kept_removed: {type: integer, description: 'Of them, those kept, marked removed, since a row outside the scopes names them'}
+        missing:
+          type: array
+          description: Rows of other scopes the backup's rows name and this server lacks
+          items:
+            type: object
+            properties:
+              table: {type: string}
+              uuid: {type: string}
+              name: {type: string}
+              by: {type: string, description: The table that names it}
+        cleared:
+          type: array
+          items: {$ref: "#/components/schemas/ServerRestoreCount"}
+        removed:
+          type: array
+          description: Live rows outside the scopes that went with a row the restore removed
+          items: {$ref: "#/components/schemas/ServerRestoreCount"}
+        secrets_lost: {type: integer, description: 'Sealed secrets that did not open, each to be entered again'}
+        cubes:
+          type: array
+          items: {$ref: "#/components/schemas/ServerRestoreCube"}
+    ServerRestoreCount:
+      type: object
+      properties:
+        table: {type: string}
+        column: {type: string}
+        rows: {type: integer}
+    ServerRestoreCube:
+      type: object
+      properties:
+        serial: {type: string}
+        name: {type: string}
+        live: {type: boolean, description: This server held it before}
+        backup: {type: string, description: 'Its newest Cube backup, the configuration the Cube restore could write onto it'}
+    ServerRestoreFile:
+      type: object
+      properties:
+        role: {type: string}
+        name: {type: string, description: Its name in the backup}
+        to: {type: string, description: Where it goes on this box}
+        before: {type: string, description: Where the file it replaced stays}
+    ServerRestorePlan:
+      type: object
+      properties:
+        backup:
+          type: object
+          properties:
+            uuid: {type: string}
+            time: {type: string, format: date-time}
+            trigger: {type: string}
+            label: {type: string}
+            version: {type: string}
+            schema: {type: integer}
+        identity:
+          type: object
+          properties:
+            this_box: {type: boolean}
+            fingerprint: {type: string}
+            node: {type: string, description: The backup's node id}
+            answers: {type: boolean, nullable: true, description: The box of another backup still answers on the network}
+        migrated: {type: boolean, description: 'A backup of an older schema, brought to this server''s'}
+        scopes: {type: array, items: {type: string}}
+        serials: {type: array, items: {type: string}}
+        cubes:
+          type: array
+          items:
+            type: object
+            properties:
+              serial: {type: string}
+              name: {type: string}
+              live: {type: boolean}
+        env: {type: boolean, description: The backup holds an env file}
+        tls: {type: integer, description: The TLS files it holds}
+        files: {type: array, items: {$ref: "#/components/schemas/ServerRestoreFile"}}
+        report: {$ref: "#/components/schemas/ServerRestoreReport"}
+        refused: {type: string, description: Why the restore would be refused; empty for not}
+    ServerRestoreResult:
+      type: object
+      properties:
+        restart:
+          type: object
+          properties:
+            started: {type: boolean}
+            by: {type: string}
+            blocked: {type: string, description: Why the server did not restart; restart it by hand}
+        before_backup: {type: string, description: The pinned local backup taken first}
+        scopes: {type: array, items: {type: string}}
+        serials: {type: array, items: {type: string}}
+        report: {$ref: "#/components/schemas/ServerRestoreReport"}
+        files: {type: array, items: {$ref: "#/components/schemas/ServerRestoreFile"}}
+        cubes: {type: array, items: {$ref: "#/components/schemas/ServerRestoreCube"}}
     ServerBackupKey:
       type: object
       properties:

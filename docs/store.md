@@ -2352,6 +2352,77 @@ all with Go's standard library:
   and against a bucket with object lock and a default retention too,
   `_LOCK_BUCKET`.
 
+#### Restore by scope
+
+The owner restores chosen scopes of a backup (D6-A, D7-A;
+`internal/serverbackup`, `Catalogue.Restore`; docs/api-v1.md, "Server backups").
+Each table of the store belongs to scopes by its rows,
+in one list beside the store's queries (`internal/store/restore.go`, `scopeTables`),
+and a test fails on a table that is in none:
+a table added later is placed there, or a restore would leave it out.
+
+| Scope | Rows | File |
+|-------|------|------|
+| `settings` | the settings but `node.id` and `tenant.id`, the targets of the server's backups with their sealed secrets, their keys | – |
+| `users` | the users that are not an integration's, `roles`, `role_capabilities`, `capabilities_disabled`, `auth_providers`, the providers' identities, the users' API keys, preferences and push subscriptions on a key | `opaque.key` |
+| `integrations` | the integrations, their users, identities, keys and preferences | – |
+| `cubes`, `cube:<serial>` | each Cube by its serial, with its rooms, Cube backups and their files, and its commands | – |
+| `history` | `audit`, `log`, the commands of no Cube | – |
+| the identity, ticked | `node.id`, `tenant.id` | `node.key` |
+| never | the sessions and the push subscriptions on one, `auth_failures`, `backup_pending`, `schema_version`, `server_backups` and `server_backup_copies`, the live catalogue | – |
+
+The env file and the TLS files are restored only where ticked, each on its own,
+since a new box's paths can differ: the env file goes where this server reads its own,
+the TLS files where it keeps its own (files mode's, else the self-signed pair's place,
+and the ACME directory). Each file replaced stays beside as `<name>.before-restore`.
+
+A restore, in this order:
+
+1. The backup is opened with the owner's key, which the request carries and nothing
+   writes, into a temporary directory in the data directory
+   (`.serverbackup-restore-*`, removed at its end, or by the next backup after a crash).
+   A backup whose store is of a newer schema than this one's is refused first:
+   update first. One of an older schema is migrated there, on its copy alone.
+2. It is planned: run in a transaction and rolled back.
+   A refusal takes no backup.
+3. A local backup is taken, pinned for 30 days (`before-restore`).
+4. The scopes are replaced whole, in one transaction:
+   - A row of the backup takes the id of the live row of its uuid, or of its natural key
+     (a role's key, a Cube's serial, a target's name, a key's fingerprint),
+     or a new one; its references follow through a map of the backup's ids to this
+     store's, read from the schema (`PRAGMA foreign_key_list`), so that a later
+     table's are followed without new code. A reference to a row of another scope
+     maps to the live row of its uuid.
+   - A reference to a row of another scope that this store lacks refuses the restore
+     with the list of what is missing (a user by name, a Cube by serial, …).
+     One the schema lets go (`ON DELETE SET NULL`) is cleared,
+     and so is one to a session, which never comes back.
+   - A live row the backup lacks is removed. Where a row outside the scopes still
+     names it and its table keeps removed rows (`deleted_at`), it stays, marked
+     removed: a user who left since the backup stays in the audit's rows.
+     What the schema removes with it (`ON DELETE CASCADE`) goes,
+     the sessions of a user removed among them.
+   - Users and sign-in that would leave no owner, where there was one, is refused.
+   - The sealed secrets of the rows taken are opened with the backup's
+     `opaque.key` and sealed with this store's.
+     With users and sign-in, `opaque.key` travels too, since a password of
+     version 2 opens with it alone: every sealed secret, the live ones too,
+     is then sealed with the backup's (D7-A).
+5. The files go in place: `opaque.key` with users and sign-in,
+   `node.key` with the identity, the env file and the TLS files where ticked.
+6. The server restarts, as `POST /api/v1/restart` does:
+   it keeps `opaque.key` and its node in memory.
+
+This box keeps its `node.key` unless "take the backup's identity" is ticked;
+the plan says whether the box that made the backup still answers on the network,
+since two boxes of one identity clash.
+A Cube restored is the store's rows alone: writing its configuration onto the Cube
+stays the Cube restore (`POST /api/v1/cubes/{sn}/restore`), with its radio cost,
+which the restore's answer offers for each Cube with the newest of its Cube backups.
+"Check with the key" opens a backup into a temporary directory the same way
+and runs `PRAGMA integrity_check` on its store, changing nothing:
+a backup nobody has opened is a hope, not a backup.
+
 ## 8. Migration of an installed box
 
 The Pi runs `massimo serve` as a systemd service with `/etc/massimo/env`,

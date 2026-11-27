@@ -144,6 +144,9 @@ var actions = map[string]string{
 	"POST /api/v1/server-backup-keys":                            "serverbackup.key_add",
 	"POST /api/v1/server-backup-keys/{uuid}/confirm":             "serverbackup.key_confirm",
 	"DELETE /api/v1/server-backup-keys/{uuid}":                   "serverbackup.key_remove",
+	"POST /api/v1/server-backups/{id}/restore/plan":              "serverbackup.restore_plan",
+	"POST /api/v1/server-backups/{id}/restore":                   "serverbackup.restore",
+	"POST /api/v1/server-backups/{id}/check-key":                 "serverbackup.check_key",
 }
 
 // streamedBodies are the routes whose body the audit does not read
@@ -179,13 +182,19 @@ var changeLines = map[string]string{
 	"serverbackup.push": "system", "serverbackup.pull": "system", "serverbackup.target_test": "",
 	"serverbackup.pin": "change", "serverbackup.copy_delete": "change", "serverbackup.delete": "change", "serverbackup.target_add": "change", "serverbackup.target_update": "change",
 	"serverbackup.target_remove": "change", "serverbackup.key_add": "change", "serverbackup.key_confirm": "change", "serverbackup.key_remove": "change",
+	// a restore: the backup it takes first writes its line, and the
+	// server restarts; its plan and a check with the key change nothing
+	"serverbackup.restore": "system", "serverbackup.restore_plan": "", "serverbackup.check_key": "",
 }
 
 // noCommand are the actions that are audited but are no command: they
 // send nothing to a Cube and a retry of them is harmless (commands.go).
 var noCommand = map[string]bool{"login": true, "login.start": true, "login.key": true, "logout": true, "integration.request": true, "preference.set": true, "preference.delete": true,
 	"push.subscribe": true, "push.unsubscribe": true, "server.reload": true, "identity.link.start": true,
-	"identity.link.cancel": true, "serverbackup.upload": true, "serverbackup.target_test": true}
+	"identity.link.cancel": true, "serverbackup.upload": true, "serverbackup.target_test": true,
+	// a restore replaces the commands themselves, and its plan and a
+	// check with the key send nothing
+	"serverbackup.restore": true, "serverbackup.restore_plan": true, "serverbackup.check_key": true}
 
 // secretFields are the body fields an audit row never keeps, and the
 // answer's a command row never keeps: a server backup target's secret, a
