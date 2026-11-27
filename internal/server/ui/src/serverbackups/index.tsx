@@ -10,15 +10,17 @@
  * updated in place; read each time Maintenance is shown (the list; the
  * targets, the keys and, once, the kinds for a holder of backup.server),
  * after each of its actions and for the stream's events while it is
- * shown (serverEvent, MassimoParts.serverEvent).
+ * shown (serverEvent, MassimoParts.serverEvent). A key made's secret
+ * part goes as another page is shown or the card is folded.
  */
 
+import { onFold } from "../shared/card";
 import { mounter } from "../shared/region";
 import { can } from "../shared/me";
 import { onView } from "../shared/pages";
 import { Card } from "./Card";
 import { loadShown } from "./send";
-import { forgetServerBackups, quiet } from "./store";
+import { dropMade, forgetServerBackups, quiet } from "./store";
 
 export { serverEvent } from "./send";
 
@@ -34,3 +36,9 @@ onView("maint", () => {
   mount();
   void loadShown();
 });
+
+// a key made's secret part is shown that once (D4-A): another page shown, or the card folded, takes it away
+document.addEventListener("viewshown", (ev) => {
+  if ((ev as CustomEvent<string>).detail !== "maint") dropMade();
+});
+onFold("sys-server-backups", dropMade);

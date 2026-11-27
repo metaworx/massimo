@@ -119,6 +119,13 @@ function limitAria(id: string | undefined, limit: Limit | undefined) {
   return { "aria-invalid": "true" as const, "aria-describedby": id + "-limit" };
 }
 
+/** describedAria are limitAria's attributes with describedBy, the ids of what else describes the control (a note the caller draws under the field), added to its description. */
+function describedAria(id: string | undefined, limit: Limit | undefined, describedBy: string | undefined): { "aria-invalid"?: "true"; "aria-describedby"?: string } {
+  const a: { "aria-invalid"?: "true"; "aria-describedby"?: string } = limitAria(id, limit);
+  const ids = [a["aria-describedby"], describedBy].filter(Boolean).join(" ");
+  return ids ? { ...a, "aria-describedby": ids } : a;
+}
+
 /** LimitLine is the line of a field's limit, of the id id + "-limit", hidden in its place while the value is in it. */
 function LimitLine({ id, limit }: { id: string; limit: Limit }) {
   return (
@@ -148,6 +155,8 @@ interface Row {
   cls?: string;
   /** The label's class: action-title for a row's title in bold (Maintenance's settings). */
   labelCls?: string;
+  /** The ids of a note the caller draws beside the row that describes the control (a target's field warned of), its TextField's, NumberField's and Select's description. */
+  describedBy?: string;
   /** The field's limit, its line before the control (limitAria gives the control its attributes). */
   limit?: Limit;
 }
@@ -220,7 +229,7 @@ type TextValue = Value<string> | { draft?: undefined; value?: undefined; set?: u
  * draft, a value and a set it is not controlled: no drawing writes what
  * it holds, and its caller reads it through inputRef.
  */
-export function TextField({ label, id, wide = true, unit, hint, help, cls, limit, name, placeholder, type, autocomplete, inputCls, maxLength, pattern, required, disabled, draft, value, set, show, inputRef, row = true, aria }: Omit<Row, "label"> & TextValue & {
+export function TextField({ label, id, wide = true, unit, hint, help, cls, limit, describedBy, name, placeholder, type, autocomplete, inputCls, maxLength, pattern, required, disabled, draft, value, set, show, inputRef, row = true, aria }: Omit<Row, "label"> & TextValue & {
   label?: string;
   row?: boolean;
   aria?: string;
@@ -240,7 +249,7 @@ export function TextField({ label, id, wide = true, unit, hint, help, cls, limit
     <input ref={inputRef} id={id} type={(type || "text") as "text"} name={name} class={[unit || !row ? "" : "field-control", inputCls || ""].filter(Boolean).join(" ") || undefined}
       autocomplete={row ? autocomplete || "off" : autocomplete} spellcheck={row ? false : undefined} aria-label={aria}
       placeholder={placeholder} maxLength={maxLength} pattern={pattern} required={required} disabled={disabled} value={draft ? draft.value : value}
-      {...limitAria(id, limit)} onInput={(ev) => (draft ? draft.set(ev.currentTarget.value) : set?.(ev.currentTarget.value))} />
+      {...describedAria(id, limit, describedBy)} onInput={(ev) => (draft ? draft.set(ev.currentTarget.value) : set?.(ev.currentTarget.value))} />
   );
   if (!row) return input;
   return (
@@ -264,7 +273,7 @@ export function TextField({ label, id, wide = true, unit, hint, help, cls, limit
  * field with two controls), whose notice the caller then draws
  * (Meanwhile).
  */
-export function NumberField({ label, id, wide, unit, hint, help, cls, limit, name, min, max, step, aria, disabled, draft, value, set, show, row = true, inputRef, inputMode, onChange }: Partial<Row> & Value<string> & {
+export function NumberField({ label, id, wide, unit, hint, help, cls, limit, describedBy, name, min, max, step, aria, disabled, draft, value, set, show, row = true, inputRef, inputMode, onChange }: Partial<Row> & Value<string> & {
   name?: string;
   onChange?: (v: string) => void;
   inputMode?: "numeric" | "decimal";
@@ -279,7 +288,7 @@ export function NumberField({ label, id, wide, unit, hint, help, cls, limit, nam
 }) {
   const input = (
     <input ref={inputRef} id={id} type="number" name={name} class={!row || unit ? undefined : "field-control"} min={String(min)} max={String(max)}
-      step={String(step)} inputMode={inputMode} aria-label={aria} disabled={disabled} value={draft ? draft.value : value} {...limitAria(id, limit)}
+      step={String(step)} inputMode={inputMode} aria-label={aria} disabled={disabled} value={draft ? draft.value : value} {...describedAria(id, limit, describedBy)}
       onInput={(ev) => (draft ? draft.set(ev.currentTarget.value) : set(ev.currentTarget.value))}
       onChange={onChange && ((ev) => onChange(ev.currentTarget.value))} />
   );
@@ -318,7 +327,7 @@ export type SelectOption = [value: string, label: string, disabled?: boolean] | 
  * choices): aria is then its name for a screen reader, selectCls its own
  * class (hidden, for a choice left out).
  */
-export function Select({ label, id, wide, unit, hint, hintId, help, cls, labelCls, name, options, value, onChange, disabled, draft, show, row = true, inputRef, before, after, aria, selectCls }: Partial<Row> & {
+export function Select({ label, id, wide, unit, hint, hintId, help, cls, labelCls, describedBy, name, options, value, onChange, disabled, draft, show, row = true, inputRef, before, after, aria, selectCls }: Partial<Row> & {
   aria?: string;
   selectCls?: string;
   before?: ComponentChildren;
@@ -335,7 +344,7 @@ export function Select({ label, id, wide, unit, hint, hintId, help, cls, labelCl
 }) {
   const opt = ([v, l, off]: [string, string, boolean?]) => <option key={v} value={v} disabled={off}>{l}</option>;
   const select = (
-    <select ref={inputRef} id={id} name={name} class={!row ? selectCls : unit ? undefined : "field-control"} disabled={disabled} aria-label={aria} aria-describedby={hint ? hintId : undefined}
+    <select ref={inputRef} id={id} name={name} class={!row ? selectCls : unit ? undefined : "field-control"} disabled={disabled} aria-label={aria} aria-describedby={[hint ? hintId : "", describedBy || ""].filter(Boolean).join(" ") || undefined}
       value={draft ? draft.value : value} onChange={(ev) => {
       const v = ev.currentTarget.value;
       if (draft) draft.set(v);

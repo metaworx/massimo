@@ -14,7 +14,8 @@
  * they count (cardBadges), and the page's chrome draws
  * into the head (chrome/Cards.tsx), also while it is folded. Its fold is
  * kept in this browser (massimo.fold.<card id>) and set on the skeleton
- * at once, so that a card shown is open before it is scrolled to. A card
+ * at once, so that a card shown is open before it is scrolled to; a
+ * region may have something run as its card is folded (onFold). A card
  * shown, or a row in one, is kept in view while the page settles
  * (keepInView). The caller names the card by its id; this file knows no
  * region's.
@@ -54,6 +55,19 @@ function foldKey(card: HTMLElement): string {
   return "massimo.fold." + card.id;
 }
 
+/** What runs when a card is folded, by the card's id (onFold). */
+const folders = new Map<string, (() => void)[]>();
+
+/**
+ * onFold has fn run each time the card of the id is folded, by its
+ * button or as the page loads it folded: a region that shows something
+ * only while it is in sight takes it away (a key made's secret part,
+ * Server backups).
+ */
+export function onFold(id: string, fn: () => void): void {
+  folders.set(id, [...(folders.get(id) || []), fn]);
+}
+
 /** foldCard folds a card or opens it: the body hidden, the head with its badges still shown. */
 function foldCard(card: HTMLElement, folded: boolean): void {
   const btn = card.querySelector<HTMLElement>(".section-fold");
@@ -61,6 +75,7 @@ function foldCard(card: HTMLElement, folded: boolean): void {
   btn.setAttribute("aria-expanded", folded ? "false" : "true");
   document.getElementById(btn.getAttribute("aria-controls") || "")?.classList.toggle("hidden", folded);
   card.classList.toggle("folded", folded);
+  if (folded) for (const fn of folders.get(card.id) || []) fn();
 }
 
 /**

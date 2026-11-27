@@ -14,7 +14,8 @@
  * …/server-backup-targets/kinds), for a holder of backup.server. Beside
  * them what the card keeps beyond its parts: a new key's or target's form
  * shown, the key just made with its secret part, held until it is
- * confirmed, a fold open per backup and per target, and the message
+ * confirmed, its hour is over, another page is shown or the card is
+ * folded, a fold open per backup and per target, and the message
  * lines. A sign-out forgets it all, the secret part first.
  */
 
@@ -84,6 +85,36 @@ export const TAKES = ["every", "daily", "weekly", "monthly"] as const;
 /** DEFAULT_KEEP is the retention of a target added without one, the server's (serverbackup.DefaultPolicy). */
 export const DEFAULT_KEEP: ServerBackupPolicy = { daily: 7, weekly: 4, monthly: 6 };
 
+/** The timer that takes the key made away at its end, 0 for none. */
+let madeTimer: ReturnType<typeof setTimeout> | 0 = 0;
+
+/**
+ * holdMade shows a key made, its secret part, until its end (expires,
+ * the server's expires_at), when it goes by itself and gone() runs (the
+ * keys read again); dropMade takes it away at once: confirmed, removed,
+ * gone from the list, another page shown, the card folded, a sign-out
+ * (D4-A: the secret part is shown that once).
+ */
+export function holdMade(m: Made, expires: string | null | undefined, gone: () => void): void {
+  dropMade();
+  card.made = m;
+  const ms = Date.parse(expires || "") - Date.now();
+  if (isNaN(ms)) return;
+  madeTimer = setTimeout(() => {
+    madeTimer = 0;
+    if (card.made?.uuid !== m.uuid) return;
+    card.made = null;
+    gone();
+  }, Math.max(ms, 0));
+}
+
+/** dropMade takes the key made and its secret part from the page, and its timer. */
+export function dropMade(): void {
+  if (madeTimer) clearTimeout(madeTimer);
+  madeTimer = 0;
+  card.made = null;
+}
+
 /** targetFormKey is the key of a target's settings form (shared/forms.ts), under the card's "serverbackups". */
 export function targetFormKey(uuid: string): string {
   return "serverbackups:" + uuid;
@@ -105,7 +136,7 @@ export function quiet(): void {
  * messages; the part is drawn from nothing.
  */
 export function forgetServerBackups(): void {
-  card.made = null;
+  dropMade();
   for (const tg of sb.targets) forgetForms(targetFormKey(tg.uuid || ""));
   sb.list = null;
   sb.failed = "";

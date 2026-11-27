@@ -30,7 +30,7 @@ import { isShown } from "../shared/pages";
 import { saveResponse } from "../shared/save";
 import { session, stillSession } from "../shared/session";
 import { fmtWhen } from "../shared/time";
-import { backupUI, card, sb, targetFormKey, targetUI } from "./store";
+import { backupUI, card, dropMade, holdMade, sb, targetFormKey, targetUI } from "./store";
 
 /** The answer of a key added: the key, and for one made its secret part and the key file, once. */
 interface KeyAdded {
@@ -98,7 +98,7 @@ export async function loadKeys(): Promise<void> {
     const list = (await api<ServerBackupKey[]>("GET", KEYS)) || [];
     if (!stillSession(n)) return;
     const made = card.made;
-    if (made && !list.some((k) => k.uuid === made.uuid && k.pending)) card.made = null; // confirmed, removed or its hour over: its secret part goes
+    if (made && !list.some((k) => k.uuid === made.uuid && k.pending)) dropMade(); // confirmed, removed or its hour over: its secret part goes
     sb.keys = list;
     sb.keysLoaded = true;
   } catch (e) {
@@ -201,7 +201,8 @@ export async function upload(file: File): Promise<boolean> {
 export async function download(b: ServerBackup): Promise<void> {
   const n = session();
   try {
-    await saveResponse(await apiRaw("GET", backupPath(b) + "/file"), "massimo-server-backup-" + (b.uuid || "") + ".zip");
+    // a file whose answer comes after a sign-out is not saved
+    await saveResponse(await apiRaw("GET", backupPath(b) + "/file"), "massimo-server-backup-" + (b.uuid || "") + ".zip", () => stillSession(n));
   } catch (e) {
     if (stillSession(n)) sayBackup(b)({ text: t("serverbackup.failedAction", { error: (e as Error).message }), ok: false });
   }
@@ -314,20 +315,31 @@ export function addKey(label: string, way: string, recipient: string): Promise<b
     throw e;
   }), (r) => {
     if (r.identity && r.key?.uuid) {
-      card.made = { uuid: r.key.uuid, identity: r.identity, file: r.key_file || r.identity + "\n" };
+      // shown until its end, when the keys are read again and the server has let it go
+      holdMade({ uuid: r.key.uuid, identity: r.identity, file: r.key_file || r.identity + "\n" }, r.key.expires_at, () => void loadKeys());
       return { text: t("serverbackup.key.madeSaid", { label: label || r.key.fingerprint || "" }), ok: true };
     }
     return { text: t("serverbackup.key.added", { label: label || r.key?.fingerprint || "" }), ok: true };
   }, "serverbackup.key.refused");
 }
 
-/** confirmKey sends a key made's last six characters (POST …/{uuid}/confirm), which make it a key; others are refused. */
+/**
+ * confirmKey sends a key made's last six characters (POST …/{uuid}/confirm),
+ * which make it a key; others are refused. A key the server no longer
+ * has (404: its hour is over) is read again with the others, so that its
+ * row, its secret part and Confirm go.
+ */
 export function confirmKey(k: ServerBackupKey, lastSix: string): Promise<boolean> {
-  return act(sayKeys, reloadKeys, () => api("POST", KEYS + "/" + encodeURIComponent(k.uuid || "") + "/confirm", { last_six: lastSix }).catch((e: Error & { status?: number }) => {
+  const n = session();
+  return act(sayKeys, reloadKeys, () => api("POST", KEYS + "/" + encodeURIComponent(k.uuid || "") + "/confirm", { last_six: lastSix }).catch(async (e: Error & { status?: number }) => {
     if (e.status === 422) throw new Error(t("serverbackup.key.wrongSix"));
+    if (e.status === 404) {
+      if (stillSession(n)) await reloadKeys();
+      throw new Error(t("serverbackup.key.expired"));
+    }
     throw e;
   }), () => {
-    card.made = null; // confirmed: its secret part goes from the page
+    dropMade(); // confirmed: its secret part goes from the page
     return { text: t("serverbackup.key.confirmed", { label: k.label || k.fingerprint || "" }), ok: true };
   }, "serverbackup.key.refused");
 }
@@ -335,7 +347,7 @@ export function confirmKey(k: ServerBackupKey, lastSix: string): Promise<boolean
 /** removeKey removes a key (DELETE …/{uuid}); backups made before stay encrypted for it. */
 export function removeKey(k: ServerBackupKey): Promise<boolean> {
   return act(sayKeys, reloadKeys, () => api("DELETE", KEYS + "/" + encodeURIComponent(k.uuid || "")), () => {
-    if (card.made?.uuid === k.uuid) card.made = null;
+    if (card.made?.uuid === k.uuid) dropMade();
     return { text: t("serverbackup.key.removed", { label: k.label || k.fingerprint || "" }), ok: true };
   }, "serverbackup.failedAction");
 }

@@ -57,22 +57,27 @@ function MadeKey({ k, made }: { k: ServerBackupKey; made: Made }) {
   );
 }
 
-/** Confirm is a pending key's last six characters and Confirm, for the owner: typed back they make it a key. */
+/**
+ * Confirm is a pending key's last six characters and Confirm, for the
+ * owner: typed back they make it a key. The whole secret key pasted
+ * gives its last six, so the field takes any length.
+ */
 function Confirm({ k }: { k: ServerBackupKey }) {
   useLook();
-  const [six, setSix] = useState("");
+  const [typed, setTyped] = useState("");
   const send = useBusy();
   const id = "sb-key-" + k.uuid + "-six";
+  const six = typed.trim().slice(-6);
   const submit = (ev: Event) => {
     ev.preventDefault();
-    void send.run(() => confirmKey(k, six.trim()));
+    void send.run(() => confirmKey(k, six));
   };
   return (
     <form class="sb-key-confirm" onSubmit={submit}>
-      <TextField label={t("serverbackup.key.lastSix")} id={id} name="last_six" inputCls="mono" maxLength={6} required value={six} set={setSix}
+      <TextField label={t("serverbackup.key.lastSix")} id={id} name="last_six" inputCls="mono" required value={typed} set={setTyped}
         hint={t("serverbackup.key.lastSixHint")} />
       <div class="actions sb-key-actions">
-        <button type="submit" {...busyProps("primary sb-key-confirm-btn", send.busy, six.trim().length !== 6)}>{t("serverbackup.key.confirm")}</button>
+        <button type="submit" {...busyProps("primary sb-key-confirm-btn", send.busy, six.length !== 6)}>{t("serverbackup.key.confirm")}</button>
       </div>
     </form>
   );

@@ -13,7 +13,9 @@
  * types, which is secret, what a value is warned of: GET
  * …/server-backup-targets/kinds), so that a
  * kind a later block adds needs no form of its own: a secret is a
- * password field that never shows what is stored, written only; the
+ * password field that never shows what is stored, written only; while
+ * the page does not know a target's kind, its fields are shown off, with
+ * why, and Save leaves them as they are; the
  * form is a settings form kept by the target's uuid (shared/forms.ts),
  * with Test, Remove, which asks, Reset and Save. The form that adds one
  * chooses the kind first. For a holder of backup.retry alone each
@@ -150,13 +152,27 @@ function secretOf(kind?: ServerBackupKind) {
   return (kind?.fields || []).find((f) => f.key === kind?.secret || f.type === "secret");
 }
 
-/** bodyOf is what Save sends: the name, the kind's fields, what it takes, its retention, whether it is on; the secret only where one is typed. */
+/**
+ * bodyOf is what Save sends: the name, what it takes, its retention,
+ * whether it is on, and the kind's fields, which the server takes whole:
+ * left out while the page does not know the kind (its kinds not read, or
+ * a kind of a newer server), so that they stay as they are; the secret
+ * only where one is typed and the kind has one.
+ */
 function bodyOf(v: Values, kind: ServerBackupKind | undefined, secret: string): Record<string, unknown> {
-  const config: Record<string, string> = {};
-  for (const f of fieldsOf(kind)) config[f.key || ""] = String(v.config.value[f.key || ""] ?? "").trim();
-  const body: Record<string, unknown> = { name: v.name.value.trim(), config, takes: v.takes.value, retention: policyOf(v.keep.value), enabled: v.enabled.value };
-  if (secret) body.secret = secret;
+  const body: Record<string, unknown> = { name: v.name.value.trim(), takes: v.takes.value, retention: policyOf(v.keep.value), enabled: v.enabled.value };
+  if (kind) {
+    const config: Record<string, string> = {};
+    for (const f of fieldsOf(kind)) config[f.key || ""] = String(v.config.value[f.key || ""] ?? "").trim();
+    body.config = config;
+  }
+  if (secret && secretOf(kind)) body.secret = secret;
   return body;
+}
+
+/** fieldLabel names a kind's field: serverbackup.field.<kind>.<key>, else the key. */
+function fieldLabel(kind: string, key: string): string {
+  return textOr("serverbackup.field." + kind + "." + key, key);
 }
 
 /**
@@ -177,40 +193,59 @@ function warns(warn: string | undefined, value: string): boolean {
 /**
  * KindField is one field of a kind's form, drawn from its type: a text
  * or a path (a directory of this box, relative to the data directory),
- * a number, a switch, or a choice; its default the placeholder. While
- * its value matches the field's warn, the note serverbackup.warn.<kind>.
- * <key> stands under it, amber with its mark: a note, which keeps
- * nothing from being saved (plain http to a WebDAV target).
+ * a number, a switch, or a choice; its default the placeholder, a
+ * choice's and a switch's value where none is set. While its value
+ * matches the field's warn, the note serverbackup.warn.<kind>.<key>, or
+ * a general one where a later kind brings none, stands under it, amber
+ * with its mark, and describes the control: a note, which keeps nothing
+ * from being saved (plain http to a WebDAV target).
  */
 function KindField({ id, kind, f, value, merge }: { id: string; kind: string; f: NonNullable<ServerBackupKind["fields"]>[number]; value: string; merge: (key: string, x: string) => void }) {
   const key = f.key || "";
-  const label = textOr("serverbackup.field." + kind + "." + key, key);
+  const label = fieldLabel(kind, key);
   const set = (x: string) => merge(key, x);
   const fid = id + "-" + key;
-  const note = warns(f.warn, value.trim() || f.default || "") && (
-    <p id={fid + "-warn"} class="small warn-text sb-field-warn" role="note"><Mark state="warn" /> {t("serverbackup.warn." + kind + "." + key)}</p>
+  const warned = warns(f.warn, value.trim() || f.default || "");
+  const describedBy = warned ? fid + "-warn" : undefined;
+  const note = warned && (
+    <p id={fid + "-warn"} class="small warn-text sb-field-warn" role="note">
+      <Mark state="warn" /> {textOr("serverbackup.warn." + kind + "." + key, t("serverbackup.target.warned"))}
+    </p>
   );
   let field;
   switch (f.type) {
     case "bool":
-      field = <Switch name={key} label={label} checked={value === "true"} onChange={(on) => set(on ? "true" : "false")} />;
+      field = <Switch name={key} label={label} checked={(value || f.default) === "true"} onChange={(on) => set(on ? "true" : "false")} />;
       break;
     case "choice":
       field = (
-        <Select label={label} id={fid} name={key} wide value={value || f.default || ""} onChange={set}
+        <Select label={label} id={fid} name={key} wide value={value || f.default || ""} onChange={set} describedBy={describedBy}
           options={(f.choices || []).map((c): [string, string] => [c, textOr("serverbackup.field." + kind + "." + key + "." + c, c)])} />
       );
       break;
     case "number":
-      field = <NumberField label={label} id={fid} name={key} wide min={0} max={1e9} step={1} inputMode="numeric" value={value} set={set} />;
+      field = <NumberField label={label} id={fid} name={key} wide min={0} max={1e9} step={1} inputMode="numeric" value={value} set={set} describedBy={describedBy} />;
       break;
     default:
       field = (
-        <TextField label={label} id={fid} name={key} placeholder={f.default} required={f.required} value={value} set={set}
+        <TextField label={label} id={fid} name={key} placeholder={f.default} required={f.required} value={value} set={set} describedBy={describedBy}
           hint={f.type === "path" ? t("serverbackup.target.pathHint") : undefined} />
       );
   }
   return <>{field}{note}</>;
+}
+
+/** KeptFields are a target's fields as stored while the page does not know its kind: off, with why, and sent as they are, not at all. */
+function KeptFields({ id, kind, config }: { id: string; kind: string; config: Record<string, string> }) {
+  useLook();
+  return (
+    <>
+      <p class="small warn-text sb-kind-unknown" role="note"><Mark state="warn" /> {t("serverbackup.target.kindUnknown", { kind: kindLabel(kind) })}</p>
+      {Object.entries(config).map(([key, x]) => (
+        <TextField key={key} label={fieldLabel(kind, key)} id={id + "-" + key} name={key} disabled value={x} set={() => undefined} />
+      ))}
+    </>
+  );
 }
 
 /** Keeps is a target's retention: a count each, the last so many and the newest of so many days, weeks, months and years. */
@@ -249,8 +284,11 @@ function Fields({ id, kind, v, secret, setSecret, stored }: {
   return (
     <>
       <TextField label={t("serverbackup.target.name")} id={f("name")} name="name" maxLength={64} required {...(v.name.draft ? { draft: v.name.draft } : { value: v.name.value, set: v.name.set })} />
-      {fieldsOf(kind).map((fl) => <KindField key={fl.key} id={f("field")} kind={kname} f={fl} value={v.config.value[fl.key || ""] ?? ""} merge={merge} />)}
-      {v.config.draft && <Meanwhile draft={v.config.draft} show={(c) => Object.entries(c).map(([k, x]) => k + ": " + x).join(", ")} />}
+      {stored && !kind ? <KeptFields id={f("field")} kind={kname} config={stored.config || {}} />
+        : fieldsOf(kind).map((fl) => <KindField key={fl.key} id={f("field")} kind={kname} f={fl} value={v.config.value[fl.key || ""] ?? ""} merge={merge} />)}
+      {kind && v.config.draft && (
+        <Meanwhile draft={v.config.draft} show={(c) => Object.entries(c).map(([k, x]) => fieldLabel(kname, k) + ": " + x).join(", ")} />
+      )}
       {sec && (
         <TextField label={textOr("serverbackup.field." + kname + "." + sec.key, sec.key || "")} id={f("secret")} name="secret" type="password"
           autocomplete="new-password" value={secret} set={setSecret}
@@ -340,7 +378,7 @@ function TargetPanel({ tg }: { tg: ServerBackupTarget }) {
   );
 }
 
-/** NewTarget is the form that adds a target: the kind first, then its fields, as a free form of its own, the defaults of the kind and of the server. */
+/** NewTarget is the form that adds a target: the kind first, then its fields, as a free form of its own, the defaults of the kind and of the server; another kind chosen forgets the secret typed. */
 function NewTarget() {
   useLook();
   const kinds = sb.kinds || [];
@@ -370,7 +408,11 @@ function NewTarget() {
   };
   return (
     <form class="panel sb-target-form sb-target-new" onSubmit={submit}>
-      <Select label={t("serverbackup.target.kind")} id="sb-target-new-kind" name="kind" wide value={kname} onChange={setKind}
+      <Select label={t("serverbackup.target.kind")} id="sb-target-new-kind" name="kind" wide value={kname} onChange={(k) => {
+        // a secret typed for one kind is not another's
+        setKind(k);
+        setSecret("");
+      }}
         options={kinds.map((k): [string, string] => [k.name || "", kindLabel(k.name)])} />
       <Fields id="new" kind={kind} v={v} secret={secret} setSecret={setSecret} />
       <div class="actions">

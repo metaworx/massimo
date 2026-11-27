@@ -12,7 +12,8 @@
  * copies per target (there, missing, failed with the error, or not
  * there) and the actions who is in may take: with backup.server
  * Download, Check, Pin or Unpin, and on a copy Push, Pull and Delete,
- * which asks, naming the backup's going with its last copy; with
+ * which asks, saying so where no other copy is there, and the backup
+ * goes from the list with its last copy; with
  * backup.retry Retry where something of it failed. A holder of
  * backup.retry alone sees the state and Retry, nothing more.
  */
@@ -48,9 +49,18 @@ const COPY_KIND: Record<string, string> = { there: "mode", none: "mode", missing
  * CopyRow is a backup's copy on a target, or its place where the target
  * has none: the target, the copy's state, a failed one's error and next
  * try; with backup.server Push where it is not there, Pull to this box
- * from another target, and Delete, which asks in the row.
+ * from another target, and Delete, which asks in the row, saying where
+ * no other copy is there (alone); last is the backup's last copy of any
+ * state, which takes the backup from the list.
  */
-function CopyRow({ b, target, c, last, localThere }: { b: ServerBackup; target?: ServerBackupTargetState; c?: ServerBackupCopy; last: boolean; localThere: boolean }) {
+function CopyRow({ b, target, c, alone, last, localThere }: {
+  b: ServerBackup;
+  target?: ServerBackupTargetState;
+  c?: ServerBackupCopy;
+  alone: boolean;
+  last: boolean;
+  localThere: boolean;
+}) {
   useLook();
   const ask = useAsk<HTMLButtonElement>();
   const server = can("backup.server");
@@ -76,7 +86,7 @@ function CopyRow({ b, target, c, last, localThere }: { b: ServerBackup; target?:
       </div>
       {(error || next) && <p class="small sb-copy-error">{[error, next].filter(Boolean).join(" · ")}</p>}
       {ask.asking && c && (
-        <Question text={t(last ? "serverbackup.deleteLastAsk" : "serverbackup.deleteAsk", { target: name })} yes={t("action.delete")} no={t("action.cancel")}
+        <Question text={t(alone ? "serverbackup.deleteLastAsk" : "serverbackup.deleteAsk", { target: name })} yes={t("action.delete")} no={t("action.cancel")}
           boxRef={ask.box} onNo={() => ask.done()} onYes={async () => {
             // refused, the question stays, the message under the backup
             if (await deleteCopy(b, c, last)) ask.done(false);
@@ -131,7 +141,8 @@ function BackupRow({ b, targets }: { b: ServerBackup; targets: ServerBackupTarge
       )}
       {b.state !== "failed" && (
         <ul class="sb-copies" aria-label={t("serverbackup.copies")}>
-          {rows.map((r) => <CopyRow key={r.key} b={b} target={r.target} c={r.c} last={copies.length <= 1 && !!r.c} localThere={localThere} />)}
+          {rows.map((r) => <CopyRow key={r.key} b={b} target={r.target} c={r.c} alone={!!r.c && !there.some((x) => x !== r.c)}
+              last={copies.length <= 1 && !!r.c} localThere={localThere} />)}
         </ul>
       )}
       <div class="actions sb-backup-actions">

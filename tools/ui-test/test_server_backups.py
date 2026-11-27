@@ -6,9 +6,13 @@ server backup at first: without a key the card says that backups are
 off and Back up now is off; a post-quantum key made shows its secret
 part once, as text and as a file, a wrong last six refused and the right
 ones confirming it; a classic key pasted beside it is refused with why;
-a target added from the kinds' form and tested, a backup made onto it
-and checked; a field's note while its value matches the warn its kind
-gives it; a copy that failed, retried by a user with backup.retry
+a key made's secret part gone with another page or the card folded,
+and a confirmation after its hour; a target added from the kinds' form
+and tested, a backup made onto it and checked; the form of stubbed
+kinds: a field's note while its value matches the warn its kind gives
+it, a switch's default, a secret that goes with another kind; a target
+of a kind the page does not know keeping its fields; Delete of the one
+copy there; a copy that failed, retried by a user with backup.retry
 alone, who sees the state and Retry and nothing else. The four cases
 share the server, so each test starts from nothing and takes away what
 it made (clean): the backups' copies first, each backup going with its
@@ -144,7 +148,7 @@ def test_key_made_confirmed_and_other_kind_refused(page, case, watch):
         assert wait_until(page, f"document.querySelector('#sb-keys-msg').textContent === {refused!r}", 10), msg.inner_text()
         assert api_call("GET", KEYS)[0]["pending"], "still pending"
         assert row.locator(".sb-identity").count() == 1, "the secret part still shown"
-        six.fill(identity[-6:].lower())
+        six.fill(identity.lower())  # the whole key pasted gives its last six
         confirm.click()
         assert wait_until(page, f"!document.querySelector(\".sb-key[data-uuid='{uuid}'] .sb-identity\")", 10), "the secret part gone"
         assert not api_call("GET", KEYS)[0]["pending"], "confirmed"
@@ -163,6 +167,57 @@ def test_key_made_confirmed_and_other_kind_refused(page, case, watch):
         assert len(api_call("GET", KEYS)) == 1, "not added"
         assert page.locator("#sb-key-new form").is_visible(), "the form stays, with what was typed"
         page.locator("#sb-key-new .form-cancel").click()
+    finally:
+        clean()
+    show_view(page, "tiles")
+
+
+def make_key(page, label):
+    """A classic key made through the card, its secret part shown; its uuid."""
+    page.locator("#sb-key-add").click()
+    page.fill("#sb-key-label", label)
+    page.select_option("#sb-key-way", "classic")
+    page.locator("#sb-key-new button[type=submit]").click()
+    assert wait_until(page, "document.querySelectorAll('.sb-key .sb-identity').length === 1", 10), "the secret part shown"
+    return next(k["uuid"] for k in api_call("GET", KEYS) if k["label"] == label)
+
+
+def test_made_key_shown_once(page, case, watch):
+    """A key made's secret part is shown that once: another page shown, or
+    the card folded, takes it away, the key still waiting for its
+    confirmation; a confirmation the server no longer takes (404, its hour
+    over) reads the keys again and says why."""
+    watch.expected.append(("/confirm", 404))
+    clean()
+    try:
+        show_view(page, "maint")
+        page.locator("#sb-no-key").wait_for(state="visible", timeout=10000)
+        uuid = make_key(page, "away")
+        show_view(page, "tiles")
+        show_view(page, "maint")
+        row = page.locator(f".sb-key[data-uuid='{uuid}']")
+        row.wait_for(timeout=10000)
+        assert row.locator(".sb-identity").count() == 0, "another page shown: the secret part gone"
+        assert row.locator(".sb-key-confirm-btn").count() == 1, "still waiting for its confirmation"
+        api_call("DELETE", f"{KEYS}/{uuid}")
+
+        uuid = make_key(page, "folded")
+        fold = page.locator(f"{CARD} .section-fold")
+        fold.click()
+        fold.click()
+        row = page.locator(f".sb-key[data-uuid='{uuid}']")
+        assert row.locator(".sb-identity").count() == 0, "the card folded: the secret part gone"
+
+        reads = []
+        page.on("request", lambda r: reads.append(r.method) if r.url.endswith("/api/v1/server-backup-keys") else None)
+        safe_route(page, "**/api/v1/server-backup-keys/*/confirm",
+                   lambda route: route.fulfill(status=404, content_type="application/json", body='{"error": "no server backup key"}'))
+        row.locator(f"#sb-key-{uuid}-six").fill("ABCDEF")
+        row.locator(".sb-key-confirm-btn").click()
+        expired = text(page, "serverbackup.key.refused", error=text(page, "serverbackup.key.expired"))
+        assert wait_until(page, f"document.querySelector('#sb-keys-msg').textContent === {expired!r}", 10), page.locator("#sb-keys-msg").inner_text()
+        assert "GET" in reads, f"the keys read again: {reads}"
+        page.unroute("**/api/v1/server-backup-keys/*/confirm")
     finally:
         clean()
     show_view(page, "tiles")
@@ -221,29 +276,91 @@ def test_target_added_tested_and_backup_made(page, case):
     show_view(page, "tiles")
 
 
-def test_field_warned_of(page, case):
-    """A kind's field with a warn (WebDAV's url warns of plain http), here
-    the local kind's path in a stubbed answer of the kinds: while the value
-    matches, its note stands under it, amber with its mark, and Add stays
-    on; another value takes it away."""
-    kinds = [{"name": "local", "fields": [{"key": "path", "type": "path", "required": False, "default": "backups", "warn": "^/tmp/"}]}]
+def stub_kinds(page, kinds):
+    """The kinds of target answered with kinds, before Maintenance first reads them."""
     safe_route(page, "**/api/v1/server-backup-targets/kinds",
                lambda route: route.fulfill(status=200, content_type="application/json", body=json.dumps(kinds)))
-    show_view(page, "maint")
-    page.locator(CARD).scroll_into_view_if_needed()
-    page.locator("#sb-target-add").click()
-    path = page.locator("#sb-target-new-field-path")
-    path.wait_for()
-    note = page.locator("#sb-target-new-field-path-warn")
-    assert note.count() == 0, "no note for the default"
-    path.fill("/tmp/backups")
-    note.wait_for(timeout=5000)
-    assert note.inner_text().strip() == text(page, "serverbackup.warn.local.path"), "its text"
-    assert note.locator(".mark-sign").count() == 1 and note.get_attribute("role") == "note", "a note with its mark"
-    assert page.locator("#sb-target-new button[type=submit]").is_enabled(), "Add stays on"
-    path.fill("/srv/backups")
-    assert wait_until(page, "!document.querySelector('#sb-target-new-field-path-warn')", 5), "another value: no note"
-    page.locator("#sb-target-new .form-cancel").click()
+
+
+def test_kind_form(page, case):
+    """The new target's form from a stubbed answer of the kinds: the local
+    kind's path warns of /warned/ (as WebDAV's url warns of plain http), a
+    second kind has a secret and a switch on by default. While the value
+    matches, the note stands under it, amber with its mark, a general one
+    where the kind has no text of its own, and describes the input; Add
+    stays on; another value takes it away. The switch shows its default; a
+    secret typed goes with another kind, and is not sent for a kind
+    without one."""
+    kinds = [{"name": "local", "fields": [{"key": "path", "type": "path", "required": False, "default": "backups", "warn": "^/warned/"}]},
+             {"name": "vault", "secret": "password", "fields": [{"key": "password", "type": "secret", "required": False},
+                                                                  {"key": "verify", "type": "bool", "required": False, "default": "true"}]}]
+    stub_kinds(page, kinds)
+    clean()
+    sent = []
+    page.on("request", lambda r: sent.append(r.post_data_json) if r.method == "POST" and r.url.endswith("/api/v1/server-backup-targets") else None)
+    try:
+        show_view(page, "maint")
+        page.locator(CARD).scroll_into_view_if_needed()
+        page.locator("#sb-target-add").click()
+        path = page.locator("#sb-target-new-field-path")
+        path.wait_for()
+        note = page.locator("#sb-target-new-field-path-warn")
+        assert note.count() == 0, "no note for the default"
+        path.fill("/warned/backups")
+        note.wait_for(timeout=5000)
+        assert note.inner_text().strip() == text(page, "serverbackup.target.warned"), "the general note: the kind has no text of its own"
+        assert note.locator(".mark-sign").count() == 1 and note.get_attribute("role") == "note", "a note with its mark"
+        assert "sb-target-new-field-path-warn" in (path.get_attribute("aria-describedby") or "").split(), "it describes the input"
+        assert page.locator("#sb-target-new button[type=submit]").is_enabled(), "Add stays on"
+        path.fill(data_dir(f"sb-kind-{case.width}-{case.lang}"))
+        assert wait_until(page, "!document.querySelector('#sb-target-new-field-path-warn')", 5), "another value: no note"
+        assert not path.get_attribute("aria-describedby"), "and no description"
+
+        page.select_option("#sb-target-new-kind", "vault")
+        assert page.locator("#sb-target-new input[name=verify]").is_checked(), "a switch shows its default"
+        page.fill("#sb-target-new-secret", "s3cret")
+        page.select_option("#sb-target-new-kind", "local")
+        assert page.locator("#sb-target-new-secret").count() == 0, "no secret for the local kind"
+        page.select_option("#sb-target-new-kind", "vault")
+        assert page.locator("#sb-target-new-secret").input_value() == "", "another kind chosen: the secret typed is gone"
+        page.fill("#sb-target-new-secret", "s3cret")
+        page.select_option("#sb-target-new-kind", "local")
+        page.fill("#sb-target-new-name", f"Kind {case.width} {case.lang}")
+        page.locator("#sb-target-new button[type=submit]").click()
+        assert wait_until(page, "!document.querySelector('#sb-target-new form')", 10), "added"
+        assert sent and "secret" not in sent[-1] and sent[-1]["kind"] == "local", f"no secret sent for the local kind: {sent}"
+    finally:
+        clean()
+    show_view(page, "tiles")
+
+
+def test_unknown_kind_keeps_its_fields(page, case):
+    """A target whose kind the page does not know (the kinds answered
+    without it, as by a server newer than the page): its fields shown off,
+    with why; its name saved, its directory stays."""
+    stub_kinds(page, [])
+    clean()
+    where = data_dir(f"sb-usb-{case.width}-{case.lang}")
+    target = api_call("POST", TARGETS, {"name": "USB", "kind": "local", "config": {"path": where}})["target"]
+    puts = []
+    page.on("request", lambda r: puts.append(r.post_data_json) if r.method == "PUT" and r.url.endswith(target["uuid"]) else None)
+    try:
+        show_view(page, "maint")
+        panel = page.locator(f".sb-target[data-uuid='{target['uuid']}']")
+        panel.wait_for(timeout=10000)
+        panel.locator(":scope > summary").click()
+        assert panel.locator(".sb-kind-unknown").inner_text().strip() == text(page, "serverbackup.target.kindUnknown", kind=text(page, "serverbackup.kind.local"))
+        field = panel.locator(f"#sb-target-{target['uuid']}-field-path")
+        assert field.is_disabled() and field.input_value() == where, "its directory shown, off"
+        panel.locator(f"#sb-target-{target['uuid']}-name").fill("USB stick")
+        panel.locator("button[type=submit]").click()
+        saved = text(page, "serverbackup.target.saved", name="USB stick")
+        assert wait_until(page, f"document.querySelector(\".sb-target[data-uuid='{target['uuid']}'] .sb-target-msg\")?.textContent === {saved!r}", 10)
+        assert puts and "config" not in puts[-1], f"its fields not sent: {puts}"
+        now = next(tg for tg in api_call("GET", TARGETS) if tg["uuid"] == target["uuid"])
+        assert now["name"] == "USB stick" and now["config"]["path"] == where, now
+    finally:
+        clean()
     show_view(page, "tiles")
 
 
@@ -260,6 +377,18 @@ def test_copy_failed_retried_by_backup_retry_alone(page, case):
     made = api_call("POST", BACKUPS, {})["backup"]
     states = {c["target"]: c["state"] for c in made["copies"]}
     assert states.get(here["uuid"]) == "there" and states.get(broken["uuid"]) == "failed", states
+    # the owner first: Delete of the one copy that is there says that no other is, the failed one beside it counting for nothing
+    show_view(page, "maint")
+    fold = page.locator(f".sb-backup[data-uuid='{made['uuid']}']")
+    fold.wait_for(timeout=10000)
+    fold.locator(":scope > summary").click()
+    there = fold.locator(f".sb-copy[data-target='{here['uuid']}']")
+    there.locator(".sb-copy-delete").click()
+    asked = there.locator(".confirm-text").inner_text()
+    assert asked == text(page, "serverbackup.deleteLastAsk", target="Here"), asked
+    there.locator(".confirm-no").click()
+    fold.locator(":scope > summary").click()
+    show_view(page, "tiles")
     me = dict(VIEWER, capabilities=["read", "preferences", "backup.retry"])
     page.route("**/api/v1/me", lambda route: route.fulfill(status=200, content_type="application/json", body=json.dumps(me)))
     try:
