@@ -299,7 +299,7 @@ export function Card() {
   return (
     <>
       <BrandName />
-      <h3 id="login-title" class="login-title">{t(!owner ? "login.title" : card.ownerStep === "keep" ? "keepOpen.title" : "setup.title")}</h3>
+      <h3 id="login-title" class="login-title">{t(!owner ? "login.title" : card.ownerStep === "keep" ? "keepOpen.title" : card.ownerStep === "backup" ? "newBox.title" : "setup.title")}</h3>
       <ServerLine />
       <div id="login-providers" class={"login-providers" + hid(owner || (!card.providers.length && !card.providersSaid))}>
         <div id="login-provider-buttons" class="login-provider-buttons">

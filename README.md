@@ -14,7 +14,8 @@ every release is a pre-release on the `alpha` channel (see [Versions](#versions)
 - [Documentation](#documentation)
 - [Installing](#installing): [Linux](#linux), [Windows](#windows),
   [macOS](#macos), [From source](#from-source)
-- [Server](#server), with [Screenshots](#screenshots)
+- [Server](#server), with [Moving to a new box](#moving-to-a-new-box) and
+  [Screenshots](#screenshots)
 - [Command line](#command-line), with the [Cube variables](#cube-variables)
 - [Original software](#original-software)
 - [Versions](#versions)
@@ -912,6 +913,27 @@ It shares port 5353 with the system's own responder (avahi, mDNSResponder,
 Windows' mDNS);
 where multicast is missing, as in a container without it,
 `serve` logs that it is not announced and runs on.
+
+### Moving to a new box
+
+A new box takes over from an old one by a server backup of the old box
+(`massimo store backup`, or Maintenance → Server backups) and its key.
+Install Massimo on the new box and open its page before anyone is made there:
+the sign-in card that asks for the first owner offers **Start from a backup…**.
+Choose the backup's file, or the target that holds it (WebDAV, SMB, S3
+or a directory of the new box; for SFTP download the file first),
+paste its key or read it from its file, and **Open with the key**:
+the card says what the backup holds and what it replaces.
+**Start from this backup** takes every part of it, its users and sign-in,
+settings and targets, integrations, Cubes and history,
+then the server restarts and the old box's users sign in as before.
+The key is used for that start alone and stored nowhere.
+The old box's identity is taken only where ticked, best once the old box is off,
+and its settings file and certificate files likewise where the new box may write them.
+This is open only while the new box has no user,
+to anyone on the local network who has the backup and its key,
+as making the first owner is
+(docs/api-v1.md, "A new box from a backup").
 
 ### Screenshots
 

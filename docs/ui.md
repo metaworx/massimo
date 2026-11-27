@@ -321,6 +321,39 @@ Keep it open writes the setting `auth.keep_open`, reads who is in,
 and closes the card as Skip for now does, Back and Select server off meanwhile;
 a refusal is said under the field, and one that says the server has users now
 turns the card to the sign-in.
+**Start from a backup…**, beside them, shows in the form's place, at its own height,
+the start from another box's backup (AP ServerBackup, Block 11;
+docs/api-v1.md, "A new box from a backup"),
+titled so, its source in focus:
+**A file on this device**, whose **Choose the backup file…** sends it as it is,
+or **On a backup target**, its kind chosen of those the server reads from
+(not SFTP, whose key only the old box's backup holds),
+its fields drawn from what the server says of the kind, as Server backups' form is,
+the secret a password field,
+whose **List its backups** lists the target's backups and **Fetch this backup**
+fetches the one picked; the target is stored nowhere.
+The backup's line says when it was made, by which Massimo,
+its users, Cubes and rooms, and under the key's field which keys it opens with;
+one of a newer Massimo says to update first, and is not opened.
+The key is pasted into its field, or read into it from a file
+by **Read the key from a file…** in the browser;
+it goes in the body of the plan and of the restore alone,
+and the field is emptied at each opening, at Back, when the card closes
+and once the restore is sent.
+**Open with the key** plans the restore: everything replaced, the Cubes,
+and the switches of the old server's identity, with a warning where that server
+still answers on the network, of its settings file and of its certificate files
+where the backup holds them, each switch planned again;
+a refusal of the plan, such as a server that cannot restart itself, is said,
+and **Start from this backup** is off with it.
+Start from this backup asks first, then restores and follows the restart
+by `/healthz`'s start as Maintenance's restart does;
+then the card turns to the sign-in, saying that the backup's users sign in now,
+and the page signs in as before.
+A backup without users brings the first owner's form back, saying so.
+While a request of the step runs, Back and the card's Select server are off,
+and Escape leaves nothing;
+a refusal that says the server has users now turns the card to the sign-in.
 The page behind the card is hidden as at a sign-in.
 At the page's start and after a sign-out the start waits for the card:
 the Cubes, the rooms, the stream and the providers are read,
@@ -4000,6 +4033,14 @@ whose Keep it open writes `auth.keep_open`, reads who is in and closes the card,
 the card's `card.working` keeping Back and Select server off meanwhile;
 `keepAsk` and `keepBack` of `signin/store.ts` go there and back,
 what is typed in both kept.
+Start from a backup… shows the third step (`FromBackup.tsx`, `card.ownerStep` `backup`)
+in place of both, outside their one place of one height,
+since what it shows grows with the backup;
+`backupAsk` and `backupBack` go there and back, the key's field emptied,
+and `restoring` marks a restore sent, so that the turn to the sign-in that follows
+the restart (`toSignIn`) says that the backup's users sign in now.
+Its requests take no session's number, as the card's other two:
+they run on an open server, `card.working` keeping every way out of the card off.
 A part's place among plain siblings is an element of the class `part-slot`,
 which takes no box of its own (`display: contents`),
 so that the part's element is laid out as if it stood there itself.

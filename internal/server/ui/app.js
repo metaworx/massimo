@@ -279,13 +279,16 @@ const API_WAIT_MS = 20000;
 // (oidc.go); a job of the server's backups, which has no limit of its own
 // and waits for the one that runs, a backup made, copied, checked or
 // retried, a copy deleted or a target added and read, a quarter of an
-// hour, and a target's test, a minute there (serverbackups.go). The
-// stream's ticket asks no Cube.
+// hour, and a target's test, a minute there (serverbackups.go); a new
+// box's start from a backup, a target's list read, a backup fetched,
+// planned or restored, as long (newbox.go). The stream's ticket asks no
+// Cube.
 function waitOf(method, path) {
   const route = path.split("?")[0];
   if (route === "api/v1/cubes/discover") return 90000;
   if (method === "POST" && /^api\/v1\/server-backup-targets\/[^/]+\/test$/.test(route)) return 75000;
   if (method !== "GET" && /^api\/v1\/server-backups(\/|$)/.test(route) && !/\/pin$/.test(route)) return 900000;
+  if (method === "POST" && /^api\/v1\/setup\/backup(\/|$)/.test(route)) return 900000;
   if (method === "POST" && route === "api/v1/server-backup-targets") return 900000;
   if (method !== "GET" && /^api\/v1\/cubes\/[^/]+\/events\/ticket$/.test(route)) return API_WAIT_MS;
   if (method !== "GET" && /^api\/v1\/cubes\/[^/]+\/(.+\/)?repair\//.test(route)) return 630000;

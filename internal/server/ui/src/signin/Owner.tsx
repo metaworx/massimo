@@ -38,7 +38,10 @@
  * card's ☰ closed first where it is open (AP LooseEnds, D3); and Keep it
  * open… shows the confirmation that keeps the server open (KeepOpen.tsx,
  * AP FirstOwner, Block 3) in the form's place, the two of one height,
- * where the server is not kept open already. Its fields are not controlled, as the card's
+ * where the server is not kept open already; and Start from a backup…
+ * shows the start from another box's backup (FromBackup.tsx, AP
+ * ServerBackup, Block 11) in place of both, at its own height, since what
+ * it shows grows with the backup. Its fields are not controlled, as the card's
  * (UiParts D210): no drawing writes what they hold, they are read at the
  * submit and emptied at each opening, never at a dismissal nor at the
  * turn to the sign-in, and the two passwords once the card has closed on
@@ -64,8 +67,9 @@ import { keptOpen } from "../shared/owner";
 import { showView } from "../shared/pages";
 import { session, stillSession } from "../shared/session";
 import { offer } from "./app";
+import { FromBackup } from "./FromBackup";
 import { KeepOpen } from "./KeepOpen";
-import { ask, card, creationEnded, keepAsk, leaves, skip } from "./store";
+import { ask, backupAsk, card, creationEnded, keepAsk, leaves, skip } from "./store";
 
 /**
  * doneToast says that the owner name was created and signed in, and in the app where the login by fingerprint was not
@@ -117,6 +121,7 @@ export function Owner() {
   const passRef = useRef<HTMLInputElement>(null);
   const againRef = useRef<HTMLInputElement>(null);
   const keepRef = useRef<HTMLButtonElement>(null);
+  const backupRef = useRef<HTMLButtonElement>(null);
   const nc = useNameCheck(() => []);
   const create = useBusy();
   const byUser = shown && card.byUser && card.shown;
@@ -155,6 +160,7 @@ export function Owner() {
   useLayoutEffect(() => {
     if (!focus.n) return;
     if (focus.on === "keepButton") keepRef.current?.focus();
+    if (focus.on === "backupButton") backupRef.current?.focus();
     if (focus.on !== "owner") return;
     if (matchMedia("(pointer: coarse)").matches) return;
     nameRef.current?.focus();
@@ -231,7 +237,7 @@ export function Owner() {
   };
   return (
     <div id="setup" class={"login-owner" + hid(!shown)}>
-      <div class="owner-steps">
+      <div class={"owner-steps" + hid(step === "backup")}>
         <div id="setup-step" class={"owner-step" + hid(step !== "form")}>
           <form id="setup-form" class="setup-form" onSubmit={submit}>
             <p class="muted">{t("setup.text")}</p>
@@ -255,10 +261,12 @@ export function Owner() {
           <div id="setup-more" class="login-owner-more">
             <button type="button" id="setup-skip" disabled={working} onClick={skip}>{t(card.byUser ? "setup.back" : "setup.skip")}</button>
             <button ref={keepRef} type="button" id="setup-keep-open" class={hid(kept).trim() || undefined} disabled={working} onClick={keepAsk}>{t("setup.keepOpen")}</button>
+            <button ref={backupRef} type="button" id="setup-from-backup" disabled={working} onClick={backupAsk}>{t("setup.fromBackup")}</button>
           </div>
         </div>
         <KeepOpen />
       </div>
+      <FromBackup />
     </div>
   );
 }
