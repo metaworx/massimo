@@ -4135,6 +4135,30 @@ paths:
             application/json:
               schema: {$ref: "#/components/schemas/Error"}
         "429": {$ref: "#/components/responses/LockedOut"}
+  /api/v1/server-backups/{id}:
+    delete:
+      summary: Remove a server backup of which no target holds a copy
+      x-capability: backup.server
+      description: |
+        A backup that failed, or whose copies a stop of the server broke
+        off, goes from the catalogue. One that a target holds a copy of is
+        refused; its copies are deleted first (DELETE …/copies/{target}).
+      parameters: [{$ref: "#/components/parameters/serverBackupID"}]
+      responses:
+        "200":
+          description: Removed
+          content:
+            application/json:
+              schema: {type: object, properties: {ok: {type: boolean}}}
+        "401": {$ref: "#/components/responses/Unauthorized"}
+        "403": {$ref: "#/components/responses/Forbidden"}
+        "404": {$ref: "#/components/responses/NotFound"}
+        "409":
+          description: A target holds a copy of it
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/Error"}
+        "429": {$ref: "#/components/responses/LockedOut"}
   /api/v1/server-backups/{id}/pin:
     put:
       summary: Pin a server backup, or unpin it
@@ -4217,10 +4241,12 @@ paths:
       summary: Retry a failed server backup, or its failed copies
       x-capability: backup.retry
       description: |
-        A failed backup is made again in its row as the schedule made it,
-        or a backup's failed copies are made again from a copy that is
-        there; each target that took a copy is pruned after, as the
-        schedule would. It reveals nothing, the file being encrypted.
+        A scheduled backup that failed is made again in its row as the
+        schedule made it, its tries counted on; a backup's failed copies
+        are put again from a copy that is there, the same file; each
+        target that took a copy is pruned after, as the schedule would. A
+        backup made by hand that failed is made again by hand (409). It
+        reveals nothing, the file being encrypted.
       parameters: [{$ref: "#/components/parameters/serverBackupID"}, {$ref: "#/components/parameters/idempotencyKey"}]
       responses:
         "200":
@@ -4232,7 +4258,7 @@ paths:
         "403": {$ref: "#/components/responses/Forbidden"}
         "404": {$ref: "#/components/responses/NotFound"}
         "409":
-          description: Nothing of the backup failed, or no key is set
+          description: Nothing of the backup failed, it was made by hand and failed, or no key is set
           content:
             application/json:
               schema: {$ref: "#/components/schemas/Error"}

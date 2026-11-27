@@ -40,6 +40,11 @@ import (
 // while the server was down is made.
 const serverBackupLate = 5 * time.Minute
 
+// serverBackupMinWait is the loop's shortest wait, so that a retry whose
+// time is past and that a failure could not move on is not run again at
+// once, over and over.
+const serverBackupMinWait = time.Second
+
 // maxServerBackupUpload bounds a server backup uploaded.
 const maxServerBackupUpload = 8 << 30
 
@@ -100,7 +105,8 @@ func (s *Server) catalogue() *serverbackup.Catalogue {
 		Now: s.sbClock().Now, Location: s.sbLocation(), Log: s.partLog("serverbackup", nil)}
 }
 
-// sbJob runs f as the one job, waiting for one that runs; ctx ending
+// sbJob runs f as the one job, waiting for one that runs, of this
+// server or of a command beside it (serverbackup.LockJobs); ctx ending
 // first is an error.
 func (s *Server) sbJob(ctx context.Context, f func() error) error {
 	select {
@@ -109,6 +115,11 @@ func (s *Server) sbJob(ctx context.Context, f func() error) error {
 		return ctx.Err()
 	}
 	defer func() { <-s.sb.busy }()
+	unlock, err := serverbackup.LockJobs(ctx, s.opts.Store.Dir())
+	if err != nil {
+		return err
+	}
+	defer unlock()
 	return f()
 }
 
@@ -161,7 +172,7 @@ func slotBefore(t time.Time, hour, minute int, loc *time.Location) time.Time {
 }
 
 // missedRun reports whether the schedule missed its last run while the
-// server was down: no scheduled backup, made or failed, since it.
+// server was down: no scheduled backup with a copy there since it.
 func (s *Server) missedRun(ctx context.Context, now time.Time) bool {
 	h, m := s.scheduleTime(ctx)
 	last := slotBefore(now, h, m, s.sbLocation())
@@ -170,7 +181,8 @@ func (s *Server) missedRun(ctx context.Context, now time.Time) bool {
 		return false
 	}
 	for _, b := range bs {
-		if b.Trigger == string(serverbackup.TriggerScheduled) && !b.Time.Before(last) {
+		if b.Trigger == string(serverbackup.TriggerScheduled) && !b.Time.Before(last) &&
+			slices.ContainsFunc(b.Copies, func(c store.ServerBackupCopy) bool { return c.State == store.CopyThere }) {
 			return false
 		}
 	}
@@ -227,7 +239,7 @@ func (s *Server) serverBackupLoop(ctx context.Context) {
 		if r := s.nextRetry(ctx); !r.IsZero() && r.Before(next) {
 			next = r
 		}
-		t := clock.AfterFunc(max(next.Sub(now), 0), s.wakeServerBackups)
+		t := clock.AfterFunc(max(next.Sub(now), serverBackupMinWait), s.wakeServerBackups)
 		s.sb.armed.Add(1)
 		select {
 		case <-ctx.Done():
@@ -284,7 +296,7 @@ func (s *Server) retryDue(ctx context.Context, now time.Time) {
 			continue
 		}
 		s.sbJob(ctx, func() error {
-			_, outs, err := s.catalogue().Retry(ctx, b.UUID)
+			_, outs, err := s.catalogue().RetryDue(ctx, b.UUID, now)
 			s.reportServerBackup(outs, serverbackup.Trigger(b.Trigger), 0)
 			return err
 		})
@@ -371,6 +383,7 @@ func (s *Server) serverBackupRoutes(api func(pattern, capability string, h func(
 	api("POST /api/v1/server-backups/{id}/check", "backup.server", s.checkServerBackup)
 	api("GET /api/v1/server-backups/{id}/file", "backup.server", s.serverBackupFile)
 	api("POST /api/v1/server-backups/{id}/retry", "backup.retry", s.retryServerBackup)
+	api("DELETE /api/v1/server-backups/{id}", "backup.server", s.deleteServerBackup)
 	api("PUT /api/v1/server-backups/{id}/copies/{target}", "backup.server", s.pushServerBackup)
 	api("DELETE /api/v1/server-backups/{id}/copies/{target}", "backup.server", s.deleteServerBackupCopy)
 	api("POST /api/v1/server-backups/{id}/copies/{target}/pull", "backup.server", s.pullServerBackup)
@@ -399,6 +412,7 @@ func sbFail(err error) error {
 		errors.Is(err, store.ErrNoServerBackupKey):
 		return fail(http.StatusNotFound, "%v", err)
 	case errors.Is(err, serverbackup.ErrNoKey), errors.Is(err, serverbackup.ErrNoCopy), errors.Is(err, serverbackup.ErrSameTarget), errors.Is(err, serverbackup.ErrMixedKinds),
+		errors.Is(err, serverbackup.ErrNotRetried), errors.Is(err, serverbackup.ErrHasCopies), errors.Is(err, serverbackup.ErrJobRunning),
 		errors.Is(err, store.ErrServerBackupTargetExists), errors.Is(err, store.ErrServerBackupKeyExists):
 		return fail(http.StatusConflict, "%v", err)
 	case errors.Is(err, serverbackup.ErrNotABackup):
@@ -823,6 +837,24 @@ func (s *Server) retryServerBackup(w http.ResponseWriter, r *http.Request) error
 	}
 	s.wakeServerBackups()
 	return s.answerBackup(w, r, http.StatusOK, b, outs)
+}
+
+// deleteServerBackup handles DELETE /api/v1/server-backups/{id}: a
+// backup of which no target holds a copy goes from the catalogue, one
+// that failed, or whose copies a stop broke off; one with a copy there
+// is refused, its copies deleted first.
+func (s *Server) deleteServerBackup(w http.ResponseWriter, r *http.Request) error {
+	if _, err := s.sbStore(); err != nil {
+		return err
+	}
+	err := s.sbJob(r.Context(), func() error {
+		return s.catalogue().Delete(r.Context(), r.PathValue("id"))
+	})
+	if err != nil {
+		return sbFail(err)
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"ok": true})
+	return nil
 }
 
 // pushServerBackup handles PUT /api/v1/server-backups/{id}/copies/{target}:

@@ -2108,15 +2108,28 @@ from the catalogue.
 
 #### Retries and alerts
 
-A scheduled backup that fails is kept as `failed`, and so is a copy;
+A backup is a `failed` row until its first copy is there, its error saying so,
+so that a stop or a crash in the middle of its copies leaves a backup to retry,
+never one made without a file;
+the catalogue's writes after the backup is made outlive a request gone or a stop.
+A scheduled backup that fails, before its file or with no copy there,
+is kept as `failed`, and so is a copy of one that fails;
 each is tried again after 5 minutes, 30 minutes and 2 hours,
-the backup in its own row, with its `uuid`.
+the backup in its own row, with its `uuid` and its tries counted on,
+a copy as the same file put again from a copy that is there.
 After the third retry the failure is a warning in the log, `server_backup`,
 an alert of the log until a later success on its target,
-and the notification `server_backup_failed`, on by default,
-for the users who hold `backup.retry`.
-A backup made by hand that fails is not retried; its request says why.
+and, once, the notification `server_backup_failed`, on by default,
+for the users who hold `backup.retry`; then it waits for a retry by hand.
+A backup made by hand, by a command, before an update or a restore,
+is not retried by itself: its failure is its request's answer and a warning,
+it is not kept where no copy of it is there,
+and its failed copies wait for a retry by hand.
 The next scheduled run replaces a scheduled backup that failed.
+A run the schedule missed counts as missed while no scheduled backup since it
+has a copy there.
+One job runs at a time on a data directory, serve's and a command's alike:
+each takes the lock `.serverbackup.lock` in it (flock, LockFileEx).
 A holder of `backup.retry` retries at once what failed: as the schedule made it,
 pruning no more than the schedule would, and revealing nothing,
 the file being encrypted (D13-A).

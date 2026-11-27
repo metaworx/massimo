@@ -277,7 +277,7 @@ and the OpenAPI file carries each operation's as `x-capability`:
 | `audit` | read the audit | `GET /api/v1/audit` |
 | `auth` | the OpenID Connect providers users sign in through; seeded for no role | `GET`/`POST /api/v1/providers`, `PUT`/`DELETE /api/v1/providers/{key}` |
 | `integrations` | the registered integrations: requests, approval, their maximum, their users and links ("Integrations", below); an integration's users but those stored as `owner`: their name, state, end date, keys and removal, and a role within their integration's maximum ("Users", below) | `GET /api/v1/integrations`, `GET …/integrations/found`, `GET`/`PUT`/`DELETE …/integrations/{uuid}`, `POST …/integrations/{uuid}/approve`, `POST …/integrations/{uuid}/refuse`, `POST …/integrations/{uuid}/accept-instance`, `PUT …/integrations/{uuid}/users/{id}`; the users routes for an integration's users |
-| `backup.server` | the server's own backups: make one now, pin, check, download and upload one, push and pull a copy, delete one, and the targets with what each takes and its retention; the keys' list; includes `backup.retry`; seeded for no role, never an integration's ("Server backups", below) | `POST /api/v1/server-backups`, `POST …/server-backups/upload`, `PUT …/server-backups/{id}/pin`, `POST …/server-backups/{id}/check`, `GET …/server-backups/{id}/file`, `PUT`/`DELETE …/server-backups/{id}/copies/{target}`, `POST …/copies/{target}/pull`, `GET`/`POST /api/v1/server-backup-targets`, `GET …/server-backup-targets/kinds`, `PUT`/`DELETE …/server-backup-targets/{uuid}`, `POST …/server-backup-targets/{uuid}/test`, `GET /api/v1/server-backup-keys` |
+| `backup.server` | the server's own backups: make one now, pin, check, download and upload one, push and pull a copy, delete one, and the targets with what each takes and its retention; the keys' list; includes `backup.retry`; seeded for no role, never an integration's ("Server backups", below) | `POST /api/v1/server-backups`, `POST …/server-backups/upload`, `PUT …/server-backups/{id}/pin`, `POST …/server-backups/{id}/check`, `GET …/server-backups/{id}/file`, `PUT`/`DELETE …/server-backups/{id}/copies/{target}`, `POST …/copies/{target}/pull`, `DELETE …/server-backups/{id}`, `GET`/`POST /api/v1/server-backup-targets`, `GET …/server-backup-targets/kinds`, `PUT`/`DELETE …/server-backup-targets/{uuid}`, `POST …/server-backup-targets/{uuid}/test`, `GET /api/v1/server-backup-keys` |
 | `backup.retry` | see the state of the server's backups and retry a failed backup or copy, nothing more (the manager's by default) | `GET /api/v1/server-backups`, `POST …/server-backups/{id}/retry` |
 
 <!-- BEGIN GENERATED PARTIAL docs/fragments/_capability-rules.md - do not edit; run "GUIDELINES/shared/tools/sync-docs.sh" -->
@@ -5011,13 +5011,21 @@ The schedule:
   a pinned backup, a pulled copy and the target's newest are kept whatever it says,
   and a policy of zeros keeps everything.
   A new target keeps 7 days, 4 weeks and 6 months.
-- A scheduled backup or a copy that fails is tried again after 5 minutes,
-  30 minutes and 2 hours. After the third retry it is a warning in the log,
+- A scheduled backup, or a copy of one, that fails is tried again after 5 minutes,
+  30 minutes and 2 hours, the backup in its row, a copy as the same file again.
+  After the third retry it is a warning in the log,
   an alert there (`GET /api/v1/log/alerts`) until a later success on its target,
-  and a notification `server_backup_failed` to every user who holds `backup.retry`.
-  `POST …/server-backups/{id}/retry` (`backup.retry`) tries it again at once,
-  as the schedule made it, and prunes no more than the schedule would;
-  `409` where nothing of the backup failed.
+  and, once, a notification `server_backup_failed` to every user who holds
+  `backup.retry`; then it waits for a retry by hand.
+  A backup made by hand is not retried by itself: its failure is the answer,
+  and a warning in the log.
+  `POST …/server-backups/{id}/retry` (`backup.retry`) tries again at once
+  what of a backup failed, as the schedule made it, and prunes no more than the
+  schedule would; `409` where nothing of the backup failed,
+  or for a backup made by hand that failed, which is made again by hand.
+- A backup is a failed row until its first copy is there,
+  so that a stop of the server in the middle of its copies leaves a backup to retry;
+  `DELETE …/server-backups/{id}` removes one of which no target holds a copy.
 
 The other routes of a backup, `backup.server`'s:
 

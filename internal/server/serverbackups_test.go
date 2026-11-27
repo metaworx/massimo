@@ -127,7 +127,7 @@ func TestServerBackupSchedule(t *testing.T) {
 	armed := func() int64 { return r.s.sb.armed.Load() }
 	rearmed := func(what string, n int64) {
 		t.Helper()
-		testkit.Eventually(t, what, func() bool { return armed() > n })
+		testkit.Eventually(t, what, func() bool { return armed() > n }, jobWait)
 	}
 	rearmed("the loop's first timer", 0)
 	r.clock.Add(4 * time.Minute)
@@ -272,7 +272,7 @@ func TestServerBackupRoutesRights(t *testing.T) {
 			}
 		}
 	}
-	if n != 20 {
+	if n != 21 {
 		t.Fatalf("%d routes", n)
 	}
 }

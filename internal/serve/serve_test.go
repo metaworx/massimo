@@ -10,6 +10,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"io/fs"
 	"log/slog"
 	"net"
 	"net/http"
@@ -121,8 +122,16 @@ func TestOpenRunsAgainstFakeCube(t *testing.T) {
 		t.Fatalf("healthz %+v", h)
 	}
 	waitForCube(t, base)
+	// The API's address, published for the commands, and gone with the
+	// serve.
+	if f, err := ReadAPIFile(data); err != nil || f.URL != base || f.Node != h.NodeID || f.PID != os.Getpid() {
+		t.Fatalf("serve.api %+v %v", f, err)
+	}
 	if err := stop(); err != nil {
 		t.Fatal(err)
+	}
+	if _, err := ReadAPIFile(data); !errors.Is(err, fs.ErrNotExist) {
+		t.Fatalf("serve.api after the stop: %v", err)
 	}
 	logs.Has(t, 0, "the cube served", testkit.Msg("serving cube", "source", "system", "serial", "KEQ0000100"))
 	logs.Has(t, 0, "the API listening, open, without TLS", testkit.Msg("api listening", "source", "system", "addr", inst.Addr(),

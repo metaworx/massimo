@@ -27,6 +27,7 @@ import (
 	"sync"
 	"time"
 
+	"go.metaworx.ch/massimo/internal/serverbackup"
 	"go.metaworx.ch/massimo/internal/store"
 	"go.metaworx.ch/massimo/internal/view"
 )
@@ -134,6 +135,7 @@ var actions = map[string]string{
 	"POST /api/v1/server-backups/{id}/retry":                     "serverbackup.retry",
 	"PUT /api/v1/server-backups/{id}/copies/{target}":            "serverbackup.push",
 	"DELETE /api/v1/server-backups/{id}/copies/{target}":         "serverbackup.copy_delete",
+	"DELETE /api/v1/server-backups/{id}":                         "serverbackup.delete",
 	"POST /api/v1/server-backups/{id}/copies/{target}/pull":      "serverbackup.pull",
 	"POST /api/v1/server-backup-targets":                         "serverbackup.target_add",
 	"PUT /api/v1/server-backup-targets/{uuid}":                   "serverbackup.target_update",
@@ -175,7 +177,7 @@ var changeLines = map[string]string{
 	// (serverbackups.go), a test of a target none
 	"serverbackup.make": "system", "serverbackup.upload": "system", "serverbackup.check": "system", "serverbackup.retry": "system",
 	"serverbackup.push": "system", "serverbackup.pull": "system", "serverbackup.target_test": "",
-	"serverbackup.pin": "change", "serverbackup.copy_delete": "change", "serverbackup.target_add": "change", "serverbackup.target_update": "change",
+	"serverbackup.pin": "change", "serverbackup.copy_delete": "change", "serverbackup.delete": "change", "serverbackup.target_add": "change", "serverbackup.target_update": "change",
 	"serverbackup.target_remove": "change", "serverbackup.key_add": "change", "serverbackup.key_confirm": "change", "serverbackup.key_remove": "change",
 }
 
@@ -378,22 +380,61 @@ func resultOf(status int) string {
 }
 
 // redacted is the body as the row keeps it: the JSON with the secret
-// fields replaced, when it is JSON and short; nothing otherwise.
+// fields replaced wherever they sit, in an object within the body as at
+// its top, a refused body's as an accepted one's (secretKeys), when it is
+// JSON and short; nothing otherwise.
 func redacted(body []byte) json.RawMessage {
 	if len(body) == 0 || len(body) > maxAuditBody || !json.Valid(body) {
 		return nil
 	}
-	var m map[string]any
-	if json.Unmarshal(body, &m) != nil {
-		return json.RawMessage(body) // an array or a scalar
+	dec := json.NewDecoder(bytes.NewReader(body))
+	dec.UseNumber()
+	var v any
+	if dec.Decode(&v) != nil {
+		return nil
 	}
+	out, err := json.Marshal(redactValue(v, secretKeys()))
+	if err != nil {
+		return nil
+	}
+	return out
+}
+
+// secretKeys are the keys a row's body never keeps the value of:
+// secretFields, and the secret field of every kind of target of the
+// server's backups (serverbackup.Kind), which a body may send inside a
+// target's config, where the route refuses it.
+func secretKeys() map[string]bool {
+	keys := map[string]bool{}
 	for _, k := range secretFields {
-		if _, ok := m[k]; ok {
-			m[k] = "…"
+		keys[k] = true
+	}
+	for _, k := range serverbackup.Kinds() {
+		if f, ok := k.Secret(); ok {
+			keys[f.Key] = true
 		}
 	}
-	out, _ := json.Marshal(m)
-	return out
+	return keys
+}
+
+// redactValue replaces the value of every key of keys in v, at any
+// depth, with "…".
+func redactValue(v any, keys map[string]bool) any {
+	switch t := v.(type) {
+	case map[string]any:
+		for k, e := range t {
+			if keys[k] {
+				t[k] = "…"
+			} else {
+				t[k] = redactValue(e, keys)
+			}
+		}
+	case []any:
+		for i := range t {
+			t[i] = redactValue(t[i], keys)
+		}
+	}
+	return v
 }
 
 // endAudit writes the row once the answer is out.

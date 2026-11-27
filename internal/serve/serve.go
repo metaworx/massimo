@@ -397,6 +397,7 @@ func (i *Instance) Run(ctx context.Context) error {
 		attrs = append(attrs, "store", "none (-addr)")
 	}
 	i.log.Info("api listening", attrs...)
+	defer i.publishAPI()()
 	if i.cfg.Announce.On {
 		defer i.announce(ctx)()
 	}
