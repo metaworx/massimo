@@ -58,6 +58,13 @@ as `kitClock` is the server's `notify.Clock`.
 The room checks' clock of the drift tests (`checkClock`) is another:
 the real time plus an offset the test moves on,
 so that the Cube's time, read at the greeting, moves on by itself too.
+The drift rig's `r.check()` runs the checks only once they would check
+every room: it waits until none of the reasons `scanRooms` (`drift.go`)
+gives the checks holds - a structure change sent or read back,
+a command to the room in the queue, a write to it open, a window open -
+since a check that left a room out starts its ten minutes later than the test counts.
+A test that leaves a room out on purpose says why:
+`r.checkWhile(2, leftOutConfirming)`.
 
 ## The scale
 

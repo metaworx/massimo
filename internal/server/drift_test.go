@@ -6,6 +6,7 @@ package server
 import (
 	"context"
 	"encoding/base64"
+	"fmt"
 	"net/http/httptest"
 	"slices"
 	"strings"
@@ -73,8 +74,59 @@ func startDriftWith(t *testing.T, change func([]cube.Message) []cube.Message, st
 	return &driftRig{rig: startServer(t, opts...), clock: clock}
 }
 
-// check runs the room checks once.
-func (r *driftRig) check() { r.s.roomChecks(context.Background(), r.rt) }
+// check runs the room checks once, when they would check every room of
+// the Cube (checkable). A check that left a room out for a reason the
+// test did not make, such as a member's re-read still in the queue,
+// would start the room's ten minutes later than the test counts them.
+func (r *driftRig) check() {
+	r.t.Helper()
+	r.checkable(nil)
+	r.s.roomChecks(context.Background(), r.rt)
+}
+
+// checkWhile is check while the test leaves room out for why, as an
+// open window or a write it keeps unconfirmed does: it waits until the
+// room checks would leave room out for why alone and check every other
+// room.
+func (r *driftRig) checkWhile(room uint8, why leftOut) {
+	r.t.Helper()
+	r.checkable(map[uint8]leftOut{room: why})
+	r.s.roomChecks(context.Background(), r.rt)
+}
+
+// checkable waits until a check of the room checks would read the Cube,
+// connected with its metadata, and leave each room of out for its
+// reasons there alone and every other room for none: no structure
+// change sent or read back, no command to it in the queue, no write to
+// it open, no window open (scanRooms, which the checks read too). The
+// failure names the rooms and the reasons that held.
+func (r *driftRig) checkable(out map[uint8]leftOut) {
+	r.t.Helper()
+	var seen string
+	ready := func() bool {
+		if !r.rt.client.Connected() {
+			seen = " the Cube not connected"
+			return false
+		}
+		snap := r.rt.client.Snapshot()
+		md := snap.Metadata()
+		if md == nil {
+			seen = " no metadata"
+			return false
+		}
+		cubeNow, clock := snap.CubeClock(r.s.roomNow())
+		seen = ""
+		for _, c := range r.rt.scanRooms(snap, md, cubeNow, clock) {
+			if c.why != out[c.id] {
+				seen += fmt.Sprintf(" room %d left out for %v, not %v;", c.id, c.why, out[c.id])
+			}
+		}
+		return seen == ""
+	}
+	if !testkit.Within(testkit.Wait, ready) {
+		r.t.Fatalf("the room checks not ready after %v:%s", testkit.Scale(testkit.Wait), seen)
+	}
+}
 
 // set changes a device's reported state and waits until the server's
 // snapshot shows it.
@@ -277,11 +329,11 @@ func TestDisagreeStartsAgainOnceTheWriteConfirms(t *testing.T) {
 		t.Fatalf("the room's confirmation: %+v", c)
 	}
 	sent := r.lines.Mark()
-	r.check()
+	r.checkWhile(2, leftOutConfirming)
 	r.clock.add(6 * time.Minute)
-	r.check()
+	r.checkWhile(2, leftOutConfirming)
 	r.clock.add(5 * time.Minute)
-	r.check()
+	r.checkWhile(2, leftOutConfirming)
 	if got := r.outcomes("disagree"); len(got) != 0 {
 		t.Fatalf("reported while the write confirms, eleven minutes after the disagreement began: %v", got)
 	}
@@ -667,12 +719,13 @@ func TestDisagreeLeavesOut(t *testing.T) {
 	for _, c := range []struct {
 		name  string
 		apart func(r *driftRig)
+		out   leftOut // why the room checks leave room 2 out, zero where only the member is
 	}{
-		{"boost", func(r *driftRig) { r.set(0x0a0205, "boost", 21) }},
+		{"boost", func(r *driftRig) { r.set(0x0a0205, "boost", 21) }, 0},
 		{"hidden", func(r *driftRig) {
 			r.rt.setConfig(func(c *CubeConfig) { c.Hidden = []cube.RFAddress{0x0a0205} })
 			r.set(0x0a0205, "manual", 18)
-		}},
+		}, 0},
 		{"window", func(r *driftRig) {
 			open := true
 			if err := r.fc.SetState(0x0a0207, fakecube.State{WindowOpen: &open}); err != nil {
@@ -683,14 +736,14 @@ func TestDisagreeLeavesOut(t *testing.T) {
 				return st.WindowOpen != nil && *st.WindowOpen
 			})
 			r.set(0x0a0205, "manual", 12)
-		}},
+		}, leftOutWindow},
 		{"structure", func(r *driftRig) {
 			f := r.rt.follow
 			f.mu.Lock()
 			f.watches = append(f.watches, &structureWatch{action: "move", device: 0x0a0204, rooms: []uint8{2}, next: time.Now().Add(time.Hour)})
 			f.mu.Unlock()
 			r.set(0x0a0205, "manual", 18)
-		}},
+		}, leftOutWatched},
 	} {
 		t.Run(c.name, func(t *testing.T) {
 			t.Parallel()
@@ -701,7 +754,7 @@ func TestDisagreeLeavesOut(t *testing.T) {
 			c.apart(r)
 			sent := r.lines.Mark()
 			for range 3 {
-				r.check()
+				r.checkWhile(2, c.out)
 				r.clock.add(11 * time.Minute)
 			}
 			if got := r.outcomes("disagree"); len(got) != 0 {
@@ -1097,7 +1150,7 @@ func TestHeldReferenceLifetime(t *testing.T) {
 		r.rt.holdReference(2, held, at)
 		r.pauseRoom(2)
 		r.clock.add(time.Hour)
-		r.check()
+		r.checkWhile(2, leftOutWatched)
 		ref, ok := r.rt.roomReference(r.rt.client.Snapshot(), 2, 0, r.s.roomNow())
 		if !ok || ref.mode != cube.ModeManual || ref.temp != 5 || !ref.beforeChange {
 			t.Fatalf("the reference of a room left out: %+v %v", ref, ok)
