@@ -84,11 +84,17 @@ data class SessionLeft(val user: String, val id: Long, val createdAt: String = "
  * so that a session the process forgets with its memory, a swipe from the
  * recent apps or Android ending a hidden app, goes into [Server.unended]
  * at the next process's start (SessionKeeper.leaveForgotten), with its
- * revoke [code] (D112-A), so that the next contact ends it.
+ * revoke [code] (D112-A), so that the next contact ends it. [keyId] is the
+ * key it was made from, 0 for none, so that after a restart a session the
+ * server ended with its key, or with the key's next session, is not logged
+ * out (D100-A).
  */
-data class HeldSession(val user: String, val id: Long, val createdAt: String = "", val code: String = "") {
-    /** fileJson is the session as the store keeps it, `{user, id, created_at, code}`. */
-    fun fileJson(): JSONObject = JSONObject().put("user", user).put("id", id).put("created_at", createdAt).apply { if (code.isNotEmpty()) put("code", code) }
+data class HeldSession(val user: String, val id: Long, val createdAt: String = "", val code: String = "", val keyId: Long = 0) {
+    /** fileJson is the session as the store keeps it, `{user, id, created_at, code, key_id}`. */
+    fun fileJson(): JSONObject = JSONObject().put("user", user).put("id", id).put("created_at", createdAt).apply {
+        if (code.isNotEmpty()) put("code", code)
+        if (keyId > 0) put("key_id", keyId)
+    }
 
     /** left is the session as one left valid at the server at [at]. */
     fun left(at: String = ""): SessionLeft = SessionLeft(user, id, createdAt, code, leftAt = at)
@@ -98,7 +104,7 @@ data class HeldSession(val user: String, val id: Long, val createdAt: String = "
 
     override fun hashCode(): Int = listOf(user, id, createdAt).hashCode()
 
-    override fun toString(): String = "HeldSession(user=$user, id=$id, createdAt=$createdAt)"
+    override fun toString(): String = "HeldSession(user=$user, id=$id, createdAt=$createdAt, keyId=$keyId)"
 }
 
 /**
@@ -390,16 +396,24 @@ class ServerStore(private val file: File, private val now: () -> String = { nowU
     @Synchronized
     fun hold(id: String, held: HeldSession) {
         val at = servers.indexOfFirst { it.id == id }
-        if (at < 0 || held.id <= 0 || held.user.isEmpty() || servers[at].held == held) return
+        if (at < 0 || held.id <= 0 || held.user.isEmpty()) return
+        val had = servers[at].held
+        if (had != null && had == held && had.code == held.code && had.keyId == held.keyId) return
         servers[at] = servers[at].copy(held = held)
         write()
     }
 
-    /** unhold clears the session recorded as held at the server [id]: it ended, went into `unended`, or was replaced. */
+    /**
+     * unhold clears the session recorded as held at the server [id]: it
+     * ended, went into `unended`, or was replaced; with [sessionId] only
+     * where the record is that session's, so that a record of the next one
+     * stays.
+     */
     @Synchronized
-    fun unhold(id: String) {
+    fun unhold(id: String, sessionId: Long = 0) {
         val at = servers.indexOfFirst { it.id == id }
-        if (at < 0 || servers[at].held == null) return
+        val had = if (at < 0) null else servers[at].held
+        if (had == null || sessionId > 0 && had.id != sessionId) return
         servers[at] = servers[at].copy(held = null)
         write()
     }
@@ -507,11 +521,11 @@ class ServerStore(private val file: File, private val now: () -> String = { nowU
             }.distinctBy { Triple(it.user, it.id, it.createdAt) }
         }
 
-        // heldOf reads a server's session held, {user, id, created_at}, null
+        // heldOf reads a server's session held, {user, id, created_at, code, key_id}, null
         // for none or what is not one.
         private fun heldOf(o: JSONObject?): HeldSession? {
             if (o == null) return null
-            return HeldSession(str(o, "user"), o.optLong("id"), str(o, "created_at"), str(o, "code").takeIf(RevokeCode::valid) ?: "")
+            return HeldSession(str(o, "user"), o.optLong("id"), str(o, "created_at"), str(o, "code").takeIf(RevokeCode::valid) ?: "", o.optLong("key_id").coerceAtLeast(0))
                 .takeIf { it.user.isNotEmpty() && it.id > 0 }
         }
 

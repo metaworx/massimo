@@ -42,8 +42,8 @@ class KeysLeft(private val servers: ServerStore, private val logins: LoginStore,
     /** hold records [held] as the session the app holds at the server [id] (D102-A). */
     fun hold(id: String, held: HeldSession) = servers.hold(id, held)
 
-    /** unhold clears the server's record of the session held: it ended, was left or replaced. */
-    fun unhold(id: String) = servers.unhold(id)
+    /** unhold clears the server's record of the session held: it ended, was left or replaced; with [sessionId] only that session's record. */
+    fun unhold(id: String, sessionId: Long = 0) = servers.unhold(id, sessionId)
 
     /** held is the server's record of the session held, null for none. */
     fun held(id: String): HeldSession? = servers.get(id)?.held

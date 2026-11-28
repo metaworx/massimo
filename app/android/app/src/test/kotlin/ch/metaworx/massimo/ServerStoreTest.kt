@@ -314,7 +314,9 @@ class ServerStoreTest {
         st.save(input("id" to a.id, "name" to "House", "node" to "node-b", "lan" to "http://192.168.1.20:8099/"))
         assertNull("another node's", st.get(a.id)!!.held)
         st.hold(a.id, HeldSession("anna", 8, ""))
-        st.unhold(a.id)
+        st.unhold(a.id, 7)
+        assertEquals("another session's record stays", 8L, st.get(a.id)!!.held!!.id)
+        st.unhold(a.id, 8)
         assertNull(ServerStore(file()).get(a.id)!!.held)
         // moved into unended where the app holds it no more, once
         st.hold(a.id, HeldSession("anna", 9, "2026-11-20T10:00:09Z"))

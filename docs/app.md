@@ -499,7 +499,7 @@ under My profile → Sessions and keys by the phone's name, ends the session.
   which make the activity anew, keep them.
   What a process's end loses no holder keeps:
   so each server records the session the app holds there once a check has
-  learnt its id, its user, id and time and no secret
+  learnt its id, its user, id and time and the key it was made from, no secret
   (`held`, in the app's file alone, never given to the page),
   cleared where the session ends, goes into `unended` or is replaced.
   At the next process's start, before any activity,
@@ -559,7 +559,8 @@ under My profile → Sessions and keys by the phone's name, ends the session.
   Remove): the app forgets such a session without `POST /api/v1/logout`,
   and leaves it in no `unended`; a password session replaced is logged out
   as before. The app knows the key a session was made from by
-  `GET /api/v1/me`'s `token.key_id`, or by the kept key it made it with.
+  `GET /api/v1/me`'s `token.key_id`, or by the kept key it made it with,
+  and after a restart by the session's record as held.
 - **Kept and matched**: one key per server, used at whichever of its
   two addresses the page opened (D34-B); the record is bound to the
   server's id, its `node`, its pinned fingerprint and the user's name,

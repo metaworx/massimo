@@ -484,6 +484,38 @@ class SessionsTest {
     }
 
     @Test
+    fun aSessionFromTheKeySealedBeforeARestartIsNotLoggedOut() {
+        // the re-review: after a restart the record as held keeps the key a session was made from (D100-A)
+        FakeServer().use { fake ->
+            val servers = ServerStore(File(tmp.root, "servers.json"))
+            val left = KeysLeft(servers, logins, api, logged::add)
+            val none = { urls: List<String>, _: String? -> urls.map { ProbeResult(it, ok = false) } }
+            // asked after a logout: the session sealed, as without a kept login
+            val s = servers.save(org.json.JSONObject().put("name", "Barn").put("node", "node-a").put("lan", fake.base).put("ask", Server.ASK_LOGOUT))
+            logins.put(s.id, kept(42))
+            fun restart() = Sessions(SessionKeeper(TokenStore(File(tmp.root, "tokens.json"), plain)), logins, api, none, left, logged::add, Checks())
+            val first = Sessions(keeper, logins, api, none, left, logged::add, Checks())
+            first.put(s, "session-anna-fp", fake.base, keyId = 42)
+            first.check(s, fake.base)
+            assertEquals("the key kept with the record", 42L, servers.get(s.id)!!.held!!.keyId)
+            assertEquals(42L, ServerStore(File(tmp.root, "servers.json")).get(s.id)!!.held!!.keyId)
+
+            // the key's next session replaces it: the server ended it, no logout
+            assertNull(restart().put(s, "session-anna", fake.base, keyId = 42))
+            assertTrue(fake.requests().none { it.startsWith("POST /api/v1/logout") })
+            assertTrue(servers.get(s.id)!!.unended.isEmpty())
+
+            // Turn off revokes the key: the session made from it ended with it, no logout
+            first.put(s, "session-anna-fp", fake.base, keyId = 42)
+            first.check(s, fake.base)
+            assertEquals(Sessions.Revoke.REVOKED, restart().revokeWithSession(s, fake.base, kept(42)))
+            assertEquals("DELETE /api/v1/users/anna/tokens/42 session-anna-fp", fake.requests().last())
+            assertTrue(fake.requests().none { it.startsWith("POST /api/v1/logout") })
+            assertTrue(servers.get(s.id)!!.unended.isEmpty())
+        }
+    }
+
+    @Test
     fun aSignOutLeavesTheSessionRecordedWhileTheServerIsAsked() {
         // the review: an app that ends during the logout leaves the session in unended, not unrecorded
         held { fake, servers, st, s ->

@@ -1025,7 +1025,7 @@ def test_connect_server_down_and_revoke_codes(new_context, case, watch, guard):
     the next time the app reaches the server, over HTTPS and over plain
     HTTP, where the line changes as the server goes down; a probe still
     running keeps what the last one found, the badge as it was and the
-    line not drawn again; a key or a session
+    line not drawn again, and the first shows no server down; a key or a session
     left whose revoke code waits says it ends then; the toasts of Sign out,
     Turn off and Remove that left a code say so; a probe that finds the
     server again takes its codes, and their lines go. At 390 px the lines
@@ -1038,9 +1038,15 @@ def test_connect_server_down_and_revoke_codes(new_context, case, watch, guard):
         "sessionIds": {"s1": {"user": "anna", "id": 7}, "s2": {"user": "bob", "id": 9}},
         "keys": {"s3": {"user": "carl", "id": 21}},
         "codes": True,
+        "probeMs": 1500,
     }
     page = open_connect(new_context, guard, watch, config)
     st = STATE[case.lang]
+    # the first probe, still running, has found nothing yet: no server shown down
+    assert wait_until(page, "!!conn.probes.s2 && conn.probes.s2.state === 'probing' && conn.probes.s2.was === undefined", 3), "the first probe running"
+    first = row(page, "Office").locator(".session-badge").get_attribute("class")
+    assert "fill-ok" in first and "mode" not in first, f"not grey before any probe found the server down: {first}"
+    page.evaluate("window.__fakeBridgeConfig.probeMs = 0")
     wait_state(page, "Home", st["lan"])
     wait_state(page, "Office", st["offline"])
     wait_state(page, "Cabin", st["offline"])

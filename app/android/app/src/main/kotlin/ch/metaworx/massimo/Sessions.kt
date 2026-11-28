@@ -204,13 +204,13 @@ class Sessions(
                 val code = if (me.kind == KIND_SESSION) RevokeCode.of(token) else ""
                 val c = Checked(me.user, me.tokenId, me.kind, me.createdAt, me.keyId.takeIf { it > 0 } ?: made[s.id] ?: 0, code)
                 checked[s.id] = c
-                if (c.kind == KIND_SESSION && c.id > 0) runCatching { left?.hold(s.id, HeldSession(c.user, c.id, c.createdAt, c.code)) }
+                if (c.kind == KIND_SESSION && c.id > 0) runCatching { left?.hold(s.id, HeldSession(c.user, c.id, c.createdAt, c.code, c.keyId)) }
             }
             learnKeyId(s, me)
             Look(me.user, left?.revoke(s, url, token, me) ?: emptyList())
         } catch (e: ServerApi.Refused) {
             // a dead session counts as nothing at the server once forgotten
-            if (held(s) == token) forget(s.id)
+            forgetIf(s, token)
             Look(null)
         } catch (e: ServerApi.Failed) {
             log.warn("session: the session of ${s.id} was not checked at ${where(url)}: ${what(e)}")
@@ -236,7 +236,7 @@ class Sessions(
         return try {
             learnKeyId(s, api.whoami(url, s.fp, token), kept)
         } catch (e: ServerApi.Refused) {
-            if (held(s) == token) forget(s.id)
+            forgetIf(s, token)
             0
         } catch (e: IOException) {
             0
@@ -337,7 +337,7 @@ class Sessions(
         try {
             api.revoke(url, s.fp, token, kept.user, kept.keyId)
         } catch (e: ServerApi.Refused) {
-            forget(s.id)
+            forgetIf(s, token)
             return Revoke.BY_KEY
         } catch (e: ServerApi.Failed) {
             when (e.status) {
@@ -357,8 +357,11 @@ class Sessions(
     }
 
     // madeFrom is the key the session held for [s] was made from, as its
-    // check or its making found it, 0 for none or not known.
-    private fun madeFrom(s: Server): Long = synchronized(checked) { checked[s.id]?.keyId?.takeIf { it > 0 } ?: made[s.id] ?: 0 }
+    // check or its making found it, else as its record as held says (a
+    // session sealed before this process), 0 for none or not known.
+    private fun madeFrom(s: Server): Long = synchronized(checked) {
+        checked[s.id]?.keyId?.takeIf { it > 0 } ?: made[s.id] ?: heldAsChecked(s)?.keyId ?: 0
+    }
 
     /**
      * revokeWithKey revokes the kept key with the key itself, [secret], opened
@@ -405,7 +408,8 @@ class Sessions(
     // none (D70-A); one never checked is forgotten on the phone alone. Its
     // record as held goes: it is left now. It reports whether it was noted.
     private fun leave(s: Server, was: Checked?): Boolean {
-        runCatching { left?.unhold(s.id) }
+        // its own record alone: a check of the next session, done meanwhile, keeps its
+        if (was != null && was.id > 0) runCatching { left?.unhold(s.id, was.id) }
         if (was == null || was.kind != KIND_SESSION || was.id <= 0) return false
         return runCatching { left?.addSession(s.id, was.user, was.id, was.createdAt, was.code) }.getOrNull() == true
     }
@@ -414,7 +418,14 @@ class Sessions(
     // it: what a session sealed before this process, which no check of this
     // one has seen, is left by; null for none.
     private fun heldAsChecked(s: Server): Checked? =
-        runCatching { left?.held(s.id) }.getOrNull()?.let { Checked(it.user, it.id, KIND_SESSION, it.createdAt, code = it.code) }
+        runCatching { left?.held(s.id) }.getOrNull()?.let { Checked(it.user, it.id, KIND_SESSION, it.createdAt, it.keyId, it.code) }
+
+    // forgetIf forgets the session held for [s] where it is still [token],
+    // in one step a put cannot come between: a session the server refused
+    // is forgotten, and one handed in meanwhile is not.
+    private fun forgetIf(s: Server, token: String) = synchronized(checked) {
+        if (held(s) == token) forget(s.id)
+    }
 
     // unleave takes away the note [leave] made of [was], the session ended.
     private fun unleave(s: Server, was: Checked?) {
