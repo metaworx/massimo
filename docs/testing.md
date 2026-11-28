@@ -217,6 +217,7 @@ a port another program takes, the tests running beside it.
 | UI | `UI_TEST_SCALE`; `run.sh`'s retry, at four times the scale, with the trace | a slow or loaded runner; the retry's trace slows the page too | "The scale" |
 | UI | the run's ports (`UI_TEST_API_PORT`, `UI_TEST_CUBE_PORT`, `UI_TEST_DISCOVERY_PORT`, `UI_TEST_CONTROL_PORT`) | a run beside another, each on ports of its own | `tools/ui-test/README.md` |
 | UI | `HOST_NOISE` of `conftest.py` | a console line of the host's, not the page's: Chromium's `net::ERR_NETWORK_CHANGED` when the host's network changes | "The host's console lines" |
+| App | `Page(sc)`'s `waitFor` and `run`; `Wait.until`, `Wait.within` | an answer the app's main thread gives late, held up as at the WebView's first start: each try asked again within 30 s, never a loop or a latch of the test's own | [tools/app-emulator/README.md](../tools/app-emulator/README.md), "How a test waits" |
 
 ### The guards and the soak
 

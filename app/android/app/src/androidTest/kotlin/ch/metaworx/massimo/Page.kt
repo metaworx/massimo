@@ -3,7 +3,6 @@
 
 package ch.metaworx.massimo
 
-import android.os.SystemClock
 import android.view.View
 import android.webkit.WebView
 import androidx.test.core.app.ActivityScenario
@@ -16,8 +15,10 @@ import java.util.concurrent.TimeUnit
 /**
  * Page drives the app's one WebView from a test, as a user's taps would
  * reach the page: a script evaluated in the page shown, the connect page
- * or a server's, its answer as JSON; a wait for a script to come true; a
- * click; and what the activity shows around it.
+ * or a server's, its answer as JSON; a wait for a script to come true,
+ * through [Wait]; a click; and what the activity shows around it. A test
+ * that launches its own activity takes it too (`Page(sc)`), and keeps no
+ * copy of its waits (tools/app-emulator/README.md, "How a test waits").
  */
 class Page(private val sc: ActivityScenario<MainActivity>) {
     private var seq = 0
@@ -41,17 +42,21 @@ class Page(private val sc: ActivityScenario<MainActivity>) {
         return out
     }
 
-    /** waitFor waits until [js] is true in the page, [what] naming it in the failure, and returns its value. */
-    fun waitFor(js: String, what: String, ms: Long = WAIT_MS): String {
-        val until = SystemClock.elapsedRealtime() + ms
+    /**
+     * waitFor waits until [js] is true in the page, [what] naming it in the
+     * failure, and returns its value. Each try is an [eval] given
+     * [POLL_EVAL_S]; a try the page does not answer in time is asked
+     * again, not failed: a page navigating meanwhile may never answer it,
+     * and the main thread held up, as at the WebView's first start, answers
+     * it late. Only [ms] in all, [Wait.WAIT_MS] unless given, fails the test.
+     */
+    fun waitFor(js: String, what: String, ms: Long = Wait.WAIT_MS): String {
         var last = ""
-        while (SystemClock.elapsedRealtime() < until) {
-            // a page navigating meanwhile may never answer: asked again
+        val held = Wait.within(ms) {
             last = runCatching { eval("(() => { try { return ($js); } catch (e) { return null; } })()", what, POLL_EVAL_S) }.getOrDefault("null")
-            if (truthy(last)) return last
-            SystemClock.sleep(POLL_MS)
+            truthy(last)
         }
-        fail("never true within ${ms / 1000} s: $what (the page at ${url()})")
+        if (!held) fail("never true within ${ms / 1000} s: $what (the page at ${url()})")
         return last
     }
 
@@ -60,7 +65,7 @@ class Page(private val sc: ActivityScenario<MainActivity>) {
      * waits for its promise: the value it resolves, as JSON, or the
      * failure of [what] with the error it rejects with.
      */
-    fun run(body: String, what: String, ms: Long = WAIT_MS): Any? {
+    fun run(body: String, what: String, ms: Long = Wait.WAIT_MS): Any? {
         seq += 1
         val key = "__massimoEmu$seq"
         eval(
@@ -111,12 +116,7 @@ class Page(private val sc: ActivityScenario<MainActivity>) {
 
     /** waitCovered waits until the cover is shown, or [shown] false, gone. */
     fun waitCovered(shown: Boolean) {
-        val until = SystemClock.elapsedRealtime() + WAIT_MS
-        while (SystemClock.elapsedRealtime() < until) {
-            if (covered() == shown) return
-            SystemClock.sleep(POLL_MS)
-        }
-        fail(if (shown) "the page was not covered" else "the cover stayed")
+        if (!Wait.within { covered() == shown }) fail(if (shown) "the page was not covered" else "the cover stayed")
     }
 
     private fun <T> onWeb(f: (WebView) -> T): T {
@@ -129,8 +129,6 @@ class Page(private val sc: ActivityScenario<MainActivity>) {
     private companion object {
         const val EVAL_S = 15L
         const val POLL_EVAL_S = 5L
-        const val WAIT_MS = 30_000L
-        const val POLL_MS = 250L
 
         fun truthy(r: String): Boolean = r != "null" && r != "false" && r != "\"\"" && r != "0" && r != "undefined"
     }

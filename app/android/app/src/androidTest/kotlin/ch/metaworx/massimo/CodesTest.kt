@@ -43,7 +43,7 @@ class CodesTest : EmulatorTest() {
         (Rig.app.applicationContext as MassimoApp).exit()
         // the start opens the server, the first added, at start (D43-A), which posts its codes
         relaunch()
-        revokedByCode(h, mark, session)
+        h.revokedByCode(mark, session)
         assertEquals("the session still valid at the server", 401, h.status(token))
     }
 
@@ -69,7 +69,7 @@ class CodesTest : EmulatorTest() {
         val mark = h.mark()
         up(id, t)
         // the key's code first, which ends the key's session with it; the session's then matches nothing
-        revokedByCode(h, mark, key)
+        h.revokedByCode(mark, key)
         assertEquals("the session made from the key still valid", 401, h.status(token))
         assertTrue("$session", session > 0)
     }
@@ -89,7 +89,7 @@ class CodesTest : EmulatorTest() {
         assertTrue("its code waits: $res", res.optBoolean("pending"))
         val mark = h.mark()
         up(id, t)
-        revokedByCode(h, mark, session)
+        h.revokedByCode(mark, session)
         assertEquals(401, h.status(token))
     }
 
@@ -114,7 +114,7 @@ class CodesTest : EmulatorTest() {
         val mark = h.mark()
         relaunch()
         list() // the list shown posts a removed server's codes
-        revokedByCode(h, mark, session)
+        h.revokedByCode(mark, session)
         assertEquals(401, h.status(token))
     }
 
@@ -159,7 +159,7 @@ class CodesTest : EmulatorTest() {
         page.waitFor("!!conn.servers.find((s) => s.id === ${q(id)}) && !conn.servers.find((s) => s.id === ${q(id)}).login", "the login turned off")
         val mark = h.mark()
         up(id, t)
-        revokedByCode(h, mark, key)
+        h.revokedByCode(mark, key)
         page.waitFor("conn.servers.find((s) => s.id === ${q(id)}).unrevoked.length === 0", "the key's line gone")
         tap(id)
         signIn(t, A, keep = false)
@@ -208,22 +208,7 @@ class CodesTest : EmulatorTest() {
         logins.put(id, kept.copy(code = ""))
     }
 
-    // revokedByCode waits until the audit has the token [tokenId] revoked by
-    // its code after [mark], a row of nobody's.
-    private fun revokedByCode(h: Host, mark: Long, tokenId: Long) {
-        val until = android.os.SystemClock.elapsedRealtime() + CODE_MS
-        var rows: List<Host.Row> = emptyList()
-        while (android.os.SystemClock.elapsedRealtime() < until) {
-            rows = h.since(mark, anyone = true)
-            if (rows.any { it.action == "token.revoke_code" && it.target == "token:$tokenId" && it.result == "ok" }) return
-            android.os.SystemClock.sleep(POLL_MS)
-        }
-        fail("the token $tokenId not revoked by its code: $rows")
-    }
-
     private companion object {
         const val CLOSED = "https://127.0.0.1:9/"
-        const val CODE_MS = 20_000L
-        const val POLL_MS = 500L
     }
 }
