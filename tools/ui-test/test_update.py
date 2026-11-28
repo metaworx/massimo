@@ -9,7 +9,7 @@ import json
 
 import pytest
 
-from helpers import VIEWER, frames, show_view, update_json, wait_held, wait_until
+from helpers import VIEWER, frames, safe_route, show_view, update_json, wait_held, wait_until
 
 
 def test_busy_while_the_helper_installs(page):
@@ -276,7 +276,7 @@ def test_update_backup_line(page):
         assert wait_until(page, "document.getElementById('update-backup').textContent === %s" % json.dumps(text), 5), \
             "the line says %s: %r" % (key, page.locator("#update-backup").text_content())
 
-    page.route("**/api/v1/update*", handle)
+    safe_route(page, "**/api/v1/update*", handle)
     page.locator("#update-check").click()
     line_is("update.backup.ready")
     assert not page.locator("#update-no-backup").is_visible(), "no Update without a backup while the backup works"
@@ -326,7 +326,7 @@ def test_update_being_started(page):
     body["backup"] = {"state": "ready"}
     body["starting"] = {"step": "backup", "version": "v0.0.1-test", "since": "2026-11-27T10:00:00Z"}
     body["can_update"] = False
-    page.route("**/api/v1/update*", lambda route: route.fulfill(status=200, content_type="application/json", body=json.dumps(body)))
+    safe_route(page, "**/api/v1/update*", lambda route: route.fulfill(status=200, content_type="application/json", body=json.dumps(body)))
     page.locator("#update-check").click()
     backing = page.evaluate("t('update.backingUp', {version: 'v0.0.1-test'})")
     assert wait_until(page, "document.getElementById('update-helper').textContent === %s" % json.dumps(backing), 5), \
