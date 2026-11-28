@@ -22,6 +22,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"maps"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -400,7 +401,9 @@ func (s *Server) serverBackupRoutes(api func(pattern, capability string, h func(
 	api("DELETE /api/v1/server-backup-keys/{uuid}", "owner", s.deleteServerBackupKey)
 }
 
-// sbFail maps an error of the catalogue to a status.
+// sbFail maps an error of the catalogue to a status: a copy the target
+// keeps (ErrRetained, an S3 bucket's object lock) is a conflict, not a
+// target that failed.
 func sbFail(err error) error {
 	var he *httpError
 	switch {
@@ -413,6 +416,7 @@ func sbFail(err error) error {
 		return fail(http.StatusNotFound, "%v", err)
 	case errors.Is(err, serverbackup.ErrNoKey), errors.Is(err, serverbackup.ErrNoCopy), errors.Is(err, serverbackup.ErrSameTarget), errors.Is(err, serverbackup.ErrMixedKinds),
 		errors.Is(err, serverbackup.ErrNotRetried), errors.Is(err, serverbackup.ErrHasCopies), errors.Is(err, serverbackup.ErrJobRunning),
+		errors.Is(err, serverbackup.ErrRetained),
 		errors.Is(err, store.ErrServerBackupTargetExists), errors.Is(err, store.ErrServerBackupKeyExists):
 		return fail(http.StatusConflict, "%v", err)
 	case errors.Is(err, serverbackup.ErrNotABackup):
@@ -914,12 +918,14 @@ func (s *Server) deleteServerBackupCopy(w http.ResponseWriter, r *http.Request) 
 }
 
 // targetView is a target as the API shows it: its fields, never its
-// secret, whether it has one.
+// secret, whether it has one; of a secret the server made, its public
+// part (an SFTP target's key line, for authorized_keys).
 type targetView struct {
 	targetState
 	Config     map[string]string   `json:"config"`
 	HasSecret  bool                `json:"has_secret"`
 	SecretLost bool                `json:"secret_lost,omitempty"`
+	PublicKey  string              `json:"public_key,omitempty"`
 	Retention  serverbackup.Policy `json:"retention"`
 	CreatedAt  time.Time           `json:"created_at"`
 	UpdatedAt  time.Time           `json:"updated_at"`
@@ -929,8 +935,12 @@ type targetView struct {
 func viewTarget(t store.ServerBackupTarget, state targetState) targetView {
 	var p serverbackup.Policy
 	json.Unmarshal(t.Retention, &p)
-	return targetView{targetState: state, Config: t.Config, HasSecret: t.Secret != "" || t.SecretLost, SecretLost: t.SecretLost,
+	v := targetView{targetState: state, Config: t.Config, HasSecret: t.Secret != "" || t.SecretLost, SecretLost: t.SecretLost,
 		Retention: p, CreatedAt: t.CreatedAt.UTC(), UpdatedAt: t.UpdatedAt.UTC()}
+	if k, ok := serverbackup.KindOf(t.Kind); ok && k.Public != nil && t.Secret != "" {
+		v.PublicKey, _ = k.Public(t.Secret)
+	}
+	return v
 }
 
 // listServerBackupTargets handles GET /api/v1/server-backup-targets.
@@ -964,13 +974,15 @@ type kindView struct {
 }
 
 // fieldView is one field of a kind's form; its text is
-// serverbackup.field.<kind>.<key> in the web UI's languages.
+// serverbackup.field.<kind>.<key> in the web UI's languages, and that
+// of its warning, for a value Warn matches, serverbackup.warn.<kind>.<key>.
 type fieldView struct {
 	Key      string   `json:"key"`
 	Type     string   `json:"type"`
 	Required bool     `json:"required"`
 	Default  string   `json:"default,omitempty"`
 	Choices  []string `json:"choices,omitempty"`
+	Warn     string   `json:"warn,omitempty"`
 }
 
 // serverBackupKinds handles GET /api/v1/server-backup-targets/kinds: the
@@ -984,7 +996,7 @@ func (s *Server) serverBackupKinds(w http.ResponseWriter, r *http.Request) error
 			kv.Secret = f.Key
 		}
 		for _, f := range k.Fields {
-			kv.Fields = append(kv.Fields, fieldView{Key: f.Key, Type: f.Type, Required: f.Required, Default: f.Default, Choices: f.Choices})
+			kv.Fields = append(kv.Fields, fieldView{Key: f.Key, Type: f.Type, Required: f.Required, Default: f.Default, Choices: f.Choices, Warn: f.Warn})
 		}
 		out = append(out, kv)
 	}
@@ -1005,7 +1017,13 @@ type targetRequest struct {
 }
 
 // apply checks the request and writes it into t, a target of kind k.
+// Of a kind with a secret field, a change to the config that keeps the
+// secret is refused: the config says where the secret goes (a WebDAV
+// server's URL, an SMB host), so that one who may change a target but
+// never sees its secret could otherwise send it to a server of their
+// own. The secret comes again with the change.
 func (req targetRequest) apply(k serverbackup.Kind, t *store.ServerBackupTarget) error {
+	before := t.Config
 	if req.Name != nil {
 		t.Name = strings.TrimSpace(*req.Name)
 	}
@@ -1013,10 +1031,21 @@ func (req targetRequest) apply(k serverbackup.Kind, t *store.ServerBackupTarget)
 		return fail(http.StatusBadRequest, "a target needs a name of at most 64 characters, without control characters")
 	}
 	if req.Secret != nil {
-		if _, ok := k.Secret(); !ok && *req.Secret != "" {
+		_, field := k.Secret()
+		switch {
+		case k.MakeSecret != nil && *req.Secret != "":
+			return fail(http.StatusBadRequest, `a target of kind %s takes no secret: the server makes its key, and "secret": "" a new one`, k.Name)
+		case !field && *req.Secret != "":
 			return fail(http.StatusBadRequest, "a target of kind %s takes no secret", k.Name)
 		}
 		t.Secret, t.SecretLost = *req.Secret, false
+	}
+	if k.MakeSecret != nil && t.Secret == "" && !t.SecretLost {
+		secret, err := k.MakeSecret()
+		if err != nil {
+			return fail(http.StatusInternalServerError, "%v", err)
+		}
+		t.Secret = secret
 	}
 	if req.Config != nil {
 		t.Config = req.Config
@@ -1024,6 +1053,9 @@ func (req targetRequest) apply(k serverbackup.Kind, t *store.ServerBackupTarget)
 	cfg, err := k.Check(t.Config, t.Secret != "" || t.SecretLost)
 	if err != nil {
 		return fail(http.StatusBadRequest, "%v", err)
+	}
+	if f, ok := k.Secret(); ok && req.Secret == nil && t.Secret != "" && !sameConfig(k, before, cfg) {
+		return fail(http.StatusBadRequest, `the settings of a %s target say where its %s goes: send it again, in "secret", with a change to them`, k.Name, f.Key)
 	}
 	t.Config = cfg
 	if req.Takes != nil {
@@ -1042,6 +1074,15 @@ func (req targetRequest) apply(k serverbackup.Kind, t *store.ServerBackupTarget)
 		t.Enabled = *req.Enabled
 	}
 	return nil
+}
+
+// sameConfig reports whether a target's config before, as stored, is
+// cfg, checked: both as the kind reads them, its defaults filled in.
+func sameConfig(k serverbackup.Kind, before, cfg map[string]string) bool {
+	if read, err := k.Check(before, true); err == nil {
+		before = read
+	}
+	return maps.Equal(before, cfg)
 }
 
 // answerTarget writes a target with its state.
@@ -1096,6 +1137,7 @@ func (s *Server) addServerBackupTarget(w http.ResponseWriter, r *http.Request) e
 		extra["found"] = added
 		if err != nil {
 			extra["scan_error"] = err.Error()
+			hostKeyAnswer(err, extra)
 		}
 		var names []string
 		for _, sk := range skipped {
@@ -1112,7 +1154,8 @@ func (s *Server) addServerBackupTarget(w http.ResponseWriter, r *http.Request) e
 
 // putServerBackupTarget handles PUT …/server-backup-targets/{uuid}: the
 // fields given changed, the others kept; "secret" replaces the secret,
-// "" removes it, left out keeps it.
+// "" removes it, left out keeps it. Of a kind that makes its secret (an
+// SFTP target's key), "" makes a new one, and no other is taken.
 func (s *Server) putServerBackupTarget(w http.ResponseWriter, r *http.Request) error {
 	st, err := s.sbStore()
 	if err != nil {
@@ -1159,9 +1202,23 @@ func (s *Server) deleteServerBackupTarget(w http.ResponseWriter, r *http.Request
 	return nil
 }
 
+// hostKeyAnswer adds to an answer the host key an SFTP target's error
+// names: host_key, the host's, to confirm as the target's host_key, and
+// pinned_host_key, the one confirmed, where the host's changed.
+func hostKeyAnswer(err error, out map[string]any) {
+	var hk *serverbackup.HostKeyError
+	if !errors.As(err, &hk) {
+		return
+	}
+	out["host_key"] = hk.Fingerprint
+	if hk.Pinned != "" {
+		out["pinned_host_key"] = hk.Pinned
+	}
+}
+
 // testServerBackupTarget handles POST …/server-backup-targets/{uuid}/test:
 // the target reached and written to, its outcome the answer's "ok" and
-// "error".
+// "error", and an SFTP host's key to confirm (hostKeyAnswer).
 func (s *Server) testServerBackupTarget(w http.ResponseWriter, r *http.Request) error {
 	st, err := s.cubeStore()
 	if err != nil {
@@ -1181,7 +1238,9 @@ func (s *Server) testServerBackupTarget(w http.ResponseWriter, r *http.Request) 
 		cancel()
 	}
 	if err != nil {
-		writeJSON(w, http.StatusOK, map[string]any{"ok": false, "error": err.Error()})
+		out := map[string]any{"ok": false, "error": err.Error()}
+		hostKeyAnswer(err, out)
+		writeJSON(w, http.StatusOK, out)
 		return nil
 	}
 	writeJSON(w, http.StatusOK, map[string]any{"ok": true})

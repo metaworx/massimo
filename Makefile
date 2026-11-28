@@ -50,7 +50,7 @@ export SOURCE_DATE_EPOCH ?= $(shell git log -1 --format=%ct 2>/dev/null || date 
 # The container the package test runs in (make deb-test).
 DEB_IMAGE ?= debian:trixie-slim
 
-.PHONY: all ui ui-check api-types credits build test vet race test-armv6 fuzz store-bench ui-test ui-screenshots ui-brand lan-test app-emulator-test actionlint windows linux linux-arm64 linux-armv7 linux-armv6 darwin darwin-amd64 darwin-arm64 cross cross-check deb-unit packages debver version deb-test deb-systemd-test apt-test site build-release release release-files clean clean-tests distclean release-alpha release-beta release-rc release-stable freeze
+.PHONY: all ui ui-check api-types credits build test vet race test-armv6 fuzz store-bench ui-test ui-screenshots ui-brand lan-test target-test app-emulator-test actionlint windows linux linux-arm64 linux-armv7 linux-armv6 darwin darwin-amd64 darwin-arm64 cross cross-check deb-unit packages debver version deb-test deb-systemd-test apt-test site build-release release release-files clean clean-tests distclean release-alpha release-beta release-rc release-stable freeze
 
 # Development happens on main; a release is a tag on main, or on the
 # maintenance branch maint/<x.y> of its line once that line is frozen
@@ -405,6 +405,14 @@ ui-brand:
 # Compose v2.
 lan-test: ui
 	tools/lan-test/run.sh
+
+# The server backup's targets against real servers in Docker
+# (tools/target-test/README.md): the SMB target against Samba, the S3
+# target against MinIO, their live tests run with the servers' addresses
+# and accounts; needs Docker with Compose v2. The tests build no server,
+# so they need no bundle of the web UI.
+target-test:
+	tools/target-test/run.sh
 
 # The Android app's flows on an emulator (tools/app-emulator/README.md):
 # its instrumented tests against two servers on the host, built from this

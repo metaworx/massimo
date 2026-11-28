@@ -32,11 +32,17 @@ type Target interface {
 	Open(ctx context.Context, name string) (File, int64, error)
 	// List returns the backups there (names ending in .zip).
 	List(ctx context.Context) ([]Entry, error)
-	// Delete removes name; a name not there is no error.
+	// Delete removes name; a name not there is no error, and one the
+	// target refuses to delete for its lock is ErrRetained.
 	Delete(ctx context.Context, name string) error
 	// Check proves the target reachable and writable (the card's Test).
 	Check(ctx context.Context) error
 }
+
+// ErrRetained is a delete the target refuses because it keeps the file,
+// such as an S3 bucket's object lock: the copy stays, and a prune keeps
+// it, with a warning, until a later prune deletes it.
+var ErrRetained = errors.New("serverbackup: the target keeps the file")
 
 // File is a copy opened for ranged reads.
 type File interface {
@@ -63,6 +69,14 @@ type Kind struct {
 	// field of type path is absolute by then: the server takes a
 	// relative one as relative to the data directory.
 	New func(cfg map[string]string, secret []byte) (Target, error)
+	// MakeSecret, where set, makes the kind's secret, which nobody
+	// enters: the server calls it for a target added, and for one whose
+	// secret is set to "" (a new one). Public then derives what of a
+	// secret may be shown, which the target's view carries: an SSH
+	// key's public line. A kind that makes its secret has no secret
+	// field.
+	MakeSecret func() (string, error)
+	Public     func(secret string) (string, error)
 }
 
 // Field is one field of a kind's form.
@@ -72,6 +86,10 @@ type Field struct {
 	Required bool
 	Default  string
 	Choices  []string
+	// Warn is a pattern, in the syntax RE2 and JavaScript share, of the
+	// values the card warns of beside the field, with the text
+	// serverbackup.warn.<kind>.<key>; it refuses nothing.
+	Warn string
 }
 
 // The types of a field. A kind has at most one secret field, whose
@@ -96,8 +114,9 @@ var (
 
 // Register adds a kind; each target file registers its own in init.
 // A kind of a name taken, a field of no known type, two fields of one
-// key, two secret fields, or a choice without choices is a mistake of
-// the code, and panics.
+// key, two secret fields, a choice without choices, or MakeSecret
+// without Public or beside a secret field is a mistake of the code, and
+// panics.
 func Register(k Kind) {
 	if err := k.valid(); err != nil {
 		panic(err)
@@ -126,6 +145,13 @@ func (k Kind) valid() error {
 			return fmt.Errorf("serverbackup: kind %s: field %s: a choice without choices", k.Name, f.Key)
 		case f.Type == FieldSecret && f.Default != "":
 			return fmt.Errorf("serverbackup: kind %s: field %s: a secret has no default", k.Name, f.Key)
+		case f.Warn != "" && f.Type == FieldSecret:
+			return fmt.Errorf("serverbackup: kind %s: field %s: a secret, never shown, has no warning", k.Name, f.Key)
+		}
+		if f.Warn != "" {
+			if _, err := regexp.Compile(f.Warn); err != nil {
+				return fmt.Errorf("serverbackup: kind %s: field %s: its warning: %w", k.Name, f.Key, err)
+			}
 		}
 		if f.Default != "" {
 			if _, err := f.check(f.Default); err != nil {
@@ -137,8 +163,13 @@ func (k Kind) valid() error {
 			secrets++
 		}
 	}
-	if secrets > 1 {
+	switch {
+	case secrets > 1:
 		return fmt.Errorf("serverbackup: kind %s: more than one secret field", k.Name)
+	case (k.MakeSecret == nil) != (k.Public == nil):
+		return fmt.Errorf("serverbackup: kind %s: MakeSecret and Public go together", k.Name)
+	case k.MakeSecret != nil && secrets > 0:
+		return fmt.Errorf("serverbackup: kind %s: makes its secret, and has a secret field", k.Name)
 	}
 	return nil
 }

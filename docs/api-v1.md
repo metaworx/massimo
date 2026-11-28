@@ -5705,7 +5705,9 @@ The other routes of a backup, `backup.server`'s:
 - `PUT …/server-backups/{id}/copies/{target}` pushes it to the target,
   a uuid or a name, from a copy that is there;
   `DELETE` removes the copy, the file included,
-  and the backup goes from the catalogue with its last copy.
+  and the backup goes from the catalogue with its last copy;
+  `409` where the target keeps the file, such as an S3 bucket's object lock,
+  the copy staying.
 - `POST …/server-backups/{id}/copies/{target}/pull` fetches the target's copy
   to the local target, where it stays until it is deleted.
 
@@ -5721,6 +5723,13 @@ the web UI's texts `serverbackup.field.<kind>.<key>`:
 A field's `type` is `text`, `number`, `path` (a directory of this box,
 relative to the data directory), `secret`, `bool` or `choice` (with `choices`);
 `secret` names the kind's secret field, given apart and kept sealed.
+A field's `warn`, where it has one,
+is a pattern in the syntax RE2 and JavaScript share,
+of the values the card warns of beside the field,
+with the text `serverbackup.warn.<kind>.<key>`; it refuses nothing.
+The kind `webdav` takes `url`, `user` and the secret `password`,
+its `url` warned of where it is plain `http:` (`^[Hh][Tt][Tt][Pp]:`),
+since the password then travels in clear (docs/store.md, "WebDAV").
 `POST /api/v1/server-backup-targets` adds one,
 `{"name": "NAS", "kind": "local", "config": {"path": "/mnt/nas/massimo"},
 "secret": "…", "takes": "daily", "retention": {"daily": 7, "weekly": 4},
@@ -5730,6 +5739,9 @@ a name unique without regard to case (`409`), and scans it at once:
 added to the catalogue by their manifests, read without the key.
 `PUT …/server-backup-targets/{uuid}` changes what it is given,
 `secret` replaced, `""` removing it, left out kept;
+of a kind with a secret field, a change to `config` keeps no secret:
+the config says where the secret goes, so the secret comes again with it,
+or the change is refused with `400`;
 `DELETE` removes the target and its copies from the catalogue,
 the files staying; `POST …/{uuid}/test` reaches and writes to it,
 `{"ok": false, "error": "…"}` where not.
@@ -5738,6 +5750,22 @@ never its secret, but whether it has one (`has_secret`)
 and whether that does not open (`secret_lost`), to be entered again.
 Where no target exists, the first backup makes `local`,
 `backups/` in the data directory.
+
+An SFTP target, `sftp` (`host`, `port` 22, `user`, `path`, `host_key`),
+takes no secret: the server makes its key, an Ed25519 pair, when it is added,
+and `PUT` with `"secret": ""` makes a new one.
+The target shows the key's public line as `public_key`,
+`ssh-ed25519 AAAA… massimo-server-backup`,
+for the user's `authorized_keys` on the host.
+Until `host_key` is set, and while the host shows another key,
+the server stops at the host's key, offering it nothing and writing nothing:
+the add's scan and `POST …/{uuid}/test` answer `"host_key": "SHA256:…"`,
+the host's, and `"pinned_host_key"`, the one confirmed,
+where the host's changed.
+The owner compares it with the host's own
+(`ssh-keygen -lf /etc/ssh/ssh_host_ed25519_key.pub` there)
+and confirms it with a `PUT` of the target's config, `host_key` set
+to the fingerprint or to the host's key line.
 
 The keys: `GET /api/v1/server-backup-keys` (`backup.server`) lists their public parts.
 `POST /api/v1/server-backup-keys` (the owner's alone) takes

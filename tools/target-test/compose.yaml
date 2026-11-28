@@ -1,0 +1,32 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
+# Copyright (C) 2026 The Massimo Authors
+#
+# The servers the backup targets are tested against (README.md): Samba
+# for the SMB target, its image built from Debian (Dockerfile), and
+# MinIO for the S3 target, the community's fork, pgsty/minio, since
+# MinIO publishes no image of its own any more. Each listens on a port
+# of the loopback that Docker picks, so that runs side by side do not
+# collide; run.sh names the project, reads the ports, makes the buckets
+# and sets the live tests' variables from the same values as these.
+# Each image is pinned by its digest, its tag in the comment beside it;
+# a newer one is taken by its digest from
+#   docker buildx imagetools inspect <image>:<tag>
+services:
+  samba:
+    build: .
+    image: massimo-target-test:samba
+    pull_policy: build
+    environment:
+      SMB_USER: "${TARGET_TEST_SMB_USER:?run tools/target-test/run.sh}"
+      SMB_PASS: "${TARGET_TEST_SMB_PASS:?run tools/target-test/run.sh}"
+    ports: ["127.0.0.1::445"]
+
+  minio:
+    # pgsty/minio:RELEASE.2026-08-04T00-00-00Z
+    image: pgsty/minio@sha256:b6bfe7239bfc83fb90d31612d9704d86039dd714f7904b3f1ad68f211e602372
+    command: [server, /data]
+    environment:
+      MINIO_ROOT_USER: "${TARGET_TEST_S3_KEY:?run tools/target-test/run.sh}"
+      MINIO_ROOT_PASSWORD: "${TARGET_TEST_S3_SECRET:?run tools/target-test/run.sh}"
+      MINIO_SITE_REGION: "${TARGET_TEST_S3_REGION:?run tools/target-test/run.sh}"
+    ports: ["127.0.0.1::9000"]

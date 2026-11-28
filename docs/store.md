@@ -2381,6 +2381,9 @@ runs the jobs on it, for `serve` and for `massimo store` alike:
   its fields, the card's form, and how to make one; `local` first, WebDAV, SFTP,
   SMB and S3 after), with its fields as JSON and its one secret field sealed
   with its `uuid` as the additional data, what it takes and its retention.
+  A change to the fields of a kind with a secret field brings the secret again,
+  since they say where it goes: else a user who may change targets,
+  but never sees a secret, could send it to a server of their own.
   A target added is scanned: the backups it holds are added by their manifests,
   read with ranged reads and without the key,
   so that a new box sees them at once; a copy no longer there is `missing`.
@@ -2423,6 +2426,9 @@ as restic refuses an empty one.
 A new target keeps 7 days, 4 weeks and 6 months.
 The prune runs after each copy to the target; a backup left without a copy goes
 from the catalogue.
+A copy the target refuses to delete for its lock (`ErrRetained`: an S3 bucket's
+object lock, a key that may not delete) is kept, with a warning in the log,
+and tried again at the next prune.
 
 #### Retries and alerts
 
@@ -2451,6 +2457,210 @@ each takes the lock `.serverbackup.lock` in it (flock, LockFileEx).
 A holder of `backup.retry` retries at once what failed: as the schedule made it,
 pruning no more than the schedule would, and revealing nothing,
 the file being encrypted (D13-A).
+
+#### WebDAV
+
+A target of the kind `webdav` is a folder on a WebDAV server,
+such as Nextcloud with an app password, a Synology box or a storage box,
+reached with the standard library alone (`internal/serverbackup/webdav.go`):
+
+| Field | What it holds |
+|-------|---------------|
+| `url` | the folder: `https://` where the URL names no scheme, `http://` only where it says so, which the card warns of, since the password then travels in clear; without a user, a password, a query or a fragment in it |
+| `user` | the user it signs in as, by basic authentication, without a colon |
+| `password` | the secret, sealed; an app password where the server has them |
+
+- A copy is put (`PUT`) to a hidden name beside its own,
+  `.<name>.<random>.tmp`, and moved (`MOVE`, `Overwrite: F`) to its name,
+  so that a put broken off leaves nothing under the name;
+  its temporary file is deleted, or by a later put once it is a day old;
+  a hidden file of a name not of that form stays, whoever made it.
+  A name goes into the URL escaped, as one part of its path,
+  and one that would name the folder itself or another is refused.
+  A put asks `Expect: 100-continue`,
+  so that a refusal, a quota spent among them, comes before the file is sent.
+- A file of the name that is there already is not replaced:
+  of the same size it is taken for the copy (a move whose answer was lost),
+  of another the put fails and says so.
+- A folder missing is made (`MKCOL`), its parents too.
+- The backups are listed with `PROPFIND` at depth 1
+  and read with ranged `GET`s of 4 MiB at least,
+  so that reads that follow one another come from one request.
+- The card's Test makes the folder where it is missing,
+  puts a small file as a copy is put, reads it back and deletes it.
+- A redirect is not followed, the password would go along:
+  the error names where it points, to be put in the target.
+- The client waits 30 s for a connection and for TLS,
+  5 minutes for an answer once the request is sent,
+  and gives a transfer up once no byte moved for 2 minutes.
+- An error names the server, the request, the file and the HTTP status
+  with what it means (`401`, `403`, `413`, `423`, `507`), never the password.
+
+#### The SFTP target
+
+The kind `sftp` (D8-A) reaches a directory on a host that speaks SSH,
+in-process, with `golang.org/x/crypto/ssh` and `github.com/pkg/sftp`
+(`internal/serverbackup/sftp.go`);
+NAS boxes and storage boxes speak it, and OpenSSH's `scp` runs over it.
+
+| Field | What it holds |
+|-------|---------------|
+| `host` | the host's name or address |
+| `port` | 22 by default |
+| `user` | the user it logs in as |
+| `path` | the directory, relative to the user's login directory where not absolute, that directory where empty; made where missing |
+| `host_key` | the host's key, confirmed: its fingerprint, `SHA256:…`, or its public key line |
+
+- **Its key**, an Ed25519 pair of its own,
+  is made by the server when the target is added (`Kind.MakeSecret`):
+  the private part, in OpenSSH's form, is the target's secret,
+  sealed as the others are and never answered;
+  the public line, `ssh-ed25519 AAAA… massimo-server-backup`,
+  is the target's `public_key`,
+  for the user's `~/.ssh/authorized_keys` on the host.
+  Nobody enters the secret: `"secret": ""` makes a new pair,
+  also for a target whose key no longer opens (`secret_lost`).
+- **A host whose key is not confirmed** is offered nothing,
+  and nothing is written:
+  the connection stops at the host's key (`serverbackup.HostKeyError`),
+  and the add's scan and the target's test answer its fingerprint.
+  The owner compares it with the host's own,
+  `ssh-keygen -lf /etc/ssh/ssh_host_ed25519_key.pub` on the host,
+  and confirms it as `host_key`.
+  A key that changed is refused with both fingerprints, every time,
+  until the owner confirms the new one.
+  Ed25519 is asked for first, then ECDSA, then RSA signed with SHA-2;
+  a key line in `host_key` asks for its own kind alone.
+- **A copy** goes to a hidden temporary name beside its own,
+  `.<name>.<random>.part`, mode 0600 where the host takes it, and is renamed:
+  in one step by `posix-rename@openssh.com` where the host offers it,
+  else by removing the name first, which SFTP's own rename does not replace.
+  A copy broken off leaves nothing under its name;
+  a temporary file a broken line left is removed by the next copy after a day,
+  and the hidden files of other programs stay.
+  A copy is read by ranges, so a scan reads the manifests alone.
+- **Each job** opens a connection of its own, with timeouts:
+  30 seconds to connect, 45 up to the SFTP session,
+  and 2 minutes without a byte from the host,
+  which a keepalive every 30 seconds keeps from striking a connection merely idle.
+  An error names `user@host:port` and what refused:
+  the host's key, the target's key with where its line goes,
+  or the host's SFTP status.
+
+#### The SMB target
+
+An SMB target, of kind `smb`, is a folder of a share on a NAS,
+a Windows computer or Samba (`internal/serverbackup/smb.go`).
+It is reached in-process over SMB 2 and 3,
+with `github.com/cloudsoda/go-smb2`, the same on every platform:
+no share is mounted on the box,
+so Windows' service account needs no rights on one.
+
+| Field | What it holds |
+|-------|---------------|
+| `host` | the server's name or address, without `smb://` or `\\` |
+| `port` | 445 by default |
+| `share` | the share's name, without `/` or `\` |
+| `path` | a folder in the share, its parts separated by `/` or `\`, the share's root where empty; made where it is missing |
+| `user` | the user it signs in as; `DOMAIN\user`, with no `domain` given, is taken as both |
+| `password` | the user's password, the target's secret |
+| `domain` | the domain or workgroup, where the server asks for one |
+
+- It signs in by NTLM with the user and the password,
+  and signs every message,
+  which also refuses a server that would take a wrong password for its guest.
+- It offers SMB 3.1.1 with AES-GCM and AES-CCM,
+  and encrypts where the server asks for it:
+  Samba's `server smb encrypt = required`,
+  Windows' `Set-SmbShare -EncryptData $true`.
+  It cannot ask for encryption where a server only offers it:
+  go-smb2 encrypts where the server asks, for the session or the share,
+  and has no setting by which a client asks for it,
+  so a share that does not ask is reached signed, not encrypted.
+  A copy is encrypted by age in any case;
+  the share's encryption hides the names and the listing on the network too.
+- Each call connects, signs in, mounts the share and logs off again;
+  a copy opened for ranged reads keeps its connection until it is closed.
+  Each request to the server has a minute,
+  the connection with its sign-in among them:
+  one that takes longer ends the connection, and its error says so.
+- A copy is written to a hidden temporary name beside its own,
+  `.<name>.<random>.part`, in writes of 1 MiB,
+  then flushed, closed and renamed over the name,
+  so that a copy broken off leaves nothing under the name;
+  the temporary file is removed where the put fails,
+  and one a crash left by the next put,
+  once the server's clock says it is a day old.
+- The card's Test makes the folder where it is missing,
+  and writes, reads back and deletes a small file in it:
+  a target that cannot delete cannot prune.
+- An error names the target as `//host/share/path` and what the server answered,
+  "The attempted logon is invalid" for a refused password,
+  "{Network Name Not Found}" for a share that is not there;
+  it never holds the password.
+- `make target-test` tests it against Samba with signing and encryption required
+  (`tools/target-test/README.md`).
+
+#### The S3 target
+
+The kind `s3` keeps the copies in a bucket of an S3-compatible store (D10-A):
+AWS, MinIO, Backblaze B2, Wasabi, Cloudflare R2 and Hetzner among them.
+It speaks five calls of the S3 API, signed with AWS Signature Version 4,
+all with Go's standard library:
+`PUT`, `GET` with a range, `HEAD`, `DELETE` and `ListObjectsV2`.
+
+| Field | What it holds |
+|-------|---------------|
+| `endpoint` | the store's URL without a path, such as `https://s3.eu-central-1.amazonaws.com`; `https` where it names no scheme, `http` only where it says so |
+| `region` | the bucket's region, `us-east-1` by default; R2 takes `auto` |
+| `bucket` | the bucket, made with the store's own tools |
+| `prefix` | a folder in the bucket, empty for its top; the backups go directly under it, and keys below it are left alone |
+| `path_style` | the bucket reached by path, `https://host/bucket/…`, not by virtual host, `https://bucket.host/…`; MinIO needs it, and so do an endpoint given by its address and a bucket with dots over `https` |
+| `access_key` | the key's id |
+| `secret_key` | the key's secret, the kind's secret field, sealed by the store |
+
+- A copy is put in one `PUT`, under its final name:
+  S3 has no rename and needs none, since a `PUT` is atomic,
+  and one broken off or refused leaves nothing.
+  One `PUT` takes at most 5 GiB, so a larger backup is refused with its size.
+  The body is sent unsigned (`UNSIGNED-PAYLOAD`),
+  with its `Content-MD5`, read once ahead from the file on the box
+  (or from the copy on another target a push reads, which is read twice),
+  since a bucket with object lock takes no `PUT` without it,
+  AWS's rule, and the store checks the body by it;
+  TLS carries it, and the check reads the copy back with its hash.
+- A copy is read by ranges, each a `GET` with `Range`,
+  and with `If-Match` on the version `HEAD` found,
+  so that an object replaced while it is read is refused.
+  A read that follows the one before fetches twice as much ahead, up to 8 MiB,
+  so that a copy read whole costs a few requests.
+- The list goes page by page, with its continuation token,
+  and holds the names a backup may have, directly under the prefix.
+- The card's test lists the bucket,
+  then writes, reads back and deletes a probe, `.massimo-check-<random>`.
+- The key needs `s3:ListBucket` on the bucket,
+  and `s3:PutObject`, `s3:GetObject` and `s3:DeleteObject` under the prefix.
+- A request that moves no byte for two minutes is broken off,
+  and so is an answer whose header takes as long; a redirect is not followed.
+  An error says the store's status, its code and its message,
+  and the bucket's region where the store names another.
+- **Object lock.**
+  A bucket with object lock is versioned,
+  and there a `DELETE` succeeds by hiding the object behind a delete marker:
+  the copy goes from the catalogue,
+  while the locked version stays in the bucket until its lock ends,
+  out of the key's reach, and the store's own tools bring it back.
+  A `DELETE` the store refuses keeps the copy (`ErrRetained`):
+  `AccessDenied`, a key that may not delete,
+  or an answer that speaks of a lock, a retention or WORM,
+  such as MinIO's for a locked version.
+  The prune warns, `server backups: a copy the target keeps`, and goes on;
+  a copy deleted by hand stays, the request answering `409` with why.
+- `TestS3Live` runs the target against a real store,
+  where `MASSIMO_TARGET_TEST_S3_ENDPOINT`, `_BUCKET`, `_REGION`, `_KEY`
+  and `_SECRET` are set, as `make target-test` sets them for its MinIO,
+  and against a bucket with object lock and a default retention too,
+  `_LOCK_BUCKET`.
 
 ## 8. Migration of an installed box
 
