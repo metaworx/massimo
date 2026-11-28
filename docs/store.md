@@ -414,10 +414,12 @@ CREATE TABLE tokens (
     last_used_at   TEXT,
     last_used_from TEXT    NOT NULL DEFAULT '',  -- the client's address
     deleted_at     TEXT,                         -- revoked; revoked_at until migration 0024 (D7)
-    parent_id      INTEGER                       -- migration 0025: the key a session was made from; NULL for a sign-in's and for a key
+    parent_id      INTEGER,                      -- migration 0025: the key a session was made from; NULL for a sign-in's and for a key
+    revoke_hash    TEXT                          -- migration 0100: SHA-256 of the token's revoke code, hex; NULL where the store never held the secret
 );
 CREATE INDEX tokens_user ON tokens (user_id);
 CREATE INDEX tokens_parent ON tokens (parent_id) WHERE parent_id IS NOT NULL;  -- migration 0025
+CREATE UNIQUE INDEX tokens_revoke ON tokens (revoke_hash) WHERE revoke_hash IS NOT NULL;  -- migration 0100
 
 CREATE TABLE settings (
     key        TEXT    NOT NULL,   -- 'stale_after', 'poll_interval', 'log.keep_days', 'backups.keep_days_auto', …
@@ -1056,6 +1058,14 @@ names another reference in `ref`, and this binary's next start deletes it.
 Its down part, `0026_backup_pending.down.sql`, drops the table;
 it loses the windows of a pending backup, and only that,
 which the binary of 25 begins again at its first look.
+`0100_token_revoke.sql`, the first of `main`'s block after the freeze of 0.17
+("Two lines of releases"), adds `tokens.revoke_hash` and its unique index
+(AP MobileApp v1.6, Block 21, D112-A), additively, keeping `min_reader` 24:
+the hash of a token's revoke code (section 6, "A token's revoke code").
+A binary for 24 to 26 writes its tokens without the column,
+which this binary fills at a token's next use.
+Its down part, `0100_token_revoke.down.sql`, drops the column and the index;
+it loses the tokens' revoke codes, and only that.
 On a store of 500 000 log rows (149 MB, a tenth with a user) a desktop took
 2.0 s for the raise, its copy `massimo.db.before-24` included, and 2.2 s for the
 down part, its copy included (`TestRaiseTimes` with
@@ -1517,6 +1527,32 @@ and a session counts only while its key does (`TokenByHash`, `Tokens`),
 which also ends one whose key a binary before 0025 revoked.
 A password set by someone else ends the sessions, those made from keys
 among them, and leaves the keys.
+
+### A token's revoke code
+
+A client that forgot a token without its server answering ends it by its
+revoke code at the next contact (`POST /api/v1/tokens/revoke`,
+docs/api-v1.md; the apps, docs/app.md).
+The code is `RevokeCode(secret)`, the hex of SHA-256 of `massimo revoke v1`
+followed by the token as the server gave it,
+and the store keeps `HashToken` of the code in `tokens.revoke_hash`
+(migration 0100), not the hash it keeps of the token:
+with that, the store and every backup of it could revoke every token,
+while no code can be had back from its hash.
+The store writes the column where it makes the secret (`addToken`,
+`AddKeySession`); a token whose hash it is handed (`AddTokenHash`) and the
+settings file's key (`Bootstrap`) get none.
+A token made before 0100 gets it at its first use after it:
+the server works it out from the secret presented and `TouchToken` writes it,
+within the hour of the last use too, keeping one written;
+the settings file's key is passed over there.
+`RevokeByCode` revokes the token of a code as `RevokeToken` does,
+in one transaction with its sessions and what they subscribed to push,
+a token past its end included;
+a token revoked already, an unknown code and the settings file's key,
+whose hash the server hands it, match nothing;
+the code is looked up by a plain read first, so that one that matches
+nothing takes no write transaction, and a match is read again inside it.
 
 ### The sign-in by OPAQUE
 

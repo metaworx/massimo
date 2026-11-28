@@ -21,21 +21,32 @@ import java.net.HttpURLConnection
 class KeysLeft(private val servers: ServerStore, private val logins: LoginStore, private val api: ServerApi, private val log: Logger) {
     /**
      * add notes the key [keyId] of [user]'s as left valid on the server [id],
-     * and reports whether it is noted: one without an id is not, and is
-     * forgotten on the phone alone.
+     * with its revoke [code] where the app has one (D112-A), and reports
+     * whether it is noted: one without an id is not, and is forgotten on the
+     * phone alone.
      */
-    fun add(id: String, user: String, keyId: Long): Boolean = servers.leave(id, user, keyId)
+    fun add(id: String, user: String, keyId: Long, code: String = ""): Boolean = servers.leave(id, user, keyId, code)
 
     /**
      * addSession notes the session [sessionId] of [user]'s, made at
-     * [createdAt], as left valid on the server [id], and reports whether it
-     * is noted: one whose id was never learnt is not, and is forgotten on
-     * the phone alone.
+     * [createdAt], as left valid on the server [id], with its revoke [code]
+     * where the app has one, and reports whether it is noted: one whose id
+     * was never learnt is not, and is forgotten on the phone alone.
      */
-    fun addSession(id: String, user: String, sessionId: Long, createdAt: String = ""): Boolean = servers.leaveSession(id, user, sessionId, createdAt)
+    fun addSession(id: String, user: String, sessionId: Long, createdAt: String = "", code: String = ""): Boolean =
+        servers.leaveSession(id, user, sessionId, createdAt, code)
 
-    /** endedSession drops the session [sessionId] of [user]'s, made at [createdAt], from those left on the server [id]: it was ended after all. */
+    /** endedSession drops the session [sessionId] of [user]'s, made at [createdAt], from those left on the server [id]: it was ended after all, its code with it. */
     fun endedSession(id: String, user: String, sessionId: Long, createdAt: String = "") = servers.ended(id, listOf(SessionLeft(user, sessionId, createdAt)))
+
+    /** hold records [held] as the session the app holds at the server [id] (D102-A). */
+    fun hold(id: String, held: HeldSession) = servers.hold(id, held)
+
+    /** unhold clears the server's record of the session held: it ended, was left or replaced; with [sessionId] only that session's record. */
+    fun unhold(id: String, sessionId: Long = 0) = servers.unhold(id, sessionId)
+
+    /** held is the server's record of the session held, null for none. */
+    fun held(id: String): HeldSession? = servers.get(id)?.held
 
     /**
      * revoke revokes the keys and the sessions left on [s] whose user is
@@ -51,7 +62,10 @@ class KeysLeft(private val servers: ServerStore, private val logins: LoginStore,
      * ours, and is dropped unasked. One the server revoked, or has no more
      * (404), is dropped; one it refuses (403) stays, and so does one it
      * could not be asked about, logged. A session the server refuses (401)
-     * or no answer stops it: the rest wait for the next. It returns the ids
+     * or no answer stops it: the rest wait for the next. An entry whose code
+     * the server took (D112-A) is checked so too: dropped where the list has
+     * it not, the code having ended it, and revoked where it has it, a token
+     * the server had not seen since its update. It returns the ids
      * the server revoked now.
      */
     fun revoke(s: Server, url: String, session: String, me: ServerApi.Me): List<Long> {

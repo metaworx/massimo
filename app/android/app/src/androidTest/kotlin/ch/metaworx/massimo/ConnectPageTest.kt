@@ -66,7 +66,7 @@ class ConnectPageTest {
                 """.trimIndent(),
             )
             val got = waitFor(sc, "window.__smoke")
-            assertEquals("\"{\\\"version\\\":5,\\\"list\\\":true,\\\"token\\\":\\\"undefined\\\"}\"", got)
+            assertEquals("\"{\\\"version\\\":6,\\\"list\\\":true,\\\"token\\\":\\\"undefined\\\"}\"", got)
         }
     }
 

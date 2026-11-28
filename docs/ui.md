@@ -2701,7 +2701,8 @@ The apps for Android and iOS (docs/app.md) open on a page of their own,
 the servers the app keeps, each with what it found
 when it last looked (on the LAN, remote, not reachable, a changed certificate)
 and, as a green badge, the user the app is signed in as there,
-checked at each look,
+checked at each look, grey while the server answers at neither address
+(a look still running keeps what the last one found),
 a tap opening the server, the app asking for the fingerprint first where it
 keeps a login (docs/app.md, "Opening from the list"),
 a cancel opening the server's sign-in card,
@@ -2722,6 +2723,8 @@ A server's settings take the focus themselves, not a field,
 so that a phone's keyboard stays closed:
 the name and the addresses, **Open at start** (one server at most),
 when the fingerprint is asked, the session with **Sign out**,
+whose line says, while the server does not answer, that Sign out ends the
+session there the next time the app reaches the server,
 the certificate's subject and end with **Certificate…**,
 a dialog with its issuer, names, validity, fingerprint and since when it
 is trusted, the login by fingerprint with **Turn off**,
@@ -2732,6 +2735,10 @@ off while the server does not answer, its title saying why,
 a line for each session of the phone's still valid there,
 which the app forgot without the server ending it,
 the server not answering, and ends at the next sign-in there as its user,
+a key or a session whose revoke code waits saying instead that it ends the
+next time the app reaches the server (docs/app.md, "The revoke codes"),
+its line gone once the server took the code;
+the toasts of Sign out, Turn off and Remove that left a code say so,
 and under Cancel and Save, after a rule, **Remove server** on a line of its own,
 with a line saying what it does, which turns a kept login off first, or signs out first,
 its question and its message naming a key or a session left.

@@ -515,6 +515,12 @@ whose `error` names the link that refused:
 |------|--------|--------|-----------------|
 | `room_name_needed` | 409 | `room` | a listing into a room the Cube's list does not have, without `room_name`; `room` is also at the top level |
 
+**A revoke by code** (`POST /api/v1/tokens/revoke`):
+
+| Code | Status | Params | Refused because |
+|------|--------|--------|-----------------|
+| `revoke_code_malformed` | 400 | – | the body is not `{"code": …}` with 64 lower-case hex digits |
+
 ## Routes
 
 ### GET /healthz
@@ -599,7 +605,12 @@ a user whose role is disabled logs in and is then refused every route.
 The server hashes at most one password a core at once, four at the most,
 with eight more waiting;
 a login beyond them is `503` with `Retry-After`, and so is a user add or a
-password change (`docs/store.md` section 6, "The lockout").
+password change (`docs/store.md` section 6, "The lockout"),
+and one whose client went away while it waited for its turn.
+Any other request of the users' routes whose client went away before the
+store answered, a token's revoke the client gave up on among them,
+is audited as `failed` with "the client went away before the answer",
+a `503` no client reads, and never as a password check that waited.
 `409` on a server without users, where the first owner is created with
 `POST /api/v1/users` or `massimo user add`,
 and on one without a store (`serve -addr`), which takes the API token.
@@ -633,6 +644,44 @@ The settings file's token, `MASSIMO_API_TOKEN`, is `409`:
 the next start would not add the owner's key back, its hash being taken,
 so it is changed or removed in the settings file;
 a revoke under the user's tokens is `409` too (below).
+
+`POST /api/v1/tokens/revoke` with `{"code": "…"}`, and no token,
+ends a token by its revoke code, for a client that forgot the token without
+its server answering, as the apps do at a sign-out, a turned-off login or a
+removed server (`docs/app.md`; AP MobileApp, D112-A).
+The code is the hex of SHA-256 of `massimo revoke v1` followed by the token
+as the server gave it, 64 lower-case hex digits:
+only a client that once held the token can work it out,
+and the store keeps the code's own SHA-256 (`tokens.revoke_hash`,
+`docs/store.md` section 5), from which no code can be had back,
+so that neither the store nor a backup of it can revoke a token.
+The code lets nothing in: no request is authenticated by it.
+The server keeps it for every token it makes,
+and for a token made before the update from its first use after it;
+a token not used since its update has none, and its code matches nothing.
+The live token of the code is revoked, an API key's sessions with it,
+as by `DELETE /api/v1/me/token`;
+the settings file's token is left live, as no revoke ends it.
+The answer is `204` whether the code matched or not
+(a live token, one that ended, the settings file's, none),
+so that it tells nobody which codes are live.
+A body that is not that object, or a code that is not 64 lower-case hex digits,
+is `400` with `revoke_code_malformed`;
+a client drops such a code rather than post it again.
+While the address is locked out it is `429` with `Retry-After`,
+but a code never counts toward the lockout, matched or not:
+one that matches nothing is a code taken already,
+a token that ended by itself, or one the server has not seen since its update.
+A match is audited as `token.revoke_code`, the token its target and its user
+its subject, with a line under Configuration and the log's Info line
+"token revoked" `by=code`;
+a code that matches nothing, the settings file's, a malformed body and a
+locked-out address write no row of their own:
+they are counted per address and minute as refused requests are,
+in rows of their own apart from the address's other refused requests,
+with no line.
+No row and no line carries the code.
+A server without a store has no token to revoke and answers `204` at once.
 
 `GET /api/v1/me` says who the caller is:
 
@@ -1639,7 +1688,7 @@ and `result` how it went: `ok` for a 2xx, `refused` for a `401`,
 `403` or `429`, `failed` otherwise.
 `detail` keeps the method, the path, the status, the milliseconds,
 the body's size and, when it is JSON of at most 4 KB,
-the body with `password`, `current_password` and `token` replaced by `…`,
+the body with `password`, `current_password`, `token` and `code` replaced by `…`,
 and the error of a failed answer.
 A request refused for a known user (a capability it lacks,
 a disabled user or role) is a row with who was refused, without its body.

@@ -15,7 +15,7 @@ import java.util.concurrent.atomic.AtomicReference
 
 /**
  * Bridge is the native side of `window.massimo` (docs/app.md, contract
- * version 5): it takes the messages of the page's script (res/raw/bridge.js),
+ * version 6): it takes the messages of the page's script (res/raw/bridge.js),
  * checks who sent each by its origin, and answers it. The connect page gets
  * the calls of the server list, the sessions the app holds and the app's
  * settings; a server's page only its own session, its login by fingerprint
@@ -24,7 +24,9 @@ import java.util.concurrent.atomic.AtomicReference
  * bridge makes and holds it and hands a page the session alone, each login
  * sealed under the one app key ([AppKey]), which a prompt opens for one
  * step. Turn off, Remove and Forget all are the [Revoker]'s, and the keys
- * and sessions they leave valid are [left]'s.
+ * and sessions they leave valid are [left]'s; their revoke codes are posted
+ * at each contact by [codes] (contract version 6, D112-A), a removed
+ * server's kept in [gone].
  */
 class Bridge(
     private val host: Host,
@@ -32,6 +34,8 @@ class Bridge(
     private val keeper: SessionKeeper,
     private val sessions: Sessions,
     private val left: KeysLeft,
+    private val codes: Codes,
+    private val gone: GoneStore,
     private val logins: LoginStore,
     private val keys: KeySource,
     private val api: ServerApi,
@@ -102,7 +106,7 @@ class Bridge(
     // The connect page's channel, for the events.
     private var connect: Reply? = null
 
-    private val revoker = Revoker(servers, logins, sessions, left, prober::probe, io, ::forgetLogin)
+    private val revoker = Revoker(servers, logins, sessions, left, prober::probe, io, codes, gone, log, ::forgetLogin)
 
     // The prompt of the app key's steps, on the main thread, its answer on
     // io; where io takes nothing more, the activity having gone, the app
@@ -159,6 +163,17 @@ class Bridge(
     /** close drops the app key a step still holds, as the activity goes (onDestroy). */
     fun close() = appKey.dropAll()
 
+    /** postCodes posts the revoke codes waiting for the server [id] at [url], the address it was opened at, in the background (D112-A): Open at start's. */
+    fun postCodes(id: String, url: String) {
+        val s = servers.get(id) ?: return
+        onIo { runCatching { codes.post(s, url) } }
+    }
+
+    /** postGone posts a removed server's revoke codes where the probe finds it at its node, in the background: the app's start and the list shown. */
+    fun postGone() = onIo { runCatching { codes.postGone() } }
+
+
+
     /** onMessage handles one message of the page's script, on the main thread. */
     fun onMessage(data: String, origin: String, isMainFrame: Boolean, reply: Reply) {
         val msg = try {
@@ -200,12 +215,20 @@ class Bridge(
             "session" -> {
                 val s = servers.get(string(args, 0)) ?: throw BridgeException(R.string.err_no_server)
                 val url = string(args, 1)
-                background(answer) { sessions.check(s, url) }
+                // the server's revoke codes first, so that the check finds what they ended (D112-A)
+                background(answer) {
+                    runCatching { codes.post(s, url) }
+                    sessions.check(s, url)
+                }
             }
             "signOut" -> {
                 val s = servers.get(string(args, 0)) ?: throw BridgeException(R.string.err_no_server)
                 val url = args.opt(1) as? String ?: ""
-                background(answer) { JSONObject().put("ended", sessions.signOut(s, url)) }
+                // pending: the session this sign-out left carries its revoke code (contract version 6)
+                background(answer) {
+                    val out = sessions.signOutWith(s, url)
+                    JSONObject().put("ended", out.ended).put("pending", out.pending)
+                }
             }
             "signOutAll" -> background(answer) {
                 sessions.signOutAll(servers.list())
@@ -382,6 +405,8 @@ class Bridge(
             answer.ok(true)
             opened = Opened(s.id, origin, base, withheld)
             host.open(url)
+            // the revoke codes at the address opened, in the background (D112-A)
+            onIo { runCatching { codes.post(s, base) } }
         }
         when {
             opts?.opt("signIn") == true -> go(true)
@@ -446,13 +471,20 @@ class Bridge(
     }
 
     // openKept opens the kept login of [s] for fingerprint, on io, and
-    // makes the session with it.
+    // makes the session with it; the session is checked at once, as
+    // setToken checks a page's (D102-A, F43): its id learnt before the page
+    // opens, so that nothing forgets it unrecorded, and the keys and
+    // sessions left there revoked as at any check. A session it replaces,
+    // made from the same key, the server ended with this one's making, and
+    // is not logged out (D100-A).
     private fun openKept(s: Server, url: String, kept: KeptLogin, answer: Answer, then: (String?) -> Unit) {
         appKey.open(texts.get(R.string.login_title, s.name), s.id, kept) { r ->
             when (r) {
                 is AppKey.Result.Opened -> try {
                     val session = api.loginKey(url, s.fp, r.secret.key)
-                    val ending = sessions.put(s, session, url) // a session it replaces ended there (D68-A), after the answer
+                    val keyId = r.secret.id.takeIf { it > 0 } ?: kept.keyId
+                    val ending = sessions.put(s, session, url, keyId) // a session it replaces ended there (D68-A), after the answer
+                    runCatching { sessions.look(s, url) }
                     main.post { then(session) }
                     ending?.let { runCatching { it.end() } }
                 } catch (e: ServerApi.Refused) {
@@ -539,7 +571,11 @@ class Bridge(
             try {
                 revoker.turnOff(id, url, k) { off ->
                     main.post { host.privacy() }
-                    answer.ok(JSONObject().put("revoked", off.outcome == Revoker.Outcome.REVOKED).put("left", off.outcome == Revoker.Outcome.LEFT))
+                    // pending: what Turn off left waits for its revoke code (contract version 6)
+                    answer.ok(
+                        JSONObject().put("revoked", off.outcome == Revoker.Outcome.REVOKED).put("left", off.outcome == Revoker.Outcome.LEFT)
+                            .put("pending", off.pending),
+                    )
                 }
             } catch (e: Exception) {
                 k.close()
@@ -563,14 +599,15 @@ class Bridge(
             val k = byKey()
             try {
                 revoker.remove(id, url, k) { r ->
-                    r.fold({ gone ->
+                    r.fold({ removed ->
                         main.post { host.privacy() }
                         answer.ok(
                             JSONObject()
-                                .put("revoked", gone.off?.outcome == Revoker.Outcome.REVOKED)
-                                .put("keys", JSONArray(gone.keys))
-                                .put("sessions", JSONArray(gone.sessions))
-                                .put("local", gone.off?.outcome == Revoker.Outcome.LOCAL),
+                                .put("revoked", removed.off?.outcome == Revoker.Outcome.REVOKED)
+                                .put("keys", JSONArray(removed.keys))
+                                .put("sessions", JSONArray(removed.sessions))
+                                .put("local", removed.off?.outcome == Revoker.Outcome.LOCAL)
+                                .put("pending", removed.pending),
                         )
                     }, { e -> answer.fail(e) })
                 }
@@ -592,7 +629,10 @@ class Bridge(
             try {
                 revoker.forgetAll(k) { done ->
                     main.post { host.privacy() }
-                    answer.ok(JSONObject().put("revoked", JSONArray(done.revoked)).put("left", JSONArray(done.left)).put("local", JSONArray(done.local)))
+                    answer.ok(
+                        JSONObject().put("revoked", JSONArray(done.revoked)).put("left", JSONArray(done.left)).put("local", JSONArray(done.local))
+                            .put("pending", JSONArray(done.pending)),
+                    )
                 }
             } catch (e: Exception) {
                 k.close()
@@ -628,7 +668,7 @@ class Bridge(
     // there (D57-A); not for a server whose node changed, whose key is
     // another server's.
     private fun forgetLeavingKey(s: Server, kept: KeptLogin) {
-        if (kept.node == s.node) runCatching { left.add(s.id, kept.user, kept.keyId) }
+        if (kept.node == s.node) runCatching { left.add(s.id, kept.user, kept.keyId, kept.code) }
         forgetLogin(s.id)
     }
 

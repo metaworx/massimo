@@ -128,17 +128,18 @@ class MainActivity : AppCompatActivity() {
         val agent = agent()
         discovery = Discovery(this, main)
         biometric = Biometric(this, getString(android.R.string.cancel))
-        val servers = ServerStore(File(filesDir, "servers.json"))
-        val tokens = TokenStore(File(filesDir, "tokens.json"), KeystoreSealer())
-        // Version 1's switch kept a session behind a prompt the app asks no more.
-        servers.takeLegacy().forEach { tokens.remove(it) }
+        // The servers, the sessions held and what was checked of them are
+        // the process's (MassimoApp), so that an activity made anew keeps them.
+        val process = application as MassimoApp
+        val servers = process.servers
         val settings = AppSettings(File(filesDir, SETTINGS))
         val log = Logger { Log.w(LOG_TAG, it) }
-        val keeper = SessionKeeper(tokens)
+        val keeper = process.keeper
         val logins = LoginStore(File(filesDir, "logins.json"))
         val api = ServerApi(agent)
         prober = Prober(agent, texts)
         val left = KeysLeft(servers, logins, api, log)
+        val codes = Codes(servers, process.gone, api, prober::probe, log)
         bridge = Bridge(
             host = object : Bridge.Host {
                 override fun open(url: String) = openServer(url)
@@ -153,8 +154,10 @@ class MainActivity : AppCompatActivity() {
             },
             servers = servers,
             keeper = keeper,
-            sessions = Sessions(keeper, logins, api, prober::probe, left, log),
+            sessions = Sessions(keeper, logins, api, prober::probe, left, log, process.checks),
             left = left,
+            codes = codes,
+            gone = process.gone,
             logins = logins,
             keys = LoginKey(),
             api = api,
@@ -189,7 +192,12 @@ class MainActivity : AppCompatActivity() {
         channel(bridge.opened?.origin)
         if (savedInstanceState == null || web.restoreState(savedInstanceState) == null) {
             val first = if (savedInstanceState == null) servers.atStart() else null
-            if (first == null) web.loadUrl(Origins.CONNECT_URL) else openAtStart(first)
+            if (first == null) {
+                web.loadUrl(Origins.CONNECT_URL)
+            } else {
+                openAtStart(first)
+                bridge.postGone() // the app's start, the list not shown
+            }
         }
     }
 
@@ -210,6 +218,7 @@ class MainActivity : AppCompatActivity() {
                 }
                 bridge.opened = Bridge.Opened(s.id, origin, url)
                 openServer(url)
+                bridge.postCodes(s.id, url)
             }
         }
     }
@@ -405,6 +414,8 @@ class MainActivity : AppCompatActivity() {
             if (url?.let(Origins::of) != Origins.APP) return
             view.clearHistory()
             back.isEnabled = view.canGoBack()
+            // the list shown: a removed server's revoke codes where the probe finds it (D112-A)
+            bridge.postGone()
         }
 
         // A certificate the system does not trust is the server's where it

@@ -61,6 +61,18 @@ abstract class EmulatorTest {
         list()
     }
 
+    /**
+     * relaunch closes the activity and launches it anew, its tasks taken out
+     * of recents between: the app started again, at the list or at the
+     * server marked to open at start, which the first server added is.
+     */
+    protected fun relaunch() {
+        scenario?.close()
+        Rig.removeTasks()
+        scenario = ActivityScenario.launch(MainActivity::class.java)
+        page = Page(sc)
+    }
+
     /** list waits for the connect page with its list read. */
     protected fun list() {
         page.waitFor("location.href.startsWith(${q(Origins.CONNECT_URL)}) && $LIST_READY", "the list of servers")
