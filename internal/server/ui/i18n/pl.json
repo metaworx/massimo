@@ -995,7 +995,7 @@
   "log.kind.slots": "miejsca w pamięci",
   "log.kind.mismatch": "lista pomieszczeń",
   "log.kind.battery": "bateria",
-  "log.kind.wall_reset": "termostat ścienny zresetowany",
+  "log.kind.wall_reset": "tryb termostatu ściennego zresetowany",
   "log.kind.error_reset": "błąd komunikacji zresetowany",
   "log.kind.error_watch": "nadzór błędów",
   "log.kind.login": "logowanie",
