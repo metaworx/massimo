@@ -8,7 +8,7 @@
  * appAppSettings and appLogin of login.js): back to the app's servers,
  * from ☰'s Select server, the sign-in card's ☰ and the Cancels of its
  * forms and of the first owner's form, and to this server's settings and
- * the app's on its own page, from ☰'s two entries after Select server;
+ * the app's on its own page, from ☰'s two entries before Select server;
  * the app's status of the login by fingerprint as a signal, read
  * again each time it is asked (readApp: each opening of the sign-in, a
  * fingerprint refused, the first owner's form shown, My profile shown),

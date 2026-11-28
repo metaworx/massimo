@@ -15,8 +15,8 @@ import json
 from datetime import datetime, timedelta, timezone
 
 from conftest import TOKEN, URL
-from helpers import (OPERATOR_PASSWORD, focus_in_turn, frames, hold, mark, owner_page, reads_of, replaced, show_view, sign_out, taken, wait_held,
-                     wait_until)
+from helpers import (OPERATOR_PASSWORD, focus_in_turn, frames, hold, mark, owner_page, reads_of, replaced, safe_route, show_view, sign_out,
+                     taken, wait_held, wait_until)
 from test_login import sign_in
 from test_unsaved import expire
 
@@ -91,6 +91,53 @@ def test_a_joined_device_keeps_what_is_typed(page, case, reads):
     assert replaced(page, held) == [], "the pairing's elements are the ones they were"
     assert name.input_value() == "Hall radiator" and room.input_value() == chosen, "what was typed and chosen stays"
     assert name.evaluate("(el) => el === document.activeElement"), "the focus stays in the name"
+    show_view(page, "tiles")
+
+
+def test_a_late_pairing_read_keeps_the_joined_device(page, case, reads):
+    """While the Cube pairs, a pairing read asked for before a device
+    joined, whose answer the page takes after the join's paired event,
+    lists the devices without it: the device stays, its form the element
+    it was, with its name typed (AP SteadyTests v1.2, Block 21). The read
+    is held until the event is drawn and the name typed, as an answer the
+    page reads late (#473's CI failure); its answer, the server's before
+    the join, then has the pairing run three minutes longer, so that the
+    test sees the page took it. Fails on the page before, where the answer
+    replaced the list and dropped the device until the pairing ended."""
+    until = (datetime.now(timezone.utc) + timedelta(minutes=5)).isoformat()
+    reads.change(PAIRING, running(until))
+    show_view(page, "system")
+    panel = page.locator("#cubes-list " + PANEL)
+    panel.locator(":scope > summary").click()
+    panel.locator(".pair-device[data-rf='%s'] form" % JOINED["rf_address"]).wait_for(state="visible")
+    form = "#cubes-list %s .pair-device[data-rf='%s'] form" % (PANEL, SECOND["rf_address"])
+    left = "Number((document.querySelector(%s).textContent.match(/\\d+/) || [0])[0])" % json.dumps("#cubes-list %s .pairing-countdown" % PANEL)
+    held = []
+
+    def late(route):
+        """The first read held, the reads' route answering it once let go; the others go to it at once."""
+        if route.request.method == "GET" and not held:
+            held.append(route)
+        else:
+            route.fallback()
+
+    routed = safe_route(page, PAIRING, late)  # the later route of the two: it runs first
+    try:
+        page.evaluate("MassimoParts.cubes.pairingEvent(%s)" % json.dumps(SERIAL))
+        assert wait_held(page, held), "the pairing read asked for, held"
+        page.evaluate("MassimoParts.cubes.pairingJoined(%s, %s)" % (json.dumps(SERIAL), json.dumps(SECOND)))
+        name = page.locator(form + " input[name=name]")
+        name.fill("Hall window")
+        mark(page, [form])
+        assert page.evaluate(left) <= 300, "the pairing's time as the page had it"
+        reads.change(PAIRING, running((datetime.now(timezone.utc) + timedelta(minutes=8)).isoformat()))
+        held[0].fallback()
+        assert wait_until(page, left + " > 400", 5), "the page took the late answer: the pairing's new time"
+        frames(page)
+        assert replaced(page, [form]) == [], "the joined device's form is the one it was"
+        assert name.input_value() == "Hall window", "with the name typed"
+    finally:
+        page.unroute(PAIRING, routed)
     show_view(page, "tiles")
 
 

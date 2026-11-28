@@ -1,3 +1,3 @@
-- The Android app ends a session or key it forgot while its server did
-  not answer by its revoke code at the next contact, a removed server's
-  for up to 90 days; the list says so (`docs/app.md`).
+- The Android app ends a token it forgot while its server did not answer
+  by its revoke code at the next contact, a removed server's wherever its
+  node answers, for 90 days at most; the list says so (`docs/app.md`).
