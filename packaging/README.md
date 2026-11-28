@@ -43,11 +43,10 @@ on a Mac LaunchDaemons (see "macOS").
 
 Every service starts `serve` with `-env <settings file>`,
 so a line there reaches it without a change to its command line.
-`MASSIMO_LOG_LEVEL=debug` adds the Debug lines to the log
-from the service's next restart,
-such as every failed attempt to reach a lost Cube
-and every command the proxy passes on to it;
-the log then grows faster, so remove the line again after the diagnosis.
+`MASSIMO_LOG_LEVEL=debug` adds the Debug lines to the log from the service's next restart,
+such as every failed attempt to reach a lost Cube and every command the proxy
+passes on to it; the log then grows faster,
+so remove the line again after the diagnosis.
 `env.template` does not carry it:
 the package and `install` start a stopped service only when the settings
 set more than the template does, comments and blank lines aside,
@@ -133,8 +132,8 @@ and `/etc/massimo/env` (the commented template,
 or a copy of `-settings <.env>`), writes `massimo.service`,
 the update helper `massimo-update.path` and `.service` and the log rotation,
 and enables them.
-An account `massimo` that an older release made, with the home
-`/var/lib/massimo`, is renamed `_massimo` in place:
+An account `massimo` that an older release made,
+with the home `/var/lib/massimo`, is renamed `_massimo` in place:
 it keeps its ID, so its files and a running service follow.
 Any other `massimo` is a person's, and is left alone, also by `-remove -purge`.
 Where an older release ran the service as such a person's account,
@@ -201,8 +200,8 @@ or start it and create the owner in the web UI from the local network,
 which asks for the owner at each load until it exists,
 and which until then may use it unasked;
 the Cubes are added there too (System settings → Cubes, "Found on the LAN").
-The binary's full path and `-env` let the first line run from any
-directory, a home directory the service user may not enter included,
+The binary's full path and `-env` let the first line run from any directory,
+a home directory the service user may not enter included,
 and through a sudo whose PATH lacks `/usr/local/bin`, as on macOS.
 
 Running `install` again, from a newer binary,
@@ -358,9 +357,8 @@ with a newer lego than Debian 13's 4.9.1, which fails with Infomaniak
 (docs/reverse-proxy.md, step 3).
 An install with another `-tls` mode removes the variables of the one before
 (`MASSIMO_TLS_CERT`, `MASSIMO_TLS_KEY`, `MASSIMO_TLS_NAMES`,
-`MASSIMO_ACME_EMAIL`, `MASSIMO_ACME_DIRECTORY`,
-`MASSIMO_TLS_HTTP`, `MASSIMO_ACME_DNS_HOOK`)
-and sets those the new one is given;
+`MASSIMO_ACME_EMAIL`, `MASSIMO_ACME_DIRECTORY`, `MASSIMO_TLS_HTTP`,
+`MASSIMO_ACME_DNS_HOOK`) and sets those the new one is given;
 an install without `-tls` keeps them all.
 `-tls off` switches it off again;
 run the service once with `-hsts 0` over TLS first,
@@ -381,8 +379,8 @@ A package built between releases,
 such as a rolling build's or one of `make packages`,
 carries what `git describe` adds behind a `+` (`0.7.0~alpha.1+3.gabc1234`),
 so that dpkg sorts it after the release it follows and before the next one.
-The file name writes the `~` and the `+` as dots
-(`massimo_0.7.0.alpha.1_arm64.deb`), as GitHub names the asset.
+The file name writes the `~` and the `+` as dots (`massimo_0.7.0.alpha.1_arm64.deb`),
+as GitHub names the asset.
 The armhf one holds the armv6 binary and runs on every 32-bit Raspberry Pi OS,
 the Pi 1 and the Zero included (Debian's own armhf needs a Pi 2 or later).
 On a Debian, Ubuntu, Raspberry Pi OS or LoxBerry box:
@@ -393,18 +391,18 @@ sudo apt install ./massimo_<version>_arm64.deb
 ```
 
 It installs the release binary as `/usr/bin/massimo`,
-the unit as `/usr/lib/systemd/system/massimo.service` (the embedded one with
-that path),
+the unit as `/usr/lib/systemd/system/massimo.service` (the embedded one with that path),
 the update helper's `massimo-update.path` and the package's own `massimo-update.service`,
 enabled (see "Updates through apt" below),
 the log rotation and the marker `/usr/share/massimo/packaged`,
-the DNS-01 hooks `/usr/share/massimo/acme-dns-hooks/infomaniak.sh` and `cloudflare.sh`
-(see `-acme-dns-hook` above; it suggests their `curl` and `jq`),
-and the reboot helper's `massimo-reboot.path` and `.service`, disabled
-(see "Rebooting from the web UI");
-its scripts create the user `_massimo`, `/etc/massimo/env` from the template
-and the state directory `/var/lib/massimo` when they are missing,
-and enable the service.
+the DNS-01 hooks `/usr/share/massimo/acme-dns-hooks/infomaniak.sh`
+and `cloudflare.sh` (see `-acme-dns-hook` above;
+it suggests their `curl` and `jq`),
+and the reboot helper's `massimo-reboot.path` and `.service`,
+disabled (see "Rebooting from the web UI");
+its scripts create the user `_massimo`,
+`/etc/massimo/env` from the template and the state directory `/var/lib/massimo`
+when they are missing, and enable the service.
 The account `massimo` of an older package is renamed `_massimo` in place,
 keeping its ID, so its files and a running service follow;
 a person's `massimo` is left alone, also by a purge.
@@ -552,10 +550,11 @@ That container has no systemd;
 `make deb-systemd-test` runs the cases that need one (`deb/systemd-test.sh`),
 each in a container of its own with systemd as its first process:
 the first start left to the owner and the owner line as printed,
-the restart of a running service, the upgrade from v0.12.0-alpha.1
-with the service running, a person called massimo, a box an older release
-took over, and `massimo install` over v0.12.0-alpha.1's hand install.
-lintian reports two errors by design,
+the restart of a running service,
+the upgrade from v0.12.0-alpha.1 with the service running,
+a person called massimo, a box an older release took over,
+and `massimo install` over v0.12.0-alpha.1's hand install. lintian reports two
+errors by design,
 the statically linked binary and the missing Debian-format changelog (the
 changelog is `CHANGELOG.md` on GitHub).
 
@@ -628,11 +627,10 @@ so that either run makes the same keyring package,
 and `publish.sh` refuses to sign a suite with a key whose fingerprint is not
 the committed one for its kind.
 
-The repository is built by `packaging/apt/publish.sh` in the release
-workflow (the pool from GitHub's releases, `apt-ftparchive`, `InRelease`
-signed by gpg, the keyring package by nfpm) and put on the site with the
-pages and the docs (see "The site");
-it has no state of its own,
+The repository is built by `packaging/apt/publish.sh` in the release workflow
+(the pool from GitHub's releases, `apt-ftparchive`, `InRelease` signed by gpg,
+the keyring package by nfpm) and put on the site with the pages and the docs
+(see "The site"); it has no state of its own,
 so a release that is deleted on GitHub leaves the pool at the next release.
 Each release also carries the signed index as `massimo-apt-index.tar.gz`,
 so that the site can be rebuilt from `main` without the key,
@@ -724,10 +722,11 @@ The file keeps its name, and the keyring package and the key stay as they are.
 
 ## The site
 
-The project's site, <https://massimo.metaworx.ch>, is built by
-`packaging/site/build.sh`, without a key, and deployed to GitHub Pages by
-`.github/workflows/site.yml`, which the release workflow calls at every run:
-a release, a push to `main` (the devel build) and the nightly build.
+The project's site, <https://massimo.metaworx.ch>,
+is built by `packaging/site/build.sh`, without a key,
+and deployed to GitHub Pages by `.github/workflows/site.yml`,
+which the release workflow calls at every run: a release,
+a push to `main` (the devel build) and the nightly build.
 A release commit is deployed by its tag's run alone:
 its push to `main` runs no release workflow, since the tag's run tests it,
 and a nightly build that finds it at `main`'s head builds and deploys nothing
@@ -751,21 +750,22 @@ It holds:
   A build that finds none deploys nothing,
   since a deploy replaces the whole site and one without `apt/` would take
   the repository offline (`build.sh` exits 3, and the job ends green).
-- At the root, `index.html`, the landing page of the most stable channel
-  (below), and the pages of `site/`:
+- At the root, `index.html`,
+  the landing page of the most stable channel (below), and the pages of `site/`:
   `privacy.html`, the privacy policy of the project and its apps,
-  which the app stores' listings link,
-  and `site.css`, the stylesheet of every page.
+  which the app stores' listings link, and `site.css`,
+  the stylesheet of every page.
 - Under `docs/<channel>/`, the documentation of each channel,
-  built from its newest build, `release/<channel>`
-  (a branch for `alpha`, `beta` and `stable`,
-  a tag for `devel` and `nightly`), and under `docs/main/` from `main`.
+  built from its newest build, `release/<channel>` (a branch for `alpha`,
+  `beta` and `stable`, a tag for `devel` and `nightly`),
+  and under `docs/main/` from `main`.
   The documents are those `docs/fragments/_documents.md` lists,
   the list in README.md's "Documentation" too;
   each is converted by the guidelines' `md_html.py`,
-  with the heading ids GitHub gives, links between the documents to their
-  pages, and every other link to GitHub at that commit, or to the guidelines
-  at its pin, by `packaging/site/site.py` into `doc.html.in`.
+  with the heading ids GitHub gives, links between the documents to their pages,
+  and every other link to GitHub at that commit,
+  or to the guidelines at its pin,
+  by `packaging/site/site.py` into `doc.html.in`.
   Each channel's `docs/<channel>/index.html` is its landing page:
   the home of that build's own `site/index.html`, with the install routes as
   that build has them and the suites filled in, then its list of documents;
@@ -779,8 +779,8 @@ It holds:
   A build without the list (every build before 2026-11-10) gets no docs:
   its `docs/` still held the working documents.
 
-The build fails on a document under `docs/` missing from the list
-(for `main`), on a link to a file the commit does not have,
+The build fails on a document under `docs/` missing from the list (for `main`),
+on a link to a file the commit does not have,
 and on a link to a page or a heading that is not there.
 CI's `Site` job builds the pages and the docs of every pull request that way,
 and `make site` those of the checkout into `dist/site`;
@@ -837,9 +837,9 @@ What to set there:
 - `MASSIMO_CUBE_<SN>_PROXY_SERIAL` if the original software should see a
   serial other than the Cube's.
 - `MASSIMO_API_TOKEN` to require a Bearer token on the API.
-- `MASSIMO_LOG=/var/log/massimo/serve.log`, so that `massimo` commands run
-  as `_massimo`, which read `/etc/massimo/env`, agree with the unit
-  (which passes `-log`).
+- `MASSIMO_LOG=/var/log/massimo/serve.log`,
+  so that `massimo` commands run as `_massimo`, which read `/etc/massimo/env`,
+  agree with the unit (which passes `-log`).
 
 Check the settings and that the Pi reaches a Cube before enabling the
 service (with no other server connected to that Cube):
@@ -897,8 +897,8 @@ a state event takes about 0.65 KB with its indexes (measured),
 so a house of thirty devices that sends 3000 events a day adds about 2 MB a day,
 60 MB over the 30 days.
 The Cubes' backups are there as well, about 11 KB each for thirty devices,
-taken only after a change and kept as the `backups.*` settings say
-(docs/api-v1.md, "Backups"), a few megabytes at most.
+taken only after a change and kept as the `backups.*` settings say (docs/api-v1.md,
+"Backups"), a few megabytes at most.
 The file stops growing at that size, since the server reuses the pages the daily
 prune frees and never runs `VACUUM`;
 `massimo store backup` writes a compact copy.
@@ -940,8 +940,8 @@ An older binary refuses a file only when a later migration changed a meaning
 it then names the copy `massimo.db.before-<version>` made before it.
 So the rollback looks at the store too:
 where the binary put back refuses it (its `store info`),
-the rollback stops the service and runs the binary it set aside
-(`massimo.failed`, after `-rollback` `massimo.prev`) as
+the rollback stops the service and runs the binary it set aside (`massimo.failed`,
+after `-rollback` `massimo.prev`) as
 `store downgrade -to <the old binary's schema version>`,
 which undoes the newer migrations by their down parts;
 where that binary is gone or fails after a failed health check,
@@ -971,7 +971,8 @@ sudo systemctl start massimo.service
   so a Cube gets an address from the new router.
   Reserve it there, because a configured address is fixed.
   A Cube configured by serial only follows its discovery answers by itself;
-  for one with an address, change it under System settings → Cubes in the web UI,
+  for one with an address,
+  change it under System settings → Cubes in the web UI,
   or empty it there so that the Cube follows its discovery answers.
 - The fixed proxy addresses added with `nmcli` stay on the interface when the box moves.
   On the new network they must be free and outside the router's DHCP range:
@@ -986,17 +987,17 @@ sudo systemctl start massimo.service
 
 ## Updating
 
-Development happens on `main`;
-`make release <flavour>` tags it, CI tests the tag while `.github/workflows/build.yml`
-builds it, and `.github/workflows/release.yml` signs and publishes the release,
+Development happens on `main`; `make release <flavour>` tags it,
+CI tests the tag while `.github/workflows/build.yml` builds it,
+and `.github/workflows/release.yml` signs and publishes the release,
 then fast-forwards the release branch `release/<flavour>` to it.
 Each release has a **flavour**, from the least stable to the most:
 `devel`, every commit of `main` whose tests passed;
 `nightly`, once a day the newest of those;
 `alpha`, the `vX.Y.Z-alpha.N` releases;
 later `beta` (`-beta.N`) and `stable` (a plain `vX.Y.Z`).
-`devel` and `nightly` are one GitHub release each, `release/devel` and
-`release/nightly`, replaced in place by the next build;
+`devel` and `nightly` are one GitHub release each,
+`release/devel` and `release/nightly`, replaced in place by the next build;
 the others are a release per tag.
 A box follows an **update channel**, one of those names,
 and takes the newest release of its channel's flavour or a more stable one:
@@ -1113,15 +1114,16 @@ which only `main` can use;
 its public half is `internal/update/rolling-key.pem`,
 and a binary accepts it for those two flavours alone,
 so that a key `main` can reach signs nothing a box on `alpha` or above takes.
-`RELEASE_BRANCH_DEPLOY_KEY`, in `signing` too, is the private half of a deploy key
-with write access, with which the release fast-forwards `release/<flavour>`;
+`RELEASE_BRANCH_DEPLOY_KEY`, in `signing` too,
+is the private half of a deploy key with write access,
+with which the release fast-forwards `release/<flavour>`;
 `ROLLING_TAG_DEPLOY_KEY`, in `signing-rolling`, that of another,
 with which the rolling builds move `release/devel` and `release/nightly`.
 `HOMEBREW_TAP_DEPLOY_KEY` and the apt key are in `signing` as well (see "Homebrew"),
 and one approval lets every job holding one of them run.
 The repository's rulesets keep the version tags from being moved or deleted
-and let the `release/*` branches only fast-forward
-(GUIDELINES/project/CI.md, section 6).
+and let the `release/*` branches only fast-forward (GUIDELINES/project/CI.md,
+section 6).
 A new key needs a release built with the new public key before releases signed
 with it are accepted.
 
@@ -1389,9 +1391,8 @@ one is installed at a time, and another channel's replaces it
 then `brew services start massimo-devel`).
 
 The formula builds `bin/massimo` with Go, its one build dependency,
-and the web UI's parts first where the release has them
-(`go -C tools/uibundle run .`, as `make ui` does),
-since the archive git makes of a tag holds no bundle;
+and the web UI's parts first where the release has them (`go -C tools/uibundle run .`,
+as `make ui` does), since the archive git makes of a tag holds no bundle;
 it writes the settings template to `$(brew --prefix)/etc/massimo/env` when there is none,
 keeps the store in `$(brew --prefix)/var/massimo` and the log in
 `$(brew --prefix)/var/log/massimo/serve.log`,
@@ -1416,8 +1417,8 @@ so that `brew upgrade massimo-alpha` installs a newer `beta` or `stable` release
 
 One owner of the binary: brew owns it,
 and the marker under the formula's `share/massimo` tells massimo so.
-`massimo update` says when a release is out and leaves it to
-`brew upgrade massimo-alpha`; `massimo install` refuses,
+`massimo update` says when a release is out and leaves it to `brew upgrade massimo-alpha`;
+`massimo install` refuses,
 since that is the layout of a Mac without Homebrew (on an Intel Mac both would
 write to `/usr/local/bin`).
 
@@ -1435,7 +1436,8 @@ whose service runs the formula's `opt` binary, now the new one,
 and waits until `/healthz` reports it.
 Nothing is downgraded.
 The channel is the formula's;
-`MASSIMO_UPDATE_CHANNEL` naming another one keeps the button off, with the reason.
+`MASSIMO_UPDATE_CHANNEL` naming another one keeps the button off,
+with the reason.
 The tap's formula is pushed after the release is out,
 so the server offers a release only once the formula has it:
 it reads the `version` of the formula on GitHub,
