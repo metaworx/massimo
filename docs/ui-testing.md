@@ -1,4 +1,4 @@
-# Testing the web UI (v1.34.0)
+# Testing the web UI (v1.40.0)
 
 An evaluation of a Cypress suite for the web UI, against the alternatives:
 what the Playwright smoke test covers today and what it cannot do well,
@@ -825,6 +825,33 @@ The suite's helpers for it are in `tools/ui-test/helpers.py`
   A look right after the wait that saw a state, within its time, holds nothing,
   nor a check of the fade itself.
   The hold is within one document: a block whose page was loaded anew fails at its end.
+- **Whether the server holds the user's settings**
+  (`server_holds_settings(holds, token=None, **values)` of `conftest.py`,
+  AP SteadyTests v1.1, D14-A):
+  a sign-in and a page's load take the settings the server holds for the user,
+  and hand a server that holds none the browser's a second later
+  (`loadPreferences` of `login.js`),
+  so what the page shows after either, and what it pushes, can depend on which.
+  The page fixture leaves it to the page:
+  the server holds none of the token's user's (`clear_preferences`)
+  until the page's start pushes the browser's a second later,
+  and a push of a step before may land before a later load's read or after it.
+  A test whose outcome depends on it sets it, through the API,
+  at the moment that decides:
+  with `holds` the preference `ui`,
+  `values` over the page's defaults (`SETTINGS_DEFAULTS`),
+  without it none; another user's with that user's `token`.
+  That moment is one where no push of the page's own changes it after:
+  while the page is signed out, before the sign-in a 401 opened,
+  or right before a reload, where the push sent as the page is left carries
+  the values the test expects.
+  Where the outcome must hold in both, the test is parametrised over `holds`,
+  as a settings change that met a 401 is, which the page sends in neither;
+  a choice kept in the browser across a reload is read with none on the server
+  (`test_icon_choice.py`),
+  the operator's language with it (`test_shell_updates.py`),
+  and the owner's first push after another user's 401 with none
+  (`test_sign_in_resend.py`).
 - **The same element** (`mark`, `replaced`, `frames` of `helpers.py`):
   a test that holds that data takes nothing from the user marks the elements
   of its selectors, lets the data come, waits two frames and a task,
@@ -1013,7 +1040,8 @@ the server's and the test's, in order,
   waits for the request, not for what the page draws before it sends it,
   nor for a fixed pause:
   the automatic update's window comes up before its setting's PUT (`test_update.py`),
-  and the page pushes its settings a second after a sign-in,
+  and the page pushes its settings a second after a sign-in
+  where the server held none of the user's or a push waited for the sign-in,
   after the stream is open, the moment a test of a sign-in ends at otherwise
   (`test_sign_in_resend.py`);
   a request a test stubs reaches its stub before the test goes on and its route goes,
