@@ -1,4 +1,4 @@
-# Testing the web UI (v1.41.0)
+# Testing the web UI (v1.42.0)
 
 An evaluation of a Cypress suite for the web UI, against the alternatives:
 what the Playwright smoke test covers today and what it cannot do well,

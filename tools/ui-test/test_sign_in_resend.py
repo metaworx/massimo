@@ -31,8 +31,8 @@ import time
 import pytest
 
 from conftest import TOKEN, URL, api_call, clear_preferences, server_holds_settings
-from helpers import (OPERATOR_PASSWORD, frames, held_timers, open_cube_panel, open_personal_page, scaled, sent_requests, settled, show_view, sign_out,
-                     wait_held, wait_until)
+from helpers import (OPERATOR_PASSWORD, frames, held_timers, open_cube_panel, open_personal_page, scaled, sent_requests, settled, show_view,
+                     sign_out, wait_held, wait_until)
 from test_login import sign_in
 
 NOT_SENT = {"en": "not sent, since you were signed out: do it again once signed in",
