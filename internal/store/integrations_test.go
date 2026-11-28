@@ -62,7 +62,7 @@ func TestIntegrationRegistration(t *testing.T) {
 		t.Fatal("the first key still valid")
 	}
 	tok, _, _ := s.TokenByHash(ctx, HashToken(k2))
-	if err := s.TouchToken(ctx, tok.ID, "192.0.2.7", time.Time{}); err != nil {
+	if err := s.TouchToken(ctx, tok.ID, "192.0.2.7", time.Time{}, ""); err != nil {
 		t.Fatal(err)
 	}
 	if _, _, err := s.CollectIntegrationKey(ctx, req.UUID, "K7Q2PX"); !errors.Is(err, ErrRequestGone) {

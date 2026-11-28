@@ -57,7 +57,8 @@ func userUsage() {
                      create an API key for the user and print it once
   tokens <name>      the user's live sessions and keys with their ids
   revoke <name> [<token id>]
-                     revoke one session or key of the user (the id of tokens), or every one
+                     revoke one session or key of the user (the id of tokens), or every one,
+                     with the keys a revoked key made, and theirs
 
 The roles are owner, manager, operator, guest, viewer, integration and the
 ones created through the API (viewer when -role is absent); -expires takes
@@ -648,6 +649,9 @@ func (u *userCmd) tokens(args []string) error {
 	return w.Flush()
 }
 
+// revoke revokes one of a user's tokens by its id, or every one, each
+// key's sessions and heirs with it (store.RevokeToken), and says how many
+// of the user's went, and which keys beyond them.
 func (u *userCmd) revoke(args []string) error {
 	names, err := u.flags("revoke", args, flag.NewFlagSet("user revoke", flag.ContinueOnError))
 	if err != nil {
@@ -687,12 +691,37 @@ func (u *userCmd) revoke(args []string) error {
 		}
 		tokens = []store.Token{{ID: id}}
 	}
+	// A key's revoke takes its sessions and its heirs, the keys it made and
+	// theirs (AP KeyLife, D5-A): a token of the list an earlier revoke took
+	// is passed over, and the heirs beyond the list are named.
+	named, gone := map[int64]bool{}, map[int64]bool{}
 	for _, t := range tokens {
-		err := u.st.RevokeToken(u.ctx, t.ID)
-		u.audit("token.revoke", "token:"+strconv.FormatInt(t.ID, 10), map[string]any{"user": us.Name}, err)
+		named[t.ID] = true
+	}
+	var heirs []string
+	for i, t := range tokens {
+		took, err := u.st.RevokeToken(u.ctx, t.ID)
+		if errors.Is(err, store.ErrNoToken) && i > 0 && (gone[t.ID] || t.ParentID != 0) {
+			continue // an heir of an earlier one, or a session of a key revoked before it
+		}
+		detail := map[string]any{"user": us.Name}
+		if len(took) > 0 {
+			detail["heirs"] = took
+		}
+		u.audit("token.revoke", "token:"+strconv.FormatInt(t.ID, 10), detail, err)
 		if err != nil {
 			return fmt.Errorf("user revoke: %w", err)
 		}
+		for _, h := range took {
+			gone[h] = true
+			if !named[h] {
+				heirs = append(heirs, strconv.FormatInt(h, 10))
+			}
+		}
+	}
+	if len(heirs) > 0 {
+		fmt.Fprintf(stdout, "%d token(s) of %s revoked, with %d key(s) made by them: %s%s\n", len(tokens), us.Name, len(heirs), strings.Join(heirs, ", "), u.where())
+		return nil
 	}
 	fmt.Fprintf(stdout, "%d token(s) of %s revoked%s\n", len(tokens), us.Name, u.where())
 	return nil

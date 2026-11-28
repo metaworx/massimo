@@ -243,7 +243,7 @@ func (s *Server) deletePush(w http.ResponseWriter, r *http.Request) error {
 	auditTarget(r, "push:"+strconv.FormatInt(id, 10))
 	switch err := st.DeletePushSubscription(r.Context(), p.user.ID, id); {
 	case errors.Is(err, store.ErrNoPushSubscription):
-		return fail(http.StatusNotFound, "no subscription %d of yours", id)
+		return refuse(http.StatusNotFound, codePushSubscriptionUnknown, id)
 	case err != nil:
 		return fail(http.StatusInternalServerError, "%v", err)
 	}

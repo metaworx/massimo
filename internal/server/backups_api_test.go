@@ -556,7 +556,8 @@ func TestBackupsOfACubeNotServed(t *testing.T) {
 		{"/api/v1/cubes/" + other + "/restore?plan=x&backup=" + id(older), nil},
 		{"/api/v1/cubes/" + other + "/restore?plan=x", body},
 	} {
-		if code, out := postBackup(t, ts, c.path, "application/json", c.body); code != http.StatusConflict || !strings.Contains(out["error"].(string), "not served") {
+		if code, out := postBackup(t, ts, c.path, "application/json", c.body); code != http.StatusConflict || !strings.Contains(out["error"].(string), "not served") ||
+			!refusalHas(t, out, "cube_not_served", `{"cube":"`+other+`"}`) {
 			t.Errorf("POST %s: %d %v", c.path, code, out)
 		}
 	}
@@ -570,8 +571,8 @@ func TestBackupsOfACubeNotServed(t *testing.T) {
 	if code, _ := do(t, ts, "DELETE", base+"/"+id(newer), ""); code != 204 {
 		t.Fatalf("delete: %d", code)
 	}
-	if code, _ := do(t, ts, "DELETE", base+"/"+id(newer), ""); code != 404 {
-		t.Fatalf("delete again: %d", code)
+	if code, out := do(t, ts, "DELETE", base+"/"+id(newer), ""); code != 404 || !refusalHas(t, out, "backup_unknown", `{"backup":`+id(newer)+`,"cube":"`+other+`"}`) {
+		t.Fatalf("delete again: %d %v", code, out)
 	}
 	if code := getJSON(t, ts, "", base, &l); code != 200 || reasons(l) != "auto" {
 		t.Fatalf("after the delete: %d %s", code, reasons(l))

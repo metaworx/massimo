@@ -10,7 +10,7 @@ import "sync"
 type applyHold struct {
 	mu    sync.Mutex // taken before Server.mu; orders the applies
 	holds int        // HoldApply calls not yet released
-	held  [][]byte   // the commands due meanwhile, in order
+	held  []command  // the commands due meanwhile, in order
 }
 
 // HoldApply makes the fake apply nothing until the release it returns,
@@ -19,7 +19,9 @@ type applyHold struct {
 // the release, in the order they fell due, before the release returns.
 // A test holds the apply to see a write on its way for as long as it
 // needs, and releases it for the confirmation. Holds nest: the last
-// release applies; a second call of one release does nothing.
+// release applies; a second call of one release does nothing. A
+// command acknowledged before a Reset is not applied at the release,
+// and the hold goes on across the reset.
 func (s *Server) HoldApply() (release func()) {
 	h := &s.held
 	h.mu.Lock()
@@ -33,8 +35,8 @@ func (s *Server) HoldApply() (release func()) {
 			if h.holds--; h.holds > 0 {
 				return
 			}
-			for _, raw := range h.held {
-				s.applyNow(raw)
+			for _, c := range h.held {
+				s.applyNow(c)
 			}
 			h.held = nil
 		})
@@ -43,13 +45,13 @@ func (s *Server) HoldApply() (release func()) {
 
 // applyOrHold applies a command that fell due, or keeps it for the
 // release while the apply is held.
-func (s *Server) applyOrHold(raw []byte) {
+func (s *Server) applyOrHold(c command) {
 	h := &s.held
 	h.mu.Lock()
 	defer h.mu.Unlock()
 	if h.holds > 0 {
-		h.held = append(h.held, raw)
+		h.held = append(h.held, c)
 		return
 	}
-	s.applyNow(raw)
+	s.applyNow(c)
 }

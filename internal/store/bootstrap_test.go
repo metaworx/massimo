@@ -41,6 +41,10 @@ func TestBootstrap(t *testing.T) {
 	if !ok || tok.UserID != owner.ID || tok.Kind != TokenAPI || tok.Label != BootstrapLabel || !tok.ExpiresAt.IsZero() {
 		t.Fatalf("token %+v %v", tok, ok)
 	}
+	if tok.RevokeKept {
+		// the store never held the file's secret, and no revoke ends it
+		t.Fatal("the settings file's key has a revoke code")
+	}
 	// The same token again: nothing changes.
 	res, err = s.Bootstrap(ctx, "secret-one")
 	if err != nil || res.OwnerCreated || res.TokenAdded || res.Revoked != 0 {
@@ -144,7 +148,7 @@ func TestBootstrapTakesTheKeyFromAnIntegrationsUser(t *testing.T) {
 				t.Fatal(err)
 			}
 			// as an older start gave it
-			held, err := s.addTokenHash(ctx, own.ID, TokenAPI, BootstrapLabel, HashToken("file"), zeroTime, true)
+			held, err := s.addTokenHash(ctx, own.ID, TokenAPI, HashToken("file"), "", zeroTime, KeyOptions{Label: BootstrapLabel}, true)
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -171,6 +175,9 @@ func TestBootstrapTakesTheKeyFromAnIntegrationsUser(t *testing.T) {
 			u, _, _ := s.UserByID(ctx, tok.UserID)
 			if !ok || tok.ID != held.ID || u.Name != want {
 				t.Fatalf("the key %+v %v on %s", tok, ok, u.Name)
+			}
+			if tok.RevokeKept {
+				t.Fatal("the settings file's key taken from the integration's user has a revoke code")
 			}
 			if got, _, _ := s.Token(ctx, session.ID); got.DeletedAt.IsZero() {
 				t.Fatal("a session made from the key on the integration's user stays")
@@ -202,7 +209,7 @@ func TestBootstrapTakesARevokedKeyFromAnIntegrationsUser(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			held, err := s.addTokenHash(ctx, own.ID, TokenAPI, BootstrapLabel, HashToken("file"), zeroTime, true)
+			held, err := s.addTokenHash(ctx, own.ID, TokenAPI, HashToken("file"), "", zeroTime, KeyOptions{Label: BootstrapLabel}, true)
 			if err != nil {
 				t.Fatal(err)
 			}

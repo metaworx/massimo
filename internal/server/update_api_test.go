@@ -13,6 +13,7 @@ import (
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	goruntime "runtime"
 	"slices"
 	"strings"
 	"sync"
@@ -108,7 +109,7 @@ func TestUpdateEndpoints(t *testing.T) {
 
 	// While the helper works, a second request is refused.
 	update.WriteStatus(status, update.Status{State: "installing", To: "v0.1.0-alpha.10"})
-	if code, out := call(t, ts, "POST", "secret"); code != 409 {
+	if code, out := call(t, ts, "POST", "secret"); code != 409 || !refusalHas(t, out, "update_running", "null") {
 		t.Fatalf("POST while running: %d %v", code, out)
 	}
 	update.WriteStatus(status, update.Status{State: "failed", To: "v0.1.0-alpha.10", Message: "boom"})
@@ -119,7 +120,8 @@ func TestUpdateEndpoints(t *testing.T) {
 
 	// Nothing newer: up to date.
 	f.tag = "v0.1.0-alpha.9"
-	if code, out := call(t, ts, "POST", "secret"); code != 409 || !strings.Contains(out["error"].(string), "up to date") {
+	if code, out := call(t, ts, "POST", "secret"); code != 409 || !strings.Contains(out["error"].(string), "up to date") ||
+		!refusalHas(t, out, "update_up_to_date", `{"version":"v0.1.0-alpha.9"}`) {
 		t.Fatalf("POST up to date: %d %v", code, out)
 	}
 }
@@ -133,24 +135,29 @@ func TestUpdateNeedsTokenAndHelper(t *testing.T) {
 	if code != 200 || out["available"] != true || out["can_update"] != false || out["blocked"] == "" {
 		t.Fatalf("GET: %d %v", code, out)
 	}
-	if code, _ := call(t, ts, "POST", ""); code != 403 {
-		t.Fatalf("POST without a token configured: %d", code)
+	if code, out := call(t, ts, "POST", ""); code != 403 || !refusalHas(t, out, "update_open", "null") {
+		t.Fatalf("POST without a token configured: %d %v", code, out)
 	}
 	if _, err := os.Stat(req); !os.IsNotExist(err) {
 		t.Fatal("request written")
 	}
-	// A token but no helper.
+	// A token but no helper; on Windows, where the installed service is
+	// the helper, the refusal says to start updates from it.
 	ts, _ = updateServer(t, "secret", "", &fakeFinder{tag: "v0.1.0-alpha.10"})
-	if code, _ := call(t, ts, "POST", "secret"); code != 403 {
-		t.Fatalf("POST without a helper: %d", code)
+	noHelper := "update_no_helper"
+	if goruntime.GOOS == "windows" {
+		noHelper = "update_from_service"
+	}
+	if code, out := call(t, ts, "POST", "secret"); code != 403 || !refusalHas(t, out, noHelper, "null") {
+		t.Fatalf("POST without a helper: %d %v", code, out)
 	}
 	// A helper that cannot be started here.
 	ts, _ = updateServerWith(t, "secret", UpdateOptions{Request: req, Finder: &fakeFinder{tag: "v0.1.0-alpha.10"}, Start: func() error { return nil }, Blocked: "in a job"})
 	if code, out := call(t, ts, "GET", "secret"); code != 200 || out["can_update"] != false || out["blocked"] != "in a job" {
 		t.Fatalf("GET blocked: %d %v", code, out)
 	}
-	if code, _ := call(t, ts, "POST", "secret"); code != 403 {
-		t.Fatalf("POST blocked: %d", code)
+	if code, out := call(t, ts, "POST", "secret"); code != 403 || out["error"] != "in a job" || !refusalHas(t, out, "update_helper_unstartable", "null") {
+		t.Fatalf("POST blocked: %d %v", code, out)
 	}
 }
 
@@ -177,8 +184,9 @@ func TestUpdateStartsHelper(t *testing.T) {
 	// without a start.
 	os.Remove(req)
 	update.WriteStatus(status, update.Status{State: "checking"})
-	if code, _ := call(t, ts, "POST", "secret"); code != 409 || starts != 1 {
-		t.Fatalf("POST while running: %d, %d starts", code, starts)
+	if code, out := call(t, ts, "POST", "secret"); code != 409 || starts != 1 || out["error"] != "an update is already running (checking)" ||
+		!refusalHas(t, out, "update_running", "null") {
+		t.Fatalf("POST while running: %d %v, %d starts", code, out, starts)
 	}
 	update.WriteStatus(status, update.Status{State: "failed", Message: "boom"})
 
@@ -210,7 +218,7 @@ func TestUpdateManaged(t *testing.T) {
 	if code != 200 || out["available"] != true || out["can_update"] != false || out["blocked"] != "managed by apt: sudo apt install massimo" {
 		t.Fatalf("GET: %d %v", code, out)
 	}
-	if code, out := call(t, ts, "POST", "secret"); code != 403 {
+	if code, out := call(t, ts, "POST", "secret"); code != 403 || out["error"] != "managed by apt: sudo apt install massimo" || !refusalHas(t, out, "update_managed", "null") {
 		t.Fatalf("POST: %d %v", code, out)
 	}
 	if _, err := os.Stat(req); err == nil {
@@ -242,8 +250,8 @@ func TestUpdateThroughApt(t *testing.T) {
 	if code != 200 || out["manager"] != "apt" || out["can_update"] != false || out["blocked"] != off {
 		t.Fatalf("GET with the helper off: %d %v", code, out)
 	}
-	if code, _ := call(t, ts, "POST", "secret"); code != 403 {
-		t.Fatalf("POST with the helper off: %d", code)
+	if code, out := call(t, ts, "POST", "secret"); code != 403 || out["error"] != off || !refusalHas(t, out, "update_helper_off", "null") {
+		t.Fatalf("POST with the helper off: %d %v", code, out)
 	}
 	if _, err := os.Stat(req); err == nil {
 		t.Fatal("a request was written with the helper off")
@@ -748,7 +756,8 @@ func TestUpdateFromTheSource(t *testing.T) {
 	if src.channel != "alpha" {
 		t.Errorf("the source read for %q", src.channel)
 	}
-	if code, out := call(t, ts, "POST", "secret"); code != 409 || !strings.Contains(out["error"].(string), "v0.1.0-alpha.11 is out, but apt has it not yet") {
+	if code, out := call(t, ts, "POST", "secret"); code != 409 || !strings.Contains(out["error"].(string), "v0.1.0-alpha.11 is out, but apt has it not yet") ||
+		!refusalHas(t, out, "update_not_in_source", `{"source":"apt","version":"v0.1.0-alpha.11"}`) {
 		t.Errorf("POST while apt has nothing newer: %d %v", code, out)
 	}
 
@@ -802,7 +811,8 @@ func TestUpdateHeldAfterNothingNewer(t *testing.T) {
 	if out := get("/api/v1/update?refresh=1"); out["held"] != "v0.1.0-alpha.10" || out["available"] != false {
 		t.Fatalf("held after a check without it: %v", out)
 	}
-	if code, out := call(t, ts, "POST", "secret"); code != 409 || !strings.Contains(out["error"].(string), "v0.1.0-alpha.10 is held back") {
+	if code, out := call(t, ts, "POST", "secret"); code != 409 || !strings.Contains(out["error"].(string), "v0.1.0-alpha.10 is held back") ||
+		!refusalHas(t, out, "update_held", `{"source":"apt","version":"v0.1.0-alpha.10"}`) {
 		t.Fatalf("POST while held: %d %v", code, out)
 	}
 	// a check that finds it ends the hold

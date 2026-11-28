@@ -41,7 +41,7 @@ var eventKinds = []string{
 	"device_forgotten", "cube_found", "restore_step", "restore_done", "disagree", "drift",
 	"cube_gone", "address_changed", "server_started", "server_stopping", "settings_read", "restart", "reboot", "reboot_cancelled",
 	"update", "update_result", "update_postponed", "backup", "backup_deleted", "backups_pruned", "log_pruned", "log_rotated", "restore_started", "open_setup",
-	"server_backup", "change", "command", "hold", "structure", "unconfirmed", "battery", "error_reset", "error_watch", "slots", "mismatch", "login", "login_failed", "locked_out", "audit_pruned",
+	"server_backup", "change", "command", "hold", "structure", "unconfirmed", "battery", "wall_reset", "error_reset", "error_watch", "slots", "mismatch", "login", "login_failed", "locked_out", "audit_pruned",
 	"proxy_connected", "proxy_disconnected", "proxy_refused", "proxy_discarded", "proxy_deleted", "proxy_delete_refused", "proxy_pairing", "proxy_warning",
 }
 
@@ -365,7 +365,7 @@ func (lq logQuery) beyond(newest int64) error {
 // of a Cube that has since gained its row in the store. 409, after which
 // the client reads the log again.
 func afterBeyond(after int64) error {
-	return fail(http.StatusConflict, "after %d is beyond the log's newest line: reload the log", after)
+	return refuse(http.StatusConflict, codeLogAfterBeyond, after)
 }
 
 // logUser finds the row of a page's user, by login name; none reports a

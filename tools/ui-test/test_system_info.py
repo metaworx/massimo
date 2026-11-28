@@ -17,7 +17,7 @@ import time
 import pytest
 
 from conftest import TOKEN, URL
-from helpers import OPERATOR_PASSWORD, frames, hold, owner_page, safe_route, scroll_width, show_view, sign_out, wait_held, wait_until
+from helpers import OPERATOR_PASSWORD, frames, hold, owner_page, safe_route, scroll_width, show_view, sign_out, taken, wait_held, wait_until
 from test_login import sign_in
 from test_sign_out_late import nothing_waits
 
@@ -493,9 +493,8 @@ def test_credits_answer_after_leaving(page, case):
     toggle_credits(page)
     assert wait_held(page, held), "the fetch is on its way"
     show_view(page, "tiles")
-    with page.expect_response(lambda r: r.url.endswith("/ui/credits.json")) as answered:
+    with taken(page, lambda r: r.url.endswith("/ui/credits.json")):
         held[0].continue_()
-    answered.value.finished()
     frames(page)
     assert page.locator("#credits-info .credit").count() == 0, "the late answer drew nothing"
     show_view(page, "info")
@@ -521,9 +520,8 @@ def test_credits_answer_after_sign_out(new_context, case, watch, guard):
     assert page.evaluate("state.me.user.name") == "operator", "the next user is in"
     show_view(page, "info")
     assert wait_held(page, held, n=2), "the operator's System info fetches the credits, the fold still open"
-    with page.expect_response(lambda r: r.url.endswith("/ui/credits.json")) as answered:
+    with taken(page, lambda r: r.url.endswith("/ui/credits.json")):
         held[0].continue_()
-    answered.value.finished()
     frames(page)
     assert page.locator("#credits-info .credit").count() == 0, "the answer of the user before drew nothing"
     toggle_credits(page)

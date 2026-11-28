@@ -265,7 +265,7 @@ and the OpenAPI file carries each operation's as `x-capability`:
 | `restore` | plan and run a restore, delete a kept backup | `POST …/restore/plan`, `POST …/restore`, `DELETE …/backups/{id}` |
 | `repair` | the repairs of a Cube's rooms and devices: their communication errors reset, a device's configuration re-sent from its room, a device placed or listed where the Cube and its list disagree, a room's master named, a room re-linked; "unlink all and re-link" needs `structure` as well ("Repairs", below) | `GET`/`POST …/repair/…`; `GET`/`POST …/repair/unlink-relink` with `structure` as well |
 | `guests` | create, invite, change, disable and remove users whose role is `guest`, and give them an end date: regular ones, or for a call through an integration that integration's own, which makes no user ("Users", below) | the users routes, `GET`/`POST`/`PUT`/`DELETE /api/v1/users…`, for those users |
-| `users` | every user: create, role, disable, password, tokens, the identities they sign in with | `GET`/`POST /api/v1/users`, `GET`/`PUT`/`DELETE …/users/{name}`, `GET`/`POST …/users/{name}/tokens`, `DELETE …/users/{name}/tokens/{id}`, `POST …/users/{name}/register`, `GET`/`POST`/`PUT`/`DELETE …/users/{name}/identities…` |
+| `users` | every user: create, role, disable, password, tokens, the identities they sign in with | `GET`/`POST /api/v1/users`, `GET`/`PUT`/`DELETE …/users/{name}`, `GET`/`POST …/users/{name}/tokens`, `PUT`/`DELETE …/users/{name}/tokens/{id}`, `POST …/users/{name}/tokens/{id}/rekey`, `POST …/users/{name}/register`, `GET`/`POST`/`PUT`/`DELETE …/users/{name}/identities…` |
 | `passwords` | set the password of a user (the manager's by default) | `GET /api/v1/users`, `GET …/users/{name}`, `PUT …/users/{name}` with a password, `POST …/users/{name}/register` |
 | `roles` | a role's capabilities and name, create and delete roles | `GET`/`POST /api/v1/roles`, `PUT`/`DELETE /api/v1/roles/{key}` |
 | `roles.disable` | disable and enable a role | `PUT /api/v1/roles/{key}/disabled` |
@@ -356,14 +356,16 @@ no `ticket` or `token` on the stream) is answered `401` and counts as none,
 since it guesses nothing: a page before its sign-in,
 or a scanner behind a proxy not in `-trusted-proxies`,
 does not lock the address out.
-Nor does a token the server issued and that has ended:
-a session revoked, logged out or past its end, a revoked key,
-a session whose key was revoked, or the token of a removed user
-is answered `401` with the words of a wrong token, and counts as none,
-since a guessed token never matches one that was issued:
+Nor does a token the server issued and that has ended: a session revoked,
+logged out or past its end, a revoked key,
+a key past its end date or ended unused (`auth.key_idle_days`, Tokens),
+the old secret of a key given a new one (`POST …/tokens/{id}/rekey`, Tokens),
+a session whose key was revoked, is past its end or ended unused,
+or the token of a removed user is answered `401` with the words of a wrong token,
+and counts as none, since a guessed token never matches one that was issued:
 a client that sends again a session that ended,
-as a page does after a link that stalled, does not lock its address out
-(`POST /api/v1/login/key`'s key included).
+as a page does after a link that stalled,
+does not lock its address out (`POST /api/v1/login/key`'s key included).
 A wrong Bearer token counts beside any token and is answered `401` as it is alone:
 the stream's `ticket` or `token` beside it is not read;
 a wrong ticket counts beside the Bearer token of a disabled user,
@@ -439,10 +441,13 @@ and `params`, the values its text names, by name (AP ErrorCodes):
   one code may come with more than one status (a `409` on a write,
   a `404` on a read).
   The table below lists them.
-- `params` holds a room as its `{id}`, a number,
+- `params` holds a room as its `{id}`, a number
+  (so does a parameter whose name ends in `_room`),
   a device as the request named it, its radio address or its serial,
   and devices as a list of radio addresses;
   it is absent where the text names nothing.
+  `reason`, where a refusal names another one that stopped it,
+  is that one as an error answer, its `error`, `code` and `params`.
 - `error` stays the server's English text, as the log has it:
   a client that finds no `code`, or one it does not know,
   shows `error` and goes by the status.
@@ -491,6 +496,54 @@ which its setpoint, its configuration and its week programme go to:
 | `room_no_thermostat` | 409, 404 | `room` | the room has no thermostat: a write is `409`, a read of its programme `404` |
 | `room_thermostat_unplaced` | 409, 404 | `room`, `device` | the Cube's list has a thermostat in the room, `device` the first, but its C line names another room or none, so that the Cube has no thermostat there; the repair `…/devices/{rf}/repair/place` puts it there |
 
+**Rooms and devices**, their names, the rooms they are in,
+and the Cube's structure, which one change at a time writes:
+
+| Code | Status | Params | Refused because |
+|------|--------|--------|-----------------|
+| `structure_change_running` | 503 | – | another change of the Cube's rooms and devices did not end within the request's time |
+| `name_empty` | 400 | – | a room's or a device's name is empty |
+| `name_too_long` | 400 | `max` | the name is longer than `max` bytes, the Cube's limit |
+| `room_not_empty` | 409 | `room`, `device` | a room to delete still has a device, `device` the first |
+| `room_wall_thermostat_taken` | 409 | `room`, `device` | a wall thermostat moved, added, placed or listed into a room that has one, `device` |
+| `device_room_needed` | 409 | `device` | a device in no room yet, written without a `room_id` |
+| `device_settings_not_copied` | 502, 409 | `device`, `room`, `reason` | the device is in the room, but copying the room's settings to it stopped, for `reason`, with its status |
+| `setpoint_mode_invalid` | 400 | – | a setpoint's `mode` is none of `auto`, `manual`, `vacation`, `boost` |
+
+**A device's and a room's configuration**,
+a value out of the range the original software offers:
+
+| Code | Status | Params | Refused because |
+|------|--------|--------|-----------------|
+| `config_temp_offset_invalid` | 400 | – | `temp_offset` is no multiple of 0.5 from -3.5 to 3.5 |
+| `config_window_minutes_invalid` | 400 | – | `window_open_minutes` is not 0..60 in steps of 5 |
+| `config_boost_minutes_invalid` | 400 | – | `boost_minutes` is not 0..30 in steps of 5, or 60 |
+| `config_boost_valve_invalid` | 400 | – | `boost_valve_pct` is not 0..100 in steps of 5 |
+| `config_decalc_hour_invalid` | 400 | – | `decalc_hour` is not 0..23 |
+| `config_valve_pct_invalid` | 400 | `field` | `max_valve_pct` or `valve_offset_pct`, `field`, is not 0..100 |
+| `program_changed` | 412 | – | a week programme's `If-Match` names another tag than its current one, which `etag` carries |
+
+**A room's virtual wall thermostat** (see "The virtual wall thermostat"):
+
+| Code | Status | Params | Refused because |
+|------|--------|--------|-----------------|
+| `vwt_lock_no_wall_thermostat` | 409 | `room` | a lock of a room without a real wall thermostat |
+| `vwt_rename_with_room` | 409 | `room` | a rename or a move of the virtual wall thermostat, which goes with its room |
+| `vwt_remove_with_room` | 409 | `room` | a removal of the virtual wall thermostat, which goes with its room |
+| `vwt_temp_method_invalid` | 400 | – | `temp_method` is neither `median` nor `mean` |
+| `vwt_address_invalid` | 400 | – | `rf_address` is neither six hex digits nor `""` |
+| `vwt_address_real` | 409 | `device` | `rf_address` is a real device's, `device` |
+| `vwt_address_taken` | 409 | `address`, `room` | `rf_address`, `address`, is the virtual wall thermostat's of another room |
+
+**The pairing and new batteries**:
+
+| Code | Status | Params | Refused because |
+|------|--------|--------|-----------------|
+| `pairing_seconds_invalid` | 400 | `max` | `seconds` is not 1..`max` |
+| `pairing_running` | 409 | – | the Cube is in pairing mode already |
+| `battery_no_report` | 409 | `device` | the Cube holds no current report of the device |
+| `battery_still_low` | 409 | `device` | the device still reports its batteries low |
+
 **A command's result**, of a write sent to the Cube through its queue;
 `error` is the result's own:
 
@@ -500,9 +553,102 @@ which its setpoint, its configuration and its week programme go to:
 | `command_discarded` | 502 | – | the Cube discarded the command |
 | `command_discarded_no_state` | 502 | `room`, `devices` | the Cube discarded a room command, since it holds no state for those members of the room, also in `no_state` |
 | `command_unwanted` | 502 | – | the command was no longer wanted when its turn came |
-| `cube_not_connected` | 502 | – | the server's connection to the Cube is down |
+| `cube_not_connected` | 502, 503 | – | the server's connection to the Cube is down: a command's result `502`; `503` for a request that needs the connection before it sends, as pairing, a removal, a repair, a backup or a restore |
 | `cube_busy` | 502 | – | another command is waiting for the Cube's reply |
 | `command_timed_out` | 502 | – | the command's time ran out before the Cube answered, waiting for the radio budget or its turn |
+
+**A Cube added, changed or removed**
+(`POST /api/v1/cubes`, `PUT` and `DELETE /api/v1/cubes/{sn}`),
+its fields as typed in its form:
+
+| Code | Status | Params | Refused because |
+|------|--------|--------|-----------------|
+| `cube_name_bad` | 400 | `max` | the name is longer than `max` bytes, is no text or has a control character |
+| `cube_address_bad` | 400 | `address` | `address` is not `host` or `host:port` |
+| `cube_address_port_bad` | 400 | `address` | the port of `address` is not 1 to 65535 |
+| `cube_proxy_address_bad` | 400 | `address` | `proxy_address` is not `host[:port]` or `:port` |
+| `cube_proxy_address_port_bad` | 400 | `address` | the port of `proxy_address` is not 1 to 65535 |
+| `cube_proxy_serial_bad` | 400 | `serial` | `proxy_serial` is not letters and digits, at most 16 |
+| `server_no_store` | 503 | – | the server runs without a store, which the request needs: a Cube's row, the settings, the update's answer, the push key, `GET /api/v1/store` |
+| `cube_served_already` | 409 | `cube` | `POST`: the Cube is served already |
+| `cube_restore_not_removed` | 409 | `cube` | `POST` with `restore`: the serial has a row that is not removed |
+| `cube_restore_unknown` | 404 | `restore`, `cube` | `POST` with `restore`: the serial has no removed row of that uuid |
+| `cube_not_stored` | 409 | `cube` | the Cube is served for this run only (`-addr`, `-sn`), not from the store, so its row is not changed or removed here |
+
+**A Cube's refresh and reboot** (`POST …/refresh`, `POST …/reboot`),
+and a change of a Cube that has not said its serial:
+
+| Code | Status | Params | Refused because |
+|------|--------|--------|-----------------|
+| `cube_serial_not_known_yet` | 409 | – | the Cube has not reported its serial yet |
+| `cube_address_not_known_yet` | 409 | – | the Cube has no address: none is given, and discovery has not found it |
+| `cube_rebooting` | 409 | – | a refresh while the Cube reboots: its greeting after the reboot reads it again |
+| `cube_reboot_pending` | 409 | `pending` | more radiograms are pending, as the Cube last said, than the request's `pending`: a reboot drops them |
+
+**A Cube's backups and restores** (`…/backups`, `…/restore`):
+
+| Code | Status | Params | Refused because |
+|------|--------|--------|-----------------|
+| `backup_no_history` | 503 | – | the Cube has no row in the store, so the server keeps no backups of it |
+| `cube_not_served` | 409 | `cube` | a backup or a restore of a Cube whose row the store keeps and that the server does not serve |
+| `backup_unknown` | 404 | `backup`, `cube` | the Cube has no stored backup of that id |
+| `restore_running` | 409 | – | a restore to the Cube is running already |
+| `restore_plan_changed` | 409 | – | the plan made again from the request differs from its `plan`: the Cube or the backup has changed; `error` names both |
+| `restore_duty_cycle` | 409 | `duty`, `max` | the Cube's radio duty cycle is at `duty` percent, above `max`, and the plan sends by radio |
+| `restore_backup_no_cube` | 400 | `cube` | the backup names no Cube; `cube` is this one |
+| `restore_backup_other_cube` | 400 | `from`, `cube` | the backup is of the Cube `from`, not of `cube` |
+| `restore_file_too_large` | 413 | `max` | the file in the body is larger than `max` bytes |
+| `restore_file_empty` | 400 | – | the body is empty |
+
+A backup taken or a restore planned while the server is not connected to the Cube
+is refused with `503` and `cube_not_connected`.
+
+**The computer's reboot, the server's restart and the settings file's reload**
+(`/api/v1/reboot`, `/api/v1/restart`, `/api/v1/reload`):
+
+| Code | Status | Params | Refused because |
+|------|--------|--------|-----------------|
+| `reboot_unavailable` | 409 | – | nobody reboots the computer from this server: it runs as no service, or as one that cannot; `error` says which |
+| `reboot_switched_off` | 409 | – | the owner's switch is off (`MASSIMO_REBOOT`, `-allow-reboot`) |
+| `reboot_no_helper` | 409 | – | the root helper the system needs is not installed; `error` says how to install it |
+| `reboot_begun` | 409 | – | the reboot has begun |
+| `reboot_waiting` | 409 | – | a reboot waits, which a second reboot and a restart wait for |
+| `reboot_not_waiting` | 409 | – | `DELETE`: no reboot waits |
+| `reboot_open` | 403 | – | the server is open, and the request does not come from the box itself |
+| `reboot_delay_bad` | 400 | `max` | `delay` is not 0 to `max` seconds |
+| `restart_unavailable` | 409 | – | no service manager would start the server again, or the restart is switched off (`-restart off`); `error` says which |
+| `restart_under_way` | 409 | – | a restart is under way, which a second restart and a reboot wait for |
+| `restart_open` | 403 | – | the server is open, and the request does not come from the box itself |
+| `update_running` | 409 | – | an update is running, which a second update, a restart and a reboot wait for; `error` names the helper's state where it knows it |
+| `reload_no_settings_file` | 409 | – | `POST /api/v1/reload`: the server reads no settings file |
+
+**An update** (`POST /api/v1/update`, `PUT /api/v1/update/answer`):
+first why this box starts none from the API, then why not now:
+
+| Code | Status | Params | Refused because |
+|------|--------|--------|-----------------|
+| `update_managed` | 403 | – | a package manager updates the server, or apt follows another suite than `MASSIMO_UPDATE_CHANNEL`; `error` says which |
+| `update_open` | 403 | – | the server is open: it starts no update |
+| `update_from_service` | 403 | – | on Windows, only the installed service starts updates |
+| `update_no_helper` | 403 | – | no update helper is installed |
+| `update_helper_off` | 403 | – | the update helper the package installed is off; `error` says how to turn it on |
+| `update_helper_unstartable` | 403 | – | the server cannot start a helper that outlives it; `error` says why |
+| `update_no_channel` | 403 | – | no update channel is set, and the build has no flavour |
+| `update_dev_build` | 403 | – | a development or modified build, which is updated by hand |
+| `update_held` | 409 | `version`, `source` | `version` is held back: the helper found nothing to install for it, and no check since has found it in `source` |
+| `update_not_in_source` | 409 | `version`, `source` | `version` is released, but the package source `source` has it not yet |
+| `update_no_release` | 409 | `channel` | the channel has no release |
+| `update_up_to_date` | 409 | `version` | the server runs the newest release, `version` |
+| `update_not_offered` | 409 | `version`, `offered` | `PUT …/update/answer`: the answer's `version` is not the one offered, `offered` |
+| `update_none_offered` | 409 | `version` | `PUT …/update/answer`: no version is offered |
+| `update_auto_off` | 409 | `setting` | `PUT …/update/answer`, `tonight` or `skip`, while automatic updates are off by the setting `setting` |
+
+**The log and the server's facts**:
+
+| Code | Status | Params | Refused because |
+|------|--------|--------|-----------------|
+| `log_after_beyond` | 409 | `after` | `after` is beyond the log's newest line: the client reads the log again |
+| `config_not_shown` | 503 | – | `GET /api/v1/config`: the server does not show its settings in effect |
 
 **A call through an integration** (see "Acting for an integration's users"),
 whose `error` names the link that refused:
@@ -520,7 +666,162 @@ whose `error` names the link that refused:
 
 | Code | Status | Params | Refused because |
 |------|--------|--------|-----------------|
+| `repair_changed` | 409 | – | the repair as it is now differs from the preview whose plan the run names |
+| `repair_duty_cycle` | 409 | `duty`, `cost`, `max` | the duty cycle, `duty` %, and the repair's, about `cost` %, would reach the queue's hold at `max` % |
+| `repair_memory_slots` | 409 | `free`, `held`, `min` | the slots the repair's room radiograms hold, `held`, would leave fewer free than `min` |
+| `repair_stopped` | 502, 409, … | `step`, `steps`, `reason` | the run stopped at `step` of `steps`, for `reason`, with its status |
+| `repair_none_flagged` | 409 | – | no device of the Cube has a communication error |
+| `repair_room_none_flagged` | 409 | `room` | no device of the room has a communication error |
+| `repair_master_valid` | 409 | `room`, `device` | the room's master, `device`, is a thermostat of the room |
+| `repair_master_none` | 409 | `room` | the room has no thermostat to name as its master |
+| `repair_room_disagrees` | 409 | `room`, `devices` | the Cube and its list disagree on these devices of the room |
+| `repair_link_too_few` | 409 | `room` | the room has fewer than two devices to link |
+| `repair_device_no_room` | 409 | `device` | the Cube has the device in no room |
+| `repair_rooms_differ` | 409 | `device`, `room`, `list_room` | the Cube has the device in `room`, its list in `list_room` |
+| `repair_config_same` | 409 | `device`, `room`, `thermostats` | the device has the room's temperatures and week programme already |
+| `repair_device_unlisted` | 409 | `device` | the Cube's list does not list the device |
+| `repair_list_no_room` | 409 | `device` | the Cube's list places the device in no room |
+| `repair_placed_already` | 409 | `device`, `room` | the Cube has the device in the room its list has |
+| `repair_hidden_room` | 409 | `device`, `room` | the Cube has the device in its hidden room |
+| `repair_listed_already` | 409 | `device`, `room` | the Cube's list has the device in the room the Cube has |
 | `room_name_needed` | 409 | `room` | a listing into a room the Cube's list does not have, without `room_name`; `room` is also at the top level |
+
+**The server's door and the token check** (see "Authentication");
+a token nobody holds and one that ended are one code, as their `error` is one:
+
+| Code | Status | Params | Refused because |
+|------|--------|--------|-----------------|
+| `server_open_local_only` | 403 | – | the server is open and the client is beyond its local network |
+| `cross_origin_refused` | 403 | – | another site's page sent the write |
+| `token_wrong` | 401 | – | the token is missing, nobody's, or ended: revoked, logged out or expired; and the bearer key of `POST …/tokens` or `POST /api/v1/login/key` revoked or ended after the request was let in |
+| `address_locked_out` | 429 | – | too many failed token checks or sign-ins from the address; `Retry-After` says for how long |
+| `user_locked_out` | 429 | – | too many failed sign-ins for the name; `Retry-After` says for how long |
+| `user_account_disabled` | 403 | `user` | the token's or the sign-in's user is disabled |
+| `user_account_expired` | 403 | `user` | the token's or the sign-in's user is past its end date |
+| `role_disabled` | 403 | `role` | the token's user's role is disabled |
+| `capability_required` | 403 | `capability` | the caller lacks the capability, outside a call through an integration (`forbidden`) |
+
+**The sign-ins** (see the sign-in routes);
+a wrong name and a wrong password are one code, as their `error` is one:
+
+| Code | Status | Params | Refused because |
+|------|--------|--------|-----------------|
+| `login_no_store` | 409 | – | the server has no store: it takes its API token |
+| `login_no_users` | 409 | – | the server has no users yet |
+| `login_password_off` | 403 | – | the password sign-in is off (`auth.password_login`) |
+| `login_running` | 429 | – | a sign-in from the address is running; `Retry-After` is 1 |
+| `login_wrong` | 401 | – | a wrong name or password |
+| `login_not_started` | 401 | – | no sign-in by OPAQUE was started under `login`, or it took too long |
+| `login_integration_key` | 403 | – | a registered integration's key asks for a session |
+| `password_busy` | 503 | – | the store runs as many password checks as it takes; `Retry-After` is 5 |
+| `oidc_code_unknown` | 401 | – | no sign-in through a provider under the code, or it took too long |
+| `oidc_user_gone` | 401 | – | the user of the sign-in through a provider was removed since |
+
+**The first owner** (see "Users"):
+
+| Code | Status | Params | Refused because |
+|------|--------|--------|-----------------|
+| `first_owner_not_local` | 403 | – | the first owner is created from an address beyond the local network |
+| `first_owner_password_needed` | 400 | – | the first owner has no password |
+| `first_owner_exists` | 409 | – | another request made the first owner meanwhile |
+
+**Users and their tokens** (see "Users" and "Tokens"):
+
+| Code | Status | Params | Refused because |
+|------|--------|--------|-----------------|
+| `user_no_store` | 503 | – | the server has no store, so no users |
+| `user_unknown` | 404 | `user` | no user of that name |
+| `user_name_bad` | 400 | – | the name breaks the rule of a user's name; `error` names it |
+| `user_display_name_long` | 400 | `max` | the display name is longer than `max` bytes |
+| `user_integration_no_way_in` | 403 | `user` | a key, a password or an identity for an integration's user |
+| `user_integration_guest` | 403 | `user` | an integration's guest, which its integration and holders of `integrations` or `users` change |
+| `user_integration_own` | 403 | `user`, `integration` | the removal of an integration's own user, which the integration's removal keeps |
+| `user_owner_only` | 403 | – | an owner changed by one who is no owner |
+| `user_holds_settings_key` | 409 | `user` | the removal of the user that holds the settings file's `MASSIMO_API_TOKEN` |
+| `integration_own_users_only` | 403 | – | a call through an integration for a user that is not its integration's |
+| `role_beyond_yours` | 403 | `role` | a user or a role with capabilities the caller's role lacks |
+| `role_beyond_integration` | 403 | `role` | a role beyond the maximum of the user's integration |
+| `role_integration_only` | 403 | – | the role `integration` for a user that is no integration's |
+| `role_owner_only` | 403 | – | the role `owner` given by one who is no owner |
+| `capability_required_to_give` | 403 | `capability`, `role` | the role given needs `capability` of the caller |
+| `capability_required_to_create` | 403 | `capability`, `role` | the user created with the role needs `capability` of the caller |
+| `password_proof_wrong` | 403 | – | the proof of the current password is wrong, used or too old |
+| `password_current_wrong` | 403 | – | `current_password` is wrong |
+| `token_label_length` | 400 | `max` | the key's label is empty or longer than `max` bytes |
+| `token_unknown` | 404 | `user`, `token` | the user has no live token of that id |
+| `token_settings_key` | 409 | – | a revoke of the settings file's `MASSIMO_API_TOKEN`, a change of its life (`PUT …/tokens/{id}`) or a new secret for it (`POST …/tokens/{id}/rekey`) |
+
+**Roles and capabilities** (see "Roles" and "Capabilities"):
+
+| Code | Status | Params | Refused because |
+|------|--------|--------|-----------------|
+| `capability_unknown` | 400, 404 | `capability` | no capability of that name: in a role's set `400`, as the path's `404` |
+| `role_name_long` | 400 | `max` | the role's name is longer than `max` bytes |
+
+**Sign-in providers and identities** (see "Providers" and "Identities"):
+
+| Code | Status | Params | Refused because |
+|------|--------|--------|-----------------|
+| `provider_unknown` | 404 | `provider` | no provider of that key, or for a sign-in or a link none enabled |
+| `provider_key_needed` | 400 | – | a new provider without `key` |
+| `identity_last_way_in` | 409 | – | a user's removal of the last way it signs in |
+| `identity_link_own_only` | 403 | – | a link started for another user |
+| `identity_confirm_own_only` | 403 | – | a pending link read, confirmed or dropped for another user |
+| `identity_link_unknown` | 404 | – | no pending link under the code, or it took too long |
+| `identity_taken` | 409 | – | the account is linked to another user |
+
+**Integrations** (see "Integrations"):
+
+| Code | Status | Params | Refused because |
+|------|--------|--------|-----------------|
+| `integration_requests_off` | 403 | `setting` | the server takes no registration requests |
+| `integration_requests_too_many` | 429 | – | too many registration requests from the address; `Retry-After` is 60 |
+| `integration_capability_beyond` | 400 | `capability` | `max_caps` names a capability beyond the role `integration` |
+| `integration_name_length` | 400 | `max` | the name is empty or longer than `max` bytes |
+| `integration_unknown` | 404 | `integration` | no integration of that uuid, or a request only |
+
+**Settings** (see "GET and PUT /api/v1/settings"):
+
+| Code | Status | Params | Refused because |
+|------|--------|--------|-----------------|
+| `setting_keep_open_users` | 409 | `setting` | `auth.keep_open` on a server with users |
+| `setting_choice_bad` | 400 | `setting`, `choices` | a value not among the setting's `choices`, joined by commas |
+| `setting_duration_range` | 400 | `setting`, `value`, `min`, `max` | a duration outside the setting's range |
+| `setting_duration_range_off` | 400 | `setting`, `value`, `min`, `max` | a duration outside the setting's range, which `0` switches off |
+
+**Preferences, notifications and commands**
+(see "Preferences", "Notifications" and "Commands and Idempotency-Key"):
+
+| Code | Status | Params | Refused because |
+|------|--------|--------|-----------------|
+| `preference_no_user` | 409 | – | no user is signed in: an open server, or its one token |
+| `preference_unknown` | 404 | `preference` | the user has no preference of that key |
+| `push_subscription_unknown` | 404 | `subscription` | the user has no subscription of that id |
+| `idempotency_running` | 409 | – | the request of the same `Idempotency-Key` still runs |
+| `idempotency_reused` | 422 | – | the `Idempotency-Key` was used for another request |
+| `command_unknown` | 404 | `command` | no command of that id the caller may read |
+
+**An API key's life and its new secret**
+(AP KeyLife; see "Tokens"):
+
+| Code | Status | Params | Refused because |
+|------|--------|--------|-----------------|
+| `key_end_passed` | 400 | `expires_at` | `POST …/tokens` or `PUT …/tokens/{id}` with an end date not in the future, `expires_at` as the server read it |
+| `end_date_year_one` | 400 | `expires_at` | an `expires_at` that reads as the zero time (`0001-01-01T00:00:00Z`), which would else mean none: a key's or a user's |
+| `key_keep_forbidden` | 403 | `user` | `idle_exempt` at `POST …/tokens` or `PUT …/tokens/{id}` from a caller that does not manage the key's user |
+| `key_life_session` | 400 | `token` | `PUT …/tokens/{id}` of a session, whose life is its own 30 days |
+| `key_life_integration_kept` | 400 | – | `idle_exempt: true` for an integration's key, always held to the idle limit |
+| `key_life_own_key` | 403 | – | `PUT …/tokens/{id}` whose bearer is that very key |
+| `new_secret_session` | 400 | `token` | `POST …/tokens/{id}/rekey` of a session |
+| `new_secret_integration` | 403 | – | `POST …/tokens/{id}/rekey` of an integration's key |
+| `new_secret_own_key` | 403 | – | `POST …/tokens/{id}/rekey` whose bearer is that very key |
+| `new_secret_ended` | 409 | `key` | `POST …/tokens/{id}/rekey` of a key that has ended, by its end date or unused |
+
+**A revoke by code** (`POST /api/v1/tokens/revoke`):
+
+| Code | Status | Params | Refused because |
+|------|--------|--------|-----------------|
+| `revoke_code_malformed` | 400 | – | the body is not `{"code": …}` with 64 lower-case hex digits |
 
 ## Routes
 
@@ -606,7 +907,12 @@ a user whose role is disabled logs in and is then refused every route.
 The server hashes at most one password a core at once, four at the most,
 with eight more waiting;
 a login beyond them is `503` with `Retry-After`, and so is a user add or a
-password change (`docs/store.md` section 6, "The lockout").
+password change (`docs/store.md` section 6, "The lockout"),
+and one whose client went away while it waited for its turn.
+Any other request of the users' routes whose client went away before the store answered,
+a token's revoke the client gave up on among them,
+is audited as `failed` with "the client went away before the answer",
+a `503` no client reads, and never as a password check that waited.
 `409` on a server without users, where the first owner is created with
 `POST /api/v1/users` or `massimo user add`,
 and on one without a store (`serve -addr`), which takes the API token.
@@ -626,7 +932,9 @@ or by itself (below).
 
 `DELETE /api/v1/me/token` revokes the token that makes the call,
 whatever it is: a session, or an API key and the sessions made from it,
-`{"ok": true, "id": 4}` with the token's id (AP MobileApp, D80-B).
+with the keys it made and theirs ("Tokens", below),
+`{"ok": true, "id": 4, "heirs": [7]}` with the token's id and the heirs' ids,
+`[]` for none (AP MobileApp, D80-B; AP KeyLife, D5-A).
 It is one call for any token, without the user's name or the token's id:
 the apps revoke a kept key with the key alone so,
 and an integration may revoke its own key.
@@ -640,6 +948,52 @@ The settings file's token, `MASSIMO_API_TOKEN`, is `409`:
 the next start would not add the owner's key back, its hash being taken,
 so it is changed or removed in the settings file;
 a revoke under the user's tokens is `409` too (below).
+
+`POST /api/v1/tokens/revoke` with `{"code": "…"}`, and no token,
+ends a token by its revoke code, for a client that forgot the token without
+its server answering, as the apps do at a sign-out, a turned-off login or a
+removed server (`docs/app.md`; AP MobileApp, D112-A).
+The code is the hex of SHA-256 of `massimo revoke v1` followed by the token
+as the server gave it, 64 lower-case hex digits:
+only a client that once held the token can work it out,
+and the store keeps the code's own SHA-256 (`tokens.revoke_hash`,
+`docs/store.md` section 5), from which no code can be had back,
+so that neither the store nor a backup of it can revoke a token.
+The code lets nothing in: no request is authenticated by it.
+The server keeps it for every token it makes,
+and for a token made before the update from its first use after it;
+a token not used since its update has none, and its code matches nothing.
+The live token of the code is revoked, an API key's sessions with it,
+and its heirs, the keys it made and theirs, with their sessions (AP KeyLife,
+D5-A; "Tokens", below), as by `DELETE /api/v1/me/token`;
+the settings file's token is left live, as no revoke ends it:
+its own code ends it no more than a revoke does,
+and the code of a key that made it passes over it and the keys it made.
+A token past its end, an API key past its end date (`expires_at`) among them,
+and an API key ended unused (`auth.key_idle_days`) are not revoked,
+and their codes revoke them all the same, their heirs with them (AP KeyLife,
+D6-A).
+The answer is `204` whether the code matched or not (a live token,
+one that ended, the settings file's, none),
+so that it tells nobody which codes are live.
+A body that is not that object, or a code that is not 64 lower-case hex digits,
+is `400` with `revoke_code_malformed`;
+a client drops such a code rather than post it again.
+While the address is locked out it is `429` with `Retry-After`,
+but a code never counts toward the lockout, matched or not:
+one that matches nothing is a code taken already,
+a token that ended by itself, or one the server has not seen since its update.
+A match is audited as `token.revoke_code`,
+the token its target and its user its subject,
+with a line under Configuration and the log's Info line "token revoked" `by=code`,
+both naming the heirs it took (`heirs`, by id) where it took any,
+as a revoke's do; a code that matches nothing, the settings file's,
+a malformed body and a locked-out address write no row of their own:
+they are counted per address and minute as refused requests are,
+in rows of their own apart from the address's other refused requests,
+with no line.
+No row and no line carries the code.
+A server without a store has no token to revoke and answers `204` at once.
 
 `GET /api/v1/me` says who the caller is:
 
@@ -657,7 +1011,9 @@ a revoke under the user's tokens is `409` too (below).
 With users, `user`, `role`, `capabilities` (the effective set:
 the role's minus the disabled capabilities, every one for `owner`,
 none for a disabled role, and what those include, `restart` beside
-`update` or `reboot` ("Authentication")) and `token`, the one presented;
+`update` or `reboot` ("Authentication")) and `token`, the one presented,
+as this request leaves it: its use written, so that a key's `idle_ends_at`
+counts from it (Tokens);
 outside users mode `user` and `role` are null and `capabilities` is every one.
 `setup` is true on an open server for a caller on the local network,
 the one that may create the first owner,
@@ -683,13 +1039,17 @@ The session names its key: `key_id` in the token list and in `GET /api/v1/me`.
 The key's next session ends the earlier one,
 so a phone holds one live session per key,
 and revoking the key (`DELETE /api/v1/users/{name}/tokens/{id}`) ends the
-session at its next request.
+session at its next request, as the key's end does:
+a session counts only while its key is neither revoked nor past its end (AP KeyLife,
+Block 2).
+A key made with that session as the bearer is no heir of the key ("Tokens",
+below).
 A password set by someone else ends the sessions and leaves the keys,
 as it does for every key.
 
 A wrong key is `401` and counts toward the address's lockout,
 as every failed token check does;
-a revoked one is `401` and does not,
+a revoked one, or one past its end, is `401` and does not,
 as no token that ended does (Authentication above);
 a session as the bearer is `400`;
 a disabled user, a guest past its end date, a disabled role
@@ -901,7 +1261,9 @@ From then on the server is in users mode (Authentication).
 `GET /api/v1/users/{name}` is one user.
 `PUT /api/v1/users/{name}` changes any of `display_name`, `role`, `disabled`,
 `expires_at` (`null` clears it) and `password`;
-absent fields stay, an unknown one is `400`.
+absent fields stay, an unknown one is `400`,
+and so is an `expires_at` that reads as the zero time (`0001-01-01T00:00:00Z`),
+here and at `POST`, rather than clearing the end.
 A user changes its own `display_name` and, with `current_password`
 or a `proof` from the sign-in by OPAQUE, its own `password` or `record`;
 a user with keys only (`has_password` false) sets its first one without,
@@ -946,6 +1308,7 @@ or given an end date (`409`): an owner with one does not count,
 nor does an integration's user, whatever its role.
 
 `DELETE /api/v1/users/{name}` removes a user: its sessions and keys are revoked,
+with the keys its keys made ("Tokens", below),
 its preferences removed,
 an integration's user's link ended,
 and its row stays for the audit with its name,
@@ -968,16 +1331,25 @@ D89-A).
 ### Tokens: /api/v1/users/{name}/tokens
 
 `GET` and `POST /api/v1/users/{name}/tokens`;
-`DELETE /api/v1/users/{name}/tokens/{id}`.
+`PUT` and `DELETE /api/v1/users/{name}/tokens/{id}`;
+`POST /api/v1/users/{name}/tokens/{id}/rekey`.
 A user's sessions and API keys, as `GET /api/v1/me` shows the one presented;
 the same rules of access as the user.
 
-`GET` lists the live ones, oldest first, without their secrets;
+`GET` lists the live ones, oldest first, without their secrets:
+a key not revoked, ended or not, and a session not revoked, not past its end,
+and, made from a key, only while the key lives;
 the key that is the settings file's `MASSIMO_API_TOKEN` carries `"from_settings": true`,
 found by the hash of the file's token, not by its label (AP MobileApp v1.4,
-D86-A).
-`POST` with `{"label": "Loxone"}` creates an API key, which never expires,
-and answers `201` with the key once;
+D86-A);
+a key made with another key as the bearer carries that key's id as `made_by`,
+absent for every other token.
+`POST` with `{"label": "Loxone"}` creates an API key and answers `201` with the key once;
+`"expires_at"` beside the label gives it an end date (below),
+an RFC 3339 time in the future, `null` or absent for none,
+one that has passed or is no time `400`, and no key made;
+`"idle_exempt": true` keeps it from the idle limit (below),
+from who manages the user alone (`403` for anyone else);
 an integration's user gets none (`403`, "Acting for an integration's users"):
 
 ```json
@@ -988,18 +1360,162 @@ The key is kept nowhere but in this answer:
 the command of the request keeps the answer without `token`,
 and a retry with its `Idempotency-Key` answers `201` without it too.
 
-`DELETE …/tokens/{id}` revokes a session or a key by the `id` of the list;
+`DELETE …/tokens/{id}` revokes a session or a key by the `id` of the list,
+`{"ok": true, "id": 4, "heirs": [7, 9]}`;
 a token of another user is `404`.
 The settings file's key is `409`, as `DELETE /api/v1/me/token` answers it:
 it is changed or removed in the settings file,
 since the next start would not add it back, its hash being taken.
 A session made from a key (`POST /api/v1/login/key`) carries the key's id as `key_id`;
-revoking the key revokes that session with it.
+revoking the key revokes that session with it, and the key's end ends it.
+
+A key made by a `POST` whose bearer is an API key is that key's heir (AP KeyLife v1.0,
+Block 2, D5-A), whichever user it is made for: `made_by` names the key.
+A key made by a session is no heir,
+a session of a sign-in or one made from a key by `POST /api/v1/login/key`,
+nor is one made by `massimo user token`, by the settings file's bootstrap
+or at an integration's collection of its key;
+a key put into the settings file loses its maker at the next reading of the file.
+A `POST` whose bearer key was revoked or ended after the request was let in
+makes no key and is `401` with `token_wrong`.
+A revoke takes the heirs, and theirs, with their sessions:
+`DELETE …/tokens/{id}`, `DELETE /api/v1/me/token`,
+a revoke by the key's code (`POST /api/v1/tokens/revoke`), a user's removal,
+and the bootstrap's revoke of a key that is no longer the settings file's.
+The answers of the two `DELETE`s name them in `heirs`, by id, `[]` for none,
+and so do their log lines and their change lines (in the `subject`);
+a revoke by code, whose answer is `204`,
+names them in its log line and its change line,
+and a removal's and the bootstrap's log lines say them too.
+The settings file's key is never an heir, nor are the keys it made:
+the revoke of the key that made it and its maker's user's removal pass over it,
+as its own revoke is `409`.
+A key's end takes none: an heir lives past it, and only a revoke reaches it.
 A token revokes itself the same way, as its own bearer:
 a key with `DELETE …/tokens/{id}` and its own id,
 or any token with `DELETE /api/v1/me/token`,
 which needs neither the name nor the id;
 a session ends itself with `POST /api/v1/logout`.
+
+An API key unused for the days of the setting `auth.key_idle_days` (GET and PUT
+/api/v1/settings; off by default) ends (AP KeyLife v1.0, Block 3),
+and its session with it: the idle clock is the key's last use,
+a use of its session included, or its making where it was never used,
+so a phone that signs in by fingerprint and uses its session keeps its key.
+An ended key and its session are refused as ended tokens,
+which do not count toward the lockout (Authentication);
+nothing is written when a key ends, so it lives again,
+its session with it while the session's own 30 days last,
+where the limit is raised or turned off, the key kept from it,
+or its end date moved later or removed (D6-A);
+its use never brings it back, since it is refused before its use is written,
+nor writes the hash of its revoke code (`POST /api/v1/tokens/revoke`).
+An end is no revoke: a revoke still reaches an ended key,
+by its id or by its code, its heirs with it.
+The list shows each key's life: `idle_exempt`,
+true for a key kept from the limit and always for the settings file's key,
+which the limit passes over (D3-A); `idle_ends_at`, when it ends unused,
+absent where the limit is off or the key is kept from it;
+and for a key that has ended `ended`, `idle`, or `expired` past its end date,
+listed to be revoked.
+`PUT …/tokens/{id}` with `{"idle_exempt": true}` keeps a key from the limit,
+`false` holds it to it again, for who manages the key's user alone (`users`,
+or `guests` for a guest it reaches, within the rank rule: D7-A),
+the key's own user not, unless it manages itself;
+it answers the key as the list shows it, and is audited as `token.update`,
+its change line from and to.
+A body without `idle_exempt` or `expires_at`, or with another field, is `400`,
+a session `400`,
+an integration's key kept from the limit `400` (it is always held to it,
+and its integration registers again once it ended),
+the settings file's key `409`, a token of another user `404`,
+and the bearer that very key `403`: a key changes nothing of its own life,
+and a session made from it is not the key.
+
+An API key may take an end date (AP KeyLife v1.0, Block 4; AP MobileApp, D75),
+at its `POST` or later with `PUT …/tokens/{id}` and
+`{"expires_at": "2026-12-24T18:00:00Z"}`, which sets or moves it,
+or `{"expires_at": null}`, which removes it;
+the list shows it as the key's `expires_at`, absent for none.
+At its end date the key ends, its session with it,
+refused as ended tokens that do not count toward the lockout,
+and is listed with `ended` `expired`, to be revoked;
+an end is no revoke, so the keys it made live on (D5-A).
+Nothing is written when it ends (D6-A):
+moved later or removed, the key lives again,
+its session with it while the session's own 30 days last.
+The end date is the key's user's to move, signed in or with another of its keys,
+or a session made from the key,
+and that of who manages the user (`users`, or `guests` for a guest it reaches,
+within the rank rule);
+an integration's key's that of a holder of `users` or `integrations`,
+on its row in the integration's user's panel;
+the integration registers again once its key ended.
+A time that has passed, or now, is `400` and changes nothing:
+a key ends now by its revoke;
+so is one that reads as the zero time (`0001-01-01T00:00:00Z`),
+which is neither an end date nor none, here as for a user's `expires_at`.
+The settings file's key takes none (`409`, D3-A), in any state of it:
+an ended one would lock the owner out,
+since the bootstrap adds it back only where its hash is unknown.
+A key that becomes the settings file's loses its end date at the bootstrap,
+and the file's key never ends by one, whatever its row holds.
+The bearer that very key is `403` (D4-A):
+a request whose bearer is the key never moves that key's end date.
+That alone does not stop the end date from being moved later:
+a session made from the key is not the key and may move it,
+and so may the key's user, signed in or with another of its keys,
+an end date that who manages the user set included.
+A user or a key with no right to the user is `403`, as for its other fields.
+The change is audited as `token.update`,
+its change line from and to (`null` for none).
+
+`POST …/tokens/{id}/rekey`, with no body, gives a live API key a new secret
+(AP KeyLife v1.0, Block 5; AP MobileApp, D76-A, D81-A),
+the way back to a key whose secret is lost, since none is shown again,
+and the way to refuse whatever holds the key's secret now without making another key.
+The keys made with the key (its heirs, `made_by`) stay:
+for a secret that may have leaked, Revoke ends a key and the keys made with it.
+It answers `200` as `POST` answers `201`, the new secret shown once,
+the command keeping the answer without `token`
+and a retry with its `Idempotency-Key` answering without it and giving no other:
+
+```json
+{"token": "…", "id": 4, "kind": "api", "label": "Loxone", "created_at": "…"}
+```
+
+The key keeps its row: its id, label, making, last use, end date,
+exclusion from the idle limit, maker and heirs stay.
+Its revoke code is the new secret's (`POST /api/v1/tokens/revoke`),
+which ends the key and its heirs;
+the old secret's code ends nothing (`204`), and the key lives on.
+The old secret is answered `401` as a token that ended,
+which counts toward no lockout (Authentication);
+an event stream opened with it, or with a ticket taken with it,
+ends at its next keep-alive,
+and such a ticket redeemed after the new secret opens none (`401`),
+and a request let in with it just before the new secret
+makes no session (`POST /api/v1/login/key`) and no key (`POST …/tokens`) after it,
+answered `401`;
+the key's session ends, with what it subscribed to push,
+unless it is the caller's own, made from that key,
+which stays; what the key itself subscribed to push goes.
+The key's user may, signed in or with another of its keys,
+or a session made from the key, and so may who manages the user;
+never the bearer that very key (`403`): a key changes nothing of its own life.
+A session is `400`;
+the settings file's key `409`,
+since the next start would not add the file's token back, its hash being taken;
+an integration's key `403`:
+the integration learns its key by its approval's code alone,
+and registers again once it is revoked;
+a key that has ended, by its end date or unused, `409`:
+it takes one once it lives again (D6-A);
+a token of another user, or one revoked, `404`.
+It is audited as `token.rekey`, with a change line naming the key,
+and logged, neither with a secret.
+In the app, a key given a new secret elsewhere ends the login by fingerprint
+at its next use, as a revoked one does (docs/app.md).
 
 ### Identities: /api/v1/users/{name}/identities
 
@@ -1138,7 +1654,8 @@ An integration is registered by the owner, without a key typed anywhere:
    within the role `integration` and all of it by default;
    `"attach": "<uuid>"` makes the request an integration of the same kind that
    was registered before, with its users, links and maximum,
-   as after a key lost or revoked.
+   as after a key lost or revoked,
+   and gives it the request's installation id as an acceptance does (below).
    `POST …/refuse` refuses it.
 3. The integration collects its key:
    `GET /api/v1/integrations/requests/{id}?code=K7Q2PX`,
@@ -1179,6 +1696,12 @@ its users, links and maximum kept for a request from the same installation.
 A call that came with another installation id than the accepted one is refused
 and the id recorded as `pending_instance`,
 which `POST …/accept-instance` accepts.
+The installation accepted before then loses the event streams it opened for
+the integration's users, each at its next keep-alive,
+as its calls are refused (AP LinkedRemoval, D4-A),
+also where an attach gave the integration another installation id;
+the integration's own stream, without the header,
+carries no installation id and is not held to one.
 
 **On the LAN.**
 A server that announces itself (README.md, "Server") also looks for
@@ -1284,8 +1807,9 @@ on an open server the header is not read ("Integrations", above).
   with the role and the state the owner left it (D2-A).
   An event stream opened for one ends at its next keep-alive,
   once it is removed, disabled, unlinked or linked anew,
-  or its own or its linked user is removed, disabled or past its end
-  ("GET /api/v1/cubes/{sn}/events").
+  its own or its linked user is removed, disabled or past its end,
+  or another installation id than the one the stream came from is accepted
+  or attached ("GET /api/v1/cubes/{sn}/events").
   Its own user and its system user are not removed ("Users", above).
 - **Without the header** the key acts as the integration itself:
   its role and its maximum (an integration's own polls and stream),
@@ -1640,8 +2164,8 @@ for a failed login, and for `massimo user` on the box, whose `remote` is `cli`),
 and `result` how it went: `ok` for a 2xx, `refused` for a `401`, `403` or `429`,
 `failed` otherwise.
 `detail` keeps the method, the path, the status, the milliseconds,
-the body's size and, when it is JSON of at most 4 KB,
-the body with `password`, `current_password` and `token` replaced by `…`,
+the body's size and, when it is JSON of at most 4 KB, the body with `password`,
+`current_password`, `token` and `code` replaced by `…`,
 and the error of a failed answer.
 A request refused for a known user (a capability it lacks,
 a disabled user or role) is a row with who was refused, without its body.
@@ -2149,6 +2673,8 @@ The server's settings in the store:
 `in_effect` is what this run uses, which a serve flag (`-poll`, `-refresh`,
 `-discover-interval`, `-stale-after`) overrides for one run;
 `fixed_by` then names the flag.
+`serve -poll 0` asks the Cubes for their device lists never,
+`in_effect` `"0"` and `fixed_by` `-poll`, while the setting keeps its range.
 `poll_interval` is how often the server asks each Cube for its device list,
 10 seconds by default, which costs no radio time;
 `refresh_interval` how often it connects to each Cube anew and reads everything
@@ -2190,6 +2716,12 @@ the days the others are kept (365), 0 for ever and at most 3650,
 and `backups.keep_newest`,
 how many of a Cube's newest backups are kept whatever their age (10, 0 to 1000);
 a change of the last three prunes at once.
+`auth.key_idle_days`, 0 by default for off, 0 to 3650,
+is how many days an API key may stay unused before it ends, its session with it,
+counted from its last use, its session's included, or its making (Tokens, above;
+AP KeyLife, Block 3, D2-A); it applies at once,
+so a key unused for longer ends at its next check,
+and a key kept from it and the settings file's key never end by it.
 `auth.password_login`, true by default, says whether `POST /api/v1/login`
 takes a password, and applies at once:
 off, it answers `403`, the start of a sign-in by OPAQUE says `"v1": false`,
@@ -3122,8 +3654,8 @@ one `r:` for each other member whose error flag is set,
 left out where it names none,
 one 0x21 remove link partner radiogram with the room flag naming the device,
 which every member of the room takes,
-addressed to the first of the room's order, as a room command is
-(see `PUT …/rooms/{id}/setpoint`):
+addressed to the first of the room's order,
+as a room command is (see `PUT …/rooms/{id}/setpoint`):
 the room's master where it is a thermostat of the room,
 else its wall thermostat, else its first radiator thermostat,
 one the Cube holds no valid state for passed over,
@@ -3898,8 +4430,8 @@ the flagged devices its direct lines address,
 as the queue's prelude does for every command (D204-A),
 the room woken up before it (`z:1e,G,<room>`, not among `lines`),
 and its `lines` as they go to the Cube;
-a move's halves wake the device itself as well where a room's wakeup misses it
-(`z:1e,D,<rf>`, not among `lines` either, `PUT …/devices/{rf}`);
+a move's halves wake the device itself as well where a room's wakeup
+misses it (`z:1e,D,<rf>`, not among `lines` either, `PUT …/devices/{rf}`);
 a metadata write is a step of its own.
 `radiograms` counts the `s:` lines,
 `duty_cost_pct` is about what they cost of the hourly radio budget (1.25 % each),
@@ -3921,6 +4453,8 @@ either would stop it halfway.
 A repair with nothing to send now has a preview without `plan` and `steps`,
 and `nothing` says why, as the table names it;
 its run is refused with `409` and that message.
+`code` and `params` are those of `nothing` or of `refused`, whichever is set,
+as the run's refusal has them (see "Error codes").
 A listing into a room the Cube's list does not have says so with
 `details` `{"code": "room_name_needed", "room": 7}`, and its run's `409`
 carries the same `code` and `room`.
@@ -3948,7 +4482,8 @@ the device list read about two seconds after them:
 `still_flagged` names the devices whose flag it still shows.
 A step the Cube discarded or that failed stops the run there:
 `502` (`409` when superseded) with `error` naming the step and the same `steps`,
-so that a client sees how far it got.
+so that a client sees how far it got; its `code` is `repair_stopped`,
+the refusal that stopped it its `reason`.
 Room repairs and placements run under the Cube's structure lock,
 as moves and removals do.
 A room is its members by their C lines, the Cube's own idea of it.
@@ -4186,6 +4721,7 @@ of the same Cube, or of the server for the server's own:
 | `error_watch` `back` or `lasting` | the same device's `error_watch` `clear` of the same `flag` |
 | `unconfirmed`, a room's setpoint or its re-send not confirmed, its re-send failed | an `unconfirmed` of the same `target` whose `outcome` is `resend_confirmed` |
 | `battery`, a device's battery level `low` | a `battery` of the same device whose `level` is `ok`: new batteries marked, or the server's rules (see the devices' `battery`) |
+| `wall_reset`, a wall thermostat back on another mode | a `disagree` of the same `room` whose `outcome` is `agree`, which the room checks write only after a `disagree` warning: a room put right within 10 minutes, or a line without a `room`, only by a mark |
 
 Any other, such as `proxy_discarded`, `proxy_delete_refused` and `open_setup`,
 is settled only by a person's mark.
@@ -4249,7 +4785,8 @@ with `cause` `replaced` in its `summary` and who in `by` where someone marked
 new batteries),
 `wall_reset` (a wall thermostat came back after five minutes or more without a
 state on another mode than it had, as after new batteries, at warn: its
-`summary` has the `mode` and the `was_mode`, the setpoints and `silent_min`),
+`summary` has the `mode` and the `was_mode`, the setpoints, `silent_min`
+and the thermostat's `room`, whose agreement settles it, see the alerts above),
 `error_reset` (the server reset a device's communication error,
 its `error` flag, with one `r:`, which costs no radio time,
 because the device reported while flagged:
@@ -4545,8 +5082,9 @@ At each keep-alive, every 30 seconds,
 the server asks whether the stream's caller would be let in now,
 and ends the stream when not:
 a key revoked or expired, a user or role disabled,
-for a call through an integration for one of its users
-a chain that no longer lets it in or that acts as another user now
+for a call through an integration for one of its users a chain that no longer lets it in,
+that acts as another user now
+or that came from another installation than the one accepted or attached
 ("Acting for an integration's users"),
 a server that was open when the stream opened and has a user since,
 or, without a store, another token.
@@ -4560,6 +5098,12 @@ A single-use ticket for that Cube's event stream, valid for a minute:
 {"ticket": "9f86d081884c7d659a2feaa0c55ad015a3bf4f1b2b0b822c", "expires_at": "2026-11-05T15:31:12+01:00"}
 ```
 
+The stream's `?ticket=` asks first, as each keep-alive does,
+whether the ticket's caller would still be let in:
+a ticket whose key was revoked since it was issued,
+or whose caller is no longer let in for another reason,
+is refused `401` as a token that ended is, counting toward no lockout,
+and the stream sends nothing.
 Without a token configured the stream is open and the ticket not needed,
 but the route answers all the same.
 

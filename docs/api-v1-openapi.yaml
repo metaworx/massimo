@@ -369,7 +369,8 @@ paths:
       x-capability: any
       description: |
         The bearer is revoked, whatever it is: a session, or an API key
-        and the sessions made from it (POST /api/v1/login/key). One call
+        and the sessions made from it (POST /api/v1/login/key), with the
+        keys it made and theirs (heirs; AP KeyLife, D5-A). One call
         for any token, without the user's name or the token's id, as the
         apps revoke a kept key with the key alone. Audited as
         token.revoke. A caller without a token of a user, on an open
@@ -390,6 +391,7 @@ paths:
                 properties:
                   ok: {type: boolean}
                   id: {type: integer, description: "The token's id, as the user's token list had it"}
+                  heirs: {$ref: "#/components/schemas/TokenHeirs"}
         "400":
           description: No token of a user to revoke, or a call on a user's behalf
           content:
@@ -399,6 +401,53 @@ paths:
         "403": {$ref: "#/components/responses/Forbidden"}
         "409":
           description: The token is the settings file's MASSIMO_API_TOKEN
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/Error"}
+        "429": {$ref: "#/components/responses/LockedOut"}
+  /api/v1/tokens/revoke:
+    post:
+      summary: End a token by its revoke code
+      x-capability: none
+      description: |
+        For a client that forgot a token without its server answering, as
+        the apps do at a sign-out, a turned-off login or a removed server
+        (docs/app.md): the body names the token's revoke code, the hex of
+        SHA-256 of "massimo revoke v1" followed by the token as the server
+        gave it, which only a client that once held the token can work
+        out. The live token of that code is revoked, an API key's
+        sessions and heirs with it, the keys it made and theirs (made_by),
+        as DELETE /api/v1/me/token revokes one; the settings file's
+        MASSIMO_API_TOKEN is left live, by its own code and as an heir,
+        and so are the keys it made. A token past its end, an API key's
+        expires_at among them, and an API key ended unused
+        (auth.key_idle_days) are revoked by their codes all the same,
+        their heirs with them. The answer is 204
+        whether the code matched or not, so that it tells nobody which
+        codes are live; a code never counts toward the address's lockout.
+        A match is audited as token.revoke_code, the token its target and
+        its user its subject, which names the heirs it took; a code that
+        matches nothing, and a
+        malformed body, are counted per address and minute, in rows of
+        their own apart from the address's other refused requests. No row
+        and no line of the log carries the code.
+        A server without a store answers 204 at once.
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [code]
+              additionalProperties: false
+              properties:
+                code: {type: string, pattern: "^[0-9a-f]{64}$", description: "The token's revoke code, 64 lower-case hex digits"}
+      responses:
+        "204":
+          description: Taken, whether it matched a live token or not
+        "400":
+          description: The body is not {"code"} with 64 lower-case hex digits (revoke_code_malformed)
           content:
             application/json:
               schema: {$ref: "#/components/schemas/Error"}
@@ -805,11 +854,12 @@ paths:
       summary: Remove a user
       x-capability: users
       description: >-
-        The user's tokens are revoked; its row stays for the audit. An integration's user's link to a Massimo user ends
-        with it: its integration's next call for it makes it anew, unlinked. The last enabled owner without an end date
-        stays (409), and so does the user that holds the settings file's MASSIMO_API_TOKEN (409), whose key the next start
-        would not add back: it is changed or removed in the settings file first. An integration's own user (<uuid>:) and
-        its system user stay too (403): DELETE /api/v1/integrations/{uuid} removes the integration and keeps both.
+        The user's tokens are revoked, with the keys its keys made (made_by); its row stays for the audit. An integration's
+        user's link to a Massimo user ends with it: its integration's next call for it makes it anew, unlinked. The last
+        enabled owner without an end date stays (409), and so does the user that holds the settings file's MASSIMO_API_TOKEN
+        (409), whose key the next start would not add back: it is changed or removed in the settings file first. An
+        integration's own user (<uuid>:) and its system user stay too (403): DELETE /api/v1/integrations/{uuid} removes the
+        integration and keeps both.
       parameters: [{$ref: "#/components/parameters/name"}, {$ref: "#/components/parameters/idempotencyKey"}]
       responses:
         "200":
@@ -884,9 +934,15 @@ paths:
       summary: Create an API key for the user
       x-capability: users
       description: >-
-        The key is shown once, in token; the store keeps its hash. It never expires. A retry with the same
-        Idempotency-Key answers 201 without token. An integration's user gets none (403): it acts through
-        its integration alone.
+        The key is shown once, in token; the store keeps its hash. expires_at gives it an end date, a time
+        in the future (one that has passed is 400 and makes no key), null or absent none (AP KeyLife,
+        Block 4); unused for the days of the setting auth.key_idle_days it ends, unless idle_exempt keeps
+        it from that limit, which only who manages the user may set (403 for anyone else, the key's own
+        user among them; AP KeyLife, D7-A). A retry with the same Idempotency-Key answers 201 without
+        token. An integration's user gets
+        none (403): it acts through its integration alone. With an API key as the bearer, the new key names
+        it (made_by) and goes with its revoke; a bearer key revoked or ended after the request was let in
+        makes none (401, token_wrong).
       parameters: [{$ref: "#/components/parameters/name"}, {$ref: "#/components/parameters/idempotencyKey"}]
       requestBody:
         required: true
@@ -897,19 +953,14 @@ paths:
               required: [label]
               properties:
                 label: {type: string, maxLength: 64, example: Loxone}
+                idle_exempt: {type: boolean, description: "Keeps the key from the idle limit; false by default"}
+                expires_at: {type: string, format: date-time, nullable: true, description: "The key's end date, in the future; null or absent for none"}
       responses:
         "201":
           description: The key
           content:
             application/json:
-              schema:
-                type: object
-                properties:
-                  token: {type: string, description: "The secret, shown once"}
-                  id: {type: integer}
-                  kind: {type: string, enum: [api]}
-                  label: {type: string}
-                  created_at: {type: string, format: date-time}
+              schema: {$ref: "#/components/schemas/NewKey"}
         "400": {$ref: "#/components/responses/BadRequest"}
         "401": {$ref: "#/components/responses/Unauthorized"}
         "403": {$ref: "#/components/responses/Forbidden"}
@@ -917,11 +968,70 @@ paths:
         "429": {$ref: "#/components/responses/LockedOut"}
         "503": {$ref: "#/components/responses/NoStore"}
   /api/v1/users/{name}/tokens/{id}:
+    put:
+      summary: Change an API key's life
+      x-capability: users
+      description: |
+        idle_exempt keeps the key from the idle limit (true) or holds it
+        to it again (false), for who manages the key's user alone (AP
+        KeyLife, D7-A); a key that ended unused lives again once kept
+        from it (D6-A). expires_at sets or moves the key's end date, a
+        time in the future (one that has passed is 400 and changes
+        nothing), and null removes it (Block 4): for the key's user and
+        who manages it, an integration's key's for a holder of users or
+        integrations; a key past its end date lives again, its session
+        with it, once the date is moved later or removed (D6-A). A field
+        left out keeps what the key has, and a body of none, or with
+        another field, is 400. A session is 400, and so is an
+        integration's key kept from the limit: it is always held to it.
+        The settings file's key (from_settings in the list) is 409: it
+        never ends, by the limit nor by a date, and is changed in the
+        file (D3-A). The bearer that very key is 403: a key changes
+        nothing of its own life, its end date included; a session made
+        from it is not the key (D4-A). Audited as token.update.
+      parameters:
+        - {$ref: "#/components/parameters/idempotencyKey"}
+        - {$ref: "#/components/parameters/name"}
+        - {name: id, in: path, required: true, description: The token's id from the list, schema: {type: integer}}
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              properties:
+                idle_exempt: {type: boolean}
+                expires_at: {type: string, format: date-time, nullable: true, description: "The key's end date, in the future; null removes it"}
+            example: {idle_exempt: true, expires_at: "2026-12-24T18:00:00Z"}
+      responses:
+        "200":
+          description: The key as the list shows it
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/Token"}
+        "400": {$ref: "#/components/responses/BadRequest"}
+        "401": {$ref: "#/components/responses/Unauthorized"}
+        "403": {$ref: "#/components/responses/Forbidden"}
+        "404":
+          description: No such user, or no such live token of the user
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/Error"}
+        "409":
+          description: The token is the settings file's MASSIMO_API_TOKEN
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/Error"}
+        "429": {$ref: "#/components/responses/LockedOut"}
+        "503": {$ref: "#/components/responses/NoStore"}
     delete:
       summary: Revoke a session or an API key
       x-capability: users
       description: |
-        A session made from a key goes with the key. The settings file's
+        A session made from a key goes with the key, and so do the keys
+        the key made with itself as the bearer, and theirs (heirs; AP
+        KeyLife, D5-A), with their sessions. The settings file's
         token (MASSIMO_API_TOKEN, from_settings in the list) is 409, as
         DELETE /api/v1/me/token answers it: it is changed or removed in
         the settings file, since the next start would not add it back.
@@ -939,6 +1049,7 @@ paths:
                 properties:
                   ok: {type: boolean}
                   id: {type: integer}
+                  heirs: {$ref: "#/components/schemas/TokenHeirs"}
         "400": {$ref: "#/components/responses/BadRequest"}
         "401": {$ref: "#/components/responses/Unauthorized"}
         "403": {$ref: "#/components/responses/Forbidden"}
@@ -949,6 +1060,54 @@ paths:
               schema: {$ref: "#/components/schemas/Error"}
         "409":
           description: The token is the settings file's MASSIMO_API_TOKEN
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/Error"}
+        "429": {$ref: "#/components/responses/LockedOut"}
+        "503": {$ref: "#/components/responses/NoStore"}
+  /api/v1/users/{name}/tokens/{id}/rekey:
+    post:
+      summary: Give an API key a new secret
+      x-capability: users
+      description: |
+        A live API key gets a new secret, shown once in token, as POST
+        …/tokens shows a new key (AP KeyLife, Block 5; AP MobileApp,
+        D76-A, D81-A): its id, label, end date, exclusion from the idle
+        limit, maker and heirs stay. Whatever holds the old secret is
+        refused: the old secret is answered 401 as a token that ended,
+        which counts toward no lockout, and the key's session ends,
+        unless it is the caller's own, made from that key. Its revoke
+        code is the new secret's (POST /api/v1/tokens/revoke), which ends
+        the key and its heirs; the old secret's code ends nothing. For the key's
+        user and who manages it. A session is 400; the settings file's
+        key (from_settings in the list) 409, since the next start would
+        not add the file's token back; an integration's key 403, since
+        the integration learns its key by its approval's code alone; the
+        bearer that very key 403: a key changes nothing of its own life;
+        a key that has ended 409: it takes one once it lives again. The
+        request has no body. A retry with the same Idempotency-Key
+        answers 200 without token and gives no other. Audited as
+        token.rekey.
+      parameters:
+        - {$ref: "#/components/parameters/idempotencyKey"}
+        - {$ref: "#/components/parameters/name"}
+        - {name: id, in: path, required: true, description: The key's id from the list, schema: {type: integer}}
+      responses:
+        "200":
+          description: The key with its new secret
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/NewKey"}
+        "400": {$ref: "#/components/responses/BadRequest"}
+        "401": {$ref: "#/components/responses/Unauthorized"}
+        "403": {$ref: "#/components/responses/Forbidden"}
+        "404":
+          description: No such user, or no such live token of the user
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/Error"}
+        "409":
+          description: The key is the settings file's MASSIMO_API_TOKEN, or it has ended
           content:
             application/json:
               schema: {$ref: "#/components/schemas/Error"}
@@ -1299,8 +1458,9 @@ paths:
         max_caps, the integration's maximum, within the role integration;
         all of it by default. attach, an integration of the same kind, makes
         the request that integration again, with its users, links and
-        maximum. Either way the integration collects its key within ten
-        minutes.
+        maximum, and gives it the request's installation id, as
+        accept-instance does. Either way the integration collects its key
+        within ten minutes.
       parameters: [{$ref: "#/components/parameters/integrationUUID"}]
       requestBody:
         content:
@@ -1335,7 +1495,7 @@ paths:
     post:
       summary: Accept the installation id last seen
       x-capability: integrations
-      description: A call that came with another installation id than the accepted one was refused and recorded as pending_instance; this accepts it.
+      description: A call that came with another installation id than the accepted one was refused and recorded as pending_instance; this accepts it. The installation accepted before then loses the event streams it opened for the integration's users, each at its next keep-alive; the integration's own stream, without the header, goes on.
       parameters: [{$ref: "#/components/parameters/integrationUUID"}]
       responses:
         "200":
@@ -3417,8 +3577,10 @@ paths:
         only by a mark. A device's communication error and link error are
         alerts at warn while the device has them, at the state line that
         set them; its battery is one by its level, the battery event at
-        low, settled by the next at ok, not by the Cube's flag. The audit's
-        lines for a holder of audit only.
+        low, settled by the next at ok, not by the Cube's flag. A
+        wall_reset is settled by its room's members agreeing again (a
+        disagree of its room, outcome agree). The audit's lines for a
+        holder of audit only.
         A Cube without a row in the store adds nothing; without a store,
         none.
       parameters:
@@ -3463,7 +3625,7 @@ paths:
         hello, metadata, config, state, battery (a device's battery
         level changed; cause replaced in "summary" and who in "by" where
         someone marked new batteries), wall_reset (a wall thermostat back from a silence
-        on another mode, at warn), error_reset (the server reset the
+        on another mode, at warn; its room in "summary"), error_reset (the server reset the
         communication error of a device that reported while flagged, once a
         day at most: the room of its C line and automatic in "summary"),
         error_watch (a device's flags watched, "what" in "summary": back,
@@ -3568,7 +3730,11 @@ paths:
       x-capability: read
       description: |
         Valid for one connection to this Cube's event stream within a
-        minute, so that the token never goes into a URL.
+        minute, so that the token never goes into a URL. It opens the
+        stream only while its caller would still be let in: one whose key
+        was revoked since, or who is no longer let in for another reason,
+        is refused 401 as a token that ended is, counting toward no
+        lockout.
       parameters: [{$ref: "#/components/parameters/sn"}]
       responses:
         "200":
@@ -3612,6 +3778,7 @@ paths:
                 backups.keep_days_auto: {value: "90", default: "90", set: false, in_effect: "90", applies: now}
                 backups.keep_days_manual: {value: "365", default: "365", set: false, in_effect: "365", applies: now}
                 backups.keep_newest: {value: "10", default: "10", set: false, in_effect: "10", applies: now}
+                auth.key_idle_days: {value: "0", default: "0", set: false, in_effect: "0", applies: now}
                 auth.password_login: {value: "true", default: "true", set: false, in_effect: "true", applies: now}
                 integrations.requests: {value: "true", default: "true", set: false, in_effect: "true", applies: now}
                 auth.keep_open: {value: "false", default: "false", set: false, in_effect: "false", applies: now}
@@ -3646,7 +3813,10 @@ paths:
         intervals at the next start;
         window_warn_after and window_alert_after (1m to 24h, the alert not
         under the warning, at once), how long a window may stay open; the whole
-        numbers; auth.password_login, true or false, whether POST
+        numbers, auth.key_idle_days among them (0 to 3650, 0 by default
+        for off: an API key unused for that many days ends, its session
+        with it, at once; a key kept from it and the settings file's key
+        never do); auth.password_login, true or false, whether POST
         /api/v1/login takes a password (off, the users sign in by OPAQUE
         alone); integrations.requests, true or false, whether
         integrations may ask to be registered; auth.keep_open, true or
@@ -5430,11 +5600,32 @@ components:
         kind: {type: string, enum: [session, api]}
         label: {type: string}
         created_at: {type: string, format: date-time}
-        expires_at: {type: string, format: date-time, description: Absent for an API key}
+        expires_at: {type: string, format: date-time, description: "A session's end, 30 days from its last use; an API key's end date, absent for a key without one (AP KeyLife, Block 4)"}
         last_used_at: {type: string, format: date-time}
         last_used_from: {type: string, description: The client's address}
         key_id: {type: integer, description: "The key a session was made from (POST /api/v1/login/key); absent for a session of a sign-in and for a key"}
         from_settings: {type: boolean, description: "In a user's token list, true on the key that is the settings file's MASSIMO_API_TOKEN, which is changed or removed there and not revoked through the API; absent on any other"}
+        made_by: {type: integer, description: "The API key that made this key, as the bearer of its POST /api/v1/users/{name}/tokens (AP KeyLife, D5-A); absent for a key made by a session, the command line, the bootstrap or an integration's approval, and for a session. A revoke of that key revokes this one"}
+        idle_exempt: {type: boolean, description: "An API key kept from the idle limit (the setting auth.key_idle_days; AP KeyLife, D7-A), the settings file's always; absent for one held to it and for a session"}
+        idle_ends_at: {type: string, format: date-time, description: "When an API key ends unused: its last use, its session's included, or its making where it was never used, plus the limit's days. Absent where the limit is off, the key kept from it, and for a session; in the past for a key that ended so"}
+        ended:
+          type: string
+          enum: [idle, expired]
+          description: "Why an API key has ended, listed to be revoked: idle, unused past the limit; expired, past its end date. Absent while it lives. It lives again where the limit is raised or turned off, the key kept from it, or its end date moved later or removed (AP KeyLife, D6-A); its use never brings it back"
+    NewKey:
+      type: object
+      description: "An API key with its secret, shown once: made by POST /api/v1/users/{name}/tokens, or given a new secret by POST …/tokens/{id}/rekey (AP KeyLife, Block 5); a retry with the same Idempotency-Key answers without token"
+      required: [id, kind, label, created_at]
+      properties:
+        token: {type: string, description: "The secret, shown once; the store keeps its hash"}
+        id: {type: integer}
+        kind: {type: string, enum: [api]}
+        label: {type: string}
+        created_at: {type: string, format: date-time, description: "When the key was made; a new secret keeps it"}
+    TokenHeirs:
+      type: array
+      description: "The ids of the keys a revoke took with the token, the keys it made and theirs (made_by), oldest first; [] for none"
+      items: {type: integer}
     Me:
       type: object
       properties:
@@ -5519,12 +5710,22 @@ components:
         notes: {type: array, items: {type: string}}
         untested: {type: boolean, description: "Not yet run on hardware"}
         details: {type: object, additionalProperties: true, description: "What the repair names: the devices reset, the room's masters, the agreement of a re-sent configuration, the rooms of a placement or listing"}
+        code: {type: string, description: "The code of nothing or of refused, whichever is set, as an error answer has it (docs/api-v1.md, \"Error codes\")"}
+        params:
+          type: object
+          additionalProperties: true
+          description: "The parameters of that code, as an error answer has them"
     RepairResult:
       type: object
       properties:
         ok: {type: boolean}
         action: {type: string}
         error: {type: string, description: "Where and why the repair stopped"}
+        code: {type: string, description: "repair_stopped where it stopped"}
+        params:
+          type: object
+          additionalProperties: true
+          description: "The step it stopped at, the steps, and the refusal that stopped it as reason (docs/api-v1.md, \"Error codes\")"
         steps:
           type: array
           items:

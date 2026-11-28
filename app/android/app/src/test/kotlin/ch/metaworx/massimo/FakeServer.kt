@@ -17,7 +17,8 @@ import java.net.InetSocketAddress
  * Anna's sessions: `session-anna` (row 7), made with her password;
  * `session-anna-fp` (row 8), made from her key 42; `session-anna-expiring`
  * (row 10), which may list her tokens but is refused (401) by the revoke;
- * `session-anna-quiet` (row 11), whose list of her tokens comes back empty.
+ * `session-anna-quiet` (row 11), whose list of her tokens comes back empty;
+ * `session-anna-broken`, whose `GET /api/v1/me` fails (500).
  * `key-own` is her key 45 used as the bearer, `key-secret` her key itself
  * for the revoke by key, which `DELETE /api/v1/me/token` does not know, as
  * a server older than that route (404); `key-self-<id>` her key of that id,
@@ -53,12 +54,17 @@ class FakeServer : Closeable {
     /** requests are the requests the server had, in their order. */
     fun requests(): List<String> = synchronized(seen) { seen.toList() }
 
+    /** onRequest is told each request as [requests] records it, before it is answered: a test's look at that moment. */
+    @Volatile
+    var onRequest: ((String) -> Unit)? = null
+
     override fun close() = server.stop(0)
 
     private fun handle(ex: HttpExchange) {
         val bearer = ex.requestHeaders.getFirst("Authorization").orEmpty().removePrefix("Bearer ")
         val path = ex.requestURI.rawPath.removePrefix("/massimo")
         synchronized(seen) { seen.add("${ex.requestMethod} $path $bearer") }
+        onRequest?.invoke("${ex.requestMethod} $path $bearer")
         val m = ex.requestMethod
         val anna = setOf("session-anna", "session-anna-fp", "session-anna-expiring", "key-own", "key-secret")
         when {
@@ -67,6 +73,7 @@ class FakeServer : Closeable {
                 val id = bearer.removePrefix("key-self-").toLongOrNull() ?: 0
                 if (synchronized(gone) { gone.add(id) }) answer(ex, 200, """{"ok":true,"id":$id}""") else answer(ex, 401, """{"error":"missing or wrong token"}""")
             }
+            m == "GET" && path == "/api/v1/me" && bearer == "session-anna-broken" -> answer(ex, 500, """{"error":"database is locked"}""")
             m == "GET" && path == "/api/v1/me" && bearer in ME -> answer(ex, 200, ME.getValue(bearer))
             m == "POST" && path == "/api/v1/logout" && bearer in setOf("session-anna", "session-anna-fp", "session-anna-expiring", "session-bob") ->
                 answer(ex, 200, """{"ok":true}""")

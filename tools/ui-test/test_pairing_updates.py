@@ -6,7 +6,8 @@ were, with what is typed and the focus, through the countdown, a pairing
 event, a device that joins and a reload of the Cubes; the countdown
 changes its text in place. The pairing runs by the page's reads alone:
 GET …/pairing is answered as running, with a device that joined (the
-fixture reads), so that nothing is sent to the fake Cube. At a sign-out,
+fixture reads), and with the second from its paired event on, as a
+server lists it, so that nothing is sent to the fake Cube. At a sign-out,
 and for another user signed in after an expired session, nothing of a
 Cube's pairing is left: the form is a new one, and the Cube's rooms are
 asked for again."""
@@ -14,7 +15,8 @@ import json
 from datetime import datetime, timedelta, timezone
 
 from conftest import TOKEN, URL
-from helpers import OPERATOR_PASSWORD, focus_in_turn, frames, hold, mark, owner_page, reads_of, replaced, show_view, sign_out, wait_held, wait_until
+from helpers import (OPERATOR_PASSWORD, focus_in_turn, frames, hold, mark, owner_page, reads_of, replaced, show_view, sign_out, taken, wait_held,
+                     wait_until)
 from test_login import sign_in
 from test_unsaved import expire
 
@@ -33,9 +35,20 @@ def running(until):
     return change
 
 
+def joined(dev):
+    """The pairing state with dev among its devices, after those told before."""
+    def change(st):
+        st = st or {}
+        return dict(st, paired=[*st.get("paired", []), dev])
+    return change
+
+
 def asked(page, call):
-    """Runs call in the page and waits for the answer of the GET …/pairing it asks for."""
-    with page.expect_response(lambda r: r.request.method == "GET" and r.url.endswith("/pairing")):
+    """Runs call in the page and waits until the page has taken the answer
+    of the GET …/pairing it asks for (taken): it lists the devices that
+    joined as the answer has them, and a device a later event listed
+    would be gone."""
+    with taken(page, lambda r: r.request.method == "GET" and r.url.endswith("/pairing")):
         page.evaluate(call)
 
 
@@ -68,6 +81,9 @@ def test_a_joined_device_keeps_what_is_typed(page, case, reads):
     was = page.evaluate(countdown)
     assert wait_until(page, "%s !== %s" % (countdown, json.dumps(was)), 5), "the countdown moves on"
     asked(page, "MassimoParts.cubes.pairingEvent(%s)" % json.dumps(SERIAL))
+    # the device that joins in the server's pairing too, as the paired event
+    # says: a read of the page's after the event lists it as well
+    reads.change(PAIRING, joined(SECOND))
     page.evaluate("MassimoParts.cubes.pairingJoined(%s, %s)" % (json.dumps(SERIAL), json.dumps(SECOND)))
     panel.locator(".pair-device[data-rf='%s']" % SECOND["rf_address"]).wait_for(state="visible")
     page.evaluate("loadCubes()")

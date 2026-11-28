@@ -100,8 +100,9 @@ on a document under `docs/` that is not).
 - [GUIDELINES/README.md](GUIDELINES/README.md): how the project is worked on:
   the guidelines, the project's contract and its coding standard
 - [docs/roadmap.md](docs/roadmap.md): what comes next, in order
-- [docs/testing.md](docs/testing.md): how a Go test waits:
-  the test kit and the scale of every wait
+- [docs/testing.md](docs/testing.md): the front page of the tests:
+  every suite and how it runs, the rules of a steady test, the authors' rule,
+  the kits' helpers by pattern, then how a Go test waits
 - [docs/testing-writes.md](docs/testing-writes.md):
   the test plan for the configuration writes on real hardware,
   [docs/reports/write-test-2026-11-05.md](docs/reports/write-test-2026-11-05.md)
@@ -113,8 +114,9 @@ on a document under `docs/` that is not).
 - [tools/ui-test/README.md](tools/ui-test/README.md): `make ui-test`,
   the web UI smoke test with Playwright, and its setup
 - [docs/ui-testing.md](docs/ui-testing.md): testing the web UI:
-  the smoke test, Cypress and Playwright compared, screenshots,
-  the recommendation
+  its kit first, for the page's own reads and its stream, and the guard of
+  the page's parts; then the evaluation of 2026-11-06, the smoke test,
+  Cypress and Playwright compared, screenshots, the recommendation
 <!-- END GENERATED PARTIAL docs/fragments/_documents.md -->
 
 ## Installing
@@ -833,6 +835,11 @@ with its duty cycle and free slots.
 `serve` asks each Cube for its device list every 10 seconds (`-poll`),
 as the original software does: the Cube answers it from its memory,
 without radio time.
+`-poll 0` asks never, as `watch -poll 0` does:
+the server then reads the device list with each connection's greeting,
+the periodic refresh's (`-refresh`) and a refresh's through the API among them,
+for a test that wants no line of the server's own between its steps
+(the web UI's suite runs so, `tools/ui-test/README.md`).
 Between these polls the connection's TCP keepalive probes the Cube.
 A Cube that stops answering, as one whose network cable is out, is lost
 once it leaves two polls in a row unanswered,
@@ -1009,7 +1016,12 @@ for tests that drive the fake from outside:
 `panel_locked`, and `reported: false` for a device the Cube holds no state for),
 `POST /devices/<rf>/remove` and `/restore` to take a device out of its room's
 lists and bring it back, `POST /drop` to make the clients connect again and
-read the greeting, and `GET /devices` for the device list;
+read the greeting,
+`POST /reset` to put the fake back as it started and drop the clients,
+which read it anew (the greeting's devices, states, rooms and M lines,
+no `-pair` device joined, no silence, and nothing acknowledged before it
+applied after it),
+and `GET /devices` for the device list;
 `POST /silent` and `DELETE /silent` pull the Cube's cable and put it back
 (the fake keeps its connections and holds every line meanwhile),
 `POST /release` forgets a dead session (below),
@@ -1261,7 +1273,9 @@ which asks for the password again since it goes with the name (`-no-password` to
 leave the user with its keys), `user disable <name>` and `user enable <name>`,
 `user token <name> -label Loxone` prints a new API key once,
 `user tokens <name>` lists the user's sessions and keys with their ids,
-and `user revoke <name> [<token id>]` revokes one token or every one.
+and `user revoke <name> [<token id>]` revokes one token or every one,
+with the keys a revoked key made and theirs, which it names by id
+where they are not among the tokens it names.
 A new password has 8 to 64 characters; 15 or a few words are better.
 It contains no name of the user's or the box's, whatever the case:
 not the login name, the display name or a word of either,

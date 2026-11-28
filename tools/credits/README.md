@@ -15,7 +15,8 @@ go run ./tools/credits -check     # exits 1 where the file is not current
 ```
 
 `go test ./...` fails too while the file is not current:
-`TestGeneratedFileCurrent` here compares it byte for byte, licence texts included,
+`TestGeneratedFileCurrent` here compares it byte for byte,
+licence texts included,
 and `TestEverythingIncludedHasAnEntry` (`internal/credits`) names what has no entry.
 
 The file names no module's version, and no Go version:
@@ -27,8 +28,8 @@ unless it changes a licence's text or adds or removes a module.
 
 ## What it lists
 
-In this order, each with every licence file it has
-(`LICENSE*`, `LICENCE*`, `COPYING*`, and the notices `NOTICE*` and `PATENTS`):
+In this order, each with every licence file it has (`LICENSE*`, `LICENCE*`,
+`COPYING*`, and the notices `NOTICE*` and `PATENTS`):
 
 | Entry | Name and version | Licence files from |
 |-------|------------------|--------------------|
@@ -51,11 +52,12 @@ A directory of `third_party/` that replaces a module is the module's entry.
 
 ## A vendored directory's note
 
-A directory of `third_party/` has a note, its `MASSIMO.md`, else its `README.md`;
-a directory without one stops the program.
+A directory of `third_party/` has a note, its `MASSIMO.md`,
+else its `README.md`; a directory without one stops the program.
 The note's first table whose head has a **Version** column names what the directory holds,
 a row an entry; without such a table the directory is one entry,
-named by the directory, without a version and with the licence its text is known by.
+named by the directory,
+without a version and with the licence its text is known by.
 A new directory needs no change to the program, only `make credits`.
 The columns read, by their heads, in any order:
 
@@ -79,14 +81,14 @@ the crates' file by none, so that the entry reads as mixed.
 
 ## The licences
 
-Each licence file is named by the SPDX identifier of its text
-where exactly one of a few known licences matches it, else by none:
-the GNU licences version 3 (AGPL-3.0, GPL-3.0, LGPL-3.0), MPL-2.0 and
-the CC's (CC-BY-4.0, CC-BY-3.0-US) by their title alone,
+Each licence file is named by the SPDX identifier of its text where exactly one
+of a few known licences matches it, else by none:
+the GNU licences version 3 (AGPL-3.0, GPL-3.0, LGPL-3.0),
+MPL-2.0 and the CC's (CC-BY-4.0, CC-BY-3.0-US) by their title alone,
 which opens a line, its version in that line or the next;
-Apache-2.0 by its title, by sentences of its text or by its notice;
-MIT, ISC, BSD-2-Clause and BSD-3-Clause by sentences only each has
-(X11's clause against advertising keeps a text from being MIT).
+Apache-2.0 by its title, by sentences of its text or by its notice; MIT, ISC,
+BSD-2-Clause and BSD-3-Clause by sentences only each has (X11's clause against
+advertising keeps a text from being MIT).
 A file in which a second known title opens a line further down,
 or a second licence's sentences stand, is named by none,
 and so is one in which none matches: the reader reads the text.
@@ -97,8 +99,9 @@ or the program stops naming both; else that file's.
 An entry whose licence files are not all under its licence is marked mixed,
 and System info and `massimo credits` say so.
 
-An entry without a licence file stops the program with an error naming it and where it looked,
-and the file is left as it was; it is never written as unknown.
+An entry without a licence file stops the program with an error naming it
+and where it looked, and the file is left as it was;
+it is never written as unknown.
 A licence file above 256 KiB stops it too, naming the file:
 that is above the largest of today,
 the OPAQUE client's `opaque.LICENSE-3RD-PARTY`, 186 KB,

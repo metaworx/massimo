@@ -27,9 +27,14 @@ export interface ActionRunner {
   /**
    * run sends fn's request, reloads, and says ok, or what fail makes of
    * the error's message; it resolves to whether the request was taken.
+   * ok is the text, or what makes it once fn is done, from what fn
+   * learnt of the answer (a revoke's heirs).
    */
-  run(fn: () => Promise<unknown>, ok: string, fail: (error: string) => string): Promise<boolean>;
+  run(fn: () => Promise<unknown>, ok: OkText, fail: (error: string) => string): Promise<boolean>;
 }
+
+/** OkText is what a run says when it went well: a text, or what makes it once its request is done. */
+export type OkText = string | (() => string);
 
 /**
  * fader sets an outcome through set, and where ms is given takes a
@@ -82,7 +87,7 @@ export function actionRunner({ where, set, fade, reload, bound }: {
       try {
         await fn();
         if (reload && still()) await reload();
-        if (still()) say(ok, true);
+        if (still()) say(typeof ok === "function" ? ok() : ok, true);
         return still();
       } catch (e) {
         if (still()) say(fail((e as Error).message), false);

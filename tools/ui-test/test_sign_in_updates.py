@@ -12,7 +12,7 @@ import pytest
 from playwright.sync_api import TimeoutError as PlaywrightTimeoutError
 
 from conftest import TOKEN, URL, api_call
-from helpers import OPERATOR_PASSWORD, frames, sign_out, wait_held, wait_until
+from helpers import LOGIN_BOX, OPERATOR_PASSWORD, frames, same_box, sign_out, wait_held, wait_until
 from test_connect import server_page
 from test_login import status_with
 
@@ -345,7 +345,6 @@ def test_a_late_fingerprint_makes_no_token(new_context, case, watch, guard):
         api_call("DELETE", "api/v1/users/operator/tokens/%d" % kid)
 
 
-BOX = "(() => { const r = document.getElementById('login-dialog').getBoundingClientRect(); return [r.top, r.height]; })()"
 WAY = "#login-ways .login-way[data-way='%s']"
 IN_FIELD = "!!document.activeElement && ['INPUT', 'SELECT', 'TEXTAREA'].includes(document.activeElement.tagName)"
 KEPT = {"status": {"can": True, "user": "operator", "ask": "start", "plain": False}}
@@ -371,12 +370,6 @@ def card_in(new_context, guard, watch, kept, **touch):
     return page
 
 
-def same_box(page, before, what):
-    """The card where it was and as tall, within half a pixel."""
-    after = page.evaluate(BOX)
-    assert all(abs(a - b) <= 0.5 for a, b in zip(after, before)), f"{what}: the card moved, {before} → {after}"
-
-
 @pytest.mark.parametrize("kept", (False, True), ids=("browser", "app"))
 def test_a_touch_screen_gets_no_focus_and_no_move(new_context, case, watch, guard, kept):
     """On a touch screen (UiParts D224) the card puts no focus into a field
@@ -388,7 +381,7 @@ def test_a_touch_screen_gets_no_focus_and_no_move(new_context, case, watch, guar
     page = card_in(new_context, guard, watch, kept, has_touch=True, is_mobile=case.width == 390)
     assert page.evaluate("matchMedia('(pointer: coarse)').matches"), "the context is a touch screen"
     assert not page.evaluate(IN_FIELD), "no focus in a field at the opening"
-    before = page.evaluate(BOX)
+    before = page.evaluate(LOGIN_BOX)
     for way in ("key", "password"):
         page.locator(WAY % way).tap()
         frames(page)
@@ -406,7 +399,7 @@ def test_a_desktop_keeps_the_focus_and_no_move(new_context, case, watch, guard, 
     place fails there."""
     page = card_in(new_context, guard, watch, kept)
     assert wait_until(page, "document.activeElement && document.activeElement.id === 'login-user'", 3), "the name in focus at the opening"
-    before = page.evaluate(BOX)
+    before = page.evaluate(LOGIN_BOX)
     for way, field in (("key", "login-token"), ("password", "login-user")):
         page.locator(WAY % way).click()
         frames(page)

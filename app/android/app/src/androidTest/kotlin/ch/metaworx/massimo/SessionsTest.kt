@@ -28,6 +28,7 @@ class SessionsTest : EmulatorTest() {
         val key = keepLogin(t, A, id) // the password's session held
         val mark = h.mark()
         openSettings(id)
+        section(id, "login")
         page.click(row(id) + " .server-login-off")
         page.waitFor("!!conn.servers.find((s) => s.id === ${q(id)}) && !conn.servers.find((s) => s.id === ${q(id)}).login", "the login turned off")
         Prompt.none(NO_MORE_MS)
@@ -47,6 +48,7 @@ class SessionsTest : EmulatorTest() {
         signOut(id, t)
         val mark = h.mark()
         openSettings(id)
+        section(id, "login")
         page.click(row(id) + " .server-login-off")
         Prompt.pass(Prompt.off(A))
         page.waitFor("!!conn.servers.find((s) => s.id === ${q(id)}) && !conn.servers.find((s) => s.id === ${q(id)}).login", "the login turned off")
@@ -66,6 +68,7 @@ class SessionsTest : EmulatorTest() {
         toList()
         val mark = h.mark()
         openSettings(id)
+        section(id, "connection")
         page.click(row(id) + " .server-remove")
         page.waitFor("!!document.querySelector(${q(row(id) + " .server-remove-box .confirm-yes")})", "Remove's question")
         page.click(row(id) + " .server-remove-box .confirm-yes")

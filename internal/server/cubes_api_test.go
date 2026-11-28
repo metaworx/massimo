@@ -108,10 +108,20 @@ func TestPutCube(t *testing.T) {
 		t.Fatal("old proxy address still listens")
 	}
 
-	for _, bad := range []string{`{"address":"no such host:x"}`, `{"hidden":["zz"]}`, `{"nmae":"typo"}`, `{"proxy_serial":"a-b"}`, `{"serial":"KEQ1"}`, `{"name":"` + strings.Repeat("x", 65) + `"}`} {
-		if code, out := do(t, ts, "PUT", "/api/v1/cubes/KEQ0000100", bad); code != 400 {
-			t.Errorf("%s: %d %v", bad, code, out)
-		}
+	// Each field as typed has its code; what no form sends has none.
+	for _, c := range []struct{ body, code, params string }{
+		{`{"address":"no such host:x"}`, "cube_address_bad", `{"address":"no such host:x"}`},
+		{`{"address":"192.0.2.10:0"}`, "cube_address_port_bad", `{"address":"192.0.2.10:0"}`},
+		{`{"proxy_address":"a/b"}`, "cube_proxy_address_bad", `{"address":"a/b"}`},
+		{`{"proxy_address":":65536"}`, "cube_proxy_address_port_bad", `{"address":":65536"}`},
+		{`{"proxy_serial":"a-b"}`, "cube_proxy_serial_bad", `{"serial":"A-B"}`},
+		{`{"name":"` + strings.Repeat("x", 65) + `"}`, "cube_name_bad", `{"max":64}`},
+		{`{"hidden":["zz"]}`, "", "null"},
+		{`{"nmae":"typo"}`, "", "null"},
+		{`{"serial":"KEQ1"}`, "", "null"},
+	} {
+		code, out := do(t, ts, "PUT", "/api/v1/cubes/KEQ0000100", c.body)
+		refusedWithCode(t, c.body, code, out, 400, c.code, c.params)
 	}
 	if code, _ := do(t, ts, "PUT", "/api/v1/cubes/KEQ0000001", `{"name":"x"}`); code != 404 {
 		t.Fatalf("unknown cube %d", code)
@@ -157,9 +167,8 @@ func TestDeleteAndAddCube(t *testing.T) {
 	if !row.Configured || row.Name != "Again" || row.ID == before.ID {
 		t.Fatalf("row after post %+v", row)
 	}
-	if code, _ := do(t, ts, "POST", "/api/v1/cubes", `{"serial":"KEQ0000100"}`); code != 409 {
-		t.Fatalf("second post %d", code)
-	}
+	code, out = do(t, ts, "POST", "/api/v1/cubes", `{"serial":"KEQ0000100"}`)
+	refusedWithCode(t, "second post", code, out, 409, "cube_served_already", `{"cube":"KEQ0000100"}`)
 	if code, _ := do(t, ts, "POST", "/api/v1/cubes", `{"serial":"no/serial"}`); code != 400 {
 		t.Fatalf("bad serial %d", code)
 	}
@@ -190,6 +199,11 @@ func TestRestoreRemovedCube(t *testing.T) {
 	ctx := context.Background()
 	if code, _ := postDiscovery(t, ts); code != 200 {
 		t.Fatal(code)
+	}
+	// Found, the serial has a row of its own, which no restore revives.
+	if code, out := do(t, ts, "POST", "/api/v1/cubes", `{"serial":"KEQ0000000","restore":"`+strings.Repeat("0", 32)+`"}`); code != 409 ||
+		!refusalHas(t, out, "cube_restore_not_removed", `{"cube":"KEQ0000000"}`) {
+		t.Fatalf("restore of a row not removed %d %v", code, out)
 	}
 	if code, out := do(t, ts, "POST", "/api/v1/cubes", `{"serial":"KEQ0000000","name":"First"}`); code != 201 {
 		t.Fatalf("add %d %v", code, out)
@@ -230,8 +244,9 @@ func TestRestoreRemovedCube(t *testing.T) {
 		t.Fatalf("added as new: %+v", fresh)
 	}
 	waitConnected(t, ts, "KEQ0000000")
-	if code, _ := do(t, ts, "POST", "/api/v1/cubes", `{"serial":"KEQ0000000","restore":"`+first.UUID+`"}`); code != 409 {
-		t.Fatalf("restore of a served cube %d", code)
+	if code, out := do(t, ts, "POST", "/api/v1/cubes", `{"serial":"KEQ0000000","restore":"`+first.UUID+`"}`); code != 409 ||
+		!refusalHas(t, out, "cube_served_already", `{"cube":"KEQ0000000"}`) {
+		t.Fatalf("restore of a served cube %d %v", code, out)
 	}
 	if code, _ := do(t, ts, "PUT", "/api/v1/cubes/KEQ0000000", `{"restore":"`+first.UUID+`"}`); code != 400 {
 		t.Fatalf("restore in a PUT %d", code)
@@ -242,8 +257,9 @@ func TestRestoreRemovedCube(t *testing.T) {
 	if removed, _ := found()["removed"].([]any); len(removed) != 2 || removed[0].(map[string]any)["uuid"] != fresh.UUID {
 		t.Fatalf("two removed rows, newest first: %v", removed)
 	}
-	if code, _ := do(t, ts, "POST", "/api/v1/cubes", `{"serial":"KEQ0000000","restore":"`+fresh.UUID+`x"}`); code != 404 {
-		t.Fatalf("restore of no removed row %d", code)
+	if code, out := do(t, ts, "POST", "/api/v1/cubes", `{"serial":"KEQ0000000","restore":"`+fresh.UUID+`x"}`); code != 404 ||
+		!refusalHas(t, out, "cube_restore_unknown", `{"cube":"KEQ0000000","restore":"`+fresh.UUID+`x"}`) {
+		t.Fatalf("restore of no removed row %d %v", code, out)
 	}
 	code, out := do(t, ts, "POST", "/api/v1/cubes", `{"serial":"KEQ0000000","restore":"`+first.UUID+`"}`)
 	if code != 201 || out["name"] != "First" {
@@ -438,14 +454,13 @@ func TestRemovedCubeIsListedAsFound(t *testing.T) {
 	})
 }
 
-// Without a store the Cube and settings routes say so.
+// Without a store the Cube and settings routes say so (server_no_store).
 func TestCubeRoutesNeedAStore(t *testing.T) {
 	t.Parallel()
 	ts := startServer(t).ts
 	for _, r := range [][3]string{{"PUT", "/api/v1/cubes/KEQ0000100", `{"name":"x"}`}, {"DELETE", "/api/v1/cubes/KEQ0000100", ""}, {"POST", "/api/v1/cubes", `{"serial":"KEQ0000001"}`}, {"GET", "/api/v1/settings", ""}} {
-		if code, _ := do(t, ts, r[0], r[1], r[2]); code != 503 {
-			t.Errorf("%s %s: %d", r[0], r[1], code)
-		}
+		code, out := do(t, ts, r[0], r[1], r[2])
+		refusedWithCode(t, r[0]+" "+r[1], code, out, 503, "server_no_store", "null")
 	}
 }
 

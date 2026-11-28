@@ -7,7 +7,7 @@ its name, and the entries under it are indented to the name, a line down
 from its icon. The Cubes are the page's data, a signal (UiParts D123-A):
 the test tells them to the page's reads of the Cubes (reads.change) and
 has the page load them, so that its poll keeps them (docs/ui-testing.md,
-section 9; AP ToldData, Block 4), and the test's end puts the server's
+section 1; AP ToldData, Block 4), and the test's end puts the server's
 back."""
 from datetime import datetime, timedelta, timezone
 

@@ -9,9 +9,11 @@ import (
 	"encoding/json"
 	"errors"
 	"flag"
+	"fmt"
 	"os"
 	"path/filepath"
 	"runtime"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -211,6 +213,60 @@ func TestUserTokens(t *testing.T) {
 	}
 	if _, err := runUserWith(t, "", "tokens", "nobody"); err == nil {
 		t.Fatal("tokens of nobody")
+	}
+}
+
+// user revoke takes the keys a key made with it, and theirs, and says
+// which, beyond the user's own tokens it names (AP KeyLife, Block 2); a
+// revoke of every token of a user goes on past those an earlier revoke
+// of the same run took, a key's heir and its session.
+func TestUserRevokeHeirs(t *testing.T) {
+	clearCubeEnv(t)
+	dir := t.TempDir()
+	t.Setenv(env.DataVar, dir)
+	for _, name := range []string{"anna", "bob"} {
+		if _, err := runUserWith(t, "", "add", name, "-no-password"); err != nil {
+			t.Fatal(err)
+		}
+	}
+	ctx := context.Background()
+	st, err := store.Open(dir, store.Options{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	anna, _, _ := st.User(ctx, "anna")
+	bob, _, _ := st.User(ctx, "bob")
+	key := func(userID int64, label string, madeBy int64) store.Token {
+		t.Helper()
+		tok, _, err := st.AddKey(ctx, userID, store.KeyOptions{Label: label, MadeBy: madeBy})
+		if err != nil {
+			t.Fatal(err)
+		}
+		return tok
+	}
+	one := key(anna.ID, "one", 0)
+	ofOne := key(bob.ID, "bob's, made with one", one.ID)
+	root := key(anna.ID, "root", 0)
+	child := key(anna.ID, "child", root.ID)
+	ofChild := key(bob.ID, "bob's, made with child", child.ID)
+	if _, _, err := st.AddKeySession(ctx, root.ID, "phone", time.Now().Add(time.Hour)); err != nil {
+		t.Fatal(err)
+	}
+	st.Close()
+
+	out, err := runUserWith(t, "", "revoke", "anna", strconv.FormatInt(one.ID, 10))
+	if want := fmt.Sprintf("1 token(s) of anna revoked, with 1 key(s) made by them: %d", ofOne.ID); err != nil || !strings.Contains(out, want) {
+		t.Fatalf("revoke one: %q %v, want %q", out, err, want)
+	}
+	out, err = runUserWith(t, "", "revoke", "anna")
+	if want := fmt.Sprintf("3 token(s) of anna revoked, with 1 key(s) made by them: %d", ofChild.ID); err != nil || !strings.Contains(out, want) {
+		t.Fatalf("revoke every one: %q %v, want %q", out, err, want)
+	}
+	if out, _ := runUserWith(t, "", "tokens", "bob"); strings.Contains(out, "made with") {
+		t.Fatalf("bob's heirs after the revokes:\n%s", out)
+	}
+	if out, _ := runUserWith(t, "", "tokens", "anna"); len(strings.Split(strings.TrimSpace(out), "\n")) != 1 {
+		t.Fatalf("anna's tokens after the revoke of every one:\n%s", out)
 	}
 }
 

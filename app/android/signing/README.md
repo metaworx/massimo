@@ -12,5 +12,5 @@ before a signed file is published (`packaging/app-sign.sh`):
 
 The owner makes the keys and adds the certificates here;
 until one is here, a release carries no file of its key.
-The keys themselves never enter the repository
-(`app/README.md`, "The signing keys").
+The keys themselves never enter the repository (`app/README.md`,
+"The signing keys").

@@ -40,7 +40,7 @@ var contentColumns = map[string][]string{
 	// the OpenID Connect providers: the button's name and the client's
 	// secret; the identities' e-mail is a key a sign-in is found by
 	"auth_providers": {"name", "client_secret"},
-	// the server's backups (migration 0100): a key's label, a target's
+	// the server's backups (migration 0103): a key's label, a target's
 	// fields and sealed secret, a manifest, a copy's error
 	"server_backup_keys":    {"label"},
 	"server_backup_targets": {"config", "secret"},
