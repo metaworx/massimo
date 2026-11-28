@@ -7,7 +7,6 @@
 # its line here is lowered in the same commit, or taken out at 0.
 test_backup.py 1
 test_brand.py 2
-test_connect.py 2
 test_cube_updates.py 1
 test_cubes.py 4
 test_discover.py 1

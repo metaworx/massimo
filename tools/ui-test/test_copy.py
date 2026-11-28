@@ -118,6 +118,14 @@ SAY = """(texts) => {
   window.__sayWatch.observe(live, { childList: true, characterData: true, subtree: true });
 }"""
 
+# A timer of the page's own, set once the region says a bubble's text,
+# and due after any say the bubbles shown before it set: showBubble says
+# its text 50 ms after it shows (components.js, bubbleState.say), and of
+# two timers of the same time the one set first runs first. A text said
+# again by its end is in window.__said (docs/ui-testing.md, section 9,
+# "Nothing came, against an end").
+SAYS_DUE = "() => new Promise((done) => setTimeout(done, 50))"
+
 # The time from a bubble shown at the test's button with showBubble's
 # own time, 1.4 s, to its going, in ms; null where it is still there
 # after 10 s.
@@ -236,15 +244,15 @@ def test_bubble_said_once(page, case):
         }""")
         assert live == {"role": "status", "live": "polite", "regions": 1}, f"a polite status region, the one that says it: {live}"
         assert bubble(page)["hidden"] == "true", "the bubble hidden from a screen reader, which hears the region"
-        page.wait_for_timeout(300)
+        page.evaluate(SAYS_DUE)
         assert page.evaluate("window.__said") == ["Said once"], f"once: {page.evaluate('window.__said')}"
         page.evaluate(SAY, ["First", "Second"])
         assert wait_until(page, BUBBLE_STATUS + " === 'Second'", 1), "the second said"
-        page.wait_for_timeout(300)
+        page.evaluate(SAYS_DUE)
         assert page.evaluate("window.__said") == ["Second"], f"the second alone, once: {page.evaluate('window.__said')}"
         page.evaluate(SAY, ["Second"])
         assert wait_until(page, "window.__said.length > 0", 1), "the same text said again"
-        page.wait_for_timeout(300)
+        page.evaluate(SAYS_DUE)
         assert page.evaluate("window.__said") == ["Second"], f"once: {page.evaluate('window.__said')}"
         assert page.evaluate(BUBBLE_STATUS) == "Second", "the region holds it alone"
     finally:
