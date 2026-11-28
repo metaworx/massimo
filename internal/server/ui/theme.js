@@ -195,27 +195,38 @@ function validScheme(id) {
   return schemeById(id) ? id : DEFAULT_SCHEME;
 }
 
-// loadCustomSchemes reads the user's schemes; a broken entry is dropped.
-// The list is written whole, the parts' signal under it (ui/src/shared/data.ts).
-function loadCustomSchemes() {
-  themeState.custom = [];
+// storedSchemes is the user's schemes as the browser keeps them
+// (massimo.schemes); a broken entry is dropped.
+function storedSchemes() {
   let list;
   try {
     list = JSON.parse(readStored("massimo.schemes") || "[]");
   } catch (e) {
-    return;
+    return [];
   }
-  if (!Array.isArray(list)) return;
+  if (!Array.isArray(list)) return [];
   const custom = [];
   for (const s of list) {
     const name = s && schemeName(s.name, "");
     if (!name || custom.some((c) => c.name === name)) continue;
     custom.push({ name, light: tokenSet(s.light, "light"), dark: tokenSet(s.dark, "dark") });
   }
-  themeState.custom = custom;
+  return custom;
 }
 
+// loadCustomSchemes reads the user's schemes (storedSchemes). The list is
+// written whole, the parts' signal under it (ui/src/shared/data.ts).
+function loadCustomSchemes() {
+  themeState.custom = storedSchemes();
+}
+
+// storeCustomSchemes keeps the page's schemes (themeState.custom) in the
+// browser and sends them to the server shortly, when they follow the
+// user. The schemes the browser kept until then are the ones that hold
+// where the page knows none (login.js noteHeld), and a push that meets a
+// 401 goes back to them (takeBack).
 function storeCustomSchemes() {
+  noteHeld("schemes"); // login.js: the browser's schemes before the change
   store("massimo.schemes", themeState.custom.length ? JSON.stringify(themeState.custom) : null);
   schedulePreferences("schemes"); // login.js: the user's schemes follow the user
 }
@@ -229,9 +240,39 @@ function forgetCustomSchemes() {
 }
 
 // schemesDocument is the user's schemes as the server keeps them, the
-// preference schemes: a list of massimo-scheme/1 documents.
-function schemesDocument() {
-  return { format: "massimo-schemes/1", schemes: themeState.custom.map((c) => ({ format: SCHEME_FORMAT, name: c.name, light: c.light, dark: c.dark })) };
+// preference schemes: a list of massimo-scheme/1 documents, of the list
+// given, else of the page's (themeState.custom), their colours copied.
+function schemesDocument(list = themeState.custom) {
+  return { format: "massimo-schemes/1", schemes: list.map((c) => ({ format: SCHEME_FORMAT, name: c.name, light: { ...c.light }, dark: { ...c.dark } })) };
+}
+
+// takeBackSchemes takes back the schemes a push sent, sent, that met a
+// 401, to the schemes that hold, held, both as schemesDocument has them
+// (login.js takeBack; AP SteadyTests v1.2, Block 19): each scheme the push
+// sent otherwise than held, or sent where held has none, or left out
+// where held has it, goes back to held's, or goes, where the page still
+// has it as it was sent. A scheme changed again since keeps its change,
+// which a push of its own sends. The list is written whole and kept in
+// the browser, and nothing is sent; it returns whether a scheme went back.
+function takeBackSchemes(sent, held) {
+  const colours = (s) => (s ? THEME_TOKENS.map((k) => s.light[k] + "/" + s.dark[k]).join(",") : "");
+  const of = (list, name) => list.find((s) => s.name === name);
+  let list = themeState.custom;
+  let back = false;
+  const names = new Set([...sent.schemes, ...held.schemes].map((s) => s.name));
+  for (const name of names) {
+    const was = of(held.schemes, name);
+    const went = colours(of(sent.schemes, name));
+    if (went === colours(was) || colours(of(list, name)) !== went) continue;
+    const entry = was && { name, light: { ...was.light }, dark: { ...was.dark } };
+    const i = list.findIndex((c) => c.name === name);
+    list = !entry ? list.filter((c) => c.name !== name) : i >= 0 ? list.map((c, j) => (j === i ? entry : c)) : [...list, entry];
+    back = true;
+  }
+  if (!back) return false;
+  themeState.custom = list;
+  store("massimo.schemes", list.length ? JSON.stringify(list) : null);
+  return true;
 }
 
 // takeSchemes takes the user's schemes from the server as the list: a
