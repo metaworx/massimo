@@ -65,7 +65,8 @@ func TestNewBatteries(t *testing.T) {
 	}
 
 	// 0a010d has no state in the fixture.
-	if code, text := callAPI(t, ts, "POST", path, operator, replacedBody); code != 409 || !strings.Contains(errorOf(text), "no current report of device 0a010d") {
+	if code, text := callAPI(t, ts, "POST", path, operator, replacedBody); code != 409 || !strings.Contains(errorOf(text), "no current report of device 0a010d") ||
+		refusalIn(t, text).Code != "battery_no_report" || !reflect.DeepEqual(refusalIn(t, text).Params, map[string]any{"device": "0a010d"}) {
 		t.Fatalf("without a report: %d %s", code, text)
 	}
 	if code, text := callAPI(t, ts, "POST", path, viewer, replacedBody); code != 403 || errorOf(text) != `capability "configure" required` {
@@ -81,17 +82,18 @@ func TestNewBatteries(t *testing.T) {
 		device string
 		code   int
 		error  string
+		refuse string // the code, "" for none
 	}{
-		{"room-1", 400, "the virtual wall thermostat of room 1 has no batteries"},
-		{"VWT0000001", 400, "the virtual wall thermostat of room 1 has no batteries"},
-		{"room-9", 404, "no room 9"},
-		{"0a0107", 400, "device 0a0107 is the Cube, which has no batteries"},
-		{"0a0fff", 404, "no device 0a0fff"},
-		{"MEQ0000999", 404, "no device MEQ0000999"},
-		{"xyz", 400, `bad device "xyz": a radio address of six hex digits, or a serial number`},
+		{"room-1", 400, "the virtual wall thermostat of room 1 has no batteries", ""},
+		{"VWT0000001", 400, "the virtual wall thermostat of room 1 has no batteries", ""},
+		{"room-9", 404, "no room 9", "room_unknown"},
+		{"0a0107", 400, "device 0a0107 is the Cube, which has no batteries", ""},
+		{"0a0fff", 404, "no device 0a0fff", "device_unknown"},
+		{"MEQ0000999", 404, "no device MEQ0000999", "device_unknown"},
+		{"xyz", 400, `bad device "xyz": a radio address of six hex digits, or a serial number`, ""},
 	} {
-		if code, text := callAPI(t, ts, "POST", devices+c.device+"/battery", operator, replacedBody); code != c.code || errorOf(text) != c.error {
-			t.Errorf("%s: %d %s, want %d %q", c.device, code, text, c.code, c.error)
+		if code, text := callAPI(t, ts, "POST", devices+c.device+"/battery", operator, replacedBody); code != c.code || errorOf(text) != c.error || refusalIn(t, text).Code != c.refuse {
+			t.Errorf("%s: %d %s, want %d %q %s", c.device, code, text, c.code, c.error, c.refuse)
 		}
 	}
 
@@ -101,7 +103,7 @@ func TestNewBatteries(t *testing.T) {
 	}
 	testkit.Eventually(t, "the weak level", func() bool { return levelOf("0a010d") == "weak" })
 	if code, text := callAPI(t, ts, "POST", path, operator, replacedBody); code != 409 ||
-		errorOf(text) != "device 0a010d still reports its batteries low: wait for its next report" {
+		errorOf(text) != "device 0a010d still reports its batteries low: wait for its next report" || refusalIn(t, text).Code != "battery_still_low" {
 		t.Fatalf("with the flag on: %d %s", code, text)
 	}
 	m := logMarkAs(t, ts, operator)

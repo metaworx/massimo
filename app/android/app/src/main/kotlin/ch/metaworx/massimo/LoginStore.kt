@@ -19,7 +19,11 @@ import javax.crypto.Cipher
  * into the seal, so that it opens for nothing else.
  * [keyId] is the key's row at the server, in clear beside it, so that Turn
  * off revokes it with the session the app holds, without the prompt; 0 for
- * a login kept before contract version 3.
+ * a login kept before contract version 3. [code] is the key's revoke code
+ * (AP MobileApp, D112-A), in clear as the id is, since it lets nothing in:
+ * a key Turn off, Forget all or Remove leave is ended by it at the next
+ * contact; "" for a login kept before contract version 6, until its next
+ * unseal.
  */
 data class KeptLogin(
     val user: String,
@@ -29,12 +33,15 @@ data class KeptLogin(
     val sealed: ByteArray,
     val keyId: Long = 0,
     val byApp: Boolean = false,
+    val code: String = "",
 ) {
     override fun equals(other: Any?): Boolean =
         other is KeptLogin && user == other.user && node == other.node && fp == other.fp && keyId == other.keyId &&
-            byApp == other.byApp && iv.contentEquals(other.iv) && sealed.contentEquals(other.sealed)
+            byApp == other.byApp && code == other.code && iv.contentEquals(other.iv) && sealed.contentEquals(other.sealed)
 
-    override fun hashCode(): Int = listOf(user, node, fp, keyId, byApp, iv.contentHashCode(), sealed.contentHashCode()).hashCode()
+    override fun hashCode(): Int = listOf(user, node, fp, keyId, byApp, code, iv.contentHashCode(), sealed.contentHashCode()).hashCode()
+
+    override fun toString(): String = "KeptLogin(user=$user, node=$node, keyId=$keyId, byApp=$byApp)"
 }
 
 /** SealedKey is the app key as the Keystore key [LoginKey.APP] sealed it, with its [iv]; never the key itself. */
@@ -72,6 +79,7 @@ class LoginStore(private val file: File) {
                 sealed = Base64.getDecoder().decode(ServerStore.str(o, "sealed")),
                 keyId = o.optLong("key_id"),
                 byApp = o.optBoolean("app"),
+                code = ServerStore.str(o, "code").takeIf(RevokeCode::valid) ?: "",
             ).takeIf { it.user.isNotEmpty() && it.iv.isNotEmpty() && it.sealed.isNotEmpty() }
         } catch (e: IllegalArgumentException) {
             null
@@ -95,6 +103,7 @@ class LoginStore(private val file: File) {
             .put("sealed", enc.encodeToString(login.sealed))
             .put("key_id", login.keyId)
         if (login.byApp) o.put("app", true)
+        if (login.code.isNotEmpty()) o.put("code", login.code)
         all.put(id, o)
         write(all)
     }
@@ -142,6 +151,21 @@ class LoginStore(private val file: File) {
         if (now == was.copy(keyId = keyId)) return true
         if (now != was || now.keyId > 0) return false
         put(id, now.copy(keyId = keyId))
+        return true
+    }
+
+    /**
+     * setCode gives the login kept for the server [id] the revoke code
+     * [code] of its key, where it is still [was], kept without one: a login
+     * kept before contract version 6, at its next unseal (D112-A); one kept
+     * or forgotten meanwhile is left as it is.
+     */
+    @Synchronized
+    fun setCode(id: String, was: KeptLogin, code: String): Boolean {
+        if (!RevokeCode.valid(code)) return false
+        val now = get(id) ?: return false
+        if (now != was || now.code.isNotEmpty()) return now == was.copy(code = code)
+        put(id, now.copy(code = code))
         return true
     }
 
@@ -197,7 +221,7 @@ class LoginStore(private val file: File) {
             } finally {
                 plain.fill(0)
             }
-            return KeptLogin(user, node, fp, cipher.iv, sealed, secret.id, byApp)
+            return KeptLogin(user, node, fp, cipher.iv, sealed, secret.id, byApp, RevokeCode.of(secret.key))
         }
 
         /**

@@ -331,7 +331,7 @@ func (s *Server) registerOpaque(w http.ResponseWriter, r *http.Request) error {
 	}
 	resp, err := st.OpaqueRegistration(name, b)
 	if err != nil {
-		return userFail(err)
+		return passwordFail(err)
 	}
 	writeJSON(w, http.StatusOK, map[string]any{"response": opaqueB64.EncodeToString(resp), "ksf": store.OpaqueKSF})
 	return nil

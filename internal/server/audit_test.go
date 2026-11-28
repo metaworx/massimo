@@ -89,6 +89,18 @@ func TestAuditOfEveryWrite(t *testing.T) {
 			body = `{"role":"guest"}`
 		case r.path == "/api/v1/login":
 			body, want = `{"user":"nobody","password":"x"}`, "login.failed"
+		case r.path == "/api/v1/tokens/revoke":
+			// a code that matches nothing is no row of its own: the code of
+			// a key of the bootstrap user's own, which it revokes
+			code, text := callAPI(t, ts, "POST", "/api/v1/users/"+store.BootstrapUser+"/tokens", "secret", `{"label":"revoked by its code"}`)
+			var key struct {
+				Token string `json:"token"`
+			}
+			if json.Unmarshal([]byte(text), &key); code != 201 || key.Token == "" {
+				t.Fatalf("a key to revoke by its code: %d %s", code, text)
+			}
+			before = len(auditRows(t, ts, "secret", "?limit=1000"))
+			body = `{"code":"` + store.RevokeCode(key.Token) + `"}`
 		}
 		code, _ := callAPI(t, ts, r.method, fillRoute(r.path), bearer, body)
 		rows := auditRows(t, ts, "secret", "?limit=1000")
@@ -113,11 +125,11 @@ func TestAuditOfEveryWrite(t *testing.T) {
 		if row.Action != want || row.Result != result || row.Remote != "127.0.0.1" {
 			t.Errorf("%s %s (%d): row %+v, want action %s result %s", r.method, r.path, code, row, want, result)
 		}
-		// The sign-ins and an integration's registration request have no
-		// caller yet, whatever token they carry; the login by key is its
-		// key's user's.
+		// The sign-ins, an integration's registration request and a revoke
+		// by code have no caller yet, whatever token they carry; the login
+		// by key is its key's user's.
 		anonymous := r.path == "/api/v1/login" || strings.HasPrefix(r.path, "/api/v1/login/") && r.path != "/api/v1/login/key" ||
-			strings.HasPrefix(r.path, "/api/v1/integrations/requests")
+			strings.HasPrefix(r.path, "/api/v1/integrations/requests") || r.path == "/api/v1/tokens/revoke"
 		if !anonymous && row.User != store.BootstrapUser || anonymous && row.User != "" {
 			t.Errorf("%s %s: user %q", r.method, r.path, row.User)
 		}
