@@ -133,4 +133,22 @@ class LoginStoreTest {
             // the login is forgotten
         }
     }
+
+    @Test
+    fun theKeysCodeIsKeptBesideItsId() {
+        // D112-A: written at the key's making, in clear as the id is; a login kept before version 6 takes it at its unseal
+        val keys = JvmKeys()
+        val st = LoginStore(File(tmp.root, "logins.json"))
+        val kept = LoginStore.seal(keys.encrypter(alias), secret, "s1", "node-a", fp, "anna")
+        assertEquals(RevokeCode.of(secret.key), kept.code)
+        st.put("s1", kept)
+        assertEquals(RevokeCode.of(secret.key), LoginStore(File(tmp.root, "logins.json")).get("s1")!!.code)
+        assertFalse(File(tmp.root, "logins.json").readText().contains(secret.key))
+        val before = kept.copy(code = "")
+        st.put("s2", before)
+        assertTrue(st.setCode("s2", before, RevokeCode.of(secret.key)))
+        assertEquals(RevokeCode.of(secret.key), st.get("s2")!!.code)
+        assertFalse("not a login kept meanwhile", st.setCode("s2", before.copy(user = "bob"), RevokeCode.of("other")))
+        assertEquals(RevokeCode.of(secret.key), st.get("s2")!!.code)
+    }
 }

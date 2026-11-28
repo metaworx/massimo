@@ -1007,6 +1007,118 @@ def test_connect_sessions_left(new_context, case, watch, guard):
     wait_toast(page, REMOVED_SESSIONS[case.lang])
 
 
+# FITS lists the elements of sel that leave the window or are cut on their line.
+FITS = """(sel) => [...document.querySelectorAll(sel)].filter((el) => { const r = el.getBoundingClientRect();
+  return r.right > innerWidth + 1 || r.left < -1 || el.scrollWidth > el.clientWidth + 1; }).map((el) => el.className)"""
+LANGUAGES = ["en", "de", "fr", "it", "nl", "pl"]
+
+
+def said(page, key, **params):
+    """The text of key in the page's language, as the page writes it."""
+    return page.evaluate("([k, p]) => t(k, p)", [key, params])
+
+
+def test_connect_server_down_and_revoke_codes(new_context, case, watch, guard):
+    """While a server does not answer (AP MobileApp, F42, D105-A; the
+    bridge's version 6, D112-A): the row's "signed in as …" turns grey, and
+    the settings' session line says that Sign out ends the session there
+    the next time the app reaches the server, over HTTPS and over plain
+    HTTP, where the line changes as the server goes down; a probe still
+    running keeps what the last one found, the badge as it was and the
+    line not drawn again; a key or a session
+    left whose revoke code waits says it ends then; the toasts of Sign out,
+    Turn off and Remove that left a code say so; a probe that finds the
+    server again takes its codes, and their lines go. At 390 px the lines
+    fit in the six languages."""
+    config = {
+        "servers": [server("s1", "Home", NODE1, lan=HOME_LAN, session="anna"),
+                    server("s2", "Office", NODE3, remote=OFFICE_REMOTE, session="bob", unrevoked=[{"user": "bob", "id": 12, "pending": True}]),
+                    server("s3", "Cabin", NODE2, lan=CABIN_LAN, login="carl", login_key=21)],
+        "answers": {HOME_LAN: {"node": NODE1}},
+        "sessionIds": {"s1": {"user": "anna", "id": 7}, "s2": {"user": "bob", "id": 9}},
+        "keys": {"s3": {"user": "carl", "id": 21}},
+        "codes": True,
+    }
+    page = open_connect(new_context, guard, watch, config)
+    st = STATE[case.lang]
+    wait_state(page, "Home", st["lan"])
+    wait_state(page, "Office", st["offline"])
+    wait_state(page, "Cabin", st["offline"])
+    home_badge = row(page, "Home").locator(".session-badge").get_attribute("class")
+    office_badge = row(page, "Office").locator(".session-badge").get_attribute("class")
+    assert "fill-ok" in home_badge, f"green where the server answers: {home_badge}"
+    assert "fill-ok" not in office_badge and "mode" in office_badge, f"grey where it does not: {office_badge}"
+
+    # Office, over HTTPS, down: the session's line and the key pending
+    panel = settings_of(page, "Office")
+    assert panel.locator(".server-session").inner_text().startswith(said(page, "connect.sessionDown", name="bob")), panel.locator(".server-session").inner_text()
+    assert said(page, "connect.keyPending", id=12, name="bob") in panel.locator(".server-key-left").inner_text()
+    named_buttons(page, "a server's settings while it does not answer")
+    assert_axe(page, "a server's settings while it does not answer")
+    if case.width == 390:
+        for lang in LANGUAGES:
+            page.evaluate("async (l) => { await setLanguage(l); applyI18n(document); const id = conn.open; toggleSettings(id); toggleSettings(id); }", lang)
+            panel = row(page, "Office").locator(".server-panel")
+            panel.wait_for(state="visible")
+            assert panel.locator(".server-session").inner_text().startswith(said(page, "connect.sessionDown", name="bob")), f"in {lang}"
+            assert said(page, "connect.keyPending", id=12, name="bob") in panel.locator(".server-key-left").inner_text(), f"in {lang}"
+            cut = page.evaluate(FITS, ".server-panel .server-fact, .server-row .session-badge")
+            assert not cut, f"cut or out of the window in {lang}: {cut}"
+        page.evaluate("async () => { await setLanguage('auto'); applyI18n(document); const id = conn.open; toggleSettings(id); toggleSettings(id); }")
+        panel = row(page, "Office").locator(".server-panel")
+        panel.wait_for(state="visible")
+
+    # Sign out while it does not answer: left with its code, the toast says when it ends
+    panel.locator(".server-sign-out").click()
+    wait_toast(page, said(page, "connect.signedOutPending", name="Office"))
+    panel.locator(".server-session-left").wait_for(state="visible")
+    assert said(page, "connect.sessionPending", id=9, name="bob") in panel.locator(".server-session-left").inner_text()
+    row(page, "Office").locator(".server-cog").click()
+    close_toast(page)
+
+    # Home, over plain HTTP, its settings open: a probe still running keeps what the last one found
+    panel = settings_of(page, "Home")
+    assert panel.locator(".server-session").inner_text().startswith(said(page, "connect.sessionLine", name="anna"))
+    page.evaluate("document.querySelector('.server-panel .server-session').__kept = true")
+    page.evaluate("window.__fakeBridgeConfig.probeMs = 1500")
+    page.locator("#probe-btn").click()
+    assert wait_until(page, "conn.probes.s1.state === 'probing'", 3), "the probe running"
+    assert "fill-ok" in row(page, "Home").locator(".session-badge").get_attribute("class"), "the badge as the last probe found it"
+    assert page.evaluate("document.querySelector('.server-panel .server-session').__kept === true"), "the line not drawn again while the probe runs"
+    assert panel.locator(".server-session").inner_text().startswith(said(page, "connect.sessionLine", name="anna"))
+    wait_state(page, "Home", st["lan"])
+    assert page.evaluate("document.querySelector('.server-panel .server-session').__kept === true"), "nor once it found the same"
+    page.evaluate("window.__fakeBridgeConfig.probeMs = 0")
+    # Home goes down: its line says so at the next probe
+    page.evaluate(f"delete window.__fakeBridgeConfig.answers[{HOME_LAN!r}]")
+    page.locator("#probe-btn").click()
+    wait_state(page, "Home", st["offline"])
+    assert wait_until(page, f"document.querySelector('.server-panel .server-session').textContent.startsWith({json.dumps(said(page, 'connect.sessionDown', name='anna'))})", 5), \
+        f"the line of a server down over plain HTTP: {panel.locator('.server-session').inner_text()!r}"
+    assert "mode" in row(page, "Home").locator(".session-badge").get_attribute("class")
+    row(page, "Home").locator(".server-cog").click()
+
+    # Turn off while it does not answer: its key left with its code
+    panel = settings_of(page, "Cabin")
+    panel.locator(".server-login-off").click()
+    wait_toast(page, said(page, "connect.loginOffPending", name="Cabin"))
+    close_toast(page)
+
+    # Office found again: the probe takes its codes, and their lines go
+    page.evaluate(f"window.__fakeBridgeConfig.answers[{OFFICE_REMOTE!r}] = {{ node: {NODE3!r} }}")
+    page.locator("#probe-btn").click()
+    wait_state(page, "Office", st["remote"])
+    assert wait_until(page, "conn.servers.find((s) => s.id === 's2').unrevoked.length === 0 && conn.servers.find((s) => s.id === 's2').unended.length === 0", 5), \
+        "the entries taken at the probe gone from the list"
+    panel = settings_of(page, "Office")
+    assert panel.locator(".server-key-left").count() == 0 and panel.locator(".server-session-left").count() == 0, "their lines gone"
+    row(page, "Office").locator(".server-cog").click()
+
+    # Remove of a server whose codes wait: the toast says the app ends them
+    removed(page, "Cabin")
+    wait_toast(page, said(page, "connect.removedPending"))
+
+
 def test_connect_certificate(new_context, case, watch, guard):
     """A server reached over HTTPS shows its certificate in its settings:
     a line with its subject's name and the end of its validity, and

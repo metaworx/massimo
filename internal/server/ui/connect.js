@@ -224,7 +224,9 @@ async function probeServer(s) {
   if (!s) return;
   const seq = (conn.probeSeq[s.id] || 0) + 1;
   conn.probeSeq[s.id] = seq;
-  conn.probes[s.id] = { state: "probing" };
+  // what the last probe found, kept while this one runs (shownDown)
+  const prev = conn.probes[s.id];
+  conn.probes[s.id] = { state: "probing", was: prev ? (prev.state === "probing" ? prev.was : prev.state) : undefined };
   renderServers();
   const urls = [s.lan, s.remote].filter(Boolean);
   let results = [];
@@ -247,8 +249,9 @@ async function probeServer(s) {
 }
 
 // checkSession asks the app who the session it holds for a server is,
-// checked at the address its probe found (session, docs/app.md): the
-// row's badge and the settings' line follow; a session the server
+// checked at the address its probe found (session, docs/app.md), the
+// app posting the server's revoke codes there first (contract version 6):
+// the row's badge and the settings' line follow; a session the server
 // refused the app has forgotten. A call that fails leaves what the app
 // said before; a newer probe's check alone counts.
 async function checkSession(id, url, seq) {
@@ -261,9 +264,10 @@ async function checkSession(id, url, seq) {
   }
   const s = serverById(id);
   if (!s || conn.probeSeq[id] !== seq) return;
-  // a session the app holds revokes the keys left there for its user:
-  // the list read again, so that their lines go
-  if (user && keysLeft(s).some((k) => k.user === user)) {
+  // a session the app holds revokes the keys left there for its user, and
+  // a code the server took ends its entry: the list read again, so that
+  // their lines go
+  if ((user && keysLeft(s).some((k) => k.user === user)) || hasPending(s)) {
     await loadServers();
     renderServers();
     return;
@@ -337,8 +341,18 @@ function showWhere(el, where, name) {
   el.classList.toggle("hidden", where === name);
 }
 
+// shownDown reports whether a server is shown as one that does not answer
+// (AP MobileApp, F42, D105-A): its probe found it at neither address; a
+// probe still running keeps what the last one found, and the first, which
+// has found nothing yet, shows none down.
+function shownDown(p) {
+  const st = p.state === "probing" ? p.was : p.state;
+  return st !== undefined && st !== "lan" && st !== "remote";
+}
+
 // fillRow writes a server's name, address, state and session into its
-// row, and its settings under it while they are open.
+// row, and its settings under it while they are open; the session's badge
+// is grey while the server is shown down (shownDown).
 function fillRow(li, s) {
   const p = conn.probes[s.id] || { state: "probing" };
   const name = s.name || hostOf(s.lan || s.remote);
@@ -348,7 +362,7 @@ function fillRow(li, s) {
   clear(badges);
   badges.appendChild(stateBadge(p.state));
   if (p.url && plainOutside(p.url)) badges.appendChild(badgeEl(t("connect.state.plain"), "warn"));
-  if (s.session) badges.appendChild(badgeEl(t("connect.signedIn", { name: s.session }), "fill-ok session-badge"));
+  if (s.session) badges.appendChild(badgeEl(t("connect.signedIn", { name: s.session }), (shownDown(p) ? "mode" : "fill-ok") + " session-badge"));
   li.querySelector(".server-signin").classList.toggle("hidden", !s.login);
   const cog = li.querySelector(".server-cog");
   cog.setAttribute("aria-expanded", String(conn.open === s.id));
@@ -594,16 +608,29 @@ function sessionsLeft(s) {
   return s && Array.isArray(s.unended) ? s.unended.filter(good) : [];
 }
 
+// hasPending reports whether a key or a session left at a server waits for
+// its revoke code (`pending`, contract version 6; AP MobileApp, D112-A),
+// which the app posts at the next contact.
+function hasPending(s) {
+  return keysLeft(s).some((k) => k.pending === true) || sessionsLeft(s).some((x) => x.pending === true);
+}
+
 // fillFacts writes what a server's open settings say of it as it stands,
-// under its choices: the session the app holds there, with Sign out, the
+// under its choices: the session the app holds there, with Sign out,
+// which says while the server does not answer that Sign out ends it there
+// the next time the app reaches the server (F42, D105-A), the
 // certificate the probe found at the address in use, with Certificate…,
 // each key of the phone's left valid there, with Show in My profile,
 // which opens the server's page at My profile with that key marked, off
 // while the server does not answer, its title saying why (AP MobileApp,
-// F33), and each session of the phone's left valid there; drawn again only
-// where it changed, so that a probe that answers keeps the focus, the
-// buttons Show in My profile turned on and off in place; and what Remove
-// does (fillRemove).
+// F33), and each session of the phone's left valid there, a key or a
+// session whose revoke code waits saying that it ends the next time the app
+// reaches the server (`pending`, contract version 6); drawn again only
+// where it changed, whether the server is shown down among it (shownDown,
+// which a probe still running leaves as it was), which over plain HTTP
+// nothing else in it tells, so that a probe that answers keeps the focus,
+// the buttons Show in My profile turned on and off in place; and what
+// Remove does (fillRemove).
 function fillFacts(form, s) {
   fillRemove(form, s);
   const box = form.querySelector(".server-facts");
@@ -613,7 +640,8 @@ function fillFacts(form, s) {
   const cert = answers && p.cert && p.cert.not_after ? p.cert : null;
   const left = keysLeft(s);
   const unended = sessionsLeft(s);
-  const key = JSON.stringify([s.session || "", cert && cert.fingerprint, cert && cert.not_after, cert && p.url, left, unended]);
+  const down = shownDown(p);
+  const key = JSON.stringify([s.session || "", down, cert && cert.fingerprint, cert && cert.not_after, cert && p.url, left, unended]);
   if (box.dataset.key === key) {
     showsKeys(box, answers);
     return;
@@ -622,7 +650,8 @@ function fillFacts(form, s) {
   clear(box);
   if (s.session) {
     const out = button(t("connect.signOut"), "server-sign-out", () => signOut(s.id, out, form.querySelector(".server-msg")));
-    box.appendChild(elem("p", "server-fact server-session", t("connect.sessionLine", { name: s.session }), " ", out));
+    const line = down ? t("connect.sessionDown", { name: s.session }) : t("connect.sessionLine", { name: s.session });
+    box.appendChild(elem("p", "server-fact server-session", line, " ", out));
   }
   if (cert) {
     const line = t("connect.certLine", { name: commonName(cert.subject) || hostOf(p.url), until: fmtDay(cert.not_after) });
@@ -632,9 +661,13 @@ function fillFacts(form, s) {
   for (const k of left) {
     const show = button(t("connect.keyLeftShow"), { cls: "server-key-show", aria: t("connect.keyLeftShowLabel", { id: k.id }) },
       () => openServer(s.id, null, "#profile?key=" + k.id));
-    box.appendChild(elem("p", "server-fact server-key-left", t("connect.keyLeft", { id: k.id, name: k.user }), " ", show));
+    const text = k.pending === true ? t("connect.keyPending", { id: k.id, name: k.user }) : t("connect.keyLeft", { id: k.id, name: k.user });
+    box.appendChild(elem("p", "server-fact server-key-left", text, " ", show));
   }
-  for (const x of unended) box.appendChild(elem("p", "server-fact server-session-left", t("connect.sessionLeft", { id: x.id, name: x.user })));
+  for (const x of unended) {
+    const text = x.pending === true ? t("connect.sessionPending", { id: x.id, name: x.user }) : t("connect.sessionLeft", { id: x.id, name: x.user });
+    box.appendChild(elem("p", "server-fact server-session-left", text));
+  }
   box.classList.toggle("hidden", !box.firstChild);
   showsKeys(box, answers);
 }
@@ -655,7 +688,8 @@ function showsKeys(box, answers) {
 // app); the open settings lose the session's line, show it left where the
 // server did not end it (the list read again: its unended, contract
 // version 5) and keep what is typed in them, and the toast says whether
-// the server ended it.
+// the server ended it, and where it did not whether its revoke code ends
+// it the next time the app reaches the server (`pending`, version 6).
 async function signOut(id, btn, msg) {
   const s = serverById(id);
   const p = conn.probes[id] || {};
@@ -671,7 +705,9 @@ async function signOut(id, btn, msg) {
   if (s) s.session = null;
   await loadServers();
   renderServers();
-  say(res && res.ended ? t("connect.signedOut", { name }) : t("connect.signedOutLocal", { name }));
+  if (res && res.ended) say(t("connect.signedOut", { name }));
+  else if (res && res.pending === true) say(t("connect.signedOutPending", { name }));
+  else say(t("connect.signedOutLocal", { name }));
 }
 
 // signOutAll signs the app out of every server (signOutAll), from the ☰.
@@ -741,7 +777,8 @@ function showCert(id) {
 // signs the app out there); the open settings lose its line and the
 // session's and keep what is typed in them, and the toast says whether
 // the server revoked the key, or whether this Turn off left it, to revoke
-// at the next sign-in there (`left`, contract version 4).
+// at the next sign-in there (`left`, contract version 4), or by its revoke
+// code the next time the app reaches the server (`pending`, version 6).
 async function turnOff(id, btn, msg) {
   const s = serverById(id);
   const p = conn.probes[id] || {};
@@ -758,6 +795,7 @@ async function turnOff(id, btn, msg) {
   renderServers();
   const name = s ? s.name : "";
   if (res && res.revoked) say(t("connect.loginOffDone", { name }));
+  else if (res && res.pending === true) say(t("connect.loginOffPending", { name }));
   else if (res && res.left === true) say(t("connect.loginOffLeft", { name }));
   else say(t("connect.loginOffLocal", { name }));
 }
@@ -850,8 +888,9 @@ function forgetAll() {
 // kept login, the login turned off first as Turn off does, else the session
 // signed out, at the address the probe chose (remove, contract version 5),
 // and says so in the toast: the login's key revoked, the ids of the phone's
-// keys and sessions still valid there and a key listed at the server
-// alone, to revoke under My profile. An
+// keys and sessions still valid there, whether their revoke codes end them
+// the next time the app reaches the server (`pending`, contract version 6),
+// and a key listed at the server alone, to revoke under My profile. An
 // error is said in its settings, which stay open, the list read again for
 // what the app did before it. The focus goes to the Add card where the
 // list is empty now, else to the ☰.
@@ -880,6 +919,7 @@ async function removeServer(id, msg) {
   let text = res && res.revoked === true ? t("connect.removedRevoked", { name }) : t("connect.removed", { name });
   if (keys.length) text += " " + tn("connect.removedKeys", keys.length, { ids: keys.join(", ") });
   if (unended.length) text += " " + tn("connect.removedSessions", unended.length, { ids: unended.join(", ") });
+  if (res && res.pending === true) text += " " + t("connect.removedPending");
   if (res && res.local === true) text += " " + t("connect.removedKeyListed");
   say(text);
   if (conn.servers.length) menuButton().focus();

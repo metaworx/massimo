@@ -379,4 +379,65 @@ class KeysLeftTest {
         assertTrue(sessionsLeft(s.id).isEmpty())
         assertEquals("the new one held now", 8L, servers.get(s.id)!!.held!!.id)
     }
+
+    @Test
+    fun aTakenEntryIsDroppedOrRevokedByTheList() {
+        // D112-A: a code the server took (204) ended its token, or matched none it had not seen since its update
+        val s = home()
+        assertTrue(servers.leave(s.id, "anna", 43, RevokeCode.of("forty-three")))
+        assertTrue(servers.leave(s.id, "anna", 46, RevokeCode.of("forty-six")))
+        servers.took(s.id, RevokeCode.of("forty-three"))
+        servers.took(s.id, RevokeCode.of("forty-six"))
+        assertTrue("hidden from the page", servers.get(s.id)!!.toJson().getJSONArray("unrevoked").length() == 0)
+        sessions.put(s, "session-anna")
+        sessions.check(s, fake.base)
+        assertTrue("43, not listed: dropped unasked", fake.requests().none { it.contains("/tokens/43") })
+        assertTrue("46, listed: revoked", fake.requests().contains("DELETE /api/v1/users/anna/tokens/46 session-anna"))
+        assertTrue(keys(s.id).isEmpty())
+    }
+
+    @Test
+    fun aSessionLeftKeepsItsCode() {
+        // the code worked out at the check, left with the session, never logged
+        val s = home()
+        sessions.put(s, "session-anna")
+        sessions.check(s, fake.base)
+        assertEquals(RevokeCode.of("session-anna"), servers.get(s.id)!!.held!!.code)
+        assertFalse(sessions.signOut(s, ""))
+        assertEquals(RevokeCode.of("session-anna"), sessionsLeft(s.id).single().code)
+        // a key typed into the card gets none
+        sessions.put(s, "key-own")
+        sessions.check(s, fake.base)
+        assertEquals(null, servers.get(s.id)!!.held)
+        assertTrue(logged.none { it.contains(RevokeCode.of("session-anna")) })
+    }
+
+    @Test
+    fun aSignOutSaysWhetherTheSessionItLeftCarriesItsCode() {
+        // the review: pending is this sign-out's, not any code the server has waiting
+        val s = home()
+        sessions.put(s, "session-anna")
+        sessions.check(s, fake.base)
+        assertEquals(Sessions.SignedOut(false, true), sessions.signOutWith(s, ""))
+        // ended: nothing waits
+        sessions.put(s, "session-anna-fp")
+        sessions.check(s, fake.base)
+        assertEquals(Sessions.SignedOut(true, false), sessions.signOutWith(s, fake.base))
+        // one never checked is forgotten on the phone alone: not pending, though the server has a code waiting
+        assertTrue(servers.leave(s.id, "bob", 99, RevokeCode.of("bob's key")))
+        assertTrue(servers.get(s.id)!!.codes().isNotEmpty())
+        sessions.put(s, "session-bob")
+        assertEquals(Sessions.SignedOut(false, false), sessions.signOutWith(s, ""))
+    }
+
+    @Test
+    fun aSessionLeftByItsRecordKeepsItsCode() {
+        // after a restart the record as held stands in for the check, its code with it
+        val s = home()
+        sessions.put(s, "session-anna")
+        sessions.check(s, fake.base)
+        val restarted = Sessions(SessionKeeper(TokenStore(File(tmp.root, "tokens.json"), plain)), logins, api, { urls, _ -> urls.map { ProbeResult(it, ok = false) } }, left, logged::add, Checks())
+        assertEquals(Sessions.SignedOut(false, true), restarted.signOutWith(s, ""))
+        assertEquals(RevokeCode.of("session-anna"), sessionsLeft(s.id).single().code)
+    }
 }

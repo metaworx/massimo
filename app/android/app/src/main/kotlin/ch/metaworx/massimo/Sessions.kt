@@ -16,10 +16,14 @@ fun interface Logger {
 /**
  * Checked is what a check found of the session held for a server: its user,
  * its row at the server, its kind (`session`, or `api` for a key the page
- * holds), when it was made, as GET /api/v1/me answered for it, and the key
- * it was made from (`token.key_id`, 0 for none or not known).
+ * holds), when it was made, as GET /api/v1/me answered for it, the key it
+ * was made from (`token.key_id`, 0 for none or not known), and a session's
+ * revoke code, worked out from the secret ("" for a key the page holds,
+ * which gets none: D112-A).
  */
-data class Checked(val user: String, val id: Long, val kind: String, val createdAt: String, val keyId: Long = 0)
+data class Checked(val user: String, val id: Long, val kind: String, val createdAt: String, val keyId: Long = 0, val code: String = "") {
+    override fun toString(): String = "Checked(user=$user, id=$id, kind=$kind, keyId=$keyId)"
+}
 
 /**
  * Checks holds what the checks found of the sessions held, by server id,
@@ -197,9 +201,10 @@ class Sessions(
             // forget meanwhile leaves none of the one before
             synchronized(checked) {
                 if (held(s) != token) return@synchronized
-                val c = Checked(me.user, me.tokenId, me.kind, me.createdAt, me.keyId.takeIf { it > 0 } ?: made[s.id] ?: 0)
+                val code = if (me.kind == KIND_SESSION) RevokeCode.of(token) else ""
+                val c = Checked(me.user, me.tokenId, me.kind, me.createdAt, me.keyId.takeIf { it > 0 } ?: made[s.id] ?: 0, code)
                 checked[s.id] = c
-                if (c.kind == KIND_SESSION && c.id > 0) runCatching { left?.hold(s.id, HeldSession(c.user, c.id, c.createdAt)) }
+                if (c.kind == KIND_SESSION && c.id > 0) runCatching { left?.hold(s.id, HeldSession(c.user, c.id, c.createdAt, c.code)) }
             }
             learnKeyId(s, me)
             Look(me.user, left?.revoke(s, url, token, me) ?: emptyList())
@@ -258,18 +263,24 @@ class Sessions(
      * left first and taken away once ended, as [put]'s ending does, so that
      * an app that ends while the server is asked leaves it recorded.
      */
-    fun signOut(s: Server, url: String): Boolean {
+    fun signOut(s: Server, url: String): Boolean = signOutWith(s, url).ended
+
+    /** SignedOut is what a sign-out came to: whether the server ended the session, and whether the session it left waits for its revoke code (contract version 6). */
+    data class SignedOut(val ended: Boolean, val pending: Boolean)
+
+    /** signOutWith is [signOut], saying too whether the session it left carries its revoke code: the connect page's `signOut`. */
+    fun signOutWith(s: Server, url: String): SignedOut {
         val token = held(s)
         val was = synchronized(checked) { checked[s.id] } ?: heldAsChecked(s)
         if (token == null) {
             forget(s.id)
-            return false
+            return SignedOut(false, false)
         }
-        leave(s, was)
+        val noted = leave(s, was)
         forget(s.id)
         val ended = s.has(url) && end(s, url, token)
         if (ended) unleave(s, was)
-        return ended
+        return SignedOut(ended, !ended && noted && was != null && RevokeCode.valid(was.code))
     }
 
     /**
@@ -392,18 +403,18 @@ class Sessions(
     // [left], by the id, the user and the time it was made that its last
     // check found, [was]: a session's alone, a key the page held being
     // none (D70-A); one never checked is forgotten on the phone alone. Its
-    // record as held goes: it is left now.
-    private fun leave(s: Server, was: Checked?) {
+    // record as held goes: it is left now. It reports whether it was noted.
+    private fun leave(s: Server, was: Checked?): Boolean {
         runCatching { left?.unhold(s.id) }
-        if (was == null || was.kind != KIND_SESSION || was.id <= 0) return
-        runCatching { left?.addSession(s.id, was.user, was.id, was.createdAt) }
+        if (was == null || was.kind != KIND_SESSION || was.id <= 0) return false
+        return runCatching { left?.addSession(s.id, was.user, was.id, was.createdAt, was.code) }.getOrNull() == true
     }
 
     // heldAsChecked is the record of the session held for [s] as a check of
     // it: what a session sealed before this process, which no check of this
     // one has seen, is left by; null for none.
     private fun heldAsChecked(s: Server): Checked? =
-        runCatching { left?.held(s.id) }.getOrNull()?.let { Checked(it.user, it.id, KIND_SESSION, it.createdAt) }
+        runCatching { left?.held(s.id) }.getOrNull()?.let { Checked(it.user, it.id, KIND_SESSION, it.createdAt, code = it.code) }
 
     // unleave takes away the note [leave] made of [was], the session ended.
     private fun unleave(s: Server, was: Checked?) {

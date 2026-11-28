@@ -139,6 +139,7 @@ class MainActivity : AppCompatActivity() {
         val api = ServerApi(agent)
         prober = Prober(agent, texts)
         val left = KeysLeft(servers, logins, api, log)
+        val codes = Codes(servers, process.gone, api, prober::probe, log)
         bridge = Bridge(
             host = object : Bridge.Host {
                 override fun open(url: String) = openServer(url)
@@ -155,6 +156,8 @@ class MainActivity : AppCompatActivity() {
             keeper = keeper,
             sessions = Sessions(keeper, logins, api, prober::probe, left, log, process.checks),
             left = left,
+            codes = codes,
+            gone = process.gone,
             logins = logins,
             keys = LoginKey(),
             api = api,
@@ -189,7 +192,12 @@ class MainActivity : AppCompatActivity() {
         channel(bridge.opened?.origin)
         if (savedInstanceState == null || web.restoreState(savedInstanceState) == null) {
             val first = if (savedInstanceState == null) servers.atStart() else null
-            if (first == null) web.loadUrl(Origins.CONNECT_URL) else openAtStart(first)
+            if (first == null) {
+                web.loadUrl(Origins.CONNECT_URL)
+            } else {
+                openAtStart(first)
+                bridge.postGone() // the app's start, the list not shown
+            }
         }
     }
 
@@ -210,6 +218,7 @@ class MainActivity : AppCompatActivity() {
                 }
                 bridge.opened = Bridge.Opened(s.id, origin, url)
                 openServer(url)
+                bridge.postCodes(s.id, url)
             }
         }
     }
@@ -405,6 +414,8 @@ class MainActivity : AppCompatActivity() {
             if (url?.let(Origins::of) != Origins.APP) return
             view.clearHistory()
             back.isEnabled = view.canGoBack()
+            // the list shown: a removed server's revoke codes where the probe finds it (D112-A)
+            bridge.postGone()
         }
 
         // A certificate the system does not trust is the server's where it

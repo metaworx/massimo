@@ -17,10 +17,30 @@ import java.time.temporal.ChronoUnit
  * A key of the phone's that Turn off or Forget all could not revoke at its
  * server (AP MobileApp, D57-A): its user and its row at the server, no
  * secret; the next session the app holds there for that user revokes it.
+ * [code] is its revoke code (D112-A), "" for none, which the app posts at
+ * the next contact; [taken] says the server took it (`204`), the entry
+ * kept, hidden from the page, until the next session there for that user
+ * checks it.
  */
-data class KeyLeft(val user: String, val id: Long) {
-    /** toJson is the key as the connect page sees it, `{user, id}`. */
-    fun toJson(): JSONObject = JSONObject().put("user", user).put("id", id)
+data class KeyLeft(val user: String, val id: Long, val code: String = "", val taken: Boolean = false) {
+    /** toJson is the key as the connect page sees it, `{user, id}`, with `pending: true` while its code waits; never the code. */
+    fun toJson(): JSONObject = JSONObject().put("user", user).put("id", id).apply { if (code.isNotEmpty()) put("pending", true) }
+
+    /** fileJson is the key as the store keeps it, with its code and whether it was taken. */
+    fun fileJson(): JSONObject = JSONObject().put("user", user).put("id", id).apply {
+        if (code.isNotEmpty()) put("code", code)
+        if (taken) put("taken", true)
+    }
+
+    /** same reports whether [o] is this key, whatever its code says. */
+    fun same(o: KeyLeft): Boolean = user == o.user && id == o.id
+
+    // An entry is its token, whatever its code says: equal where same.
+    override fun equals(other: Any?): Boolean = other is KeyLeft && same(other)
+
+    override fun hashCode(): Int = 31 * user.hashCode() + id.hashCode()
+
+    override fun toString(): String = "KeyLeft(user=$user, id=$id, pending=${code.isNotEmpty()}, taken=$taken)"
 }
 
 /**
@@ -31,11 +51,30 @@ data class KeyLeft(val user: String, val id: Long) {
  * it), as the session's last check found them, no secret; the next
  * session the app holds there for that user revokes it, where the row of
  * that id was made then: an id a store rolled back gave again is
- * another's.
+ * another's. [code] and [taken] are as [KeyLeft]'s; [leftAt] is when it
+ * was left (RFC 3339), for the 30 days a removed server's session code is
+ * kept (D116-A).
  */
-data class SessionLeft(val user: String, val id: Long, val createdAt: String = "") {
-    /** toJson is the session as the connect page sees it, `{user, id, created_at}`. */
-    fun toJson(): JSONObject = JSONObject().put("user", user).put("id", id).put("created_at", createdAt)
+data class SessionLeft(val user: String, val id: Long, val createdAt: String = "", val code: String = "", val taken: Boolean = false, val leftAt: String = "") {
+    /** toJson is the session as the connect page sees it, `{user, id, created_at}`, with `pending: true` while its code waits; never the code. */
+    fun toJson(): JSONObject = JSONObject().put("user", user).put("id", id).put("created_at", createdAt).apply { if (code.isNotEmpty()) put("pending", true) }
+
+    /** fileJson is the session as the store keeps it, with its code, whether it was taken, and when it was left. */
+    fun fileJson(): JSONObject = JSONObject().put("user", user).put("id", id).put("created_at", createdAt).apply {
+        if (code.isNotEmpty()) put("code", code)
+        if (taken) put("taken", true)
+        if (leftAt.isNotEmpty()) put("left_at", leftAt)
+    }
+
+    /** same reports whether [o] is this session, whatever its code says. */
+    fun same(o: SessionLeft): Boolean = user == o.user && id == o.id && createdAt == o.createdAt
+
+    // An entry is its token, whatever its code says: equal where same.
+    override fun equals(other: Any?): Boolean = other is SessionLeft && same(other)
+
+    override fun hashCode(): Int = listOf(user, id, createdAt).hashCode()
+
+    override fun toString(): String = "SessionLeft(user=$user, id=$id, createdAt=$createdAt, pending=${code.isNotEmpty()}, taken=$taken)"
 }
 
 /**
@@ -44,14 +83,22 @@ data class SessionLeft(val user: String, val id: Long, val createdAt: String = "
  * no secret. It is kept in the app's file alone, never given to the page,
  * so that a session the process forgets with its memory, a swipe from the
  * recent apps or Android ending a hidden app, goes into [Server.unended]
- * at the next process's start (SessionKeeper.leaveForgotten).
+ * at the next process's start (SessionKeeper.leaveForgotten), with its
+ * revoke [code] (D112-A), so that the next contact ends it.
  */
-data class HeldSession(val user: String, val id: Long, val createdAt: String = "") {
-    /** fileJson is the session as the store keeps it, `{user, id, created_at}`. */
-    fun fileJson(): JSONObject = JSONObject().put("user", user).put("id", id).put("created_at", createdAt)
+data class HeldSession(val user: String, val id: Long, val createdAt: String = "", val code: String = "") {
+    /** fileJson is the session as the store keeps it, `{user, id, created_at, code}`. */
+    fun fileJson(): JSONObject = JSONObject().put("user", user).put("id", id).put("created_at", createdAt).apply { if (code.isNotEmpty()) put("code", code) }
 
-    /** left is the session as one left valid at the server. */
-    fun left(): SessionLeft = SessionLeft(user, id, createdAt)
+    /** left is the session as one left valid at the server at [at]. */
+    fun left(at: String = ""): SessionLeft = SessionLeft(user, id, createdAt, code, leftAt = at)
+
+    // The session is its token, whose code follows from it.
+    override fun equals(other: Any?): Boolean = other is HeldSession && user == other.user && id == other.id && createdAt == other.createdAt
+
+    override fun hashCode(): Int = listOf(user, id, createdAt).hashCode()
+
+    override fun toString(): String = "HeldSession(user=$user, id=$id, createdAt=$createdAt)"
 }
 
 /**
@@ -83,7 +130,9 @@ data class Server(
      * login is kept, [login], or "", the user of the session the app holds
      * and checked, [session], or null (contract version 3), the keys left
      * valid there (version 4), and the sessions, and the id of the kept
-     * login's key, [loginKey], 0 for none or not known (version 5).
+     * login's key, [loginKey], 0 for none or not known (version 5); no entry
+     * the server took, no code and no `held`, an entry whose code waits
+     * `pending: true` (version 6).
      */
     fun toJson(login: String = "", session: String? = null, loginKey: Long = 0): JSONObject = JSONObject()
         .put("id", id)
@@ -99,8 +148,8 @@ data class Server(
         .put("start", start)
         .put("session", session ?: JSONObject.NULL)
         .put("trusted_at", trustedAt)
-        .put("unrevoked", JSONArray().apply { unrevoked.forEach { put(it.toJson()) } })
-        .put("unended", JSONArray().apply { unended.forEach { put(it.toJson()) } })
+        .put("unrevoked", JSONArray().apply { unrevoked.filter { !it.taken }.forEach { put(it.toJson()) } })
+        .put("unended", JSONArray().apply { unended.filter { !it.taken }.forEach { put(it.toJson()) } })
 
     /**
      * fileJson is the server as the store keeps it: what the page sees, but
@@ -111,8 +160,13 @@ data class Server(
         remove("login")
         remove("login_key")
         remove("session")
+        put("unrevoked", JSONArray().apply { unrevoked.forEach { put(it.fileJson()) } })
+        put("unended", JSONArray().apply { unended.forEach { put(it.fileJson()) } })
         held?.let { put("held", it.fileJson()) }
     }
+
+    /** codes are the revoke codes that wait to be posted at the server: its keys' and sessions' left, not taken (D112-A). */
+    fun codes(): List<String> = (unrevoked.filter { !it.taken }.map { it.code } + unended.filter { !it.taken }.map { it.code }).filter(RevokeCode::valid).distinct()
 
     /** has reports whether [url] is one of the server's two addresses. */
     fun has(url: String): Boolean = url.isNotEmpty() && (url == lan || url == remote)
@@ -227,16 +281,19 @@ class ServerStore(private val file: File, private val now: () -> String = { nowU
 
     /**
      * leave notes the key [keyId] of [user]'s as left valid on the server
-     * [id] (KeysLeft), and reports whether it is noted now: a key noted
-     * already is, once; a key without an id, or of a server not kept, is not.
+     * [id] (KeysLeft), with its revoke [code] where the app has one, and
+     * reports whether it is noted now: a key noted already is, once, and
+     * takes the code where it had none; a key without an id, or of a server
+     * not kept, is not.
      */
     @Synchronized
-    fun leave(id: String, user: String, keyId: Long): Boolean {
+    fun leave(id: String, user: String, keyId: Long, code: String = ""): Boolean {
         val at = servers.indexOfFirst { it.id == id }
         if (at < 0 || keyId <= 0 || user.isEmpty()) return false
-        val key = KeyLeft(user, keyId)
-        if (key in servers[at].unrevoked) return true
-        servers[at] = servers[at].copy(unrevoked = servers[at].unrevoked + key)
+        val key = KeyLeft(user, keyId, code.takeIf(RevokeCode::valid) ?: "")
+        val had = servers[at].unrevoked.firstOrNull { it.same(key) }
+        if (had != null && (had.code.isNotEmpty() || had.taken || key.code.isEmpty())) return true
+        servers[at] = servers[at].copy(unrevoked = servers[at].unrevoked.filter { !it.same(key) } + key)
         write()
         return true
     }
@@ -246,7 +303,7 @@ class ServerStore(private val file: File, private val now: () -> String = { nowU
     fun revoked(id: String, keys: Collection<KeyLeft>) {
         val at = servers.indexOfFirst { it.id == id }
         if (at < 0 || keys.isEmpty()) return
-        val rest = servers[at].unrevoked - keys.toSet()
+        val rest = servers[at].unrevoked.filter { k -> keys.none { it.same(k) } }
         if (rest.size == servers[at].unrevoked.size) return
         servers[at] = servers[at].copy(unrevoked = rest)
         write()
@@ -254,17 +311,19 @@ class ServerStore(private val file: File, private val now: () -> String = { nowU
 
     /**
      * leaveSession notes the session [sessionId] of [user]'s, made at
-     * [createdAt], as left valid on the server [id] (D70-A), and reports
-     * whether it is noted now: a session noted already is, once; one
-     * without an id, or of a server not kept, is not.
+     * [createdAt], as left valid on the server [id] (D70-A), with its revoke
+     * [code] where the app has one, and reports whether it is noted now: a
+     * session noted already is, once, and takes the code where it had none;
+     * one without an id, or of a server not kept, is not.
      */
     @Synchronized
-    fun leaveSession(id: String, user: String, sessionId: Long, createdAt: String = ""): Boolean {
+    fun leaveSession(id: String, user: String, sessionId: Long, createdAt: String = "", code: String = ""): Boolean {
         val at = servers.indexOfFirst { it.id == id }
         if (at < 0 || sessionId <= 0 || user.isEmpty()) return false
-        val left = SessionLeft(user, sessionId, createdAt)
-        if (left in servers[at].unended) return true
-        servers[at] = servers[at].copy(unended = servers[at].unended + left)
+        val left = SessionLeft(user, sessionId, createdAt, code.takeIf(RevokeCode::valid) ?: "", leftAt = now())
+        val had = servers[at].unended.firstOrNull { it.same(left) }
+        if (had != null && (had.code.isNotEmpty() || had.taken || left.code.isEmpty())) return true
+        servers[at] = servers[at].copy(unended = servers[at].unended.filter { !it.same(left) } + left)
         write()
         return true
     }
@@ -274,11 +333,54 @@ class ServerStore(private val file: File, private val now: () -> String = { nowU
     fun ended(id: String, sessions: Collection<SessionLeft>) {
         val at = servers.indexOfFirst { it.id == id }
         if (at < 0 || sessions.isEmpty()) return
-        val rest = servers[at].unended - sessions.toSet()
+        val rest = servers[at].unended.filter { x -> sessions.none { it.same(x) } }
         if (rest.size == servers[at].unended.size) return
         servers[at] = servers[at].copy(unended = rest)
         write()
     }
+
+    /**
+     * took marks the key or session left on the server [id] whose revoke
+     * code is [code] as taken by the server (`204`), its code dropped: its
+     * line goes from the page, and the next session there for its user
+     * checks it (KeysLeft.revoke). It reports whether one was marked.
+     */
+    @Synchronized
+    fun took(id: String, code: String): Boolean = withCode(id, code) { it.copy(code = "", taken = true) }
+
+    /**
+     * dropCode drops the revoke code [code] of the key or session left on
+     * the server [id], the entry staying as before codes: a server that
+     * takes no codes, or a code it found malformed.
+     */
+    @Synchronized
+    fun dropCode(id: String, code: String): Boolean = withCode(id, code) { it.copy(code = "") }
+
+    // withCode changes the entries of the server [id] whose code is [code] by
+    // [key] and [session] alike, and writes the file where one changed.
+    private fun withCode(id: String, code: String, change: (Pending) -> Pending): Boolean {
+        val at = servers.indexOfFirst { it.id == id }
+        if (at < 0 || code.isEmpty()) return false
+        val s = servers[at]
+        var changed = false
+        val keys = s.unrevoked.map { k ->
+            if (k.code != code) return@map k
+            changed = true
+            change(Pending(k.code, k.taken)).let { p -> k.copy(code = p.code, taken = p.taken) }
+        }
+        val sessions = s.unended.map { x ->
+            if (x.code != code) return@map x
+            changed = true
+            change(Pending(x.code, x.taken)).let { p -> x.copy(code = p.code, taken = p.taken) }
+        }
+        if (!changed) return false
+        servers[at] = s.copy(unrevoked = keys, unended = sessions)
+        write()
+        return true
+    }
+
+    // Pending is what an entry left says of its code.
+    private data class Pending(val code: String, val taken: Boolean)
 
     /**
      * hold records [held] as the session the app holds at the server [id]
@@ -315,8 +417,8 @@ class ServerStore(private val file: File, private val now: () -> String = { nowU
             val h = s.held
             if (h == null || holds(s)) return@replaceAll s
             changed = true
-            val left = h.left()
-            s.copy(held = null, unended = if (left in s.unended) s.unended else s.unended + left)
+            val left = h.left(now())
+            s.copy(held = null, unended = if (s.unended.any { it.same(left) }) s.unended else s.unended + left)
         }
         if (changed) write()
     }
@@ -389,8 +491,9 @@ class ServerStore(private val file: File, private val now: () -> String = { nowU
             if (a == null) return emptyList()
             return (0 until a.length()).mapNotNull { i ->
                 val o = a.optJSONObject(i) ?: return@mapNotNull null
-                KeyLeft(str(o, "user"), o.optLong("id")).takeIf { it.user.isNotEmpty() && it.id > 0 }
-            }.distinct()
+                KeyLeft(str(o, "user"), o.optLong("id"), str(o, "code").takeIf(RevokeCode::valid) ?: "", o.optBoolean("taken"))
+                    .takeIf { it.user.isNotEmpty() && it.id > 0 }
+            }.distinctBy { it.user to it.id }
         }
 
         // sessionsLeft reads a server's sessions left, each {user, id},
@@ -399,15 +502,17 @@ class ServerStore(private val file: File, private val now: () -> String = { nowU
             if (a == null) return emptyList()
             return (0 until a.length()).mapNotNull { i ->
                 val o = a.optJSONObject(i) ?: return@mapNotNull null
-                SessionLeft(str(o, "user"), o.optLong("id"), str(o, "created_at")).takeIf { it.user.isNotEmpty() && it.id > 0 }
-            }.distinct()
+                SessionLeft(str(o, "user"), o.optLong("id"), str(o, "created_at"), str(o, "code").takeIf(RevokeCode::valid) ?: "", o.optBoolean("taken"), str(o, "left_at"))
+                    .takeIf { it.user.isNotEmpty() && it.id > 0 }
+            }.distinctBy { Triple(it.user, it.id, it.createdAt) }
         }
 
         // heldOf reads a server's session held, {user, id, created_at}, null
         // for none or what is not one.
         private fun heldOf(o: JSONObject?): HeldSession? {
             if (o == null) return null
-            return HeldSession(str(o, "user"), o.optLong("id"), str(o, "created_at")).takeIf { it.user.isNotEmpty() && it.id > 0 }
+            return HeldSession(str(o, "user"), o.optLong("id"), str(o, "created_at"), str(o, "code").takeIf(RevokeCode::valid) ?: "")
+                .takeIf { it.user.isNotEmpty() && it.id > 0 }
         }
 
         // oneAtStart keeps the first server marked to open at start, and no other.

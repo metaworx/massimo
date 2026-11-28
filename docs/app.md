@@ -123,7 +123,7 @@ the page sees only what follows.
   and neither platform's channel answers synchronously.
   A failed call rejects with an `Error` whose message the page shows as it is.
 - **Values are JSON**: objects, arrays, strings, numbers, booleans and `null`.
-- **`massimo.version`** is the contract's version, the number `5`.
+- **`massimo.version`** is the contract's version, the number `6`.
   A later version adds calls and fields; the page tests for what it uses
   (`massimo.login`, `massimo.session`, `massimo.settings`, `massimo.core`,
   `massimo.push`) rather than for a version.
@@ -151,6 +151,15 @@ the page sees only what follows.
   and a tap's rule in `open`, with `{signIn: true}`, and on a server's page
   `login.status()`'s `server`, `openServerSettings()` and `openAppSettings()`
   (Block 15).
+  Version 6 (AP MobileApp v1.6, Block 21, the first of v1.6's two, Block 19
+  taking 7) adds the revoke codes: a server's `held`, the session held there,
+  kept in the app's file alone and never given to the page; `unended` fed
+  from a process that ended; an entry of `unended` or `unrevoked`
+  `pending: true` while its code waits, the code itself never given to the
+  page, and an entry the server took no more listed;
+  the answers of `signOut`, `forget`, `forgetAll` and `remove` saying what
+  waits for its code (`pending`); `session` posting the server's codes
+  before its check; and a fingerprint tap's session checked at once.
 - **Where the bridge exists, and with what:**
   - on the connect page, the shell's own origin: every call below
     but `token` and `setToken`;
@@ -170,15 +179,15 @@ the page sees only what follows.
 |---|---|---|
 | `servers()` | an array of servers | reads the saved servers, in their order |
 | `save(server)` | the server as saved | adds a server without an `id`, giving it one, or replaces the one with its `id`; keeps `fp` and `trusted_at` as `trust` set them; `start` true turns it off at every other server, and the first server added has it whatever it says |
-| `remove(id, url)` | `{revoked, keys, sessions, local}` | turns a kept login off first at `url`, or at the address that answers where `url` is `""`, as `forget` does (the fingerprint asked once where no session is held), else signs the session it holds out there as `signOut` does (AP MobileApp, D69-A), then forgets the server, its pinned certificate, its session, its kept login and its `unrevoked` keys and `unended` sessions; `revoked`: the login's key was revoked; `keys`: the ids of the phone's keys still valid there, the login's among them where it could not be revoked, to revoke under My profile; `sessions`: the ids of the phone's sessions still valid there (`unended`, the one signed out among them where the server did not end it), until they end 30 days after their last use or are revoked under My profile; `local`: the login's key was not revoked and its id is not known |
+| `remove(id, url)` | `{revoked, keys, sessions, local, pending}` | turns a kept login off first at `url`, or at the address that answers where `url` is `""`, as `forget` does (the fingerprint asked once where no session is held), else signs the session it holds out there as `signOut` does (AP MobileApp, D69-A), then forgets the server, its pinned certificate, its session, its kept login and its `unrevoked` keys and `unended` sessions; `revoked`: the login's key was revoked; `keys`: the ids of the phone's keys still valid there, the login's among them where it could not be revoked, to revoke under My profile; `sessions`: the ids of the phone's sessions still valid there (`unended`, the one signed out among them where the server did not end it), until they end 30 days after their last use or are revoked under My profile; `local`: the login's key was not revoked and its id is not known; `pending` (version 6): their revoke codes wait, posted where the app finds the server again at its node, for 90 days at most ("The revoke codes"), a code the server took at the Remove leaving its id out of `keys` and `sessions` |
 | `discover(ms)` | `null`, when the search ends | browses `_massimo._tcp` for `ms` milliseconds (Android `NsdManager`, iOS `NWBrowser`) and sends a `found` event for each server resolved |
 | `probe(urls, fp)` | an array of probe results, in the order of `urls` | `GET <url>healthz` of each in parallel, four seconds at most; `fp`, optional, is a certificate fingerprint it accepts beside those the system trusts |
 | `trust(id, fp)` | `null` | pins the fingerprint for the server and notes when (`trusted_at`): its certificate is accepted in `probe` and in the WebView, and a self-signed one with another fingerprint is refused |
 | `open(id, url, opts)` | `true`, or `false` | loads `url`, the server's `lan` or `remote`, in the WebView, or one of them with My profile's fragment that marks a key, `#profile?key=<id>` (docs/ui.md, "My profile"); another URL is refused. Without `opts`, a tap in the list, it asks for the fingerprint first as the rule of "Opening from the list" says (below, version 5), the prompt titled with the server's name: passed, the page opens with the session held or the one made; cancelled or failed, the page opens with the session withheld for that opening (`token()` answers `null`), so that its sign-in card shows; a kept key the server refuses is forgotten and rejects, as do a key the phone no longer opens and a server that fails the login. With `opts` `{signIn: true}` (version 5) it opens the page so at once, the session withheld and no prompt. With `opts` `{login: true}` it first logs in by fingerprint (below): `false`, nothing opened, where the prompt was dismissed; a kept key the server refuses is forgotten and rejects |
-| `forget(id, url)` | `{revoked, left}` | turns the server's login by fingerprint off (Turn off) at `url`, an address of the server that answered, or, for `""`, at the one that answers now with its node, the LAN one first: revokes the kept key with the session the app holds there (`DELETE /api/v1/users/{name}/tokens/{id}`, the key's id kept beside it, or, for a login kept before version 3, the id of the key the session was made from, `GET /api/v1/me`), without a prompt; where it holds none, or the server refuses it, asks for the fingerprint once and revokes the key with the key itself (`DELETE /api/v1/me/token`, at a server older than that route, which answers `404` or `405`, by its user and id), never over plain HTTP outside the private ranges; then signs the session out and forgets the login. Where the prompt or the server fails it forgets both all the same, `revoked` `false`, the key, where its id is known, is left in the server's `unrevoked` first (`left` `true`), and the failure is in the phone's log, without any secret |
-| `forgetAll()` | `{revoked, left, local}` | turns every kept login off as `forget` does, one server after the other in the list's order, each at the address that answers with its node, the LAN one first: the fingerprint asked once for every server where the app holds no session there (the app key), and once more for each login kept before it, never only for the forgetting; `revoked`, `left` and `local` are the ids of the servers whose key the server revoked, of those whose key was left in their `unrevoked`, and of those whose key was forgotten on the phone alone (no id known, or a login no longer the server's), still listed at the server under My profile |
-| `session(id, url)` | a string, or `null` | the user of the session the app holds for the server, checked at `url`, an address of the server's that answered (`GET /api/v1/me`, over the probe's trust); `null` where it holds none, or the server refused it (`401`), which forgets it, so that it is not sent again; a server that cannot be asked leaves what the last check found. With the user known, and the session's id, which the app keeps beside it, it revokes the server's `unrevoked` keys and its `unended` sessions of that user with the session: an id only where the user's list (`GET /api/v1/users/{name}/tokens`) has it as an API key, or as a session, and never the token in use, an id the list does not have so being dropped unasked (gone, or another token's after a store rolled back); a `404` drops one too, a `403` or a failure keeps it, a failure in the phone's log. A login kept without its key's id takes the id of the key the session was made from, unless it was kept or forgotten meanwhile |
-| `signOut(id, url)` | `{ended}` | ends the session the app holds for the server at `url` (`POST /api/v1/logout`), `""` for no address that answers, and forgets it in every case, a session the server did not end left in the server's `unended` by the id its last check found; `ended` `true` where the server ended it, or had already |
+| `forget(id, url)` | `{revoked, left, pending}` | turns the server's login by fingerprint off (Turn off) at `url`, an address of the server that answered, or, for `""`, at the one that answers now with its node, the LAN one first: revokes the kept key with the session the app holds there (`DELETE /api/v1/users/{name}/tokens/{id}`, the key's id kept beside it, or, for a login kept before version 3, the id of the key the session was made from, `GET /api/v1/me`), without a prompt; where it holds none, or the server refuses it, asks for the fingerprint once and revokes the key with the key itself (`DELETE /api/v1/me/token`, at a server older than that route, which answers `404` or `405`, by its user and id), never over plain HTTP outside the private ranges; then signs the session out and forgets the login. Where the prompt or the server fails it forgets both all the same, `revoked` `false`, the key, where its id is known, is left in the server's `unrevoked` first (`left` `true`), and the failure is in the phone's log, without any secret; `pending` (version 6): the key it left there carries its revoke code, the next contact ending it |
+| `forgetAll()` | `{revoked, left, local, pending}` | turns every kept login off as `forget` does, one server after the other in the list's order, each at the address that answers with its node, the LAN one first: the fingerprint asked once for every server where the app holds no session there (the app key), and once more for each login kept before it, never only for the forgetting; `revoked`, `left` and `local` are the ids of the servers whose key the server revoked, of those whose key was left in their `unrevoked`, and of those whose key was forgotten on the phone alone (no id known, or a login no longer the server's), still listed at the server under My profile; `pending` (version 6) the ids of those among `left` whose key carries its revoke code |
+| `session(id, url)` | a string, or `null` | the user of the session the app holds for the server, checked at `url`, an address of the server's that answered (`GET /api/v1/me`, over the probe's trust); `null` where it holds none, or the server refused it (`401`), which forgets it, so that it is not sent again; a server that cannot be asked leaves what the last check found. With the user known, and the session's id, which the app keeps beside it, it revokes the server's `unrevoked` keys and its `unended` sessions of that user with the session: an id only where the user's list (`GET /api/v1/users/{name}/tokens`) has it as an API key, or as a session, and never the token in use, an id the list does not have so being dropped unasked (gone, or another token's after a store rolled back); a `404` drops one too, a `403` or a failure keeps it, a failure in the phone's log. A login kept without its key's id takes the id of the key the session was made from, unless it was kept or forgotten meanwhile. Before the check it posts the server's revoke codes at `url` (version 6, "The revoke codes"), so that the check finds what they ended |
+| `signOut(id, url)` | `{ended, pending}` | ends the session the app holds for the server at `url` (`POST /api/v1/logout`), `""` for no address that answers, and forgets it in every case, a session the server did not end left in the server's `unended` by the id its last check found; `ended` `true` where the server ended it, or had already; `pending` (version 6): it was not, and the session it left carries its revoke code, which the next contact posts |
 | `signOutAll()` | `null` | the same for every server the app holds a session for, at the address that answers with its node, the LAN one first; each forgotten at once |
 | `settings()` | the app's settings | reads them (below) |
 | `saveSettings(s)` | the app's settings as saved | keeps what `s` gives, the rest as it was, and applies it; an appearance that is none is refused |
@@ -202,8 +211,8 @@ the page sees only what follows.
 | `start` | `true`: the app opens this server at its start, in place of the connect page, at the address that answers with its node, the LAN one first, and shows the connect page where neither does; one server at most |
 | `session` | the user of the session the app holds for the server, as its last check found it (`session`), `null` for none or none checked yet; read only for `save` |
 | `trusted_at` | when `trust` pinned `fp`, RFC 3339 in UTC, `""` for none or one pinned before version 3; read only for `save` |
-| `unrevoked` | the keys of the phone's left valid there whose id is known, each `{user, id}`, its user (a string) and its row at the server (a number), no secret: where Turn off or Forget all could not revoke one (the server not reached, the prompt dismissed, plain HTTP outside the private ranges, the key not opening, the revoke failing), and where a login is forgotten that the phone no longer opens or whose certificate was trusted anew (Turn off of such a login too); never Remove's, whose server goes with them; the next session the app holds there for that user revokes them; `[]` for none; dropped where `save` changes the node; read only for `save` |
-| `unended` | the sessions of the phone's left valid there, each `{user, id, created_at}`, as `unrevoked`'s keys and when the session was made, as the server wrote it (contract version 5, AP MobileApp D70-A): where the app forgot one without the server ending it, the server not answering (Turn off, Forget all, Sign out, Sign out of all, a session `setToken` replaced), by the id and the user its last check found (`session`, `setToken`'s); one never checked is forgotten on the phone alone; never Remove's, which names them in its answer; the next session the app holds there for that user revokes them, where the user's list has the id as a session made at that time, so that an id a store rolled back gave another live session is not signed out (one whose time is not known never matches, and is dropped unasked), and never the token in use; a session `setToken` replaces is noted from the moment it is replaced until it is ended, so that an app ended meanwhile leaves it recorded; `[]` for none; dropped where `save` changes the node; read only for `save` |
+| `unrevoked` | the keys of the phone's left valid there whose id is known, each `{user, id}`, its user (a string) and its row at the server (a number), no secret: where Turn off or Forget all could not revoke one (the server not reached, the prompt dismissed, plain HTTP outside the private ranges, the key not opening, the revoke failing), and where a login is forgotten that the phone no longer opens or whose certificate was trusted anew (Turn off of such a login too); never Remove's, whose server goes with them; the next session the app holds there for that user revokes them; `[]` for none; dropped where `save` changes the node; read only for `save`; an entry whose revoke code waits carries `pending: true`, and one the server took is no more listed (version 6, "The revoke codes") |
+| `unended` | the sessions of the phone's left valid there, each `{user, id, created_at}`, as `unrevoked`'s keys and when the session was made, as the server wrote it (contract version 5, AP MobileApp D70-A): where the app forgot one without the server ending it, the server not answering (Turn off, Forget all, Sign out, Sign out of all, a session `setToken` replaced), by the id and the user its last check found (`session`, `setToken`'s); one never checked is forgotten on the phone alone; never Remove's, which names them in its answer; the next session the app holds there for that user revokes them, where the user's list has the id as a session made at that time, so that an id a store rolled back gave another live session is not signed out (one whose time is not known never matches, and is dropped unasked), and never the token in use; a session `setToken` replaces is noted from the moment it is replaced until it is ended, so that an app ended meanwhile leaves it recorded; `[]` for none; dropped where `save` changes the node; read only for `save`; an entry whose revoke code waits carries `pending: true`, and one the server took is no more listed (version 6, "The revoke codes") |
 
 **A probe result** is an object:
 
@@ -506,6 +515,43 @@ under My profile → Sessions and keys by the phone's name, ends the session.
   without any secret.
   A key typed into the card's "API key" way is the page's, not the app's:
   it gets no `held`, and nothing of it reaches `unended`.
+- **The revoke codes** (AP MobileApp, D112-A, D116-A; version 6).
+  A token the app forgets while its server does not answer is ended at the
+  next contact by its revoke code (`POST /api/v1/tokens/revoke`,
+  docs/api-v1.md): the hex of SHA-256 of `massimo revoke v1` followed by the
+  token, which only a client that held the token can work out
+  (`RevokeCode.kt`, one vector shared with `internal/store/tokens_test.go`).
+  A code lets nothing in, so the app keeps it unsealed, in its file alone:
+  a session's in its `held` and in the entry it leaves in `unended`,
+  worked out at the check that learns its id;
+  the kept login's beside its key's id (`logins.json`), written at the
+  key's making and, for a login kept before this version, at its next
+  unseal, until when its key falls to the path before codes;
+  none for a key typed into the card, which is the page's.
+  The page sees `pending: true` on an entry whose code waits, never the code.
+  The codes are posted without a token, the probe's trust pinning the
+  certificate as for every call: by `session(id, url)` before its check,
+  that is at the app's start, a return, ↻ and a probe, and by `open` at the
+  address it opens, a server opened at the start among them (D43-A).
+  `204` marks the entry taken, hidden from the page until the next session
+  there for that user checks it against the user's list, which drops it
+  where the code ended its token and revokes it where the server had not
+  seen that token since its update;
+  `400` drops the code, logged; a broken connection, `429` and `5xx` keep it
+  for the next contact; any other answer, `404` first (a server older than
+  the route), and `401`, `403`, `405`, `409`, a redirect or a proxy's page of
+  `200`, is a server that takes no codes: the code goes, and the entry is
+  ended at the next sign-in there as before.
+  **Remove** posts the server's codes where it answers,
+  and keeps those still to post in `gone.json`, a file of its own:
+  the server's id, node, addresses and pinned fingerprint with the codes,
+  never listed nor opened; the app probes those addresses at its start and
+  each time the list is shown, and posts the codes only where the probe
+  finds the server at its node, so that an address given to another host
+  spends none. Each goes on `204` or a server that takes none,
+  a session's 30 days after it was left, and every code 90 days after the
+  Remove at the latest (D116-A).
+  No code ever reaches the phone's log.
 - **A logout the server would refuse** (F41, D100-A).
   The server ends a session itself where the app makes the next session
   from the same key (`POST /api/v1/login/key`, D31-A),

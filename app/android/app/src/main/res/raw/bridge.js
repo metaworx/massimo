@@ -2,7 +2,7 @@
 // Copyright (C) 2026 The Massimo Authors
 
 // The Massimo app's bridge, window.massimo (docs/app.md, contract
-// version 5). The Android shell injects this script at the document's
+// version 6). The Android shell injects this script at the document's
 // start into the connect page and into the page of the server it opened,
 // and calls it with the page's kind, "connect" or "server". The calls go as messages over the
 // channel the shell adds, window.massimoChannel, which answers each one;
@@ -60,7 +60,7 @@
     });
   }
 
-  const api = { version: 5 };
+  const api = { version: 6 };
   if (kind === "connect") {
     api.servers = () => call("servers");
     api.save = (server) => call("save", server);

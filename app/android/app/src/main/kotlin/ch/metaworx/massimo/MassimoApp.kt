@@ -16,8 +16,8 @@ import java.io.File
  * activity). At the process's start, before any activity, each server's
  * session recorded as held that the app no longer holds, the memory of the
  * process before gone with it, moves into the server's `unended`, so that
- * the next session the app holds there for that user ends it; a sealed
- * session, still held, stays.
+ * the next session the app holds there for that user ends it, or its
+ * revoke code at the next contact; a sealed session, still held, stays.
  */
 class MassimoApp : Application() {
     /** servers are the servers the app keeps, one store for the process. */
@@ -31,6 +31,10 @@ class MassimoApp : Application() {
     /** checks are what the checks found of the sessions held. */
     val checks = Checks()
 
+    /** gone keeps the removed servers' revoke codes still to post (D112-A, D116-A). */
+    lateinit var gone: GoneStore
+        private set
+
     private lateinit var logins: LoginStore
 
     override fun onCreate() {
@@ -41,6 +45,7 @@ class MassimoApp : Application() {
         servers.takeLegacy().forEach { tokens.remove(it) }
         keeper = SessionKeeper(tokens)
         logins = LoginStore(File(filesDir, "logins.json"))
+        gone = GoneStore(File(filesDir, "gone.json"))
         runCatching { keeper.leaveForgotten(servers, logins) }
     }
 

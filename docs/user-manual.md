@@ -48,11 +48,16 @@ on the list, and **App settings…** the app's own.
   When the server does not answer, the app shows the list.
 - **Signed in as …** and **Sign out**, where the app is signed in there:
   Sign out ends that session on the server and on the phone.
+  While the server does not answer, the list's "signed in as …" is grey,
+  and the line says that Sign out ends the session there
+  the next time the app reaches the server.
 - **A session of this phone is still valid here**, where the app
   forgot a session while the server did not answer
-  (Sign out, Turn off, Forget all, or a new sign-in in its place):
-  the next time the app signs in there as the same user,
-  it ends that session by itself.
+  (Sign out, Turn off, Forget all, or a new sign-in in its place,
+  or the app closed or ended by the phone while it was signed in):
+  the next time the app reaches the server, it ends that session there
+  by itself, and the line goes; a server older than the app's way of doing
+  that ends it at the next sign-in there as the same user.
 - **A key of this phone is still valid here**, where Turn off or Forget all
   could not remove the phone's key at the server,
   or the phone no longer opens its login, or a new certificate was trusted:
@@ -180,7 +185,11 @@ At home, on the local network, plain `http://` works as usual.
 
 When Turn off or Forget all cannot remove the key at the server (it does not answer,
 or you dismiss the fingerprint), the phone forgets the key all the same,
-and the server's settings say that a key of this phone is still valid there;
+and the server's settings say that a key of this phone is still valid there.
+Where the server did not answer, the app ends the key the next time it
+reaches the server, and says so in the message and on the key's line;
+Remove does the same for up to 90 days after the server left the list,
+wherever the app finds that server again;
 so do they where the phone no longer opens its login,
 or where you trusted a new certificate for the server.
 Remove names such a key in its message instead,
