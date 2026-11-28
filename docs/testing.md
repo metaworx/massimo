@@ -1,7 +1,7 @@
 # Testing: how a test waits
 
-The Go tests run against the fake Cube and need no hardware and no network
-(the contract, "Tests").
+The Go tests run against the fake Cube and need no hardware and no network (the contract,
+"Tests").
 Most of what they check happens a little later than the call that caused it:
 a line reaches the fake Cube, the event pump hands an event on,
 a backup is written.
@@ -17,7 +17,8 @@ A test waits for the thing it checks, never for a fixed time.
   and the test goes on the moment it does.
 - **A thing that is not to happen** is checked until something that shows it
   would have happened by then: a later line, an event, a count.
-  A sleep proves nothing on a slow runner, where the thing would have come later.
+  A sleep proves nothing on a slow runner,
+  where the thing would have come later.
 - **Every wait's length takes the scale**, so that a slow runner waits longer:
   every deadline after which the test fails.
   Lengthening that can only let a slow runner pass;
@@ -61,8 +62,8 @@ so that the Cube's time, read at the greeting, moves on by itself too.
 
 ## The scale
 
-`MASSIMO_TEST_SCALE` multiplies every wait: a positive number, 1 where it is
-not set.
+`MASSIMO_TEST_SCALE` multiplies every wait: a positive number,
+1 where it is not set.
 A value that is not a positive number stops the tests at their first wait.
 
 | Run | Scale | Why |
@@ -294,7 +295,8 @@ got, next := lines.Await(t, m, "the s: line", cubewatch.Type('s'))
 | `w.Ended()`, `w.Err()` | whether the feed is over, such as a stream that ended; and why, as `End` said: `nil` while it goes on or where it ended plainly, a stream's read error where it was cut |
 
 A `nil` match takes every item.
-`Await`, `AwaitN` and `Never` take the kit's options (`testkit.For`, `testkit.Every`).
+`Await`, `AwaitN` and `Never` take the kit's options (`testkit.For`,
+`testkit.Every`).
 A wait is woken by each item, so it goes on the moment its item came.
 Where it times out, the failure says what it waited for, how long,
 and what came since the mark, the last 20 items:
@@ -445,7 +447,8 @@ The cursor or a watch of the server's log (`withLog`, `testkit.LogWatch`):
 
 ## The pump
 
-The API shows a Cube's devices, rooms and connection from the Cube client's snapshot,
+The API shows a Cube's devices,
+rooms and connection from the Cube client's snapshot,
 which changes the moment the client reads the Cube's line.
 The server's event pump takes the client's event after that,
 and only then writes the log's line, publishes the stream's event,
@@ -497,8 +500,8 @@ What it does not cover:
 
 It rests on three values that exist for tests:
 the Cube client's count of the Cube's lines it is handling,
-and the number of the last event it sent out
-(`cubelan.Event.Seq`; both through `Client.EventCounts`),
+and the number of the last event it sent out (`cubelan.Event.Seq`;
+both through `Client.EventCounts`),
 and the pump's number of the last event it handled (`runtime.pumped`).
 An event dropped because no one read it leaves no gap:
 a newer one follows it, and the pump that handled that one is past both.
@@ -508,12 +511,12 @@ a newer one follows it, and the pump that handled that one is past both.
 Every test of `internal/server` starts its server with
 `startServer(t, opts...)` (`start_test.go`),
 over a fake Cube KEQ0000100 with the recorded greeting.
-It returns once the Cube is connected, through its runtime
-whatever the API's token asks,
+It returns once the Cube is connected,
+through its runtime whatever the API's token asks,
 the pump has handled the greeting (`pumpSync`),
 and the store's writer has written what came before,
-the server's start included:
-the same for every test, which waits for none of it again.
+the server's start included: the same for every test,
+which waits for none of it again.
 With `withCubes` it waits for nothing:
 no Cube, and not the store's writer, which `Run` may not have started yet.
 The rig it returns:
@@ -544,8 +547,8 @@ The options:
 
 A test file bundles what all its tests need into an option of its own,
 as `storedRooms`, `resetsOn`, `confirming` and `discovering` do;
-a rig with waits of its own builds on the start and keeps its name
-(`startDrift`, `startSlotsCube`, `startMismatchCube`, `startMovingCube`).
+a rig with waits of its own builds on the start and keeps its name (`startDrift`,
+`startSlotsCube`, `startMismatchCube`, `startMovingCube`).
 The recorded greeting is read once for every test:
 `recorded(t)` returns a copy of it, the test's to change.
 One test runs the server by hand, since it tests `Run`'s start and end:
@@ -731,9 +734,9 @@ such as another package's tests under `make race`.
   as macOS has 127.0.0.1 alone of the loopback's 127.0.0.0/8,
   and fails on any other error, such as a port another program holds,
   which a skip would turn into a green run with the test not run.
-  CI's jobs Vet and test, Race and Test (armv6, QEMU)
-  name every test that skipped, with its reason, in the run's summary
-  (`GUIDELINES/project/CI.md`, section 3);
+  CI's jobs Vet and test, Race and Test (armv6,
+  QEMU) name every test that skipped, with its reason,
+  in the run's summary (`GUIDELINES/project/CI.md`, section 3);
   the Windows and macOS jobs do not report their skips.
 - **The server's proxies** listen through `heldPorts` (`ports_test.go`)
   and the start's `listenOn(ports)`, over the hook `Options.proxyListen`.
@@ -779,9 +782,9 @@ and the free-port helper stays there, its comment saying why:
 
 ## Still written by hand
 
-- **A sleep before "nothing came"** stays where the test has no end to wait for
-  yet, and takes no scale:
-  the server's timers, which `pumpSync` does not end, are such waits.
+- **A sleep before "nothing came"** stays where the test has no end to wait for yet,
+  and takes no scale: the server's timers, which `pumpSync` does not end,
+  are such waits.
 - **An address nothing listens on**, for a dial that is to fail
   where no fake Cube stands for it,
   is a listener opened and closed: `deadAddr` in `internal/env`,

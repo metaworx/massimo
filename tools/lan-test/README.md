@@ -28,7 +28,8 @@ bridge has both.
   and change its address, which is how it takes another lease;
 - **searcher**:
   `massimo serve` with no Cube, no proxy and no announcement,
-  searching only when asked, through `POST /api/v1/cubes/discover` on its own address,
+  searching only when asked,
+  through `POST /api/v1/cubes/discover` on its own address,
   as the web UI's search does;
 - **box**:
   avahi-daemon, then `massimo serve -listen 0.0.0.0:8099 -tls self-signed -poll 5s`
@@ -95,7 +96,8 @@ Then, the cable back, it brings up the follower and checks:
     the follower logs "cube connection lost" after its polls left unanswered,
     searches at the loss, logs the address from discovery,
     and connects to the Cube at the new one, within 90 s.
-    Without the search at the loss, nothing would search before the periodic run,
+    Without the search at the loss,
+    nothing would search before the periodic run,
     which `-discover-interval 0` turns off.
 
 Then it brings up the second Cube and, once a search finds it, the holder,
@@ -117,10 +119,10 @@ and checks:
     and the holder connects again.
 
 Check 12 stages the Cube's side with the fake's silence:
-after a real outage the abandoned connection's FIN still reaches the Cube
-when the link comes back within the kernel's limit
-(the hold, the marking of the loss and a probe's interval, 55 s here),
-and frees it, so which a real outage shows depends on the kernel's timers.
+after a real outage the abandoned connection's FIN still reaches the Cube when
+the link comes back within the kernel's limit (the hold,
+the marking of the loss and a probe's interval, 55 s here), and frees it,
+so which a real outage shows depends on the kernel's timers.
 
 The box polls every 5 s so that check 8 tests the loss by polls,
 two left unanswered and 10 s each, about 25 s;

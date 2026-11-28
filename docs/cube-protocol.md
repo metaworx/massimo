@@ -1,8 +1,9 @@
 # MAX! Cube protocol
 
-What is known about the MAX! Cube: its LAN protocol (TCP 62910) and UDP protocol (23272),
-the radio commands it sends, and how it and the original software talked to eQ-3's portal
-("MAX! internet control").
+What is known about the MAX!
+Cube: its LAN protocol (TCP 62910) and UDP protocol (23272),
+the radio commands it sends,
+and how it and the original software talked to eQ-3's portal ("MAX! internet control").
 Reconstructed from the ERNW/Insinuator analysis (2016),
 from the behaviour of the original local software (version 1.4.6),
 and from experiments with real Cubes (firmware 1.1.3) in 2026.
@@ -71,7 +72,8 @@ its decompiled code or public analyses, and says so.
   their cost in duty cycle and memory slots.
 - **Set temperature (0x40)**:
   a device in a room is accepted only when addressed as its room,
-  and one command addressed as the room sets every member, whichever one it names.
+  and one command addressed as the room sets every member,
+  whichever one it names.
   The setpoint shows in a member's L entry when that member acknowledges,
   within seconds for a device that answers; the mode only with its next report.
 - **Room commands are discarded while any member has no state** (no valid L entry):
@@ -308,8 +310,9 @@ The software shows them and compares nothing with them.
 
 ## How devices report
 
-From the original software's logs, which hold the L line every 10 s
-(2026-02-19 to 03-05, three of the owner's Cubes, Cube firmware 1.1.3),
+From the original software's logs,
+which hold the L line every 10 s (2026-02-19 to 03-05,
+three of the owner's Cubes, Cube firmware 1.1.3),
 and from serve's store on one of the owner's hosts (2026-11-11 to 14):
 
 - A wall thermostat reports about every 3 minutes (2.7 min at least).
@@ -321,8 +324,8 @@ and from serve's store on one of the owner's hosts (2026-11-11 to 14):
   In auto mode it reports at the programme's switch points.
 - A shutter contact reports only when the window moves.
 - A radiator thermostat's measured temperature (bytes 9 and 10 of its entry)
-  stays in the L entry only for 10 s to 13 min after such a report
-  (median 2.3 min), then reads 0 again.
+  stays in the L entry only for 10 s to 13 min after such a report (median 2.3 min),
+  then reads 0 again.
   The original software never shows it; Massimo keeps the last one with its age.
 - Byte 6 bit 0x08 of an entry is set in winter as in summer: it is the device's
   automatic DST switching, which the original software reads and never uses,
@@ -339,21 +342,24 @@ and from serve's store on one of the owner's hosts (2026-11-11 to 14):
   a wall thermostat lost it 4¾ to 5¾ minutes after its batteries came out,
   about two of its 3-minute reports, and had it again within a minute of the
   batteries going back.
-  The entry is then "out of date", as the original software calls it: flag
-  0x02 alone, the values of the last report kept; Massimo shows them as
-  `last_known`.
+  The entry is then "out of date", as the original software calls it:
+  flag 0x02 alone, the values of the last report kept;
+  Massimo shows them as `last_known`.
   Radiator thermostats, which report once a day when idle, kept it for more
   than 23 hours of silence (2026-02-19/20); wall thermostats that missed a
   report or two lost it for a minute (2026-11-12 and 13).
-- A device's battery flag (byte 6 bit 0x80), 2026-11-11 to 15 on the owner's Cubes:
-  - Two radiator thermostats showed it for 1 to 4 minutes at a time, ten and
-    four times in three days, each time with a report out of turn and
-    cleared by another: the device reports when its battery state changes.
-  - In the decalcification hour (Saturday 11:03 to 11:05 UTC), all three that
-    ever flickered showed it, and were the only radiator thermostats to
-    report then: the valve's full travel is the week's heaviest load.
-  - A wall thermostat, with no motor, went from clear to steady between two
-    reports.
+- A device's battery flag (byte 6 bit 0x80),
+  2026-11-11 to 15 on the owner's Cubes:
+  - Two radiator thermostats showed it for 1 to 4 minutes at a time,
+    ten and four times in three days,
+    each time with a report out of turn and cleared by another:
+    the device reports when its battery state changes.
+  - In the decalcification hour (Saturday 11:03 to 11:05 UTC),
+    all three that ever flickered showed it,
+    and were the only radiator thermostats to report then:
+    the valve's full travel is the week's heaviest load.
+  - A wall thermostat, with no motor,
+    went from clear to steady between two reports.
   - No device was seen going from flickering to steady in those days; in
     February five devices had it steady for 4 to 7 days, until new batteries.
   - A wall thermostat whose batteries go back in starts in auto mode on its
@@ -361,14 +367,16 @@ and from serve's store on one of the owner's hosts (2026-11-11 to 14):
     (2026-11-15), its room's radiator thermostat still on manual; Massimo
     warns of such a return in its log (`wall_reset`).
   - Massimo keeps a level per device from this: weak at the first flag,
-    low when it stays 15 minutes, weak again ok after the next
-    decalcification without it.
-- The duty cycle falls within the hour: on one Cube from 21 % at 14:05 to 3 %
-  at 14:42 on 2026-11-13 with no client command, and 21 % five minutes after
-  a full hour; 3 of 19 falls between readings had no full hour between them.
-  It is probably the share of the last 60 minutes, not a counter reset on the
-  hour, so after a hold Massimo reads the budget again in steps (`duty_wait`)
-  rather than waiting for the next full hour.
+    low when it stays 15 minutes,
+    weak again ok after the next decalcification without it.
+- The duty cycle falls within the hour:
+  on one Cube from 21 % at 14:05 to 3 % at 14:42 on 2026-11-13 with no client command,
+  and 21 % five minutes after a full hour;
+  3 of 19 falls between readings had no full hour between them.
+  It is probably the share of the last 60 minutes,
+  not a counter reset on the hour,
+  so after a hold Massimo reads the budget again in steps (`duty_wait`) rather
+  than waiting for the next full hour.
 
 ## One LAN client at a time
 
@@ -406,22 +414,22 @@ A metadata write longer than one block of 1900 base64 characters numbers its
 `m:` lines in decimal, two digits below 10, as the original software 1.4.6
 builds them (`"0" + i`), so the eleventh block is `m:10`, not `m:0a`;
 from the bytecode only, since no Cube here needs more than one block.
-The `z:` duration `1e` has been read as 30 s; the original software 1.4.6 names
-the field `durationInMinutes`, and the byte is the same either way, so the unit
-is open.
+The `z:` duration `1e` has been read as 30 s;
+the original software 1.4.6 names the field `durationInMinutes`,
+and the byte is the same either way, so the unit is open.
 The software wakes a room only before configuration writes and 0x82,
 never before 0x40, and only a room with a radiator thermostat.
-A day of the week programme with more than 7 switch points goes as two 0x10
-telegrams: the first with points 1 to 7, the second with points 8 to 13,
-marked with bit 4 (0x10) of the day byte and padded to 6 points with the last
-one, as the original software 1.4.6 builds it
+A day of the week programme with more than 7 switch points goes as two 0x10 telegrams:
+the first with points 1 to 7, the second with points 8 to 13,
+marked with bit 4 (0x10) of the day byte and padded to 6 points with the last one,
+as the original software 1.4.6 builds it
 (`SetRoomWeekTemperatureProfile.createDayPartSpec`), and as Massimo does.
 Verified on hardware 2026-11-15 (Cube firmware 1.1.3, one radiator thermostat
 of one of the owner's Cubes, through serve's proxy, after a `z:` room wakeup):
 the C line held all 8 points of a test day within 17 s,
 and the day was written back afterwards.
-Two wakeups and three telegrams (the test and the restore) cost 3 % of the
-duty cycle; up to three memory slots were held, one still two minutes later.
+Two wakeups and three telegrams (the test and the restore) cost 3 % of the duty cycle;
+up to three memory slots were held, one still two minutes later.
 A 0x11 command to a device in error state that was **not** preceded by `r:` came
 back as discarded (`S:14,1,31`); the software then reports "Command discarded".
 When the software sends `r:`, from its bytecode (`ResetRadiogramBuilder`) and
@@ -431,32 +439,34 @@ each device in the command's scope whose error flag is set,
 silent devices included.
 The scope of a room setpoint or mode is every device of the room,
 of a link change or a removal the device itself.
-By its design byte 4, the failed radiogram's type, decides by its category
-(below): a failed link change (0x20–0x23) would be reset only before a link
-change, a failed Reset (0xF0) only before a removal, any other before every
-command.
+By its design byte 4, the failed radiogram's type,
+decides by its category (below):
+a failed link change (0x20–0x23) would be reset only before a link change,
+a failed Reset (0xF0) only before a removal, any other before every command.
 In practice every flagged device in the scope is reset:
 `FrameType` fills its code map while its constants are built,
 and the end of its static initialisation sets the map back to `null`,
-so byte 4 is never found and every flagged device reads as `Error`
-(seen 2026-11-15, Cube firmware 1.1.3: before a room mode command the
-software reset four members of the room whose byte 4 was 0x21,
-and its own model listed them as `Error`).
+so byte 4 is never found and every flagged device reads as `Error` (seen 2026-11-15,
+Cube firmware 1.1.3:
+before a room mode command the software reset four members of the room whose
+byte 4 was 0x21, and its own model listed them as `Error`).
 The `link_error` bit alone is never reset.
 The software never resets on its own: no timer, nothing on a device's report.
-While the UI is open it calls the backend every 10 s, and each call sends one `l:`
-(2026-02-23 to 03-05: 88 000 polls of one Cube, 99.8 % 10 s apart).
+While the UI is open it calls the backend every 10 s,
+and each call sends one `l:` (2026-02-23 to 03-05: 88 000 polls of one Cube,
+99.8 % 10 s apart).
 The backend sends `q:` when the UI stops calling for a time set outside the jars,
 about 30 s, not after 30 s without user activity: one Cube was held 10½ days
 without a command.
 When the connection idles it sends the line `e:something` as a keepalive.
 The software can also set the Cube's clock:
-`MaxLocalApi.setCubeTime` sends `v:<rules>,<seconds in hex>`, lowercase and
-unpadded, only when the seconds are above 0;
-the epoch is in its UI, not in its jars, and the call was never seen in its logs.
+`MaxLocalApi.setCubeTime` sends `v:<rules>,<seconds in hex>`,
+lowercase and unpadded, only when the seconds are above 0;
+the epoch is in its UI, not in its jars,
+and the call was never seen in its logs.
 It reads the next line after a command as its reply (seen 2026-11-14 through
-Massimo's proxy, software 1.4.6): a line it did not ask for comes back as
-"S: expected", "ACK expected" or "device list expected", each reply one line late,
+Massimo's proxy, software 1.4.6): a line it did not ask for comes back as "S:
+expected", "ACK expected" or "device list expected", each reply one line late,
 while the commands themselves still reach the Cube.
 
 ### Verified on hardware with Massimo (2026-11-04, Cube JEQ…, live devices)
@@ -530,12 +540,12 @@ the time it is configured with was not found.
 Massimo asks for at most 255 s (`cube.MaxInclusion`),
 and a longer time from a proxy client is capped there.
 
-Massimo gives a thermostat it puts into a room, after pairing or in a move
-(`PUT /api/v1/cubes/{sn}/devices/{rf}`, 2026-11-06),
-the room's settings as in steps 4 to 7:
-0x40 directly to the device (flags 0, room 0, as in the log above),
-0x11 to the device and every thermostat with a valid state, with the room's values,
-each keeping its own offset, 0x12 to the device,
+Massimo gives a thermostat it puts into a room,
+after pairing or in a move (`PUT /api/v1/cubes/{sn}/devices/{rf}`, 2026-11-06),
+the room's settings as in steps 4 to 7: 0x40 directly to the device (flags 0,
+room 0, as in the log above),
+0x11 to the device and every thermostat with a valid state,
+with the room's values, each keeping its own offset, 0x12 to the device,
 and 0x10 only for the days that differ from the device's own,
 then 0x11 to the device; `"copy": false` skips it.
 The order of steps 4 to 7 is the original software's,
@@ -572,7 +582,8 @@ and since AP RoomMajority (Block 2, 2026-11-23) their values differ:
   else the wall thermostat's boost settings and the original's defaults
   (window open 15 minutes, descaling Saturday 12:00, valve 100 % and 0 %).
   The 0x11 to every thermostat stays,
-  but for one the Cube holds no valid state for, whose own configuration did not count:
+  but for one the Cube holds no valid state for,
+  whose own configuration did not count:
   a member whose temperatures differ takes the room's there.
   The days and the 0x12 go to the new device only.
 That a device which was in a room before takes the direct 0x40 is *unverified*,
@@ -599,9 +610,9 @@ firmware 1.1.3, one of the owner's rooms with three radiator thermostats; the
 original software's removal the same day took 4 slots in a room of 4).
 The member the radiogram is addressed to took it at once; the others were
 still pending ten minutes later and took it with the next wakeup of the room.
-Whether every member then acts on it was not settled: the devices pass setpoint
-changes on among themselves, so a member that kept a partner hides one that
-dropped it.
+Whether every member then acts on it was not settled:
+the devices pass setpoint changes on among themselves,
+so a member that kept a partner hides one that dropped it.
 Massimo sends one room-flagged link radiogram to each radiator thermostat.
 
 Boost over the air (2026-11-13, Cube firmware 1.1.3, through Massimo's proxy):
@@ -620,22 +631,23 @@ the wall thermostat's followed two minutes later, with its next report.
 Nothing else was sent: a boost ends by itself in the mode the devices had.
 One radio write, the duty cycle 18 % before and 21 % after.
 
-One wall thermostat per room (2026-11-12, the original software 1.4.6, Cube firmware
-not noted): moving a wall thermostat into a room that has one already is refused
-by the software before it sends anything, with "Attention: You cannot add any more
-devices of this type. The maximum number of devices of this type has been reached
-for this room."
-The message speaks of "devices of this type", so the software probably limits the
-other types per room as well;
-eQ-3's documents name up to 8 radiator thermostats and 8 window contacts per wall
-thermostat. Those limits are not confirmed:
-only the wall thermostat's was seen.
-The Cube's metadata itself could hold two
-(one written by another tool), and nothing says how the radiator thermostats
-would choose between two temperatures and two setpoints.
-Massimo refuses a second wall thermostat in a room the same way
-(`PUT …/devices/{rf}`, `409`) and copes with a Cube that has two
-(docs/api-v1.md, "The virtual wall thermostat").
+One wall thermostat per room (2026-11-12, the original software 1.4.6,
+Cube firmware not noted):
+moving a wall thermostat into a room that has one already is refused by the
+software before it sends anything, with "Attention:
+You cannot add any more devices of this type.
+The maximum number of devices of this type has been reached for this room."
+The message speaks of "devices of this type",
+so the software probably limits the other types per room as well;
+eQ-3's documents name up to 8 radiator thermostats and 8 window contacts per
+wall thermostat.
+Those limits are not confirmed: only the wall thermostat's was seen.
+The Cube's metadata itself could hold two (one written by another tool),
+and nothing says how the radiator thermostats would choose between two
+temperatures and two setpoints.
+Massimo refuses a second wall thermostat in a room the same way (`PUT …/devices/{rf}`,
+`409`) and copes with a Cube that has two (docs/api-v1.md,
+"The virtual wall thermostat").
 
 So wall thermostats take 0x11 and 0x12 with the same payloads as radiator thermostats,
 and their C line ends with offset,
@@ -660,18 +672,19 @@ every radiogram the system knows, with the codes:
 0x11 ConfigTemperatures, 0x12 ConfigValveFunctions, 0x20 AddLinkPartner,
 0x21 RemoveLinkPartner, 0x22 SetGroupAddress, 0x23 RemoveGroupAddress,
 0x30 ShutterContactState, 0x40 ControlMode (set temperature),
-0x41 SetPointTemperature,
-0x42 SetPointAndCurrentTemperature (wall thermostat), 0x43 ComfortTemperature,
-0x44 EcoTemperature, 0x45 CurrentTemperatureAndHumidity, 0x50 PushButtonState,
+0x41 SetPointTemperature, 0x42 SetPointAndCurrentTemperature (wall thermostat),
+0x43 ComfortTemperature, 0x44 EcoTemperature,
+0x45 CurrentTemperatureAndHumidity, 0x50 PushButtonState,
 0x60 HeatingThermostatState, **0x80 LockManualControls**,
 0x81 DaylightSavingTimeMode, 0x82 SwitchDisplaySetPointActual, 0xF0 Reset,
-0xF1 WakeUp, 0xFF Test
-(read again from the jar on 2026-11-15: this list had 0xF0 and 0xF1 the
-other way round and 0x70 for 0x45; no code of Massimo uses these two).
-Each type has a category, meant to decide when the software resets a device
-whose radiogram of that type failed (above; in practice it never does):
-Configuration for 0x10–0x12 and 0x82, Control for 0x40, 0x41, 0x43, 0x44
-and 0x80, Assignment for 0x20–0x23, Remove for 0xF0, none for the rest.
+0xF1 WakeUp, 0xFF Test (read again from the jar on 2026-11-15:
+this list had 0xF0 and 0xF1 the other way round and 0x70 for 0x45;
+no code of Massimo uses these two).
+Each type has a category,
+meant to decide when the software resets a device whose radiogram of that type
+failed (above; in practice it never does): Configuration for 0x10–0x12 and 0x82,
+Control for 0x40, 0x41, 0x43, 0x44 and 0x80, Assignment for 0x20–0x23,
+Remove for 0xF0, none for the rest.
 Massimo ranks a failed radiogram by them (`RadiogramType.Severity`, D181):
 Assignment and Remove first, which change the system's structure,
 then Configuration, then Control, then the rest;
@@ -701,11 +714,13 @@ for such a device.
 A device without a room (just paired) takes flags 0 and room 0.
 
 A set-temperature command (0x40) with the room flag sets every member of the
-room whose number it carries, whichever member its header names: the room's
-master, its wall thermostat or any of its radiator thermostats (2026-11-15,
-Cube firmware 1.1.3, one of the owner's rooms with a wall thermostat and three
-radiator thermostats, through serve's proxy, no wakeup; each command set all
-four within 7 to 17 s, one memory slot and 3 % of the duty cycle each).
+room whose number it carries, whichever member its header names:
+the room's master,
+its wall thermostat or any of its radiator thermostats (2026-11-15,
+Cube firmware 1.1.3,
+one of the owner's rooms with a wall thermostat and three radiator thermostats,
+through serve's proxy, no wakeup; each command set all four within 7 to 17 s,
+one memory slot and 3 % of the duty cycle each).
 A command whose header names a device of another room sets that device too,
 besides the room it names; that device's own wall thermostat put it back
 to its room's setpoint about two minutes later.
@@ -717,9 +732,10 @@ else its first radiator thermostat, then each other one in the Cube's order,
 a member without valid state (valid bit 0x10 clear, below) passed over;
 where every thermostat of the room is without state, the first of the same
 order with them, since such a radiogram must name one.
-The same order names the member a link radiogram of a move, a removal or
-a placement goes to,
-and gives the state the room checks send again (docs/api-v1.md, "The room checks").
+The same order names the member a link radiogram of a move,
+a removal or a placement goes to,
+and gives the state the room checks send again (docs/api-v1.md,
+"The room checks").
 Passing over a member without state has not been tried on hardware:
 the Cube discards room commands while any member has none (below),
 so it matters most to those link radiograms.
@@ -791,8 +807,8 @@ their serials start with IEQ.
 
 After a 0x40 set-temperature command the Cube writes the new setpoint into a
 member's L entry when the member acknowledges it,
-within 1 to 19 s in four room commands of 2026-02-19
-(Cube firmware 1.1.3, the original software 1.4.6, polled every 10 s),
+within 1 to 19 s in four room commands of 2026-02-19 (Cube firmware 1.1.3,
+the original software 1.4.6, polled every 10 s),
 while the mode bits change only with the device's next report,
 about 45 s later in one observation (a room shown as auto at the new temperature
 in between).
@@ -800,7 +816,8 @@ A member that does not answer keeps its old setpoint:
 on one Cube whose last memory slot the command took, no member showed it in
 19 hours of polling, and two room commands to a room whose members were both
 flagged (2026-11-13 and 14) were never shown either.
-An `S:` not discarded therefore says the Cube took the command, not that the room did;
+An `S:` not discarded therefore says the Cube took the command,
+not that the room did;
 the original software marks such a room "dirty" until an L line changes it.
 A client that needs the mode should wait for the next L line rather than read
 the one right after the command.
@@ -823,8 +840,8 @@ but no class of its two backend jars uses it),
 was being removed, after the Cube discarded the removal, 2026-11-15),
 and 0xf6, which the list lacks.
 After an `r:` the byte kept the failed type (0x03 in four of four resets,
-the original software's logs of 2026-02-19; 0x21 in four of four on
-2026-11-15, after the reset and a room command the devices took),
+the original software's logs of 2026-02-19; 0x21 in four of four on 2026-11-15,
+after the reset and a room command the devices took),
 so without the flag it says nothing.
 Massimo reads it so (`cube.DeviceState.FailedRadiogram`, the codes and names
 of the list above in `cube.RadiogramType`) and gives it with the flag alone,
@@ -1049,7 +1066,8 @@ kept here because they cost time to learn.
   hence pending radiograms) only when a connection starts and in S replies;
   no command asks for it.
   The Cube changes a device's C line only after the device acknowledged (1 to 4 min);
-  the setpoint in L also follows the device's acknowledgement, the mode its next report.
+  the setpoint in L also follows the device's acknowledgement,
+  the mode its next report.
 - The Cube answers UDP discovery only to port 23272,
   whatever the request's source port, so on the box running `serve`,
   `massimo discover` sees only `serve`'s own proxy answer;
@@ -1065,8 +1083,8 @@ kept here because they cost time to learn.
   With the service's udp4 socket, bound at boot, the original software on the PC
   found no Cube: all ten answers on the owner's LAN went to the service.
   With the dual-stack socket, the service running beside it on Windows 11,
-  the original software found all ten
-  (2026-11-15, five Cubes on firmware 1.1.3 and another server's five proxies).
+  the original software found all ten (2026-11-15,
+  five Cubes on firmware 1.1.3 and another server's five proxies).
   Across Windows accounts, as between the service and a user,
   the port is shared only where the first socket set SO_REUSEADDR.
 - The original software 1.4.6 (`MaxLocalBackend-1.4.6.jar`):
@@ -1081,17 +1099,18 @@ kept here because they cost time to learn.
   which is unrelated to Cubes but was learned the same night.
 - After a Cube restart, the eco switch stays "not reported" until someone presses it;
   harmless.
-- A device's transmit error (the L entry's error flag, 0x08 of the first flags
-  byte) says that the Cube's last radiogram to the device failed,
-  and it stays until `r:` or a Cube restart
-  (Cube firmware 1.1.3, the owner's Cubes, 2026-11-13 to 15,
+- A device's transmit error (the L entry's error flag,
+  0x08 of the first flags byte) says that the Cube's last radiogram to the device failed,
+  and it stays until `r:` or a Cube restart (Cube firmware 1.1.3,
+  the owner's Cubes, 2026-11-13 to 15,
   and the original software's logs of 2026-02-12 to 03-05):
-  - The names cross: the original software 1.4.6 reads this bit as its
-    radio error (`DeviceStateSerializer`: `BITPOS_RADIO_ERROR` 3 of byte 5),
+  - The names cross: the original software 1.4.6 reads this bit as its radio
+    error (`DeviceStateSerializer`: `BITPOS_RADIO_ERROR` 3 of byte 5),
     the device's `RadioState` with byte 4,
     and names byte 6's 0x40 `transmitError`
     (`@DeviceStateParameter(bytePos=1, bitPos=6)` on every device type,
-    the setter's parameter called `unreachable`), which is Massimo's `link_error`.
+    the setter's parameter called `unreachable`),
+    which is Massimo's `link_error`.
     So Massimo's "transmit error" is the original's radio error.
   - A radiogram the device does not answer sets it:
     nearly always the Cube's own time push after its restart,
@@ -1120,11 +1139,10 @@ kept here because they cost time to learn.
     a Cube whose thermostats all reported within 5 minutes of its restart
     flagged nothing in the next 13 hours (2026-11-14),
     nor its six window contacts without batteries.
-  - A room command to a room whose members were all flagged was accepted
-    (not discarded, one slot) and never carried out, twice
-    (2026-11-13 and 14);
-    the original software resets every flagged device of the room before a
-    room command (the LAN commands verified against it, above).
+  - A room command to a room whose members were all flagged was accepted (not discarded,
+    one slot) and never carried out, twice (2026-11-13 and 14);
+    the original software resets every flagged device of the room before a room
+    command (the LAN commands verified against it, above).
     Massimo's queue does the same since AP RadioHealth v1.2: before a
     room-flagged radiogram, one `r:01` for each device whose C line names
     the room and whose error flag is set, none for the link error alone,
@@ -1148,19 +1166,19 @@ kept here because they cost time to learn.
   A window contact woken with a new battery and three window cycles before the
   restart had freed none, so the radiograms were for other devices;
   the Cube does not say which.
-- Removing a device that answers from its room
-  (2026-11-15, Cube firmware 1.1.3, one of the owner's Cubes,
-  a radiator thermostat from a room with four other members):
-  Massimo's removal, a room wakeup, then 0x21 to and from each partner
-  (eight radiograms) and 0x23, was discarded by the Cube twice,
-  with 48 slots free, before `t:` was sent,
+- Removing a device that answers from its room (2026-11-15, Cube firmware 1.1.3,
+  one of the owner's Cubes,
+  a radiator thermostat from a room with four other members): Massimo's removal,
+  a room wakeup, then 0x21 to and from each partner (eight radiograms) and 0x23,
+  was discarded by the Cube twice, with 48 slots free, before `t:` was sent,
   and within a minute the room's five members were flagged with byte 4 0x21.
   The original software then removed it with a room wakeup,
-  an `r:` for the leaving device, **one** 0x21 to the room as a group
-  (`s:` flags 0x04, the room, a member as the recipient,
+  an `r:` for the leaving device,
+  **one** 0x21 to the room as a group (`s:` flags 0x04, the room,
+  a member as the recipient,
   the leaving device's address and type as the payload),
-  which took a slot for each remaining member (49 → 45)
-  and was accepted although those four were flagged,
+  which took a slot for each remaining member (49 → 45) and was accepted
+  although those four were flagged,
   then `t:01,1,<address>` and `m:` without the device.
   So a removal sends no 0x21 to the leaving device and no 0x23;
   which of Massimo's lines the Cube discarded is not known.
@@ -1174,14 +1192,13 @@ kept here because they cost time to learn.
   and Massimo keeps the last measured value meanwhile.
 - The original MAX! software cannot find a Cube again in the same run after it
   moved the Cube to a static address; a restart of the software does.
-- A Cube can list an entry at radio address 000000
-  (2026-11-13 and 14, Cube firmware 1.1.3, one of the owner's Cubes,
+- A Cube can list an entry at radio address 000000 (2026-11-13 and 14,
+  Cube firmware 1.1.3, one of the owner's Cubes,
   read from its own greeting with nothing sent):
   its L line holds `0b 00 00 00 09 00 …`, 000000 without flags,
-  and its greeting a C line `C:000000,…` of 207 bytes,
-  length byte 0xce, address and type bytes zero:
-  type 0 is the Cube's own, whose configuration needs 238 bytes,
-  so the line cannot be read.
+  and its greeting a C line `C:000000,…` of 207 bytes, length byte 0xce,
+  address and type bytes zero: type 0 is the Cube's own,
+  whose configuration needs 238 bytes, so the line cannot be read.
   No C line of a device and no room name it, and no record says how it came.
   Massimo shows no device there and keeps both lines as received,
   so that its proxy and a backup give what the Cube gave;
@@ -1189,10 +1206,11 @@ kept here because they cost time to learn.
   Nothing is sent to 000000 as a device (`cube.CheckZero`):
   removing a device makes the Cube send a factory reset to its address,
   which to 000000 could reach more than intended.
-  A room's radio command, which may carry 000000 with the room flag, is not refused.
+  A room's radio command, which may carry 000000 with the room flag,
+  is not refused.
   Clearing the entry is left to the owner, outside Massimo.
-- Repairs, moves and a pairing through Massimo, read from its log
-  (2026-11-16, Cube firmware 1.1.3, two of the owner's Cubes):
+- Repairs, moves and a pairing through Massimo, read from its log (2026-11-16,
+  Cube firmware 1.1.3, two of the owner's Cubes):
   - A room's re-link, adding only (a room of a wall thermostat and two
     radiator thermostats): one command per member after the room's wakeup,
     12 radiograms in all, every one accepted; the free slots went 49 → 38
@@ -1201,41 +1219,40 @@ kept here because they cost time to learn.
     (byte 4 0xF1) and kept failing them after it,
     taking a room setpoint only after 680 s:
     a re-link mends links, not a weak radio path.
-    Its link error, set for 101 hours, had cleared at a report of its own
-    shortly before.
-  - A move of a radiator thermostat into an empty room: the wakeup and the
-    four radiograms of the unlink half, then the 0x22 for the new room,
-    were accepted, but the device failed the 0x23 (flagged 10 s later,
+    Its link error, set for 101 hours,
+    had cleared at a report of its own shortly before.
+  - A move of a radiator thermostat into an empty room:
+    the wakeup and the four radiograms of the unlink half,
+    then the 0x22 for the new room, were accepted,
+    but the device failed the 0x23 (flagged 10 s later,
     byte 4 0x23) and its C line kept the old room;
-    Massimo's check of the C lines against the room list warned of it at
-    the next C lines, 6 minutes later.
-    One slot was still held 12 minutes after the move and was free 3½
-    minutes after that.
-    The move back sent one radiogram out of the empty room and the link
-    half into the old one; the Cube discarded one of its lines,
+    Massimo's check of the C lines against the room list warned of it at the next C lines,
+    6 minutes later.
+    One slot was still held 12 minutes after the move and was free 3½ minutes after that.
+    The move back sent one radiogram out of the empty room and the link half
+    into the old one; the Cube discarded one of its lines,
     took it after an `r:` and one more send,
-    and the next device list had both radiator thermostats' error flags
-    cleared.
+    and the next device list had both radiator thermostats' error flags cleared.
   - The copy of a move or a pairing sends 0x40 auto with temperature 0,
     as the original software does: the moved thermostat went to auto,
     16 °C, while its room's other two were manual at 5.5 °C.
-    Massimo's room checks, which leave a room alone until a structure
-    change's read-back has ended, reported the disagreement once it had
-    lasted 10 minutes after that, and re-sent the state most of the room's
-    thermostats showed (manual, 5.5 °C) as one room command 11 minutes
-    later; the moved thermostat took it within 11 s.
+    Massimo's room checks,
+    which leave a room alone until a structure change's read-back has ended,
+    reported the disagreement once it had lasted 10 minutes after that,
+    and re-sent the state most of the room's thermostats showed (manual,
+    5.5 °C) as one room command 11 minutes later;
+    the moved thermostat took it within 11 s.
   - Placing a radiator thermostat whose C line named no room into the room
     its list names (a wakeup and three radiograms):
     its C line named the room 18 s later.
     The room's wall thermostat, which had reported a link error before,
     still reported it half an hour later.
-  - A factory-fresh radiator thermostat paired and put into a room with a
-    wall thermostat: three link radiograms and the copy were accepted,
+  - A factory-fresh radiator thermostat paired and put into a room with a wall thermostat:
+    three link radiograms and the copy were accepted,
     one slot held for over 12 minutes.
-    It measured 15.9 °C before it was mounted and 11 °C on its cold
-    radiator, and then showed "window open" on its display while the wall
-    thermostat did not; both kept the same setpoint, as linked partners
-    pass it on.
+    It measured 15.9 °C before it was mounted and 11 °C on its cold radiator,
+    and then showed "window open" on its display while the wall thermostat did not;
+    both kept the same setpoint, as linked partners pass it on.
     Massimo reads no window-open state of a thermostat from its L entry.
   - A radiator thermostat whose batteries were taken out and put back
     (for its calibration on the new radiator) first reported manual,

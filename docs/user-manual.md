@@ -10,9 +10,9 @@ and how the apps work inside in [app.md](app.md).
 
 The Massimo app opens on its list of servers,
 or straight on the server you chose to open at start.
-Each server in the list says whether the app reaches it
-(on the LAN, remote, not reachable, or a changed certificate)
-and, in green, who you are signed in as there.
+Each server in the list says whether the app reaches it (on the LAN, remote,
+not reachable, or a changed certificate) and, in green,
+who you are signed in as there.
 Touch a server to open it; ⚙, or a long press, opens its settings.
 Where the app keeps a login by fingerprint for a server,
 touching it asks for your fingerprint first (below),
@@ -27,8 +27,8 @@ and the sign-in icon beside it opens its sign-in form straight away.
   The card closes once a server is added, or with **×**.
   While the list is empty, the card is always there.
 - **Sign out of all**, which signs the app out of every server.
-- **Forget all stored credentials**, where a server keeps a login by
-  fingerprint; it asks first, under the list,
+- **Forget all stored credentials**,
+  where a server keeps a login by fingerprint; it asks first, under the list,
   and turns every such login off (below).
 - **App settings…**, below.
 
@@ -39,18 +39,18 @@ touch a field to change it.
 On a server's page, **☰** → **This server's settings…** opens them too,
 on the list, and **App settings…** the app's own.
 
-- **Open at start**: the app opens this server when it starts,
-  in place of the list.
-  One server at most has it, and the first server you add has it
-  until you choose another.
+- **Open at start**:
+  the app opens this server when it starts, in place of the list.
+  One server at most has it,
+  and the first server you add has it until you choose another.
   **Select server…** in its ☰, or **Cancel** on its sign-in form,
   takes you back to the list.
   When the server does not answer, the app shows the list.
 - **Signed in as …** and **Sign out**, where the app is signed in there:
   Sign out ends that session on the server and on the phone.
-- **A session of this phone is still valid here**, where the app
-  forgot a session while the server did not answer
-  (Sign out, Turn off, Forget all, or a new sign-in in its place):
+- **A session of this phone is still valid here**,
+  where the app forgot a session while the server did not answer (Sign out,
+  Turn off, Forget all, or a new sign-in in its place):
   the next time the app signs in there as the same user,
   it ends that session by itself.
 - **A key of this phone is still valid here**, where Turn off or Forget all
@@ -71,7 +71,8 @@ on the list, and **App settings…** the app's own.
 
 ### App settings
 
-**Appearance**: as the phone, light or dark.
+**Appearance**:
+as the phone, light or dark.
 It sets the list, and every server's page whose own appearance
 (My settings) is "as the system".
 
@@ -85,7 +86,8 @@ so that you type your password once.
 1. Open the app and choose the server.
 2. On the sign-in form, switch on **Enable login by fingerprint**,
    then sign in with your name and password as usual.
-3. The phone asks for your fingerprint. Touch the sensor.
+3. The phone asks for your fingerprint.
+   Touch the sensor.
 
 The app now keeps a key for you on the phone, locked by your fingerprint.
 If you cancel the fingerprint, you are still signed in,
@@ -114,8 +116,8 @@ Your password still works as before.
 Each server's settings, on the app's list of servers (⚙ beside the server),
 say when the app asks for your fingerprint:
 
-- **each time the app comes back**: whenever you return to the app,
-  it is covered until you touch the sensor;
+- **each time the app comes back**:
+  whenever you return to the app, it is covered until you touch the sensor;
   the page is as you left it.
   Opening the server from the list asks each time too,
   and going back to it from the list shows its sign-in form.
@@ -123,7 +125,8 @@ say when the app asks for your fingerprint:
   On Android 12 and older, this also blocks screenshots of that page;
 - **when the app starts** (the usual choice):
   each time the app is started anew;
-- **only after a logout**: you stay signed in until you log out,
+- **only after a logout**:
+  you stay signed in until you log out,
   and the fingerprint is asked on the sign-in form only.
 
 Logging out ends the session on this phone only.
@@ -156,8 +159,8 @@ At home, on the local network, plain `http://` works as usual.
 ### Turning it off
 
 - **Turn off**, in the server's settings on the app's list of servers,
-  removes the key at the server, signs you out there
-  and forgets the key on the phone.
+  removes the key at the server,
+  signs you out there and forgets the key on the phone.
   Where the app is signed in to that server it needs nothing more;
   where it is not, it asks for your fingerprint once.
 - **Forget all stored credentials**, in the list's ☰,
@@ -170,11 +173,10 @@ At home, on the local network, plain `http://` works as usual.
   If you cancel the fingerprint, it asks no more,
   and those keys stay valid at their servers (below).
   Its message names the servers where a key stays valid.
-- **Remove server**, in a server's settings, turns its login by fingerprint off first,
-  as Turn off does, or signs the app out there,
-  then forgets everything the app kept for it.
-  It says so before, and warns where a key or a session of the phone is
-  still valid there;
+- **Remove server**, in a server's settings,
+  turns its login by fingerprint off first, as Turn off does,
+  or signs the app out there, then forgets everything the app kept for it.
+  It says so before, and warns where a key or a session of the phone is still valid there;
   afterwards its message names any key or session that stays valid,
   to revoke under My profile.
 

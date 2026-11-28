@@ -21,13 +21,12 @@ which the AndroidX libraries ask for,
 and behaves as an app made for Android 16.
 Three flavours: `foss`, the F-Droid build, and `play`, the Google Play build,
 the same app until Block 8 gives `play` Google's push distributor,
-both with the application id `ch.metaworx.massimo`;
-and `nightly`, `foss` as the nightly build publishes it on GitHub,
+both with the application id `ch.metaworx.massimo`; and `nightly`,
+`foss` as the nightly build publishes it on GitHub,
 `ch.metaworx.massimo.nightly`, "Massimo nightly",
-an app of its own that installs beside the release
-(AP MobileApp, D18-A).
-Its icon is the mark's one-colour layer, white on a dark blue
-(`src/nightly/res/`);
+an app of its own that installs beside the release (AP MobileApp, D18-A).
+Its icon is the mark's one-colour layer,
+white on a dark blue (`src/nightly/res/`);
 a themed icon looks the same for both, and the label tells them apart.
 Dependencies are AndroidX (Apache-2.0) alone, from Google's Maven
 repository and Maven Central; the JVM tests add JUnit and org.json.
@@ -109,8 +108,8 @@ and the CI job Android app runs it.
 
 ### The signing keys
 
-The app is signed in the release workflow alone
-(`GUIDELINES/project/CI.md`, "Releases"), with three keys the owner makes and keeps:
+The app is signed in the release workflow alone (`GUIDELINES/project/CI.md`,
+"Releases"), with three keys the owner makes and keeps:
 
 | Key | Signs | Secrets, environment | Certificate |
 |---|---|---|---|
@@ -125,8 +124,8 @@ certificate before a file is handed on;
 without a key's secrets or its certificate the release warns and carries no app.
 The keys never enter the repository, a log or a chat;
 the certificates are public and committed.
-A lost app signing key cannot be registered again for Android's
-developer verification, nor for Play App Signing with our own key,
+A lost app signing key cannot be registered again for Android's developer verification,
+nor for Play App Signing with our own key,
 so the keystore and its password are kept in two places of the owner's.
 Made with `keytool` (here the app signing key; the others alike,
 with their alias and name):
@@ -193,30 +192,30 @@ The unit tests run on the JVM (`app/src/test/`): the server store,
 the token store with a JVM key, the probe against a local HTTP server,
 the trust manager with a self-signed certificate, fingerprints,
 origins and who may call what, the discovery event;
-the login store with JVM keys, the login's requests against a local HTTP
-server, and where each choice of when the fingerprint is asked keeps a session;
+the login store with JVM keys, the login's requests against a local HTTP server,
+and where each choice of when the fingerprint is asked keeps a session;
 what a tap in the list does, row for row of its rule (`OpeningTest`),
 and what an opening withholds on leaving for the list (`OpenedTest`);
-the sessions' check, sign-out and Turn off's revoke against a local HTTP
-server, a failure logged without any secret,
+the sessions' check, sign-out and Turn off's revoke against a local HTTP server,
+a failure logged without any secret,
 Turn off and Forget all on every path and the keys they leave,
-revoked at the next session (`FakeServer`), the certificate's details
-(`src/test/resources/san.pem`, made for the test, its key thrown away),
-the address the server opened at start is taken at, and the app's settings.
-The WebView, the bridge, the prompt and the Keystore's keys bound to it
-are checked on an emulator:
+revoked at the next session (`FakeServer`),
+the certificate's details (`src/test/resources/san.pem`, made for the test,
+its key thrown away), the address the server opened at start is taken at,
+and the app's settings.
+The WebView, the bridge,
+the prompt and the Keystore's keys bound to it are checked on an emulator:
 `make app-emulator-test`, at the repository's root,
 runs the instrumented tests (`app/src/androidTest/`) on one,
 against two servers on the host with the fake Cube,
-the fingerprint simulated
-(`tools/app-emulator/README.md`, which lists the cases).
+the fingerprint simulated (`tools/app-emulator/README.md`,
+which lists the cases).
 It needs KVM and the SDK's emulator with the pinned system image,
 says which is missing, and CI's job Android emulator runs it.
 What only a phone shows stays the phone check's:
 a real fingerprint sensor, the phone maker's autofill, the look.
-On a phone, by hand, the connect page's smoke test (`ConnectPageTest`)
-is the one that runs, the others skipped without the servers the target
-passes;
+On a phone, by hand, the connect page's smoke test (`ConnectPageTest`) is the
+one that runs, the others skipped without the servers the target passes;
 the orchestrator clears the debug app's data before each test,
 and Gradle uninstalls it afterwards:
 
@@ -274,12 +273,11 @@ Its socket is `webview_devtools_remote_<pid>`, forwarded to a port in WSL:
 adb forward tcp:9222 localabstract:webview_devtools_remote_$(adb shell pidof ch.metaworx.massimo)
 ```
 
-Chrome then finds the page at `localhost:9222`
-(`chrome://inspect`, "Configure…"), and `http://localhost:9222/json` lists it.
+Chrome then finds the page at `localhost:9222` (`chrome://inspect`,
+"Configure…"), and `http://localhost:9222/json` lists it.
 
-A VPN on the phone that does not let LAN connections through
-(its setting is often called "Allow LAN connections")
-routes the LAN into its tunnel:
+A VPN on the phone that does not let LAN connections through (its setting is
+often called "Allow LAN connections") routes the LAN into its tunnel:
 the phone reaches no server on the LAN, and adding one times out,
 while the LAN still reaches the phone, `adb` among it.
 Allow LAN connections in the VPN, or turn it off, for a server on the LAN.
