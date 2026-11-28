@@ -21,7 +21,7 @@ import (
 const suite = ".."
 
 // section is where the failures send a test's writer.
-const section = "docs/ui-testing.md, section 9"
+const section = "docs/ui-testing.md, section 1"
 
 var (
 	// fixedWaitRE is a fixed pause: Playwright's wait_for_timeout called.
@@ -293,11 +293,11 @@ func TestCheck(t *testing.T) {
 	want := []string{
 		"tools/ui-test/idioms/wait_for_timeout.txt: test_gone.py is listed with 3, but there is no such test file: take its line out",
 		"tools/ui-test/test_a.py: wait_for_timeout( calls: 2, 1 listed in tools/ui-test/idioms/wait_for_timeout.txt: " +
-			"wait for what the test checks (docs/ui-testing.md, section 9)",
+			"wait for what the test checks (docs/ui-testing.md, section 1)",
 		"tools/ui-test/test_b.py: wait_for_timeout( calls: 1, 2 listed in tools/ui-test/idioms/wait_for_timeout.txt: " +
-			"lower its line to 1 in this commit, so that the count does not rise again (docs/ui-testing.md, section 9)",
+			"lower its line to 1 in this commit, so that the count does not rise again (docs/ui-testing.md, section 1)",
 		"tools/ui-test/test_c.py: wait_for_timeout( calls: 0, 1 listed in tools/ui-test/idioms/wait_for_timeout.txt: " +
-			"take its line out in this commit, so that the count does not rise again (docs/ui-testing.md, section 9)",
+			"take its line out in this commit, so that the count does not rise again (docs/ui-testing.md, section 1)",
 	}
 	if !slices.Equal(got, want) {
 		t.Errorf("check:\n%s\nwant:\n%s", strings.Join(got, "\n"), strings.Join(want, "\n"))

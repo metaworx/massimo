@@ -111,7 +111,7 @@ func TestPushSubscriptionsThatMayBeSentTo(t *testing.T) {
 	if got := users(); len(got) != 5 {
 		t.Fatalf("all five: %v", got)
 	}
-	if err := s.RevokeToken(ctx, revoked.ID); err != nil {
+	if _, err := s.RevokeToken(ctx, revoked.ID); err != nil {
 		t.Fatal(err)
 	}
 	if err := s.RevokeSessions(ctx, sessions.ID); err != nil {

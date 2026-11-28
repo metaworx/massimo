@@ -203,8 +203,8 @@ so no unit change is needed for the file to be created.
 The data directory is a global option like `-env`: `massimo -data
 <dir> serve …`, default `MASSIMO_DATA`, else the current directory;
 for the service user, the owner of `/etc/massimo/env`, without `-env`,
-`/var/lib/massimo` and that settings file alone (`useServiceDefaults`). The
-installers pass it explicitly in the unit,
+`/var/lib/massimo` and that settings file alone (`useServiceDefaults`).
+The installers pass it explicitly in the unit,
 the plist and the Windows service arguments (`ServiceArgs`),
 so nothing depends on the working directory;
 a Windows service runs in `System32`, so there the default is not usable,
@@ -407,22 +407,25 @@ CREATE TABLE tokens (
     id             INTEGER PRIMARY KEY,
     user_id        INTEGER NOT NULL REFERENCES users (id) ON DELETE CASCADE,
     kind           TEXT    NOT NULL CHECK (kind IN ('session', 'api')),
-    hash           TEXT    NOT NULL UNIQUE,      -- SHA-256 of the token, hex; the token itself is never stored
+    hash           TEXT    NOT NULL UNIQUE,      -- SHA-256 of the token, hex; the token itself is never stored; a new secret keeps the old one in a revoked row (AP KeyLife, Block 5)
     label          TEXT    NOT NULL DEFAULT '',  -- 'MASSIMO_API_TOKEN', 'Loxone', 'Firefox on the laptop'
     created_at     TEXT    NOT NULL,
-    expires_at     TEXT,                         -- NULL: never (API keys); sessions: moved on every use
+    expires_at     TEXT,                         -- sessions: moved on every use; API keys: the end date, NULL for none (AP KeyLife, Block 4)
     last_used_at   TEXT,
     last_used_from TEXT    NOT NULL DEFAULT '',  -- the client's address
     deleted_at     TEXT,                         -- revoked; revoked_at until migration 0024 (D7)
     parent_id      INTEGER,                      -- migration 0025: the key a session was made from; NULL for a sign-in's and for a key
-    revoke_hash    TEXT                          -- migration 0100: SHA-256 of the token's revoke code, hex; NULL where the store never held the secret
+    revoke_hash    TEXT,                         -- migration 0100: SHA-256 of the token's revoke code, hex; NULL where the store never held the secret
+    made_by        INTEGER,                      -- migration 0101: the API key that made a key; NULL for every other token
+    idle_exempt    INTEGER NOT NULL DEFAULT 0    -- migration 0102: 1 for an API key kept from the idle limit (auth.key_idle_days)
 );
 CREATE INDEX tokens_user ON tokens (user_id);
 CREATE INDEX tokens_parent ON tokens (parent_id) WHERE parent_id IS NOT NULL;  -- migration 0025
 CREATE UNIQUE INDEX tokens_revoke ON tokens (revoke_hash) WHERE revoke_hash IS NOT NULL;  -- migration 0100
+CREATE INDEX tokens_made_by ON tokens (made_by) WHERE made_by IS NOT NULL;  -- migration 0101
 
 CREATE TABLE settings (
-    key        TEXT    NOT NULL,   -- 'stale_after', 'poll_interval', 'log.keep_days', 'backups.keep_days_auto', …
+    key        TEXT    NOT NULL,   -- 'stale_after', 'poll_interval', 'log.keep_days', 'backups.keep_days_auto', 'auth.key_idle_days', …
     value      TEXT    NOT NULL,   -- JSON: a string, a number or a document
     updated_at TEXT    NOT NULL,
     updated_by INTEGER REFERENCES users (id),
@@ -648,8 +651,8 @@ Notes on the tables:
   so "Add" in the UI is an update of the row and `GET /api/v1/cubes` is one query;
   the discovery columns are what `foundCube` carries today.
   A Cube row is never deleted by the server;
-  "Remove" sets `configured = 0` and `deleted_at` (`RemoveCube`) and keeps the
-  events, the audit and the backups of the Cube with the row.
+  "Remove" sets `configured = 0` and `deleted_at` (`RemoveCube`) and keeps the events,
+  the audit and the backups of the Cube with the row.
   Discovery makes no row for a serial with removed rows (D20-B):
   it is found in memory only until it is added, as new or restored.
 - `log.data` (`events.data` before migration 0014) is the event JSON as the
@@ -662,12 +665,13 @@ Notes on the tables:
   Migration 0009 (AP Logging v1.1, Block 3) adds the server's own events,
   with `cube_id` NULL, and copies out `source`, `level`, `serial` and `user_id`:
   a Cube's log shows the server's events beside its own,
-  and a page chooses a source, a level and above, a device by its serial
-  and a user.
+  and a page chooses a source, a level and above,
+  a device by its serial and a user.
   A page reads one index from its end, in id order,
   under 2 ms at 90,000 events of one Cube (`TestEventsPageQuery`);
   with the server's events it is two such walks, the Cube's and the server's,
-  each limited to the page and merged by id, since one query for both would sort.
+  each limited to the page and merged by id,
+  since one query for both would sort.
   A page after a cursor (`after=<id>`, AP LogCursor) walks the same index
   forward from the cursor, `id > ? ORDER BY id ASC`,
   since every index carries the rowid after its columns:
@@ -754,9 +758,8 @@ Notes on the tables:
     a third of whose events are warnings;
     154 ms on the Pi 5, whose busiest Cube has none,
     so the page reads every row.
-    The same walk takes 11 s on the Pi 1
-    (a page of errors, of which it has none),
-    5 to 16 s from one page to the next.
+    The same walk takes 11 s on the Pi 1 (a page of errors,
+    of which it has none), 5 to 16 s from one page to the next.
   - Measured again on 2026-11-09 on new copies of both stores,
     with a test binary at schema 10 and one at 11, at 90,000 events:
     migration 0011 takes a page of 200 warnings from 58 ms to 1.9 ms on the Pi 5,
@@ -824,14 +827,16 @@ Notes on the tables:
   `deleted_at` every table's tombstone (D7: `tokens.revoked_at` until 0024),
   and the first migration seeds `settings` with `node.id` and `tenant.id`.
   The listing above leaves those columns out so that it stays readable;
-  the migration file has them, and so does `internal/store/migrations/store.sql`.
+  the migration file has them,
+  and so does `internal/store/migrations/store.sql`.
 - `rooms` (migration 0017) are each Cube's rooms as the server knows them,
   kept in step with the Cube's metadata:
   a room it names gets a row and a uid, one it leaves out is marked deleted,
   and a room that takes a deleted room's number later gets a row of its own.
-  The uid is the room's `room_uid` in the API, which a client keeps for the
-  room's life; the other columns are the settings of the room's virtual wall
-  thermostat (docs/api-v1.md, "The virtual wall thermostat").
+  The uid is the room's `room_uid` in the API,
+  which a client keeps for the room's life;
+  the other columns are the settings of the room's virtual wall thermostat
+  (docs/api-v1.md, "The virtual wall thermostat").
   A row has `version`, `deleted_at` and `origin`, as the owned tables do.
 - `cubes.proxy_virtual` (docs/proxy.md) was a table of its own,
   `cube_options` (migration 0018), so that a binary built for an earlier version
@@ -855,9 +860,11 @@ Notes on the tables:
   a subscription is bound to this server's VAPID key, is not replicated,
   and is deleted rather than marked.
   The VAPID key pair (RFC 8292) is the setting `push.vapid`,
-  made at its first use and kept sealed, as the providers' client secrets are
-  (section 6, "Sign-in through OpenID Connect"; AP SealedSecrets v1.0):
-  its value is the JSON string of the box, the setting's key its additional data,
+  made at its first use and kept sealed,
+  as the providers' client secrets are (section 6,
+  "Sign-in through OpenID Connect"; AP SealedSecrets v1.0):
+  its value is the JSON string of the box,
+  the setting's key its additional data,
   so a `store backup` carries it but opens it only beside its `opaque.key`;
   a plain one, from before, is sealed at the next open.
   One that no longer opens is made anew, and the browsers subscribe again
@@ -957,31 +964,33 @@ the old one dropped, the new one renamed, the indexes made.
 It fills the new columns from each row's JSON:
 the serial from the event or its device view,
 else from another row of the same Cube and radio address,
-else for the Cube's own C line the Cube's;
-the source from the event, else `system` for a restore's,
-`cube` for the Cube's own C line and for a row of no device, `device` for the rest;
-the level `warn` for `disconnected`, `debug` for `hello`, `info` for the rest.
-It keeps `min_reader` 1: a binary of version 8 reads its Cube's rows by
-`cube_id = ?`, never meeting a NULL one, and writes rows without the new
-columns, which take their defaults;
-the writer of a binary of version 9 to 23 filled those (`source` empty) at its
-start, and 0024 fills them once, the binaries since knowing no such rows.
+else for the Cube's own C line the Cube's; the source from the event,
+else `system` for a restore's,
+`cube` for the Cube's own C line and for a row of no device,
+`device` for the rest; the level `warn` for `disconnected`, `debug` for `hello`,
+`info` for the rest.
+It keeps `min_reader` 1:
+a binary of version 8 reads its Cube's rows by `cube_id = ?`,
+never meeting a NULL one, and writes rows without the new columns,
+which take their defaults;
+the writer of a binary of version 9 to 23 filled those (`source` empty) at its start,
+and 0024 fills them once, the binaries since knowing no such rows.
 `0011_events_warnings.sql` (AP Logging v1.2, Block 8) adds `events_cube_warn`,
 an index of the log's warnings and errors alone (section 5, `events`),
 additively: a binary of before writes and reads as it did,
 and SQLite keeps the index for its rows too.
-`0014_log.sql` (AP OneLog v1.1, Block 4) makes `commands` again with
-`AUTOINCREMENT`, for the reason 0013 gave the backups,
-and `events` again as `log`, with `command_id` and `visibility`;
-it declares `-- foreign_keys: off`, so the runner applies it with the
-foreign keys off, set outside its transaction,
+`0014_log.sql` (AP OneLog v1.1,
+Block 4) makes `commands` again with `AUTOINCREMENT`,
+for the reason 0013 gave the backups, and `events` again as `log`,
+with `command_id` and `visibility`; it declares `-- foreign_keys: off`,
+so the runner applies it with the foreign keys off, set outside its transaction,
 since `DROP TABLE` with them on deletes the rows first,
 which would set every `audit.command_id` to NULL and delete the steps;
 it runs `PRAGMA foreign_key_check` before the commit.
-It keeps `min_reader` 1 by a view: `events` shows the log's columns as the
-binaries before it knew them,
-and its `INSTEAD OF` triggers turn their insert, update and delete into the
-log's.
+It keeps `min_reader` 1 by a view:
+`events` shows the log's columns as the binaries before it knew them,
+and its `INSTEAD OF` triggers turn their insert,
+update and delete into the log's.
 SQLite counts no rows changed through a view,
 so the prune of such a binary removes one chunk per Cube a pass;
 the next pass goes on.
@@ -995,45 +1004,50 @@ and the rename carries it to the new table;
 an id pruned before the upgrade can still be given out once more.
 It keeps `min_reader` 1: the columns and their meaning stay,
 and a binary of before chooses a new id by the table's schema as well.
-`0023_down_parts.sql` (AP StoreRaise v1.2, Block 1, D1-D) adds
-`schema_version.down_sql`, additively:
-the down part of each version, which the binary writes into its row at every
-start where the row has none (the "down parts" rule below).
-`0024_raise.sql` (AP StoreRaise v1.2, Block 3) is the first migration that
-raises `min_reader`, to 24: no binary built for 23 or earlier opens a file it
-migrated, and each refuses it naming `massimo store downgrade -to <its version>`,
+`0023_down_parts.sql` (AP StoreRaise v1.2, Block 1,
+D1-D) adds `schema_version.down_sql`, additively: the down part of each version,
+which the binary writes into its row at every start where the row has none (the
+"down parts" rule below).
+`0024_raise.sql` (AP StoreRaise v1.2,
+Block 3) is the first migration that raises `min_reader`, to 24:
+no binary built for 23 or earlier opens a file it migrated,
+and each refuses it naming `massimo store downgrade -to <its version>`,
 which the newer binary runs.
 It drops what was kept for older binaries alone (the view `events`,
-the fill of rows without a source, `cube_options`, now `cubes.proxy_virtual`)
-and tidies the schema: the backups' files in `backup_data`;
-`effective_user_id` and `real_user_id` in `log`, `audit` and `user_identities`
-(D2-A; `real_user_id` filled for every row with a user, the audit rows of a call
-through an integration with its user's own);
-an integration's users named `<uuid>:`, `<uuid>:system` and `<uuid>:<subject>`
-under `users.integration_id`, and `integrations` without `key`, `user_id` and
-`system_user_id` (D3-A, D8-C);
-the columns of a replicated row on `user_identities`, whose deletes are
-tombstones now, and a uuid on `roles` (D6-B);
+the fill of rows without a source, `cube_options`,
+now `cubes.proxy_virtual`) and tidies the schema:
+the backups' files in `backup_data`;
+`effective_user_id` and `real_user_id` in `log`,
+`audit` and `user_identities` (D2-A;
+`real_user_id` filled for every row with a user,
+the audit rows of a call through an integration with its user's own);
+an integration's users named `<uuid>:`,
+`<uuid>:system` and `<uuid>:<subject>` under `users.integration_id`,
+and `integrations` without `key`, `user_id` and `system_user_id` (D3-A, D8-C);
+the columns of a replicated row on `user_identities`,
+whose deletes are tombstones now, and a uuid on `roles` (D6-B);
 `tokens.revoked_at` as `deleted_at` (D7);
-a removed row's name unique among the live ones only, the users' `-del-…`
-suffixes taken off (D10-A, D11-A);
+a removed row's name unique among the live ones only,
+the users' `-del-…` suffixes taken off (D10-A, D11-A);
 and the rest of D9-A (`commands.deleted_at` and `commands_cube_time` gone,
 `auto_domains` a JSON array, `request_expires_at`, a CHECK on `last_level`).
 It runs with the foreign keys off and makes a table again as `<name>_new`,
 copied, dropped and renamed; `log` is altered, never made again.
-Its down part, `0024_raise.down.sql`, makes the file of version 23 again to the
-byte of `sqlite_master`, every row a binary for 23 wrote as it was;
-its header names what it loses, L1 to L8:
-who made a row where an integration acted for a linked user (L1),
-the removed identities (L2), the integration users' and the removed users'
-names, made again by the rules of 23 (L3, L5), an integration's key, made again
-from its name (L4), the role's uuid and a second row of one key (L6),
-the time and the user of a Cube's option (L7), and the never written
-`deleted_at` of tokens and commands (L8).
-Several rows of one serial (a Cube added again after its removal, D15-C) are
-all kept: the one not removed keeps the serial, else the newest removed, and
-each other, removed, is `<serial>~<its id>` in `cubes.serial` alone, with its
-log, backups, rooms, commands and audit rows;
+Its down part, `0024_raise.down.sql`,
+makes the file of version 23 again to the byte of `sqlite_master`,
+every row a binary for 23 wrote as it was; its header names what it loses,
+L1 to L8: who made a row where an integration acted for a linked user (L1),
+the removed identities (L2),
+the integration users' and the removed users' names,
+made again by the rules of 23 (L3, L5), an integration's key,
+made again from its name (L4), the role's uuid and a second row of one key (L6),
+the time and the user of a Cube's option (L7),
+and the never written `deleted_at` of tokens and commands (L8).
+Several rows of one serial (a Cube added again after its removal,
+D15-C) are all kept: the one not removed keeps the serial,
+else the newest removed, and each other, removed,
+is `<serial>~<its id>` in `cubes.serial` alone, with its log, backups, rooms,
+commands and audit rows;
 `log.serial` and the serials in the rows' JSON stay as written.
 A binary for 23 reads only the Cubes not removed, and every read of the log
 is by `cube_id`, so their lines do not meet;
@@ -1041,8 +1055,8 @@ is by `cube_id`, so their lines do not meet;
 `0025_token_parent.sql` (AP MobileApp v1.1, Block 8, D31-A) adds
 `tokens.parent_id` and its index, additively, keeping `min_reader` 24:
 a session made from a key names it (section 6, "A session from a key").
-A binary for 24 writes its tokens without the column and makes no session
-from a key; one that revokes a key leaves the key's session live in its row,
+A binary for 24 writes its tokens without the column and makes no session from a key;
+one that revokes a key leaves the key's session live in its row,
 which a binary since 0025 refuses, a session counting only while its key does.
 The column has no foreign key, so that its down part,
 `0025_token_parent.down.sql`, can drop it and the index;
@@ -1066,6 +1080,59 @@ A binary for 24 to 26 writes its tokens without the column,
 which this binary fills at a token's next use.
 Its down part, `0100_token_revoke.down.sql`, drops the column and the index;
 it loses the tokens' revoke codes, and only that.
+`0101_token_maker.sql`, the second of `main`'s block, after 0100
+(AP KeyLife v1.0, Block 2, D5-A), adds `tokens.made_by` and its index,
+additively, keeping `min_reader` 24:
+the API key that made a key, where the bearer of its making was that key
+(section 6, "Keys made by keys").
+A binary for 24 to 100 writes its tokens without the column,
+so a key it makes has no maker,
+and its revoke of a key, by its id or by its code, leaves the keys that
+key made, which a revoke by this binary of the key's own maker still
+reaches, the makers being followed through a revoked key.
+It keeps `min_reader` by the rules below:
+it adds a nullable column and an index, and changes the meaning of no column.
+What such a binary does not do, revoke the heirs and refuse a session whose key
+is past its end, is its code's, not the file's:
+`expires_at` and `parent_id` mean what they meant,
+and a binary that runs reads them its own way,
+as one for 24 left the sessions of a key it revoked (0025).
+A raise would make every rollback to the 0.17 line, or to a binary of 100,
+a downgrade of the file, and would protect nothing a file can carry:
+the heirs a rollback's revoke leaves are reached again by this binary's
+revoke of their maker's maker,
+and no key has an end before AP KeyLife's Block 4.
+The column has no foreign key, so that its down part,
+`0101_token_maker.down.sql`, can drop it and the index,
+taking the file back to 100;
+it loses which key made a key, and only that.
+`0102_token_idle.sql`, the third of `main`'s block, after 0101
+(AP KeyLife v1.0, Block 3, D7-A), adds
+`tokens.idle_exempt`, a column defaulted to 0, additively, keeping `min_reader` 24:
+an API key kept from the idle limit of the setting `auth.key_idle_days`
+(section 6, "The life of a key").
+A binary for 24 to 101 writes its tokens without the column,
+so a key it makes is held to the limit,
+and knows no idle limit at all, so it lets in a key this binary ends unused.
+A raise of `min_reader` would not keep such a key out:
+an end is a state read at each check and nothing is written (D6-A),
+so the older binary that a downgrade serves would let it in all the same.
+Its down part, `0102_token_idle.down.sql`, drops the column,
+taking the file back to 101;
+it loses which keys were kept from the limit, and only that,
+and a binary of 102 or later that opens the file again holds every key to it.
+AP KeyLife's Block 4, an API key's end date, adds no migration:
+the end date is `tokens.expires_at`, a column of 0001 that every binary reads
+for the token itself,
+so a binary for 24 to 102 refuses a key past its end date too;
+one before Block 2 lets in that key's session, as the paragraph of 0101 says,
+which is its code's and not the file's, and `min_reader` stays 24.
+Nor does Block 5, a key's new secret:
+it writes the key's `tokens.hash` and a revoked row of the old hash,
+columns of 0001 that every binary reads as this one does,
+and moves `revoke_hash` (0100) with them,
+so a binary for 24 to 102 lets the new secret in
+and refuses the old one as a revoked token, and `min_reader` stays 24.
 On a store of 500 000 log rows (149 MB, a tenth with a user) a desktop took
 2.0 s for the raise, its copy `massimo.db.before-24` included, and 2.2 s for the
 down part, its copy included (`TestRaiseTimes` with
@@ -1087,40 +1154,40 @@ Rules:
 - A binary that finds a file with `min_reader` above its own version
   refuses to start with a message naming the copy and the versions;
   it never downgrades a file by itself.
-- The down parts: a migration whose `min_reader` is above 1, the one that
-  raised it and every one after it (an additive one too, since it was made on
-  the raised schema), comes with `NNNN_<name>.down.sql`, plain SQL that undoes it;
+- The down parts: a migration whose `min_reader` is above 1,
+  the one that raised it and every one after it (an additive one too,
+  since it was made on the raised schema), comes with `NNNN_<name>.down.sql`,
+  plain SQL that undoes it;
   `TestRaisingMigrationsHaveDownParts` fails without one.
-  The binary embeds them and writes each into `schema_version.down_sql`
-  of its version,
+  The binary embeds them and writes each into `schema_version.down_sql` of its version,
   so that the file carries them for a binary that knows the version by its row alone.
 - `massimo store downgrade -to <N>` takes the file back to what a binary for
-  schema version N opens:
-  it undoes, newest first, the migrations from the first whose `min_reader` is
-  above N up to the file's version,
+  schema version N opens: it undoes, newest first,
+  the migrations from the first whose `min_reader` is above N up to the file's version,
   in one transaction with the foreign keys off and checked before the commit,
   and deletes their `schema_version` rows;
-  the additive migrations before that first one stay, since N's binary reads them,
-  so the file can end above N.
+  the additive migrations before that first one stay,
+  since N's binary reads them, so the file can end above N.
   The SQL of each comes from the binary that runs it, else from the file.
   It needs the file alone: it opens it with `locking_mode=EXCLUSIVE`,
   so a running `serve`, which holds a shared lock, makes it fail
   ("stop the service first"), and nobody opens the file while it runs.
-  It copies the file first to `massimo.db.before-downgrade-<version>`
-  (`-2`, `-3` where an earlier downgrade left that name), owned by the file's owner
-  where root runs it.
+  It copies the file first to `massimo.db.before-downgrade-<version>` (`-2`,
+  `-3` where an earlier downgrade left that name),
+  owned by the file's owner where root runs it.
   A version without a down part in either stops it before anything changes,
   naming the `massimo.db.before-<version>` copy as the way back.
   It loses what the newer schema added, and only that.
-- The rollback of `massimo update` (after a failed health check, and `-rollback`)
-  asks the binary it put back whether it opens the file (its `store info`,
-  which names its schema version N also in its refusal);
+- The rollback of `massimo update` (after a failed health check,
+  and `-rollback`) asks the binary it put back whether it opens the file (its
+  `store info`, which names its schema version N also in its refusal);
   where it does not, the rollback stops the service,
-  runs the binary it set aside (`.failed`, after `-rollback` `.prev`, the newer one)
-  as `store downgrade -to <N>`,
-  else, after a failed health check, the binary put back, which is the one that
-  ran the update and downgrades by the file's own down parts,
-  and says what it did in the update's status (packaging/README.md, "The store").
+  runs the binary it set aside (`.failed`, after `-rollback` `.prev`,
+  the newer one) as `store downgrade -to <N>`, else,
+  after a failed health check, the binary put back,
+  which is the one that ran the update and downgrades by the file's own down parts,
+  and says what it did in the update's status (packaging/README.md,
+  "The store").
   The update runs as root and opens no store itself:
   where root runs them, both binaries run as the owner of `massimo.db`.
   apt, brew and the Windows installer never downgrade a binary.
@@ -1129,16 +1196,18 @@ Rules:
 - Tests: migrating an empty file to the latest version,
   migrating a file at every earlier version,
   opening a newer additive version with an older reader,
-  and a test-only raise undone by its down parts, from the binary and from the
-  file, to the schema of a fresh file (`downgrade_test.go`).
-  For 0024 (`raise_test.go`, D14-A): each release's dump, migrated to the
-  newest version and downgraded for its own release, equals the dump migrated
-  only as far as that downgrade stops, in `sqlite_master` and in every row but
-  for the columns of the losses (`losses0024`, which names them by L1 to L8);
-  a store of version 23 with a row of every kind 0024 changes goes up and down
-  again so, and the losses themselves are checked where the raised schema
-  holds what 23 cannot; two rows of one serial go down and up again with all
-  their rows, the log byte for byte.
+  and a test-only raise undone by its down parts,
+  from the binary and from the file,
+  to the schema of a fresh file (`downgrade_test.go`).
+  For 0024 (`raise_test.go`, D14-A): each release's dump,
+  migrated to the newest version and downgraded for its own release,
+  equals the dump migrated only as far as that downgrade stops,
+  in `sqlite_master` and in every row but for the columns of the losses (`losses0024`,
+  which names them by L1 to L8);
+  a store of version 23 with a row of every kind 0024 changes goes up and down again so,
+  and the losses themselves are checked where the raised schema holds what 23 cannot;
+  two rows of one serial go down and up again with all their rows,
+  the log byte for byte.
   The comparison takes `sqlite_sequence` as a table like any other, so the
   AUTOINCREMENT counters of `backups` and `commands` are compared too.
 - The stores the releases wrote: `internal/store/testdata/releases/<tag>.sql`
@@ -1290,8 +1359,7 @@ moves such a user off it, and an owner gives it back.
 <!-- END GENERATED PARTIAL docs/fragments/_capability-rules.md -->
 
 The rule holds for `users`, `guests` and `passwords` alike,
-and for `integrations` in the role it gives
-(docs/api-v1.md, "Authentication").
+and for `integrations` in the role it gives (docs/api-v1.md, "Authentication").
 Both includes were decided on 2026-11-25 (AP StartConfiguration, D37),
 and on the same day that `reboot` does not include `update` (D40-A).
 
@@ -1321,29 +1389,30 @@ The default roles, as seeded.
 
 So `manager` is `operator` plus guests, pairing, names, structure, restore,
 the server's restart (migration 0006, 2026-11-07),
-the passwords of other users (migration 0008, 2026-11-08)
-and the repairs (migration 0022, 2026-11-15, AP RadioHealth, D166-A),
-which the role integration gains with its ceiling;
-`reboot` is seeded for no role (2026-11-08): restarting the server is not
-rebooting a computer that may run other services too;
+the passwords of other users (migration 0008,
+2026-11-08) and the repairs (migration 0022, 2026-11-15, AP RadioHealth,
+D166-A), which the role integration gains with its ceiling;
+`reboot` is seeded for no role (2026-11-08):
+restarting the server is not rebooting a computer that may run other services too;
 nor is `cubes.reboot` (2026-11-14):
 a Cube's restart drops the radiograms it has not delivered,
 and the owner gives it to a role where that is wanted;
 `operator` runs the heating, locks, configures, discovers and takes backups;
 `guest` is `operator` without the lock, backups, discovery and preferences;
-`viewer` reads;
-`integration` is fixed, as `owner` is (migration 0021, 2026-11-14,
-AP IntegrationUsers): it is the role of the registered integrations and
-of their users, and the ceiling of every call through an integration
-("Integrations", below). It holds every capability but those that manage
-people, sign-in and the integrations themselves (`users`, `passwords`,
-`roles`, `roles.disable`, `capabilities`, `auth`, `integrations`), so that
-an integration can never widen its own users; each integration's maximum
-narrows it further. It cannot be changed, disabled or given to a regular
-user. Its users before 0021, API keys made by hand for an integration,
+`viewer` reads; `integration` is fixed, as `owner` is (migration 0021,
+2026-11-14, AP IntegrationUsers):
+it is the role of the registered integrations and of their users,
+and the ceiling of every call through an integration ("Integrations", below).
+It holds every capability but those that manage people,
+sign-in and the integrations themselves (`users`, `passwords`, `roles`,
+`roles.disable`, `capabilities`, `auth`, `integrations`),
+so that an integration can never widen its own users;
+each integration's maximum narrows it further.
+It cannot be changed, disabled or given to a regular user.
+Its users before 0021, API keys made by hand for an integration,
 moved to the ordinary role `integration-v0`, "integration (before 1.0)",
-with exactly the set they had (read, setpoint, lock, and configure where
-migration 0012 gave it).
+with exactly the set they had (read, setpoint, lock,
+and configure where migration 0012 gave it).
 Moves and deletions (`structure`) go with the names to `manager`,
 because a move changes the house as a name does; if `operator` should keep them,
 that is one row of the seed.
@@ -1394,8 +1463,8 @@ the roles and their sets are rows (section 5), seeded by the first migration.
   unless it is kept open on purpose;
   a version before counted them, so such a server was closed and becomes open
   at the upgrade (D2).
-- With `MASSIMO_API_TOKEN` set and no user in the store (the first start after
-  the update, or a store with an integration's users alone),
+- With `MASSIMO_API_TOKEN` set and no user in the store (the first start after the update,
+  or a store with an integration's users alone),
   the server creates the user `owner` with the role `owner` and no password,
   and a token of kind `api` with the hash of `MASSIMO_API_TOKEN`,
   label `MASSIMO_API_TOKEN`.
@@ -1406,20 +1475,21 @@ the roles and their sets are rows (section 5), seeded by the first migration.
   (every five seconds it looks, and on SIGHUP),
   a `MASSIMO_API_TOKEN` whose hash is not in `tokens` is
   added to the owner's keys with the same label,
-  and one that was removed from the file is revoked.
+  and one that was removed from the file is revoked,
+  with the keys it made ("Keys made by keys", below; AP KeyLife, D8-A).
   The file stays the way to recover an owner who lost the password:
   put a token into the file, log in with it, set a password.
   The API does not revoke the file's key,
-  nor remove the user that holds it (`409`; docs/api-v1.md,
-  "Users: /api/v1/users and /api/v1/users/{name}"
-  and "Tokens: /api/v1/users/{name}/tokens"):
-  a revoked row keeps its hash, unique, so the next start could not add it back.
-  The file's key that an older start gave to an integration's user with the
-  role `owner`, live or revoked since (a revoke of the integration revokes it),
-  moves, at the start, to the first enabled regular owner,
+  nor remove the user that holds it (`409`; docs/api-v1.md, "Users:
+  /api/v1/users and /api/v1/users/{name}" and "Tokens:
+  /api/v1/users/{name}/tokens"): a revoked row keeps its hash, unique,
+  so the next start could not add it back.
+  The file's key that an older start gave to an integration's user with the role `owner`,
+  live or revoked since (a revoke of the integration revokes it), moves,
+  at the start, to the first enabled regular owner,
   or to the user `owner` made where there is none, in one transaction with it,
-  live again and its sessions ended, and the log says from whom
-  (`the settings file's key moved from an integration's user`;
+  live again and its sessions ended,
+  and the log says from whom (`the settings file's key moved from an integration's user`;
   AP LooseEnds, D1): such a user holds no key of its own.
   Whoever can edit the file is root or the service user,
   who can edit the database anyway.
@@ -1428,28 +1498,30 @@ the roles and their sets are rows (section 5), seeded by the first migration.
   docs/api-v1.md says so already),
   and Settings shows "No users yet" with a form that creates the first owner
   with a password; the form works only while there are no users,
-  and makes one owner: the store counts the users again in the transaction
-  that writes it, which holds the database's one write lock from its start
-  (`_txlock=immediate`), so of two at the same moment the second is refused
-  (AP FirstOwner, D15).
+  and makes one owner:
+  the store counts the users again in the transaction that writes it,
+  which holds the database's one write lock from its start (`_txlock=immediate`),
+  so of two at the same moment the second is refused (AP FirstOwner, D15).
   `massimo user add` does the same from the command line (open decision 4 on
   whether the form should exist).
-  The first regular user, made by the form, by `massimo user add` whatever its
-  role, or from `MASSIMO_API_TOKEN`, is told once what was set up while there
-  was none, or left by an owner since removed, and still works
-  (`OpenSetup`, AP AccessEnds, Block 3):
-  the integrations active with a key, or one still to be collected
-  with the approval's code,
-  the sign-in providers enabled, the roles added or changed
-  (one that is not a default role, or a default one past its first version;
+  The first regular user, made by the form,
+  by `massimo user add` whatever its role, or from `MASSIMO_API_TOKEN`,
+  is told once what was set up while there was none,
+  or left by an owner since removed, and still works (`OpenSetup`,
+  AP AccessEnds, Block 3): the integrations active with a key,
+  or one still to be collected with the approval's code,
+  the sign-in providers enabled,
+  the roles added or changed (one that is not a default role,
+  or a default one past its first version;
   never owner or integration) and the capabilities turned off;
   a request still waiting is not listed (AP AccessEnds, D15).
-  It is the log's `open_setup` line at warn, a log alert until a person marks it
-  seen, the form's toast and the command's second line
-  (docs/api-v1.md, "Authentication").
-  The setting `auth.keep_open` (false by default) keeps such a server open
-  on purpose: the web UI does not ask for the first owner
-  (AP FirstOwner, D11), and nothing changes about who is let in.
+  It is the log's `open_setup` line at warn,
+  a log alert until a person marks it seen,
+  the form's toast and the command's second line (docs/api-v1.md,
+  "Authentication").
+  The setting `auth.keep_open` (false by default) keeps such a server open on purpose:
+  the web UI does not ask for the first owner (AP FirstOwner, D11),
+  and nothing changes about who is let in.
   It counts only while there are no users:
   every transaction of the store that makes a user removes it,
   the API's first owner, `massimo user add`, the owner of `MASSIMO_API_TOKEN`
@@ -1460,10 +1532,11 @@ the roles and their sets are rows (section 5), seeded by the first migration.
   which a process of an older version can leave;
   each removal is an Info line, `keep-open setting removed`.
   A server that loses all its users asks for the first owner again.
-  One window is left: where a process of an older version adds a user
-  while the setting is on, and every user is removed again before the next
-  start or reload, the setting is in effect again without anybody having
-  been asked; only a start or a reload closes it.
+  One window is left: where a process of an older version adds a user while the
+  setting is on,
+  and every user is removed again before the next start or reload,
+  the setting is in effect again without anybody having been asked;
+  only a start or a reload closes it.
 - With users present, every `/api` request needs a valid token:
   the `Authorization: Bearer` header as today,
   with a session token or an API key.
@@ -1523,10 +1596,68 @@ empty for a session of a sign-in and for a key.
 and what they subscribed to push;
 the key's next session revokes its earlier one, in the same transaction,
 so a key has one live session at a time;
-and a session counts only while its key does (`TokenByHash`, `Tokens`),
+and a session counts only while its key does,
+neither revoked, past its end nor ended unused (AP KeyLife, Blocks 2 and 3),
 which also ends one whose key a binary before 0025 revoked.
+That is one rule, `alive` in `internal/store/tokens.go`,
+of a token not revoked, not past its own end, not an API key ended unused
+("The life of a key", below), its user not removed,
+and of a session made from a key only while the key is neither revoked,
+past its end nor ended unused,
+wherever a token is let in, counted or sent to:
+`TokenByHash` and `TokenAlive` give a token under it,
+and `TokenAliveAs` too while it holds the secret it was let in with,
+`TokenEnded` says a token the store issued is not,
+`Tokens` lists the sessions under it and the keys while not revoked,
+a key past its end staying listed, to be revoked,
+`PushSubscriptions` sends to a session's devices under it,
+and `AddKeySession` and `AddKeySessionAs` make a session from a key under it alone,
+the latter also only while the key holds the secret it was let in with.
 A password set by someone else ends the sessions, those made from keys
 among them, and leaves the keys.
+
+### Keys made by keys
+
+Any key of a user makes keys, for its user and for those its user manages,
+so a key that leaked could make more keys, which its revoke would leave
+(AP KeyLife v1.0, Block 2, D5-A).
+A key made by `POST /api/v1/users/{name}/tokens` whose bearer is an API key
+names that key in `tokens.made_by` (migration 0101), its heir;
+a key made by a session, of a sign-in or made from a key by
+`POST /api/v1/login/key`, by `massimo user token`, by the bootstrap
+or at an integration's collection of its key names none.
+A key the bootstrap takes in as the settings file's has no maker either:
+the bootstrap clears `made_by` of the file's key it finds,
+before it revokes the file's old key, which may have made it.
+A key is made with a maker only while the maker is alive,
+the check and the insert one statement (`AddKey`, else `ErrNoToken`, a `401`):
+a request whose bearer was let in before its revoke,
+and makes its key after it, makes none,
+so that no live key names a revoked maker that no later revoke reaches;
+nor does one let in with a secret the maker no longer holds (`KeyOptions.Maker`,
+its hash checked in the same statement; Block 5).
+`RevokeToken` revokes, in its transaction, the heirs of the token it revokes,
+and so does `RevokeByCode`, a revoke by the token's code
+("A token's revoke code", below), in its own,
+followed through `made_by` from key to key in any state,
+so that a key past its end, or one an older binary revoked alone,
+passes the revoke on to the keys it made,
+with their sessions and what those subscribed to push,
+and returns the heirs it revoked, by id;
+`DeleteUser` revokes the heirs of the user's tokens with them,
+and the bootstrap's revoke of a key that is no longer the settings file's
+takes them too (D8-A), its log line saying how many;
+a key of the file's label that a revoke before it in the same bootstrap took
+is passed over, and the file's new token is added all the same.
+The settings file's key is never an heir:
+the store keeps in memory the hash `Bootstrap` last applied,
+at the start and at each reading of the file,
+and a revoke's heirs pass over that key and the keys it made,
+whoever made it, as the API revokes it neither by a revoke nor with its user
+(MobileApp.D86-A, D89-A);
+`massimo user`, which runs no bootstrap, knows no such hash.
+A key's end, by its end date, takes none:
+an heir lives past its maker's end, and only a revoke reaches it.
 
 ### A token's revoke code
 
@@ -1540,19 +1671,138 @@ and the store keeps `HashToken` of the code in `tokens.revoke_hash`
 with that, the store and every backup of it could revoke every token,
 while no code can be had back from its hash.
 The store writes the column where it makes the secret (`addToken`,
-`AddKeySession`); a token whose hash it is handed (`AddTokenHash`) and the
-settings file's key (`Bootstrap`) get none.
+`AddKey`, `AddKeySession`); a token whose hash it is handed (`AddTokenHash`)
+and the settings file's key (`Bootstrap`) get none.
 A token made before 0100 gets it at its first use after it:
 the server works it out from the secret presented and `TouchToken` writes it,
 within the hour of the last use too, keeping one written;
 the settings file's key is passed over there.
 `RevokeByCode` revokes the token of a code as `RevokeToken` does,
-in one transaction with its sessions and what they subscribed to push,
-a token past its end included;
-a token revoked already, an unknown code and the settings file's key,
-whose hash the server hands it, match nothing;
+in one transaction with its sessions, its heirs, the keys a key made and
+theirs with their sessions ("Keys made by keys", above),
+and what they all subscribed to push, a token past its end included,
+and returns the heirs it revoked;
+a token revoked already, an unknown code and the settings file's key
+match nothing, the store knowing that key by the hash `Bootstrap` last
+applied, as the heirs of a revoke do, so that a key made by
+`POST …/tokens` and then named in the file keeps its code but is not
+ended by it while the file names it;
 the code is looked up by a plain read first, so that one that matches
 nothing takes no write transaction, and a match is read again inside it.
+
+### The life of a key
+
+An API key unused for the days of the setting `auth.key_idle_days` ends
+(AP KeyLife v1.0, Block 3; AP MobileApp, D75):
+whole days, 0 or unset for off, the default (D2-A), at most 3650,
+read at each check, so that a change applies at once.
+The idle clock is the key's last use, or its making where it was never used:
+`coalesce(last_used_at, created_at)` at or before the time of the check less
+the limit has ended.
+A session's use is its key's: where the server writes a session's last use,
+at most once an hour, it writes the key's too, with that use's address,
+so a phone that uses its session keeps its key.
+The idle part joins the rule `alive` ("A session from a key", above),
+for the token itself and for the key a session was made from,
+so an ended key's session ends with it, and its heirs live on:
+an end is no revoke,
+and a revoke still reaches the key, by its id or by its code
+(`RevokeByCode` matches a code on `deleted_at` alone, D6-A),
+its heirs with it.
+Two keys never end by it:
+one kept from it, `tokens.idle_exempt` (migration 0102),
+which only who manages the key's user sets (D7-A)
+and an integration's key never has (MobileApp.D75);
+and the settings file's key (D3-A), known by its hash,
+which the store keeps in memory as `Bootstrap` last applied it,
+at the start and at each reading of the file,
+not by a mark on its row: the file may change.
+An end is a state read at each check, and nothing is written (D6-A):
+an ended key stays listed, to be revoked, with why it ended,
+and lives again, its session with it while the session's own 30 days last,
+where the limit is raised or turned off, or the key kept from it.
+Its use never brings it back, since the rule refuses it before its use is written,
+and writes no hash of its revoke code either ("A token's revoke code", above):
+a key made before 0100 that ended unused before its first use since keeps none,
+and its code matches nothing.
+`Tokens` gives each key its life by the same rule in Go
+(`IdleEndsAt`, `EndsAt`, the earlier of its end date and its idle end,
+and `Ended`, `idle` or `expired`),
+which `TestKeyEndRule` holds to the SQL on one table of cases;
+`SetTokenLife` changes a key's exclusion.
+
+A key may also take an end date (AP KeyLife v1.0, Block 4; AP MobileApp, D75):
+`tokens.expires_at`,
+which the rule `alive` always read for the token itself and,
+since Block 2, for the key a session was made from,
+`NULL` for none, as every key had before.
+`AddKey` makes a key with one (`KeyOptions.Expires`) and `SetTokenLife` sets,
+moves or removes it (`TokenLife.Expires`, the zero time for none);
+a date not after the store's clock, as the rule compares the two,
+is `ErrEndPassed`, and nothing is made or changed:
+a key is ended now by its revoke.
+At its date the key ends, its session with it,
+and is listed with `Ended` `expired`;
+its heirs live on, an end being no revoke (D5-A),
+and a revoke still reaches the key, by its id or by its code, its heirs with it
+(`RevokeByCode` on `deleted_at` alone, as for an idle end).
+The end is a state read at each check, as the idle end is (D6-A):
+the date moved later, or removed, brings the key back, its session with it.
+Who may move it is the server's question:
+the key's user or who manages it, never the key itself as the bearer (D4-A).
+The settings file's key never ends by a date (D3-A):
+the bootstrap clears the end date of the key it takes in as the file's,
+a key made with one and then put into the file among them,
+and the end-date part of `alive`, as its idle part, passes over the file's hash,
+for the key and for a session made from it,
+so that an end date left in its row, by a binary before that, ends nothing;
+`SetTokenLife` refuses that key (`ErrSettingsKey`),
+and the server finds it by `KeyByHash`, its hash among the keys not revoked,
+whatever else of its life, so that it refuses every change of it.
+
+A live key may take a new secret (AP KeyLife v1.0, Block 5; MobileApp.D76-A),
+the way back to a key whose secret is lost,
+since the store keeps its hash alone (D81-A),
+and the way to refuse whatever holds the key's secret now.
+Its heirs, the keys made with it, stay:
+for a secret that may have leaked, a revoke ends a key and the keys it made.
+`RekeyToken` replaces the key's hash in one transaction,
+and the hash of its revoke code with it, the new secret's,
+so the key keeps its row:
+its id, label, making, last use, end date, exclusion, maker and heirs,
+and the new secret's code ends it and its heirs ("A token's revoke code").
+The old hash is kept in a revoked row of its own,
+an API key of the key's user and label, made and revoked at that moment,
+with no maker:
+the hash is unique, and a revoked row keeps its hash,
+so a client still sending the old secret is a token that ended (`TokenEnded`),
+not a guess that counts toward the lockout (MobileApp.D64-A);
+a hash replaced alone would make it one.
+The old secret's revoke code, none for a key made before 0100, moves onto
+that row, after the key's row took the new one, the column being unique:
+the old secret's code then matches a revoked row alone and ends nothing,
+as a code taken already does, and the key lives on.
+The key's session (a key has one at a time, `AddKeySession`) is revoked
+with what it subscribed to push, unless it is the caller's own (`keep`),
+and what the key itself subscribed goes too:
+whoever held the old secret holds no session and no subscription.
+What a request let in with the old secret does next is held to that secret,
+since the key keeps its id:
+`AddKeySessionAs` and a key made with `KeyOptions.Maker` take the key only
+while its hash is still the one the request was let in with (`ErrNoToken`),
+and `TokenAliveAs`, which the event stream asks at each keep-alive
+and at a ticket's redemption,
+no longer finds it, so a stream opened with the old secret ends,
+and a ticket taken with it opens none.
+A key that is not live, by its revoke, its end date or the idle limit,
+takes none (`ErrNoToken`),
+and an integration's key none (`ErrIntegrationUser`):
+the integration learns its key by its approval's code alone.
+The settings file's key, known by the hash `Bootstrap` last applied,
+takes none (`ErrSettingsKey`, as for `SetTokenLife`; the API's `409`):
+the next start would not add the file's key back,
+its hash being taken by the old secret's row.
+Who may is the server's question, as for the end date.
 
 ### The sign-in by OPAQUE
 
@@ -1618,11 +1868,11 @@ who cannot sign in once it is off until a password is set for them.
 
 ### The commands
 
-`massimo user add <name> -role owner|operator|viewer|integration`
-(asks for the password twice, or `-no-password` for a key-only user),
-`user list`, `user passwd <name>`,
-`user rename <name> <new name>` (asks for the password again, or `-no-password`),
-`user disable <name>`, `user enable <name>`,
+`massimo user add <name> -role owner|operator|viewer|integration` (asks for the
+password twice, or `-no-password` for a key-only user), `user list`,
+`user passwd <name>`,
+`user rename <name> <new name>` (asks for the password again,
+or `-no-password`), `user disable <name>`, `user enable <name>`,
 `user token <name> -label <text>` (prints a new API key once),
 `user tokens <name>` (the sessions and keys with their ids),
 `user revoke <name> [<token id>]`.
@@ -1664,9 +1914,9 @@ and ends the user's sessions; its keys, preferences and audit stay with the row.
 A removed user's row keeps its name, which is unique among the users not
 removed only (migration 0024, D10-A),
 so that the name is free and a user added under it is a row of its own.
-From migration 0015 to 0024 a removed row was renamed
-`<name>-del-YYYYMMDD-HHNN`, the removal's time in UTC, `-<id>` added where
-that was taken; 0024 took the suffixes off.
+From migration 0015 to 0024 a removed row was renamed `<name>-del-YYYYMMDD-HHNN`,
+the removal's time in UTC, `-<id>` added where that was taken;
+0024 took the suffixes off.
 (Until 0015 a new user took the removed one's row over, with its history.)
 The audit records them with `user_id` NULL and `remote` `cli`.
 
@@ -1735,7 +1985,8 @@ which replaces the user's other identities at that provider;
 an account another user has is refused.
 Each sign-in and link writes what the provider said of the account:
 the e-mail, the name, the user name and the groups (migration 0019).
-A provider may admit only some groups, read from its groups claim (migration 0020):
+A provider may admit only some groups,
+read from its groups claim (migration 0020):
 an account in none of them neither signs in nor links.
 An identity no sign-in has used may be changed;
 a used one is removed and assigned again.
@@ -1748,33 +1999,35 @@ so that a box copied to another row does not open.
 A copy or a backup of `massimo.db` alone so does not hold the secrets.
 A plain secret, as v0.15.0-alpha.1 kept them,
 is sealed at the next open of a writable store;
-so is one a build of main sealed as `v1:` with a key file of its own, `secret.key`,
+so is one a build of main sealed as `v1:` with a key file of its own,
+`secret.key`,
 which is then renamed `secret.key.retired` for the owner to delete.
-Lost, or another store's, `opaque.key` leaves each secret unopened, as each password:
-the provider answers `secret_lost`, and the owner enters the secret again;
+Lost, or another store's, `opaque.key` leaves each secret unopened,
+as each password: the provider answers `secret_lost`,
+and the owner enters the secret again;
 a change that does not write it keeps the box, which the key found again opens.
 The secret is never answered (`has_secret`).
 
 ### Integrations
 
-An integration, Home Assistant first, acts for users of its own
-(AP IntegrationUsers, migration 0021):
+An integration, Home Assistant first,
+acts for users of its own (AP IntegrationUsers, migration 0021):
 a row of `integrations` per installation the owner approved,
 and per request waiting or refused.
-A request comes without a key and waits ten minutes with a short code
-the owner compares; at most five wait at once.
-Approved, the integration gets its own user `<uuid>:`, the integration's
-uuid and a colon, holding its API key, a user `<uuid>:system` for the
-calls no user started, both with the role `integration` and
-`users.integration_id` naming it, and its maximum, `max_caps`
-(migration 0024, D3-A and D8-C; until then a `key` made from its name,
-`casa-leone`, and users `<key>` and `<key>.system`).
+A request comes without a key and waits ten minutes with a short code the owner compares;
+at most five wait at once.
+Approved, the integration gets its own user `<uuid>:`,
+the integration's uuid and a colon, holding its API key,
+a user `<uuid>:system` for the calls no user started,
+both with the role `integration` and `users.integration_id` naming it,
+and its maximum, `max_caps` (migration 0024, D3-A and D8-C;
+until then a `key` made from its name, `casa-leone`,
+and users `<key>` and `<key>.system`).
 The own user's `display_name` is the reported name at first,
-and follows a name reported anew only while it still is the name reported
-before: a name the owner gave stays.
-The names of an integration's users follow
-`^<uuid>:([a-z0-9]{1,64}|system)?$`; only the store makes them, and the
-rule of every other name has no colon.
+and follows a name reported anew only while it still is the name reported before:
+a name the owner gave stays.
+The names of an integration's users follow `^<uuid>:([a-z0-9]{1,64}|system)?$`;
+only the store makes them, and the rule of every other name has no colon.
 An integration's user acts through its integration alone:
 the store gives it no key but the integration's own (`CollectIntegrationKey`),
 no session, no password of either version and no identity at a provider
@@ -1785,18 +2038,18 @@ within the role `integration` and the integration's maximum,
 a password or an identity signing in nowhere.
 They are not regular users: they neither close an open server nor block its
 first owner ("Bootstrap and compatibility").
-A request approved as an earlier integration (`merged_into`) reuses that
-one's row, users and links, as after a key lost or revoked;
+A request approved as an earlier integration (`merged_into`) reuses that one's row,
+users and links, as after a key lost or revoked;
 a revoke ends the key and keeps the rest.
 `instance_id` is the installation id the owner accepted;
 a call from another is refused and the id kept in `pending_instance`
 until the owner accepts it.
 
-Each of the integration's users is a row of `user_identities` with
-`integration_id` set, its id at the integration as `subject`:
-made at its first call, with a user of its own (`real_user_id`, named
-`<uuid>:<the id, lower case>`; `own_user_id` and `<key>.<the id's first 8
-characters>` before 0024) of the role `integration`.
+Each of the integration's users is a row of `user_identities` with `integration_id` set,
+its id at the integration as `subject`: made at its first call,
+with a user of its own (`real_user_id`, named `<uuid>:<the id, lower case>`;
+`own_user_id` and `<key>.<the id's first 8 characters>` before 0024) of the role
+`integration`.
 `effective_user_id` is the user its calls act as: its own,
 or the Massimo user the owner linked it to,
 several of an integration's users to one where wanted.
@@ -1816,19 +2069,20 @@ One whose linked user was removed only a link racing that removal could leave,
 which the link no longer lets through, since it reads its target
 in the transaction that writes it;
 it is treated so all the same.
-The log and the audit write both: whose rights a row was made with
-(`effective_user_id`), and who made it (`real_user_id`).
+The log and the audit write both:
+whose rights a row was made with (`effective_user_id`),
+and who made it (`real_user_id`).
 A call's capabilities are what the user's role, the role `integration`,
-the linked user's role, the maximum and the call's level all allow
-(docs/api-v1.md, "Acting for an integration's users").
+the linked user's role,
+the maximum and the call's level all allow (docs/api-v1.md,
+"Acting for an integration's users").
 
 0021 made `user_identities` again for both kinds,
-`provider_id` NULL for an integration's:
-a store of a 0.15.0 alpha, once migrated, is not for that alpha again,
-although `min_reader` stays 1 (D10-C), since only the alphas had the
-table.
-The settings: `integrations.requests` (true by default) lets
-integrations ask; `server.proxied_url`, which the server writes,
+`provider_id` NULL for an integration's: a store of a 0.15.0 alpha,
+once migrated, is not for that alpha again,
+although `min_reader` stays 1 (D10-C), since only the alphas had the table.
+The settings: `integrations.requests` (true by default) lets integrations ask;
+`server.proxied_url`, which the server writes,
 is the address a trusted reverse proxy serves it at,
 the announcement's `url` where `MASSIMO_PUBLIC_URL` is not set.
 
@@ -2044,13 +2298,14 @@ Implemented on 2026-11-06 (AP StorePrefs v1.0).
 
 Implemented on 2026-11-06 (AP StoreLog v1.0), with its review's fixes (v1.1).
 
-- Files: `internal/store/events.go` (the writer: a batch in one transaction at
-  100 events or a second after the first, before a read and at the stop;
-  the paging query; the daily prune per Cube in chunks of 5000,
+- Files: `internal/store/events.go` (the writer:
+  a batch in one transaction at 100 events or a second after the first,
+  before a read and at the stop; the paging query;
+  the daily prune per Cube in chunks of 5000,
   answering a read and a stop between two chunks);
   `internal/server/log.go` (`remember` hands a Cube's event to the writer,
-  `GET …/log` reads the store),
-  the log's part, `internal/server/ui/src/log/` (the log view pages with "Older",
+  `GET …/log` reads the store), the log's part,
+  `internal/server/ui/src/log/` (the log view pages with "Older",
   chooses a kind and a device).
   Migration 0004 (v1.1): the indexes a page walks in id order;
   the review found a page sorting every one of a Cube's rows,
@@ -2107,10 +2362,10 @@ Implemented on 2026-11-07 (AP StoreBackups v1.0).
 
 - Files: `internal/store/backups.go` (add, list, read,
   delete as a tombstone without the file, the prune, the windows kept),
-  migrations 0005 (the four reasons), 0013 (an id never given out twice)
-  and 0026 (the windows kept across a start);
-  `internal/server/backups.go` (the automatic backup) and `backups_api.go` (the
-  routes); `backup.ConfigHash` and `cubelan.SnapshotOf` (the comparison);
+  migrations 0005 (the four reasons),
+  0013 (an id never given out twice) and 0026 (the windows kept across a start);
+  `internal/server/backups.go` (the automatic backup) and `backups_api.go` (the routes);
+  `backup.ConfigHash` and `cubelan.SnapshotOf` (the comparison);
   `backup.js` with its partials (the Settings panel).
 - When the server takes one: only after a change.
   The Cube's configuration, the decoded part of a backup without the live state,

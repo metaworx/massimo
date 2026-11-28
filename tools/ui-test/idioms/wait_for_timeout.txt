@@ -2,7 +2,7 @@
 # wait_for_timeout called (idioms_test.go; AP SteadyTests, Block 4):
 # a test file and its count a line. A pause outlasts nothing on a slow
 # runner and waits for nothing in particular; a test waits for what it
-# checks (docs/ui-testing.md, section 9). A count may fall and may not
+# checks (docs/ui-testing.md, section 1). A count may fall and may not
 # rise: a new pause fails `go test`, and so does a pause taken out until
 # its line here is lowered in the same commit, or taken out at 0.
 test_backup.py 1

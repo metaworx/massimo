@@ -10,7 +10,7 @@ string, so waiting on the page's state polls page.evaluate from here
 global scope but not on window; page.evaluate reaches it there.
 
 What the page reads and what its stream brings (docs/ui-testing.md,
-section 9): Reads answers the page's own reads with the server's data
+section 1): Reads answers the page's own reads with the server's data
 and what a test put in, a device's or a room's in the rooms' read among
 it (Reads.device, Reads.room), kept through the server's own events of
 them; Stream watches the page's event stream from a mark; isolate_log
@@ -301,7 +301,7 @@ def answered(page, held=(), seconds=5):
     reads now", before a count of what an action read or a check of what
     the answers drew: it follows a read that starts only after another
     has answered, where a request of the test's own that overtakes the
-    page's does not (docs/ui-testing.md, section 9)."""
+    page's does not (docs/ui-testing.md, section 1)."""
     reads = api_reads(page)
     assert reads.answered(seconds, held=held), \
         f"the page's reads answered within {scaled(seconds):g} s: still open {', '.join(reads.pending()) or 'none'}"
@@ -391,7 +391,7 @@ def wait_held(page, held, seconds=5, n=1):
     notes each it answers, or the page's own as it sends them
     (sent_requests). A check of a request waits for the request itself,
     not for what the page draws before it sends it (docs/ui-testing.md,
-    section 9, "The request itself")."""
+    section 1, "The request itself")."""
     end = time.time() + scaled(seconds)
     while len(held) < n and time.time() < end:
         page.wait_for_timeout(100)
@@ -446,7 +446,7 @@ def taken(page, predicate, seconds=5, **kw):
     come before overtook it, a told event that the answer then took back
     among them (test_pairing_updates.py). For a block whose answer a check
     of what the page drew, or of what it did not draw, comes after
-    (docs/ui-testing.md, section 9, "The answer taken"). An answer of the
+    (docs/ui-testing.md, section 1, "The answer taken"). An answer of the
     same URL whose body the page reads after the block began counts too.
     Within one document."""
     start = page.evaluate(TAKEN_KIT)
@@ -462,7 +462,7 @@ def held_poll(page):
     """The page's poll held for the with block: its timer cleared, and
     started again at the end (startPolling()), for a test that measures
     what the page does by itself, which a poll would change (docs/ui-
-    testing.md, section 9). Whatever calls startPolling() meanwhile ends
+    testing.md, section 1). Whatever calls startPolling() meanwhile ends
     the hold unseen: applySettings() (a setting changed, expert mode, a
     sign-in), the poll's field, a sign-out. So a block that ends without
     an error of its own fails where the timer is no longer the one the
@@ -1139,7 +1139,7 @@ def own_id(what=""):
     left: an integration's installation id and the ids of its users
     there, since an integration is only disabled at its end and a
     request from the same installation joins it (docs/ui-testing.md,
-    section 9; AP SteadyTests, Block 11). An id made from the case alone
+    section 1; AP SteadyTests, Block 11). An id made from the case alone
     is the same at every repeat."""
     head = what.encode()[:8].hex()
     return head + secrets.token_hex(16)[:32 - len(head)]

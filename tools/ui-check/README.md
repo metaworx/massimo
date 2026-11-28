@@ -7,9 +7,10 @@ the TypeScript and TSX under `internal/server/ui/src/`, twice:
   strict, with Preact's and the signals' types taken from
   `third_party/preact/` by `paths`;
 - **their hooks,** with `biome lint` and this directory's `biome.jsonc`:
-  two rules and no other, `useHookAtTopLevel`
-  (a hook at the top of a part's drawing, never after an early return or in a branch)
-  and `useExhaustiveDependencies` (an effect lists what it reads).
+  two rules and no other,
+  `useHookAtTopLevel` (a hook at the top of a part's drawing,
+  never after an early return or in a branch) and `useExhaustiveDependencies`
+  (an effect lists what it reads).
   A hook is known by its name, `use` and a capital letter,
   so a region's counter is read with `useLoad()`.
   An effect that must not list what it reads says why in a

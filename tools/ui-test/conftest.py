@@ -54,7 +54,7 @@ The page has helpers.PAGE_KIT before its own scripts, which records
 what its event stream brings. The fixture reads answers the page's own
 reads with the server's data and what the test put in (helpers.Reads),
 and stream watches the page's event stream from a mark (helpers.Stream);
-docs/ui-testing.md, section 9, says when a test needs them.
+docs/ui-testing.md, section 1, says when a test needs them.
 
 A test marked used_ticket gets a used ticket for its first stream
 (`watch.refused`), which the server refuses with a 401; its page is
@@ -691,7 +691,7 @@ def server_holds_settings(holds, token=None, **values):
     hand a server that holds none the browser's (loadPreferences of
     login.js), so a test whose outcome depends on which sets it at the
     moment that decides, rather than taking what the page's own pushes or
-    an earlier test left (docs/ui-testing.md, section 9; AP SteadyTests
+    an earlier test left (docs/ui-testing.md, section 1; AP SteadyTests
     v1.1, D14-A): while its page is signed out, or before the load,
     where no push of the page's own comes after it."""
     if holds:

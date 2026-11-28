@@ -16,6 +16,7 @@ import (
 	"go.metaworx.ch/massimo/internal/protocol/cube"
 	"go.metaworx.ch/massimo/internal/store"
 	"go.metaworx.ch/massimo/internal/testkit/cubewatch"
+	"go.metaworx.ch/massimo/internal/testkit/storekit"
 )
 
 // roleSets are the default roles' capabilities as docs/store.md section
@@ -33,7 +34,15 @@ var roleSets = map[string][]string{
 // stays quick.
 func storeOptions(t *testing.T, dir, token string) Options {
 	t.Helper()
-	st := testStore(t, dir)
+	return storeOptionsAt(t, dir, token, nil)
+}
+
+// storeOptionsAt is storeOptions with the store's clock now (nil for the
+// real one; storekit.OpenAt), for a test that moves the store's days on:
+// an API key's idle limit (AP KeyLife, Block 3).
+func storeOptionsAt(t *testing.T, dir, token string, now func() time.Time) Options {
+	t.Helper()
+	st := storekit.OpenAt(t, dir, now)
 	// The fake Cube has a row, as a served Cube has in production, so
 	// that the audit can name it; the runtime itself comes from Cubes.
 	if _, ok, _ := st.Cube(t.Context(), "KEQ0000100"); !ok {
@@ -57,6 +66,16 @@ func userToken(t *testing.T, st *store.Store, name, role string) string {
 		t.Fatal(err)
 	}
 	return secret
+}
+
+// endToken puts a token's end a second into the past, as a key's end
+// date does once it has passed (AP KeyLife, Block 2): TouchToken moves a
+// token's end to the one it is given, with a use at the same moment.
+func endToken(t *testing.T, st *store.Store, id int64) {
+	t.Helper()
+	if err := st.TouchToken(t.Context(), id, "", time.Now().Add(-time.Second), ""); err != nil {
+		t.Fatal(err)
+	}
 }
 
 // callAPI sends a request with a token and a body and returns the status

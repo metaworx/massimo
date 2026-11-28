@@ -18,7 +18,9 @@ import (
 // thermostat reports again after wallSilence without a state, on another
 // mode than it last had, the log says so at warn, as wall_reset (AP
 // LegacyLogs v1.0, Block 12, D147-A): a battery change returns a room to
-// its programme without anyone asking.
+// its programme without anyone asking. Its line names the thermostat's
+// room, so that the room check's next agreement there settles its alert
+// (wallAgreed).
 
 // wallSilence is how long a wall thermostat has to be without a state
 // for its return to count, in nanoseconds; the Cube clears its valid bit
@@ -65,8 +67,20 @@ func (rt *runtime) wallReset(dv view.Device, at time.Time) *event {
 		if m.setpoint != nil {
 			summary["was_setpoint"] = *m.setpoint
 		}
+		if dv.RoomID != 0 {
+			summary["room"] = dv.RoomID
+		}
 		ev = &event{Kind: "wall_reset", Source: "device", Device: dv.RFAddress, Serial: dv.Serial, Level: "warn", Time: at, State: dv, Summary: summary}
 	}
 	rt.walls[rf] = &wallMemo{mode: dv.State.Mode, setpoint: dv.State.Setpoint}
 	return ev
+}
+
+// wallAgreed settles a wall_reset: a later disagree of the thermostat's
+// room whose members agree, which the room check writes once it has
+// found them differing (drift.go). A line without a room, written before
+// it was named, settles by a mark alone.
+func wallAgreed(alert, later *event) bool {
+	room := summaryText(alert, "room")
+	return room != "" && summaryText(later, "outcome") == "agree" && summaryText(later, "room") == room
 }

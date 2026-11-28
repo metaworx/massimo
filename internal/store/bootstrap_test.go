@@ -148,7 +148,7 @@ func TestBootstrapTakesTheKeyFromAnIntegrationsUser(t *testing.T) {
 				t.Fatal(err)
 			}
 			// as an older start gave it
-			held, err := s.addTokenHash(ctx, own.ID, TokenAPI, BootstrapLabel, HashToken("file"), "", zeroTime, true)
+			held, err := s.addTokenHash(ctx, own.ID, TokenAPI, HashToken("file"), "", zeroTime, KeyOptions{Label: BootstrapLabel}, true)
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -209,7 +209,7 @@ func TestBootstrapTakesARevokedKeyFromAnIntegrationsUser(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			held, err := s.addTokenHash(ctx, own.ID, TokenAPI, BootstrapLabel, HashToken("file"), "", zeroTime, true)
+			held, err := s.addTokenHash(ctx, own.ID, TokenAPI, HashToken("file"), "", zeroTime, KeyOptions{Label: BootstrapLabel}, true)
 			if err != nil {
 				t.Fatal(err)
 			}

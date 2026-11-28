@@ -57,9 +57,9 @@ GUIDELINES/wip/HANDOVER.md is the context a session needs to work here.
    the server's error texts in the UI's language.
 9. **Release engineering**:
    macOS notarization; log rotation through SIGHUP; the `edge` mode.
-10. **Firmware dump** of the spare Cube once the FT232H is in
-    (its procedure, `docs/firmware-extraction.md`, and the portal code it would revive
-    are on the branch `archive/portal`),
+10. **Firmware dump** of the spare Cube once the FT232H is in (its procedure,
+    `docs/firmware-extraction.md`,
+    and the portal code it would revive are on the branch `archive/portal`),
     then the DataFlash and the portal reply format.
 11. **Decisions for the owner**:
     the final set of built-in colour schemes (Massimo,
@@ -100,9 +100,9 @@ GUIDELINES/wip/HANDOVER.md is the context a session needs to work here.
     `/etc/sudoers.d/massimo-test` on the Mac; on the Pi `~/massimo-alpha12.*`,
     `/usr/local/bin/massimo.alpha9.bak` and, once the M7 setup is settled,
     `/etc/massimo/env.before-m7` (keep `massimo.prev`);
-    on the development PC the merged branches `claude/tls*`, `backup/claude/tls*`,
-    `claude/ci-update-race`, `claude/heuristic-noether-90a440`,
-    `claude/store-c` and `claude/store-d*`,
+    on the development PC the merged branches `claude/tls*`,
+    `backup/claude/tls*`, `claude/ci-update-race`,
+    `claude/heuristic-noether-90a440`, `claude/store-c` and `claude/store-d*`,
     and the worktree `xenodochial-pasteur-c0e0c8` once its session is gone.
 14. **Later**:
     the server mode with encryption at rest and sync (docs/server.md),
