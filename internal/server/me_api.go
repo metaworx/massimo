@@ -40,7 +40,7 @@ func (s *Server) prefUser(r *http.Request) (*store.Store, *principal, error) {
 	}
 	p := principalOf(r)
 	if !p.named() {
-		return nil, nil, fail(http.StatusConflict, "no user signed in: the preferences stay in the browser")
+		return nil, nil, refuse(http.StatusConflict, codePreferenceNoUser)
 	}
 	return st, p, nil
 }
@@ -88,7 +88,7 @@ func (s *Server) getPreference(w http.ResponseWriter, r *http.Request) error {
 		return fail(http.StatusInternalServerError, "%v", err)
 	}
 	if !ok {
-		return fail(http.StatusNotFound, "no preference %q", key)
+		return refuse(http.StatusNotFound, codePreferenceUnknown, key)
 	}
 	writeJSON(w, http.StatusOK, pr.Value)
 	return nil

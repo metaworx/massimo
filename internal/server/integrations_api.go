@@ -145,10 +145,10 @@ func (s *Server) postIntegrationRequest(w http.ResponseWriter, r *http.Request) 
 		return err
 	}
 	if !st.IntegrationRequests(r.Context()) {
-		return fail(http.StatusForbidden, "this server takes no registration requests (setting %s)", store.IntegrationRequestsKey)
+		return refuse(http.StatusForbidden, codeIntegrationRequestsOff, store.IntegrationRequestsKey)
 	}
 	if !s.integrationRequests.allow(s.clientIP(r), time.Now()) {
-		return &httpError{status: http.StatusTooManyRequests, msg: "too many registration requests from this address", retryAfter: 60}
+		return withRetryAfter(refuse(http.StatusTooManyRequests, codeIntegrationRequestsTooMany), 60)
 	}
 	var req struct {
 		Kind       string `json:"kind"`
@@ -224,7 +224,7 @@ func (s *Server) getIntegrations(w http.ResponseWriter, r *http.Request) error {
 func checkMaxCaps(caps []string) error {
 	for _, c := range caps {
 		if !slices.Contains(integrationCeiling, c) {
-			return fail(http.StatusBadRequest, "max_caps: %q is not an integration's to have", c)
+			return refuse(http.StatusBadRequest, codeIntegrationCapabilityBeyond, c)
 		}
 	}
 	return nil
@@ -319,7 +319,7 @@ func (s *Server) putIntegration(w http.ResponseWriter, r *http.Request) error {
 		return fail(http.StatusBadRequest, "state is active or disabled")
 	}
 	if req.Name != nil && (strings.TrimSpace(*req.Name) == "" || len(*req.Name) > maxDisplayName) {
-		return fail(http.StatusBadRequest, "name is 1 to %d bytes", maxDisplayName)
+		return refuse(http.StatusBadRequest, codeIntegrationNameLength, maxDisplayName)
 	}
 	i, err := st.SetIntegration(r.Context(), r.PathValue("uuid"), func(i *store.Integration) error {
 		if req.Name != nil {
@@ -379,7 +379,7 @@ func (s *Server) integrationOf(r *http.Request, st *store.Store) (store.Integrat
 		return store.Integration{}, integrationFail(err)
 	}
 	if !ok || i.State == store.IntegrationPending || i.State == store.IntegrationRefused {
-		return store.Integration{}, fail(http.StatusNotFound, "no integration %s", r.PathValue("uuid"))
+		return store.Integration{}, refuse(http.StatusNotFound, codeIntegrationUnknown, r.PathValue("uuid"))
 	}
 	return i, nil
 }
@@ -465,7 +465,7 @@ func (s *Server) putIntegrationUser(w http.ResponseWriter, r *http.Request) erro
 			return userFail(err)
 		}
 		if !ok {
-			return fail(http.StatusNotFound, "no user %s", *req.User)
+			return refuseSaying(http.StatusNotFound, "no user "+*req.User, codeUserUnknown, *req.User)
 		}
 		if a := s.accessOf(r.Context(), principalOf(r), ""); !a.ranks(u.Role) {
 			return a.rankFail(u.Role, "integrations")

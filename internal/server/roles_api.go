@@ -9,6 +9,7 @@ package server
 
 import (
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"strings"
 	"time"
@@ -49,7 +50,7 @@ type capabilityView struct {
 func checkCapabilities(list []string) error {
 	for _, c := range list {
 		if !validCapability(strings.TrimSpace(c)) {
-			return fail(http.StatusBadRequest, "unknown capability %q", c)
+			return refuse(http.StatusBadRequest, codeCapabilityUnknown, c)
 		}
 	}
 	return nil
@@ -71,7 +72,7 @@ func decodeRole(r *http.Request) (roleRequest, error) {
 		return req, fail(http.StatusBadRequest, "bad body: %v", err)
 	}
 	if req.Name != nil && len(*req.Name) > maxRoleName {
-		return req, fail(http.StatusBadRequest, "name: at most %d bytes", maxRoleName)
+		return req, refuse(http.StatusBadRequest, codeRoleNameLong, maxRoleName)
 	}
 	if req.Capabilities != nil {
 		if err := checkCapabilities(*req.Capabilities); err != nil {
@@ -260,7 +261,7 @@ func (s *Server) putCapability(w http.ResponseWriter, r *http.Request) error {
 	}
 	key := r.PathValue("key")
 	if !validCapability(key) {
-		return fail(http.StatusNotFound, "no capability %q", key)
+		return refuseSaying(http.StatusNotFound, fmt.Sprintf("no capability %q", key), codeCapabilityUnknown, key)
 	}
 	disabled, err := decodeDisabled(r)
 	if err != nil {
