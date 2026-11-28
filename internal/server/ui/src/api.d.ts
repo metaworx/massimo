@@ -688,7 +688,8 @@ export interface Token {
   /** @format date-time */
   created_at: string;
   /**
-   * Absent for an API key
+   * A session's end, 30 days from its last use; an API key's end date, absent
+   * for a key without one (AP KeyLife, Block 4)
    * @format date-time
    */
   expires_at?: string;
@@ -707,7 +708,61 @@ export interface Token {
    * through the API; absent on any other
    */
   from_settings?: boolean;
+  /**
+   * The API key that made this key, as the bearer of its POST
+   * /api/v1/users/{name}/tokens (AP KeyLife, D5-A); absent for a key made by a
+   * session, the command line, the bootstrap or an integration's approval, and
+   * for a session. A revoke of that key revokes this one
+   */
+  made_by?: number;
+  /**
+   * An API key kept from the idle limit (the setting auth.key_idle_days; AP
+   * KeyLife, D7-A), the settings file's always; absent for one held to it and
+   * for a session
+   */
+  idle_exempt?: boolean;
+  /**
+   * When an API key ends unused: its last use, its session's included, or its
+   * making where it was never used, plus the limit's days. Absent where the
+   * limit is off, the key kept from it, and for a session; in the past for a
+   * key that ended so
+   * @format date-time
+   */
+  idle_ends_at?: string;
+  /**
+   * Why an API key has ended, listed to be revoked: idle, unused past the
+   * limit; expired, past its end date. Absent while it lives. It lives again
+   * where the limit is raised or turned off, the key kept from it, or its end
+   * date moved later or removed (AP KeyLife, D6-A); its use never brings it
+   * back
+   */
+  ended?: "idle" | "expired";
 }
+
+/**
+ * An API key with its secret, shown once: made by POST
+ * /api/v1/users/{name}/tokens, or given a new secret by POST
+ * …/tokens/{id}/rekey (AP KeyLife, Block 5); a retry with the same
+ * Idempotency-Key answers without token
+ */
+export interface NewKey {
+  /** The secret, shown once; the store keeps its hash */
+  token?: string;
+  id: number;
+  kind: "api";
+  label: string;
+  /**
+   * When the key was made; a new secret keeps it
+   * @format date-time
+   */
+  created_at: string;
+}
+
+/**
+ * The ids of the keys a revoke took with the token, the keys it made and theirs
+ * (made_by), oldest first; [] for none
+ */
+export type TokenHeirs = number[];
 
 export interface Me {
   /** How the server authenticates */

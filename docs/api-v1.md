@@ -12,12 +12,12 @@ The web UI's types are generated from its schemas (`make api-types`,
 The server keeps one persistent connection and one command queue per Cube.
 Reads answer from the server's copy of the Cube's state,
 which the Cube refreshes on every change and which the server polls every 10 seconds.
-Writes go through the queue, which serialises commands, respects the
-radio duty cycle and the Cube's memory slots
-(a command of `r:` lines alone, which take neither, does not wait for them),
+Writes go through the queue, which serialises commands,
+respects the radio duty cycle and the Cube's memory slots (a command of `r:` lines alone,
+which take neither, does not wait for them),
 and resets a device's communication error (`error`) before a command that reaches it:
-one `r:`, which costs no radio time, for each device whose flag is set
-that a command names or sends a radiogram to directly,
+one `r:`, which costs no radio time,
+for each device whose flag is set that a command names or sends a radiogram to directly,
 and for every member of the room a room command names whose flag is set.
 
 ## Web UI
@@ -151,10 +151,11 @@ In this document a server's users are its regular users,
 those that are not an integration's, disabled ones included:
 "a server without users" is one whose only users, if any, are an integration's.
 
-- **Users**, a store with at least one regular user: every `/api` request carries
-  `Authorization: Bearer <token>`, a session from `POST /api/v1/login`
-  (or made from a key by `POST /api/v1/login/key`) or
-  an API key from `POST /api/v1/users/{name}/tokens`; otherwise `401`.
+- **Users**, a store with at least one regular user:
+  every `/api` request carries `Authorization: Bearer <token>`,
+  a session from `POST /api/v1/login` (or made from a key by
+  `POST /api/v1/login/key`) or an API key from `POST /api/v1/users/{name}/tokens`;
+  otherwise `401`.
   The token names a user, the user's role grants capabilities,
   and every route needs one of them (the table below);
   a request without it is `403` with the message `capability "pair" required`.
@@ -181,11 +182,11 @@ those that are not an integration's, disabled ones included:
   naming whom and by whom.
   `POST /api/v1/users` from an address on the local network creates the first
   owner (see that route), and `massimo user add` does the same on the box.
-  The first regular user, made either way or from `MASSIMO_API_TOKEN`
-  at a start or a reload of the settings file,
+  The first regular user,
+  made either way or from `MASSIMO_API_TOKEN` at a start or a reload of the settings file,
   is told once what was set up before it and still works, where anything was,
-  as a rule while the server was open, else left by an owner since removed
-  (AP AccessEnds, Block 3):
+  as a rule while the server was open,
+  else left by an owner since removed (AP AccessEnds, Block 3):
   the integrations active with a key, or one still to be collected,
   the sign-in providers enabled, the roles added or changed,
   and the capabilities turned off, by name, never a key or a secret.
@@ -237,8 +238,9 @@ At every later start, and whenever the server reads the file again while it runs
 (it looks every five seconds, and on SIGHUP; see README.md, "Server"),
 a token in the file that the store does not know is added to an enabled owner's keys,
 and a key with that label whose secret is not the file's any more is revoked.
-The file's key that an older start gave to an integration's user, live or revoked since,
-moves to that owner, or to the user `owner` the start makes where there is no other,
+The file's key that an older start gave to an integration's user,
+live or revoked since, moves to that owner,
+or to the user `owner` the start makes where there is no other,
 since an integration's user holds no key of its own.
 The file stays the way to recover an owner who lost the password:
 put a token into it, log in with it, set a password; no restart is needed.
@@ -263,7 +265,7 @@ and the OpenAPI file carries each operation's as `x-capability`:
 | `restore` | plan and run a restore, delete a kept backup | `POST …/restore/plan`, `POST …/restore`, `DELETE …/backups/{id}` |
 | `repair` | the repairs of a Cube's rooms and devices: their communication errors reset, a device's configuration re-sent from its room, a device placed or listed where the Cube and its list disagree, a room's master named, a room re-linked; "unlink all and re-link" needs `structure` as well ("Repairs", below) | `GET`/`POST …/repair/…`; `GET`/`POST …/repair/unlink-relink` with `structure` as well |
 | `guests` | create, invite, change, disable and remove users whose role is `guest`, and give them an end date: regular ones, or for a call through an integration that integration's own, which makes no user ("Users", below) | the users routes, `GET`/`POST`/`PUT`/`DELETE /api/v1/users…`, for those users |
-| `users` | every user: create, role, disable, password, tokens, the identities they sign in with | `GET`/`POST /api/v1/users`, `GET`/`PUT`/`DELETE …/users/{name}`, `GET`/`POST …/users/{name}/tokens`, `DELETE …/users/{name}/tokens/{id}`, `POST …/users/{name}/register`, `GET`/`POST`/`PUT`/`DELETE …/users/{name}/identities…` |
+| `users` | every user: create, role, disable, password, tokens, the identities they sign in with | `GET`/`POST /api/v1/users`, `GET`/`PUT`/`DELETE …/users/{name}`, `GET`/`POST …/users/{name}/tokens`, `PUT`/`DELETE …/users/{name}/tokens/{id}`, `POST …/users/{name}/tokens/{id}/rekey`, `POST …/users/{name}/register`, `GET`/`POST`/`PUT`/`DELETE …/users/{name}/identities…` |
 | `passwords` | set the password of a user (the manager's by default) | `GET /api/v1/users`, `GET …/users/{name}`, `PUT …/users/{name}` with a password, `POST …/users/{name}/register` |
 | `roles` | a role's capabilities and name, create and delete roles | `GET`/`POST /api/v1/roles`, `PUT`/`DELETE /api/v1/roles/{key}` |
 | `roles.disable` | disable and enable a role | `PUT /api/v1/roles/{key}/disabled` |
@@ -342,20 +344,21 @@ Ten failed token checks from one address within a minute lock that
 address out for five minutes: every `/api` request from it is then
 answered `429` with a `Retry-After` header, the right token included.
 A failed check is a wrong token, an empty `Bearer` header among them,
-or a wrong ticket;
-a request that offers neither (no `Authorization: Bearer`,
+or a wrong ticket; a request that offers neither (no `Authorization: Bearer`,
 no `ticket` or `token` on the stream) is answered `401` and counts as none,
-since it guesses nothing:
-a page before its sign-in, or a scanner behind a proxy not in
-`-trusted-proxies`, does not lock the address out.
-Nor does a token the server issued and that has ended:
-a session revoked, logged out or past its end, a revoked key,
-a session whose key was revoked, or the token of a removed user
-is answered `401` with the words of a wrong token, and counts as none,
-since a guessed token never matches one that was issued:
+since it guesses nothing: a page before its sign-in,
+or a scanner behind a proxy not in `-trusted-proxies`,
+does not lock the address out.
+Nor does a token the server issued and that has ended: a session revoked,
+logged out or past its end, a revoked key,
+a key past its end date or ended unused (`auth.key_idle_days`, Tokens),
+the old secret of a key given a new one (`POST …/tokens/{id}/rekey`, Tokens),
+a session whose key was revoked, is past its end or ended unused,
+or the token of a removed user is answered `401` with the words of a wrong token,
+and counts as none, since a guessed token never matches one that was issued:
 a client that sends again a session that ended,
-as a page does after a link that stalled, does not lock its address out
-(`POST /api/v1/login/key`'s key included).
+as a page does after a link that stalled,
+does not lock its address out (`POST /api/v1/login/key`'s key included).
 A wrong Bearer token counts beside any token and is answered `401` as it is alone:
 the stream's `ticket` or `token` beside it is not read;
 a wrong ticket counts beside the Bearer token of a disabled user,
@@ -397,8 +400,7 @@ and it will be removed in a later release.
   the two cannot be confused.
   A serial reaches a device while the Cube has it, and a serial the Cube
   does not have is `404`.
-  Radio address 000000 is no device's and is `400`
-  ("radio address 000000 is no device"):
+  Radio address 000000 is no device's and is `400` ("radio address 000000 is no device"):
   a Cube can list an entry there, which no list of the API shows,
   and nothing is sent to it (docs/cube-protocol.md).
   The answers carry both, `serial` and `rf_address`,
@@ -684,7 +686,7 @@ a token nobody holds and one that ended are one code, as their `error` is one:
 |------|--------|--------|-----------------|
 | `server_open_local_only` | 403 | – | the server is open and the client is beyond its local network |
 | `cross_origin_refused` | 403 | – | another site's page sent the write |
-| `token_wrong` | 401 | – | the token is missing, nobody's, or ended: revoked, logged out or expired |
+| `token_wrong` | 401 | – | the token is missing, nobody's, or ended: revoked, logged out or expired; and the bearer key of `POST …/tokens` or `POST /api/v1/login/key` revoked or ended after the request was let in |
 | `address_locked_out` | 429 | – | too many failed token checks or sign-ins from the address; `Retry-After` says for how long |
 | `user_locked_out` | 429 | – | too many failed sign-ins for the name; `Retry-After` says for how long |
 | `user_account_disabled` | 403 | `user` | the token's or the sign-in's user is disabled |
@@ -740,7 +742,7 @@ a wrong name and a wrong password are one code, as their `error` is one:
 | `password_current_wrong` | 403 | – | `current_password` is wrong |
 | `token_label_length` | 400 | `max` | the key's label is empty or longer than `max` bytes |
 | `token_unknown` | 404 | `user`, `token` | the user has no live token of that id |
-| `token_settings_key` | 409 | – | a revoke of the settings file's `MASSIMO_API_TOKEN` |
+| `token_settings_key` | 409 | – | a revoke of the settings file's `MASSIMO_API_TOKEN`, a change of its life (`PUT …/tokens/{id}`) or a new secret for it (`POST …/tokens/{id}/rekey`) |
 
 **Roles and capabilities** (see "Roles" and "Capabilities"):
 
@@ -793,6 +795,22 @@ a wrong name and a wrong password are one code, as their `error` is one:
 | `idempotency_reused` | 422 | – | the `Idempotency-Key` was used for another request |
 | `command_unknown` | 404 | `command` | no command of that id the caller may read |
 
+**An API key's life and its new secret**
+(AP KeyLife; see "Tokens"):
+
+| Code | Status | Params | Refused because |
+|------|--------|--------|-----------------|
+| `key_end_passed` | 400 | `expires_at` | `POST …/tokens` or `PUT …/tokens/{id}` with an end date not in the future, `expires_at` as the server read it |
+| `end_date_year_one` | 400 | `expires_at` | an `expires_at` that reads as the zero time (`0001-01-01T00:00:00Z`), which would else mean none: a key's or a user's |
+| `key_keep_forbidden` | 403 | `user` | `idle_exempt` at `POST …/tokens` or `PUT …/tokens/{id}` from a caller that does not manage the key's user |
+| `key_life_session` | 400 | `token` | `PUT …/tokens/{id}` of a session, whose life is its own 30 days |
+| `key_life_integration_kept` | 400 | – | `idle_exempt: true` for an integration's key, always held to the idle limit |
+| `key_life_own_key` | 403 | – | `PUT …/tokens/{id}` whose bearer is that very key |
+| `new_secret_session` | 400 | `token` | `POST …/tokens/{id}/rekey` of a session |
+| `new_secret_integration` | 403 | – | `POST …/tokens/{id}/rekey` of an integration's key |
+| `new_secret_own_key` | 403 | – | `POST …/tokens/{id}/rekey` whose bearer is that very key |
+| `new_secret_ended` | 409 | `key` | `POST …/tokens/{id}/rekey` of a key that has ended, by its end date or unused |
+
 **A revoke by code** (`POST /api/v1/tokens/revoke`):
 
 | Code | Status | Params | Refused because |
@@ -835,10 +853,10 @@ What a key may do is not here but in `GET /api/v1/me`.
 `node_id` is the box's identifier from its store (`node.id`,
 a UUID made at the first start, see docs/store.md);
 it stays the same across restarts and updates.
-`password_reveal` is the setting `auth.password_reveal` (below), `true`
-without a store: whether the web UI's password fields offer their eye;
-the page reads it here, before anyone signs in, so that the sign-in card
-shows the eye or not from its first drawing.
+`password_reveal` is the setting `auth.password_reveal` (below),
+`true` without a store: whether the web UI's password fields offer their eye;
+the page reads it here, before anyone signs in,
+so that the sign-in card shows the eye or not from its first drawing.
 `tls`, with TLS, describes the certificate served:
 `{"source": "files", "names": ["massimo.example.net"], "not_after": "2027-02-01T00:00:00Z", "fingerprint": "SHA256:…", "self_signed": false}`;
 `source` is `files` (the owner's files, re-read when they change),
@@ -885,8 +903,8 @@ with eight more waiting;
 a login beyond them is `503` with `Retry-After`, and so is a user add or a
 password change (`docs/store.md` section 6, "The lockout"),
 and one whose client went away while it waited for its turn.
-Any other request of the users' routes whose client went away before the
-store answered, a token's revoke the client gave up on among them,
+Any other request of the users' routes whose client went away before the store answered,
+a token's revoke the client gave up on among them,
 is audited as `failed` with "the client went away before the answer",
 a `503` no client reads, and never as a password check that waited.
 `409` on a server without users, where the first owner is created with
@@ -908,16 +926,18 @@ or by itself (below).
 
 `DELETE /api/v1/me/token` revokes the token that makes the call,
 whatever it is: a session, or an API key and the sessions made from it,
-`{"ok": true, "id": 4}` with the token's id (AP MobileApp, D80-B).
+with the keys it made and theirs ("Tokens", below),
+`{"ok": true, "id": 4, "heirs": [7]}` with the token's id and the heirs' ids,
+`[]` for none (AP MobileApp, D80-B; AP KeyLife, D5-A).
 It is one call for any token, without the user's name or the token's id:
 the apps revoke a kept key with the key alone so,
 and an integration may revoke its own key.
 It is audited as `token.revoke`, as a revoke under the user's tokens is.
 A caller without a token of a user,
-on an open server or with the one token of a server without users,
-is `400`, and so is an integration's call on a user's behalf
-(`X-MassimoHA-On-Behalf-Of`), which would revoke the integration's key in that
-user's name: the integration revokes its key without the header.
+on an open server or with the one token of a server without users, is `400`,
+and so is an integration's call on a user's behalf (`X-MassimoHA-On-Behalf-Of`),
+which would revoke the integration's key in that user's name:
+the integration revokes its key without the header.
 The settings file's token, `MASSIMO_API_TOKEN`, is `409`:
 the next start would not add the owner's key back, its hash being taken,
 so it is changed or removed in the settings file;
@@ -938,10 +958,17 @@ The server keeps it for every token it makes,
 and for a token made before the update from its first use after it;
 a token not used since its update has none, and its code matches nothing.
 The live token of the code is revoked, an API key's sessions with it,
-as by `DELETE /api/v1/me/token`;
-the settings file's token is left live, as no revoke ends it.
-The answer is `204` whether the code matched or not
-(a live token, one that ended, the settings file's, none),
+and its heirs, the keys it made and theirs, with their sessions (AP KeyLife,
+D5-A; "Tokens", below), as by `DELETE /api/v1/me/token`;
+the settings file's token is left live, as no revoke ends it:
+its own code ends it no more than a revoke does,
+and the code of a key that made it passes over it and the keys it made.
+A token past its end, an API key past its end date (`expires_at`) among them,
+and an API key ended unused (`auth.key_idle_days`) are not revoked,
+and their codes revoke them all the same, their heirs with them (AP KeyLife,
+D6-A).
+The answer is `204` whether the code matched or not (a live token,
+one that ended, the settings file's, none),
 so that it tells nobody which codes are live.
 A body that is not that object, or a code that is not 64 lower-case hex digits,
 is `400` with `revoke_code_malformed`;
@@ -950,11 +977,12 @@ While the address is locked out it is `429` with `Retry-After`,
 but a code never counts toward the lockout, matched or not:
 one that matches nothing is a code taken already,
 a token that ended by itself, or one the server has not seen since its update.
-A match is audited as `token.revoke_code`, the token its target and its user
-its subject, with a line under Configuration and the log's Info line
-"token revoked" `by=code`;
-a code that matches nothing, the settings file's, a malformed body and a
-locked-out address write no row of their own:
+A match is audited as `token.revoke_code`,
+the token its target and its user its subject,
+with a line under Configuration and the log's Info line "token revoked" `by=code`,
+both naming the heirs it took (`heirs`, by id) where it took any,
+as a revoke's do; a code that matches nothing, the settings file's,
+a malformed body and a locked-out address write no row of their own:
 they are counted per address and minute as refused requests are,
 in rows of their own apart from the address's other refused requests,
 with no line.
@@ -977,7 +1005,9 @@ A server without a store has no token to revoke and answers `204` at once.
 With users, `user`, `role`, `capabilities` (the effective set:
 the role's minus the disabled capabilities, every one for `owner`,
 none for a disabled role, and what those include, `restart` beside
-`update` or `reboot` ("Authentication")) and `token`, the one presented;
+`update` or `reboot` ("Authentication")) and `token`, the one presented,
+as this request leaves it: its use written, so that a key's `idle_ends_at`
+counts from it (Tokens);
 outside users mode `user` and `role` are null and `capabilities` is every one.
 `setup` is true on an open server for a caller on the local network,
 the one that may create the first owner,
@@ -989,26 +1019,31 @@ and absent otherwise: the web UI then does not ask for the first owner.
 
 ### POST /api/v1/login/key
 
-A session from an API key, for the apps' login by fingerprint
-([app.md](app.md)): the phone keeps a key of the user's own, made by
-`POST /api/v1/users/{name}/tokens`, and turns it into a session when the
-user passes the fingerprint.
+A session from an API key,
+for the apps' login by fingerprint ([app.md](app.md)):
+the phone keeps a key of the user's own,
+made by `POST /api/v1/users/{name}/tokens`,
+and turns it into a session when the user passes the fingerprint.
 The bearer is the key; the optional body `{"label": "…"}` names the session
 as `POST /api/v1/login`'s does (the `User-Agent` when absent),
 and the answer is that route's: `token`, `expires_at`, `user`, `role`,
 `capabilities`.
 
 The session names its key: `key_id` in the token list and in `GET /api/v1/me`.
-The key's next session ends the earlier one, so a phone holds one live
-session per key,
+The key's next session ends the earlier one,
+so a phone holds one live session per key,
 and revoking the key (`DELETE /api/v1/users/{name}/tokens/{id}`) ends the
-session at its next request.
+session at its next request, as the key's end does:
+a session counts only while its key is neither revoked nor past its end (AP KeyLife,
+Block 2).
+A key made with that session as the bearer is no heir of the key ("Tokens",
+below).
 A password set by someone else ends the sessions and leaves the keys,
 as it does for every key.
 
 A wrong key is `401` and counts toward the address's lockout,
 as every failed token check does;
-a revoked one is `401` and does not,
+a revoked one, or one past its end, is `401` and does not,
 as no token that ended does (Authentication above);
 a session as the bearer is `400`;
 a disabled user, a guest past its end date, a disabled role
@@ -1128,14 +1163,14 @@ The session's token so never sits in a URL, a history or a proxy's log.
 
 `GET` and `POST /api/v1/users`; `GET`, `PUT` and `DELETE /api/v1/users/{name}`.
 The users of the store (docs/store.md section 6), each with one role.
-The routes need `users`; a holder of `guests` reaches them for users whose role
-is `guest`, regular ones,
+The routes need `users`;
+a holder of `guests` reaches them for users whose role is `guest`, regular ones,
 or for a call through an integration that integration's own;
-a holder of `integrations` for an integration's users, whatever their role but `owner`;
-and a user reaches its own name (see below),
+a holder of `integrations` for an integration's users,
+whatever their role but `owner`; and a user reaches its own name (see below),
 but never through an integration:
-a call for an integration's user linked to a Massimo user
-has none of the rights of that user's own name.
+a call for an integration's user linked to a Massimo user has none of the rights
+of that user's own name.
 A call through an integration is one with its key
 or with a key one of its users holds from before ("Acting for an integration's users",
 below);
@@ -1146,8 +1181,8 @@ Every one answers `503` on a server without a store.
 
 `GET /api/v1/users` lists the users by name, as `GET /api/v1/me` shows a user;
 a holder of `users` or `passwords` sees every user,
-any other caller the users it may change, as above, and itself
-(AP AccessEnds, D45-A).
+any other caller the users it may change, as above, and itself (AP AccessEnds,
+D45-A).
 Each user carries `display`, how it is shown:
 its `display_name`, else its `name`;
 an integration's user ("Integrations", below) by the chain
@@ -1220,7 +1255,9 @@ From then on the server is in users mode (Authentication).
 `GET /api/v1/users/{name}` is one user.
 `PUT /api/v1/users/{name}` changes any of `display_name`, `role`, `disabled`,
 `expires_at` (`null` clears it) and `password`;
-absent fields stay, an unknown one is `400`.
+absent fields stay, an unknown one is `400`,
+and so is an `expires_at` that reads as the zero time (`0001-01-01T00:00:00Z`),
+here and at `POST`, rather than clearing the end.
 A user changes its own `display_name` and, with `current_password`
 or a `proof` from the sign-in by OPAQUE, its own `password` or `record`;
 a user with keys only (`has_password` false) sets its first one without,
@@ -1265,6 +1302,7 @@ or given an end date (`409`): an owner with one does not count,
 nor does an integration's user, whatever its role.
 
 `DELETE /api/v1/users/{name}` removes a user: its sessions and keys are revoked,
+with the keys its keys made ("Tokens", below),
 its preferences removed,
 an integration's user's link ended,
 and its row stays for the audit with its name,
@@ -1274,29 +1312,38 @@ The last enabled owner without an end date stays (`409`);
 a user cannot remove itself.
 An integration's own user, `<uuid>:`, which holds its key,
 and its user `<uuid>:system` stay (`403`), for every caller:
-`DELETE /api/v1/integrations/{uuid}` removes the integration itself
-and keeps both, so that a request from the same installation can be attached to it
-("Integrations", below).
+`DELETE /api/v1/integrations/{uuid}` removes the integration itself and keeps both,
+so that a request from the same installation can be attached to it ("Integrations",
+below).
 The user that holds the settings file's key, `MASSIMO_API_TOKEN`,
 stays too (`409`), as the key's revoke is refused (below, "Tokens"):
 the removal would revoke the key with the user's tokens,
 and the next start would not add it back, its hash being taken;
-the key is changed or removed in the settings file first
-(AP MobileApp v1.4, D89-A).
+the key is changed or removed in the settings file first (AP MobileApp v1.4,
+D89-A).
 
 ### Tokens: /api/v1/users/{name}/tokens
 
 `GET` and `POST /api/v1/users/{name}/tokens`;
-`DELETE /api/v1/users/{name}/tokens/{id}`.
+`PUT` and `DELETE /api/v1/users/{name}/tokens/{id}`;
+`POST /api/v1/users/{name}/tokens/{id}/rekey`.
 A user's sessions and API keys, as `GET /api/v1/me` shows the one presented;
 the same rules of access as the user.
 
-`GET` lists the live ones, oldest first, without their secrets;
+`GET` lists the live ones, oldest first, without their secrets:
+a key not revoked, ended or not, and a session not revoked, not past its end,
+and, made from a key, only while the key lives;
 the key that is the settings file's `MASSIMO_API_TOKEN` carries `"from_settings": true`,
-found by the hash of the file's token, not by its label
-(AP MobileApp v1.4, D86-A).
-`POST` with `{"label": "Loxone"}` creates an API key, which never expires,
-and answers `201` with the key once;
+found by the hash of the file's token, not by its label (AP MobileApp v1.4,
+D86-A);
+a key made with another key as the bearer carries that key's id as `made_by`,
+absent for every other token.
+`POST` with `{"label": "Loxone"}` creates an API key and answers `201` with the key once;
+`"expires_at"` beside the label gives it an end date (below),
+an RFC 3339 time in the future, `null` or absent for none,
+one that has passed or is no time `400`, and no key made;
+`"idle_exempt": true` keeps it from the idle limit (below),
+from who manages the user alone (`403` for anyone else);
 an integration's user gets none (`403`, "Acting for an integration's users"):
 
 ```json
@@ -1307,17 +1354,162 @@ The key is kept nowhere but in this answer:
 the command of the request keeps the answer without `token`,
 and a retry with its `Idempotency-Key` answers `201` without it too.
 
-`DELETE …/tokens/{id}` revokes a session or a key by the `id` of the list;
+`DELETE …/tokens/{id}` revokes a session or a key by the `id` of the list,
+`{"ok": true, "id": 4, "heirs": [7, 9]}`;
 a token of another user is `404`.
 The settings file's key is `409`, as `DELETE /api/v1/me/token` answers it:
 it is changed or removed in the settings file,
 since the next start would not add it back, its hash being taken.
-A session made from a key (`POST /api/v1/login/key`) carries the key's id
-as `key_id`; revoking the key revokes that session with it.
+A session made from a key (`POST /api/v1/login/key`) carries the key's id as `key_id`;
+revoking the key revokes that session with it, and the key's end ends it.
+
+A key made by a `POST` whose bearer is an API key is that key's heir (AP KeyLife v1.0,
+Block 2, D5-A), whichever user it is made for: `made_by` names the key.
+A key made by a session is no heir,
+a session of a sign-in or one made from a key by `POST /api/v1/login/key`,
+nor is one made by `massimo user token`, by the settings file's bootstrap
+or at an integration's collection of its key;
+a key put into the settings file loses its maker at the next reading of the file.
+A `POST` whose bearer key was revoked or ended after the request was let in
+makes no key and is `401` with `token_wrong`.
+A revoke takes the heirs, and theirs, with their sessions:
+`DELETE …/tokens/{id}`, `DELETE /api/v1/me/token`,
+a revoke by the key's code (`POST /api/v1/tokens/revoke`), a user's removal,
+and the bootstrap's revoke of a key that is no longer the settings file's.
+The answers of the two `DELETE`s name them in `heirs`, by id, `[]` for none,
+and so do their log lines and their change lines (in the `subject`);
+a revoke by code, whose answer is `204`,
+names them in its log line and its change line,
+and a removal's and the bootstrap's log lines say them too.
+The settings file's key is never an heir, nor are the keys it made:
+the revoke of the key that made it and its maker's user's removal pass over it,
+as its own revoke is `409`.
+A key's end takes none: an heir lives past it, and only a revoke reaches it.
 A token revokes itself the same way, as its own bearer:
 a key with `DELETE …/tokens/{id}` and its own id,
-or any token with `DELETE /api/v1/me/token`, which needs neither the name nor the id;
+or any token with `DELETE /api/v1/me/token`,
+which needs neither the name nor the id;
 a session ends itself with `POST /api/v1/logout`.
+
+An API key unused for the days of the setting `auth.key_idle_days` (GET and PUT
+/api/v1/settings; off by default) ends (AP KeyLife v1.0, Block 3),
+and its session with it: the idle clock is the key's last use,
+a use of its session included, or its making where it was never used,
+so a phone that signs in by fingerprint and uses its session keeps its key.
+An ended key and its session are refused as ended tokens,
+which do not count toward the lockout (Authentication);
+nothing is written when a key ends, so it lives again,
+its session with it while the session's own 30 days last,
+where the limit is raised or turned off, the key kept from it,
+or its end date moved later or removed (D6-A);
+its use never brings it back, since it is refused before its use is written,
+nor writes the hash of its revoke code (`POST /api/v1/tokens/revoke`).
+An end is no revoke: a revoke still reaches an ended key,
+by its id or by its code, its heirs with it.
+The list shows each key's life: `idle_exempt`,
+true for a key kept from the limit and always for the settings file's key,
+which the limit passes over (D3-A); `idle_ends_at`, when it ends unused,
+absent where the limit is off or the key is kept from it;
+and for a key that has ended `ended`, `idle`, or `expired` past its end date,
+listed to be revoked.
+`PUT …/tokens/{id}` with `{"idle_exempt": true}` keeps a key from the limit,
+`false` holds it to it again, for who manages the key's user alone (`users`,
+or `guests` for a guest it reaches, within the rank rule: D7-A),
+the key's own user not, unless it manages itself;
+it answers the key as the list shows it, and is audited as `token.update`,
+its change line from and to.
+A body without `idle_exempt` or `expires_at`, or with another field, is `400`,
+a session `400`,
+an integration's key kept from the limit `400` (it is always held to it,
+and its integration registers again once it ended),
+the settings file's key `409`, a token of another user `404`,
+and the bearer that very key `403`: a key changes nothing of its own life,
+and a session made from it is not the key.
+
+An API key may take an end date (AP KeyLife v1.0, Block 4; AP MobileApp, D75),
+at its `POST` or later with `PUT …/tokens/{id}` and
+`{"expires_at": "2026-12-24T18:00:00Z"}`, which sets or moves it,
+or `{"expires_at": null}`, which removes it;
+the list shows it as the key's `expires_at`, absent for none.
+At its end date the key ends, its session with it,
+refused as ended tokens that do not count toward the lockout,
+and is listed with `ended` `expired`, to be revoked;
+an end is no revoke, so the keys it made live on (D5-A).
+Nothing is written when it ends (D6-A):
+moved later or removed, the key lives again,
+its session with it while the session's own 30 days last.
+The end date is the key's user's to move, signed in or with another of its keys,
+or a session made from the key,
+and that of who manages the user (`users`, or `guests` for a guest it reaches,
+within the rank rule);
+an integration's key's that of a holder of `users` or `integrations`,
+on its row in the integration's user's panel;
+the integration registers again once its key ended.
+A time that has passed, or now, is `400` and changes nothing:
+a key ends now by its revoke;
+so is one that reads as the zero time (`0001-01-01T00:00:00Z`),
+which is neither an end date nor none, here as for a user's `expires_at`.
+The settings file's key takes none (`409`, D3-A), in any state of it:
+an ended one would lock the owner out,
+since the bootstrap adds it back only where its hash is unknown.
+A key that becomes the settings file's loses its end date at the bootstrap,
+and the file's key never ends by one, whatever its row holds.
+The bearer that very key is `403` (D4-A):
+a request whose bearer is the key never moves that key's end date.
+That alone does not stop the end date from being moved later:
+a session made from the key is not the key and may move it,
+and so may the key's user, signed in or with another of its keys,
+an end date that who manages the user set included.
+A user or a key with no right to the user is `403`, as for its other fields.
+The change is audited as `token.update`,
+its change line from and to (`null` for none).
+
+`POST …/tokens/{id}/rekey`, with no body, gives a live API key a new secret
+(AP KeyLife v1.0, Block 5; AP MobileApp, D76-A, D81-A),
+the way back to a key whose secret is lost, since none is shown again,
+and the way to refuse whatever holds the key's secret now without making another key.
+The keys made with the key (its heirs, `made_by`) stay:
+for a secret that may have leaked, Revoke ends a key and the keys made with it.
+It answers `200` as `POST` answers `201`, the new secret shown once,
+the command keeping the answer without `token`
+and a retry with its `Idempotency-Key` answering without it and giving no other:
+
+```json
+{"token": "…", "id": 4, "kind": "api", "label": "Loxone", "created_at": "…"}
+```
+
+The key keeps its row: its id, label, making, last use, end date,
+exclusion from the idle limit, maker and heirs stay.
+Its revoke code is the new secret's (`POST /api/v1/tokens/revoke`),
+which ends the key and its heirs;
+the old secret's code ends nothing (`204`), and the key lives on.
+The old secret is answered `401` as a token that ended,
+which counts toward no lockout (Authentication);
+an event stream opened with it, or with a ticket taken with it,
+ends at its next keep-alive,
+and such a ticket redeemed after the new secret opens none (`401`),
+and a request let in with it just before the new secret
+makes no session (`POST /api/v1/login/key`) and no key (`POST …/tokens`) after it,
+answered `401`;
+the key's session ends, with what it subscribed to push,
+unless it is the caller's own, made from that key,
+which stays; what the key itself subscribed to push goes.
+The key's user may, signed in or with another of its keys,
+or a session made from the key, and so may who manages the user;
+never the bearer that very key (`403`): a key changes nothing of its own life.
+A session is `400`;
+the settings file's key `409`,
+since the next start would not add the file's token back, its hash being taken;
+an integration's key `403`:
+the integration learns its key by its approval's code alone,
+and registers again once it is revoked;
+a key that has ended, by its end date or unused, `409`:
+it takes one once it lives again (D6-A);
+a token of another user, or one revoked, `404`.
+It is audited as `token.rekey`, with a change line naming the key,
+and logged, neither with a secret.
+In the app, a key given a new secret elsewhere ends the login by fingerprint
+at its next use, as a revoked one does (docs/app.md).
 
 ### Identities: /api/v1/users/{name}/identities
 
@@ -1347,8 +1539,8 @@ or a user id another identity there has, is `409`,
 an unknown provider `404`, a bad e-mail or both or neither of the two `400`.
 `GET` answers too what the provider said of the account at the last sign-in or link:
 `name`, `username` (`preferred_username`) and `groups`.
-`PUT …/identities/{id}` with `{"email": …}` or `{"subject": …}` changes one no sign-in used,
-the e-mail making it a waiting one, the user id a bound one;
+`PUT …/identities/{id}` with `{"email": …}` or `{"subject": …}` changes one no
+sign-in used, the e-mail making it a waiting one, the user id a bound one;
 one a sign-in used is `409`: it is removed and assigned again.
 `DELETE` removes one: no sign-in finds the user by it any more.
 A user removing its own last way in,
@@ -1423,10 +1615,11 @@ Both need `capabilities`, which only `owner` has by default.
 
 ### Integrations: /api/v1/integrations
 
-An integration, Home Assistant first, is a program that acts for users of
-its own: each of its calls can name the user it acts for and the level
-the user has for that call, and Massimo allows only what every link of
-that chain allows ("Acting for an integration's users", below).
+An integration, Home Assistant first,
+is a program that acts for users of its own:
+each of its calls can name the user it acts for and the level the user has for that call,
+and Massimo allows only what every link of that chain allows ("Acting for an
+integration's users", below).
 On an open server, one without regular users (Authentication),
 the key is not looked at:
 every request from the local network is anyone's,
@@ -1451,9 +1644,10 @@ An integration is registered by the owner, without a key typed anywhere:
    and the setting `integrations.requests` off refuses requests (`403`).
 2. The owner compares the codes and approves (capability `integrations`):
    `POST /api/v1/integrations/{uuid}/approve` with `{"max_caps": [...]}`,
-   the integration's maximum, within the role `integration` and all of it
-   by default; `"attach": "<uuid>"` makes the request an integration of the
-   same kind that was registered before, with its users, links and maximum,
+   the integration's maximum,
+   within the role `integration` and all of it by default;
+   `"attach": "<uuid>"` makes the request an integration of the same kind that
+   was registered before, with its users, links and maximum,
    as after a key lost or revoked,
    and gives it the request's installation id as an acceptance does (below).
    `POST …/refuse` refuses it.
@@ -1462,10 +1656,9 @@ An integration is registered by the owner, without a key typed anywhere:
    `202` while the request waits,
    `200` with `{"key": "…", "integration": {…}}` once approved,
    `410` once refused, expired, or its key collected and used.
-   An answer lost on the way is not lost:
-   the same call answers a new key, the one before revoked,
-   as long as that key was never used and ten minutes since the approval
-   have not passed.
+   An answer lost on the way is not lost: the same call answers a new key,
+   the one before revoked,
+   as long as that key was never used and ten minutes since the approval have not passed.
    Until then the approved integration carries `request_expires`,
    the end of those ten minutes; once they are over, Home Assistant
    registers again and the owner approves the new request.
@@ -1481,10 +1674,10 @@ when it asks and when a request is attached to it;
 so that a name the owner gave stays.
 The chain each of its users is shown by begins with `name`
 ("Acting for an integration's users", below).
-`GET /api/v1/integrations` lists the integrations and the requests
-waiting, a request with its code and the address it came from;
-`PUT /api/v1/integrations/{uuid}` changes `name`, `max_caps` and `state`
-(`active`, `disabled`):
+`GET /api/v1/integrations` lists the integrations and the requests waiting,
+a request with its code and the address it came from;
+`PUT /api/v1/integrations/{uuid}` changes `name`,
+`max_caps` and `state` (`active`, `disabled`):
 
 ```json
 {"name": "Home"}
@@ -1494,9 +1687,9 @@ answers the integration with `"name": "Home"` and `reported_name` as it was;
 `name` is 1 to 64 bytes, its spaces at either end dropped;
 `DELETE` revokes it: its key revoked and the integration disabled,
 its users, links and maximum kept for a request from the same installation.
-A call that came with another installation id than the accepted one is
-refused and the id recorded as `pending_instance`, which
-`POST …/accept-instance` accepts.
+A call that came with another installation id than the accepted one is refused
+and the id recorded as `pending_instance`,
+which `POST …/accept-instance` accepts.
 The installation accepted before then loses the event streams it opened for
 the integration's users, each at its next keep-alive,
 as its calls are refused (AP LinkedRemoval, D4-A),
@@ -1514,22 +1707,23 @@ at the start and every 30 minutes.
 each installation with `kind`, `name`, `instance_id`, `location`, `url`,
 `version`, `address`, and `integration`, the uuid of the integration or
 the request of that installation id, where there is one.
-A server that does not look answers `"looks": false` and why, in
-`announce`: the setting `announce` as `GET /api/v1/settings` shows it
-(`value`, the stored one or `auto`; `in_effect`, `off`; `fixed_by`),
-and `why`, the first that holds of
-`fixed` (`-announce` or `MASSIMO_ANNOUNCE` decides, named in `fixed_by`),
-`restart` (the stored setting announces from the next start: `on`, or
-`auto` where the server does not listen on the loopback),
-`off` (the setting is `off`) and
-`loopback` (the setting is `auto` and the server listens on a loopback
-address), so that a holder of `integrations` alone reads it too.
+A server that does not look answers `"looks": false` and why, in `announce`:
+the setting `announce` as `GET /api/v1/settings` shows it (`value`,
+the stored one or `auto`; `in_effect`, `off`; `fixed_by`), and `why`,
+the first that holds of `fixed` (`-announce` or `MASSIMO_ANNOUNCE` decides,
+named in `fixed_by`),
+`restart` (the stored setting announces from the next start: `on`,
+or `auto` where the server does not listen on the loopback),
+`off` (the setting is `off`) and `loopback` (the setting is `auto` and the
+server listens on a loopback address),
+so that a holder of `integrations` alone reads it too.
 An integration or request whose installation id the last look saw is
 marked `"seen": true`: a request's id confirmed by the LAN.
 Home Assistant finds the server the same way:
-the TXT record of `_massimo._tcp` carries `url`, where the API is
-reached (README.md, "Server"), `loc`, the installation's name, `reg=1` while requests are
-taken, and `api=1`, `GET /healthz` listing the features.
+the TXT record of `_massimo._tcp` carries `url`,
+where the API is reached (README.md, "Server"), `loc`, the installation's name,
+`reg=1` while requests are taken, and `api=1`,
+`GET /healthz` listing the features.
 
 ### Acting for an integration's users
 
@@ -1539,9 +1733,8 @@ A registered integration's key with the header
 X-MassimoHA-On-Behalf-Of: id=<the user's id, 32 hex>; level=control; name*=UTF-8''J%C3%BCrg; instance=<installation id, 32 hex>
 ```
 
-acts for one of the integration's users,
-on a server with regular users: on an open server the header is not read
-("Integrations", above).
+acts for one of the integration's users, on a server with regular users:
+on an open server the header is not read ("Integrations", above).
 
 - **The header's parameters:**
   - `id` is the user's id at the integration (Home Assistant's `user.id`),
@@ -1552,8 +1745,8 @@ on a server with regular users: on an open server the header is not read
     is the user's name there,
     shown in the users list and updated when it changes;
   - `system_generated`, alone,
-    marks one of the integration's own system users
-    (Home Assistant's Supervisor, Cloud, …).
+    marks one of the integration's own system users (Home Assistant's Supervisor, Cloud,
+    …).
 - **The user** is made at its first call,
   with the role `integration` and no password,
   named `<the integration's uuid>:<the id>`,
@@ -1575,31 +1768,29 @@ on a server with regular users: on an open server the header is not read
 
   The include is taken on what they leave ("Authentication"):
   a call left with `update` or `reboot` passes `restart`'s checks too.
-- **Its role:** of the roles the caller may give,
-  the users routes offer such a user (`may.roles`) only those
-  whose capabilities lie within the role `integration` and the integration's maximum,
-  and `integration` itself,
-  which a user moved off it is given back, by the rank rule as any role;
-  never `owner`, which holds every capability.
+- **Its role:**
+  of the roles the caller may give,
+  the users routes offer such a user (`may.roles`) only those whose capabilities
+  lie within the role `integration` and the integration's maximum,
+  and `integration` itself, which a user moved off it is given back,
+  by the rank rule as any role; never `owner`, which holds every capability.
   A role beyond them is taken all the same from a holder of `users`,
   and acts within them,
   and refused, `403`, to a holder of `integrations` (AP AccessEnds, D48-A);
   one stored so, or left beyond a maximum lowered later,
   is offered no more once another is given.
-- **Who manages them:** an owner;
-  a holder of `users`, by the rank rule;
-  a holder of `integrations`, every integration's user
-  but one stored as `owner`, which stays an owner's alone,
-  giving a role it outranks within the maximum;
+- **Who manages them:**
+  an owner; a holder of `users`, by the rank rule; a holder of `integrations`,
+  every integration's user but one stored as `owner`,
+  which stays an owner's alone, giving a role it outranks within the maximum;
   and the integration's own calls, where their chain holds `guests`,
   its users stored as `guest`, by the rank rule.
   No other integration's key changes them,
   nor a holder of `guests` that comes through no integration,
   and no call through an integration changes or makes a regular user,
-  nor has the rights of the own name of the user it is linked to:
-  no key, password, record, identity, link, name or field of that user's
-  (AP AccessEnds, D41-A4 and A5);
-  that user changes them signed in itself.
+  nor has the rights of the own name of the user it is linked to: no key,
+  password, record, identity, link, name or field of that user's (AP AccessEnds,
+  D41-A4 and A5); that user changes them signed in itself.
   Disabling one stops its calls, a linked one's too.
   Removing one ends its link (AP AccessEnds, D54-A):
   its next call makes it anew, unlinked, with the role `integration`,
@@ -1617,8 +1808,9 @@ on a server with regular users: on an open server the header is not read
 - **Without the header** the key acts as the integration itself:
   its role and its maximum (an integration's own polls and stream),
   within the role `integration` as every call through it.
-- **No way in of its own:** an integration's user acts through its integration
-  alone, whatever role the owner gives it.
+- **No way in of its own:**
+  an integration's user acts through its integration alone,
+  whatever role the owner gives it.
   The users' routes refuse it a key (`POST /api/v1/users/{name}/tokens`),
   a password, plain or by a record (`PUT /api/v1/users/{name}`,
   `POST /api/v1/users/{name}/register`),
@@ -1633,11 +1825,10 @@ on a server with regular users: on an open server the header is not read
   as every call of such a user, whatever its role;
   `GET /api/v1/me` with it says what is left.
   A password or a provider's identity it holds signs in nowhere.
-- **The audit and the log** name the user the call acted as,
-  `effective_user`, and the integration's user, `real_user`
-  (GET /api/v1/audit, "Who did it");
-  the audit's `detail` adds `"via"`, the integration's uuid,
-  and `"for"`, the integration's user (id, name, level).
+- **The audit and the log** name the user the call acted as, `effective_user`,
+  and the integration's user, `real_user` (GET /api/v1/audit, "Who did it");
+  the audit's `detail` adds `"via"`, the integration's uuid, and `"for"`,
+  the integration's user (id, name, level).
 
 A refusal says which link refused, in `code`:
 
@@ -1650,13 +1841,12 @@ A refusal says which link refused, in `code`:
 | 403 | `user_disabled` | the integration's user, its linked user or one of their roles is disabled |
 | 403 | `forbidden` | a capability the chain did not leave |
 
-`GET /api/v1/me` answers, for an integration's key, `integration`
-(`uuid`, `name`, `reported_name`, `state`, `instance_id`, null for any other key),
+`GET /api/v1/me` answers, for an integration's key, `integration` (`uuid`,
+`name`, `reported_name`, `state`, `instance_id`, null for any other key),
 with the header `acts_for` (`id`, `name`, `level`, `linked`,
 `system_generated`), and `capabilities`, what the chain leaves.
-So an integration knows before naming a user whether its key is a
-registered integration's, and a key typed by hand keeps working without
-the header.
+So an integration knows before naming a user whether its key is a registered
+integration's, and a key typed by hand keeps working without the header.
 
 **Links.**
 `GET /api/v1/integrations/{uuid}` answers the integration with `users`,
@@ -1667,14 +1857,15 @@ and for one not linked a `proposal`, a Massimo user whose name or display
 name is its name at the integration.
 The owner confirms a link (capability `integrations`):
 `PUT /api/v1/integrations/{uuid}/users/{id}` with `{"user": "anna"}`;
-its calls then act as `anna`, within `anna`'s role (the chain's third
-link), and `{"user": null}` unlinks it.
+its calls then act as `anna`, within `anna`'s role (the chain's third link),
+and `{"user": null}` unlinks it.
 Several of an integration's users may be linked to one user.
-The system user stays its own, a user of an integration is no user to
-link to (`400`), and the caller must outrank the user linked to (`403`).
-`GET /api/v1/users` marks an integration's user with `integration`
-(`uuid`, and for one of its users `id`, `name`, `linked_to`)
-and lists under `links` the integrations' users linked to a user
+The system user stays its own,
+a user of an integration is no user to link to (`400`),
+and the caller must outrank the user linked to (`403`).
+`GET /api/v1/users` marks an integration's user with `integration` (`uuid`,
+and for one of its users `id`, `name`,
+`linked_to`) and lists under `links` the integrations' users linked to a user
 (`integration`, its uuid, `id`, `name` and `display`, its chain).
 
 ### Providers: /api/v1/providers
@@ -1700,8 +1891,8 @@ An enabled provider is saved,
 by `POST` or by a `PUT` that changes its issuer or enables it,
 only where that document is reached and names the issuer:
 one that differs only by a trailing slash is kept in the document's form,
-which the sign-in compares exactly;
-any other answer is `400`, saying what the document names or why it was not reached.
+which the sign-in compares exactly; any other answer is `400`,
+saying what the document names or why it was not reached.
 A disabled provider is saved unchecked.
 `auto_role`, the role of the users a sign-in creates where `auto_create` is true,
 may not be `owner` nor hold an administrative capability (`guests`,
@@ -1709,11 +1900,11 @@ may not be `owner` nor hold an administrative capability (`guests`,
 `cubes.reboot`, `settings`, `update`, `restart`, `reboot`, `audit`, `auth`);
 `viewer` where absent.
 `auto_domains` limits it to e-mails of those domains, any where empty.
-`allowed_groups` are the groups the provider admits, read from the claim `groups_claim`
-(`groups` where empty) of the `id_token` or the userinfo,
-a list of strings or one string:
-an account in none of them neither signs in (`#oidc-error=group`)
-nor links (`#oidc-link-error=group`); any where empty.
+`allowed_groups` are the groups the provider admits,
+read from the claim `groups_claim` (`groups` where empty) of the `id_token`
+or the userinfo, a list of strings or one string:
+an account in none of them neither signs in (`#oidc-error=group`) nor links
+(`#oidc-link-error=group`); any where empty.
 `PUT` changes the fields given; the key stays,
 `client_secret` left out stays and `""` clears it.
 The answers never hold the secret:
@@ -1957,16 +2148,15 @@ Every route but the `GET`s and the stream ticket leaves a row:
 `pairing.start`, `restore.start`, `cube.add`, `settings.update`, `login`,
 `login.failed`, `logout`, `user.add`, `token.add`, `role.update`,
 `capability.disable`, …), `cube` the Cube of the route, `target` the device,
-room, user, role, token or Cube concerned, `user` and `token_id` who asked
-(absent without authentication, for a failed login,
-and for `massimo user` on the box, whose `remote` is `cli`),
-`effective_user` and `real_user` the users of the row
-("Who did it", below),
-and `result` how it went: `ok` for a 2xx, `refused` for a `401`,
-`403` or `429`, `failed` otherwise.
+room, user, role, token or Cube concerned,
+`user` and `token_id` who asked (absent without authentication,
+for a failed login, and for `massimo user` on the box, whose `remote` is `cli`),
+`effective_user` and `real_user` the users of the row ("Who did it", below),
+and `result` how it went: `ok` for a 2xx, `refused` for a `401`, `403` or `429`,
+`failed` otherwise.
 `detail` keeps the method, the path, the status, the milliseconds,
-the body's size and, when it is JSON of at most 4 KB,
-the body with `password`, `current_password`, `token` and `code` replaced by `…`,
+the body's size and, when it is JSON of at most 4 KB, the body with `password`,
+`current_password`, `token` and `code` replaced by `…`,
 and the error of a failed answer.
 A request refused for a known user (a capability it lacks,
 a disabled user or role) is a row with who was refused, without its body.
@@ -2013,10 +2203,9 @@ They are the same user but for a call of an integration's user
 linked to a Massimo user ("Integrations", below):
 its rights are that user's, `effective_user`,
 and `real_user` is the integration's user.
-Each carries `name`, `display_name`, `integration` (an integration's user's)
-and `display`, how it is shown;
-`real_user`'s says `", as <the effective user's login name>"`
-where the two differ:
+Each carries `name`, `display_name`,
+`integration` (an integration's user's) and `display`, how it is shown;
+`real_user`'s says `", as <the effective user's login name>"` where the two differ:
 
 ```json
 "user": "anna",
@@ -2061,9 +2250,9 @@ which reports in `GET /api/v1/update`:
 its command is `acknowledged` with the answer.
 
 `GET /api/v1/commands/{id}` is one command with its steps,
-by its id or by its number, as the log's `command` and the audit's
-`command_id` name it, and for a caller with `audit` with its audit row
-under `audit`;
+by its id or by its number,
+as the log's `command` and the audit's `command_id` name it,
+and for a caller with `audit` with its audit row under `audit`;
 the command names a device by its serial number, as the audit does,
 and a step by its radio address, the radio command's:
 
@@ -2087,10 +2276,10 @@ and a step by its radio address, the radio command's:
 }
 ```
 
-A step's `result` also gives `answers`, the Cube's answer to each of its
-lines in order up to the first failure (`S:` for a radio line, `A:` for
-`t:`), and `discarded_line`, the line the Cube discarded, where it
-discarded one.
+A step's `result` also gives `answers`,
+the Cube's answer to each of its lines in order up to the first failure (`S:`
+for a radio line, `A:` for `t:`), and `discarded_line`,
+the line the Cube discarded, where it discarded one.
 
 Needs `read`; a user without `audit` sees its own commands only,
 and another's is `404`.
@@ -2174,11 +2363,11 @@ Both have `backups`, the number of backups the store keeps of the Cube's row
 (0 without one, and without a store),
 which `GET …/backups` lists also for a found Cube (see Backups);
 the answer of a discovery has no such field.
-A configured Cube has the fields below;
-`mac`, `last_seen` (when it last answered discovery) and `found_address` only once
-discovery has seen it:
-`found_address` is the host it answered from, which differs from `address`
-where the server connects through a proxy or to a fixed address the Cube has left.
+A configured Cube has the fields below; `mac`,
+`last_seen` (when it last answered discovery) and `found_address` only once
+discovery has seen it: `found_address` is the host it answered from,
+which differs from `address` where the server connects through a proxy or to a
+fixed address the Cube has left.
 `found_elsewhere` says the latter:
 a Cube with a fixed address (`follow_discovery` false) that answered the latest
 discovery at another address, and neither it nor a proxy at its own,
@@ -2198,7 +2387,8 @@ the server reaches it only through a router, if at all.
 A Cube with DHCP on and no lease uses its fallback address,
 192.168.0.222/16 from the factory (docs/cube-protocol.md),
 and refuses a connection from another network;
-`massimo netconfig -sn <serial> -broadcast -static …` gives it a fixed address (README.md).
+`massimo netconfig -sn <serial> -broadcast -static …` gives it a fixed address
+(README.md).
 The networks are read again at most every 30 seconds.
 
 `slots_low` says that the Cube's memory slots stay held:
@@ -2207,9 +2397,8 @@ answers or the Cube restarts, and one Cube held 49 of its 50 for months.
 Each `S:` reply to a radio line and each greeting's `H` line is a reading of the
 free slots;
 a reading counts while nothing of the server's is in flight to the Cube,
-no `s:` line (the server's own or a proxy client's) accepted in the 15 minutes
-before it, since its radiogram may still wait for its device's wakeup
-(an `r:` holds no slot).
+no `s:` line (the server's own or a proxy client's) accepted in the 15 minutes before it,
+since its radiogram may still wait for its device's wakeup (an `r:` holds no slot).
 Two counting readings an hour apart with fewer than 5 free,
 and none with 5 or more in between,
 give the Cube's log event `slots` at `warn` (see the log, below)
@@ -2217,8 +2406,8 @@ and `slots_low` with `level` `warn`;
 two with fewer than 2, and none with 2 or more in between,
 give it at `error` and `level` `error`, once each in a run,
 the error without the warning where both come due at one reading.
-A reading with 2 or more ends the error, which is logged as the step back to
-the warning;
+A reading with 2 or more ends the error,
+which is logged as the step back to the warning;
 one with 5 or more gives `slots` at `info` and drops `slots_low`.
 `slots_low` has `since`, the first reading below 5,
 `full_since`, the first below 2, for an error,
@@ -2226,19 +2415,20 @@ one with 5 or more gives `slots` at `info` and drops `slots_low`.
 Below 5 free the server holds each radio command for a while before it sends
 it all the same (the log's `hold` with `memory_slots`).
 A reboot of the Cube (`POST …/reboot`, below) drops the radiograms it holds.
-The server reads no budget of its own for it:
-the readings are those its writes, its proxy's clients and its reconnects bring,
-the periodic refresh (`serve -refresh`, or `refresh_interval` in the settings)
-among them.
+The server reads no budget of its own for it: the readings are those its writes,
+its proxy's clients and its reconnects bring,
+the periodic refresh (`serve -refresh`,
+or `refresh_interval` in the settings) among them.
 
 ```json
 "slots_low": {"level": "error", "since": "2026-11-14T07:10:00+01:00", "full_since": "2026-11-14T08:00:00+01:00",
   "free_slots": 1, "logged": "2026-11-14T09:02:00+01:00"}
 ```
 
-`problems` lists, where there are any, the Cube's visible devices with a problem,
-as `GET …/devices` shows them, each with its room's name (`room`):
-a communication or link error, a battery level (`battery`) weak or low,
+`problems` lists, where there are any,
+the Cube's visible devices with a problem, as `GET …/devices` shows them,
+each with its room's name (`room`): a communication or link error,
+a battery level (`battery`) weak or low,
 or the Cube's flag (`battery_low`) where the server keeps no level,
 a window open (with its `window` times);
 a client that shows every Cube's problems, such as the web UI's header,
@@ -2247,20 +2437,21 @@ It is the server's last state, also while the Cube is not connected.
 A found Cube has only the fields shown: `address` is the IP it answered from,
 its own where a massimo proxy answers for it too (docs/proxy.md),
 and `proxies` the other addresses that answered for its serial in the latest run;
-`kind` is what answered: `cube`, a Cube
-(it answered the `N` or `c` request, or has eQ-3's MAC),
-`proxy`, a massimo proxy (it answered the identify request alone, from a MAC
-that is not eQ-3's, or from the address of a massimo server announced on the LAN),
-or `unknown`, neither, as on the loopback;
-a proxy has `serves`, the serial of the Cube with its radio address,
-served here or found, where one is known.
-A found Cube whose `address` lies in none of this machine's networks has
-`other_network`, as a configured one has (above), in the `cube_found` event too;
+`kind` is what answered: `cube`, a Cube (it answered the `N` or `c` request,
+or has eQ-3's MAC), `proxy`,
+a massimo proxy (it answered the identify request alone,
+from a MAC that is not eQ-3's,
+or from the address of a massimo server announced on the LAN), or `unknown`,
+neither, as on the loopback; a proxy has `serves`,
+the serial of the Cube with its radio address, served here or found,
+where one is known.
+A found Cube whose `address` lies in none of this machine's networks has `other_network`,
+as a configured one has (above), in the `cube_found` event too;
 a proxy never has it.
 `host` names the massimo server that serves the entry:
 for a proxy the one at its address, for a Cube the one a proxy of it runs on,
-with its instance name (`name`) and the `url` its announcement gives
-(`_massimo._tcp`, README.md); it is absent where no announced server matched.
+with its instance name (`name`) and the `url` its announcement gives (`_massimo._tcp`,
+README.md); it is absent where no announced server matched.
 The servers are asked by mDNS beside each run of discovery, for as long,
 by multicast, or at the addresses of `-discover-target` where it is set;
 the answer of a run that heard none keeps the last.
@@ -2367,9 +2558,9 @@ so a non-zero value says the states may still change.
 `observed_since` is when the server first heard from the Cube (see the
 ages of device values below).
 `cube_time` is the Cube's clock, in its own time zone and to the minute,
-as its greeting told it at the last connect, and `cube_time_at` when the
-server read it: the clock moves on by the time since, and the two say how
-far it is off.
+as its greeting told it at the last connect,
+and `cube_time_at` when the server read it:
+the clock moves on by the time since, and the two say how far it is off.
 
 The Cube reports its budget only in the answer to a radio command and when a
 connection starts,
@@ -2403,8 +2594,8 @@ The answer is `201` with the Cube object; a Cube served already is `409`.
 A Cube that was removed is added as new,
 a row of its own without the removed rows' history,
 unless `"restore": "<uuid>"` names one of the removed rows its found entry lists:
-that row is served again with its settings, log, backups, rooms, commands and audit,
-the body's other fields changing its settings (D11-A).
+that row is served again with its settings, log, backups, rooms,
+commands and audit, the body's other fields changing its settings (D11-A).
 A `restore` that names no removed row of the serial is `404`,
 one for a serial with a row that is not removed `409`,
 and in a `PUT` it is `400`.
@@ -2476,30 +2667,32 @@ The server's settings in the store:
 `in_effect` `"0"` and `fixed_by` `-poll`, while the setting keeps its range.
 `poll_interval` is how often the server asks each Cube for its device list,
 10 seconds by default, which costs no radio time;
-`refresh_interval` how often it connects to each Cube anew and reads
-everything the Cube holds, 6 hours by default;
-`discover_interval` how often it looks for Cubes on the LAN, 30 minutes by default;
+`refresh_interval` how often it connects to each Cube anew and reads everything
+the Cube holds, 6 hours by default;
+`discover_interval` how often it looks for Cubes on the LAN,
+30 minutes by default;
 `duty_wait` how long radio commands wait while a Cube's duty cycle is used up
 before the server reads the Cube's budget again by a new connection,
 which costs no radio time, 10 minutes by default:
-the duty cycle falls within the hour (docs/cube-protocol.md), so the server
-does not wait for the next full hour, and holds again while it is still used up.
+the duty cycle falls within the hour (docs/cube-protocol.md),
+so the server does not wait for the next full hour,
+and holds again while it is still used up.
 `stale_after` is when a radiator thermostat that has not changed counts as stale,
 50 hours by default, since an idle one changes its entry once a day and not on
 its decalcification day (docs/cube-protocol.md, "How devices report");
 `stale_after_wall` the same for a wall thermostat, 24 hours by default;
 both apply at once, the intervals at the next start.
 `window_warn_after` and `window_alert_after` are how long a window may stay open
-before it counts as open too long, a warning and then an alert
-(5 and 10 minutes, 1m to 24h, the alert not under the warning, at once;
-a device's `window`, above).
+before it counts as open too long,
+a warning and then an alert (5 and 10 minutes, 1m to 24h,
+the alert not under the warning, at once; a device's `window`, above).
 `commands.keep_days` is how many days finished commands are kept (see Commands),
 a number, 0 for ever, and applies at once;
 `log.keep_days` how many days the Cubes' events are kept (see `GET …/log`),
 30 by default, 0 for ever, at most 3650, and applies at once:
 a lower value removes the older events within moments;
-`audit.keep_days` how many days the audit's rows are kept (see
-`GET /api/v1/audit`), 365 by default, 0 for ever, at most 3650, at once too,
+`audit.keep_days` how many days the audit's rows are kept (see `GET /api/v1/audit`),
+365 by default, 0 for ever, at most 3650, at once too,
 an `audit_pruned` line in the log saying how many went.
 The backups' settings are whole numbers that apply at once (see Backups):
 `backups.auto_min`,
@@ -2513,6 +2706,12 @@ the days the others are kept (365), 0 for ever and at most 3650,
 and `backups.keep_newest`,
 how many of a Cube's newest backups are kept whatever their age (10, 0 to 1000);
 a change of the last three prunes at once.
+`auth.key_idle_days`, 0 by default for off, 0 to 3650,
+is how many days an API key may stay unused before it ends, its session with it,
+counted from its last use, its session's included, or its making (Tokens, above;
+AP KeyLife, Block 3, D2-A); it applies at once,
+so a key unused for longer ends at its next check,
+and a key kept from it and the settings file's key never end by it.
 `auth.password_login`, true by default, says whether `POST /api/v1/login`
 takes a password, and applies at once:
 off, it answers `403`, the start of a sign-in by OPAQUE says `"v1": false`,
@@ -2520,37 +2719,38 @@ and the users sign in by OPAQUE alone, so that no password crosses;
 the API keys are not touched.
 A user still of `auth_version` 1 cannot sign in then,
 until someone with `users` sets a password for it.
-`integrations.requests`, true by default, says whether integrations may
-ask to be registered (`POST /api/v1/integrations/requests`), and applies
-at once; the announcement's `reg` says it on the LAN.
-`auth.keep_open`, false by default, says that a server without regular users
-is kept open on purpose, and applies at once:
-`GET /api/v1/me` then says `kept_open`, and the web UI does not ask for the
-first owner.
+`integrations.requests`, true by default,
+says whether integrations may ask to be registered (`POST /api/v1/integrations/requests`),
+and applies at once; the announcement's `reg` says it on the LAN.
+`auth.keep_open`, false by default,
+says that a server without regular users is kept open on purpose,
+and applies at once: `GET /api/v1/me` then says `kept_open`,
+and the web UI does not ask for the first owner.
 The web UI sets it from the sign-in card once the page's own address is entered,
 and System settings → Users turns it off again (docs/ui.md).
 It changes nothing about who is let in:
 the local network alone, as on any open server (Authentication).
 It counts only while the server has no regular users:
-the first regular user removes it, however it is made
-(the API, `massimo user add`, `MASSIMO_API_TOKEN`, a sign-in through a provider),
-and so do the server's start and a reload of the settings file
-where they find regular users beside it;
-the log says `keep-open setting removed`.
+the first regular user removes it, however it is made (the API,
+`massimo user add`, `MASSIMO_API_TOKEN`, a sign-in through a provider),
+and so do the server's start and a reload of the settings file where they find
+regular users beside it; the log says `keep-open setting removed`.
 An integration approved and its users leave it as it is.
 With regular users, `in_effect` is `false`, and `true` is `409`;
 `false` and `null` are taken.
-`auth.password_reveal`, true by default, says whether the web UI's password
-fields offer their eye, a button at a field's end that shows the password as
-it is typed, and applies at once (AP MobileApp, D84-A):
-off, no field shows one, the browser's own eye hidden either way;
-`GET /healthz` says it as `password_reveal`, since the sign-in reads it
-before anyone signs in, and System settings → Users has its switch (docs/ui.md).
-`announce`, `auto` by default, says whether the server announces itself
-on the LAN by mDNS (README.md, "Server"): `on`, `off`,
-or `auto`, on unless it listens on a loopback address;
-it applies at the next start, `in_effect` saying `on` or `off` for this
-run, and where `-announce` or `MASSIMO_ANNOUNCE` decides instead,
+`auth.password_reveal`, true by default,
+says whether the web UI's password fields offer their eye,
+a button at a field's end that shows the password as it is typed,
+and applies at once (AP MobileApp, D84-A): off, no field shows one,
+the browser's own eye hidden either way;
+`GET /healthz` says it as `password_reveal`,
+since the sign-in reads it before anyone signs in,
+and System settings → Users has its switch (docs/ui.md).
+`announce`, `auto` by default,
+says whether the server announces itself on the LAN by mDNS (README.md,
+"Server"): `on`, `off`, or `auto`, on unless it listens on a loopback address;
+it applies at the next start, `in_effect` saying `on` or `off` for this run,
+and where `-announce` or `MASSIMO_ANNOUNCE` decides instead,
 `fixed_by` names it.
 `update.channel` is the update channel (see `GET /api/v1/update`),
 one of `devel`, `nightly`, `alpha`, `beta` and `stable`,
@@ -2569,17 +2769,18 @@ A number setting takes a JSON number, or the number as a string,
 and `auth.password_reveal` `true` or `false`,
 `announce` `auto`, `on` or `off`, `update.channel` a name,
 `update.auto` `off` or `night`, and `update.auto_window` a window as above.
-The ranges: `stale_after` and `stale_after_wall` 1h to 720h, `poll_interval` 10s to 1h,
-`refresh_interval` 10m to 168h, `discover_interval` 1m to 24h, `duty_wait` 1m to 1h,
+The ranges: `stale_after` and `stale_after_wall` 1h to 720h,
+`poll_interval` 10s to 1h, `refresh_interval` 10m to 168h,
+`discover_interval` 1m to 24h, `duty_wait` 1m to 1h,
 `window_warn_after` and `window_alert_after` 1m to 24h.
 Every value is checked before any is written.
 The answer is that of `GET`.
 
 ### POST /api/v1/cubes/{sn}/reboot
 
-Reboots the Cube: the server sends it `R` on UDP port 23272
-(`docs/cube-protocol.md`, "Cube UDP protocol"),
-from its discovery socket, where the Cube's answer arrives.
+Reboots the Cube: the server sends it `R` on UDP port 23272 (`docs/cube-protocol.md`,
+"Cube UDP protocol"), from its discovery socket,
+where the Cube's answer arrives.
 The Cube is gone for about a minute and then takes a connection again;
 one that still holds an old connection (`link` `stale`, above)
 does so otherwise only after up to about 40 minutes.
@@ -2594,8 +2795,8 @@ the request names the count it accepts to drop:
 {"pending": 3}
 ```
 
-A request without it, or with fewer, is `409`, naming the count and when
-the Cube said it.
+A request without it, or with fewer, is `409`,
+naming the count and when the Cube said it.
 A Cube that another client holds (`link` `busy`) restarts too,
 and that client may take it again before the server does.
 The answer is `202`:
@@ -2605,9 +2806,10 @@ The answer is `202`:
 ```
 
 `answered` says whether the Cube answered within a second,
-`status` its answer's status, 2 for restarting (firmware 1.1.3), null without one.
-The client's `link` is `rebooting` until the Cube's greeting, three minutes at most,
-and the server's log has no loss for it.
+`status` its answer's status, 2 for restarting (firmware 1.1.3),
+null without one.
+The client's `link` is `rebooting` until the Cube's greeting,
+three minutes at most, and the server's log has no loss for it.
 `409` also comes while the Cube's serial or address is not known yet,
 `502` when `R` could not be sent.
 `massimo netconfig -reboot` sends the same request without the server (README.md).
@@ -2761,10 +2963,11 @@ Device types: `radiator_thermostat`, `radiator_thermostat_plus`,
 it is false for every device after a Cube restart until the device transmits
 again (window contacts only do so on a window change),
 and `state` is then absent.
-It is false too for a device the Cube has not heard for some minutes, whose
-entry the Cube marks out of date (a wall thermostat after about five minutes of
-silence, docs/cube-protocol.md): such a device has `out_of_date: true` and
-`last_known`, the values of its last report, as `state` holds them,
+It is false too for a device the Cube has not heard for some minutes,
+whose entry the Cube marks out of date (a wall thermostat after about five
+minutes of silence, docs/cube-protocol.md):
+such a device has `out_of_date: true` and `last_known`,
+the values of its last report, as `state` holds them,
 with `received` and `last_seen` as old as they are.
 `ready` on a room is true when all its devices have reported,
 which is the condition for the Cube to accept a room command.
@@ -2794,21 +2997,24 @@ the web UI marks the room's setpoint by them, and each device's by its own.
 from the same configuration, absent for a room without a thermostat:
 a client offers the room's setpoints within them,
 4.5 being OFF and 30.5 ON there as in any setpoint.
-`confirmation`, on a device and on a room, is present while a write to it is
-not confirmed yet (see "Writes confirmed by the devices"):
-its `state` (`pending`, `unconfirmed`), `since` the Cube took the oldest write
-still open, the `fields` not shown yet (the state's names, the configuration's,
-and `program.<day>` for a day of the week programme), and on a room the
-`devices` that do not show them; a virtual wall thermostat has its room's.
+`confirmation`, on a device and on a room,
+is present while a write to it is not confirmed yet (see "Writes confirmed by
+the devices"): its `state` (`pending`, `unconfirmed`),
+`since` the Cube took the oldest write still open,
+the `fields` not shown yet (the state's names, the configuration's,
+and `program.<day>` for a day of the week programme),
+and on a room the `devices` that do not show them;
+a virtual wall thermostat has its room's.
 Thermostats carry `mode` (`auto`, `manual`, `vacation`, `boost`), `setpoint`,
 `actual_temp` once the device reported one (the last it reported, kept while
 its entries carry none),
 `valve_pct` for radiator thermostats, `until` for vacation mode;
 shutter contacts carry `window_open`.
-A radiator or wall thermostat's entry, beside `state`, carries `comfort_temp`
-and `eco_temp`, its comfort and eco temperatures from its configuration
-(its C line, as `GET …/devices/{rf}` gives them under `thermostat` or
-`wall_thermostat`), absent where the Cube sent none:
+A radiator or wall thermostat's entry, beside `state`,
+carries `comfort_temp` and `eco_temp`,
+its comfort and eco temperatures from its configuration (its C line,
+as `GET …/devices/{rf}` gives them under `thermostat` or `wall_thermostat`),
+absent where the Cube sent none:
 the web UI marks a device's setpoint that is one of them,
 as the device's display does, and a room's by the room's (below).
 `error` is the device's communication error,
@@ -2830,8 +3036,8 @@ in the original software's words
 it clears with a later report of the device.
 The original software names it `transmitError`,
 which this API's names do not follow:
-they stay `error` and `link_error`
-(docs/cube-protocol.md, "Lessons from the hardware days").
+they stay `error` and `link_error` (docs/cube-protocol.md,
+"Lessons from the hardware days").
 `panel_locked` (present when true) is the key lock on the device.
 `battery_low` is the device's battery flag as the Cube shows it now;
 `battery`, beside `state`, is the level the server keeps from its history:
@@ -2915,15 +3121,14 @@ has the device) with `room_name`, the rooms of both sides with their names
 and `since`, when the server first found it.
 A device's `mismatches` are those of its `device`, a room's those of its `room`
 or of either side.
-Left out are the hidden devices and those parked in room 255, and the rooms
-they alone make up;
-the device of a removal, placement or move through the API, and the rooms it
-concerns, from the change's start until the device's C line follows,
-5 minutes at most after its end
-(the Cube changes a C line only once the device acknowledged);
-for `programme` and `temperatures`, a room with a member whose configuration
-write the server still follows (see the re-reads after writes, above);
-and the whole Cube while a restore runs.
+Left out are the hidden devices and those parked in room 255,
+and the rooms they alone make up; the device of a removal,
+placement or move through the API, and the rooms it concerns,
+from the change's start until the device's C line follows,
+5 minutes at most after its end (the Cube changes a C line only once the device
+acknowledged); for `programme` and `temperatures`,
+a room with a member whose configuration write the server still follows (see the
+re-reads after writes, above); and the whole Cube while a restore runs.
 
 ```json
 "mismatches": [{"finding": "room", "device": "0a010a", "name": "Living room radiator", "room": 1, "room_name": "Living room",
@@ -2940,11 +3145,12 @@ After a restart the server takes the findings its log holds unsettled,
 so that it does not warn of them again.
 
 A device whose state says a window is open (`window_open: true`,
-a shutter contact, or a virtual wall thermostat of a room with one)
-also has `window`, when the server saw it open and when it counts as open
-too long, first as a warning, then as an alert,
-by the settings `window_warn_after` and `window_alert_after`
-(5 and 10 minutes by default, see `GET /api/v1/settings`):
+a shutter contact,
+or a virtual wall thermostat of a room with one) also has `window`,
+when the server saw it open and when it counts as open too long,
+first as a warning, then as an alert,
+by the settings `window_warn_after` and `window_alert_after` (5 and 10 minutes by default,
+see `GET /api/v1/settings`):
 
 ```json
 "window": {"open_since": "2026-11-05T09:40:02+01:00", "warn_at": "2026-11-05T09:45:02+01:00",
@@ -2979,7 +3185,8 @@ whichever client shows it.
 
 - It belongs to its room: its name is the room's,
   it comes with the room and goes with it (`device_forgotten`),
-  and `room_uid` is the room's uid, which no later room of the same number takes.
+  and `room_uid` is the room's uid,
+  which no later room of the same number takes.
   A room deleted and another made with its number while the server was not running
   cannot be told apart and keeps the uid.
 - Its address is the room number (`000005` for room 5),
@@ -2987,9 +3194,8 @@ whichever client shows it.
   then the first free one from `000100` to `0001ff`.
   Its serial is `VWT` and the room number in seven digits;
   no eQ-3 serial starts with V.
-- `actual_temp` is the room's wall thermostat's
-  (of two, set up by another tool, their median),
-  else the median of the room's radiator thermostats',
+- `actual_temp` is the room's wall thermostat's (of two, set up by another tool,
+  their median), else the median of the room's radiator thermostats',
   or their mean where the room's setting says so (`temp_method`);
   a median of two values is their mean, rounded to 0.1 °C.
   A stale value is left out while a fresh one exists;
@@ -3011,10 +3217,9 @@ whichever client shows it.
   the thermostats that show its state, the one of the newest change,
   or the one of the order;
   `sources.mode` names the same.
-  During a boost, `setpoint` and `until` are still those of that rule
-  over the thermostats that do not boost (over those that boost, where every one does),
-  which `sources.setpoint` names,
-  and `sources.mode` names the boosting ones.
+  During a boost, `setpoint` and `until` are still those of that rule over the
+  thermostats that do not boost (over those that boost, where every one does),
+  which `sources.setpoint` names, and `sources.mode` names the boosting ones.
   It is the room checks' rule for the state they send again (below),
   where Massimo's own command and a state held from before a newcomer come first.
   `consistent` is false while the room's thermostats disagree on mode,
@@ -3027,12 +3232,13 @@ whichever client shows it.
 - `reported` is true once a thermostat of the room has reported;
   a room without one has a virtual wall thermostat with `window_open` alone.
 - It has a `state` event whenever its computed state changes,
-  right after the event of the member that changed it, with the member's `command`.
+  right after the event of the member that changed it,
+  with the member's `command`.
   It is never in the device counts, the log, the notifications,
   a backup or a room's `ready`.
 
-Which devices the lists show is the parameter `devices`
-of `GET …/rooms`, `GET …/devices`, `GET /api/v1/cubes/{sn}` and `GET …/events`:
+Which devices the lists show is the parameter `devices` of `GET …/rooms`,
+`GET …/devices`, `GET /api/v1/cubes/{sn}` and `GET …/events`:
 
 | `devices=` | real wall thermostats | virtual wall thermostats |
 |------------|-----------------------|--------------------------|
@@ -3059,10 +3265,10 @@ Its commands are the device routes', under any of its names:
 A configuration of one part answers as that part's route does;
 one of several answers each by name,
 `{"ok": true, "room": {…}, "wall_thermostat": {…}, "settings": {…}}`.
-`temp_method` is `median` or `mean` and needs `configure`, as the room's
-settings do; `rf_address` is six hex digits, or `""` for the room number,
-and one that a real device, the Cube or another room's virtual wall thermostat has
-is `409`.
+`temp_method` is `median` or `mean` and needs `configure`,
+as the room's settings do; `rf_address` is six hex digits,
+or `""` for the room number, and one that a real device,
+the Cube or another room's virtual wall thermostat has is `409`.
 A change of its settings is a `config` event of it,
 and a `state` event where its state changes.
 Each command needs the capability of the route it goes to,
@@ -3089,27 +3295,27 @@ under the `etag` beside it.
 `temp_offset` is no room's but a device's own:
 the room's real wall thermostat's, which a write of it reaches,
 else that of the first of the room's order.
-The proxy's virtual C line carries the same
-(docs/proxy.md, "Virtual wall thermostats").
+The proxy's virtual C line carries the same (docs/proxy.md,
+"Virtual wall thermostats").
 
 ### The room checks
 
 Every minute the server compares the thermostats of each room,
 those whose C line names it, as the Cube goes by,
-and writes what it finds to the Cube's log (`disagree` and `drift`, see the log, below).
+and writes what it finds to the Cube's log (`disagree` and `drift`, see the log,
+below).
 Left out are the hidden and parked devices, window contacts,
 a thermostat in boost and one whose entry is out of date;
-a room while one of its windows is open
-(its thermostats then hold their own window-open temperature),
-while a structure change of Massimo's concerns it
-(see "Structure changes read back"),
-while a command to it waits or runs in the queue
-and while a write to it is open or not confirmed, its `confirmation` set
-(see "Writes confirmed by the devices": a room setpoint not confirmed is
-sent once more there);
+a room while one of its windows is open (its thermostats then hold their own
+window-open temperature),
+while a structure change of Massimo's concerns it (see "Structure changes read back"),
+while a command to it waits or runs in the queue and while a write to it is open
+or not confirmed, its `confirmation` set (see "Writes confirmed by the devices":
+a room setpoint not confirmed is sent once more there);
 a difference not yet reported then starts again.
 
-- **Thermostats that disagree:** they differ in mode, setpoint or `until`,
+- **Thermostats that disagree:**
+  they differ in mode, setpoint or `until`,
   as the virtual wall thermostat's `consistent` says,
   but two in auto that each follow their own week programme agree,
   since a difference of their programmes is their configuration's.
@@ -3120,22 +3326,24 @@ a difference not yet reported then starts again.
   as one room command (`0x40`) through the queue at low priority,
   the first of these, which the log's line names (`from`;
   RadioHealth.D188 as RoomMajority.D3-A, D4-A, D7-C and D9 change it):
-  1. `massimo`: Massimo's last setpoint to the room (`PUT …/rooms/{id}/setpoint`,
+  1. `massimo`:
+     Massimo's last setpoint to the room (`PUT …/rooms/{id}/setpoint`,
      a member's or the virtual wall thermostat's setpoint),
-     where it was sent at most 15 minutes before they began to differ,
-     or since, and a thermostat still shows it.
-     Where it was auto, auto again:
-     auto without a temperature, the week programme, takes the programme's value now;
+     where it was sent at most 15 minutes before they began to differ, or since,
+     and a thermostat still shows it.
+     Where it was auto, auto again: auto without a temperature,
+     the week programme, takes the programme's value now;
      auto with a temperature, which lasts until the next switch point,
-     is sent as it was while no switch point of a thermostat's programme
-     has passed since, at the Cube's time, and else as auto on the programme,
+     is sent as it was while no switch point of a thermostat's programme has passed since,
+     at the Cube's time, and else as auto on the programme,
      which a thermostat on its programme shows too;
-  2. `majority`: else the state more than half of the compared thermostats show,
-     their mode, setpoint and `until`, those on their own programmes counting
-     as one state, auto on the programme;
-     in its place, where the server holds one for the room,
-     the state its thermostats showed before a structure change brought a device in
-     (`before_change`: true, with the `from` of the rule that took it then):
+  2. `majority`:
+     else the state more than half of the compared thermostats show, their mode,
+     setpoint and `until`, those on their own programmes counting as one state,
+     auto on the programme; in its place,
+     where the server holds one for the room,
+     the state its thermostats showed before a structure change brought a device
+     in (`before_change`: true, with the `from` of the rule that took it then):
      taken by this order (steps 1 to 5) over the room's thermostats,
      the device brought in left out where its C line names the room already,
      under the structure lock, before the device is linked,
@@ -3153,26 +3361,28 @@ a difference not yet reported then starts again.
      nor where Massimo set the room another state since it was read;
      auto with a temperature as for `massimo`,
      auto on the programme once a switch point has passed since it was held;
-     held until the room's first check after the change that finds its thermostats
-     agreeing, on any state, two at least or every thermostat of the room;
-     until a compared thermostat is changed by hand to another state
-     after the first check that judged the room
-     (one to the held state, as by its own room command, keeps it);
+     held until the room's first check after the change that finds its
+     thermostats agreeing, on any state,
+     two at least or every thermostat of the room;
+     until a compared thermostat is changed by hand to another state after the
+     first check that judged the room (one to the held state,
+     as by its own room command, keeps it);
      until a newer setpoint of Massimo's to the room, but one of the held state;
      until a held holiday's end has passed at the Cube's time;
-     for a day at most;
-     and until a later change holds its own in its place,
+     for a day at most; and until a later change holds its own in its place,
      but one made before any check has judged the room keeps the earlier hold
      and its time;
-  3. `newest`: else the state of the thermostat whose mode or setpoint changed last,
-     by when the server saw each value change from an earlier one, as `received` dates it:
+  3. `newest`:
+     else the state of the thermostat whose mode or setpoint changed last,
+     by when the server saw each value change from an earlier one,
+     as `received` dates it:
      a change by hand at a device is the newest wish (RoomMajority.D3-A).
      A value's first sighting has no time here, though `received` dates it:
-     one there when the server first connected to the Cube,
-     a new device's, an entry's that got its values late;
+     one there when the server first connected to the Cube, a new device's,
+     an entry's that got its values late;
      nor has the mode with which a boost ends,
-     nor its setpoint where it is the one from before the boost
-     (a new one, turned at the wheel to end the boost, is a change);
+     nor its setpoint where it is the one from before the boost (a new one,
+     turned at the wheel to end the boost, is a change);
      nor have the mode and setpoint with which a holiday ends at its end,
      read on the Cube's clock, which the device changes by itself.
      A thermostat's time is the later of its mode's and its setpoint's,
@@ -3197,23 +3407,24 @@ a difference not yet reported then starts again.
   as the comparison leaves it out;
   the communication error and the link error do not make it so.
   The state is sent at most once a day per room,
-  a day shared with the re-send of a room setpoint not confirmed
-  (one lost room command, one extra write):
+  a day shared with the re-send of a room setpoint not confirmed (one lost room command,
+  one extra write):
   a room sent its state once more by either is not by the other that day;
   but a held state's one re-send goes out whatever the day had,
   the one radiogram its structure change costs;
   the day's re-sends of both are read back from the log after a restart.
-  It is never sent while the queue holds the radio for the duty
-  cycle or the memory slots: it waits for a later check then.
+  It is never sent while the queue holds the radio for the duty cycle or the memory slots:
+  it waits for a later check then.
   Once they agree, an `agree` line settles the warning.
-- **A thermostat off its week programme:** in a room in auto,
-  one whose setpoint has not been its own programme's temperature
-  at the Cube's time for 5 minutes, while every other thermostat
-  of the room follows its own: a `drift` warning naming its clock or its
-  programme as suspect, with the radiogram that failed where it has the
-  communication error, and `hour_off` where its setpoint is the programme's
-  an hour before or after, as a clock on the other side of a change of summer
-  time would show it; its `auto_dst` says whether it switches summer time itself.
+- **A thermostat off its week programme:**
+  in a room in auto, one whose setpoint has not been its own programme's
+  temperature at the Cube's time for 5 minutes,
+  while every other thermostat of the room follows its own:
+  a `drift` warning naming its clock or its programme as suspect,
+  with the radiogram that failed where it has the communication error,
+  and `hour_off` where its setpoint is the programme's an hour before or after,
+  as a clock on the other side of a change of summer time would show it;
+  its `auto_dst` says whether it switches summer time itself.
   Nothing is sent for it.
   A temperature the programme has within 5 minutes of the Cube's time counts,
   so that a switch point just past, or a clock a few minutes off, is no drift.
@@ -3277,16 +3488,17 @@ radio budget is exhausted) and returns
 
 `ok` is the Cube's answer: it has taken the radiogram.
 `confirmation` is `pending` until the device shows the setpoint and mode,
-or `confirmed` where it shows them already
-(see "Writes confirmed by the devices").
+or `confirmed` where it shows them already (see "Writes confirmed by the devices").
 A device that belongs to a room is addressed as its room,
 because the Cube discards a direct command to a room member;
 every thermostat of that room therefore takes the new setpoint,
 which is how MAX! treats setpoints.
 A device outside any room is addressed directly.
-A boost is the set-temperature command with mode 3, as a button at a device starts it;
+A boost is the set-temperature command with mode 3,
+as a button at a device starts it;
 the command carries the setpoint the device has, which the devices ignore.
-Seen on hardware on 2026-11-13: both thermostats of a room showed `boost` within a minute,
+Seen on hardware on 2026-11-13:
+both thermostats of a room showed `boost` within a minute,
 and returned by themselves to the mode they had after their boost time
 (docs/cube-protocol.md).
 
@@ -3296,17 +3508,19 @@ Same body and answer, addressed to every device of the room, which is
 what the original software does:
 one set-temperature radiogram with the room flag, which every member takes.
 It names one thermostat of the room,
-the first of the room's order (RoomMajority.D9, in place of DeviceUnPairingFix.D167):
+the first of the room's order (RoomMajority.D9,
+in place of DeviceUnPairingFix.D167):
 the room's master from the Cube's metadata where that is one,
 else the room's wall thermostat, else its first radiator thermostat,
-each passed over while the Cube holds no valid state for it
-(`reported` false or `out_of_date`) and another thermostat of the room is not,
-never a device of another room, which would take the command as well
-(docs/cube-protocol.md, "Set temperature (0x40) addressing").
+each passed over while the Cube holds no valid state for it (`reported` false
+or `out_of_date`) and another thermostat of the room is not,
+never a device of another room,
+which would take the command as well (docs/cube-protocol.md,
+"Set temperature (0x40) addressing").
 A room without a thermostat is refused with `409`, `room_no_thermostat`,
 and so is its configuration and its week programme;
-where the Cube's list has a thermostat in the room whose C line names another room or none,
-`room_thermostat_unplaced` names it (see "Error codes").
+where the Cube's list has a thermostat in the room whose C line names another
+room or none, `room_thermostat_unplaced` names it (see "Error codes").
 Before the radiogram, every member of the room whose communication error
 (`error`) is set gets one `r:`, the room taken from each device's C line,
 as the Cube takes it, so that the Cube does not hold the command back
@@ -3321,9 +3535,9 @@ the setpoint and mode.
 ### Writes confirmed by the devices
 
 The Cube answers a radio write once it has taken it;
-a device's state takes the new values only when the device has acknowledged the
-radiogram, at its next wakeup, and a room's members take a room command each at
-its own (docs/cube-protocol.md).
+a device's state takes the new values only when the device has acknowledged the radiogram,
+at its next wakeup,
+and a room's members take a room command each at its own (docs/cube-protocol.md).
 So a setpoint, a key lock and a wall thermostat's display mode are confirmed
 by the devices' states, at each of their reports and at a deadline five
 minutes after the Cube's answer:
@@ -3349,8 +3563,8 @@ it compares what was written with what it reads, value by value.
 
 A value the device already had is shown at once,
 so only what the write changes stays open;
-a wall thermostat is not compared by what it does not store
-(the window-open time, descaling and valve limits).
+a wall thermostat is not compared by what it does not store (the window-open time,
+descaling and valve limits).
 Each device written is a write of its own:
 not confirmed after the last re-read, its line names the device and the values
 that differ.
@@ -3430,8 +3644,8 @@ one `r:` for each other member whose error flag is set,
 left out where it names none,
 one 0x21 remove link partner radiogram with the room flag naming the device,
 which every member of the room takes,
-addressed to the first of the room's order, as a room command is
-(see `PUT …/rooms/{id}/setpoint`):
+addressed to the first of the room's order,
+as a room command is (see `PUT …/rooms/{id}/setpoint`):
 the room's master where it is a thermostat of the room,
 else its wall thermostat, else its first radiator thermostat,
 one the Cube holds no valid state for passed over,
@@ -3538,21 +3752,19 @@ The answer is
 {"ok": true, "copied": {"state": {"mode": "manual", "setpoint": 5}, "temperatures": ["0a010a", "0a0b0c"], "valve": true, "days": 5}, "budget": {…}}
 ```
 
-with `copied` where the copy ran,
-absent without it (`"copy": false`, a device that is no thermostat, a rename):
-`state`, the state its 0x40 carried,
-`mode` with `setpoint` (none for auto on the week programme)
-and `until` (a holiday's end, as `PUT …/rooms/{id}/setpoint` takes it),
-and `state_from`, `room` for the room's or Massimo's setpoint to it,
+with `copied` where the copy ran, absent without it (`"copy": false`,
+a device that is no thermostat, a rename): `state`, the state its 0x40 carried,
+`mode` with `setpoint` (none for auto on the week programme) and `until` (a holiday's end,
+as `PUT …/rooms/{id}/setpoint` takes it), and `state_from`,
+`room` for the room's or Massimo's setpoint to it,
 `default` where the room had none and the 0x40 carried auto on the programme;
 `temperatures`, `valve` and `days`, what of the room's settings was sent;
-`config_skipped` where none was and why:
-`no_other_thermostat`, the room has no other thermostat,
-or `no_valid_state`,
+`config_skipped` where none was and why: `no_other_thermostat`,
+the room has no other thermostat, or `no_valid_state`,
 the Cube holds no valid state for any other thermostat of it,
 as after its restart until they report;
-`"confirmation": "pending"` where the device went into a room
-(see "Structure changes read back", below),
+`"confirmation": "pending"` where the device went into a room (see "Structure
+changes read back", below),
 and `"mode_not_set": true` in `copied` when the Cube discarded the 0x40,
 which leaves the device's mode as it was and ends nothing:
 on 2026-11-04 the Cube discarded a direct 0x40 to a device in a room.
@@ -3604,15 +3816,13 @@ The answer is `{"ok": true, "budget": {…}, "confirmation": "pending"}`.
 The Cube accepts a removal's, a placement's or a move's radiograms at once,
 but the room's members take them at their next wakeup, about ten minutes on,
 and the Cube holds a memory slot for each until then;
-it reports its free slots only in `S:` replies and in the `H` line of a new
-connection.
+it reports its free slots only in `S:` replies and in the `H` line of a new connection.
 So such a change answers `"confirmation": "pending"`,
 and the server reads it back 2, 6 and 12 minutes after it:
-done once a budget the Cube reported after the change shows the free slots
-back at their count before it;
-at the last check, where the Cube reported none since,
-the server reconnects once for a fresh `H` line
-(only with `RefreshInterval` set, as the budget refresh after writes).
+done once a budget the Cube reported after the change shows the free slots back
+at their count before it; at the last check, where the Cube reported none since,
+the server reconnects once for a fresh `H` line (only with `RefreshInterval` set,
+as the budget refresh after writes).
 The outcome is the Cube's log event `structure` (see the log, below):
 at `info` when done, at `warn` when not confirmed,
 or when the change left a member of the rooms concerned with the error flag
@@ -3725,9 +3935,10 @@ else the first of the room's order's,
 a thermostat out of date passed over as there (RoomMajority.D9, D19-A);
 a programme written and not yet in a thermostat's configuration counts as written.
 Plus `source`, the first thermostat of that order whose whole week is the room's,
-else the first of the order;
-its tag `etag` (also the `ETag` header), `pending` and `program_consistent`;
-`404` for a room without a thermostat (`room_no_thermostat`, `room_thermostat_unplaced`).
+else the first of the order; its tag `etag` (also the `ETag` header),
+`pending` and `program_consistent`;
+`404` for a room without a thermostat (`room_no_thermostat`,
+`room_thermostat_unplaced`).
 `GET …/devices/{rf}/program` gives one thermostat's own the same way,
 under its room's tag;
 a virtual wall thermostat's is its room's.
@@ -3783,8 +3994,7 @@ Both answer like a setpoint, with the programme's new `etag`;
 Lock or unlock the buttons of one thermostat (the key lock,
 "LoC" on the display, `panel_locked` in its state).
 Body `{"locked": false}`; the answer is the same as for a setpoint,
-its `confirmation` the device's `panel_locked`
-(see "Writes confirmed by the devices").
+its `confirmation` the device's `panel_locked` (see "Writes confirmed by the devices").
 The command is radiogram 0x80,
 which the original software lists but never sends;
 it is sent directly to the device after a wakeup of its room and takes effect
@@ -4114,8 +4324,8 @@ A Cube with a row in the store first keeps a backup of its configuration
 (`before_restore`; the restore is refused with `503` when it cannot be stored)
 and the file of the body (`upload`), both with the user;
 a stored backup restored by `backup=<id>` is not stored again.
-After the restore the file restored is what the next automatic backup compares
-with, so a restore that wrote everything leaves nothing to back up.
+After the restore the file restored is what the next automatic backup compares with,
+so a restore that wrote everything leaves nothing to back up.
 
 Refused with `409` while a restore is running on this Cube,
 when the plan has changed since it was made (another client wrote to the Cube,
@@ -4203,10 +4413,11 @@ and what they cost:
 
 `steps` are the commands in the order they would be sent:
 each with the device it addresses,
-whether the queue resets error flags first (`reset`, the `r:` not among
-`lines`): the device's, the flagged members its room-flagged lines reach,
-the flagged devices its direct lines address, as the queue's prelude does
-for every command (D204-A),
+whether the queue resets error flags first (`reset`,
+the `r:` not among `lines`): the device's,
+the flagged members its room-flagged lines reach,
+the flagged devices its direct lines address,
+as the queue's prelude does for every command (D204-A),
 the room woken up before it (`z:1e,G,<room>`, not among `lines`),
 and its `lines` as they go to the Cube;
 a move's halves wake the device itself as well where a room's wakeup
@@ -4229,8 +4440,8 @@ the duty cycle with the repair's cost would reach the queue's hold (95 %),
 or its held slots would leave fewer free than the queue waits for (5);
 either would stop it halfway.
 `details` names what the repair concerns, per repair (below).
-A repair with nothing to send now has a preview without `plan` and
-`steps`, and `nothing` says why, as the table names it;
+A repair with nothing to send now has a preview without `plan` and `steps`,
+and `nothing` says why, as the table names it;
 its run is refused with `409` and that message.
 `code` and `params` are those of `nothing` or of `refused`, whichever is set,
 as the run's refusal has them (see "Error codes").
@@ -4250,19 +4461,19 @@ Its answer:
  "budget": {…}}
 ```
 
-A run is judged by what the Cube shows:
-each step's lines `accepted`;
-where it sent radiograms, the structure read-back of
-`DELETE …/devices/{rf}` (`"confirmation": "pending"`, the log's
-**device change** line once the Cube's free slots are back at their count before
-it, or naming the slots still held and the members it left with an error flag
-or a link error they did not have);
-for resets, the device list read about two seconds after them:
+A run is judged by what the Cube shows: each step's lines `accepted`;
+where it sent radiograms,
+the structure read-back of `DELETE …/devices/{rf}` (`"confirmation": "pending"`,
+the log's **device change** line once the Cube's free slots are back at their
+count before it,
+or naming the slots still held and the members it left with an error flag or a
+link error they did not have); for resets,
+the device list read about two seconds after them:
 `still_flagged` names the devices whose flag it still shows.
 A step the Cube discarded or that failed stops the run there:
-`502` (`409` when superseded) with `error` naming the step and the same
-`steps`, so that a client sees how far it got;
-its `code` is `repair_stopped`, the refusal that stopped it its `reason`.
+`502` (`409` when superseded) with `error` naming the step and the same `steps`,
+so that a client sees how far it got; its `code` is `repair_stopped`,
+the refusal that stopped it its `reason`.
 Room repairs and placements run under the Cube's structure lock,
 as moves and removals do.
 A room is its members by their C lines, the Cube's own idea of it.
@@ -4297,15 +4508,15 @@ and for a device the list lacks `name`, the name its entry gets,
 `room_name`, the room's, and `type`, the device's,
 so that a client can offer a name of its own words.
 
-**A listed device's name** (D185):
-a device the list lacks gets the name the query's `name` gives,
+**A listed device's name**
+(D185): a device the list lacks gets the name the query's `name` gives,
 checked as every name is (1 to 32 bytes, else `400`),
-else the default `<room name> <type> <n>`:
-the room's name, the one it is listed into or the new room's `room_name`;
+else the default `<room name> <type> <n>`: the room's name,
+the one it is listed into or the new room's `room_name`;
 the device type in English (`radiator thermostat`, `radiator thermostat plus`,
 `wall thermostat`, `window contact`, `eco button`);
-`n` the lowest number from 1 that no device the list has in that room
-takes in a name of that form, whatever its case,
+`n` the lowest number from 1 that no device the list has in that room takes in a
+name of that form, whatever its case,
 such as `Bath radiator thermostat 2` beside `Bath radiator thermostat 1`.
 Where the whole would pass 32 bytes, nobody being there to shorten it,
 the room's name is dropped (D201):
@@ -4347,17 +4558,15 @@ or an RFC 3339 time for the events before that time;
 `after` an event's `id` for the page after it (`?after=4711`),
 the first `limit` events after that one, oldest first,
 and `0` for the log's start;
-`since` an RFC 3339 time for the events at or after it
-(`?since=2026-11-06T20:00:00Z`, not after a `before` time),
+`since` an RFC 3339 time for the events at or after it (`?since=2026-11-06T20:00:00Z`,
+not after a `before` time),
 so that a view of the last hour or of today is one request,
-with `before` as the cursor within it;
-`since` is the start of a range, not a cursor:
-its page is the newest `limit` events since the time,
-a client that asks again since the newest time it has
-gets that millisecond's events again,
-and an event stamped before that time but kept after the client's last read
-in no page at all;
-`kind` keeps one kind (`state`, `config`, `connected`,
+with `before` as the cursor within it; `since` is the start of a range,
+not a cursor: its page is the newest `limit` events since the time,
+a client that asks again since the newest time it has gets that millisecond's
+events again,
+and an event stamped before that time but kept after the client's last read in
+no page at all; `kind` keeps one kind (`state`, `config`, `connected`,
 …) and `device` one device, by its serial number or its radio address,
 also one the Cube no longer has.
 `source` keeps one source: `device` (a device's), `cube` (the Cube's own:
@@ -4372,22 +4581,22 @@ debug lines (the Cube's `hello`).
 started with its rights or by it,
 a removed user's too, under the name its removal gave it;
 a name the server does not know answers an empty page.
-`command` keeps the events of one command, by its id
-(`GET /api/v1/commands/{id}`):
-its attempt, a discard and a retry, its outcome.
+`command` keeps the events of one command,
+by its id (`GET /api/v1/commands/{id}`): its attempt, a discard and a retry,
+its outcome.
 An event of a command names it in `command`,
 until `commands.keep_days` prunes the command.
 The events only a user with `audit` sees (sign-ins, lockouts)
 are on such a user's pages alone.
 The page holds the server's own events too, kept once with no Cube,
 in every Cube's log.
-Each event says its `source` and its `level`,
-and `by` names who started it, as the user is named now
-(`{"name": "anna", "display_name": "Anna"}`),
-with `effective_user` and `real_user` as the audit names them
-(GET /api/v1/audit, "Who did it"):
-absent for the Cube, the server's own jobs and a server without users;
-the bootstrap token is a key of the first owner, whom it names, as the audit does.
+Each event says its `source` and its `level`, and `by` names who started it,
+as the user is named now (`{"name": "anna", "display_name": "Anna"}`),
+with `effective_user` and `real_user` as the audit names them (GET /api/v1/audit,
+"Who did it"): absent for the Cube,
+the server's own jobs and a server without users;
+the bootstrap token is a key of the first owner, whom it names,
+as the audit does.
 A client pages back with `before` set to the `id` of the oldest event it has,
 until a page is empty: the events of a burst share a millisecond,
 so a time does not page them without gaps or repeats.
@@ -4502,6 +4711,7 @@ of the same Cube, or of the server for the server's own:
 | `error_watch` `back` or `lasting` | the same device's `error_watch` `clear` of the same `flag` |
 | `unconfirmed`, a room's setpoint or its re-send not confirmed, its re-send failed | an `unconfirmed` of the same `target` whose `outcome` is `resend_confirmed` |
 | `battery`, a device's battery level `low` | a `battery` of the same device whose `level` is `ok`: new batteries marked, or the server's rules (see the devices' `battery`) |
+| `wall_reset`, a wall thermostat back on another mode | a `disagree` of the same `room` whose `outcome` is `agree`, which the room checks write only after a `disagree` warning: a room put right within 10 minutes, or a line without a `room`, only by a mark |
 
 Any other, such as `proxy_discarded`, `proxy_delete_refused` and `open_setup`,
 is settled only by a person's mark.
@@ -4532,8 +4742,8 @@ So a flag set by the Cube's time push (0x03) at 10:00
 and still set when a setpoint (0x40) fails at 14:00 names the setpoint's,
 and a removal's link (0x21) failing after that names the link's.
 `after` leaves out the alerts up to that id.
-The audit's lines (`login_failed`, `locked_out`)
-are there for a holder of `audit` only.
+The audit's lines (`login_failed`,
+`locked_out`) are there for a holder of `audit` only.
 A Cube without a row in the store yet adds nothing;
 without a store, there are none.
 
@@ -4565,7 +4775,8 @@ with `cause` `replaced` in its `summary` and who in `by` where someone marked
 new batteries),
 `wall_reset` (a wall thermostat came back after five minutes or more without a
 state on another mode than it had, as after new batteries, at warn: its
-`summary` has the `mode` and the `was_mode`, the setpoints and `silent_min`),
+`summary` has the `mode` and the `was_mode`, the setpoints, `silent_min`
+and the thermostat's `room`, whose agreement settles it, see the alerts above),
 `error_reset` (the server reset a device's communication error,
 its `error` flag, with one `r:`, which costs no radio time,
 because the device reported while flagged:
@@ -4606,72 +4817,45 @@ a Cube that is not configured, see POST /cubes/discover),
 see POST /restore),
 `notification` (with `notification`, what the stream's user is told, on that
 user's streams alone; see Notifications).
-The server's own lines, source `system`, each with its `summary` and, where a
-request asked for it, `by`:
-`server_started` (`version`, and `before` when it changed),
-`server_stopping` (`why`: `restart`, `reboot`, `update` or `stop`),
-`settings_read` (the settings file read again: `why`, the names of the
-variables `changed` and of those waiting `at_next_start`, never their values;
-at `warn` with its `error`
-where the next start would refuse a setting of the file,
-such as a log level that does not parse
-or a `MASSIMO_TLS_HTTP` beside a `MASSIMO_TLS` that is not `acme`,
-or the file itself, one that does not parse or is there but cannot be read,
-which then changed nothing, and whose next read writes its `settings_read`
-even where nothing changed:
-the start's own error after "the next start refuses: ",
-a secret's value, the path of `MASSIMO_TLS_KEY`, named by its variable,
-and a line by its number, never quoted;
-GET /api/v1/restart's `refused` says the same, each with its settings,
-and a read whose settings did not change writes its `settings_read`
-where that differs from the last read's,
-as a DNS hook made or removed meanwhile makes it;
+The server's own lines, source `system`, each with its `summary` and,
+where a request asked for it, `by`: `server_started` (`version`,
+and `before` when it changed), `server_stopping` (`why`: `restart`, `reboot`,
+`update` or `stop`), `settings_read` (the settings file read again: `why`,
+the names of the variables `changed` and of those waiting `at_next_start`,
+never their values;
+at `warn` with its `error` where the next start would refuse a setting of the file,
+such as a log level that does not parse or a `MASSIMO_TLS_HTTP` beside a
+`MASSIMO_TLS` that is not `acme`, or the file itself,
+one that does not parse or is there but cannot be read,
+which then changed nothing,
+and whose next read writes its `settings_read` even where nothing changed:
+the start's own error after "the next start refuses: ", a secret's value,
+the path of `MASSIMO_TLS_KEY`, named by its variable, and a line by its number,
+never quoted; GET /api/v1/restart's `refused` says the same,
+each with its settings,
+and a read whose settings did not change writes its `settings_read` where that
+differs from the last read's, as a DNS hook made or removed meanwhile makes it;
 README.md, "Server", says which settings it checks;
-at `warn` too where the read found notes on the file,
-the lines it set aside, which set nothing
-(a later line of a name given twice, a line without a name,
-a `MASSIMO_ENV_FILE` line),
-after "the settings file: ", each naming its lines by their numbers,
-never a value, and after the refusals where both stand:
-`the next start refuses: -hsts or MASSIMO_HSTS "-1": want a number of days, 0 or more; the settings file: MASSIMO_HSTS is given on lines 3 and 4; the first wins`,
-each list joined by "; ",
-one line holding all that its read found;
-a read whose settings did not change writes its `settings_read`
-where its notes differ from the last read's,
-and GET /api/v1/restart's `refused` never names a note;
-a start whose read found notes writes a `settings_read` of them,
-`why` `start`, after its `server_started`,
-which settles every earlier warning of the kind,
-so that a note that stands stays a warning across a restart),
-`restart`, `reboot`, `reboot_cancelled`, `update` (`from`, `to`, `channel`,
-and `auto` for one the server started itself at night, by nobody),
-`update_result` (the helper's outcome after the restart, once:
-`state`, `from`, `to`; a failure at `warn` with its `error`),
-`update_postponed` (the night's window closed while the radio,
-or a settings file the next start refuses, held a due automatic update back:
-`version`, `why`, `window`),
-`backup` (`reason`, `id`, `bytes`; an automatic one that failed at `warn`),
-`backup_deleted` (`id`), `backups_pruned`, `log_pruned` and `audit_pruned` (`removed`),
-`log_rotated` (serve's `-log` file rotated: `why`, `size`, `format`, `sighup`
-or `reload`; `previous`, the name the old file has now; `kept` and `removed`,
-the rotated files kept and those deleted; at `warn` with its `error` where a
-step failed),
-`restore_started` (`id`, `steps`, `radio_commands`),
-`open_setup` at `warn`, what was set up before the first regular user and still works
-(Authentication): the `user` and its `role`, the lists of `open_setup` where it holds any,
-and `via` `cli` where `massimo user add` made the user.
-A Cube's own: `address_changed` (`from`, `to`, for a Cube that follows discovery)
-and `cube_gone` (with `cube`, a Cube found before that no longer answers).
-`change`, source `config`: every request that changed something, once it
-succeeded, with `by`: its `summary` holds the audit's `action` and `target`
-(a device by its serial number), what it `set` (the request's body, its
-secrets removed), what `changes` from and to where the server knows both
-(a Cube's `name`, `address`, proxy and hidden devices; a setting), and the
-`subject` it concerns as it was then (a user's `id`, `uuid`, `name`,
+at `warn` too where the read found notes on the file, the lines it set aside,
+which set nothing (a later line of a name given twice, a line without a name,
+a `MASSIMO_ENV_FILE` line), after "the settings file: ",
+each naming its lines by their numbers, never a value,
+and after the refusals where both stand:
+`the next start refuses: -hsts or MASSIMO_HSTS "-1": want a number of days, 0 or more; the settings file: MASSIMO_HSTS is given on lines 3 and 4; the first wins`, each list joined by "; ", one line holding all that its read found; a read whose settings did not change writes its `settings_read` where its notes differ from the last read's, and GET /api/v1/restart's `refused` never names a note; a start whose read found notes writes a `settings_read` of them, `why` `start`, after its `server_started`, which settles every earlier warning of the kind, so that a note that stands stays a warning across a restart), `restart`, `reboot`, `reboot_cancelled`, `update` (`from`, `to`, `channel`, and `auto` for one the server started itself at night, by nobody), `update_result` (the helper's outcome after the restart, once: `state`, `from`, `to`; a failure at `warn` with its `error`), `update_postponed` (the night's window closed while the radio, or a settings file the next start refuses, held a due automatic update back: `version`, `why`, `window`), `backup` (`reason`, `id`, `bytes`; an automatic one that failed at `warn`), `backup_deleted` (`id`), `backups_pruned`, `log_pruned` and `audit_pruned` (`removed`), `log_rotated` (serve's `-log` file rotated: `why`, `size`, `format`, `sighup` or `reload`; `previous`, the name the old file has now; `kept` and `removed`, the rotated files kept and those deleted; at `warn` with its `error` where a step failed), `restore_started` (`id`, `steps`, `radio_commands`), `open_setup` at `warn`, what was set up before the first regular user and still works (Authentication): the `user` and its `role`, the lists of `open_setup` where it holds any, and `via` `cli` where `massimo user add` made the user.
+A Cube's own: `address_changed` (`from`, `to`,
+for a Cube that follows discovery) and `cube_gone` (with `cube`,
+a Cube found before that no longer answers).
+`change`, source `config`: every request that changed something,
+once it succeeded, with `by`:
+its `summary` holds the audit's `action` and `target` (a device by its serial number),
+what it `set` (the request's body, its secrets removed),
+what `changes` from and to where the server knows both (a Cube's `name`,
+`address`, proxy and hidden devices; a setting),
+and the `subject` it concerns as it was then (a user's `id`, `uuid`, `name`,
 `display_name` and `role`; a role's `id`, `key` and `name`; a key's `id`,
 `uuid`, `name` and its user).
-A change of a Cube is that Cube's line, one of a device carries its
-`serial`, every other is the server's; it names its request's `command`.
+A change of a Cube is that Cube's line, one of a device carries its `serial`,
+every other is the server's; it names its request's `command`.
 The queue's, source `queue`:
 `command`, a step of a command on the Cube's radio, with `command` naming the
 request (`GET /api/v1/commands/{id}`) and its `summary` the `step`'s id, its
@@ -4682,95 +4866,94 @@ and it was sent again),
 `dropped` and `failed` with their `error`;
 `hold` at `warn`, the radio commands waiting (`reason` `duty_cycle` with
 `duty_pct` and `until`, or `memory_slots` with `free_slots` and `wait_s`).
-`structure`, source `cube`, a removal, placement or move read back
-(see "Structure changes read back"), or a repair's radiograms ("Repairs"),
-with the device in `device` and in its
-`summary` the `action` (`remove`, `add`, `move`; a repair's `relink`,
-`unlink_relink`, `config`, `move`, a room's without `device` and with its
-`rooms`),
+`structure`, source `cube`, a removal,
+placement or move read back (see "Structure changes read back"),
+or a repair's radiograms ("Repairs"),
+with the device in `device` and in its `summary` the `action` (`remove`, `add`,
+`move`; a repair's `relink`, `unlink_relink`, `config`, `move`,
+a room's without `device` and with its `rooms`),
 the `outcome` (`done` at `info`, `not_confirmed` at `warn`),
 the free slots `before` the change and now (`free_slots`),
-the minutes since it (`minutes`), the slots still `held` or `no_reading`,
-and, at `warn`, the devices the change left `flagged` or with a `link_error`;
+the minutes since it (`minutes`), the slots still `held` or `no_reading`, and,
+at `warn`, the devices the change left `flagged` or with a `link_error`;
 it is settled only by a person's mark.
-`slots`, source `cube`, the Cube's memory slots held for an hour with nothing
-of the server's in flight (see `slots_low` under `GET /api/v1/cubes`):
-at `warn` with `state` `low` (fewer than 5 free), at `error` with `state`
-`full` (fewer than 2), each once in a run, a step between the two with the
-state it came `from`, and at `info` with `state` `free` at the first reading
-with 5 or more; each settles the one before it, so that the newest is the
-alert; its `summary` has the `free_slots` of the reading, the `since` of the
-first reading below 5 and, below 2, the `full_since` of the first.
-`mismatch`, source `cube`, a C line and the room list, or the members of a
-room, that differ (see "The Cube's lines against its room list" under the
-devices): at `warn` with `state` `found`, once, a room master's again once
-read, and at `info` with `state` `cleared` when they agree again, which settles
-it; with the device in `device`, and in its `summary` the finding as a
-device's `mismatches` has it.
-The room checks', every minute (see "The room checks"):
-`disagree`, source `cube`, a room whose thermostats differ, with the
-`room` and the `outcome` in its `summary`:
-`differ` at `warn` (the `members`, each with its `rf`, `mode`, `setpoint`
-and `until`, what `differs`, the `minutes` so far),
-`resent` (the room's state sent once more as a room command:
-`from` `massimo`, `majority`, `newest`, `master`,
-`wall_thermostat` or `radiator_thermostat`,
-`before_change` true for the state from before a structure change,
-its `mode`, `setpoint` and `until`,
-the budget's `duty_pct` and `free_slots`), `resend_failed` at `warn` with its
-`error`, `not_resent` (`why`: `today`, once a day at most, or
-`no_state`, only in lines written before RoomMajority),
-and `agree` once they agree again (`minutes`);
-`drift`, source `device`, a thermostat in auto that does not follow its
-week programme while the room's other thermostats follow theirs:
-`not_following` at `warn` (its `setpoint` and the programme's
-`expected` at the Cube's `cube_time`, the switch point `switch_at`, the
-`others`, `hour_off` where its setpoint is the programme's an hour
-before or after, its `auto_dst`, and the `failed_radiogram` of its
-communication error), then `follows` (`minutes`) or `left_auto`
-(`mode`).
-`unconfirmed`, source `device`, a write its devices do not show in time
-(see "Writes confirmed by the devices"), its `summary` the `write`
-(`setpoint`, `lock`, `display`, `config`, `program`), its `target` (`room:<id>` or
-`device:<rf>`), the `room`, its `source` (`api` or `proxy`), what it set
-(`expected`), and an `outcome`:
-`not_confirmed` at `warn`, with the `minutes` since the Cube's answer, how many
-devices showed it (`confirmed`), and the `devices` that do not, each with its
-`rf_address`, `serial`, the `fields` it does not show, what it `shows`, and its
-`error`, `link_error` and `out_of_date`;
+`slots`, source `cube`,
+the Cube's memory slots held for an hour with nothing of the server's in flight
+(see `slots_low` under `GET /api/v1/cubes`):
+at `warn` with `state` `low` (fewer than 5 free),
+at `error` with `state` `full` (fewer than 2), each once in a run,
+a step between the two with the state it came `from`,
+and at `info` with `state` `free` at the first reading with 5 or more;
+each settles the one before it, so that the newest is the alert;
+its `summary` has the `free_slots` of the reading,
+the `since` of the first reading below 5 and, below 2,
+the `full_since` of the first.
+`mismatch`, source `cube`, a C line and the room list, or the members of a room,
+that differ (see "The Cube's lines against its room list" under the devices):
+at `warn` with `state` `found`, once, a room master's again once read,
+and at `info` with `state` `cleared` when they agree again, which settles it;
+with the device in `device`,
+and in its `summary` the finding as a device's `mismatches` has it.
+The room checks', every minute (see "The room checks"): `disagree`,
+source `cube`, a room whose thermostats differ,
+with the `room` and the `outcome` in its `summary`:
+`differ` at `warn` (the `members`, each with its `rf`, `mode`,
+`setpoint` and `until`, what `differs`, the `minutes` so far),
+`resent` (the room's state sent once more as a room command: `from` `massimo`,
+`majority`, `newest`, `master`, `wall_thermostat` or `radiator_thermostat`,
+`before_change` true for the state from before a structure change, its `mode`,
+`setpoint` and `until`, the budget's `duty_pct` and `free_slots`),
+`resend_failed` at `warn` with its `error`, `not_resent` (`why`: `today`,
+once a day at most, or `no_state`, only in lines written before RoomMajority),
+and `agree` once they agree again (`minutes`); `drift`, source `device`,
+a thermostat in auto that does not follow its week programme while the room's
+other thermostats follow theirs:
+`not_following` at `warn` (its `setpoint` and the programme's `expected` at the
+Cube's `cube_time`, the switch point `switch_at`, the `others`,
+`hour_off` where its setpoint is the programme's an hour before or after,
+its `auto_dst`, and the `failed_radiogram` of its communication error),
+then `follows` (`minutes`) or `left_auto` (`mode`).
+`unconfirmed`, source `device`,
+a write its devices do not show in time (see "Writes confirmed by the devices"),
+its `summary` the `write` (`setpoint`, `lock`, `display`, `config`, `program`),
+its `target` (`room:<id>` or `device:<rf>`), the `room`,
+its `source` (`api` or `proxy`), what it set (`expected`), and an `outcome`:
+`not_confirmed` at `warn`, with the `minutes` since the Cube's answer,
+how many devices showed it (`confirmed`), and the `devices` that do not,
+each with its `rf_address`, `serial`, the `fields` it does not show,
+what it `shows`, and its `error`, `link_error` and `out_of_date`;
 or `confirmed_late` at `info`, one device's, with the `seconds` it took.
 A room setpoint's re-send (see "A room setpoint sent once more") has these:
-`resent` at `info` (the budget's `duty_pct` and `free_slots`, and `program`
-where auto with a temperature went as auto on the week programme),
-`not_resent` at `info` (`why`: `superseded`, `changed`, `busy`, `boost` or
-`today`), `resend_failed` at `warn` with its `error`,
-then `resend_confirmed` at `info` (`confirmed`, the `seconds` it took) or
-`resend_not_confirmed` at `warn`, with what `not_confirmed` has.
-A device's write has the device in `device`, and so has each device's of a
-configuration; a room's setpoint none.
+`resent` at `info` (the budget's `duty_pct` and `free_slots`,
+and `program` where auto with a temperature went as auto on the week programme),
+`not_resent` at `info` (`why`: `superseded`, `changed`, `busy`,
+`boost` or `today`), `resend_failed` at `warn` with its `error`,
+then `resend_confirmed` at `info` (`confirmed`,
+the `seconds` it took) or `resend_not_confirmed` at `warn`,
+with what `not_confirmed` has.
+A device's write has the device in `device`,
+and so has each device's of a configuration; a room's setpoint none.
 A room setpoint's warning, its re-send's included, is settled by a later
 `resend_confirmed` of the same room; any other only by a person's mark.
 The server's sign-ins, source `server`, only on the pages and streams of a
 user with `audit`: `login` (`user`, `remote`), `login_failed` at `warn`,
 and `locked_out` at `warn` (`remote`, `for`, `after`: `logins` or `tokens`).
-The LAN proxy's, source `proxy`, with the client's `remote`:
-`proxy_connected`, `proxy_disconnected`,
-`proxy_refused` at `warn` (the Cube is not connected),
-`proxy_discarded` at `warn` (a radio command answered as discarded and not
-sent, the duty cycle at `duty_pct`),
-`proxy_deleted` (the `devices` a client deleted),
-`proxy_delete_refused` at `warn` (`why`: `hidden`, with the `devices`, or
-`not_understood`),
-`proxy_pairing` (`seconds`, with `asked` where a client asked for more,
+The LAN proxy's, source `proxy`, with the client's `remote`: `proxy_connected`,
+`proxy_disconnected`, `proxy_refused` at `warn` (the Cube is not connected),
+`proxy_discarded` at `warn` (a radio command answered as discarded and not sent,
+the duty cycle at `duty_pct`), `proxy_deleted` (the `devices` a client deleted),
+`proxy_delete_refused` at `warn` (`why`: `hidden`, with the `devices`,
+or `not_understood`), `proxy_pairing` (`seconds`,
+with `asked` where a client asked for more,
 or `joined`) and `proxy_warning` at `warn` (`what`: `pairing_not_started`,
-`pairing_not_stopped`, `metadata_multipart`, `metadata_not_understood` or
-`metadata_not_encoded`).
+`pairing_not_stopped`, `metadata_multipart`,
+`metadata_not_understood` or `metadata_not_encoded`).
 A line a proxy client passes on to the Cube is a command
 (`GET /api/v1/commands/{id}`) with no user, its `action` `proxy.radio`,
 `proxy.delete`, `proxy.metadata`, … and its `request` the client's `remote`
 and the line's letter; its step's lines name it.
-A device's next `state` line after a command was sent to it, within two
-minutes, names that command too.
+A device's next `state` line after a command was sent to it, within two minutes,
+names that command too.
 Setpoints are changes too; a sign-in, a preference, a search, a restore's
 plan and the requests whose own line is the server's (a backup, a restore,
 a restart, …) write none.
@@ -4825,9 +5008,9 @@ data: {"kind":"config","device":"0a0101","serial":"MEQ0000101","source":"device"
 
 A connection's greeting brings the Cube's `hello`, `metadata` and a `config`
 for each device and the Cube itself every time, changed or not.
-These lines come at `debug`, each with
-its `summary` (a hello's `firmware`, `duty_cycle_pct` and `free_memory_slots`,
-a list's `rooms` and `devices`, a configuration's main values).
+These lines come at `debug`, each with its `summary` (a hello's `firmware`,
+`duty_cycle_pct` and `free_memory_slots`, a list's `rooms` and `devices`,
+a configuration's main values).
 `connected` comes at `info` with a `summary` of the connection:
 `devices`, `rooms`, `firmware`, `duty_cycle_pct`, `free_memory_slots`,
 `cause` (`start`, `loss`, or `reconnect` for one the server asked for,
@@ -4836,13 +5019,13 @@ What the greeting found changed, against what the server held before
 (or after a start the newest backup), follows `connected` at `info`,
 with `"while_disconnected": true`:
 a `metadata` event with `list_changes`, a `config` event with `changes`.
-Outside a greeting, `metadata` says its `list_changes`
-(`room_added`, `room_renamed`, `room_deleted`, `device_added`, `device_renamed`,
-`device_moved`, `device_left`, each with the room's or device's `name`,
-`from`, `to`, and a device's `device` and `serial`),
+Outside a greeting, `metadata` says its `list_changes` (`room_added`,
+`room_renamed`, `room_deleted`, `device_added`, `device_renamed`,
+`device_moved`, `device_left`, each with the room's or device's `name`, `from`,
+`to`, and a device's `device` and `serial`),
 a line of one device carrying that device's;
-`config` says its `changes` by the configuration's names, from and to
-(`comfort_temp`, `temp_offset`, `program_monday` without values, …),
+`config` says its `changes` by the configuration's names,
+from and to (`comfort_temp`, `temp_offset`, `program_monday` without values, …),
 and a device's first `config` says its `summary`;
 one that changes nothing is at `debug`.
 
@@ -4980,8 +5163,8 @@ with `discovery_serial`, the serial a listener answers discovery with:
 the Cube's proxy serial where one is set, else the Cube's own;
 absent for a listener that answers no discovery (only one on the Cube port does,
 docs/proxy.md);
-one that does not listen has the fields of a Cube's `proxy_failing`
-(`GET /api/v1/cubes`), and is tried again.
+one that does not listen has the fields of a Cube's `proxy_failing` (`GET /api/v1/cubes`),
+and is tried again.
 
 `proxy` is there when the request came from a trusted proxy:
 the scheme, host and port the proxy serves the server at.
@@ -4995,8 +5178,8 @@ else the request's `Host`; the port from `X-Forwarded-Port`,
 else the host's own, else 443 or 80 for the scheme said;
 `port` is absent where neither a scheme nor a port is.
 For `https`, `certificate` is the proxy's,
-read through a TLS handshake with the proxy at the request's peer address and
-that port, for that host, best effort, within five seconds:
+read through a TLS handshake with the proxy at the request's peer address and that port,
+for that host, best effort, within five seconds:
 at the first proxied request after the server's start, once a day after,
 and again when the proxy's address changes.
 It is absent until the first check has read it; `error` says why one failed.
@@ -5162,11 +5345,13 @@ by the server itself as a detached process on Windows;
 see [packaging/README.md](../packaging/README.md)) downloads and verifies the release,
 test-runs it, replaces the binary,
 restarts the server and rolls back if the new version does not answer `/healthz`.
-Where `manager` is `apt`, the Debian package's helper runs apt for the massimo
-source instead, having pointed the source at the channel's suite where it names another
-(and back where apt cannot fetch that suite), the package restarts the server,
-and nothing is rolled back: the helper's last run names the way back
-(packaging/README.md, "Debian package").
+Where `manager` is `apt`,
+the Debian package's helper runs apt for the massimo source instead,
+having pointed the source at the channel's suite where it names another (and
+back where apt cannot fetch that suite), the package restarts the server,
+and nothing is rolled back:
+the helper's last run names the way back (packaging/README.md,
+"Debian package").
 Where it is `brew`, the server starts a helper as its own user that runs
 `brew upgrade` and restarts the job (packaging/README.md, "Homebrew").
 The request names no version and no file,
@@ -5307,8 +5492,8 @@ A note on the file, a line the read set aside, is no refusal:
 `refused` does not name it,
 and the log's `settings_read` is at `warn` with it after "the settings file: ",
 after the refusals where both stand.
-It sends nothing to a Cube, and is an audit row (`server.reload`) but no
-command, so a retry is harmless.
+It sends nothing to a Cube,
+and is an audit row (`server.reload`) but no command, so a retry is harmless.
 `409` when the server reads no settings file,
 `500` when the file could not be read, with the error,
 after the rotation and the checkpoint:
@@ -5396,15 +5581,18 @@ and tenant identities and the rows per table:
  "node": "…", "tenant": "…", "rows": {"audit": 412, "users": 5}}
 ```
 
-`GET /api/v1/config` answers the version, the settings file and whether it
-was found, the data directory, the address `serve` listens on, its TLS mode,
-the log level and every `MASSIMO_*` variable in effect with where it came
-from (`environment` or the settings file, with its lines where the file
-gives the name more than once: `file, lines 3 and 4: the first wins`).
+`GET /api/v1/config` answers the version,
+the settings file and whether it was found, the data directory,
+the address `serve` listens on, its TLS mode,
+the log level and every `MASSIMO_*` variable in effect with where it came from
+(`environment` or the settings file,
+with its lines where the file gives the name more than once:
+`file, lines 3 and 4: the first wins`).
 A key's, an IV's, a token's or a password's value never leaves the server:
 such a variable has `"secret": true` and no `value`.
-A name Massimo does not know has `"unknown": true`, and `"secret": true`
-with no `value`, since it may hold a secret under a name the rule misses,
+A name Massimo does not know has `"unknown": true`,
+and `"secret": true` with no `value`,
+since it may hold a secret under a name the rule misses,
 such as `MASSIMO_API_TOKEN_OLD`.
 `503` when the server has no store, or does not show its settings.
 

@@ -3,6 +3,6 @@
 # SteadyTests, Block 4): a test file and its count a line. A copy of a
 # kit's helper drifts from it; a test imports the name from helpers.py,
 # and a helper several files need goes there under a name of its own
-# (docs/ui-testing.md, section 9). None was left when the guard came, so
+# (docs/ui-testing.md, section 1). None was left when the guard came, so
 # the list is empty, and a count may not rise.
 

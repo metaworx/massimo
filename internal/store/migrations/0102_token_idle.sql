@@ -1,0 +1,20 @@
+-- SPDX-License-Identifier: AGPL-3.0-or-later
+-- Copyright (C) 2026 The Massimo Authors
+--
+-- min_reader: 24
+--
+-- An API key may be kept from the idle limit (AP KeyLife v1.0, Block 3,
+-- D7-A; docs/store.md section 6, "The life of a key"):
+-- tokens.idle_exempt is 1 for a key that the setting auth.key_idle_days
+-- does not end however long it stays unused, 0 for every other token,
+-- an integration's key always. The third number of main's block, after
+-- 0100_token_revoke and 0101_token_maker (docs/store.md, "Two lines of
+-- releases"). Additive, a defaulted column: a binary for 24 to 101 reads
+-- the file and writes its tokens without the column, so a key it makes
+-- is held to the limit, and it knows no idle limit at all, so it lets in
+-- a key this binary ends unused. A raise of
+-- min_reader would not keep it out: an end is a state read at each
+-- check, nothing written (D6-A), so the binary of 24 that a downgrade
+-- serves would let the key in all the same. No index: the rule reads the
+-- column on a token's row it has found.
+ALTER TABLE tokens ADD COLUMN idle_exempt INTEGER NOT NULL DEFAULT 0;

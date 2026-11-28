@@ -78,21 +78,44 @@ func (req userRequest) record() ([]byte, error) {
 // expiresAt reads the end date of a request: set, cleared (null), or
 // absent.
 func (req userRequest) expiresAt() (t time.Time, set bool, err error) {
-	if len(req.ExpiresAt) == 0 {
+	return expiresOf(req.ExpiresAt)
+}
+
+// expiresOf reads an end date, expires_at of a user's or an API key's
+// body, decoded apart so that a null is told from an absent field: an
+// RFC 3339 time (set), null (set, the zero time: no end), or absent (not
+// set); anything else is 400, and so is a time that reads as the zero
+// time (0001-01-01T00:00:00Z), which would else be taken for null
+// (end_date_year_one).
+func expiresOf(raw json.RawMessage) (t time.Time, set bool, err error) {
+	if len(raw) == 0 {
 		return time.Time{}, false, nil
 	}
-	if string(req.ExpiresAt) == "null" {
+	if string(raw) == "null" {
 		return time.Time{}, true, nil
 	}
 	var s string
-	if json.Unmarshal(req.ExpiresAt, &s) != nil {
+	if json.Unmarshal(raw, &s) != nil {
 		return time.Time{}, false, fail(http.StatusBadRequest, "expires_at: want a time such as 2026-12-24T18:00:00Z, or null")
 	}
 	t, err = time.Parse(time.RFC3339, s)
 	if err != nil {
 		return time.Time{}, false, fail(http.StatusBadRequest, "expires_at: %v", err)
 	}
+	if t.IsZero() {
+		return time.Time{}, false, refuse(http.StatusBadRequest, codeEndDateYearOne, s)
+	}
 	return t, true, nil
+}
+
+// endFail is the refusal of end, an API key's end date, that has passed
+// (store.ErrEndPassed, AP KeyLife, Block 4): 400 key_end_passed, as for
+// any bad field; any other error goes on as it is.
+func endFail(err error, end time.Time) error {
+	if errors.Is(err, store.ErrEndPassed) {
+		return refuse(http.StatusBadRequest, codeKeyEndPassed, end.UTC().Format(time.RFC3339))
+	}
+	return err
 }
 
 // userFail maps a store error of the users and roles to a status. A
@@ -1029,6 +1052,7 @@ func (s *Server) listTokens(w http.ResponseWriter, r *http.Request) error {
 	for _, t := range tokens {
 		v := viewToken(t)
 		v.FromSettings = held && t.ID == file.ID
+		v.IdleExempt = v.IdleExempt || v.FromSettings // the store passes over it by the hash Bootstrap applied (D3-A)
 		out = append(out, v)
 	}
 	writeJSON(w, http.StatusOK, out)
@@ -1036,18 +1060,26 @@ func (s *Server) listTokens(w http.ResponseWriter, r *http.Request) error {
 }
 
 // postToken handles POST /api/v1/users/{name}/tokens: a new API key,
-// shown once.
+// shown once. Where the bearer is an API key, the new key names it as
+// its maker, and a revoke of that key revokes it (AP KeyLife, D5-A); a
+// key made by a session of any kind, one made from a key by
+// POST /api/v1/login/key among them, names none. idle_exempt true keeps
+// the key from the idle limit, for who manages its user alone (AP
+// KeyLife, D7-A; keptFail); expires_at, an RFC 3339 time in the future,
+// gives it an end date, null or absent none (Block 4; endFail).
 func (s *Server) postToken(w http.ResponseWriter, r *http.Request) error {
 	st, err := s.userStore()
 	if err != nil {
 		return err
 	}
-	u, _, err := s.targetUser(r, st, true)
+	u, a, err := s.targetUser(r, st, true)
 	if err != nil {
 		return err
 	}
 	var req struct {
-		Label string `json:"label"`
+		Label      string          `json:"label"`
+		IdleExempt bool            `json:"idle_exempt"`
+		ExpiresAt  json.RawMessage `json:"expires_at"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		return fail(http.StatusBadRequest, "bad body: %v", err)
@@ -1056,24 +1088,53 @@ func (s *Server) postToken(w http.ResponseWriter, r *http.Request) error {
 	if req.Label == "" || len(req.Label) > maxLabel {
 		return refuse(http.StatusBadRequest, codeTokenLabelLength, maxLabel)
 	}
+	end, _, err := expiresOf(req.ExpiresAt)
+	if err != nil {
+		return err
+	}
 	if err := noWayIn(u); err != nil {
 		return err
 	}
-	tok, secret, err := st.AddToken(r.Context(), u.ID, store.TokenAPI, req.Label, time.Time{})
+	if req.IdleExempt && !a.mayManage(u) {
+		return keptFail(u)
+	}
+	opts := store.KeyOptions{Label: req.Label, IdleExempt: req.IdleExempt, Expires: end}
+	if p := principalOf(r); p.named() && p.token.Kind == store.TokenAPI {
+		opts.Maker = p.token // held to the secret it was let in with
+	}
+	tok, secret, err := st.AddKey(r.Context(), u.ID, opts)
+	if opts.Maker.ID != 0 && errors.Is(err, store.ErrNoToken) {
+		// The bearer, let in a moment before, was revoked, ended or given
+		// a new secret since: no key is made, as none would have been made
+		// after it; refused in errBadToken's words, as a key revoked
+		// meanwhile makes no session (openSessionFrom).
+		return refuse(http.StatusUnauthorized, codeTokenWrong)
+	}
 	if err != nil {
-		return userFail(err)
+		return userFail(endFail(err, end))
 	}
 	auditTarget(r, "token:"+strconv.FormatInt(tok.ID, 10))
 	auditSubject(r, tokenSubject(tok, u))
-	s.log.Info("api key created", "user", s.logUserName(r.Context(), u), "label", req.Label, "remote", s.clientIP(r))
+	line := []any{"user", s.logUserName(r.Context(), u), "label", req.Label, "remote", s.clientIP(r)}
+	if tok.MadeBy != 0 {
+		line = append(line, "made_by", tok.MadeBy)
+	}
+	if opts.IdleExempt {
+		line = append(line, "idle_exempt", true)
+	}
+	if !tok.ExpiresAt.IsZero() {
+		line = append(line, "expires_at", tok.ExpiresAt)
+	}
+	s.log.Info("api key created", line...)
 	v := viewToken(tok)
 	writeJSON(w, http.StatusCreated, map[string]any{"token": secret, "id": v.ID, "kind": v.Kind, "label": v.Label, "created_at": v.CreatedAt})
 	return nil
 }
 
 // deleteToken handles DELETE /api/v1/users/{name}/tokens/{id}: the
-// session or key is revoked. The settings file's key is 409, as
-// DELETE /api/v1/me/token answers it (settingsKey).
+// session or key is revoked, a key's heirs with it, which its answer, its
+// log line and its change line name (revoked). The settings file's key
+// is 409, as DELETE /api/v1/me/token answers it (settingsKey).
 func (s *Server) deleteToken(w http.ResponseWriter, r *http.Request) error {
 	st, err := s.userStore()
 	if err != nil {
@@ -1101,11 +1162,225 @@ func (s *Server) deleteToken(w http.ResponseWriter, r *http.Request) error {
 	if held && id == file.ID {
 		return refuse(http.StatusConflict, codeTokenSettingsKey)
 	}
-	if err := st.RevokeToken(r.Context(), id); err != nil {
+	heirs, err := st.RevokeToken(r.Context(), id)
+	if err != nil {
 		return userFail(err)
 	}
-	s.log.Info("token revoked", "user", s.logUserName(r.Context(), u), "token", id, "kind", tok.Kind, "remote", s.clientIP(r))
-	auditSubject(r, tokenSubject(tok, u))
-	writeJSON(w, http.StatusOK, map[string]any{"ok": true, "id": id})
+	s.revoked(w, r, tok, u, heirs, "user", s.logUserName(r.Context(), u), "token", id, "kind", tok.Kind, "remote", s.clientIP(r))
 	return nil
+}
+
+// putToken handles PUT /api/v1/users/{name}/tokens/{id}: an API key's
+// life, {"idle_exempt": true|false} (AP KeyLife, Block 3) and
+// {"expires_at": "<RFC 3339>"|null} (Block 4), answered with the key's
+// view; a field left out keeps what the key has, and a body of none is
+// 400. A session is 400; the settings file's key 409, its life being the
+// file's (D3-A); the bearer that very key 403, since a key changes
+// nothing of its own life, a session made from it not being the key
+// (D4-A); idle_exempt from a caller that does not manage the key's user
+// 403 (D7-A, keptFail), and true for an integration's key 400 (AP
+// MobileApp, D75); expires_at from the key's user or who manages it, as
+// targetUser lets in, an integration's key's from a holder of users or
+// integrations, a time that has passed 400 (endFail), null removing the
+// end date; another user's token 404. Audited as token.update, its
+// change line from and to.
+func (s *Server) putToken(w http.ResponseWriter, r *http.Request) error {
+	st, err := s.userStore()
+	if err != nil {
+		return err
+	}
+	u, a, err := s.targetUser(r, st, true)
+	if err != nil {
+		return err
+	}
+	id, err := strconv.ParseInt(r.PathValue("id"), 10, 64)
+	if err != nil {
+		return fail(http.StatusBadRequest, "bad token id %q", r.PathValue("id"))
+	}
+	var req struct {
+		IdleExempt *bool           `json:"idle_exempt"`
+		ExpiresAt  json.RawMessage `json:"expires_at"`
+	}
+	dec := json.NewDecoder(r.Body)
+	dec.DisallowUnknownFields()
+	if err := dec.Decode(&req); err != nil {
+		return fail(http.StatusBadRequest, "bad body: %v (want {\"idle_exempt\": true} or false, {\"expires_at\": \"2026-12-24T18:00:00Z\"} or null)", err)
+	}
+	end, setEnd, err := expiresOf(req.ExpiresAt)
+	if err != nil {
+		return err
+	}
+	if req.IdleExempt == nil && !setEnd {
+		return fail(http.StatusBadRequest, "nothing to change: want idle_exempt or expires_at")
+	}
+	tok, ok, err := st.Token(r.Context(), id)
+	if err != nil {
+		return userFail(err)
+	}
+	if !ok || tok.UserID != u.ID || !tok.DeletedAt.IsZero() {
+		return refuse(http.StatusNotFound, codeTokenUnknown, u.Name, id)
+	}
+	if tok.Kind != store.TokenAPI {
+		return refuse(http.StatusBadRequest, codeKeyLifeSession, id)
+	}
+	file, held, err := s.settingsKey(r.Context())
+	if err != nil {
+		return userFail(err)
+	}
+	if held && id == file.ID {
+		return refuse(http.StatusConflict, codeTokenSettingsKey)
+	}
+	if p := principalOf(r); p.named() && p.token.ID == id {
+		return refuse(http.StatusForbidden, codeKeyLifeOwnKey)
+	}
+	// Each field's own rule; the exclusion is who manages the user's alone.
+	if req.IdleExempt != nil {
+		if !a.mayManage(u) {
+			return keptFail(u)
+		}
+		if *req.IdleExempt && u.IntegrationID != 0 {
+			return refuse(http.StatusBadRequest, codeKeyLifeIntegrationKept)
+		}
+	}
+	// The end date is the key's user's or who manages it, as targetUser let
+	// in, an integration's key's a holder of users' or integrations'
+	// (D4-A): nothing more to ask of the caller.
+	life := store.TokenLife{IdleExempt: req.IdleExempt}
+	if setEnd {
+		life.Expires = &end
+	}
+	auditTarget(r, "token:"+strconv.FormatInt(id, 10))
+	auditSubject(r, tokenSubject(tok, u))
+	got, err := st.SetTokenLife(r.Context(), id, life)
+	if errors.Is(err, store.ErrSettingsKey) {
+		return refuse(http.StatusConflict, codeTokenSettingsKey) // the file read again since the check above
+	}
+	if err != nil {
+		return userFail(endFail(err, end))
+	}
+	line := []any{"user", s.logUserName(r.Context(), u), "token", id, "remote", s.clientIP(r)}
+	if req.IdleExempt != nil {
+		auditChange(r, "idle_exempt", tok.IdleExempt, got.IdleExempt)
+		line = append(line, "idle_exempt", got.IdleExempt)
+	}
+	if setEnd {
+		auditChange(r, "expires_at", optTime(tok.ExpiresAt), optTime(got.ExpiresAt))
+		if got.ExpiresAt.IsZero() {
+			line = append(line, "expires_at", "none")
+		} else {
+			line = append(line, "expires_at", got.ExpiresAt)
+		}
+	}
+	s.log.Info("token changed", line...)
+	writeJSON(w, http.StatusOK, viewToken(got))
+	return nil
+}
+
+// rekeyToken handles POST /api/v1/users/{name}/tokens/{id}/rekey: a live
+// API key gets a new secret, shown once in the answer, as POST …/tokens
+// answers, {"token", "id", "kind", "label", "created_at"} (AP KeyLife,
+// Block 5; MobileApp.D76-A, D81-A); its id, label, end date, exclusion,
+// maker and heirs stay (store.RekeyToken). The old secret is answered as
+// an ended token, not counted toward the lockout, and the key's session
+// ends unless it is the caller's own, made from that key. Who may: the
+// key's user or who manages it, as targetUser lets in, as for its end
+// date. A session is 400; the settings file's key 409, since the next
+// start would not add the file's token back, its hash being taken; an
+// integration's key 403, the integration learning its key by its
+// approval's code alone; the bearer that very key 403, a key changing
+// nothing of its own life (D4-A); an ended key 409; another user's token
+// 404. The command keeps the answer without token (withoutSecrets), and a
+// retry with its Idempotency-Key answers without it and gives no other.
+// Audited as token.rekey, with a change line and an Info line.
+func (s *Server) rekeyToken(w http.ResponseWriter, r *http.Request) error {
+	st, err := s.userStore()
+	if err != nil {
+		return err
+	}
+	u, _, err := s.targetUser(r, st, true)
+	if err != nil {
+		return err
+	}
+	id, err := strconv.ParseInt(r.PathValue("id"), 10, 64)
+	if err != nil {
+		return fail(http.StatusBadRequest, "bad token id %q", r.PathValue("id"))
+	}
+	tok, ok, err := st.Token(r.Context(), id)
+	if err != nil {
+		return userFail(err)
+	}
+	if !ok || tok.UserID != u.ID || !tok.DeletedAt.IsZero() {
+		return refuse(http.StatusNotFound, codeTokenUnknown, u.Name, id)
+	}
+	if tok.Kind != store.TokenAPI {
+		return refuse(http.StatusBadRequest, codeNewSecretSession, id)
+	}
+	file, held, err := s.settingsKey(r.Context())
+	if err != nil {
+		return userFail(err)
+	}
+	if held && id == file.ID {
+		return refuse(http.StatusConflict, codeTokenSettingsKey)
+	}
+	if u.IntegrationID != 0 {
+		return refuse(http.StatusForbidden, codeNewSecretIntegration)
+	}
+	p := principalOf(r)
+	if p.named() && p.token.ID == id {
+		return refuse(http.StatusForbidden, codeNewSecretOwnKey)
+	}
+	if _, live, err := st.TokenAlive(r.Context(), id); err != nil {
+		return userFail(err)
+	} else if !live {
+		return refuse(http.StatusConflict, codeNewSecretEnded, id)
+	}
+	// The caller's own session, made from this key, stays.
+	var keep int64
+	if p.named() && p.token.Kind == store.TokenSession && p.token.ParentID == id {
+		keep = p.token.ID
+	}
+	auditTarget(r, "token:"+strconv.FormatInt(id, 10))
+	auditSubject(r, tokenSubject(tok, u))
+	got, secret, err := st.RekeyToken(r.Context(), id, keep)
+	if errors.Is(err, store.ErrSettingsKey) {
+		return refuse(http.StatusConflict, codeTokenSettingsKey) // the file read again since the check above
+	}
+	if errors.Is(err, store.ErrNoToken) {
+		// Ended or revoked since it was read.
+		return refuse(http.StatusConflict, codeNewSecretEnded, id)
+	}
+	if err != nil {
+		return userFail(err)
+	}
+	line := []any{"user", s.logUserName(r.Context(), u), "token", id, "remote", s.clientIP(r)}
+	if keep != 0 {
+		line = append(line, "kept_session", keep)
+	}
+	s.log.Info("api key given a new secret", line...)
+	v := viewToken(got)
+	writeJSON(w, http.StatusOK, map[string]any{"token": secret, "id": v.ID, "kind": v.Kind, "label": v.Label, "created_at": v.CreatedAt})
+	return nil
+}
+
+// keptFail is the refusal of idle_exempt, a key kept from the idle limit
+// or held to it again, to a caller that does not manage the key's user u
+// (AP KeyLife, D7-A): the limit is the policy of who sets it, and a user
+// who manages nobody keeps it on its own keys.
+func keptFail(u store.User) error {
+	return refuse(http.StatusForbidden, codeKeyKeepForbidden, u.Name)
+}
+
+// revoked answers a revoke of tok, a token of u, that took heirs with it
+// (store.RevokeToken): {"ok", "id", "heirs"}, the heirs [] for none, and
+// its Info line of line's attributes, the heirs added where it took any;
+// the change line's subject names them too (AP KeyLife, D5-A).
+func (s *Server) revoked(w http.ResponseWriter, r *http.Request, tok store.Token, u store.User, heirs []int64, line ...any) {
+	subject := tokenSubject(tok, u)
+	if len(heirs) > 0 {
+		line = append(line, "heirs", heirs)
+		subject["heirs"] = heirs
+	}
+	s.log.Info("token revoked", line...)
+	auditSubject(r, subject)
+	writeJSON(w, http.StatusOK, map[string]any{"ok": true, "id": tok.ID, "heirs": heirs})
 }

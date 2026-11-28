@@ -9,7 +9,7 @@ import re
 
 import pytest
 
-from conftest import URL, api_call
+from conftest import URL, address_failures, api_call
 from helpers import (KEY_COPY, NAME_BAD, NAME_TAKEN, assert_busy, cleanup, close_fold, copies, frames, grant_clipboard, hold, icon_after_last_line, named_buttons,
                      open_fold, own_id, safe_route, scroll_width, show_view, sign_out, stub_me, undo, wait_held, wait_until)
 
@@ -156,10 +156,20 @@ def test_an_integrations_user_has_no_way_in(page, case, reads):
             if not regular:
                 assert said.inner_text() == line, f"{name}: the line's words"
             assert panel.locator(".remove-password").count() == (1 if name == PHONE else 0), f"{name}: the held password's removal"
+            # an integration's key is always held to the idle limit: no Keep while unused; the regular user's,
+            # which the owner manages, has it (AP KeyLife, Block 3); its Change… has the end date alone (Block 4)
+            assert panel.locator(".key-keep").count() == (1 if regular else 0), f"{name}: Create key's Keep while unused"
             if name == PHONE:
                 row = panel.locator(f".user-tokens li[data-id='{held_key['id']}']")
                 row.wait_for()
                 assert row.locator(".revoke-token").count() == 1, "the held key's Revoke"
+                assert row.locator(".new-secret").count() == 0, "no New secret on an integration's key (AP KeyLife, Block 5)"
+                row.locator(".change-key").click()
+                form = row.locator("form.token-change")
+                form.wait_for()
+                assert form.locator(".token-end-input").count() == 1, "Change… of an integration's key: its end date"
+                assert form.locator("input[name=idle_exempt]").count() == 0, "Change… of an integration's key: no Keep while unused"
+                form.locator(".form-cancel").click()
                 panel.locator(".remove-password").click()
                 # the route's own list: Playwright's request event of the PUT comes before the route has run
                 assert wait_held(page, sent), "the removal is sent"
@@ -455,6 +465,45 @@ def test_a_key_session_names_its_key(page, case):
     show_view(page, "tiles")
 
 
+MADE_BY = {"en": "made by the API key {label}", "de": "erstellt mit dem API-Schlüssel {label}"}
+REVOKED_WITH_HEIRS = {"en": "Token {id} revoked, with the keys it made: {ids}.",
+                      "de": "Token {id} widerrufen, mit den Schlüsseln, die damit erstellt wurden: {ids}."}
+
+
+def test_a_key_made_by_a_key_names_its_maker(page, case):
+    """A key made with another API key as the bearer (AP KeyLife, Block 2,
+    D5-A) says in its row which key made it, by the maker's label where
+    the list holds the maker, else by its id: the maker itself was made
+    with the suite's token, the owner's settings-file key, which the
+    operator's list does not hold. Revoking the maker says which keys
+    went with it, and they are listed no more."""
+    prefix = f"ui-test-heirs-{case.width}-{case.lang}-"
+    revoke_keys(prefix)
+    file_key = api_call("GET", "api/v1/me")["token"]["id"]
+    maker = api_call("POST", "api/v1/users/operator/tokens", {"label": prefix + "maker"})
+    heir = api_call("POST", "api/v1/users/operator/tokens", {"label": prefix + "heir"}, token=maker["token"])
+    try:
+        show_view(page, "system")
+        panel = page.locator(".user-panel[data-name='operator']")
+        panel.wait_for()
+        panel.locator("summary").click()
+        heir_row = panel.locator(f".user-tokens li[data-id='{heir['id']}']")
+        heir_row.wait_for(timeout=5000)
+        maker_row = panel.locator(f".user-tokens li[data-id='{maker['id']}']")
+        assert heir_row.locator(".token-maker").inner_text() == MADE_BY[case.lang].format(label=prefix + "maker"), "the heir names its maker by its label"
+        assert maker_row.locator(".token-maker").inner_text() == MADE_BY[case.lang].format(label="#%d" % file_key), "the maker names its own by its id"
+        assert scroll_width(page) <= case.width, "no horizontal scroll"
+        maker_row.locator(".revoke-token").click()
+        said = REVOKED_WITH_HEIRS[case.lang].format(id=maker["id"], ids=heir["id"])
+        assert wait_until(page, "document.getElementById('users-msg').textContent.includes(%r)" % said, 5), \
+            f"the users' line names the heirs: {page.locator('#users-msg').text_content()}"
+        assert wait_until(page, "!document.querySelector(%r)" % f".user-panel[data-name='operator'] .user-tokens li[data-id='{heir['id']}']", 5), \
+            "the heir is listed no more"
+    finally:
+        revoke_keys(prefix)
+    show_view(page, "tiles")
+
+
 TOKEN_ID = {"en": "id {id}", "de": "ID {id}"}
 
 
@@ -525,12 +574,567 @@ def test_settings_file_key_has_no_revoke(page, case):
             row.wait_for(timeout=5000)
             page.locator(f"{rows} li[data-id='{other['id']}']").wait_for(timeout=5000)
             assert row.locator(".revoke-token").count() == 0, f"{where}: no Revoke on the settings file's key"
+            assert row.locator(".new-secret").count() == 0, f"{where}: no New secret on the settings file's key (AP KeyLife, Block 5)"
+            assert page.locator(f"{rows} li[data-id='{other['id']}'] .new-secret").count() == 1, f"{where}: another key offers New secret"
             assert row.locator(".token-settings").inner_text() == FROM_SETTINGS[case.lang], f"{where}: it says where it comes from"
             assert page.locator(f"{rows} li[data-id='{other['id']}'] .revoke-token").count() == 1, f"{where}: another key offers Revoke"
             assert page.locator(f"{rows} .token-settings").count() == 1, f"{where}: that row alone says so"
         assert scroll_width(page) <= case.width, "no horizontal scroll"
     finally:
         api_call("DELETE", "api/v1/users/owner/tokens/%d" % other["id"])
+    show_view(page, "tiles")
+
+
+KEY_IDLE_SAVED = {"en": "API keys now end after 30 days unused.", "de": "API-Schlüssel enden jetzt nach 30 Tagen ohne Nutzung."}
+
+
+def test_key_idle_setting(page, case):
+    """System settings → Users: API keys end unused after, the setting
+    auth.key_idle_days (AP KeyLife, Block 3, D2-A), 0 by default, in days,
+    with its line; a value typed is saved as the field is left, one PUT,
+    the users' line saying so, and the next showing of the page reads it
+    again; one out of 0 to 3650 is refused in the field, its limit saying
+    so, and sends nothing; emptied, the field goes back to the value
+    stored. The setting goes back to its default at the end."""
+    puts = []
+    page.on("request", lambda r: puts.append(r.post_data_json) if r.method == "PUT" and r.url.endswith("/api/v1/settings") else None)
+    sel = "#key-idle-days"
+    try:
+        show_view(page, "system")
+        field = page.locator(sel)
+        field.wait_for()
+        assert wait_until(page, "document.querySelector(%r).value === '0'" % sel, 5), f"0 by default: {field.input_value()}"
+        row = page.locator(".field.key-idle")
+        assert row.locator("label").inner_text() == page.evaluate("t('users.keyIdleDays')"), "its label"
+        assert row.locator(".field-hint").inner_text() == page.evaluate("t('users.keyIdleHint')"), "its line"
+        assert page.evaluate("t('users.keyIdleUnit')") in row.inner_text(), "in days"
+        field.fill("4000")
+        field.press("Tab")
+        limit = page.locator(sel + "-limit")
+        assert limit.is_visible() and field.get_attribute("aria-invalid") == "true", "out of 0 to 3650: refused in the field"
+        field.fill("")
+        field.press("Tab")
+        assert wait_until(page, "document.querySelector(%r).value === '0'" % sel, 5), "emptied: back to the value stored"
+        assert limit.is_hidden() and puts == [], f"nothing sent: {puts}"
+        field.fill("30")
+        with page.expect_request(lambda r: r.method == "PUT" and r.url.endswith("/api/v1/settings")):
+            field.press("Tab")
+        assert wait_until(page, "document.getElementById('users-msg').textContent.includes(%r)" % KEY_IDLE_SAVED[case.lang], 5), \
+            f"the users' line: {page.locator('#users-msg').text_content()}"
+        assert puts == [{"auth.key_idle_days": 30}], f"one PUT: {puts}"
+        assert api_call("GET", "api/v1/settings")["auth.key_idle_days"]["value"] == "30", "stored"
+        api_call("PUT", "api/v1/settings", {"auth.key_idle_days": 45})
+        show_view(page, "tiles")
+        show_view(page, "system")
+        assert wait_until(page, "document.querySelector(%r).value === '45'" % sel, 5), "read again at the next showing"
+        assert scroll_width(page) <= case.width, "no horizontal scroll"
+    finally:
+        api_call("PUT", "api/v1/settings", {"auth.key_idle_days": None})
+    show_view(page, "tiles")
+
+
+# the page's own form of an API time, fmtWhen of shared/time.ts
+WHEN = """(iso) => new Intl.DateTimeFormat(i18n.lang, { year: "numeric", month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit",
+  hour12: false }).format(new Date(iso))"""
+
+
+def test_a_keys_life_line(page, case, reads):
+    """Under the idle limit (AP KeyLife, Block 3; the list stubbed), a
+    key's line says when it ends unless used, that it is kept while
+    unused, or, ended, the badge Ended and since when it was unused; a key
+    with none of them says nothing of its life; at 390 px in every
+    language each row stays inside its list."""
+    prefix = f"ui-test-life-{case.width}-{case.lang}-"
+    revoke_keys(prefix)
+    keys = {what: api_call("POST", "api/v1/users/operator/tokens", {"label": prefix + what}) for what in ("ends", "kept", "ended", "plain")}
+    future, past = "2026-12-24T09:30:00Z", "2026-11-01T08:00:00Z"
+
+    def life(body):
+        for tk in body or []:
+            if tk["id"] == keys["ends"]["id"]:
+                tk["idle_ends_at"] = future
+            elif tk["id"] == keys["kept"]["id"]:
+                tk["idle_exempt"] = True
+            elif tk["id"] == keys["ended"]["id"]:
+                tk.update(ended="idle", idle_ends_at=past, last_used_at=past, last_used_from="192.0.2.7")
+        return body
+    pattern = "**/api/v1/users/operator/tokens"
+    reads.change(pattern, life)
+    try:
+        show_view(page, "system")
+        panel = page.locator(".user-panel[data-name='operator']")
+        panel.wait_for()
+        panel.locator("summary").click()
+        row = lambda what: panel.locator(f".user-tokens li[data-id='{keys[what]['id']}']")
+        row("ended").wait_for(timeout=5000)
+        want = page.evaluate("""([future, past]) => {
+          const at = """ + WHEN + """;
+          return { ends: t('users.idleEnds', { date: at(future) }), kept: t('users.idleKept'), ended: t('users.ended'), since: t('users.endedIdle', { date: at(past) }) };
+        }""", [future, past])
+        assert row("ends").locator(".token-life").inner_text() == want["ends"], "ends unless used"
+        assert row("kept").locator(".token-life").inner_text() == want["kept"], "kept while unused"
+        assert row("ended").locator(".flag.bad").inner_text().strip() == want["ended"], "the badge Ended"
+        assert row("ended").locator(".token-life").inner_text() == want["since"], "unused since"
+        assert row("plain").locator(".token-life").count() == 0, "a key with none of them"
+        langs = ("en", "de", "fr", "it", "nl", "pl") if case.width == 390 else (case.lang,)
+        for lang in langs:
+            page.evaluate("async (l) => { await changeLanguage(l); applyLanguage(); }", lang)
+            frames(page)
+            m = page.evaluate("""() => [...document.querySelectorAll(".user-panel[data-name='operator'] .user-tokens li[data-id]")].map((li) => {
+              const r = li.getBoundingClientRect(), list = li.parentElement.getBoundingClientRect();
+              return {id: li.dataset.id, inside: r.left >= list.left - 0.5 && r.right <= list.right + 0.5};
+            })""")
+            assert m and all(x["inside"] for x in m), f"{lang}: every row inside the list: {m}"
+            assert scroll_width(page) <= case.width, f"no horizontal scroll in {lang}"
+        page.evaluate("async (l) => { await changeLanguage(l); applyLanguage(); }", case.lang)
+    finally:
+        reads.clear(pattern)
+        revoke_keys(prefix)
+    show_view(page, "tiles")
+
+
+def test_keep_while_unused(page, case):
+    """For who manages the user, the owner of the operator (AP KeyLife,
+    Block 3, D7-A): a key's Change… opens a small form, the focus on its
+    switch Keep while unused, which shows the key's state, Save off until
+    it is changed; Cancel sends nothing and gives the focus back to
+    Change…; Save sends one PUT with idle_exempt, the line follows and the
+    focus is back on Change…. Create key's switch sends idle_exempt, and
+    the key made says it is kept. No Change… on the settings file's key,
+    in the owner's panel nor in My profile, where it is this device."""
+    prefix = f"ui-test-keep-{case.width}-{case.lang}-"
+    revoke_keys(prefix)
+    plain = api_call("POST", "api/v1/users/operator/tokens", {"label": prefix + "plain"})
+    puts, posts = [], []
+    page.on("request", lambda r: puts.append(r.post_data_json) if r.method == "PUT" and "/users/operator/tokens/" in r.url else None)
+    page.on("request", lambda r: posts.append(r.post_data_json) if r.method == "POST" and r.url.endswith("/users/operator/tokens") else None)
+    focused = "document.activeElement && document.activeElement.matches(%r)"
+    try:
+        show_view(page, "system")
+        panel = page.locator(".user-panel[data-name='operator']")
+        panel.wait_for()
+        panel.locator("summary").click()
+        row = panel.locator(f".user-tokens li[data-id='{plain['id']}']")
+        row.wait_for(timeout=5000)
+        change = row.locator(".change-key")
+        assert change.is_visible() and change.get_attribute("aria-label") == page.evaluate("(l) => t('users.changeKeyLabel', { label: l })", prefix + "plain"), \
+            "Change…, named by the key"
+        change.click()
+        form = row.locator("form.token-change")
+        form.wait_for()
+        switch = form.locator("input[name=idle_exempt]")
+        assert not switch.is_checked(), "the switch shows the key held to the limit"
+        assert wait_until(page, focused % ".token-change input[name=idle_exempt]", 3), "the focus on the switch"
+        save = form.locator("button[type=submit]")
+        assert save.is_disabled(), "Save off until it is changed"
+        form.locator(".form-cancel").click()
+        assert wait_until(page, "!document.querySelector(%r)" % f"li[data-id='{plain['id']}'] form.token-change", 3), "Cancel closes the form"
+        assert wait_until(page, focused % f"li[data-id='{plain['id']}'] .change-key", 3), "the focus back on Change…"
+        assert puts == [], f"Cancel sends nothing: {puts}"
+        change.click()
+        form.wait_for()
+        form.locator("label.switch .slider").click()
+        with page.expect_request(lambda r: r.method == "PUT" and "/users/operator/tokens/" in r.url):
+            save.click()
+        assert puts == [{"idle_exempt": True}], f"one PUT with idle_exempt: {puts}"
+        kept = page.evaluate("t('users.idleKept')")
+        assert wait_until(page, "(document.querySelector(%r) || {}).textContent === %r" % (f"li[data-id='{plain['id']}'] .token-life", kept), 5), "the line follows"
+        assert wait_until(page, focused % f"li[data-id='{plain['id']}'] .change-key", 3), "the focus back on Change… after Save"
+        assert api_call("GET", "api/v1/users/operator/tokens") and \
+            [tk for tk in api_call("GET", "api/v1/users/operator/tokens") if tk["id"] == plain["id"]][0].get("idle_exempt"), "stored"
+        # Create key's switch
+        panel.locator("label.switch.key-keep .slider").click()
+        panel.locator("input[name=label]").fill(prefix + "made kept")
+        with page.expect_request(lambda r: r.method == "POST" and r.url.endswith("/users/operator/tokens")):
+            panel.locator(".create-key").click()
+        assert posts == [{"label": prefix + "made kept", "idle_exempt": True}], f"the switch sends idle_exempt: {posts}"
+        made = panel.locator(".user-tokens li", has_text=prefix + "made kept")
+        made.wait_for(timeout=5000)
+        assert made.locator(".token-life").inner_text() == kept, "the key made is kept"
+        assert not panel.locator("label.switch.key-keep input").is_checked(), "the switch off again for the next key"
+        named_buttons(page, "System settings → Users, a key's Change…")
+        assert scroll_width(page) <= case.width, "no horizontal scroll"
+        # the settings file's key: no Change…, in the owner's panel and in My profile
+        file_key = api_call("GET", "api/v1/me")["token"]["id"]
+        owner = page.locator(".user-panel[data-name='owner']")
+        owner.locator("summary").click()
+        owner.locator(f".user-tokens li[data-id='{file_key}']").wait_for(timeout=5000)
+        assert owner.locator(f".user-tokens li[data-id='{file_key}'] .change-key").count() == 0, "none on the settings file's key"
+        show_view(page, "profile")
+        page.locator(f"#profile-tokens li[data-id='{file_key}']").wait_for(timeout=5000)
+        assert page.locator(f"#profile-tokens li[data-id='{file_key}'] .change-key").count() == 0, "none in My profile on this device's key"
+    finally:
+        revoke_keys(prefix)
+    show_view(page, "tiles")
+
+
+def test_no_keep_for_who_manages_nobody(new_context, case, watch, guard):
+    """A user who manages nobody, a viewer, keeps the idle limit on its own
+    keys (AP KeyLife, D7-A): My profile lists its key with Revoke, but
+    offers no Keep while unused, at Create key nor in Change…, which has
+    the key's end date alone, the user's own to move (Block 4, D4-A)."""
+    from test_login import sign_in
+    name = f"idle-{case.width}-{case.lang}"
+    api_call("POST", "api/v1/users", {"name": name, "role": "viewer", "password": "pass-word-kv-71"})
+    try:
+        key = api_call("POST", f"api/v1/users/{name}/tokens", {"label": "a key of the viewer's"})
+        ctx = new_context()
+        page = ctx.new_page()
+        guard.page = page
+        page.set_default_timeout(5000)
+        page.on("pageerror", lambda e: watch.problems.append(f"page error: {e}"))
+        page.goto(URL)
+        sign_in(page, name, "pass-word-kv-71")
+        show_view(page, "profile")
+        row = page.locator(f"#profile-tokens li[data-id='{key['id']}']")
+        row.wait_for(timeout=5000)
+        assert row.locator(".revoke-token").count() == 1, "its Revoke"
+        assert row.locator(".new-secret").count() == 1, "New secret on its own key (AP KeyLife, Block 5)"
+        assert page.locator("#profile-tokens .create-key").count() == 1, "Create key"
+        assert page.locator("#profile-tokens .key-keep").count() == 0, "no Keep while unused"
+        row.locator(".change-key").click()
+        form = row.locator("form.token-change")
+        form.wait_for()
+        assert form.locator(".token-end-input").count() == 1, "Change…: the key's end date"
+        assert form.locator("input[name=idle_exempt]").count() == 0, "Change…: no Keep while unused"
+        # the user's own end date, moved signed in, is taken (D4-A)
+        form.locator(".token-end-input").fill("2031-02-03T12:30")
+        with page.expect_response(lambda r: r.request.method == "PUT" and f"/users/{name}/tokens/" in r.url and r.status == 200):
+            form.locator("button[type=submit]").click()
+        row.locator(".token-end").wait_for(timeout=5000)
+        sign_out(page)
+    finally:
+        api_call("DELETE", "api/v1/users/" + name)
+
+
+def test_a_keys_end_date(page, case, watch):
+    """A key's end date (AP KeyLife, Block 4): Create key's field Ends,
+    with its label and its line, sends expires_at, the browser's time as
+    an API time, the key made saying when it ends and the field empty
+    again; a key made with the field empty sends none. Change… shows the
+    date, Save off until it is changed; a new date is one PUT and the line
+    follows; one that has passed is refused by the server, the form
+    staying open and the users' line saying why in the page's language,
+    by the refusal's code (key_end_passed, AP ErrorCodes); No end empties
+    the field and Save sends null, the line gone, and the key stored
+    without an end."""
+    prefix = f"ui-test-end-{case.width}-{case.lang}-"
+    revoke_keys(prefix)
+    puts, posts = [], []
+    page.on("request", lambda r: puts.append(r.post_data_json) if r.method == "PUT" and "/users/operator/tokens/" in r.url else None)
+    page.on("request", lambda r: posts.append(r.post_data_json) if r.method == "POST" and r.url.endswith("/users/operator/tokens") else None)
+    iso = lambda local: page.evaluate("(l) => new Date(l).toISOString()", local)
+    ends = lambda at: page.evaluate("(iso) => t('users.keyEnds', { date: (" + WHEN + ")(iso) })", at)
+    try:
+        show_view(page, "system")
+        panel = page.locator(".user-panel[data-name='operator']")
+        panel.wait_for()
+        panel.locator("summary").click()
+        field = panel.locator("#user-key-label-operator-end")
+        field.wait_for()
+        row_of = panel.locator(".field.key-end")
+        assert row_of.locator("label").inner_text() == page.evaluate("t('users.keyEndsField')"), "the field's label"
+        assert row_of.locator(".field-hint").inner_text() == page.evaluate("t('users.keyEndsHint')"), "its line"
+        field.fill("2031-02-03T12:30")
+        panel.locator("input[name=label]").fill(prefix + "dated")
+        with page.expect_request(lambda r: r.method == "POST" and r.url.endswith("/users/operator/tokens")):
+            panel.locator(".create-key").click()
+        first = iso("2031-02-03T12:30")
+        assert posts == [{"label": prefix + "dated", "expires_at": first}], f"Create key sends expires_at: {posts}"
+        made = panel.locator(".user-tokens li", has_text=prefix + "dated")
+        made.wait_for(timeout=5000)
+        assert made.locator(".token-end").inner_text() == ends(first), "the key made says when it ends"
+        assert wait_until(page, "document.querySelector('#user-key-label-operator-end').value === ''", 3), "the field empty again"
+        panel.locator("input[name=label]").fill(prefix + "plain")
+        with page.expect_request(lambda r: r.method == "POST" and r.url.endswith("/users/operator/tokens")):
+            panel.locator(".create-key").click()
+        assert posts[-1] == {"label": prefix + "plain"}, f"a key made with the field empty sends no end: {posts}"
+
+        # Change… shows the date and moves it
+        made.locator(".change-key").click()
+        form = made.locator("form.token-change")
+        form.wait_for()
+        end = form.locator(".token-end-input")
+        assert end.input_value() == "2031-02-03T12:30", "Change… shows the key's end"
+        assert form.locator("label", has_text=page.evaluate("t('users.keyEndsField')")).count() == 1, "the field's label"
+        save = form.locator("button[type=submit]")
+        assert save.is_disabled(), "Save off until it is changed"
+        end.fill("2032-03-04T13:00")
+        with page.expect_request(lambda r: r.method == "PUT" and "/users/operator/tokens/" in r.url):
+            save.click()
+        second = iso("2032-03-04T13:00")
+        assert puts == [{"expires_at": second}], f"one PUT with expires_at: {puts}"
+        assert wait_until(page, "(document.querySelector(%r) || {}).textContent === %r" % (f"li[data-id='{made.get_attribute('data-id')}'] .token-end", ends(second)), 5), \
+            "the line follows"
+
+        # a date that has passed: refused, the form left open; the refusal is on purpose
+        watch.expected.append((f"/api/v1/users/operator/tokens/{made.get_attribute('data-id')}", 400))
+        made.locator(".change-key").click()
+        form.wait_for()
+        end.fill("2020-01-01T00:00")
+        with page.expect_response(lambda r: r.request.method == "PUT" and "/users/operator/tokens/" in r.url and r.status == 400) as refused:
+            save.click()
+        body = refused.value.json()
+        assert body.get("code") == "key_end_passed" and body.get("params", {}).get("expires_at"), f"the refusal's code: {body}"
+        said = page.evaluate("(p) => t('err.key_end_passed', p)", body["params"])
+        assert body["params"]["expires_at"] in said and said != body["error"], f"the page's own text of the code: {said!r}"
+        assert wait_until(page, "document.getElementById('users-msg').textContent.includes(%r)" % said, 5), \
+            f"the users' line says why in the page's language: {page.locator('#users-msg').text_content()}"
+        assert form.is_visible(), "the form left open"
+
+        # No end: the field emptied, null sent, the line gone
+        form.locator(".token-no-end").click()
+        assert end.input_value() == "", "No end empties the field"
+        with page.expect_request(lambda r: r.method == "PUT" and "/users/operator/tokens/" in r.url):
+            save.click()
+        assert puts[-1] == {"expires_at": None}, f"No end sends null: {puts}"
+        assert wait_until(page, "!document.querySelector(%r)" % f"li[data-id='{made.get_attribute('data-id')}'] .token-end", 5), "the line gone"
+        stored = [tk for tk in api_call("GET", "api/v1/users/operator/tokens") if (tk.get("label") or "") == prefix + "dated"]
+        assert stored and "expires_at" not in stored[0], f"stored without an end: {stored}"
+        named_buttons(page, "System settings → Users, a key's Change… with its end")
+        assert scroll_width(page) <= case.width, "no horizontal scroll"
+    finally:
+        revoke_keys(prefix)
+    show_view(page, "tiles")
+
+
+def test_a_keys_end_line(page, case, reads):
+    """A key's line of its end date (AP KeyLife, Block 4; the list
+    stubbed): ends … where it has one, beside ends … unless used only
+    where that comes first, and kept while unused as before; past it, the
+    badge Ended and ended …; at 390 px in every language each row, its
+    Change… form open, stays inside its list."""
+    prefix = f"ui-test-endline-{case.width}-{case.lang}-"
+    revoke_keys(prefix)
+    keys = {what: api_call("POST", "api/v1/users/operator/tokens", {"label": prefix + what}) for what in ("dated", "idle first", "kept", "expired")}
+    end, sooner, later, past = "2026-12-24T09:30:00Z", "2026-12-10T08:00:00Z", "2027-01-15T08:00:00Z", "2026-11-01T08:00:00Z"
+
+    def life(body):
+        for tk in body or []:
+            if tk["id"] == keys["dated"]["id"]:
+                tk.update(expires_at=end, idle_ends_at=later)
+            elif tk["id"] == keys["idle first"]["id"]:
+                tk.update(expires_at=end, idle_ends_at=sooner)
+            elif tk["id"] == keys["kept"]["id"]:
+                tk.update(expires_at=end, idle_exempt=True)
+            elif tk["id"] == keys["expired"]["id"]:
+                tk.update(ended="expired", expires_at=past)
+        return body
+    pattern = "**/api/v1/users/operator/tokens"
+    reads.change(pattern, life)
+    try:
+        show_view(page, "system")
+        panel = page.locator(".user-panel[data-name='operator']")
+        panel.wait_for()
+        panel.locator("summary").click()
+        row = lambda what: panel.locator(f".user-tokens li[data-id='{keys[what]['id']}']")
+        row("expired").wait_for(timeout=5000)
+        want = page.evaluate("""([end, sooner, past]) => {
+          const at = """ + WHEN + """;
+          return { ends: t('users.keyEnds', { date: at(end) }), idle: t('users.idleEnds', { date: at(sooner) }), kept: t('users.idleKept'),
+                   ended: t('users.ended'), past: t('users.endedExpired', { date: at(past) }) };
+        }""", [end, sooner, past])
+        assert row("dated").locator(".token-end").inner_text() == want["ends"], "ends …"
+        assert row("dated").locator(".token-life").count() == 0, "no idle end after the end date"
+        assert row("idle first").locator(".token-end").inner_text() == want["ends"], "ends …, the idle end first"
+        assert row("idle first").locator(".token-life").inner_text() == want["idle"], "ends … unless used, before the end date"
+        assert row("kept").locator(".token-end").inner_text() == want["ends"], "ends …, kept while unused"
+        assert row("kept").locator(".token-life").inner_text() == want["kept"], "kept while unused"
+        assert row("expired").locator(".flag.bad").inner_text().strip() == want["ended"], "the badge Ended"
+        assert row("expired").locator(".token-life").inner_text() == want["past"], "ended …"
+        assert row("expired").locator(".token-end").count() == 0, "no ends … past it"
+        assert row("expired").locator(".new-secret").count() == 0, "no New secret on a key that ended (AP KeyLife, Block 5)"
+        assert row("dated").locator(".new-secret").count() == 1, "New secret on a live key"
+        row("dated").locator(".change-key").click()
+        row("dated").locator("form.token-change").wait_for()
+        langs = ("en", "de", "fr", "it", "nl", "pl") if case.width == 390 else (case.lang,)
+        for lang in langs:
+            page.evaluate("async (l) => { await changeLanguage(l); applyLanguage(); }", lang)
+            frames(page)
+            m = page.evaluate("""() => [...document.querySelectorAll(".user-panel[data-name='operator'] .user-tokens li[data-id]")].map((li) => {
+              const r = li.getBoundingClientRect(), list = li.parentElement.getBoundingClientRect();
+              return {id: li.dataset.id, inside: r.left >= list.left - 0.5 && r.right <= list.right + 0.5};
+            })""")
+            assert m and all(x["inside"] for x in m), f"{lang}: every row inside the list: {m}"
+            assert scroll_width(page) <= case.width, f"no horizontal scroll in {lang}"
+        page.evaluate("async (l) => { await changeLanguage(l); applyLanguage(); }", case.lang)
+    finally:
+        reads.clear(pattern)
+        revoke_keys(prefix)
+    show_view(page, "tiles")
+
+
+# a datetime field half typed: it reads as empty, as one emptied on purpose does
+HALF = "(el) => el.validity.badInput && el.value === ''"
+FOCUSED = "document.activeElement && document.activeElement.matches(%r)"
+
+
+def test_a_half_typed_end_makes_no_key(page, case):
+    """At Create key, a date half typed in Ends, which reads as empty, makes
+    no key (AP KeyLife, Block 4): the users' line says that the date is not
+    complete and the focus goes back into the field. On the page before, it
+    made a key without an end date."""
+    prefix = f"ui-test-halfmake-{case.width}-{case.lang}-"
+    revoke_keys(prefix)
+    posts = []
+    page.on("request", lambda r: posts.append(r.post_data_json) if r.method == "POST" and r.url.endswith("/users/operator/tokens") else None)
+    said = "document.getElementById('users-msg').textContent.includes(%r)" % page.evaluate("t('users.keyEndBad')")
+    try:
+        show_view(page, "system")
+        panel = page.locator(".user-panel[data-name='operator']")
+        panel.wait_for()
+        panel.locator("summary").click()
+        field = panel.locator("#user-key-label-operator-end")
+        field.wait_for()
+        field.focus()
+        page.keyboard.type("02")
+        assert field.evaluate(HALF), "Create key's date half typed"
+        panel.locator("input[name=label]").fill(prefix + "half")
+        panel.locator(".create-key").click()
+        assert wait_until(page, said, 5), f"the users' line: {page.locator('#users-msg').text_content()}"
+        assert wait_until(page, FOCUSED % "#user-key-label-operator-end", 3), "the focus in Create key's field"
+        assert posts == [], f"a date half typed makes no key: {posts}"
+    finally:
+        revoke_keys(prefix)
+    show_view(page, "tiles")
+
+
+def test_a_half_typed_end_is_refused(page, case):
+    """In Change… of a key with an end date, a date half typed, which reads
+    as empty as No end does, is no choice of none (AP KeyLife, Block 4):
+    Save sends nothing, the users' line says that the date is not complete
+    and the focus goes back into the field, the key's end kept; No end then
+    empties the field, and Save sends null. On the page before, the
+    browser's own check of the form held the save, with its bubble alone."""
+    prefix = f"ui-test-halfend-{case.width}-{case.lang}-"
+    revoke_keys(prefix)
+    dated = api_call("POST", "api/v1/users/operator/tokens", {"label": prefix + "dated", "expires_at": "2031-02-03T11:30:00Z"})
+    puts = []
+    page.on("request", lambda r: puts.append(r.post_data_json) if r.method == "PUT" and "/users/operator/tokens/" in r.url else None)
+    said = "document.getElementById('users-msg').textContent.includes(%r)" % page.evaluate("t('users.keyEndBad')")
+    try:
+        show_view(page, "system")
+        panel = page.locator(".user-panel[data-name='operator']")
+        panel.wait_for()
+        panel.locator("summary").click()
+        row = panel.locator(f".user-tokens li[data-id='{dated['id']}']")
+        row.wait_for(timeout=5000)
+        row.locator(".change-key").click()
+        form = row.locator("form.token-change")
+        form.wait_for()
+        end = form.locator(".token-end-input")
+        assert end.input_value() != "", "Change… shows the key's end"
+        end.focus()
+        page.keyboard.press("Backspace")
+        assert end.evaluate(HALF), "a part of the date cleared: half typed, reading as empty"
+        save = form.locator("button[type=submit]")
+        save.click()
+        assert wait_until(page, said, 5), f"the users' line: {page.locator('#users-msg').text_content()}"
+        assert wait_until(page, FOCUSED % f"li[data-id='{dated['id']}'] .token-end-input", 3), "the focus back in the field"
+        assert puts == [], f"a date half typed sends nothing: {puts}"
+        stored = [tk for tk in api_call("GET", "api/v1/users/operator/tokens") if tk["id"] == dated["id"]]
+        assert stored and stored[0].get("expires_at") == "2031-02-03T11:30:00Z", f"the key's end kept: {stored}"
+        form.locator(".token-no-end").click()
+        assert end.evaluate("(el) => !el.validity.badInput && el.value === ''"), "No end empties the field whole"
+        with page.expect_request(lambda r: r.method == "PUT" and "/users/operator/tokens/" in r.url):
+            save.click()
+        assert puts == [{"expires_at": None}], f"No end sends null: {puts}"
+    finally:
+        revoke_keys(prefix)
+    show_view(page, "tiles")
+
+
+NEW_SECRET_SHOWN = {"en": "The new secret of key {id}, shown once:", "de": "Das neue Geheimnis von Schlüssel {id}, einmal gezeigt:"}
+NEW_SECRET_MADE = {"en": "Key {id} has a new secret; it is shown in the panel once.",
+                   "de": "Schlüssel {id} hat ein neues Geheimnis; es wird einmal im Panel gezeigt."}
+
+
+def test_new_secret(page, case):
+    """New secret on a key's row (AP KeyLife, Block 5; MobileApp.D76-A):
+    named by the key, it asks first, in place of the row's buttons, and
+    No takes the question back with nothing sent and the focus back on New
+    secret; Yes sends one POST …/rekey and shows the new secret in the box
+    of the key just made, under "The new secret of key {id}", copied as
+    the key just made is, the users' line saying so; the row keeps its id
+    and label, the key's session is listed no more, the focus is back on
+    New secret, and the old secret is refused, counted toward no lockout,
+    while the new one lets in. The question says that the keys made with
+    the key stay, and how many the list holds: one here, which stays after
+    the new secret. A session has none. Fails on the page before: no New
+    secret, then a question that did not say the keys made with it stay."""
+    from test_login import status_with
+    prefix = f"ui-test-rekey-{case.width}-{case.lang}-"
+    revoke_keys(prefix)
+    grant_clipboard(page)
+    key = api_call("POST", "api/v1/users/operator/tokens", {"label": prefix + "phone"})
+    # the session's label out of the prefix: it goes with its key, which revoke_keys revokes
+    session_label = f"ui-test-rekey-session-{case.width}-{case.lang}"
+    api_call("POST", "api/v1/login/key", {"label": session_label}, token=key["token"])
+    # a key made with the key, its heir, which stays; out of the prefix too, it goes with its maker
+    heir = api_call("POST", "api/v1/users/operator/tokens", {"label": f"ui-test-rekey-heir-{case.width}-{case.lang}"}, token=key["token"])
+    posts = []
+    page.on("request", lambda r: posts.append(r.url) if r.method == "POST" and r.url.endswith("/rekey") else None)
+    rows = ".user-panel[data-name='operator'] .user-tokens"
+    button = f"{rows} li[data-id='{key['id']}'] .new-secret"
+    try:
+        show_view(page, "system")
+        panel = page.locator(".user-panel[data-name='operator']")
+        panel.wait_for()
+        panel.locator("summary").click()
+        row = panel.locator(f".user-tokens li[data-id='{key['id']}']")
+        row.wait_for(timeout=5000)
+        session = panel.locator(".user-tokens li", has_text=session_label)
+        session.wait_for(timeout=5000)
+        assert session.locator(".new-secret").count() == 0, "a session has no New secret"
+        assert page.locator(button).inner_text() == page.evaluate("t('users.newSecret')"), "New secret"
+        assert page.locator(button).get_attribute("aria-label") == page.evaluate("(l) => t('users.newSecretLabel', { label: l })", prefix + "phone"), \
+            "named by the key"
+
+        # asked first; No sends nothing and gives the focus back
+        page.locator(button).click()
+        box = row.locator(".confirm-box")
+        box.wait_for()
+        panel.locator(f".user-tokens li[data-id='{heir['id']}']").wait_for(timeout=5000)
+        asked = page.evaluate("(l) => t('users.newSecretAskHeirs', { label: l, n: 1 })", prefix + "phone")
+        assert "{n}" not in asked and "(1 " in asked, f"the question's text: {asked!r}"
+        assert box.locator(".confirm-text").inner_text() == asked, "the question names the one key made with the key, which stays"
+        assert row.locator(".token-buttons").is_hidden(), "asked in place of the row's buttons"
+        assert wait_until(page, FOCUSED % f"li[data-id='{key['id']}'] .confirm-no", 3), "the focus on No"
+        named_buttons(page, "System settings → Users, New secret asked")
+        assert scroll_width(page) <= case.width, "no horizontal scroll with the question"
+        box.locator(".confirm-no").click()
+        assert wait_until(page, "!document.querySelector(%r)" % f"{rows} li[data-id='{key['id']}'] .confirm-box", 3), "No takes the question back"
+        assert wait_until(page, FOCUSED % button, 3), "the focus back on New secret"
+        assert posts == [], f"No sends nothing: {posts}"
+
+        # Yes: one POST, the new secret shown once and copied
+        page.locator(button).click()
+        with page.expect_response(lambda r: r.request.method == "POST" and r.url.endswith("/rekey")) as answer:
+            box.locator(".confirm-yes").click()
+        assert answer.value.status == 200, f"the new secret: {answer.value.status}"
+        what = NEW_SECRET_SHOWN[case.lang].format(id=key["id"])
+        assert wait_until(page, "(document.querySelector(%r) || {}).textContent === %r" % (".user-panel[data-name='operator'] .user-key-what", what), 5), \
+            f"shown under its words: {panel.locator('.user-key-what').text_content()!r}"
+        secret = panel.locator(".user-key").inner_text().strip()
+        assert panel.locator(".user-key-box").is_visible() and secret and secret != key["token"], "the new secret shown"
+        assert wait_until(page, FOCUSED % button, 3), "the focus back on New secret once it is taken"
+        copies(page, ".user-panel[data-name='operator'] .user-key", secret, KEY_COPY[case.lang])
+        assert wait_until(page, "document.getElementById('users-msg').textContent.includes(%r)" % NEW_SECRET_MADE[case.lang].format(id=key["id"]), 5), \
+            f"the users' line: {page.locator('#users-msg').text_content()}"
+        assert len(posts) == 1, f"one POST: {posts}"
+        assert row.locator(".token-label").inner_text() == prefix + "phone", "the row keeps its id and label"
+        assert wait_until(page, "![...document.querySelectorAll(%r)].some((li) => li.textContent.includes(%r))" % (f"{rows} li", session_label), 5), \
+            "the key's session is listed no more"
+        assert panel.locator(f".user-tokens li[data-id='{heir['id']}']").count() == 1, "the key made with the key stays"
+
+        # the old secret refused, not counted; the new one lets in
+        assert status_with(key["token"]) == 401, "the old secret is refused"
+        assert not address_failures(), "and counts toward no lockout"
+        me = api_call("GET", "api/v1/me", token=secret)
+        assert me["token"]["id"] == key["id"], f"the new secret is the same key's: {me['token']}"
+        assert scroll_width(page) <= case.width, "no horizontal scroll"
+    finally:
+        revoke_keys(prefix)
     show_view(page, "tiles")
 
 

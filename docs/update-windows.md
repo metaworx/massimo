@@ -384,8 +384,8 @@ and a new `update helper started pid=…` line, plus the new server's start;
 `running`;
 the System event log for the service manager (events 7036 "entered the
 stopped/running state", 7009 and 7000 on a failed start).
-`update.log` is never rotated, unlike `serve.log`, which `serve` rotates
-itself; a run adds a dozen lines, so that is years of updates.
+`update.log` is never rotated, unlike `serve.log`, which `serve` rotates itself;
+a run adds a dozen lines, so that is years of updates.
 
 **Defender and SmartScreen.**
 Go's HTTP client writes no Mark-of-the-Web,

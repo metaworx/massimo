@@ -1,4 +1,4 @@
-# AP SteadyTests v1.1: Steady tests at their cause
+# AP SteadyTests v1.2: Steady tests at their cause
 
 ## TL;DR
 
@@ -8,7 +8,8 @@ and a guard keeps the pattern closed
 (`wip/2026-11-26_14-29_ANALYSIS_SteadyTests_steady_tests.md`,
 `wip/2026-11-27_13-12_ANALYSIS_SteadyTests_eval_and_soak.md`).
 v1.0's nine blocks carried AccessEnds' nine flakes;
-v1.1 adds five blocks for what the run, the soak and other sessions found.
+v1.1 added five for what the run, the soak and other sessions found;
+v1.2 adds seven for the flakes of 2026-11-28 and the page defects behind them.
 
 - fixed windows → the fake's apply held, `UI_TEST_SCALE`, a write made due
   by the test, timed UI states held
@@ -18,6 +19,9 @@ v1.1 adds five blocks for what the run, the soak and other sessions found.
   server left as found, per test file; no poll in UI runs
 - a pattern found → a helper in the kit, with its page in the tests' front page
 - flakes → found by a nightly soak; Gradle's 429 → a cache
+- a room check skipped → the rig waits for the server's own reasons
+- the host's network change → the guard's, not the page's
+- a refused change → taken back (settings, #498; schemes); two page races
 
 ### Blocks
 
@@ -35,6 +39,13 @@ v1.1 adds five blocks for what the run, the soak and other sessions found.
 12. GoWindows: the Go tests' windows set by the test, the fake's silent lines
 13. UiMoments: timed UI states held, several boxes read at once, waits for the request
 14. AgedCell: a reading's age does not widen its cell; the test pins it
+15. RoomChecksReady: the room checks' reasons to skip, one function the rig waits on
+16. AppPageKit: `ConnectPageTest` takes `Page.kt`'s waits
+17. DiscoveryReconnect: the moved Cube's wait can hold, as long as a loaded host needs
+18. HostNoise: the guard tells the host's network change from the page's errors
+19. RefusedSchemes: a refused colour scheme goes back, as a refused setting does
+20. TicketSwitch: a Cube switch drops the ticket asked for the other Cube
+21. LatePairingRead: a pairing read older than a join's event keeps the joined device
 
 ## Discussion
 
@@ -88,6 +99,31 @@ Open, for the plan gate of v1.1:
     what no API can undo (log lines) is listed with its reason.
   - **B.** It warns in the log and fails nothing.
 
+The owner, 2026-11-27 and 2026-11-28, recorded in the NOTEs
+`wip/2026-11-27_15-15_NOTE_SteadyTests_v1.1_the_gates_decisions.md` and
+`wip/2026-11-28_10-40_NOTE_SteadyTests_v1.1_the_refused_change_and_block_7.md`:
+D10-A, D11-A, D14-A (#498, merged into `maint/0.17`), D15-A (Block 7 on #473),
+and D16 for planning.
+
+The owner, 2026-11-28, `PLAN++` for v1.2 with D19-B and D20-A,
+D17 and D18 taking their recommended options:
+
+- **D16-A.** The flakes from AP MobileApp's and AP ErrorCodes' runs go into
+  v1.2 by pattern: Blocks 15 to 18. The emulator's slow first boot is
+  recorded; the app's process killed with Google Play services' is a choice
+  in the app for AP MobileApp.
+- **D17-A.** The room checks' reasons to skip a room become one server
+  function, which the room checks and the test rig both use,
+  so that the rig cannot fall behind the code.
+- **D18-A.** The discovery reconnect and the guard's host noise are
+  Blocks 17 and 18.
+- **D19-B.** #498 stays as it was; the same defect for colour schemes
+  is Block 19.
+- **D20-A.** The two page races found in passing, the ticket across a Cube
+  switch and the pairing read handled after a join, are Blocks 20 and 21,
+  in one product-fix pull request into `maint/0.17` after #498,
+  with Block 19.
+
 ### Decided in the writing
 
 - **Builders:** Opus sub-agents, each on a branch of its own in an isolation
@@ -116,6 +152,15 @@ Open, for the plan gate of v1.1:
   since it documents #473's kit too.
 - **v1.1's plan commits** go onto `maint/0.17`, where Blocks 1 to 3 and 9
   shipped, and are merged upward (the owner's rule after the freeze).
+- **v1.2's pull requests:** Blocks 15 to 18 in one against `main`
+  (`claude/steady-flakes`): the tests they fix are on `main` only, or the kit
+  is the same on both lines and `main` runs it first;
+  Blocks 19 to 21 in one into `maint/0.17` (`claude/steady-page-races`),
+  merged upward after it: they fix defects of 0.17.
+  Builders: one for the Go and UI kit blocks (15, 17, 18),
+  one for the app's (16), one for the page's (19 to 21).
+- **v1.2's plan commit** goes onto `maint/0.17` and is merged upward,
+  with #498.
 
 ## Analysis
 
@@ -189,6 +234,53 @@ Grouped by pattern, not by test:
   a reading's age reaches two digits in a run over 10 minutes,
   and the holiday tile overflows in German at 1100 px; a real server shows
   two-digit ages all day, so the page is wrong, not the test.
+
+### For Blocks 15 to 21: the flakes of 2026-11-28
+
+AP MobileApp's session sent four flakes from its run (#496, #497),
+AP ErrorCodes' session two; Block 11's builder and the builders of #473's
+CI fix and of #498 found the page defects. Each passed on a rerun.
+
+- **A room check skipped** (Block 15): `TestRepairPlaceHoldsTheRoomsState`
+  on armv6, "the re-send: []". `resendRoom` waits for the queue's answer,
+  so a re-send made is recorded: none was made. `roomChecks` skips a room
+  while a structure change is sent, the queue holds a command for it,
+  a room confirmation is open or the room is watched;
+  the rig's `settled()` waits for the last of these only.
+  A first check that skips the room starts its ten minutes late,
+  so `disagreeAndResend`'s third check comes too early.
+  It passed 300 of 300 locally, on one CPU at scale 4; QEMU is slower.
+  The rig's checks are called in 76 places
+  (`drift_test.go`, `resend_test.go`, `config_api_test.go`).
+- **A private copy of the kit's wait** (Block 16):
+  `ConnectPageTest.theBridgeAnswersTheConnectPage` timed out on its own
+  5 s `eval` while the WebView's first start stalled the main thread 4 s.
+  `Page.kt`'s `waitFor` allows a slow `eval` per poll within 30 s and wraps
+  the same `ActivityScenario`; `ConnectPageTest`'s are the only private copies.
+- **A wait that may never hold** (Block 17):
+  `TestCubeConfiguredBySerialFollowsItsAddress` timed out once after 5 s
+  waiting for the moved Cube (`discovery_test.go:642`). Either the reconnect's
+  backoff outlasts an unscaled 5 s on a loaded host, or
+  `second.Connections() == 1` cannot hold once the client has connected twice.
+- **The host's noise as the page's** (Block 18):
+  `test_reboot_waits_and_is_taken_back[390-en]` failed on Chromium's
+  `net::ERR_NETWORK_CHANGED`, a change of the host's network (another
+  session's Docker network, for one); the guard fails a test on any console
+  error.
+- **A refused change kept by the browser** (Block 19):
+  #498 takes a refused setting back; a refused colour scheme is still kept,
+  and a sign-in hands it to a server without the user's schemes.
+- **A late answer over a newer event** (Blocks 20, 21):
+  `connectEvents` reads `state.serial` again once the ticket comes, so a Cube
+  switch meanwhile opens one Cube's stream with the other's ticket
+  (Block 11 planted it: a console 401);
+  `cubes/flow.ts`' `apply()` lets a pairing read answered before a join,
+  and handled after the join's event, replace the list and drop the device
+  until the pairing ends (#473's CI fix found it).
+- **Recorded only:** the emulator's first boot past `APP_EMU_BOOT_TIMEOUT`
+  once in CI; the app's process killed when Google Play services' died,
+  likely appcompat's emoji font from its font provider, unconfirmed,
+  for AP MobileApp.
 
 ## Implementation Plan
 
@@ -498,6 +590,121 @@ taken onto its branch in their order.
 - **Verification:** `make ui-check`; the four cases of the touched files;
   the screenshots at 1100 and 390 px.
 
+### Block 15: RoomChecksReady
+
+- **Goal:** the drift rig's checks run when the room checks would check
+  the room, so that a test's ten minutes start when it says.
+- **Changes:**
+  - `internal/server/drift.go`: the reasons `roomChecks` skips a room
+    (a structure change sent, the queue holding a command for the room,
+    an open room confirmation, a watched room) become one function,
+    which `roomChecks` uses (D17-A); no behaviour changes.
+  - The rig (`drift_test.go`, `config_api_test.go`): before each check, a
+    wait until no reason holds for the rooms the test checks, through that
+    function; `settled` and `disagreeAndResend` take it.
+  - The sweep: every test that calls the rig's checks or `roomChecks`
+    itself takes the wait.
+  - `docs/testing.md`: the helper.
+- **Tests:** a command held for the room across the first check
+  (`HoldApply`): the old `TestRepairPlaceHoldsTheRoomsState` fails with
+  "the re-send: []", the new passes, three runs each;
+  `-race` at scale 2, `-count=5`; `make test-armv6` where it runs.
+- **CHANGELOG:** as the project does for a change of `internal/` without
+  a change a user sees.
+- **Commits:** the function; the wait with the tests that take it.
+- **Verification:** `go test ./internal/server/...`, `make race` for it;
+  `gofmt`; `go vet` for linux, windows and darwin.
+
+### Block 16: AppPageKit
+
+- **Goal:** `ConnectPageTest` waits as every app test does.
+- **Changes:**
+  - `app/android/app/src/androidTest/…/ConnectPageTest.kt`:
+    `Page(sc).eval` and `waitFor` in place of its private copies.
+  - The sweep: the app tests' other private waits (none found yet);
+    the app kit's waits named where the app tests are documented.
+- **Tests:** a main-thread stall of 6 s planted before the first `eval`:
+  the old class fails, the new passes; `make app-emulator-test`.
+- **CHANGELOG:** none: `androidTest` is not shipped.
+- **Commit:** `test(app): …`
+- **Verification:** the plant; `make app-emulator-test` once whole.
+
+### Block 17: DiscoveryReconnect
+
+- **Goal:** the moved Cube's wait holds once the Cube is there,
+  however loaded the host.
+- **Changes:**
+  - First the cause: `Connections()` and the reconnect's tries at the
+    timeout, with a planted second connect and a planted slow reconnect.
+  - `internal/server/discovery_test.go`: the condition counts the
+    connections since the move, or waits for the reconnect's own event,
+    within the kit's scaled wait; the sweep: the discovery tests with the
+    same wait take it.
+- **Tests:** the plants: old fails, new passes, three runs each;
+  `-race` at scale 2, `-count=5`.
+- **CHANGELOG:** none where only tests change.
+- **Commit:** `test(server): …`
+- **Verification:** `go test ./internal/server/...`; `make race` for it.
+
+### Block 18: HostNoise
+
+- **Goal:** the UI guard fails a test on the page's errors,
+  not on a change of the host's network.
+- **Changes:**
+  - First whether a Chromium launch option keeps it from seeing the host's
+    network changes; else `tools/ui-test/conftest.py`'s guard lists
+    `net::ERR_NETWORK_CHANGED` as the host's, with its reason.
+  - The sweep: CI's and the soak's failures on console lines of the host
+    rather than the page.
+  - `docs/ui-testing.md` section 9.
+- **Tests:** a planted `net::ERR_NETWORK_CHANGED` line: the old guard fails,
+  the new passes; a planted other console error still fails.
+- **CHANGELOG:** none: `tools/` is not shipped.
+- **Commit:** `test(ui-test): …`
+- **Verification:** the plants; the whole UI suite once in one case.
+
+### Block 19: RefusedSchemes
+
+- **Goal:** a colour scheme change whose save met a 401 goes back,
+  as a setting's does since #498, and no sign-in sends it later (D19-B).
+- **Changes:**
+  - `internal/server/ui/login.js`, `theme.js`: the schemes that hold, kept
+    beside the settings' (`prefsSync.held`); a refused schemes push taken
+    back and drawn.
+  - The kit: whether the server holds the user's schemes, beside
+    `server_holds_settings`, one helper if it fits both.
+  - `docs/ui.md`.
+- **Tests:** a refused scheme with the server holding schemes and holding
+  none: the old page sends it at the sign-in, the new does not.
+- **CHANGELOG:** a fragment under Fixed.
+- **Commit:** `fix(ui): …`
+- **Verification:** the four cases of the touched files.
+
+### Block 20: TicketSwitch
+
+- **Goal:** a stream is opened only with a ticket asked for its own Cube.
+- **Changes:** `internal/server/ui/app.js` `connectEvents`: the ticket is
+  used for the Cube it was asked for; a switch meanwhile drops it and asks
+  for the shown Cube's.
+- **Tests:** a ticket held across a Cube switch: the old page's console
+  shows the 401, the new opens the shown Cube's stream.
+- **CHANGELOG:** a fragment under Fixed.
+- **Commit:** `fix(ui): …`
+- **Verification:** the four cases of the touched files.
+
+### Block 21: LatePairingRead
+
+- **Goal:** a pairing read older than a join's event does not drop the
+  joined device.
+- **Changes:** `internal/server/ui/src/cubes/flow.ts` `apply()`: an answer
+  asked before the last pairing event does not replace what the event
+  brought.
+- **Tests:** a pairing read whose body the page reads after the join's
+  event: the old page drops the device, the new keeps it.
+- **CHANGELOG:** a fragment under Fixed.
+- **Commit:** `fix(ui): …`
+- **Verification:** `make ui-check`; the four cases of the touched files.
+
 ### Before each pull request
 
 The branch merges `origin/main`;
@@ -508,7 +715,9 @@ the pull request's text in commit form, a block's proofs in it.
 
 The plan: `chore(aps): +SteadyTests v1.0, +ANALYSIS SteadyTests`;
 its revision: `chore(aps): +SteadyTests v1.1, +ANALYSIS SteadyTests eval_and_soak`,
-onto `maint/0.17`, then `merge: maint/0.17 into main, with SteadyTests v1.1`.
+onto `maint/0.17`, then `merge: maint/0.17 into main, with SteadyTests v1.1`;
+v1.2: `chore(aps): +SteadyTests v1.2`, onto `maint/0.17`,
+then `merge: maint/0.17 into main, with SteadyTests v1.2 and #498`.
 
 Block 1:
 
@@ -538,3 +747,8 @@ Assisted-by: claude-code:claude-opus-5-5
   from the run's NOTE, the soak's first run and the owner's eight;
   D6-A, D7-A, D8-A, D9-A; D10 and D11 open; v1.0's PR shape after the freeze
   (#466, #467 into `maint/0.17`, #473 against `main`) recorded.
+- v1.2 (2026-11-28): from the owner's `PLAN++` with D19-B and D20-A,
+  D17-A and D18-A as recommended: Blocks 15 to 21 for the flakes of
+  2026-11-28 (AP MobileApp's, AP ErrorCodes') and the page defects found by
+  Block 11, #473's CI fix and #498; the NOTEs' D10-A, D11-A, D14-A, D15-A
+  named; two pull requests, against `main` and into `maint/0.17`.
