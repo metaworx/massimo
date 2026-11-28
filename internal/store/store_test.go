@@ -91,8 +91,12 @@ func TestOpenMigratesAnEmptyFile(t *testing.T) {
 	// "Two lines of releases"), so there are fewer than the last one's.
 	var rows int
 	s2.db.QueryRow(`SELECT count(*) FROM schema_version`).Scan(&rows)
-	if ms, err := loadMigrations(embeddedMigrations()); err != nil || rows != len(ms) {
-		t.Fatalf("%d schema_version rows, %d migrations: %v", rows, len(ms), err)
+	all, err := loadMigrations(embeddedMigrations())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if rows != len(all) {
+		t.Fatalf("%d schema_version rows, %d migrations", rows, len(all))
 	}
 }
 

@@ -49,6 +49,24 @@ class SessionKeeper(private val tokens: TokenStore) {
     @Synchronized
     fun inMemory(id: String): Boolean = memory.containsKey(id)
 
+    /** holds reports whether a session is kept for the server [id] where [inMemory] says, without opening a sealed one. */
+    @Synchronized
+    fun holds(id: String, inMemory: Boolean): Boolean = if (inMemory) memory.containsKey(id) else tokens.has(id)
+
+    /** dropMemory forgets every session kept in memory, as the process's end does: Exit (D91-A). */
+    @Synchronized
+    fun dropMemory() = memory.clear()
+
+    /**
+     * leaveForgotten moves into `unended` each server's session recorded as
+     * held ([Server.held]) that the keeper no longer holds where its login
+     * says it is kept (D102-A): at a new process's start, nothing in memory,
+     * and at Exit once [dropMemory] has dropped them; a sealed session,
+     * still held, stays recorded. [logins] says where each is kept.
+     */
+    fun leaveForgotten(servers: ServerStore, logins: LoginStore) =
+        servers.leaveHeld { s -> holds(s.id, memoryFor(s.ask, logins.get(s.id) != null)) }
+
     /** forget forgets the server's session, wherever it is. */
     @Synchronized
     fun forget(id: String) {

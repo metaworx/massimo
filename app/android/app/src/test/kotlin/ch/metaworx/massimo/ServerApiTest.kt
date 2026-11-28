@@ -158,4 +158,32 @@ class ServerApiTest {
         assertEquals("anna%20maria", ServerApi.segment("anna maria"))
         assertEquals("a%2Fb", ServerApi.segment("a/b"))
     }
+
+    @Test
+    fun aRevokeCodeGoesWithoutATokenAndItsAnswerIsRead() {
+        // D112-A: 204 taken, 400 malformed, a broken connection, 429 and 5xx later, any other a server that takes no codes
+        val codes = HttpServer.create(InetSocketAddress(InetAddress.getLoopbackAddress(), 0), 0)
+        val heard = mutableListOf<String>()
+        codes.createContext("/c/") { ex ->
+            val status = ex.requestURI.rawPath.removePrefix("/c/").substringBefore('/').toInt()
+            synchronized(heard) { heard.add("${ex.requestMethod} ${ex.requestURI.rawPath} ${ex.requestHeaders.getFirst("Authorization")} ${ex.requestBody.readBytes().toString(Charsets.UTF_8)}") }
+            if (status in 300..399) ex.responseHeaders.add("Location", "https://elsewhere.example.net/")
+            val body = if (status == 200) "<html>a proxy's page</html>".toByteArray() else ByteArray(0)
+            ex.sendResponseHeaders(status, if (status == 204) -1 else body.size.toLong())
+            if (body.isNotEmpty()) ex.responseBody.use { it.write(body) } else ex.close()
+        }
+        codes.start()
+        try {
+            val at = { status: Int -> "http://127.0.0.1:${codes.address.port}/c/$status/" }
+            val code = RevokeCode.of("x")
+            assertEquals(ServerApi.Taken.TAKEN, api.revokeCode(at(204), "", code))
+            assertEquals("POST /c/204/api/v1/tokens/revoke null {\"code\":\"$code\"}", heard.single())
+            assertEquals(ServerApi.Taken.MALFORMED, api.revokeCode(at(400), "", code))
+            for (later in listOf(429, 500, 502, 503)) assertEquals("$later", ServerApi.Taken.LATER, api.revokeCode(at(later), "", code))
+            for (none in listOf(404, 401, 403, 405, 409, 302, 200)) assertEquals("$none", ServerApi.Taken.NONE, api.revokeCode(at(none), "", code))
+        } finally {
+            codes.stop(0)
+        }
+        assertEquals("a broken connection", ServerApi.Taken.LATER, api.revokeCode("http://127.0.0.1:9/", "", RevokeCode.of("x")))
+    }
 }

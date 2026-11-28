@@ -124,7 +124,7 @@ func TestRebootRoutes(t *testing.T) {
 	if v := decodeReboot(t, text); code != 200 || v.Available || v.Blocked != rebootBegun || v.At == nil || !v.Begun {
 		t.Fatalf("GET after the reboot began: %d %s", code, text)
 	}
-	if code, text := callAPI(t, ts, "DELETE", path, "secret", ""); code != 409 || errorOf(text) != rebootBegun {
+	if code, text := callAPI(t, ts, "DELETE", path, "secret", ""); code != 409 || errorOf(text) != rebootBegun || !refusalHas(t, text, "reboot_begun", "null") {
 		t.Fatalf("taking back a reboot that began: %d %s", code, text)
 	}
 	if got := received.Since(before, cubewatch.Except('l')); len(got) != 0 {
@@ -134,7 +134,8 @@ func TestRebootRoutes(t *testing.T) {
 
 // A reboot waits its delay, 60 s when the request names none, and can be
 // taken back meanwhile; while it waits the server neither takes another
-// nor restarts. A delay outside 0 to 3600 seconds is refused.
+// nor restarts. A delay outside 0 to 3600 seconds is refused
+// (reboot_delay_bad), a body that does not parse with no code.
 func TestRebootDelayAndTakeBack(t *testing.T) {
 	t.Parallel()
 	f := newRebootFake(nil)
@@ -145,9 +146,13 @@ func TestRebootDelayAndTakeBack(t *testing.T) {
 	ts, s := r.ts, r.s
 	keepStore(t, ts, s.opts.Store)
 	path := "/api/v1/reboot"
-	for _, body := range []string{`{"delay": -1}`, `{"delay": 3601}`, `{"delay": "60"}`, `{"delay": 1.5}`, `[`} {
-		if code, text := callAPI(t, ts, "POST", path, "secret", body); code != 400 {
-			t.Errorf("POST %s: %d %s", body, code, text)
+	for body, code := range map[string]string{`{"delay": -1}`: "reboot_delay_bad", `{"delay": 3601}`: "reboot_delay_bad", `{"delay": "60"}`: "", `{"delay": 1.5}`: "", `[`: ""} {
+		params := "null"
+		if code != "" {
+			params = `{"max":3600}`
+		}
+		if status, text := callAPI(t, ts, "POST", path, "secret", body); status != 400 || !refusalHas(t, text, code, params) {
+			t.Errorf("POST %s: %d %s", body, status, text)
 		}
 	}
 	for _, c := range []struct {
@@ -163,10 +168,11 @@ func TestRebootDelayAndTakeBack(t *testing.T) {
 		if v := decodeReboot(t, text); code != 200 || v.Available || v.Blocked != rebootWaiting || v.At == nil || !v.At.Equal(answer.At) || v.Begun {
 			t.Fatalf("GET while it waits: %d %s", code, text)
 		}
-		if code, text := callAPI(t, ts, "POST", path, "secret", `{"delay": 0}`); code != 409 || errorOf(text) != rebootWaiting {
+		if code, text := callAPI(t, ts, "POST", path, "secret", `{"delay": 0}`); code != 409 || errorOf(text) != rebootWaiting || !refusalHas(t, text, "reboot_waiting", "null") {
 			t.Fatalf("a second reboot: %d %s", code, text)
 		}
-		if code, text := callAPI(t, ts, "POST", "/api/v1/restart", "secret", "{}"); code != 409 || errorOf(text) != "a reboot of the computer is waiting" {
+		if code, text := callAPI(t, ts, "POST", "/api/v1/restart", "secret", "{}"); code != 409 || errorOf(text) != "a reboot of the computer is waiting" ||
+			!refusalHas(t, text, "reboot_waiting", "null") {
 			t.Fatalf("a restart while it waits: %d %s", code, text)
 		}
 		if code, text := callAPI(t, ts, "DELETE", path, "secret", ""); code != 200 {
@@ -181,7 +187,7 @@ func TestRebootDelayAndTakeBack(t *testing.T) {
 			t.Fatalf("GET after taking it back: %d %s", code, text)
 		}
 	}
-	if code, text := callAPI(t, ts, "DELETE", path, "secret", ""); code != 409 || errorOf(text) != "no reboot is waiting" {
+	if code, text := callAPI(t, ts, "DELETE", path, "secret", ""); code != 409 || errorOf(text) != "no reboot is waiting" || !refusalHas(t, text, "reboot_not_waiting", "null") {
 		t.Fatalf("DELETE with none waiting: %d %s", code, text)
 	}
 	// A timer that fires after its reboot was taken back does nothing.
@@ -196,14 +202,15 @@ func TestRebootDelayAndTakeBack(t *testing.T) {
 	f.none(t)
 }
 
-// The API says why the computer cannot be rebooted, in order: the system,
-// the owner's switch, the helper, an update at work; a reboot that fails
+// The API says why the computer cannot be rebooted, in order, each with
+// its code: the system, the owner's switch, the helper, an update at
+// work; a reboot that fails
 // is reported, and the next one may be asked for. Switching the reboot
 // off takes back one that waits.
 func TestRebootBlocked(t *testing.T) {
 	t.Parallel()
 	path := "/api/v1/reboot"
-	refused := func(o RebootOptions, update UpdateOptions, want string) {
+	refused := func(o RebootOptions, update UpdateOptions, want, wantCode string) {
 		t.Helper()
 		opts := storeOptions(t, t.TempDir(), "secret")
 		opts.Reboot, opts.Update = o, update
@@ -212,27 +219,27 @@ func TestRebootBlocked(t *testing.T) {
 		if v := decodeReboot(t, text); code != 200 || v.Available || v.Blocked != want {
 			t.Fatalf("GET, want %q: %d %s", want, code, text)
 		}
-		if code, text := callAPI(t, ts, "POST", path, "secret", `{"delay": 0}`); code != 409 || errorOf(text) != want {
-			t.Fatalf("POST, want %q: %d %s", want, code, text)
+		if code, text := callAPI(t, ts, "POST", path, "secret", `{"delay": 0}`); code != 409 || errorOf(text) != want || !refusalHas(t, text, wantCode, "null") {
+			t.Fatalf("POST, want %q, %s: %d %s", want, wantCode, code, text)
 		}
 	}
 	f := newRebootFake(nil)
-	refused(RebootOptions{}, UpdateOptions{}, "this server does not reboot the computer it runs on")
+	refused(RebootOptions{}, UpdateOptions{}, "this server does not reboot the computer it runs on", "reboot_unavailable")
 	terminal := "only a server the system runs as a service reboots its computer"
-	refused(RebootOptions{Blocked: terminal, Allowed: true, Reboot: f.reboot}, UpdateOptions{}, terminal)
+	refused(RebootOptions{Blocked: terminal, Allowed: true, Reboot: f.reboot}, UpdateOptions{}, terminal, "reboot_unavailable")
 	o := rebootOptions(f)
 	o.Allowed = false
 	o.Helper = func() string { t.Error("the helper looked at while switched off"); return "" }
-	refused(o, UpdateOptions{}, rebootSwitchedOff)
+	refused(o, UpdateOptions{}, rebootSwitchedOff, "reboot_switched_off")
 	o = rebootOptions(f)
 	missing := "no reboot helper installed: sudo massimo install -reboot-helper"
 	o.Helper = func() string { return missing }
-	refused(o, UpdateOptions{}, missing)
+	refused(o, UpdateOptions{}, missing, "reboot_no_helper")
 	status := filepath.Join(t.TempDir(), "status.json")
 	if err := update.WriteStatus(status, update.Status{State: "installing", To: "v0.1.0-alpha.10", Time: time.Now()}); err != nil {
 		t.Fatal(err)
 	}
-	refused(rebootOptions(f), UpdateOptions{Status: status}, "an update is running")
+	refused(rebootOptions(f), UpdateOptions{Status: status}, "an update is running", "update_running")
 	f.none(t)
 
 	failing := newRebootFake(errors.New("the reboot helper did not take the request within 30s"))
@@ -301,13 +308,13 @@ func TestRebootOpenServer(t *testing.T) {
 	if code, text := sendWith(t, ts, "GET", path, "", h); code != 200 || decodeReboot(t, text).Available || decodeReboot(t, text).Blocked != openRebootRefused {
 		t.Fatalf("GET through the proxy: %d %s", code, text)
 	}
-	if code, text := sendWith(t, ts, "POST", path, "{}", h); code != 403 || errorOf(text) != openRebootRefused {
+	if code, text := sendWith(t, ts, "POST", path, "{}", h); code != 403 || errorOf(text) != openRebootRefused || !refusalHas(t, text, "reboot_open", "null") {
 		t.Fatalf("POST through the proxy: %d %s", code, text)
 	}
 	if code, text := sendWith(t, ts, "POST", path, `{"delay": 3600}`, nil); code != 202 {
 		t.Fatalf("POST from the box: %d %s", code, text)
 	}
-	if code, text := sendWith(t, ts, "DELETE", path, "", h); code != 403 || errorOf(text) != openRebootRefused {
+	if code, text := sendWith(t, ts, "DELETE", path, "", h); code != 403 || errorOf(text) != openRebootRefused || !refusalHas(t, text, "reboot_open", "null") {
 		t.Fatalf("DELETE through the proxy: %d %s", code, text)
 	}
 	if code, text := sendWith(t, ts, "DELETE", path, "", nil); code != 200 {

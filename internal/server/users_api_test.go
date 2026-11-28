@@ -11,6 +11,7 @@ import (
 	"io"
 	"log/slog"
 	"net/http"
+	"net/http/httptest"
 	"slices"
 	"strconv"
 	"strings"
@@ -648,18 +649,79 @@ func TestRolesRoutes(t *testing.T) {
 }
 
 // A password check or hash the store refuses for the load, or that
-// waited until the client went away, answers 503 with Retry-After;
-// a wrong password is not that.
+// waited until the client went away, answers 503 with Retry-After
+// (passwordFail); a wrong password is not that. Any other store error of
+// a request whose client went away says so, 503 without Retry-After, and
+// not that a password check waited (AP MobileApp v1.5, D106-A, F46).
 func TestPasswordBusy(t *testing.T) {
 	t.Parallel()
 	for _, err := range []error{store.ErrBusy, fmt.Errorf("store: password check: %w", context.Canceled)} {
 		var he *httpError
-		if !errors.As(userFail(err), &he) || he.status != 503 || he.retryAfter != busyRetry {
+		if !errors.As(passwordFail(err), &he) || he.status != 503 || he.retryAfter != busyRetry {
+			t.Errorf("%v: %+v", err, he)
+		}
+	}
+	if he := (*httpError)(nil); !errors.As(userFail(store.ErrBusy), &he) || he.retryAfter != busyRetry {
+		t.Errorf("the store's load outside a password route: %+v", he)
+	}
+	for _, err := range []error{fmt.Errorf("store: token 4: %w", context.Canceled), fmt.Errorf("store: users: %w", context.DeadlineExceeded)} {
+		var he *httpError
+		if !errors.As(userFail(err), &he) || he.status != 503 || he.retryAfter != 0 || he.msg != clientGoneText {
 			t.Errorf("%v: %+v", err, he)
 		}
 	}
 	if passwordBusy(store.ErrBadPassword) != nil || passwordBusy(store.ErrUserExists) != nil {
 		t.Error("an answer that is not the load is busy")
+	}
+	var he *httpError
+	if !errors.As(passwordFail(store.ErrUserExists), &he) || he.status != 409 {
+		t.Errorf("passwordFail of another error: %+v", he)
+	}
+}
+
+// A token's revoke whose request was cancelled before the store
+// answered is audited as a client that went away, the result failed,
+// not as a password check that waited (D106-A, F46): the request runs
+// through the api wrapper's steps with its context ended once its
+// caller is known, as a phone that gave up on the answer leaves it.
+func TestCancelledRevokeIsNoPasswordCheck(t *testing.T) {
+	t.Parallel()
+	rg := startServer(t, withOptions(storeOptions(t, t.TempDir(), "secret")))
+	s, st := rg.s, rg.s.opts.Store
+	key := userToken(t, st, "anna", store.RoleViewer)
+	p, err := s.resolve(t.Context(), modeUsers, key, "127.0.0.1")
+	if err != nil {
+		t.Fatal(err)
+	}
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	const pattern = "DELETE /api/v1/me/token"
+	req := httptest.NewRequestWithContext(ctx, "DELETE", "/api/v1/me/token", nil)
+	req.Header.Set("Authorization", "Bearer "+key)
+	sw := &statusWriter{ResponseWriter: httptest.NewRecorder()}
+	au, req := s.beginAudit(sw, req, pattern, actions[pattern], true)
+	au.p = p
+	err = s.deleteMyToken(sw, withPrincipal(req, p))
+	var he *httpError
+	if !errors.As(err, &he) || he.status != 503 || he.retryAfter != 0 || he.msg != clientGoneText {
+		t.Fatalf("the revoke of a client gone: %v (%+v)", err, he)
+	}
+	writeJSON(sw, he.status, he.body()) // as the wrapper answers it
+	s.endAudit(req.Context(), au, "127.0.0.1")
+	rows := auditRows(t, rg.ts, "secret", "?limit=10")
+	if len(rows) == 0 {
+		t.Fatal("no row")
+	}
+	row := rows[0]
+	d := detailOf(t, row)
+	if row.Action != "token.revoke" || row.Result != store.ResultFailed || d["error"] != clientGoneText {
+		t.Errorf("row %+v, detail %v", row, d)
+	}
+	if strings.Contains(fmt.Sprint(d["error"]), "password") {
+		t.Errorf("the row says a password check waited: %v", d["error"])
+	}
+	if code, _ := callAPI(t, rg.ts, "GET", "/api/v1/me", key, ""); code != 200 {
+		t.Errorf("the key after the revoke that never ran: %d", code)
 	}
 }
 
