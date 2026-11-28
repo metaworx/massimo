@@ -1592,8 +1592,8 @@ as the settings' ⓘ do:
   names the key by its label, and revoking the key ends it;
   a key made with another key as the bearer says **made by the API key**
   and that key's label, or its id where the list does not hold it,
-  and revoking the maker revokes it, the message naming the keys that went
-  with it (AP KeyLife, Block 2, D5-A);
+  and revoking the maker revokes it,
+  the message naming the keys that went with it (AP KeyLife, Block 2, D5-A);
   the session or key the page is signed in with says **this device**,
   the key that session was made from **its key**,
   and Revoke on this device signs out, as **Sign out** does;
@@ -1604,18 +1604,20 @@ as the settings' ⓘ do:
   the key that is the settings file's `MASSIMO_API_TOKEN` (`from_settings`) says
   **from the settings file: change or remove it there** in place of Revoke,
   which the server refuses for it (D86-A);
-  under the idle limit (`auth.key_idle_days`, AP KeyLife, Block 3)
-  a key's line says **ends … unless used**, the date and time it ends unused,
+  under the idle limit (`auth.key_idle_days`, AP KeyLife,
+  Block 3) a key's line says **ends … unless used**,
+  the date and time it ends unused,
   or **kept while unused** for one kept from it,
-  and a key that ended says **Ended** and **unused since …**, listed to be revoked;
-  for one who manages its own user (with `users`, as an owner,
-  or `guests` where it is a guest itself; D7-A) a key's row has **Change…**,
+  and a key that ended says **Ended** and **unused since …**,
+  listed to be revoked; for one who manages its own user (with `users`,
+  as an owner, or `guests` where it is a guest itself;
+  D7-A) a key's row has **Change…**,
   a small form with the switch **Keep while unused**, **Save** and **Cancel**,
   but not on the settings file's key nor on the key the page is signed in with,
   and **Create key** has the same switch;
   one who manages nobody keeps the limit on its keys,
-  and sees the switch nowhere;
-  a key with an end date (AP KeyLife, Block 4) says **ends …** on its line,
+  and sees the switch nowhere; a key with an end date (AP KeyLife,
+  Block 4) says **ends …** on its line,
   and one past it **Ended** and **ended …**, listed to be revoked;
   **Create key** has the field **Ends**, a date and time, empty for no end date,
   and a key's **Change…** has it too, with **No end**, which empties it:
@@ -1624,13 +1626,14 @@ as the settings' ⓘ do:
   Save sends what changed, an end emptied as none,
   and a time that has passed is refused, the message line saying so;
   a date half typed, which the browser reads as empty, is never taken for none:
-  Save and Create key then send nothing, the message line says that the date is
-  not complete and the focus goes back into the field;
+  Save and Create key then send nothing,
+  the message line says that the date is not complete and the focus goes back
+  into the field;
   never on the settings file's key nor on the key the page is signed in with;
   a live key's row has **New secret** (AP KeyLife, Block 5; MobileApp.D76-A),
   for every user on its own keys,
-  which asks first in place of the row's buttons,
-  "A new secret for …: whatever holds the key now is refused.
+  which asks first in place of the row's buttons, "A new secret for …:
+  whatever holds the key now is refused.
   Keys made with it stay; Revoke ends a key and the keys made with it.
   The new secret is shown once.",
   saying how many such keys the list holds where it holds some,
@@ -1949,7 +1952,8 @@ and that `-trusted-proxies` would show more.
 The server's version copies on a click, or by its copy icon, whole,
 with what it was built with (the header's does too, without the icon);
 so do each Cube proxy's serial, the serial it answers discovery with ("as …",
-where it answers discovery) and its address, which the original software connects to.
+where it answers discovery) and its address,
+which the original software connects to.
 A copy says "Copied" in the page's bubble above what it copied
 (below it at the window's top, "Signs, texts and buttons");
 on a page served over plain HTTP the browser gives no clipboard to the page,
@@ -2262,11 +2266,10 @@ settings forms and have none of it.
   and goes with a Save, a Reset or a sign-out;
   it is typed once (AP PasswordRules, D51-A), the rule's line under it,
   and a Save the rule refuses sends nothing and puts the focus in it;
-  left empty, the password stays as it is, unchecked;
-  **Remove**, which asks in place of the panel's actions;
-  the user's sessions and API keys, each with its id, and **Revoke**,
-  a key made by another key naming it, and a revoke's message the keys
-  that went with it, as under My profile;
+  left empty, the password stays as it is, unchecked; **Remove**,
+  which asks in place of the panel's actions; the user's sessions and API keys,
+  each with its id, and **Revoke**, a key made by another key naming it,
+  and a revoke's message the keys that went with it, as under My profile;
   read when the panel opens and after every change of the users while it is open;
   in one's own panel the session or key the page is signed in with says **this device**,
   the key that session was made from **its key**,
@@ -2278,32 +2281,31 @@ settings forms and have none of it.
   the settings file's key says it comes from there in place of Revoke,
   as under My profile;
   a key's line says its life under the idle limit and its end date,
-  as under My profile,
-  and for who manages the user (AP KeyLife, D7-A) a key's row has **Change…**,
+  as under My profile, and for who manages the user (AP KeyLife,
+  D7-A) a key's row has **Change…**,
   whose switch **Keep while unused** keeps it from the limit or holds it to it again,
   and whose field **Ends** sets, moves or removes its end date (Block 4, D4-A),
   with **No end**, the only field on an integration's key's row,
   which a holder of `users` or `integrations` sees in the integration's user's panel,
-  and in one's own panel for one who manages nobody;
-  with **Save**, off until a field is changed, and **Cancel**,
+  and in one's own panel for one who manages nobody; with **Save**,
+  off until a field is changed, and **Cancel**,
   the focus on the form's first field as it opens and back on Change… as it closes,
   never on the settings file's key or the key the page is signed in with;
-  a live key's row has **New secret** for who manages the user
-  and in one's own panel (AP KeyLife, Block 5),
-  asked first, as under My profile,
+  a live key's row has **New secret** for who manages the user and in one's own
+  panel (AP KeyLife, Block 5), asked first, as under My profile,
   never on an integration's key, a key that ended, the settings file's key,
   the key the page is signed in with, the key its session was made from,
-  nor in the app on the phone's key;
-  and **Create key**, with the same switch for who manages the user
-  and the field **Ends**, empty for no end date,
-  which shows the new key once: from the read that follows it
-  until the next, in that panel alone, kept nowhere;
-  a key's new secret is shown there the same way, under its own words;
-  it copies with its copy icon, as under My profile;
+  nor in the app on the phone's key; and **Create key**,
+  with the same switch for who manages the user and the field **Ends**,
+  empty for no end date, which shows the new key once:
+  from the read that follows it until the next, in that panel alone,
+  kept nowhere; a key's new secret is shown there the same way,
+  under its own words; it copies with its copy icon, as under My profile;
   where a sign-in provider is enabled, the user's identities at the providers,
   each with its e-mail, or its user ID there,
   and whether it is bound or waits for its first sign-in,
-  what the provider said of it at the last sign-in (name, user name, groups) and when,
+  what the provider said of it at the last sign-in (name, user name,
+  groups) and when,
   **Change** of the e-mail or user ID while no sign-in used it,
   a settings form of its own, with **Cancel**, **Remove**,
   and **Assign** to the user, at a provider,
@@ -2830,46 +2832,46 @@ The server's sign, when it says an update is out, opens it at Software update.
 
 The apps for Android and iOS (docs/app.md) open on a page of their own,
 `ui/connect.html`, or on the server marked **Open at start**,
-its cards at the page's full width, up to 1100 px:
-the servers the app keeps, sorted by the name shown,
-case and accents ignored and numbers by their value,
-each with what it found
-when it last looked (on the LAN, remote, not reachable, a changed certificate)
-and, as a green badge, the user the app is signed in as there,
-checked at each look, grey while the server answers at neither address
-(a look still running keeps what the last one found),
-a tap opening the server, the app asking for the fingerprint first where it
-keeps a login (docs/app.md, "Opening from the list"),
-a cancel opening the server's sign-in card,
+its cards at the page's full width, up to 1100 px: the servers the app keeps,
+sorted by the name shown, case and accents ignored and numbers by their value,
+each with what it found when it last looked (on the LAN, remote, not reachable,
+a changed certificate) and, as a green badge,
+the user the app is signed in as there, checked at each look,
+grey while the server answers at neither address (a look still running keeps
+what the last one found), a tap opening the server,
+the app asking for the fingerprint first where it keeps a login (docs/app.md,
+"Opening from the list"), a cancel opening the server's sign-in card,
 the sign-in icon, where a login is kept, that card without the prompt,
-⚙ or a long press its settings;
-the list's ☰ in the header at the logo's right, where a server's page has its ☰:
-the app's version first, Massimo's mark and the version with its copy icon,
-a tap copying it whole and closing ☰,
-then **Add server…**, **Sign out of all**,
-**Forget all stored credentials** where a login is kept,
-asked first, under the list,
+⚙ or a long press its settings; the list's ☰ in the header at the logo's right,
+where a server's page has its ☰: the app's version first,
+Massimo's mark and the version with its copy icon,
+a tap copying it whole and closing ☰, then **Add server…**, **Sign out of all**,
+**Forget all stored credentials** where a login is kept, asked first,
+under the list,
 which revokes each login's key at its server and signs out there,
 as **Turn off** does, its message naming the servers that keep a key,
-**App settings** and **Exit**, which ends the app as a swipe from the recent
-apps does, the sessions it held ended by their codes at the next start;
-the Servers card keeps ↻, and pulling the list down in the app does what it does;
+**App settings** and **Exit**,
+which ends the app as a swipe from the recent apps does,
+the sessions it held ended by their codes at the next start;
+the Servers card keeps ↻,
+and pulling the list down in the app does what it does;
 the card that adds a server, shown while the list is empty or from the ☰,
-with × and closed once a server is added:
-the servers on the network, searched for as it opens, and an address typed;
-and the fingerprint of a self-signed certificate, compared with the
-server's log or `massimo tls show` before it is trusted.
+with × and closed once a server is added: the servers on the network,
+searched for as it opens, and an address typed;
+and the fingerprint of a self-signed certificate,
+compared with the server's log or `massimo tls show` before it is trusted.
 A server's settings take the focus themselves, not a field,
 so that a phone's keyboard stays closed:
 a head with the server's name and ✕, and three sections switched by tabs,
 as the settings pages are, their names alone, Connection first.
-**Connection** holds the name and the addresses, **Open at start** (one server at most),
-notifications, and when the fingerprint is asked,
-Cancel and Save, off while nothing differs from what is kept,
+**Connection** holds the name and the addresses,
+**Open at start** (one server at most), notifications,
+and when the fingerprint is asked, Cancel and Save,
+off while nothing differs from what is kept,
 its tab marked with the disk of unsaved changes while something does,
 and under them, after a rule, **Remove server** on a line of its own,
-with a line saying what it does, which turns a kept login off first, or signs out first,
-its question and its message naming a key or a session left.
+with a line saying what it does, which turns a kept login off first,
+or signs out first, its question and its message naming a key or a session left.
 **Login**, each line acting at once, holds the session with **Sign out**,
 whose line says, while the server does not answer, that Sign out ends the
 session there the next time the app reaches the server,
@@ -3089,10 +3091,10 @@ in the order the page loads them:
 
 - `i18n.js`, the texts, `t()` and `tn()`, and `applyI18n` for the skeleton;
   the connect page loads it too;
-- `components.js`, the builders the connect page, `login.js`, `config.js`' kit and
-  `app.js`' help build with, and what the parts call of the page's
-  (the menus' placing, a copy, a bubble, a toast, a sign's blinking,
-  a result line);
+- `components.js`, the builders the connect page, `login.js`,
+  `config.js`' kit and `app.js`' help build with,
+  and what the parts call of the page's (the menus' placing, a copy, a bubble,
+  a toast, a sign's blinking, a result line);
 - `app.js`, the core: the state, the storage and the settings with their scopes,
   the API with the token and the 401,
   the helpers the plain scripts and the parts share (a temperature, help,
@@ -3182,22 +3184,24 @@ A state is a sign, a colour and a mark, so that it reads without its colour:
 nothing for a state that is fine, a triangle for a warning (amber),
 a cross for a failure (red).
 `Sign` of `shared/icon.tsx`, and `signEl` of `components.js` for a plain script,
-draw a kind of thing in a state (`signOf` of
-`components.js`: the radio and the window as the person chooses, `ICON_CHOICES`,
-the Wi-Fi fan or the tower, the opening sash with the mark inside its frame
-or the paned window with it at the bottom right, as the original MAX! software has it;
-`SIGNS`: the network of a Cube's link with it on top, the cog for the settings,
-the disk for a form's unsaved changes),
-the drawing and the mark two parts, so that the mark alone blinks;
-`Badge` leads a warning's or a failure's badge with its mark (`Mark`)
-and sets it in bold, while a badge that names a state, such as a mode, stays regular;
-`keepBlink` keeps a mark's blinking where it was across the drawings that make a new
-element of it.
-The icons draw in the token `warn-mark`, a brighter amber than the text's `warn`,
-at a contrast of 3 on a tile, the text at 4.5 (`TestUIDefaultSchemeMatchesCSS`);
-the filled amber, `fill-warn`, is the Manual mode's alone.
-The list of what is wrong in a place is the shared part `Problems`, wherever it is put,
-its entries one format at every level:
+draw a kind of thing in a state (`signOf` of `components.js`:
+the radio and the window as the person chooses, `ICON_CHOICES`,
+the Wi-Fi fan or the tower,
+the opening sash with the mark inside its frame or the paned window with it at
+the bottom right, as the original MAX! software has it; `SIGNS`:
+the network of a Cube's link with it on top, the cog for the settings,
+the disk for a form's unsaved changes), the drawing and the mark two parts,
+so that the mark alone blinks;
+`Badge` leads a warning's or a failure's badge with its mark (`Mark`) and sets it in bold,
+while a badge that names a state, such as a mode, stays regular;
+`keepBlink` keeps a mark's blinking where it was across the drawings that make a
+new element of it.
+The icons draw in the token `warn-mark`,
+a brighter amber than the text's `warn`, at a contrast of 3 on a tile,
+the text at 4.5 (`TestUIDefaultSchemeMatchesCSS`); the filled amber,
+`fill-warn`, is the Manual mode's alone.
+The list of what is wrong in a place is the shared part `Problems`,
+wherever it is put, its entries one format at every level:
 the icon in a column of its own, the name and a grey detail beside it,
 the badges under the name,
 and the entries under it (`subs`) indented to the name,
@@ -3218,8 +3222,8 @@ It is one element, made at the first bubble,
 on the page and the connect page alike,
 over the toast and everything else of the page, hidden from a screen reader;
 its text is said once in the page's polite live region beside it.
-A button that sends a request is busy from its click until the answer:
-off, with a turning ring after its text, and `aria-busy` (`BusyButton`, `useBusy`),
+A button that sends a request is busy from its click until the answer: off,
+with a turning ring after its text, and `aria-busy` (`BusyButton`, `useBusy`),
 so that a second click or Enter sends nothing.
 A request waits about 20 seconds for its answer (`apiRequest` of `app.js`,
 AP MobileApp, D82-A),

@@ -349,17 +349,16 @@ no `ticket` or `token` on the stream) is answered `401` and counts as none,
 since it guesses nothing: a page before its sign-in,
 or a scanner behind a proxy not in `-trusted-proxies`,
 does not lock the address out.
-Nor does a token the server issued and that has ended:
-a session revoked, logged out or past its end, a revoked key,
+Nor does a token the server issued and that has ended: a session revoked,
+logged out or past its end, a revoked key,
 a key past its end date or ended unused (`auth.key_idle_days`, Tokens),
 the old secret of a key given a new one (`POST …/tokens/{id}/rekey`, Tokens),
 a session whose key was revoked, is past its end or ended unused,
-or the token of a removed user
-is answered `401` with the words of a wrong token, and counts as none,
-since a guessed token never matches one that was issued:
+or the token of a removed user is answered `401` with the words of a wrong token,
+and counts as none, since a guessed token never matches one that was issued:
 a client that sends again a session that ended,
-as a page does after a link that stalled, does not lock its address out
-(`POST /api/v1/login/key`'s key included).
+as a page does after a link that stalled,
+does not lock its address out (`POST /api/v1/login/key`'s key included).
 A wrong Bearer token counts beside any token and is answered `401` as it is alone:
 the stream's `ticket` or `token` beside it is not read;
 a wrong ticket counts beside the Bearer token of a disabled user,
@@ -795,7 +794,8 @@ a wrong name and a wrong password are one code, as their `error` is one:
 | `idempotency_reused` | 422 | – | the `Idempotency-Key` was used for another request |
 | `command_unknown` | 404 | `command` | no command of that id the caller may read |
 
-**An API key's life and its new secret** (AP KeyLife; see "Tokens"):
+**An API key's life and its new secret**
+(AP KeyLife; see "Tokens"):
 
 | Code | Status | Params | Refused because |
 |------|--------|--------|-----------------|
@@ -902,8 +902,8 @@ with eight more waiting;
 a login beyond them is `503` with `Retry-After`, and so is a user add or a
 password change (`docs/store.md` section 6, "The lockout"),
 and one whose client went away while it waited for its turn.
-Any other request of the users' routes whose client went away before the
-store answered, a token's revoke the client gave up on among them,
+Any other request of the users' routes whose client went away before the store answered,
+a token's revoke the client gave up on among them,
 is audited as `failed` with "the client went away before the answer",
 a `503` no client reads, and never as a password check that waited.
 `409` on a server without users, where the first owner is created with
@@ -957,18 +957,17 @@ The server keeps it for every token it makes,
 and for a token made before the update from its first use after it;
 a token not used since its update has none, and its code matches nothing.
 The live token of the code is revoked, an API key's sessions with it,
-and its heirs, the keys it made and theirs, with their sessions
-(AP KeyLife, D5-A; "Tokens", below),
-as by `DELETE /api/v1/me/token`;
+and its heirs, the keys it made and theirs, with their sessions (AP KeyLife,
+D5-A; "Tokens", below), as by `DELETE /api/v1/me/token`;
 the settings file's token is left live, as no revoke ends it:
 its own code ends it no more than a revoke does,
 and the code of a key that made it passes over it and the keys it made.
 A token past its end, an API key past its end date (`expires_at`) among them,
-and an API key ended unused (`auth.key_idle_days`)
-are not revoked, and their codes revoke them all the same,
-their heirs with them (AP KeyLife, D6-A).
-The answer is `204` whether the code matched or not
-(a live token, one that ended, the settings file's, none),
+and an API key ended unused (`auth.key_idle_days`) are not revoked,
+and their codes revoke them all the same, their heirs with them (AP KeyLife,
+D6-A).
+The answer is `204` whether the code matched or not (a live token,
+one that ended, the settings file's, none),
 so that it tells nobody which codes are live.
 A body that is not that object, or a code that is not 64 lower-case hex digits,
 is `400` with `revoke_code_malformed`;
@@ -977,12 +976,12 @@ While the address is locked out it is `429` with `Retry-After`,
 but a code never counts toward the lockout, matched or not:
 one that matches nothing is a code taken already,
 a token that ended by itself, or one the server has not seen since its update.
-A match is audited as `token.revoke_code`, the token its target and its user
-its subject, with a line under Configuration and the log's Info line
-"token revoked" `by=code`, both naming the heirs it took (`heirs`, by id) where
-it took any, as a revoke's do;
-a code that matches nothing, the settings file's, a malformed body and a
-locked-out address write no row of their own:
+A match is audited as `token.revoke_code`,
+the token its target and its user its subject,
+with a line under Configuration and the log's Info line "token revoked" `by=code`,
+both naming the heirs it took (`heirs`, by id) where it took any,
+as a revoke's do; a code that matches nothing, the settings file's,
+a malformed body and a locked-out address write no row of their own:
 they are counted per address and minute as refused requests are,
 in rows of their own apart from the address's other refused requests,
 with no line.
@@ -1034,10 +1033,10 @@ The key's next session ends the earlier one,
 so a phone holds one live session per key,
 and revoking the key (`DELETE /api/v1/users/{name}/tokens/{id}`) ends the
 session at its next request, as the key's end does:
-a session counts only while its key is neither revoked nor past its end
-(AP KeyLife, Block 2).
-A key made with that session as the bearer is no heir of the key
-("Tokens", below).
+a session counts only while its key is neither revoked nor past its end (AP KeyLife,
+Block 2).
+A key made with that session as the bearer is no heir of the key ("Tokens",
+below).
 A password set by someone else ends the sessions and leaves the keys,
 as it does for every key.
 
@@ -1334,8 +1333,8 @@ the same rules of access as the user.
 a key not revoked, ended or not, and a session not revoked, not past its end,
 and, made from a key, only while the key lives;
 the key that is the settings file's `MASSIMO_API_TOKEN` carries `"from_settings": true`,
-found by the hash of the file's token, not by its label
-(AP MobileApp v1.4, D86-A);
+found by the hash of the file's token, not by its label (AP MobileApp v1.4,
+D86-A);
 a key made with another key as the bearer carries that key's id as `made_by`,
 absent for every other token.
 `POST` with `{"label": "Loxone"}` creates an API key and answers `201` with the key once;
@@ -1360,13 +1359,11 @@ a token of another user is `404`.
 The settings file's key is `409`, as `DELETE /api/v1/me/token` answers it:
 it is changed or removed in the settings file,
 since the next start would not add it back, its hash being taken.
-A session made from a key (`POST /api/v1/login/key`) carries the key's id
-as `key_id`; revoking the key revokes that session with it,
-and the key's end ends it.
+A session made from a key (`POST /api/v1/login/key`) carries the key's id as `key_id`;
+revoking the key revokes that session with it, and the key's end ends it.
 
-A key made by a `POST` whose bearer is an API key is that key's heir
-(AP KeyLife v1.0, Block 2, D5-A), whichever user it is made for:
-`made_by` names the key.
+A key made by a `POST` whose bearer is an API key is that key's heir (AP KeyLife v1.0,
+Block 2, D5-A), whichever user it is made for: `made_by` names the key.
 A key made by a session is no heir,
 a session of a sign-in or one made from a key by `POST /api/v1/login/key`,
 nor is one made by `massimo user token`, by the settings file's bootstrap
@@ -1380,8 +1377,9 @@ a revoke by the key's code (`POST /api/v1/tokens/revoke`), a user's removal,
 and the bootstrap's revoke of a key that is no longer the settings file's.
 The answers of the two `DELETE`s name them in `heirs`, by id, `[]` for none,
 and so do their log lines and their change lines (in the `subject`);
-a revoke by code, whose answer is `204`, names them in its log line and its
-change line, and a removal's and the bootstrap's log lines say them too.
+a revoke by code, whose answer is `204`,
+names them in its log line and its change line,
+and a removal's and the bootstrap's log lines say them too.
 The settings file's key is never an heir, nor are the keys it made:
 the revoke of the key that made it and its maker's user's removal pass over it,
 as its own revoke is `409`.
@@ -1392,11 +1390,10 @@ or any token with `DELETE /api/v1/me/token`,
 which needs neither the name nor the id;
 a session ends itself with `POST /api/v1/logout`.
 
-An API key unused for the days of the setting `auth.key_idle_days`
-(GET and PUT /api/v1/settings; off by default) ends
-(AP KeyLife v1.0, Block 3), and its session with it:
-the idle clock is the key's last use, a use of its session included,
-or its making where it was never used,
+An API key unused for the days of the setting `auth.key_idle_days` (GET and PUT
+/api/v1/settings; off by default) ends (AP KeyLife v1.0, Block 3),
+and its session with it: the idle clock is the key's last use,
+a use of its session included, or its making where it was never used,
 so a phone that signs in by fingerprint and uses its session keeps its key.
 An ended key and its session are refused as ended tokens,
 which do not count toward the lockout (Authentication);
@@ -1408,22 +1405,22 @@ its use never brings it back, since it is refused before its use is written,
 nor writes the hash of its revoke code (`POST /api/v1/tokens/revoke`).
 An end is no revoke: a revoke still reaches an ended key,
 by its id or by its code, its heirs with it.
-The list shows each key's life:
-`idle_exempt`, true for a key kept from the limit and always for the settings
-file's key, which the limit passes over (D3-A);
-`idle_ends_at`, when it ends unused, absent where the limit is off or the key is
-kept from it;
+The list shows each key's life: `idle_exempt`,
+true for a key kept from the limit and always for the settings file's key,
+which the limit passes over (D3-A); `idle_ends_at`, when it ends unused,
+absent where the limit is off or the key is kept from it;
 and for a key that has ended `ended`, `idle`, or `expired` past its end date,
 listed to be revoked.
 `PUT …/tokens/{id}` with `{"idle_exempt": true}` keeps a key from the limit,
-`false` holds it to it again,
-for who manages the key's user alone (`users`, or `guests` for a guest it reaches,
-within the rank rule: D7-A), the key's own user not, unless it manages itself;
+`false` holds it to it again, for who manages the key's user alone (`users`,
+or `guests` for a guest it reaches, within the rank rule: D7-A),
+the key's own user not, unless it manages itself;
 it answers the key as the list shows it, and is audited as `token.update`,
 its change line from and to.
 A body without `idle_exempt` or `expires_at`, or with another field, is `400`,
-a session `400`, an integration's key kept from the limit `400`
-(it is always held to it, and its integration registers again once it ended),
+a session `400`,
+an integration's key kept from the limit `400` (it is always held to it,
+and its integration registers again once it ended),
 the settings file's key `409`, a token of another user `404`,
 and the bearer that very key `403`: a key changes nothing of its own life,
 and a session made from it is not the key.
@@ -2157,8 +2154,8 @@ for a failed login, and for `massimo user` on the box, whose `remote` is `cli`),
 and `result` how it went: `ok` for a 2xx, `refused` for a `401`, `403` or `429`,
 `failed` otherwise.
 `detail` keeps the method, the path, the status, the milliseconds,
-the body's size and, when it is JSON of at most 4 KB,
-the body with `password`, `current_password`, `token` and `code` replaced by `…`,
+the body's size and, when it is JSON of at most 4 KB, the body with `password`,
+`current_password`, `token` and `code` replaced by `…`,
 and the error of a failed answer.
 A request refused for a known user (a capability it lacks,
 a disabled user or role) is a row with who was refused, without its body.
@@ -2708,11 +2705,11 @@ the days the others are kept (365), 0 for ever and at most 3650,
 and `backups.keep_newest`,
 how many of a Cube's newest backups are kept whatever their age (10, 0 to 1000);
 a change of the last three prunes at once.
-`auth.key_idle_days`, 0 by default for off, 0 to 3650, is how many days an API key
-may stay unused before it ends, its session with it,
-counted from its last use, its session's included, or its making
-(Tokens, above; AP KeyLife, Block 3, D2-A);
-it applies at once, so a key unused for longer ends at its next check,
+`auth.key_idle_days`, 0 by default for off, 0 to 3650,
+is how many days an API key may stay unused before it ends, its session with it,
+counted from its last use, its session's included, or its making (Tokens, above;
+AP KeyLife, Block 3, D2-A); it applies at once,
+so a key unused for longer ends at its next check,
 and a key kept from it and the settings file's key never end by it.
 `auth.password_login`, true by default, says whether `POST /api/v1/login`
 takes a password, and applies at once:
@@ -4470,9 +4467,9 @@ link error they did not have); for resets,
 the device list read about two seconds after them:
 `still_flagged` names the devices whose flag it still shows.
 A step the Cube discarded or that failed stops the run there:
-`502` (`409` when superseded) with `error` naming the step and the same
-`steps`, so that a client sees how far it got;
-its `code` is `repair_stopped`, the refusal that stopped it its `reason`.
+`502` (`409` when superseded) with `error` naming the step and the same `steps`,
+so that a client sees how far it got; its `code` is `repair_stopped`,
+the refusal that stopped it its `reason`.
 Room repairs and placements run under the Cube's structure lock,
 as moves and removals do.
 A room is its members by their C lines, the Cube's own idea of it.

@@ -1080,16 +1080,16 @@ A binary for 24 to 26 writes its tokens without the column,
 which this binary fills at a token's next use.
 Its down part, `0100_token_revoke.down.sql`, drops the column and the index;
 it loses the tokens' revoke codes, and only that.
-`0101_token_maker.sql`, the second of `main`'s block, after 0100
-(AP KeyLife v1.0, Block 2, D5-A), adds `tokens.made_by` and its index,
-additively, keeping `min_reader` 24:
-the API key that made a key, where the bearer of its making was that key
-(section 6, "Keys made by keys").
+`0101_token_maker.sql`, the second of `main`'s block,
+after 0100 (AP KeyLife v1.0, Block 2, D5-A),
+adds `tokens.made_by` and its index, additively, keeping `min_reader` 24:
+the API key that made a key,
+where the bearer of its making was that key (section 6, "Keys made by keys").
 A binary for 24 to 100 writes its tokens without the column,
-so a key it makes has no maker,
-and its revoke of a key, by its id or by its code, leaves the keys that
-key made, which a revoke by this binary of the key's own maker still
-reaches, the makers being followed through a revoked key.
+so a key it makes has no maker, and its revoke of a key,
+by its id or by its code, leaves the keys that key made,
+which a revoke by this binary of the key's own maker still reaches,
+the makers being followed through a revoked key.
 It keeps `min_reader` by the rules below:
 it adds a nullable column and an index, and changes the meaning of no column.
 What such a binary does not do, revoke the heirs and refuse a session whose key
@@ -1106,11 +1106,11 @@ The column has no foreign key, so that its down part,
 `0101_token_maker.down.sql`, can drop it and the index,
 taking the file back to 100;
 it loses which key made a key, and only that.
-`0102_token_idle.sql`, the third of `main`'s block, after 0101
-(AP KeyLife v1.0, Block 3, D7-A), adds
-`tokens.idle_exempt`, a column defaulted to 0, additively, keeping `min_reader` 24:
-an API key kept from the idle limit of the setting `auth.key_idle_days`
-(section 6, "The life of a key").
+`0102_token_idle.sql`, the third of `main`'s block, after 0101 (AP KeyLife v1.0,
+Block 3, D7-A), adds `tokens.idle_exempt`, a column defaulted to 0, additively,
+keeping `min_reader` 24:
+an API key kept from the idle limit of the setting `auth.key_idle_days` (section 6,
+"The life of a key").
 A binary for 24 to 101 writes its tokens without the column,
 so a key it makes is held to the limit,
 and knows no idle limit at all, so it lets in a key this binary ends unused.
@@ -1133,10 +1133,11 @@ columns of 0001 that every binary reads as this one does,
 and moves `revoke_hash` (0100) with them,
 so a binary for 24 to 102 lets the new secret in
 and refuses the old one as a revoked token, and `min_reader` stays 24.
-On a store of 500 000 log rows (149 MB, a tenth with a user) a desktop took
-2.0 s for the raise, its copy `massimo.db.before-24` included, and 2.2 s for the
-down part, its copy included (`TestRaiseTimes` with
-`MASSIMO_STORE_RAISE_ROWS`; not measured on a Raspberry Pi yet).
+On a store of 500 000 log rows (149 MB,
+a tenth with a user) a desktop took 2.0 s for the raise,
+its copy `massimo.db.before-24` included, and 2.2 s for the down part,
+its copy included (`TestRaiseTimes` with `MASSIMO_STORE_RAISE_ROWS`;
+not measured on a Raspberry Pi yet).
 
 Rules:
 
@@ -1613,19 +1614,20 @@ a key past its end staying listed, to be revoked,
 `PushSubscriptions` sends to a session's devices under it,
 and `AddKeySession` and `AddKeySessionAs` make a session from a key under it alone,
 the latter also only while the key holds the secret it was let in with.
-A password set by someone else ends the sessions, those made from keys
-among them, and leaves the keys.
+A password set by someone else ends the sessions,
+those made from keys among them, and leaves the keys.
 
 ### Keys made by keys
 
 Any key of a user makes keys, for its user and for those its user manages,
-so a key that leaked could make more keys, which its revoke would leave
-(AP KeyLife v1.0, Block 2, D5-A).
+so a key that leaked could make more keys,
+which its revoke would leave (AP KeyLife v1.0, Block 2, D5-A).
 A key made by `POST /api/v1/users/{name}/tokens` whose bearer is an API key
 names that key in `tokens.made_by` (migration 0101), its heir;
-a key made by a session, of a sign-in or made from a key by
-`POST /api/v1/login/key`, by `massimo user token`, by the bootstrap
-or at an integration's collection of its key names none.
+a key made by a session,
+of a sign-in or made from a key by `POST /api/v1/login/key`,
+by `massimo user token`,
+by the bootstrap or at an integration's collection of its key names none.
 A key the bootstrap takes in as the settings file's has no maker either:
 the bootstrap clears `made_by` of the file's key it finds,
 before it revokes the file's old key, which may have made it.
@@ -1637,18 +1639,18 @@ so that no live key names a revoked maker that no later revoke reaches;
 nor does one let in with a secret the maker no longer holds (`KeyOptions.Maker`,
 its hash checked in the same statement; Block 5).
 `RevokeToken` revokes, in its transaction, the heirs of the token it revokes,
-and so does `RevokeByCode`, a revoke by the token's code
-("A token's revoke code", below), in its own,
+and so does `RevokeByCode`,
+a revoke by the token's code ("A token's revoke code", below), in its own,
 followed through `made_by` from key to key in any state,
 so that a key past its end, or one an older binary revoked alone,
 passes the revoke on to the keys it made,
 with their sessions and what those subscribed to push,
 and returns the heirs it revoked, by id;
 `DeleteUser` revokes the heirs of the user's tokens with them,
-and the bootstrap's revoke of a key that is no longer the settings file's
-takes them too (D8-A), its log line saying how many;
-a key of the file's label that a revoke before it in the same bootstrap took
-is passed over, and the file's new token is added all the same.
+and the bootstrap's revoke of a key that is no longer the settings file's takes
+them too (D8-A), its log line saying how many;
+a key of the file's label that a revoke before it in the same bootstrap took is
+passed over, and the file's new token is added all the same.
 The settings file's key is never an heir:
 the store keeps in memory the hash `Bootstrap` last applied,
 at the start and at each reading of the file,
@@ -1664,11 +1666,11 @@ an heir lives past its maker's end, and only a revoke reaches it.
 A client that forgot a token without its server answering ends it by its
 revoke code at the next contact (`POST /api/v1/tokens/revoke`,
 docs/api-v1.md; the apps, docs/app.md).
-The code is `RevokeCode(secret)`, the hex of SHA-256 of `massimo revoke v1`
-followed by the token as the server gave it,
-and the store keeps `HashToken` of the code in `tokens.revoke_hash`
-(migration 0100), not the hash it keeps of the token:
-with that, the store and every backup of it could revoke every token,
+The code is `RevokeCode(secret)`,
+the hex of SHA-256 of `massimo revoke v1` followed by the token as the server gave it,
+and the store keeps `HashToken` of the code in `tokens.revoke_hash` (migration 0100),
+not the hash it keeps of the token: with that,
+the store and every backup of it could revoke every token,
 while no code can be had back from its hash.
 The store writes the column where it makes the secret (`addToken`,
 `AddKey`, `AddKeySession`); a token whose hash it is handed (`AddTokenHash`)
@@ -1678,24 +1680,24 @@ the server works it out from the secret presented and `TouchToken` writes it,
 within the hour of the last use too, keeping one written;
 the settings file's key is passed over there.
 `RevokeByCode` revokes the token of a code as `RevokeToken` does,
-in one transaction with its sessions, its heirs, the keys a key made and
-theirs with their sessions ("Keys made by keys", above),
+in one transaction with its sessions, its heirs,
+the keys a key made and theirs with their sessions ("Keys made by keys", above),
 and what they all subscribed to push, a token past its end included,
-and returns the heirs it revoked;
-a token revoked already, an unknown code and the settings file's key
-match nothing, the store knowing that key by the hash `Bootstrap` last
-applied, as the heirs of a revoke do, so that a key made by
-`POST …/tokens` and then named in the file keeps its code but is not
-ended by it while the file names it;
-the code is looked up by a plain read first, so that one that matches
-nothing takes no write transaction, and a match is read again inside it.
+and returns the heirs it revoked; a token revoked already,
+an unknown code and the settings file's key match nothing,
+the store knowing that key by the hash `Bootstrap` last applied,
+as the heirs of a revoke do,
+so that a key made by `POST …/tokens` and then named in the file keeps its code
+but is not ended by it while the file names it;
+the code is looked up by a plain read first,
+so that one that matches nothing takes no write transaction,
+and a match is read again inside it.
 
 ### The life of a key
 
-An API key unused for the days of the setting `auth.key_idle_days` ends
-(AP KeyLife v1.0, Block 3; AP MobileApp, D75):
-whole days, 0 or unset for off, the default (D2-A), at most 3650,
-read at each check, so that a change applies at once.
+An API key unused for the days of the setting `auth.key_idle_days` ends (AP KeyLife v1.0,
+Block 3; AP MobileApp, D75): whole days, 0 or unset for off, the default (D2-A),
+at most 3650, read at each check, so that a change applies at once.
 The idle clock is the key's last use, or its making where it was never used:
 `coalesce(last_used_at, created_at)` at or before the time of the check less
 the limit has ended.
@@ -1721,13 +1723,13 @@ An end is a state read at each check, and nothing is written (D6-A):
 an ended key stays listed, to be revoked, with why it ended,
 and lives again, its session with it while the session's own 30 days last,
 where the limit is raised or turned off, or the key kept from it.
-Its use never brings it back, since the rule refuses it before its use is written,
+Its use never brings it back,
+since the rule refuses it before its use is written,
 and writes no hash of its revoke code either ("A token's revoke code", above):
 a key made before 0100 that ended unused before its first use since keeps none,
 and its code matches nothing.
-`Tokens` gives each key its life by the same rule in Go
-(`IdleEndsAt`, `EndsAt`, the earlier of its end date and its idle end,
-and `Ended`, `idle` or `expired`),
+`Tokens` gives each key its life by the same rule in Go (`IdleEndsAt`, `EndsAt`,
+the earlier of its end date and its idle end, and `Ended`, `idle` or `expired`),
 which `TestKeyEndRule` holds to the SQL on one table of cases;
 `SetTokenLife` changes a key's exclusion.
 
@@ -1778,8 +1780,9 @@ the hash is unique, and a revoked row keeps its hash,
 so a client still sending the old secret is a token that ended (`TokenEnded`),
 not a guess that counts toward the lockout (MobileApp.D64-A);
 a hash replaced alone would make it one.
-The old secret's revoke code, none for a key made before 0100, moves onto
-that row, after the key's row took the new one, the column being unique:
+The old secret's revoke code, none for a key made before 0100,
+moves onto that row, after the key's row took the new one,
+the column being unique:
 the old secret's code then matches a revoked row alone and ends nothing,
 as a code taken already does, and the key lives on.
 The key's session (a key has one at a time, `AddKeySession`) is revoked

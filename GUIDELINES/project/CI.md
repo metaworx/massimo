@@ -1,4 +1,4 @@
-# Massimo — CI Conventions (v1.77.1)
+# Massimo — CI Conventions (v1.77.2)
 
 What CI does in this project, for whoever has to change it.
 `/AGENTS.md` names this file as the canonical owner of CI conventions,
@@ -519,16 +519,13 @@ Windows service 20, 3.4; Vet and test 30, 7.6,
 its `go test` with Go's ten minutes a package; macOS LaunchDaemon 30, 8.1;
 Race 40, 9.6, and Test (armv6, QEMU) 40, 10.3, both above their `-timeout 30m`;
 the UI test jobs a case's 30 and the screenshot set's 15,
-estimated from the two-case jobs' 15.4 before AP TestSpeed's Block 5
-until they have runs of their own;
-the UI soak's jobs 90, three times a case's 30,
-for each test three times,
-until they have runs of their own;
+estimated from the two-case jobs' 15.4 before AP TestSpeed's Block 5 until they
+have runs of their own; the UI soak's jobs 90, three times a case's 30,
+for each test three times, until they have runs of their own;
 the Android app keeps its 45, 7.0, and Code result its 70,
-which waits up to an hour for a run still going;
-the Android emulator 45, about three times the 15 or so it is estimated
-to take, until it has runs of its own,
-its suite's step 32 of them (below).
+which waits up to an hour for a run still going; the Android emulator 45,
+about three times the 15 or so it is estimated to take,
+until it has runs of its own, its suite's step 32 of them (below).
 
 The armhf package ships the armv6 binary, which `make cross-check` only builds:
 Test (armv6, QEMU) runs every package's tests on it,
@@ -634,17 +631,15 @@ Each job's summary lists the tests that failed in at least one repeat,
 each with its case, how many of its runs failed,
 each failed run's worker and what the retry did with it, on which worker,
 and the first failure's message,
-and the line that runs the case again in the same order
-(`tools/ui-test/soak_summary.py`,
-from the first pass's JUnit report, `UI_TEST_JUNIT`,
-and the retry's beside it, `ui-soak-junit.retry.xml`);
+and the line that runs the case again in the same order (`tools/ui-test/soak_summary.py`,
+from the first pass's JUnit report, `UI_TEST_JUNIT`, and the retry's beside it,
+`ui-soak-junit.retry.xml`);
 a test that fails on one worker alone met what an earlier file left on its server,
-and a retry that passed may only have landed on another
-(AP SteadyTests, Block 11);
-a job is red where a test failed once,
-whatever its run once more with the trace did,
-whose screenshots, videos, traces and the servers' logs it uploads
-as `ui-soak-results-<case>`, kept two weeks.
+and a retry that passed may only have landed on another (AP SteadyTests,
+Block 11); a job is red where a test failed once,
+whatever its run once more with the trace did, whose screenshots, videos,
+traces and the servers' logs it uploads as `ui-soak-results-<case>`,
+kept two weeks.
 It gates nothing (AP SteadyTests):
 no other workflow waits for it, no check requires it,
 the Tested record and All tests passed do not read it,

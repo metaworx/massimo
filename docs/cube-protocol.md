@@ -628,16 +628,15 @@ a restore whose room differs, and the add of a device whose C line names a room;
   a device refuses a 0x23 of another room and is flagged with it.
 - **The device is woken itself** (`z:1e,D,<rf>`, after the room's wakeup),
   since a room's wakeup reaches only the devices whose C line names the room:
-  before the unlink half where its C line names another room than the one it
-  leaves, or none, and before the link half always,
+  before the unlink half where its C line names another room than the one it leaves,
+  or none, and before the link half always,
   the device not being in the new room's group yet.
 
 So a move of a device whose C line names room A, the room it is listed in,
 into an empty room B sends `z:1e,G,<A>`, an `r:` for each flagged member of A,
-0x23 A and the 0x21s of A's partners;
-then `z:1e,G,<B>`, `z:1e,D,<rf>` and 0x22 B, no partner to link in B;
-then `m:` and `c:<rf>`, and the copy of the room's settings unless
-`"copy": false`.
+0x23 A and the 0x21s of A's partners; then `z:1e,G,<B>`,
+`z:1e,D,<rf>` and 0x22 B, no partner to link in B; then `m:` and `c:<rf>`,
+and the copy of the room's settings unless `"copy": false`.
 Whether a device's wakeup right after its room's keeps the room's wakeup for
 the other members is *unverified*.
 
@@ -842,8 +841,8 @@ with the devices in it, instead.
 The device types of the three are shutter contacts;
 their serials start with IEQ.
 
-Set group and remove group on the test Cube
-(2026-11-26, firmware 1.1.3, through the proxy of the owner's service,
+Set group and remove group on the test Cube (2026-11-26, firmware 1.1.3,
+through the proxy of the owner's service,
 a radiator thermostat alone in its room, its C line read after each step):
 
 - **0x23 naming the room the C line names**, after that room's wakeup,
@@ -1285,10 +1284,9 @@ kept here because they cost time to learn.
     then the 0x22 for the new room, were accepted,
     but the device failed the 0x23 (flagged 10 s later,
     byte 4 0x23) and its C line kept the old room;
-    Massimo's check of the C lines against the room list warned of it at
-    the next C lines, 6 minutes later.
-    One slot was still held 12 minutes after the move and was free 3½
-    minutes after that.
+    Massimo's check of the C lines against the room list warned of it at the next C lines,
+    6 minutes later.
+    One slot was still held 12 minutes after the move and was free 3½ minutes after that.
     The test Cube showed the same pattern on 2026-11-26 (the next entry):
     a device refuses a 0x23 of a room its C line does not name,
     and a 0x22 after the new room's wakeup does not reach a device that is
@@ -1323,18 +1321,18 @@ kept here because they cost time to learn.
     20 °C, with the link error set; 30 s later its link error was clear
     and its setpoint its room's, 4.5 °C, from its wall thermostat partner,
     with nothing sent by the Cube.
-- Set group, remove group and wakeups on the test Cube
-  (2026-11-26 and 27, firmware 1.1.3, one radiator thermostat alone in its room;
+- Set group, remove group and wakeups on the test Cube (2026-11-26 and 27,
+  firmware 1.1.3, one radiator thermostat alone in its room;
   through the proxy of the owner's service on 2026-11-26,
   later straight to the Cube with the service stopped;
   each probe a 0x22 that set the room the C line named already,
   which changes nothing):
   - **A room's wakeup reaches only the devices whose C line names the room.**
     After a 0x23 had left the thermostat in no group,
-    the original software's move of it into a new room
-    (`z:1e,G,<old room>`, 0x23 of the old room, `m:` without it,
-    `z:1e,G,<new room>`, 0x22 of the new room, `c:`, `z:1e,G,<new room>`, 0x11)
-    was accepted line by line but for the 0x11, which the Cube discarded;
+    the original software's move of it into a new room (`z:1e,G,<old room>`,
+    0x23 of the old room, `m:` without it, `z:1e,G,<new room>`,
+    0x22 of the new room, `c:`, `z:1e,G,<new room>`,
+    0x11) was accepted line by line but for the 0x11, which the Cube discarded;
     the thermostat took neither the 0x23 nor the 0x22 and was flagged with 0x23,
     its C line in no room, the Cube's room and device list without it,
     while the original software showed it in the new room.
@@ -1345,11 +1343,13 @@ kept here because they cost time to learn.
     as Massimo addresses a room, at 17 % of the duty cycle in one radiogram;
     whether a member the address does not name takes it was not tested.
   - **A wakeup keeps a device awake about a minute, whatever its value.**
-    On one standing LAN connection (2026-11-27, the readings from `r:` answers
-    every 2 s), radiograms 10 to 60 s after `z:1e,G,<room>` were cheap
-    (0 to 1 point of the duty cycle, the slot back in 2 to 5 s)
-    and the one at 70 s was not (4 → 12 %, the slot not back within 8 s);
-    after `z:05,G,<room>` the same, cheap up to 60 s and 16 → 24 % at 70 s.
+    On one standing LAN connection (2026-11-27,
+    the readings from `r:` answers every 2 s),
+    radiograms 10 to 60 s after `z:1e,G,<room>` were cheap (0 to 1 point of the
+    duty cycle,
+    the slot back in 2 to 5 s) and the one at 70 s was not (4 → 12 %,
+    the slot not back within 8 s); after `z:05,G,<room>` the same,
+    cheap up to 60 s and 16 → 24 % at 70 s.
     Through the service's proxy on 2026-11-26 the window ended between
     45 and 60 s in one run,
     and in another a radiogram at 70 s was cheap and one at 4 minutes not.
@@ -1366,8 +1366,8 @@ kept here because they cost time to learn.
   - **What the radio costs:**
     a wakeup about 3 points of the duty cycle,
     a radiogram to a sleeping device 8 to 11;
-    one radiogram stayed pending 56 s and cost 59 points
-    (through the proxy, an `r:` every 2 s), why is not known.
+    one radiogram stayed pending 56 s and cost 59 points (through the proxy,
+    an `r:` every 2 s), why is not known.
     Two `r:` lines while a radiogram was pending added nothing
     (9 points against 11 without): `r:` does not make the Cube send it again.
   - **The duty cycle is the air time of the last hour**:

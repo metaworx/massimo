@@ -34,7 +34,7 @@ refer to linked documents for extended guidance.
   6. Commit Policy (STRICT)
   7. Additional References
   8. Document Governance
-- Massimo — Project Contract (v1.25.0)
+- Massimo — Project Contract (v1.25.1)
   1. Project Facts
   2. Primary References
   3. Project-Specific Conventions
@@ -431,7 +431,7 @@ Their values come from `GUIDELINES/config.ini`.
 ---
 
 
-# Massimo — Project Contract (v1.25.0)
+# Massimo — Project Contract (v1.25.1)
 
 What binds work in this project, for everyone working on it.
 Inlined into `/AGENTS.md` for agents and into `GUIDELINES/README.md` for people,

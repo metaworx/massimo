@@ -57,7 +57,7 @@ Editing a generated file is wasted work — change the fragment and re-run
 ---
 
 
-# Massimo — Project Contract (v1.25.0)
+# Massimo — Project Contract (v1.25.1)
 
 What binds work in this project, for everyone working on it.
 Inlined into `/AGENTS.md` for agents and into `GUIDELINES/README.md` for people,

@@ -992,9 +992,10 @@ budget two minutes after a write, and the H line says the greeting's own.
 
 The fake carries out the radio commands it acknowledges, as the devices do:
 a setpoint or mode (to every thermostat of the room for a room command),
-a boost, which ends by itself after the device's boost time (`-boost-for` to
-shorten it), a day's programme, the preset temperatures, the valve settings,
-the key lock, a wall thermostat's display and the device's group:
+a boost,
+which ends by itself after the device's boost time (`-boost-for` to shorten it),
+a day's programme, the preset temperatures, the valve settings, the key lock,
+a wall thermostat's display and the device's group:
 set group (0x22) names its room in the device's C line,
 and remove group (0x23) clears it where it names the room the C line names,
 while a device refuses one naming another room and is flagged with it,
