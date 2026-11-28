@@ -419,12 +419,18 @@ class Bridge(
 
     // save keeps a server; its session moves where its new choice of when
     // the fingerprint is asked keeps it, and a node that changed forgets
-    // its login, which opens for nothing else.
+    // its login, which opens for nothing else; a removed server's codes of
+    // its node are taken back into its entry (AP MobileApp, D117-A), so
+    // that the answer shows them waiting.
     private fun save(input: JSONObject, answer: Answer) {
         background(answer) {
             val id = ServerStore.str(input, "id")
             val old = if (id.isEmpty()) null else servers.get(id)
-            val s = servers.save(input)
+            val saved = servers.save(input)
+            if (saved.node.isNotEmpty()) {
+                runCatching { codes.adopt(saved) }.onFailure { e -> log.warn("save: the removed server's revoke codes were not taken back: ${e.javaClass.simpleName}") }
+            }
+            val s = servers.get(saved.id) ?: saved
             if (old != null && logins.get(s.id) != null && old.node != s.node) forgetLogin(s.id)
             if (old != null) keeper.move(s.id, sessions.inMemory(s))
             main.post { host.privacy() }

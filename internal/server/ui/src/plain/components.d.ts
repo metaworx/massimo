@@ -37,8 +37,8 @@ declare global {
   function menuArrows(details: HTMLDetailsElement, selector: string): void;
   /** Puts text on the clipboard; whether it did. */
   function copyText(text: string): Promise<boolean>;
-  /** Says in a bubble above el, and to a screen reader, that something was copied, or that it could not be. */
-  function copied(el: HTMLElement, ok: boolean): void;
+  /** Says in a bubble above el, or with el null at the window's foot, and to a screen reader, that something was copied, or that it could not be. */
+  function copied(el: HTMLElement | null, ok: boolean): void;
   /**
    * Shows text for a moment (ms, 1.4 s by default) in a bubble above ctrl, or below it where the window
    * has no room above, or at the window's bottom centre without one; said once to a screen reader.

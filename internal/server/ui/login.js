@@ -670,7 +670,11 @@ function notSentSaid() {
 // for this device only, so that the next to sign in neither sees them
 // nor hands them to its own account, as loadPreferences would hand over
 // what a server lacks (forgetSession). Neither request asks for a
-// sign-in.
+// sign-in. In the app (appConnect) the app's list shows once the session
+// is ended and forgotten, in place of this server's sign-in card (AP
+// MobileApp, Block 20), the bridge told first that the page holds no
+// token; where the app does not take the page there, the card shows, as
+// in a browser.
 async function logout() {
   // a settings form with changes not saved: the page's dialog lists them and asks first (ui/src/leaving/)
   if (!(await MassimoParts.leaving.signOut())) return;
@@ -687,8 +691,13 @@ async function logout() {
       // the session may be gone already
     }
   }
-  setToken(null);
+  const told = setToken(null);
   await forgetSession(synced);
+  const back = appConnect();
+  if (back) {
+    await told; // the app holds no session of the page's before its list shows
+    if (await back().then(() => true, () => false)) return;
+  }
   await loadMeAndPreferences();
   startPolling();
   refresh().then((fresh) => fresh && connectEvents());

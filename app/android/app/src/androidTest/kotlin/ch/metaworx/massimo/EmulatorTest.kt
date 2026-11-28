@@ -190,7 +190,7 @@ abstract class EmulatorTest {
         signedIn(t)
     }
 
-    /** toList goes back to the list from a server's page, by ☰'s Select server…. */
+    /** toList goes back to the list from a server's page, by ☰'s Select server. */
     protected fun toList() {
         page.click("#menu-servers")
         list()

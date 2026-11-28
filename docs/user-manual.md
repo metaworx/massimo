@@ -28,7 +28,8 @@ and the sign-in icon beside it opens its sign-in form straight away.
 
 **☰**, at the top right, beside Massimo's logo, holds:
 
-- the app's version: touch it to copy it.
+- the app's version: touch it, or its copy icon, to copy it;
+  the menu closes, and "Copied" shows at the foot of the screen.
 - **Add server…**, which shows the card to add one:
   the servers the app finds on your network, and a field for an address.
   The card closes once a server is added, or with **×**.
@@ -45,8 +46,8 @@ and the sign-in icon beside it opens its sign-in form straight away.
 
 Opening a server's settings does not open the keyboard;
 touch a field to change it.
-On a server's page, **☰** → **This server's settings…** opens them too,
-on the list, and **App settings…** the app's own.
+On a server's page, **☰** → **This server's settings** opens them too,
+on the list, and **App settings** the app's own.
 They have three tabs, **Connection** first; ✕ at the top closes them.
 
 **Connection**:
@@ -56,7 +57,7 @@ They have three tabs, **Connection** first; ✕ at the top closes them.
   the app opens this server when it starts, in place of the list.
   One server at most has it,
   and the first server you add has it until you choose another.
-  **Select server…** in its ☰, or **Cancel** on its sign-in form,
+  **Select server** in its ☰, or **Cancel** on its sign-in form,
   takes you back to the list.
   When the server does not answer, the app shows the list;
 - when the app asks for your fingerprint (below);
@@ -242,8 +243,19 @@ Do the same if you lose the phone.
 
 ### Moving between servers
 
-**Select server…**, last in the sign-in form's ☰,
-at the end of the Cube choice in the header, and in the ☰ just before Sign out,
+**Select server**, last in the sign-in form's ☰,
+at the end of the Cube choice in the header, and in the ☰ after
+**App settings** and **This server's settings**, just before Sign out,
 and **Cancel**, left of the sign-in form's **Sign in**,
 take you back to the app's list of servers.
 You stay signed in where you were; the list shows where.
+**Sign out** on a server's page signs you out there and takes you back to the list too.
+
+The sign-in form names the server above its title: its name, its address,
+and ⓘ, which shows the server's instance id and its certificate's fingerprint;
+touch either, or its copy icon, to copy it.
+On a server without users, the form that creates its owner gives the command
+that does it on the server's box, `massimo user add`, on a line of its own:
+touch it, or its copy icon, to copy it.
+A new password is typed twice; one eye shows and hides both,
+and the second field turns red, with a line under it, while the two differ.

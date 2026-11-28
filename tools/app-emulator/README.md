@@ -300,12 +300,28 @@ In the suite's own run `EnrollTest` passes at once.
 | `TapTest.aServerAskedAtEachReturnAsksAtEveryTap` | a server asked at each return, opened twice from the list, asks twice | 15 |
 | `TapTest.thePageIsCoveredAfterHomeUntilTheFingerprint` | the cover after Home, taken away by the prompt | 15 |
 | `TapTest.backFromTheListLeavesTheAppAndTheServersPageShowsItsCard` | the list forgets the pages before it, Back from it leaves the app, and the server's page reached again without a tap shows its card | 15 |
-| `TapTest.theCardNamesItsServerAndTheMenuOpensItsSettingsAndTheApps` | the card's server line and its ⓘ, ☰'s This server's settings… and App settings… | 15 |
+| `TapTest.theCardNamesItsServerAndTheMenuOpensItsSettingsAndTheApps` | the card's server line and its ⓘ, ☰'s This server's settings and App settings | 15 |
+| `TapTest.signOutOnAServersPageShowsTheList` | Sign out on a server's page ends the session at the server (`GET /api/v1/me` refused) and shows the list, the app holding no session there | 20 |
 | `ForgetAllTest.forgetAllAsksOnceForTwoServers` | Forget all over two servers without a session, one prompt, each key revoking itself (both audits) | 17 |
 | `SessionsTest.turnOffWithASessionRevokesTheKeyWithItAndSignsItOut` | Turn off with a session: no prompt, the key revoked with the session, which is signed out after (the audit) | 16 |
 | `SessionsTest.turnOffWithoutASessionRevokesTheKeyWithItselfAfterThePrompt` | Turn off without a session: the prompt, the key revoking itself (the audit) | 16 |
 | `SessionsTest.removeSignsTheSessionOutFirst` | Remove of a server without a kept login signs its session out, which the server then refuses | 16 |
-| `ConnectPageTest` (two tests) | the connect page and the bridge at contract version 5, a server's call refused | 3 |
+| `ListTest.exitLeavesTheRecentAppsAndItsSessionIsEndedAtTheNextStart` | Exit from the list's ☰ ends the app's task with nothing sent, and the session it dropped is ended by its code at the next start (the audit) | 19 |
+| `ListTest.backClosesTheMenuThenTheSettingsThenLeavesTheApp` | Back closes ☰, then a server's settings, and leaves the app from the bare list | 19 |
+| `ListTest.storeLoginKeepsTheLoginWithOnePrompt` | Store login keeps the login of the session held with one prompt, its key made at the server | 19 |
+| `ListTest.thePullDownChecksEveryServer` | the list pulled down checks every server again | 19 |
+| `ListTest.aPageThatFailsToLoadReturnsToTheList` | a server's page that fails to load gives way to the list, which says the server does not answer | 19 |
+| `ListTest.aCertificateThatChangedKeepsItsDialogAndSaysNothingOfAnAnswer` | a certificate that changed keeps its dialog, and the list says nothing of a server that does not answer | 19 |
+| `HeldTest.theNightModeKeepsTheSessionHeld` | the phone's night mode, which makes the activity anew, keeps the session held in memory | 21 |
+| `HeldTest.aSessionTheServerEndedIsNotLoggedOut` | a session the server ended itself, replaced by its key's next one or revoked with its key, is not logged out: no refused logout in the audit | 21 |
+| `CodesTest.aSessionTheProcessForgotIsEndedByItsCode` | a session the process forgot is ended by its revoke code at the next start (the audit's `token.revoke_code`) | 21 |
+| `CodesTest.turnOffWhileTheServerIsDownLeavesCodesTheNextContactTakes` | Turn off while the server does not answer leaves the key and the session, which the next contact ends by their codes | 21 |
+| `CodesTest.signOutWhileTheServerIsDownIsEndedByItsCode` | Sign out while the server does not answer leaves the session, which the next contact ends by its code | 21 |
+| `CodesTest.removeWhileTheServerIsDownEndsItsSessionWhereItIsFoundAgain` | Remove while the server does not answer keeps the session's code in `gone.json`, posted where the server is found again at its node | 21 |
+| `CodesTest.aKeyLeftWithoutItsCodeIsRevokedAtTheSignInAndSaidSo` | a key left from a login kept before version 6, without a code, is revoked at the next sign-in, and My profile's toast says so | 21 |
+| `CodesTest.aKeyLeftWithItsCodeIsTakenAtTheProbeAndNoToastShows` | a key left with its code is taken at the probe, and no toast shows | 21 |
+| `CodesTest.aServerAddedAgainWithItsNodeTakesItsCodesBack` | Remove while the server does not answer, then the server added again with its node: `save`'s answer shows the session left waiting, `gone.json` holds it no more, and the next contact ends it by its code (D117-A) | 20 |
+| `ConnectPageTest` (two tests) | the connect page and the bridge at contract version 7, a server's call refused | 3, 19 |
 | `EnrollTest.aFingerIsEnrolled` | the finger enrolled through Settings, run alone before the others | 18 |
 
 A step on the list or a server's page is a script in the WebView (`Page`),

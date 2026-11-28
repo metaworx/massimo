@@ -347,7 +347,10 @@ async function copyText(text) {
 }
 
 // copied says that something was copied, or that it could not be: in a
-// bubble above the control (showBubble).
+// bubble above the control el (showBubble), or with el null at the
+// window's foot, where the copy closes the menu that holds the control
+// (a ☰'s version row; AP MobileApp, D115-D), whose bubble would go with
+// it.
 function copied(el, ok) {
   showBubble(t(ok ? "copy.done" : "copy.failed"), el);
 }
@@ -472,9 +475,10 @@ function bubbleScrolled() {
 
 // copyable makes an element copy what get() returns on a click, and on
 // Enter or Space: a button to the keyboard and a screen reader, named by
-// label, its tooltip saying so. Wired once; label may change later
-// (copyLabel).
-function copyable(el, get, label) {
+// label, its tooltip saying so; with foot the bubble says it at the
+// window's foot, not above the element (copied). Wired once; label may
+// change later (copyLabel).
+function copyable(el, get, label, { foot = false } = {}) {
   el.classList.add("copyable");
   if (!/^(BUTTON|A)$/.test(el.tagName)) {
     el.setAttribute("role", "button");
@@ -485,7 +489,7 @@ function copyable(el, get, label) {
     ev.preventDefault();
     ev.stopPropagation();
     const text = get();
-    if (text) copied(el, await copyText(text));
+    if (text) copied(foot ? null : el, await copyText(text));
   };
   el.addEventListener("click", run);
   el.addEventListener("keydown", (ev) => {
@@ -502,13 +506,13 @@ function copyLabel(el, label) {
 }
 
 // copyIcon is a small button with the copy icon that copies what get()
-// returns; label names what it copies.
-function copyIcon(get, label) {
+// returns; label names what it copies; opts as copyable's.
+function copyIcon(get, label, opts) {
   const b = document.createElement("button");
   b.type = "button";
   b.className = "copy-icon";
   b.appendChild(iconEl("icon-copy", "ni"));
-  return copyable(b, get, label);
+  return copyable(b, get, label, opts);
 }
 
 // copyEl is a text that copies itself, as a mono span, and with icon a

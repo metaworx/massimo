@@ -7,6 +7,7 @@ import androidx.test.ext.junit.runners.AndroidJUnit4
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
+import org.junit.Assert.fail
 import org.junit.Test
 import org.junit.runner.RunWith
 
@@ -16,8 +17,8 @@ import org.junit.runner.RunWith
  * cancel opening the page at its card; a server asked at each return asks
  * at every tap, covers its page while the app is hidden, and is not
  * reached again past its prompt by Back from the list, which leaves the
- * app; the card names its server, and ☰ has This server's settings… and
- * App settings….
+ * app; the card names its server, and ☰ has This server's settings and
+ * App settings; Sign out on a server's page shows the list (Block 20).
  */
 @RunWith(AndroidJUnit4::class)
 class TapTest : EmulatorTest() {
@@ -85,6 +86,22 @@ class TapTest : EmulatorTest() {
         // the activity moved back with the list, or finished, which leaves the app too
         val url = runCatching { page.url() }.getOrNull()
         assertTrue("Back from the list went to $url", url == null || url.startsWith(Origins.CONNECT_URL))
+    }
+
+    @Test
+    fun signOutOnAServersPageShowsTheList() {
+        // AP MobileApp, Block 20: the session ended and forgotten, the app's list in place of the server's sign-in card
+        val t = Rig.a
+        val h = Host(t)
+        val id = add(t, A)
+        tap(id)
+        signIn(t, A, keep = false)
+        val token = page.run("return await massimo.token();", "the page's session") as? String ?: return fail("the page holds no session")
+        page.click("#menu-logout")
+        list()
+        ready(id)
+        assertEquals("the session not ended at the server", 401, h.status(token))
+        assertTrue("the app still holds a session there: ${server(id)}", server(id).isNull("session"))
     }
 
     @Test
