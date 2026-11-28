@@ -1,4 +1,4 @@
-# Testing the web UI (v1.45.0)
+# Testing the web UI (v1.45.1)
 
 The kit of the web UI's tests comes first:
 what a test does about the page's own reads and its stream,
@@ -23,40 +23,41 @@ and on the CI runs of that day, unless a section says otherwise.
 
 ## 1. The page's own reads and its stream
 
-The page takes its data anew at every read:
-its poll (every 10 s by default, `startPolling` in `app.js`)
-reads the Cubes, the server's health and the log's alerts,
-and events and actions start reads of their own
-(`loadCubes()`, `loadRooms()`, `refresh()`).
+The page takes its data anew at every read: its poll (every 10 s by default,
+`startPolling` in `app.js`) reads the Cubes,
+the server's health and the log's alerts,
+and events and actions start reads of their own (`loadCubes()`, `loadRooms()`,
+`refresh()`).
 Data a test put into the page alone is gone at the next one,
 and a line of the server's comes into the log among the test's.
-The suite's helpers for it are in `tools/ui-test/helpers.py`
-(AP TestInfrastructure, Block 7):
+The suite's helpers for it are in `tools/ui-test/helpers.py` (AP TestInfrastructure,
+Block 7):
 
 - **The page's reads answered** (`Reads`, the fixture `reads`):
   what a test tells it is in the server's answer from then on,
   every GET of the path answered with the server's JSON as the test changes it,
   until the test clears it or its page closes;
   other methods go on to the test's other routes or the server.
-  `reads.cube(serial, **fields)` puts fields into a Cube's entry of
-  `GET /api/v1/cubes`, in place of those told before;
-  `reads.found(cube)` lists a found Cube, once per serial;
-  `reads.change(pattern, fn)` changes any read; `reads.clear(pattern)` ends it.
+  `reads.cube(serial, **fields)` puts fields into a Cube's entry of `GET /api/v1/cubes`,
+  in place of those told before; `reads.found(cube)` lists a found Cube,
+  once per serial; `reads.change(pattern, fn)` changes any read;
+  `reads.clear(pattern)` ends it.
   The test then shows it by a read of the page's own (`loadCubes()`),
   and the page's poll keeps it.
-  An event a test gives the page whose data a server's read would hold
-  is told to `reads` as well, so that the page's next read keeps it:
+  An event a test gives the page whose data a server's read would hold is told
+  to `reads` as well, so that the page's next read keeps it:
   a device that joined by `pairingJoined` is in the pairing's read from then on
-  (`test_pairing_updates.py`, `joined`), where a read after the event took it back:
-  with a pairing read right after the event, the device told to the page alone
-  was gone in three runs of three, and told to `reads` too stayed in three.
-  A test does not set `state.cubes`, `state.found` or `state.version` in the page:
-  the next poll takes them back,
+  (`test_pairing_updates.py`, `joined`),
+  where a read after the event took it back:
+  with a pairing read right after the event,
+  the device told to the page alone was gone in three runs of three,
+  and told to `reads` too stayed in three.
+  A test does not set `state.cubes`,
+  `state.found` or `state.version` in the page: the next poll takes them back,
   and a version other than the server's makes the page reload.
-  A test that holds the poll and writes a field of a Cube
-  writes `state.cubes` whole, as the page's loads do,
-  never the field in place, which the page may not draw again
-  (`test_header.py`'s `SET_READ`).
+  A test that holds the poll and writes a field of a Cube writes `state.cubes` whole,
+  as the page's loads do, never the field in place,
+  which the page may not draw again (`test_header.py`'s `SET_READ`).
 - **The poll held** (`with held_poll(page):`):
   a test that measures what the page does by itself,
   a count of its drawings or times that stand still,
@@ -72,18 +73,20 @@ The suite's helpers for it are in `tools/ui-test/helpers.py`
   so the hold fails at its end where the timer is no longer the one it cleared.
   What a poll itself draws the test counts for one poll of its own (`poll(false)`),
   once every request it started has been answered (`answered`).
-- **A timed state held** (`with held_timers(page, *kinds):`, AP SteadyTests, Block 13):
+- **A timed state held** (`with held_timers(page, *kinds):`, AP SteadyTests,
+  Block 13):
   a test that checks a state the page takes back on a timer of its own,
   or that must come before a timer of the page's, holds it while it checks,
-  rather than fitting its steps into the timer, which a slow runner
-  or the retry's trace outlasts:
+  rather than fitting its steps into the timer,
+  which a slow runner or the retry's trace outlasts:
   "Copied" on a copy control (`copied`, 1400 ms, `copied()` of `components.js`),
-  which a copy, the page shown again and its reads did not fit in
-  (`test_maint_updates.py`);
+  which a copy,
+  the page shown again and its reads did not fit in (`test_maint_updates.py`);
   the toast (`toast`, 8 to 30 s), checked after an axe run,
-  or taken back by its ×, Show or a probe, which its own time would take back too
-  (`test_notifications.py`, `test_discover.py`, `test_connect.py`);
-  the settings' push (`push`, a second after a change or a dismissed sign-in,
+  or taken back by its ×, Show or a probe,
+  which its own time would take back too (`test_notifications.py`,
+  `test_discover.py`, `test_connect.py`); the settings' push (`push`,
+  a second after a change or a dismissed sign-in,
   `schedulePreferences` of `login.js`),
   which a test's later read must come before (`test_sign_in_resend.py`).
   The page sets its timer as always and an observer clears it at once,
@@ -92,7 +95,8 @@ The suite's helpers for it are in `tools/ui-test/helpers.py`
   at the end what was held goes at once, as its timer would have by then.
   A look right after the wait that saw a state, within its time, holds nothing,
   nor a check of the fade itself.
-  The hold is within one document: a block whose page was loaded anew fails at its end.
+  The hold is within one document:
+  a block whose page was loaded anew fails at its end.
 - **Whether the server holds the user's settings**
   (`server_holds_settings(holds, token=None, **values)` of `conftest.py`,
   AP SteadyTests v1.1, D14-A):
@@ -125,12 +129,13 @@ The suite's helpers for it are in `tools/ui-test/helpers.py`
   of its selectors, lets the data come, waits two frames and a task,
   and asks which selectors no longer find the element it marked
   (`test_pairing_updates.py`, `test_repair_updates.py`).
-- **One moment for several boxes** (`boxes(page, *targets)`, AP SteadyTests, Block 13):
+- **One moment for several boxes** (`boxes(page, *targets)`, AP SteadyTests,
+  Block 13):
   a check that compares where elements are reads their boxes at one moment,
   in one `page.evaluate`, not with a `bounding_box()` each:
   the page may draw between two calls,
-  as the server's poll drew a device's values above the pairing form
-  between the form's two reads, and the limit, read second,
+  as the server's poll drew a device's values above the pairing form between the
+  form's two reads, and the limit, read second,
   came out 78 px below the box it sits above (`test_pairing.py`).
   Each target, a selector or a `Locator`, is found as `bounding_box()` finds it,
   one element, waited for, and its box is the one `bounding_box()` gives,
@@ -176,13 +181,12 @@ The suite's helpers for it are in `tools/ui-test/helpers.py`
   by `updateDevice` or a dispatched `state` event:
   it lasts until the rooms are loaded again.
   The poll does not load them while the stream is open,
-  but the events that start a load do (`connected`, `metadata`, `unconfirmed` and others),
-  among them those the server sends by itself.
-- **What a test tells of a device or a room**
-  (`reads.device(rf, **fields)`, `reads.room(rid, **fields)`, AP ToldData, D2-A):
-  a device's fields, those of its `state` among them,
-  or a room entry's, its presets, its `thermostat`
-  and its virtual wall thermostat's `sources`,
+  but the events that start a load do (`connected`, `metadata`,
+  `unconfirmed` and others), among them those the server sends by itself.
+- **What a test tells of a device or a room** (`reads.device(rf, **fields)`,
+  `reads.room(rid, **fields)`, AP ToldData, D2-A): a device's fields,
+  those of its `state` among them, or a room entry's, its presets,
+  its `thermostat` and its virtual wall thermostat's `sources`,
   are in the rooms' read (`ROOMS`) from then on,
   each in place of its value told before, and a `None` takes a field out.
   `reads.device(rf, like=…)` tells of a device the server does not list,
@@ -235,28 +239,29 @@ The suite's helpers for it are in `tools/ui-test/helpers.py`
   and the part's drawing after it, before the test acts inside the fold;
   a click that toggles nothing fails within seconds (`FOLD_TOGGLE`),
   not at the test's end.
-- **A copy checked** (`grant_clipboard`, `copies`, `icon_after_last_line` of `helpers.py`,
-  AP KeyLife, Block 1):
+- **A copy checked** (`grant_clipboard`, `copies`,
+  `icon_after_last_line` of `helpers.py`, AP KeyLife, Block 1):
   `grant_clipboard` lets the page's origin read and write the clipboard,
   and empties it;
   `copies(page, sel, value, name)` checks a shared `Copy` with its icon,
   `sel` its text and the icon the button right after it:
-  a button to the keyboard,
-  it and its icon named `name`, which does not tell `value`,
-  and a click on it, Enter and Space on it and a click on its icon,
-  each copying `value`, the clipboard emptied before each;
+  a button to the keyboard, it and its icon named `name`,
+  which does not tell `value`, and a click on it,
+  Enter and Space on it and a click on its icon, each copying `value`,
+  the clipboard emptied before each;
   `icon_after_last_line` says whether its icon follows the text's last line,
   the lines measured by a range over the text,
-  which gives them where a flex item made the text a block, too
-  (`test_users.py`, `test_settings.py`).
+  which gives them where a flex item made the text a block,
+  too (`test_users.py`, `test_settings.py`).
 - **The stream watched** (`Stream`, the fixture `stream`):
   every page of the page fixture has `PAGE_KIT` before its own scripts,
   which records each event the page's listeners take,
 the server's and the test's, in order,
   with how many times the page handed it to the log (`MassimoParts.log.event`).
   `stream.mark()` says "from now on";
-  `stream.wait(what, kind, match=…, mark=…, server=…)` returns the first match from the mark
-  and skips the rest, and on a timeout says what did come since the mark.
+  `stream.wait(what, kind, match=…, mark=…, server=…)` returns the first match
+  from the mark and skips the rest,
+  and on a timeout says what did come since the mark.
   A mark holds within one document.
 - **A log of the test's own lines** (`isolate_log(page, reads)`):
   the lines of the events the server sends are kept out of the log
@@ -274,9 +279,11 @@ the server's and the test's, in order,
   on Playwright's error in a handler the request is aborted:
   where the page closed with it on its way or it was answered already,
   the abort fails too and nothing more happens;
-  where the page still waited for it, as when the server did not answer `route.fetch()`,
+  where the page still waited for it,
+  as when the server did not answer `route.fetch()`,
   the abort goes to the guard, which fails the test.
-  Anything else the handler raises goes to the guard as well, and the request is aborted.
+  Anything else the handler raises goes to the guard as well,
+  and the request is aborted.
   The guard's problems are printed as they come,
   and a test that fails first carries them in its report.
 - **Waits and cleanups:**
@@ -317,72 +324,77 @@ the server's and the test's, in order,
   What a reload brings is waited for too,
   not looked at once when the page is shown:
   the page's start goes on after it (`test_header.py`).
-- **The page's reads all answered** (`answered(page, held=…)`, AP SteadyTests, Block 4):
-  the one wait for a page that has read all it reads now,
-  before a test counts what an action read ("one read", "nothing read")
-  or checks what the answers drew:
-  every read of the page's own, to the API and to `/healthz`, has its answer,
-  but those of the routes the test holds (`held`, a list it may add to meanwhile),
+- **The page's reads all answered** (`answered(page, held=…)`, AP SteadyTests,
+  Block 4): the one wait for a page that has read all it reads now,
+  before a test counts what an action read ("one read",
+  "nothing read") or checks what the answers drew: every read of the page's own,
+  to the API and to `/healthz`, has its answer,
+  but those of the routes the test holds (`held`,
+  a list it may add to meanwhile),
   and for 200 ms none has started or ended and the page's height stood still.
   A read the page starts only after another has answered,
-  the next of a burst (`shared/burst.ts`), the next of the page's start
-  (`app.js`, `init`) or a load an answer sets off,
+  the next of a burst (`shared/burst.ts`),
+  the next of the page's start (`app.js`, `init`) or a load an answer sets off,
   comes within those 200 ms and is waited for in turn.
   The waits before it did not follow one:
   a request of the test's own that overtakes the page's
   (`test_maint_updates.py`'s `fetch('healthz')`) returns before the next read starts,
-  and `ApiReads.answered`, which looked at the reads in flight at the start and the end
-  of its quiet time, let a read start and end inside it;
+  and `ApiReads.answered`,
+  which looked at the reads in flight at the start and the end of its quiet time,
+  let a read start and end inside it;
   of four reads chained 150 ms after each other's answer,
-  they returned after none and after one, the new wait after all four
-  (three runs each, 1100-en, 2026-11-26).
+  they returned after none and after one,
+  the new wait after all four (three runs each, 1100-en, 2026-11-26).
   It reads the `ApiReads` the page fixture and `owner_page` make before the page's start
   (`api_reads`), measures its quiet time from the test,
   so that a page under a paused clock is waited for too,
   and fails naming the reads still open;
   the 200 ms are not scaled, its ceiling is.
   `ApiReads.answered` is the same wait, for a test that makes its own.
-- **The request itself** (`wait_held`, `sent_requests`, AP SteadyTests, Block 13):
-  a check of what a request carried, or that a write was not sent again,
-  waits for the request, not for what the page draws before it sends it,
-  nor for a fixed pause:
+- **The request itself** (`wait_held`, `sent_requests`, AP SteadyTests,
+  Block 13): a check of what a request carried,
+  or that a write was not sent again, waits for the request,
+  not for what the page draws before it sends it, nor for a fixed pause:
   the automatic update's window comes up before its setting's PUT (`test_update.py`),
-  and the page pushes its settings a second after a sign-in
-  where the server held none of the user's or a push waited for the sign-in,
-  after the stream is open, the moment a test of a sign-in ends at otherwise
-  (`test_sign_in_resend.py`);
+  and the page pushes its settings a second after a sign-in where the server
+  held none of the user's or a push waited for the sign-in,
+  after the stream is open,
+  the moment a test of a sign-in ends at otherwise (`test_sign_in_resend.py`);
   a request a test stubs reaches its stub before the test goes on and its route goes,
   or it reaches the server (`test_admin_updates.py`'s restores).
   `wait_held(page, sent, n=…)` waits until the list holds n requests:
   one a route of the test's fills as it answers (`hold`, a stub's own list),
   or `sent_requests(page, method, pattern)`,
-  the page's requests as it sends them, for one that no route of the test's notes.
+  the page's requests as it sends them,
+  for one that no route of the test's notes.
   A list a route fills is read after the wait, not after Playwright's
   `request` event of it, which comes before the route runs.
-- **The answer taken** (`taken(page, predicate)`, AP SteadyTests v1.1, Block 13):
-  a check of what an answer drew, or that it drew nothing,
+- **The answer taken** (`taken(page, predicate)`, AP SteadyTests v1.1,
+  Block 13): a check of what an answer drew, or that it drew nothing,
   and a step the answer must come before,
   wait until the page has read the answer's body, not for the answer alone:
   Playwright's `expect_response` returns once the answer's head has come,
   and `.finished()` once its body has, on Playwright's side;
-  the page reads the body later and goes on with it in that turn
-  (`app.js`, `apiRequest`), its parts drawing what it brings.
+  the page reads the body later and goes on with it in that turn (`app.js`,
+  `apiRequest`), its parts drawing what it brings.
   So a test's next step overtook it:
-  `test_pairing_updates.py` told the page a device that joined
-  right after the answer of a pairing read,
-  the page then took that answer, which listed the devices without it,
-  and the device was gone before Playwright looked
-  (1100-de on CI, 2026-11-28; it passed in the retry).
-  With the page reading that answer's body 150 ms after its head
-  and the test looking 300 ms after the join,
-  the old wait failed three runs of three and `taken` passed three (1100-de, 2026-11-28).
+  `test_pairing_updates.py` told the page a device that joined right after the
+  answer of a pairing read, the page then took that answer,
+  which listed the devices without it,
+  and the device was gone before Playwright looked (1100-de on CI, 2026-11-28;
+  it passed in the retry).
+  With the page reading that answer's body 150 ms after its head and the test
+  looking 300 ms after the join,
+  the old wait failed three runs of three and `taken` passed three (1100-de,
+  2026-11-28).
   `taken` is `expect_response` for a block, with its answer as `.value`,
   and at the block's end a wait until the page has read that answer's body:
-  `TAKEN_KIT`, run at the block's start, wraps `Response`'s body methods
-  in the document, each noting its answer's URL once the body is read,
+  `TAKEN_KIT`, run at the block's start,
+  wraps `Response`'s body methods in the document,
+  each noting its answer's URL once the body is read,
   before the page's code that awaited it goes on in the same turn,
-  so that what the answer draws is drawn by the test's next call
-  (a part's effect after it by `frames`).
+  so that what the answer draws is drawn by the test's next call (a part's
+  effect after it by `frames`).
   An answer of the same URL whose body the page reads after the block began counts too.
   It holds within one document.
   Every test that waited for an answer as the page having it takes it,
@@ -390,8 +402,8 @@ the server's and the test's, in order,
   `test_admin_updates.py`, `test_integrations.py`, `test_log_updates.py`,
   `test_login.py`, `test_maint_updates.py`, `test_pairing_updates.py`,
   `test_personal_updates.py`, `test_sign_out_late.py` and `test_system_info.py`.
-  A test that waits for what the answer drew (`wait_until`, a locator's `wait_for`)
-  or for the page's reads (`answered`) needs none,
+  A test that waits for what the answer drew (`wait_until`,
+  a locator's `wait_for`) or for the page's reads (`answered`) needs none,
   nor one that reads the answer itself (`.value.json()`).
 - **Nothing came, against an end:**
   a check that an action brought nothing has an end of its own,
@@ -424,10 +436,10 @@ the server's and the test's, in order,
   `wait_for_timeout.txt`, `page_route.txt` and `kit_names.txt`.
   A count may fall and may not rise.
   Above its listed one, none listed being 0, the test fails,
-  naming what to use instead and this section;
-  below it, the test fails too, asking for the line to be lowered to the new count
-  in the same commit, so that the count cannot rise back to it,
-  and taken out at 0; a line of a file that is gone is taken out.
+  naming what to use instead and this section; below it, the test fails too,
+  asking for the line to be lowered to the new count in the same commit,
+  so that the count cannot rise back to it, and taken out at 0;
+  a line of a file that is gone is taken out.
   So a list holds what the files had when the guard came,
   120 fixed pauses in 34 files, 177 plain routes in 45 and no copy (2026-11-26),
   and falls as files move onto the kit.
@@ -444,24 +456,24 @@ the server's and the test's, in order,
 - **The page's state written** (`state_writes.txt`, AP SteadyTests, Block 6):
   the same test counts per test file the writes of the page's state in its page scripts,
   against a list of its own that falls as the others do:
-  a field of `app.js`'s `state` assigned
-  (`state.x = …`, `state.x.y += …`, `state.x[k] = …`),
-  incremented or decremented, deleted, changed in place by an array's method
-  (`state.x.push(…)`), or the state or a field of it as `Object.assign`'s target.
-  A read (`state.x === …`) is none, nor a field of another object's state
-  (`themeState`, `MassimoParts.log.state`), nor a Python dict named `state`.
-  Data put into the page alone lasts until its next read or event
-  (above, "The page's reads answered"):
+  a field of `app.js`'s `state` assigned (`state.x = …`, `state.x.y += …`,
+  `state.x[k] = …`), incremented or decremented, deleted,
+  changed in place by an array's method (`state.x.push(…)`),
+  or the state or a field of it as `Object.assign`'s target.
+  A read (`state.x === …`) is none,
+  nor a field of another object's state (`themeState`,
+  `MassimoParts.log.state`), nor a Python dict named `state`.
+  Data put into the page alone lasts until its next read or event (above,
+  "The page's reads answered"):
   a test tells the page's reads what it wants shown,
   through `Reads` (`reads.cube`, `reads.device`, `reads.room`, `reads.change`),
   or the fake Cube, and its failure says so and points here.
   The list held 39 writes in 13 files when it came (2026-11-26),
   20 of them expert mode turned on or off for the page alone (`state.settings.expert`).
-- **The server sets** run without the server's poll of the fake Cube
-  (`serve -poll 0`, AP SteadyTests, Block 5, D4-A):
+- **The server sets** run without the server's poll of the fake Cube (`serve -poll 0`,
+  AP SteadyTests, Block 5, D4-A):
   the server sends its fake Cube no line of its own between a test's steps,
-  and learns what the fake holds only where it connects or a test asks
-  (below).
+  and learns what the fake holds only where it connects or a test asks (below).
   With the poll, every 10 s, the device list and the events it brought
   fell into whichever test ran then.
   So the poll's interval in Maintenance is read-only in a UI run,
@@ -491,7 +503,8 @@ the server's and the test's, in order,
   whatever `backups.auto_min` and `backups.auto_max` say (`internal/server/backups.go`),
   so `run.sh` takes one by hand as soon as each set is up.
   With it the Cube is clean,
-  and an automatic backup waits for a change of its configuration and then `backups.auto_min`, 60 minutes;
+  and an automatic backup waits for a change of its configuration and then
+  `backups.auto_min`, 60 minutes;
   a test that deletes the newest backup leaves the one taken at the start,
   so the Cube does not count as one without a backup.
   This is quiet, not off: no setting or flag of `serve` turns them off.
@@ -512,14 +525,13 @@ the server's and the test's, in order,
   most of it the server's wait of a second before it connects again.
   So no earlier file's write, pairing or room list reaches a file,
   whichever worker runs it after whichever file.
-  Before the reset, and after a file's last test, no write is on its way
-  (`writes_shown`):
-  where the server still waits for a device to show a write
-  (a device's or a room's `confirmation`),
-  the fixture reads the Cube again (`POST …/refresh`),
+  Before the reset, and after a file's last test,
+  no write is on its way (`writes_shown`):
+  where the server still waits for a device to show a write (a device's or a
+  room's `confirmation`), the fixture reads the Cube again (`POST …/refresh`),
   whose greeting shows what the fake applied at once,
-  and waits until none is left, for 20 s, scaled;
-  one still on its way fails, naming the device or the room and the write's fields.
+  and waits until none is left, for 20 s, scaled; one still on its way fails,
+  naming the device or the room and the write's fields.
   Without the poll a setpoint is shown only at a connect,
   and a reset that came first would take it back:
   the server would count it as not confirmed five minutes later
@@ -530,28 +542,29 @@ the server's and the test's, in order,
   Within a file the tests share the fake Cube, the four cases among them:
   a test that changes the fake still puts it back.
   What the server keeps in its store, users, settings, backups,
-  the reset does not touch:
-  a file leaves them as it found them, which a check after its last test holds (below).
+  the reset does not touch: a file leaves them as it found them,
+  which a check after its last test holds (below).
 - **A test that needs a read asks for it:**
   where a test needs the server to read what the fake Cube now holds,
   a write the fake applied, it asks:
   `POST …/cubes/<serial>/refresh` reconnects and reads the whole greeting,
   the device list among it, and answers once the server has it;
   the page then learns of it by the events of the reconnect.
-  No test waited for the server's poll when the suite first ran without it
-  (2026-11-26, 1100-en): the five that failed chose the poll's interval,
+  No test waited for the server's poll when the suite first ran without it (2026-11-26,
+  1100-en): the five that failed chose the poll's interval,
   which `-poll` makes read-only, and choose the refresh's now.
-- **The warnings seen** (`clear_preferences`, `conftest.py`, AP SteadyTests, Block 11):
+- **The warnings seen** (`clear_preferences`, `conftest.py`, AP SteadyTests,
+  Block 11):
   before every page of the page fixture the token's user's preferences go,
-  its settings of the page, its schemes, its notification rules and its marks of the log,
+  its settings of the page, its schemes,
+  its notification rules and its marks of the log,
   so that a test starts from the defaults as a fresh browser does,
   and then every warning of the log the server holds is marked seen
   (`PUT /api/v1/me/preferences/log.seen`, `all` the newest alert's id).
-  A warning stays until a later event settles it or a person marks it
-  (`docs/api-v1.md`, `GET /api/v1/log/alerts`):
-  a `login_failed` until a sign-in of the same name,
-  which the ten tests that refuse a sign-in on purpose never make
-  (`test_login.py`, `test_oidc.py`, `test_opaque.py`; 1100-en, 2026-11-27).
+  A warning stays until a later event settles it or a person marks it (`docs/api-v1.md`,
+  `GET /api/v1/log/alerts`): a `login_failed` until a sign-in of the same name,
+  which the ten tests that refuse a sign-in on purpose never make (`test_login.py`,
+  `test_oidc.py`, `test_opaque.py`; 1100-en, 2026-11-27).
   Unseen, it put the amber mark on ☰ for every later page of the worker,
   whose few pixels widened the header,
   and the tests of ☰'s marks and of the header's folding failed on it
@@ -560,23 +573,24 @@ the server's and the test's, in order,
   A warning a test makes once its page has loaded is newer, and shows;
   a test that reads the log's alerts answers them itself (`alerts_route`),
   with ids above the server's.
-- **An id of the test's own** (`own_id(what)` of `helpers.py`, AP SteadyTests, Block 11):
-  32 hex digits, new at each call, `what` hex-encoded first
-  (at most 8 bytes, for a reader of the server's log), then random ones,
+- **An id of the test's own** (`own_id(what)` of `helpers.py`, AP SteadyTests,
+  Block 11): 32 hex digits, new at each call,
+  `what` hex-encoded first (at most 8 bytes, for a reader of the server's log),
+  then random ones,
   for what a test makes on the shared server that no API removes,
   so that its next run, a repeat on the same server among them,
   makes its own and meets nothing the last run left.
   An integration is only disabled at its end (`DELETE …/integrations/{uuid}`),
   its users, links and maximum kept,
   and a request from the same installation joins it:
-  `test_register_and_link` took its installation id and its user's id there
-  from the case alone, so its next repeat on the server
-  found the integration of the one before, disabled,
-  and waited in vain for a new one's panel
-  (8 of the 33 failures of the soak's first run, 2026-11-26).
+  `test_register_and_link` took its installation id and its user's id there from
+  the case alone,
+  so its next repeat on the server found the integration of the one before,
+  disabled,
+  and waited in vain for a new one's panel (8 of the 33 failures of the soak's first run,
+  2026-11-26).
   Every test that registers an integration takes its installation id from `own_id`,
-  and the ids of its users there
-  (`test_integrations.py`, `test_users.py`,
+  and the ids of its users there (`test_integrations.py`, `test_users.py`,
   `test_admin_updates.py`'s `made_integrations`),
   and `test_notifications.py`'s push endpoint, which it removes, is one too.
   A name the test removes at its end, a user's or a provider's,
@@ -585,8 +599,8 @@ the server's and the test's, in order,
   in its memory, so a run of the three tests that make one,
   each case three times on one server, meets its 429 (2026-11-27);
   the soak's, a case a job, makes nine at most.
-- **A test's sessions ended** (`ended_sessions`, `conftest.py`, AP SteadyTests, Block 11):
-  a sign-in makes a session on the server,
+- **A test's sessions ended** (`ended_sessions`, `conftest.py`, AP SteadyTests,
+  Block 11): a sign-in makes a session on the server,
   in a context of the test's own (`new_context`, `owner_page`) or in its page,
   and a context that closes without a sign-out leaves it there,
   for whichever test the worker runs next.
@@ -624,9 +638,10 @@ the server's and the test's, in order,
   and a file where they differ fails at its last test's tear-down,
   naming each: added, removed, or changed, with what it was and is.
   A test undoes what it made, in its `finally`, with `undo` and `cleanup`,
-  and the kit what several do alike:
-  `ended_sessions` the sessions, `clear_preferences` the token's user's preferences.
-  What no API takes back is not counted, each in `LEFT_FOR_GOOD` with its reason:
+  and the kit what several do alike: `ended_sessions` the sessions,
+  `clear_preferences` the token's user's preferences.
+  What no API takes back is not counted,
+  each in `LEFT_FOR_GOOD` with its reason:
   - the log's lines;
   - the log's warnings, which `clear_preferences` marks seen before every page (above);
   - an integration registered, disabled at its end,
@@ -635,7 +650,8 @@ the server's and the test's, in order,
   - a Cube a search found, which stays found while it answers a search,
     as the fake Cube does at every one:
     a test that needs none found tells its page's reads (`configured_only`);
-  - the token's user's preferences, which the page fixture removes before every page.
+  - the token's user's preferences,
+    which the page fixture removes before every page.
   The sweep that made the list ran the whole suite once,
   1100-en shuffled by the soak's seed 45895569993,
   with a probe of the same reads before and after every test (2026-11-27):
