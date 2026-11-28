@@ -11,6 +11,7 @@ import (
 	"io"
 	"log/slog"
 	"net/http"
+	"net/http/httptest"
 	"slices"
 	"strconv"
 	"strings"
@@ -153,7 +154,7 @@ func TestUsersRoutes(t *testing.T) {
 	if code, _ := callAPI(t, ts, "GET", users+"/owner", annaKey, ""); code != 200 {
 		t.Fatalf("a manager reads the owner: %d", code)
 	}
-	if code, text := callAPI(t, ts, "PUT", users+"/owner", annaKey, `{"password":"taken-over"}`); code != 403 || errorOf(text) != "only an owner changes an owner" {
+	if code, text := callAPI(t, ts, "PUT", users+"/owner", annaKey, `{"password":"taken-over"}`); !isRefusal(code, text, 403, "user_owner_only", "", "only an owner changes an owner") {
 		t.Fatalf("a manager sets the owner's password: %d %s", code, text)
 	}
 	if code, _ := callAPI(t, ts, "POST", users, annaKey, `{"name":"g2","role":"guest","password":"guest-pass-2"}`); code != 201 {
@@ -648,18 +649,79 @@ func TestRolesRoutes(t *testing.T) {
 }
 
 // A password check or hash the store refuses for the load, or that
-// waited until the client went away, answers 503 with Retry-After;
-// a wrong password is not that.
+// waited until the client went away, answers 503 with Retry-After
+// (passwordFail); a wrong password is not that. Any other store error of
+// a request whose client went away says so, 503 without Retry-After, and
+// not that a password check waited (AP MobileApp v1.5, D106-A, F46).
 func TestPasswordBusy(t *testing.T) {
 	t.Parallel()
 	for _, err := range []error{store.ErrBusy, fmt.Errorf("store: password check: %w", context.Canceled)} {
 		var he *httpError
-		if !errors.As(userFail(err), &he) || he.status != 503 || he.retryAfter != busyRetry {
+		if !errors.As(passwordFail(err), &he) || he.status != 503 || he.retryAfter != busyRetry {
+			t.Errorf("%v: %+v", err, he)
+		}
+	}
+	if he := (*httpError)(nil); !errors.As(userFail(store.ErrBusy), &he) || he.retryAfter != busyRetry {
+		t.Errorf("the store's load outside a password route: %+v", he)
+	}
+	for _, err := range []error{fmt.Errorf("store: token 4: %w", context.Canceled), fmt.Errorf("store: users: %w", context.DeadlineExceeded)} {
+		var he *httpError
+		if !errors.As(userFail(err), &he) || he.status != 503 || he.retryAfter != 0 || he.msg != clientGoneText {
 			t.Errorf("%v: %+v", err, he)
 		}
 	}
 	if passwordBusy(store.ErrBadPassword) != nil || passwordBusy(store.ErrUserExists) != nil {
 		t.Error("an answer that is not the load is busy")
+	}
+	var he *httpError
+	if !errors.As(passwordFail(store.ErrUserExists), &he) || he.status != 409 {
+		t.Errorf("passwordFail of another error: %+v", he)
+	}
+}
+
+// A token's revoke whose request was cancelled before the store
+// answered is audited as a client that went away, the result failed,
+// not as a password check that waited (D106-A, F46): the request runs
+// through the api wrapper's steps with its context ended once its
+// caller is known, as a phone that gave up on the answer leaves it.
+func TestCancelledRevokeIsNoPasswordCheck(t *testing.T) {
+	t.Parallel()
+	rg := startServer(t, withOptions(storeOptions(t, t.TempDir(), "secret")))
+	s, st := rg.s, rg.s.opts.Store
+	key := userToken(t, st, "anna", store.RoleViewer)
+	p, err := s.resolve(t.Context(), modeUsers, key, "127.0.0.1")
+	if err != nil {
+		t.Fatal(err)
+	}
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	const pattern = "DELETE /api/v1/me/token"
+	req := httptest.NewRequestWithContext(ctx, "DELETE", "/api/v1/me/token", nil)
+	req.Header.Set("Authorization", "Bearer "+key)
+	sw := &statusWriter{ResponseWriter: httptest.NewRecorder()}
+	au, req := s.beginAudit(sw, req, pattern, actions[pattern], true)
+	au.p = p
+	err = s.deleteMyToken(sw, withPrincipal(req, p))
+	var he *httpError
+	if !errors.As(err, &he) || he.status != 503 || he.retryAfter != 0 || he.msg != clientGoneText {
+		t.Fatalf("the revoke of a client gone: %v (%+v)", err, he)
+	}
+	writeJSON(sw, he.status, he.body()) // as the wrapper answers it
+	s.endAudit(req.Context(), au, "127.0.0.1")
+	rows := auditRows(t, rg.ts, "secret", "?limit=10")
+	if len(rows) == 0 {
+		t.Fatal("no row")
+	}
+	row := rows[0]
+	d := detailOf(t, row)
+	if row.Action != "token.revoke" || row.Result != store.ResultFailed || d["error"] != clientGoneText {
+		t.Errorf("row %+v, detail %v", row, d)
+	}
+	if strings.Contains(fmt.Sprint(d["error"]), "password") {
+		t.Errorf("the row says a password check waited: %v", d["error"])
+	}
+	if code, _ := callAPI(t, rg.ts, "GET", "/api/v1/me", key, ""); code != 200 {
+		t.Errorf("the key after the revoke that never ran: %d", code)
 	}
 }
 
@@ -720,31 +782,31 @@ func TestRankRule(t *testing.T) {
 	cases := []struct {
 		what, key, path, body string
 		code                  int
-		err                   string
+		err, errCode          string
 	}{
-		{"users, a viewer's password", keeper, "viewer1", `{"password":"v-pass-1"}`, 200, ""},
-		{"users, a viewer's name", keeper, "viewer1", `{"display_name":"V"}`, 200, ""},
-		{"users, an operator's password", keeper, "operator1", `{"password":"o-pass-1"}`, 403, "the role operator has capabilities yours lacks"},
-		{"users, a manager's role", keeper, "manager1", `{"role":"viewer"}`, 403, "the role manager has capabilities yours lacks"},
-		{"users, giving operator", keeper, "viewer1", `{"role":"operator"}`, 403, "the role operator has capabilities yours lacks"},
-		{"users, giving owner", keeper, "viewer1", `{"role":"owner"}`, 403, "only an owner gives the role owner"},
-		{"users, the owner's password", keeper, "owner", `{"password":"x-pass-1"}`, 403, "only an owner changes an owner"},
-		{"passwords, an operator's password", manager, "operator1", `{"password":"o-pass-2"}`, 200, ""},
-		{"passwords, an operator's name", manager, "operator1", `{"display_name":"O"}`, 403, `capability "users" required`},
-		{"passwords, an operator's role", manager, "operator1", `{"role":"viewer"}`, 403, `capability "users" required`},
-		{"passwords, a keeper's password", manager, "keeper1", `{"password":"k-pass-1"}`, 403, "the role keeper has capabilities yours lacks"},
-		{"owner, a manager's password", "secret", "manager1", `{"password":"m-pass-1"}`, 200, ""},
+		{"users, a viewer's password", keeper, "viewer1", `{"password":"v-pass-1"}`, 200, "", ""},
+		{"users, a viewer's name", keeper, "viewer1", `{"display_name":"V"}`, 200, "", ""},
+		{"users, an operator's password", keeper, "operator1", `{"password":"o-pass-1"}`, 403, "the role operator has capabilities yours lacks", "role_beyond_yours"},
+		{"users, a manager's role", keeper, "manager1", `{"role":"viewer"}`, 403, "the role manager has capabilities yours lacks", "role_beyond_yours"},
+		{"users, giving operator", keeper, "viewer1", `{"role":"operator"}`, 403, "the role operator has capabilities yours lacks", "role_beyond_yours"},
+		{"users, giving owner", keeper, "viewer1", `{"role":"owner"}`, 403, "only an owner gives the role owner", "role_owner_only"},
+		{"users, the owner's password", keeper, "owner", `{"password":"x-pass-1"}`, 403, "only an owner changes an owner", "user_owner_only"},
+		{"passwords, an operator's password", manager, "operator1", `{"password":"o-pass-2"}`, 200, "", ""},
+		{"passwords, an operator's name", manager, "operator1", `{"display_name":"O"}`, 403, `capability "users" required`, "capability_required"},
+		{"passwords, an operator's role", manager, "operator1", `{"role":"viewer"}`, 403, `capability "users" required`, "capability_required"},
+		{"passwords, a keeper's password", manager, "keeper1", `{"password":"k-pass-1"}`, 403, "the role keeper has capabilities yours lacks", "role_beyond_yours"},
+		{"owner, a manager's password", "secret", "manager1", `{"password":"m-pass-1"}`, 200, "", ""},
 	}
 	for _, c := range cases {
 		code, text := callAPI(t, ts, "PUT", users+c.path, c.key, c.body)
-		if code != c.code || c.err != "" && errorOf(text) != c.err {
-			t.Errorf("%s: %d %s, want %d %q", c.what, code, text, c.code, c.err)
+		if code != c.code || c.err != "" && (errorOf(text) != c.err || answerCode(text) != c.errCode) {
+			t.Errorf("%s: %d %s, want %d %q %s", c.what, code, text, c.code, c.err, c.errCode)
 		}
 	}
-	if code, text := callAPI(t, ts, "POST", "/api/v1/users", keeper, `{"name":"x1","role":"owner"}`); code != 403 || errorOf(text) != "only an owner gives the role owner" {
+	if code, text := callAPI(t, ts, "POST", "/api/v1/users", keeper, `{"name":"x1","role":"owner"}`); !isRefusal(code, text, 403, "role_owner_only", "", "only an owner gives the role owner") {
 		t.Errorf("users, creating an owner: %d %s", code, text)
 	}
-	if code, text := callAPI(t, ts, "DELETE", users+"manager1", keeper, ""); code != 403 || errorOf(text) != "the role manager has capabilities yours lacks" {
+	if code, text := callAPI(t, ts, "DELETE", users+"manager1", keeper, ""); !isRefusal(code, text, 403, "role_beyond_yours", `{"role":"manager"}`, "the role manager has capabilities yours lacks") {
 		t.Errorf("users, removing a manager: %d %s", code, text)
 	}
 }
@@ -853,7 +915,8 @@ func TestAssignableRolesOfAnIntegrationsUser(t *testing.T) {
 	if got := listed(keeper)[system]; !slices.Equal(got, []string{store.RoleViewer}) {
 		t.Errorf("the keeper's choice for %s: %v, want viewer alone", system, got)
 	}
-	if code, text := callAPI(t, ts, "PUT", "/api/v1/users/"+system, keeper, `{"role":"integration"}`); code != 403 || errorOf(text) != "the role integration has capabilities yours lacks" {
+	if code, text := callAPI(t, ts, "PUT", "/api/v1/users/"+system, keeper, `{"role":"integration"}`); !isRefusal(code, text, 403, "role_beyond_yours", `{"role":"integration"}`,
+		"the role integration has capabilities yours lacks") {
 		t.Errorf("the keeper gives %s integration: %d %s", system, code, text)
 	}
 	// The integration's own key, which holds guests: guest alone, never
@@ -862,7 +925,8 @@ func TestAssignableRolesOfAnIntegrationsUser(t *testing.T) {
 	if got := listed(key)[system]; !slices.Equal(got, []string{store.RoleGuest}) {
 		t.Errorf("the integration's choice for %s: %v, want guest alone", system, got)
 	}
-	if code, text := callAPI(t, ts, "PUT", "/api/v1/users/"+system, key, `{"role":"integration"}`); code != 403 || errorOf(text) != `capability "users" required to give the role integration` {
+	if code, text := callAPI(t, ts, "PUT", "/api/v1/users/"+system, key, `{"role":"integration"}`); !isRefusal(code, text, 403, "capability_required_to_give",
+		`{"capability":"users","role":"integration"}`, `capability "users" required to give the role integration`) {
 		t.Errorf("the integration gives %s integration: %d %s", system, code, text)
 	}
 }
@@ -1155,10 +1219,10 @@ func TestWhoManagesAnIntegrationsUsers(t *testing.T) {
 	}
 
 	// What each refusal says.
-	refused := func(what string, h holder, method, path, body, msg string) {
+	refused := func(what string, h holder, method, path, body, msg, errCode string) {
 		t.Helper()
-		if got, text := code(h, method, path, body); got != 403 || errorOf(text) != msg {
-			t.Errorf("%s: %d %s, want 403 %q", what, got, text, msg)
+		if got, text := code(h, method, path, body); got != 403 || errorOf(text) != msg || answerCode(text) != errCode {
+			t.Errorf("%s: %d %s, want 403 %q %s", what, got, text, msg, errCode)
 		}
 	}
 	guest, owner, other := of(a, store.RoleGuest), of(a, store.RoleOwner), of(b, store.RoleGuest)
@@ -1167,15 +1231,15 @@ func TestWhoManagesAnIntegrationsUsers(t *testing.T) {
 	}
 	through := "a call through an integration changes its own integration's users alone"
 	refused("a holder of guests, an integration's guest", holders[4], "PUT", "/api/v1/users/"+guest, `{"disabled":true}`,
-		"the user "+guest+" is an integration's: its own integration, a holder of integrations or of users changes it")
-	refused("the integration's key, a regular guest", holders[5], "PUT", "/api/v1/users/rg", `{"disabled":true}`, through)
-	refused("the integration's key, a regular guest's password", holders[5], "PUT", "/api/v1/users/rg", `{"password":"a-pass-0042"}`, through)
-	refused("the integration's key, a new guest", holders[5], "POST", "/api/v1/users", `{"name":"new","role":"guest"}`, through)
-	refused("the second integration's key, the first's guest", holders[7], "PUT", "/api/v1/users/"+guest, `{"disabled":true}`, through)
-	refused("the key for the manager, a regular guest", holders[8], "DELETE", "/api/v1/users/rg", "", through)
-	refused("the key held from before, the second's guest", holders[9], "PUT", "/api/v1/users/"+other, `{"disabled":true}`, through)
+		"the user "+guest+" is an integration's: its own integration, a holder of integrations or of users changes it", "user_integration_guest")
+	refused("the integration's key, a regular guest", holders[5], "PUT", "/api/v1/users/rg", `{"disabled":true}`, through, "integration_own_users_only")
+	refused("the integration's key, a regular guest's password", holders[5], "PUT", "/api/v1/users/rg", `{"password":"a-pass-0042"}`, through, "integration_own_users_only")
+	refused("the integration's key, a new guest", holders[5], "POST", "/api/v1/users", `{"name":"new","role":"guest"}`, through, "integration_own_users_only")
+	refused("the second integration's key, the first's guest", holders[7], "PUT", "/api/v1/users/"+guest, `{"disabled":true}`, through, "integration_own_users_only")
+	refused("the key for the manager, a regular guest", holders[8], "DELETE", "/api/v1/users/rg", "", through, "integration_own_users_only")
+	refused("the key held from before, the second's guest", holders[9], "PUT", "/api/v1/users/"+other, `{"disabled":true}`, through, "integration_own_users_only")
 	for _, h := range holders[2:4] {
-		refused(h.name+", an integration's owner", h, "PUT", "/api/v1/users/"+owner, `{"disabled":true}`, "only an owner changes an owner")
+		refused(h.name+", an integration's owner", h, "PUT", "/api/v1/users/"+owner, `{"disabled":true}`, "only an owner changes an owner", "user_owner_only")
 	}
 	// The manager gives viewer, and neither integration, which it does not
 	// outrank, nor owner, nor operator, which lies beyond the maximum.
@@ -1183,14 +1247,14 @@ func TestWhoManagesAnIntegrationsUsers(t *testing.T) {
 	if got, text := code(holders[2], "PUT", "/api/v1/users/"+user, `{"role":"viewer"}`); got != 200 {
 		t.Errorf("the manager gives viewer: %d %s", got, text)
 	}
-	refused("the manager gives integration", holders[2], "PUT", "/api/v1/users/"+user, `{"role":"integration"}`, "the role integration has capabilities yours lacks")
-	refused("the manager gives owner", holders[2], "PUT", "/api/v1/users/"+user, `{"role":"owner"}`, "only an owner gives the role owner")
-	refused("the manager gives operator", holders[2], "PUT", "/api/v1/users/"+user, `{"role":"operator"}`, "the role operator lies beyond the maximum of its integration")
+	refused("the manager gives integration", holders[2], "PUT", "/api/v1/users/"+user, `{"role":"integration"}`, "the role integration has capabilities yours lacks", "role_beyond_yours")
+	refused("the manager gives owner", holders[2], "PUT", "/api/v1/users/"+user, `{"role":"owner"}`, "only an owner gives the role owner", "role_owner_only")
+	refused("the manager gives operator", holders[2], "PUT", "/api/v1/users/"+user, `{"role":"operator"}`, "the role operator lies beyond the maximum of its integration", "role_beyond_integration")
 	// A holder of users and guests that does not outrank guest is told the rank.
 	refused("a holder of users and guests, an integration's guest", holder{name: "keepg", token: keepg}, "PUT", "/api/v1/users/"+guest, `{"disabled":true}`,
-		"the role guest has capabilities yours lacks")
+		"the role guest has capabilities yours lacks", "role_beyond_yours")
 	// A call through an integration registers no password for a new name, which it may not add.
-	refused("the integration's key, a new name's registration", holders[5], "POST", "/api/v1/users/newname/register", `{"request":"AAAA"}`, through)
+	refused("the integration's key, a new name's registration", holders[5], "POST", "/api/v1/users/newname/register", `{"request":"AAAA"}`, through, "integration_own_users_only")
 	// The own name is the linked user's alone, not the call's through the integration.
 	if got, text := code(holders[8], "PUT", "/api/v1/users/manager1", `{"display_name":"M"}`); got != 403 {
 		t.Errorf("the key for the manager, the manager's own name: %d %s", got, text)
@@ -1365,7 +1429,7 @@ func TestIntegrationsOwnUsersStay(t *testing.T) {
 	for who, token := range callers {
 		for _, name := range []string{i.UUID + ":", i.UUID + ":system"} {
 			want := "the user " + name + " is the integration's own: remove the integration itself, DELETE /api/v1/integrations/" + i.UUID + ", which keeps it to be attached again"
-			if got, text := callAPI(t, ts, "DELETE", "/api/v1/users/"+name, token, ""); got != 403 || errorOf(text) != want {
+			if got, text := callAPI(t, ts, "DELETE", "/api/v1/users/"+name, token, ""); !isRefusal(got, text, 403, "user_integration_own", `{"integration":"`+i.UUID+`","user":"`+name+`"}`, want) {
 				t.Errorf("%s removes %s: %d %s", who, name, got, text)
 			}
 		}
@@ -1401,7 +1465,7 @@ func TestFirstOwnPassword(t *testing.T) {
 	if err := json.Unmarshal([]byte(text), &v); err != nil || code != 200 || !v.HasPassword {
 		t.Fatalf("the first password: %d %s", code, text)
 	}
-	if code, text := callAPI(t, ts, "PUT", path, key, `{"password":"second-pass-1"}`); code != 403 || errorOf(text) != "current_password is wrong" {
+	if code, text := callAPI(t, ts, "PUT", path, key, `{"password":"second-pass-1"}`); !isRefusal(code, text, 403, "password_current_wrong", "", "current_password is wrong") {
 		t.Fatalf("the second without the current one: %d %s", code, text)
 	}
 	if code, text := callAPI(t, ts, "PUT", path, key, `{"password":"second-pass-1","current_password":"first-pass-1"}`); code != 200 {

@@ -9,8 +9,8 @@ Home Assistant is one more client, beside the web UI, the apps and Loxone.
 
 ## Today: Home Assistant's MAX! integration through the proxy
 
-Home Assistant ships an integration for the MAX! Cube, `maxcube`
-(`eQ-3 MAX!`), configured in YAML only.
+Home Assistant ships an integration for the MAX!
+Cube, `maxcube` (`eQ-3 MAX!`), configured in YAML only.
 It speaks the Cube's LAN protocol on port 62910,
 and Massimo's LAN proxy answers it as a Cube ([proxy.md](proxy.md)):
 Home Assistant never holds the Cube,
@@ -29,8 +29,7 @@ maxcube:
 - **host** is the address the proxy listens on:
   the Cube's `MASSIMO_CUBE_<SERIAL>_PROXY`,
   or any address of the server's host for a single Cube without one;
-  `127.0.0.1` when Home Assistant runs on the same host with the host's
-  network.
+  `127.0.0.1` when Home Assistant runs on the same host with the host's network.
 - **scan_interval** may be short:
   the proxy answers the poll from Massimo's copy of the Cube (`l:`),
   so a poll costs no radio time; the default is 300 s.
@@ -40,13 +39,15 @@ maxcube:
 - A setpoint set in Home Assistant is a radio write through Massimo's queue,
   about 1.25 % of the hour's duty cycle, as it is from the web UI.
 - Not there: week programmes, Massimo's rooms as one entity,
-  pushed changes (Home Assistant polls), Massimo's users and roles
-  (the Cube protocol has no sign-in, so the proxy's port belongs to the LAN only).
+  pushed changes (Home Assistant polls),
+  Massimo's users and roles (the Cube protocol has no sign-in,
+  so the proxy's port belongs to the LAN only).
 
 ## Coming: Massimo's own integration
 
-A repository of its own, `metaworx/massimo-homeassistant`
-(the integration and its card, Apache-2.0), not published yet.
+A repository of its own,
+`metaworx/massimo-homeassistant` (the integration and its card, Apache-2.0),
+not published yet.
 It talks to Massimo's HTTP API, signed in with an API key:
 
 - a `climate` entity per room, as the web UI's tiles are,
@@ -59,9 +60,9 @@ It talks to Massimo's HTTP API, signed in with an API key:
 
 What Massimo provides for it, and for every other integration:
 
-- **An API key under the role `integration`**,
-  which reads, sets, locks and configures
-  ([store.md](store.md) section 6; [api-v1.md](api-v1.md), "Authentication").
+- **An API key under the role `integration`**, which reads, sets,
+  locks and configures ([store.md](store.md) section 6; [api-v1.md](api-v1.md),
+  "Authentication").
   Create a user with that role and a key for it in System settings → Users,
   or on the server:
   ```bash

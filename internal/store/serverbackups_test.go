@@ -32,23 +32,23 @@ func openClocked(t *testing.T) (*Store, *atomic.Int64) {
 	return s, &at
 }
 
-// Migration 0100 is additive: a binary for 26 opens the file it made and
+// Migration 0103 is additive: a binary for 26 opens the file it made and
 // reads it as before; its down part takes the schema back to the one of
-// 26 and the manager's backup.retry with it.
+// 102, main's migration before it, and the manager's backup.retry with it.
 func TestServerBackupsMigration(t *testing.T) {
 	t.Parallel()
 	ctx := context.Background()
 	clock := fixedClock()
-	at26 := t.TempDir()
-	migrateOnly(t, at26, migrationsUpTo(t, 26), clock)
-	dir := copyStore(t, at26)
+	at102 := t.TempDir()
+	migrateOnly(t, at102, migrationsUpTo(t, 102), clock)
+	dir := copyStore(t, at102)
 	migrateOnly(t, dir, nil, clock)
 
 	old, err := Open(dir, Options{Logger: quiet(), migrations: migrationsUpTo(t, 26), readerVersion: 26})
 	if err != nil {
 		t.Fatalf("a binary for 26: %v", err)
 	}
-	if v, mr := old.SchemaVersion(); v != 100 || mr != 24 {
+	if v, mr := old.SchemaVersion(); v != 103 || mr != 24 {
 		t.Fatalf("a binary for 26 reads version %d, min_reader %d", v, mr)
 	}
 	if _, _, off, err := old.Effective(ctx, RoleManager, []string{"read", "backup.retry"}); err != nil || off {
@@ -56,7 +56,7 @@ func TestServerBackupsMigration(t *testing.T) {
 	}
 	old.Close()
 
-	down, err := fs.ReadFile(embeddedMigrations(), "0100_server_backups.down.sql")
+	down, err := fs.ReadFile(embeddedMigrations(), "0103_server_backups.down.sql")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -72,9 +72,9 @@ func TestServerBackupsMigration(t *testing.T) {
 	if _, err := db.ExecContext(ctx, string(down)); err != nil {
 		t.Fatal(err)
 	}
-	want, got := fileSchema(t, rawDB(t, at26)), fileSchema(t, db)
+	want, got := fileSchema(t, rawDB(t, at102)), fileSchema(t, db)
 	if fmt.Sprint(got) != fmt.Sprint(want) {
-		t.Fatalf("after the down part:\n%v\nwant the schema of 26:\n%v", got, want)
+		t.Fatalf("after the down part:\n%v\nwant the schema of 102:\n%v", got, want)
 	}
 	if err := db.QueryRowContext(ctx, `SELECT count(*) FROM role_capabilities WHERE capability LIKE 'backup.%'`).Scan(&n); err != nil || n != 0 {
 		t.Fatalf("after the down part, %d rows of backup.*: %v", n, err)

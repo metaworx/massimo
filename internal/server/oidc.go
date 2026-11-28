@@ -396,14 +396,14 @@ func (s *Server) oidcStartLogin(w http.ResponseWriter, r *http.Request) error {
 	}
 	if d := s.limiter.lockedFor(ctx, store.LockoutAddr(s.clientIP(r))); d > 0 {
 		w.Header().Set("Retry-After", fmt.Sprint(int(d.Round(time.Second)/time.Second)))
-		return fail(http.StatusTooManyRequests, "too many failed sign-ins from this address; try again later")
+		return refuseSaying(http.StatusTooManyRequests, "too many failed sign-ins from this address; try again later", codeAddressLockedOut)
 	}
 	p, ok, err := s.opts.Store.Provider(ctx, key)
 	if err != nil {
 		return fail(http.StatusInternalServerError, "%v", err)
 	}
 	if !ok || !p.Enabled {
-		return fail(http.StatusNotFound, "no provider %q", key)
+		return refuse(http.StatusNotFound, codeProviderUnknown, key)
 	}
 	return s.oidcStartFlow(w, r, p, redirect, 0)
 }
@@ -889,11 +889,11 @@ func (s *Server) pendingLink(r *http.Request, take bool) (store.User, *oidcPendi
 	}
 	auditTarget(r, "user:"+u.Name)
 	if !a.self {
-		return store.User{}, nil, fail(http.StatusForbidden, "a user confirms only its own links")
+		return store.User{}, nil, refuse(http.StatusForbidden, codeIdentityConfirmOwnOnly)
 	}
 	p, ok := s.oidc.pendingLink(r.PathValue("code"), u.ID, s.clientIP(r), time.Now(), take)
 	if !ok {
-		return store.User{}, nil, fail(http.StatusNotFound, "no link waits under this code, or it took too long; link again")
+		return store.User{}, nil, refuse(http.StatusNotFound, codeIdentityLinkUnknown)
 	}
 	return u, p, nil
 }
@@ -936,7 +936,7 @@ func (s *Server) confirmPendingLink(w http.ResponseWriter, r *http.Request) erro
 	}
 	i, err := s.opts.Store.LinkIdentity(r.Context(), u.ID, p.providerID, p.subject, p.details)
 	if errors.Is(err, store.ErrIdentityTaken) {
-		return fail(http.StatusConflict, "the account is another user's")
+		return refuse(http.StatusConflict, codeIdentityTaken)
 	}
 	if err != nil {
 		return providerFail(err)
@@ -977,7 +977,7 @@ func (s *Server) oidcStartLink(w http.ResponseWriter, r *http.Request) error {
 		return err
 	}
 	if !a.self {
-		return fail(http.StatusForbidden, "a user links only its own accounts")
+		return refuse(http.StatusForbidden, codeIdentityLinkOwnOnly)
 	}
 	var req oidcStartRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
@@ -993,7 +993,7 @@ func (s *Server) oidcStartLink(w http.ResponseWriter, r *http.Request) error {
 		return fail(http.StatusInternalServerError, "%v", err)
 	}
 	if !ok || !p.Enabled {
-		return fail(http.StatusNotFound, "no provider %q", key)
+		return refuse(http.StatusNotFound, codeProviderUnknown, key)
 	}
 	auditSubject(r, map[string]any{"provider": p.Key, "user": u.Name})
 	return s.oidcStartFlow(w, r, p, redirect, u.ID)
@@ -1018,7 +1018,7 @@ func (s *Server) oidcFinish(w http.ResponseWriter, r *http.Request) error {
 	}
 	proven, ok := s.oidc.takeProven(req.Code, s.clientIP(r), time.Now())
 	if !ok {
-		return fail(http.StatusUnauthorized, "no sign-in under this code, or it took too long; sign in again")
+		return refuse(http.StatusUnauthorized, codeOidcCodeUnknown)
 	}
 	// by its id, and live under its name: not removed since the callback
 	u, ok, err := s.opts.Store.UserByID(ctx, proven.userID)
@@ -1028,7 +1028,7 @@ func (s *Server) oidcFinish(w http.ResponseWriter, r *http.Request) error {
 		ok = ok && live.ID == u.ID
 	}
 	if err != nil || !ok {
-		return fail(http.StatusUnauthorized, "the user is gone; sign in again")
+		return refuse(http.StatusUnauthorized, codeOidcUserGone)
 	}
 	auditTarget(r, "user:"+u.Name)
 	return s.openSession(w, r, u, req.Label, map[string]any{"provider": proven.provider})

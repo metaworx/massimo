@@ -228,7 +228,7 @@ export function PasswordRule({ id, value, context, refused, note = "", fresh = 0
   const text = failed ? NOTES[note]() : !value ? t("password.hint") : answer ? passwordSaid(answer, refused) : note ? NOTES[note]() : t("password.fine");
   const sign = failed ? "mark-warn" : !value ? "icon-info" : answer ? "mark-warn" : "icon-check";
   latest.current = text;
-  // written anew at each change of fresh, as copied() of components.js writes its status: emptied, then the words, so
+  // written anew at each change of fresh, as showBubble() of components.js writes its status: emptied, then the words, so
   // that a screen reader hears a text it holds already; the words as they are by then
   useLayoutEffect(() => {
     const words = lineRef.current?.lastChild;

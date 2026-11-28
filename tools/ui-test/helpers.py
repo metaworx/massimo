@@ -10,25 +10,29 @@ string, so waiting on the page's state polls page.evaluate from here
 global scope but not on window; page.evaluate reaches it there.
 
 What the page reads and what its stream brings (docs/ui-testing.md,
-section 9): Reads answers the page's own reads with the server's data
+section 1): Reads answers the page's own reads with the server's data
 and what a test put in, a device's or a room's in the rooms' read among
 it (Reads.device, Reads.room), kept through the server's own events of
 them; Stream watches the page's event stream from a mark; isolate_log
 keeps a log of the test's own lines; wait_log_live waits until the log
 takes the stream's state events; safe_route is the one route handler
 that lets go a request the page no longer waits for; undo is a cleanup
-that says what it could not undo; held_poll holds the page's poll while
-a test measures what the page does by itself; held_timers holds the
-page's timed states, "Copied", the toast and the settings' push, while a
-test checks them; pause_clock pauses Playwright's clock at the page's
-now. open_fold, close_fold and
+that says what it could not undo; own_id is an id of a test's own, new
+at each call, for what it makes that no API removes; held_poll holds
+the page's poll while a test measures what the page does by itself;
+held_timers holds the page's timed states, "Copied", the toast and the
+settings' push, while a test checks them; pause_clock pauses
+Playwright's clock at the page's now. open_fold, close_fold and
 toggle_fold take a fold's toggle event before a test acts inside it.
 wait_started waits for the page's start, the page fixture's and
-owner_page's, and says on a timeout which read it waited for. boxes
-reads several elements' boxes at one moment, for a check that compares
-where they are. grant_clipboard and copies check what a shared Copy
-puts into the clipboard and how it is named; icon_after_last_line
-where its icon sits.
+owner_page's, and says on a timeout which read it waited for; answered
+waits until the page has read all it reads now, a read it starts only
+after another has answered among them. boxes reads several elements'
+boxes at one moment, for a check that compares where they are.
+grant_clipboard and copies check what a shared Copy puts into the
+clipboard and how it is named; icon_after_last_line where its icon
+sits. bubble, bubble_at and wait_bubble_at look at the page's bubble
+(showBubble of components.js), where it shows against its control.
 
 Every wait of this kit, and the page fixture's, lasts its seconds times
 UI_TEST_SCALE (scaled), a positive number, 1 where it is not set: a
@@ -41,6 +45,7 @@ import json
 import math
 import os
 import re
+import secrets
 import sys
 import time
 import urllib.error
@@ -191,50 +196,122 @@ def scroll_settled(page, seconds=3):
     })""", scaled(seconds) * 1000)
 
 
+def scrolled_to(page, y):
+    """Scrolls the window to y at once and waits until it rests there
+    (scroll_settled); the scroll it rests at."""
+    page.evaluate("(y) => window.scrollTo({top: y, behavior: 'instant'})", y)
+    assert scroll_settled(page), f"the page rests at {y}"
+    return page.evaluate("window.scrollY")
+
+
+# The ApiReads of each page, the first made for it (api_reads).
+_API_READS = weakref.WeakKeyDictionary()
+
+
 class ApiReads:
-    """The page's requests to the API that have no answer yet, counted from
-    the moment it is made: a page shown sends its cards' reads at once, and
-    their answers come in any order, so a card that grows with a later one
-    (System settings → Integrations, with why the server does not look on
-    the LAN, api/v1/integrations/found) changes the page's height after the
-    answer a test waited for. The event stream, which stays open, is left
-    out."""
+    """The page's requests to the server that have no answer yet, its API's
+    and /healthz (the header's version check, a restart's following),
+    counted from the moment it is made: a page shown sends its cards' reads
+    at once, and their answers come in any order, so a card that grows with
+    a later one (System settings → Integrations, with why the server does
+    not look on the LAN, api/v1/integrations/found) changes the page's
+    height after the answer a test waited for. The event stream, which
+    stays open, is left out. The first made for a page is its own
+    (api_reads): the page fixture's and owner_page's, made before the
+    page's start. It holds its page weakly, so that the page's entry goes
+    with the page."""
 
     def __init__(self, page):
-        self.page = page
+        self._page = weakref.ref(page)
         self.open = set()
+        self.changes = 0  # the reads started and ended so far, for answered's quiet time
         page.on("request", self._sent)
         page.on("requestfinished", self._done)
         page.on("requestfailed", self._done)
+        _API_READS.setdefault(page, self)
+
+    @property
+    def page(self):
+        """The page, None once it is gone."""
+        return self._page()
 
     @staticmethod
     def _api(request):
-        return "/api/v1/" in request.url and not re.search(r"/events(\?|$)", request.url)  # not the stream (app.js connectEvents)
+        path = urlparse(request.url).path
+        return ("/api/v1/" in path and not re.search(r"/events$", path)) or path.endswith("/healthz")  # not the stream (app.js connectEvents)
 
     def _sent(self, request):
         if self._api(request):
             self.open.add(request)
+            self.changes += 1
 
     def _done(self, request):
-        self.open.discard(request)
+        if request in self.open:
+            self.open.discard(request)
+            self.changes += 1
 
     def pending(self):
         """The reads without an answer, each as its method and URL, sorted."""
         return sorted(f"{r.method} {r.url}" for r in self.open)
 
-    def answered(self, seconds=5, quiet_ms=200):
-        """Waits until every read has its answer and nothing more is drawn
-        for quiet_ms (the page's height unchanged, not scaled: it waits for
-        nothing to come); false after so many seconds (scaled)."""
+    def _waiting(self, held):
+        """The reads without an answer but those of held, routes (or
+        requests) the test holds."""
+        kept = {getattr(h, "request", h) for h in held}
+        return [r for r in self.open if r not in kept]
+
+    def answered(self, seconds=5, quiet_ms=200, held=()):
+        """Waits until every read has its answer, but those of held, the
+        routes (or requests) the test holds, a list it adds to meanwhile
+        among them; and for quiet_ms no read has started or ended and
+        nothing more is drawn (the page's height unchanged). A read the page
+        starts only after another has answered comes within quiet_ms of
+        that answer and is waited for in turn: a burst's next read
+        (shared/burst.ts), the next of the page's start (app.js init), a
+        load an answer sets off. quiet_ms is not scaled: it waits for
+        nothing to come. Measured from here, by Playwright's own timer, so
+        that a page under a paused clock is waited for as well. False after
+        so many seconds (scaled)."""
+        page = self.page
         end = time.monotonic() + scaled(seconds)
         while time.monotonic() < end:
-            if not self.open and self.page.evaluate("""(quiet) => new Promise((done) => {
-                const h = document.documentElement.scrollHeight;
-                setTimeout(() => done(document.documentElement.scrollHeight === h), quiet);
-            })""", quiet_ms) and not self.open:
+            if self._waiting(held):
+                page.wait_for_timeout(25)
+                continue
+            changes = self.changes
+            height = page.evaluate("document.documentElement.scrollHeight")
+            page.wait_for_timeout(quiet_ms)
+            if self.changes == changes and page.evaluate("document.documentElement.scrollHeight") == height and not self._waiting(held):
                 return True
-            self.page.wait_for_timeout(25)
         return False
+
+
+def api_reads(page):
+    """The page's ApiReads (the first made for it): the page fixture's and
+    owner_page's, made before the page's start; one made now for a page
+    of a test's own, which sees no read the page sent before."""
+    return _API_READS.get(page) or ApiReads(page)
+
+
+def answered(page, held=(), seconds=5):
+    """Waits until the page's reads have all answered and none starts
+    within the quiet time (ApiReads.answered of api_reads), held aside,
+    the routes the test holds; fails, naming the reads still open, after
+    so many seconds (scaled). The one wait for "the page has read all it
+    reads now", before a count of what an action read or a check of what
+    the answers drew: it follows a read that starts only after another
+    has answered, where a request of the test's own that overtakes the
+    page's does not (docs/ui-testing.md, section 1)."""
+    reads = api_reads(page)
+    assert reads.answered(seconds, held=held), \
+        f"the page's reads answered within {scaled(seconds):g} s: still open {', '.join(reads.pending()) or 'none'}"
+
+
+def load_cubes(page):
+    """A load of the Cubes' list, as the poll makes it (loadCubes()), and
+    the reads it sets off answered (answered)."""
+    page.evaluate("loadCubes()")
+    answered(page)
 
 
 def scroll_width(page):
@@ -314,7 +391,7 @@ def wait_held(page, held, seconds=5, n=1):
     notes each it answers, or the page's own as it sends them
     (sent_requests). A check of a request waits for the request itself,
     not for what the page draws before it sends it (docs/ui-testing.md,
-    section 9, "The request itself")."""
+    section 1, "The request itself")."""
     end = time.time() + scaled(seconds)
     while len(held) < n and time.time() < end:
         page.wait_for_timeout(100)
@@ -334,12 +411,58 @@ def sent_requests(page, method, pattern):
     return sent
 
 
+# TAKEN_KIT notes in window.__uiTaken, from its first run in a document on,
+# each answer whose body the page has read, its URL and status, in turn:
+# Response's body methods are wrapped, and each notes its answer once the
+# body is read, before the page's code that awaited it goes on in the same
+# turn. It returns how many were noted before, where taken counts from.
+TAKEN_KIT = """() => {
+  if (!window.__uiTaken) {
+    const taken = (window.__uiTaken = []);
+    for (const m of ["text", "json", "arrayBuffer", "blob", "formData"]) {
+      const read = Response.prototype[m];
+      if (typeof read !== "function") continue;
+      Response.prototype[m] = function () {
+        const r = this;
+        return read.call(r).then((v) => {
+          taken.push({ url: r.url, status: r.status });
+          return v;
+        });
+      };
+    }
+  }
+  return window.__uiTaken.length;
+}"""
+
+
+@contextlib.contextmanager
+def taken(page, predicate, seconds=5, **kw):
+    """page.expect_response(predicate, **kw) for a block, whose answer it
+    gives as .value, and at the block's end a wait, for seconds (scaled), until
+    the page has read that answer's body as well (TAKEN_KIT): the answer
+    reaches Playwright when its head comes, and the page reads its body
+    and goes on with it later, its parts drawing what it brings in that
+    turn (app.js apiRequest), so a test's next step that the answer must
+    come before overtook it, a told event that the answer then took back
+    among them (test_pairing_updates.py). For a block whose answer a check
+    of what the page drew, or of what it did not draw, comes after
+    (docs/ui-testing.md, section 1, "The answer taken"). An answer of the
+    same URL whose body the page reads after the block began counts too.
+    Within one document."""
+    start = page.evaluate(TAKEN_KIT)
+    with page.expect_response(predicate, **kw) as info:
+        yield info
+    answer = info.value
+    assert wait_until(page, "(window.__uiTaken || []).slice(%d).some((a) => a.url === %s)" % (start, json.dumps(answer.url)), seconds), \
+        f"the page read the answer of {answer.request.method} {answer.url} within {scaled(seconds):g} s"
+
+
 @contextlib.contextmanager
 def held_poll(page):
     """The page's poll held for the with block: its timer cleared, and
     started again at the end (startPolling()), for a test that measures
     what the page does by itself, which a poll would change (docs/ui-
-    testing.md, section 9). Whatever calls startPolling() meanwhile ends
+    testing.md, section 1). Whatever calls startPolling() meanwhile ends
     the hold unseen: applySettings() (a setting changed, expert mode, a
     sign-in), the poll's field, a sign-out. So a block that ends without
     an error of its own fails where the timer is no longer the one the
@@ -358,8 +481,9 @@ def held_poll(page):
 
 # The page's timers that held_timers holds, by kind, each with what the
 # page shows or sends while it runs:
-# - copied: "Copied" on a copy control, the class copied, taken back
-#   1400 ms after the copy (copied() of components.js, el.copiedTimer);
+# - copied: the page's bubble, "Copied" at a copy control or any other,
+#   taken away 1400 ms after it shows (showBubble of components.js, which
+#   copied() calls, bubbleState.timer);
 # - toast: the page's toast, hidden 8 to 30 s after it is shown
 #   (showToast of components.js, toastState.timer);
 # - push: the settings' push to the server, sent 1 s after a change or
@@ -367,19 +491,22 @@ def held_poll(page):
 #   prefsSync.timer).
 TIMED = ("copied", "toast", "push")
 
-# The hold, in the page: an observer of the classes clears the timer of
-# each control that shows "Copied" and of the toast shown, once the page
-# has set it; the push's timer is cleared as the page sets it, the push
-# noted as due. The page's own code is not changed: a later copy, a toast
-# closed by its ×, a push taken by a sign-in all go as they do.
+# The hold, in the page: an observer of the classes and of the children
+# clears the timer of the bubble shown and of the toast shown, once the
+# page has set it (a bubble shown anew writes its text, though its class
+# may not change); the push's timer is cleared as the page sets it, the
+# push noted as due. The page's own code is not changed: a later copy, a
+# toast closed by its ×, a push taken by a sign-in all go as they do, and
+# a bubble still goes at a scroll that moves its control or once the
+# control has left the page.
 HOLD_TIMED = """(kinds) => {
   const k = window.__uiTest || (window.__uiTest = {});
   if (k.timed) throw new Error("held_timers: a hold is on already");
   const h = k.timed = { kinds, observer: null, due: false };
   const sweep = () => {
-    if (kinds.includes("copied")) for (const el of document.querySelectorAll(".copied")) {
-      clearTimeout(el.copiedTimer);
-      el.copiedTimer = 0;
+    if (kinds.includes("copied") && bubbleState.el && !bubbleState.el.classList.contains("hidden") && bubbleState.timer) {
+      clearTimeout(bubbleState.timer);
+      bubbleState.timer = 0;
     }
     const toast = document.getElementById("toast");
     if (kinds.includes("toast") && toast && !toast.classList.contains("hidden") && toastState.timer) {
@@ -390,7 +517,7 @@ HOLD_TIMED = """(kinds) => {
   sweep();
   if (kinds.includes("copied") || kinds.includes("toast")) {
     h.observer = new MutationObserver(sweep);
-    h.observer.observe(document.documentElement, { subtree: true, attributes: true, attributeFilter: ["class"] });
+    h.observer.observe(document.documentElement, { subtree: true, childList: true, attributes: true, attributeFilter: ["class"] });
   }
   if (kinds.includes("push")) {
     if (prefsSync.timer) {
@@ -407,14 +534,14 @@ HOLD_TIMED = """(kinds) => {
 }"""
 
 # The hold's end: what it held goes at once, as its timer would have by
-# then: "Copied" taken back, the toast hidden, a push that came due sent.
+# then: the bubble taken away, the toast hidden, a push that came due sent.
 END_TIMED = """() => {
   const k = window.__uiTest || {};
   const h = k.timed;
   if (!h) return false;
   k.timed = null;
   if (h.observer) h.observer.disconnect();
-  if (h.kinds.includes("copied")) for (const el of document.querySelectorAll(".copied")) el.classList.remove("copied");
+  if (h.kinds.includes("copied")) hideBubble();
   const toast = document.getElementById("toast");
   if (h.kinds.includes("toast") && toast && !toast.classList.contains("hidden")) hideToast();
   if (h.kinds.includes("push")) {
@@ -428,9 +555,9 @@ END_TIMED = """() => {
 @contextlib.contextmanager
 def held_timers(page, *kinds):
     """The page's timed states of kinds (TIMED) held for the with block:
-    "Copied" on a copy control (copied), the toast (toast) and the
-    settings' push (push) stay or wait until the block ends, not until a
-    product timer that a slow runner, or the retry's trace, outlasts:
+    the bubble, "Copied" at a copy control (copied), the toast (toast)
+    and the settings' push (push) stay or wait until the block ends, not
+    until a product timer that a slow runner, or the retry's trace, outlasts:
     "Copied" fades after 1400 ms, which a copy, a page shown again and its
     reads did not fit in (test_maint_updates.py, AP SteadyTests, Block
     13). The page's code is not changed and nothing else of it stops: a
@@ -1003,6 +1130,21 @@ def isolate_log(page, reads=None):
         assert wait_until(page, "!MassimoParts.log.state.loading && MassimoParts.log.state.lines.length === 0", 5), "the log loaded, without a line of the server's"
 
 
+def own_id(what=""):
+    """An id of the test's own, new at each call: 32 hex digits, what
+    hex-encoded first (at most 8 bytes of it, for a reader of the
+    server's log), then random ones. For what a test makes on the shared
+    server that no API removes, so that its next run, a repeat on the
+    same server among them, makes its own and meets nothing the last one
+    left: an integration's installation id and the ids of its users
+    there, since an integration is only disabled at its end and a
+    request from the same installation joins it (docs/ui-testing.md,
+    section 1; AP SteadyTests, Block 11). An id made from the case alone
+    is the same at every repeat."""
+    head = what.encode()[:8].hex()
+    return head + secrets.token_hex(16)[:32 - len(head)]
+
+
 def undo(what, call, absent=(404,)):
     """A cleanup's step: call(), what naming what it undoes. An answer
     with a status of absent means there was nothing to undo; anything
@@ -1221,6 +1363,18 @@ def assert_login_card_centred(page, what):
     controls_reached(look, look["innerHeight"], what)
 
 
+# The sign-in card's top and height, for a test that checks the card
+# stays where it was (same_box).
+LOGIN_BOX = "(() => { const r = document.getElementById('login-dialog').getBoundingClientRect(); return [r.top, r.height]; })()"
+
+
+def same_box(page, before, what):
+    """The sign-in card where it was and as tall (LOGIN_BOX, before taken
+    earlier), within half a pixel."""
+    after = page.evaluate(LOGIN_BOX)
+    assert all(abs(a - b) <= 0.5 for a, b in zip(after, before)), f"{what}: the card moved, {before} → {after}"
+
+
 def centred_across(m, what):
     """The card of LOGIN_CARD's measure m in the middle of the window's
     width, and its title's text in the middle of the card, each within
@@ -1306,6 +1460,17 @@ VIEWER = {"mode": "users", "user": {"name": "viewer1", "role": "viewer", "has_pa
           "role": {"key": "viewer"}, "capabilities": ["read", "preferences"], "token": {"kind": "session"}}
 
 
+def stub_me(page, capabilities):
+    """The page signed in with these capabilities: GET /api/v1/me answered
+    as VIEWER's with them (safe_route), and read (loadMe()); the owner's
+    token still answers the other reads. The route as routed; a test
+    takes it away with page.unroute("**/api/v1/me")."""
+    me = dict(VIEWER, capabilities=capabilities)
+    routed = safe_route(page, "**/api/v1/me", lambda route: route.fulfill(status=200, content_type="application/json", body=json.dumps(me)))
+    page.evaluate("loadMe()")
+    return routed
+
+
 # The pages of the main area: how a user opens each, and the section it
 # shows.
 VIEW_BUTTON = {"tiles": "#view-tiles"}
@@ -1335,6 +1500,23 @@ def show_view(page, view):
         page.locator(VIEW_BUTTON[view]).click()
     page.locator(VIEW_SECTION[view]).wait_for(state="visible")
 
+
+# The fake Cube's panel in System settings → Cubes.
+CUBE_PANEL = "#cubes-list .cube-panel[data-serial='KEQ0000100']"
+
+
+def open_cube_panel(page):
+    """System settings → Cubes with the fake Cube's panel open, opened by
+    its name in the summary where it is closed (a click elsewhere on the
+    summary may meet one of its controls); the panel and its form, shown."""
+    show_view(page, "system")
+    panel = page.locator(CUBE_PANEL)
+    if panel.get_attribute("open") is None:
+        panel.locator(":scope > summary .cube-head-who").click()
+    form = panel.locator("form.cube-form")
+    form.wait_for(state="visible")
+    return panel, form
+
 # --- the same element ----------------------------------------------------
 
 def mark(page, selectors):
@@ -1346,6 +1528,12 @@ def mark(page, selectors):
 def replaced(page, selectors):
     """The selectors whose element is not the one mark marked, or is gone."""
     return page.evaluate("(ss) => ss.filter((s) => { const e = document.querySelector(s); return !e || e.__mark !== s; })", selectors)
+
+
+def same_and_open(page, selector):
+    """Whether the element of selector, a details, is the one mark marked
+    and is open: a list that a load left in place and open."""
+    return page.evaluate("(s) => { const d = document.querySelector(s); return !!d && d.__mark === s && d.open; }", selector)
 
 
 def focus_in_turn(page, click, focused):
@@ -1365,6 +1553,72 @@ def focus_in_turn(page, click, focused):
 def frames(page):
     """Two frames and a task: a part drawn again after a change has been drawn."""
     page.evaluate("() => new Promise((done) => requestAnimationFrame(() => requestAnimationFrame(() => setTimeout(done, 0))))")
+
+
+# --- the bubble -------------------------------------------------------------
+
+# The page's bubble (components.js showBubble) while it shows: its text,
+# its box, the window's size, its aria-hidden and its z-index; null while
+# it does not show. #bubble is made at the page's first bubble.
+BUBBLE = """() => {
+  const b = document.getElementById('bubble');
+  if (!b || !b.getClientRects().length) return null;
+  const r = b.getBoundingClientRect();
+  return { text: b.textContent, left: r.left, right: r.right, top: r.top, bottom: r.bottom,
+           width: document.documentElement.clientWidth, height: document.documentElement.clientHeight,
+           hidden: b.getAttribute('aria-hidden'), z: Number(getComputedStyle(b).zIndex) };
+}"""
+
+# What the page's live region of bubbles says, "" while it is not there:
+# showBubble makes #bubble-status at the page's first bubble, which may
+# come once the clipboard has answered, so a wait that reads it before
+# then must not throw (wait_until does not retry an expression that
+# throws).
+BUBBLE_STATUS = "(document.getElementById('bubble-status') || {textContent: ''}).textContent"
+
+# Where the bubble saying text shows against the element of sel: "above"
+# or "below" it, at most 8 px from it, centred on it or, where the window
+# has no room for that, at the window's edge on its side, and inside the
+# window; else what is wrong.
+BUBBLE_AT = """([sel, text]) => {
+  const b = document.getElementById('bubble');
+  const el = document.querySelector(sel);
+  if (!el) return 'no element ' + sel;
+  if (!b || !b.getClientRects().length) return 'no bubble';
+  if (b.textContent !== text) return 'it says ' + JSON.stringify(b.textContent);
+  const r = b.getBoundingClientRect(), c = el.getBoundingClientRect();
+  const w = document.documentElement.clientWidth, h = document.documentElement.clientHeight;
+  if (r.left < -0.5 || r.right > w + 0.5 || r.top < -0.5 || r.bottom > h + 0.5) return 'outside the window: ' + JSON.stringify(r);
+  const off = (r.left + r.right) / 2 - (c.left + c.right) / 2;
+  if (Math.abs(off) > 1 && !(off > 0 ? r.left <= 8.5 : r.right >= w - 8.5)) return 'not centred on it: ' + off.toFixed(1) + ' px';
+  if (r.bottom <= c.top + 0.5 && c.top - r.bottom <= 8) return 'above';
+  if (r.top >= c.bottom - 0.5 && r.top - c.bottom <= 8) return 'below';
+  return 'far from it: ' + JSON.stringify({ bubble: r, it: c });
+}"""
+
+
+def bubble(page):
+    """The page's bubble while it shows (BUBBLE), None while it does not."""
+    return page.evaluate(BUBBLE)
+
+
+def bubble_at(page, sel, text):
+    """Where the bubble saying text shows against the element of sel:
+    "above" or "below" it, else what is wrong (BUBBLE_AT)."""
+    return page.evaluate(BUBBLE_AT, [sel, text])
+
+
+def wait_bubble_at(page, sel, text, seconds=3):
+    """Waits, for seconds (scaled), until the bubble says text above or
+    below the element of sel, and returns where, or what was wrong at the
+    last look. The bubble shows for 1.4 s, so a test looks right after
+    what shows it."""
+    end = time.time() + scaled(seconds)
+    while True:
+        where = bubble_at(page, sel, text)
+        if where in ("above", "below") or time.time() >= end:
+            return where
+        page.wait_for_timeout(50)
 
 
 # --- one moment ------------------------------------------------------------

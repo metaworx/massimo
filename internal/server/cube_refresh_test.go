@@ -99,13 +99,15 @@ func TestRefreshRefusedWhileTheCubeReboots(t *testing.T) {
 	if code != 409 || !strings.Contains(body["error"].(string), "rebooting") {
 		t.Fatalf("refresh while rebooting: %d %v", code, body)
 	}
+	refusedWithCode(t, "refresh while rebooting", code, body, 409, "cube_rebooting", "null")
 	if n := fc.Connections(); n != 2 {
 		t.Errorf("%d connections, want the client's own 2", n)
 	}
 }
 
 // A Cube whose address or serial is not known yet is refused, as its
-// reboot is: there is nothing to reconnect to, or nothing reached yet.
+// reboot is: there is nothing to reconnect to, or nothing reached yet
+// (cube_address_not_known_yet, cube_serial_not_known_yet).
 func TestRefreshRefusedWithoutAddressOrSerial(t *testing.T) {
 	t.Parallel()
 	// Discovery only towards a loopback port that nobody answers on.
@@ -115,9 +117,15 @@ func TestRefreshRefusedWithoutAddressOrSerial(t *testing.T) {
 	if code != 409 || body["error"] != "the Cube's address is not known yet" {
 		t.Errorf("without an address: %d %v", code, body)
 	}
+	refusedWithCode(t, "refresh without an address", code, body, 409, "cube_address_not_known_yet", "null")
+	code, body = do(t, ts, "POST", "/api/v1/cubes/KEQ0000200/reboot", "{}")
+	refusedWithCode(t, "reboot without an address", code, body, 409, "cube_address_not_known_yet", "null")
 	ts = startServer(t, nowhere, withCubes(CubeConfig{Addr: "127.0.0.1:9"})).ts
 	code, body = do(t, ts, "POST", "/api/v1/cubes/127.0.0.1:9/refresh", "")
 	if code != 409 || body["error"] != "the Cube's serial is not known yet" {
 		t.Errorf("without a serial: %d %v", code, body)
 	}
+	refusedWithCode(t, "refresh without a serial", code, body, 409, "cube_serial_not_known_yet", "null")
+	code, body = do(t, ts, "POST", "/api/v1/cubes/127.0.0.1:9/reboot", "{}")
+	refusedWithCode(t, "reboot without a serial", code, body, 409, "cube_serial_not_known_yet", "null")
 }

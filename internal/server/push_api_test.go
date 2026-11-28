@@ -139,7 +139,7 @@ func TestPushSubscriptionRoutes(t *testing.T) {
 	}
 	for _, role := range []string{store.RoleGuest} {
 		tok := userToken(t, st, "u-"+role, role)
-		if code, text := callAPI(t, ts, "POST", "/api/v1/me/push", tok, subscription(t, "https://push.example.net/send/"+role, "")); code != 403 || errorOf(text) != `capability "preferences" required` {
+		if code, text := callAPI(t, ts, "POST", "/api/v1/me/push", tok, subscription(t, "https://push.example.net/send/"+role, "")); !isRefusal(code, text, 403, "capability_required", `{"capability":"preferences"}`, `capability "preferences" required`) {
 			t.Errorf("%s subscribed: %d %s", role, code, text)
 		}
 		if code, _ := callAPI(t, ts, "DELETE", "/api/v1/me/push/"+strconv.FormatInt(v.ID, 10), tok, ""); code != 403 {

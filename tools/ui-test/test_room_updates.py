@@ -30,7 +30,7 @@ from datetime import datetime, timedelta, timezone
 
 import pytest
 
-from helpers import boxes, frames, held_poll, hold, mark, replaced, wait_held, wait_until
+from helpers import answered, boxes, frames, held_poll, hold, mark, replaced, wait_held, wait_until
 from helpers import settled as looked_until
 
 
@@ -57,16 +57,10 @@ def state_event(page, rid):
 
 
 def rooms_loaded(page):
-    """The rooms loaded again, as a metadata event loads them."""
+    """The rooms loaded again, as a metadata event loads them, and the
+    reads the load sets off answered (answered)."""
     page.evaluate("loadRooms()")
-    page.wait_for_timeout(400)
-
-
-def settled(page):
-    """A frame and a task of the page awaited: what the focus leaving set
-    off at setTimeout(0), as the plain configuration's fill put off was,
-    has run by then."""
-    page.evaluate("new Promise((done) => requestAnimationFrame(() => setTimeout(done)))")
+    answered(page)
 
 
 def active(page):
@@ -307,7 +301,7 @@ def test_config_name_stays_once_left(page, case):
     config_name(page, tile)
     state_event(page, rid)
     page.locator(tile + " .room-name-btn").focus()
-    settled(page)
+    frames(page)
     value = page.evaluate("(s) => { const i = document.querySelector(s); return i ? i.value : null; }", tile + " .config-area input[type=text]")
     page.locator(tile + " .config-tabs .close").click()
     assert value == "Typed name", f"the name {value!r}"
@@ -419,7 +413,7 @@ def test_config_is_the_same_once_the_focus_left(page, case, tab):
     state_event(page, rid)
     rooms_loaded(page)
     page.locator(tile + " .room-name-btn").focus()
-    settled(page)
+    frames(page)
     fresh = unmarked(page, tile)
     value = field.input_value() if typed is not None else None
     selected = page.locator(tile + " .config-tabs [role=tab][aria-selected=true]").get_attribute("data-tab")

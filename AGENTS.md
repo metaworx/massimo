@@ -34,7 +34,7 @@ refer to linked documents for extended guidance.
   6. Commit Policy (STRICT)
   7. Additional References
   8. Document Governance
-- Massimo — Project Contract (v1.24.1)
+- Massimo — Project Contract (v1.26.0)
   1. Project Facts
   2. Primary References
   3. Project-Specific Conventions
@@ -430,9 +430,7 @@ Their values come from `GUIDELINES/config.ini`.
 
 ---
 
-
-# Massimo — Project Contract (v1.24.1)
-
+# Massimo — Project Contract (v1.26.0)
 What binds work in this project, for everyone working on it.
 Inlined into `/AGENTS.md` for agents and into `GUIDELINES/README.md` for people,
 so that the two cannot drift apart.
@@ -604,6 +602,10 @@ the ones an agent trips over most come first:
   A new API route gets a test that checks the exact line sent to the fake Cube,
   and `TestOpenAPICoversRoutes` fails when `docs/api-v1-openapi.yaml` and the
   routes differ.
+  A flaky test's fix that is a pattern becomes a documented kit helper
+  that every place of the pattern uses,
+  the tests' front page (`docs/testing.md`) names it,
+  and a local fix stays only where a sweep finds the pattern once.
 - **The API.**
   A client needs a token: `MASSIMO_API_TOKEN` is the owner's key,
   every other user has one of their own (`docs/api-v1.md`, "Authentication");

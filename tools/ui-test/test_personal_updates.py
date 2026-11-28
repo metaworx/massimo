@@ -15,7 +15,7 @@ import os
 import pytest
 
 from conftest import TOKEN, URL, api_call
-from helpers import OPERATOR_PASSWORD, frames, hold, mark, open_main_menu, owner_page, pause_clock, replaced, show_view, undo, wait_held, wait_until
+from helpers import OPERATOR_PASSWORD, frames, hold, mark, open_main_menu, owner_page, pause_clock, replaced, show_view, taken, undo, wait_held, wait_until
 from test_admin_updates import menu_mark, out
 from test_login import sign_in
 from test_notifications import FAKE_PUSH, reload_with
@@ -29,13 +29,15 @@ NEW = "#me-new"
 
 
 def user_read(page, name):
-    """A wait for My profile's read of the user name (GET …/users/{name})."""
-    return page.expect_response(lambda r: r.request.method == "GET" and r.url.endswith("/api/v1/users/" + name))
+    """A wait for My profile's read of the user name (GET …/users/{name}),
+    until the page has taken its answer (taken)."""
+    return taken(page, lambda r: r.request.method == "GET" and r.url.endswith("/api/v1/users/" + name))
 
 
 def tokens_read(page, name):
-    """A wait for the read of the user's sessions and keys that follows it."""
-    return page.expect_response(lambda r: r.request.method == "GET" and r.url.endswith(f"/api/v1/users/{name}/tokens"))
+    """A wait for the read of the user's sessions and keys that follows it,
+    until the page has taken its answer (taken)."""
+    return taken(page, lambda r: r.request.method == "GET" and r.url.endswith(f"/api/v1/users/{name}/tokens"))
 
 
 def profile_shown(page, name="owner"):
@@ -162,10 +164,9 @@ def test_a_late_read_of_my_profile_reaches_nothing_of_the_next_user(new_context,
         show_view(page, "profile")
         assert wait_held(page, held), "the user asked for"
         across(page, how)
-        with page.expect_response(lambda r: r.request.method == "GET" and r.url.endswith("/api/v1/users/owner")) as answer:
+        with taken(page, lambda r: r.request.method == "GET" and r.url.endswith("/api/v1/users/owner")):
             for r in held:
                 r.continue_()
-        answer.value.finished()  # its body read by the page too
         frames(page)
         frames(page)  # the read's own drawing, where it drew one
         assert page.locator(NAME).count() == 0, "no display name drawn: the operator has not shown My profile since"
@@ -422,8 +423,9 @@ WINDOW = "#notify-rules .notify-row[data-kind=window_open] input[type=number]"
 
 
 def push_read(page):
-    """A wait for the card's read of the devices (GET …/me/push)."""
-    return page.expect_response(lambda r: r.request.method == "GET" and r.url.endswith("/api/v1/me/push"))
+    """A wait for the card's read of the devices (GET …/me/push), until the
+    page has taken its answer (taken)."""
+    return taken(page, lambda r: r.request.method == "GET" and r.url.endswith("/api/v1/me/push"))
 
 
 def notify_shown(page):
@@ -501,10 +503,9 @@ def test_a_late_read_of_the_devices_reaches_nothing_of_the_next_user(new_context
         show_view(page, "notify")
         assert wait_held(page, held), "the devices asked for"
         across(page, how)
-        with page.expect_response(lambda r: r.request.method == "GET" and r.url.endswith("/api/v1/me/push")) as answer:
+        with taken(page, lambda r: r.request.method == "GET" and r.url.endswith("/api/v1/me/push")):
             for r in held:
                 r.fulfill(status=200, content_type="application/json", body=json.dumps(OWNERS_DEVICE))
-        answer.value.finished()  # its body read by the page too
         frames(page)
         frames(page)  # the read's own drawing, where it drew one
         assert page.locator(".notify-device", has_text="The first user's phone").count() == 0, "no device of the first user"
@@ -578,7 +579,7 @@ def test_a_rule_changed_before_another_users_sign_in_is_dropped(new_context, cas
         expire(page)  # the sign-in open: holdPushes has taken the rule's save
         page.clock.resume()
         sign_in(page, "operator", OPERATOR_PASSWORD)
-        with page.expect_response(lambda r: r.request.method == "GET" and r.url.endswith("/api/v1/me/preferences")) as prefs:
+        with taken(page, lambda r: r.request.method == "GET" and r.url.endswith("/api/v1/me/preferences")) as prefs:
             notify_shown(page)
         held = ((prefs.value.json() or {}).get("notify") or {}).get("device_stale", {}).get("on", False)
         assert puts == [], f"nothing sent: {puts}"
@@ -603,10 +604,9 @@ def test_a_read_that_finds_a_change_waiting_keeps_it(page, case):
         assert wait_held(page, held), "the rules asked for"
         pause(page)  # the save's second cannot pass before the read has answered
         flip_stale(page)
-        with page.expect_response(lambda r: r.request.method == "GET" and r.url.endswith("/api/v1/me/preferences")) as answer:
+        with taken(page, lambda r: r.request.method == "GET" and r.url.endswith("/api/v1/me/preferences")):
             for r in held:
                 r.continue_()
-        answer.value.finished()
         page.clock.run_for(100)  # the read's drawing, not the save
         assert page.locator(STALE).is_checked() != was, "the change kept through the read"
         assert puts == [], f"nothing sent before the second: {puts}"
@@ -637,10 +637,9 @@ def test_the_rules_wait_for_their_first_read(new_context, case, watch, guard):
         page.locator(STALE).wait_for(state="attached")
         assert page.locator("#notify-rules input[type=checkbox]:not([disabled])").count() == 0, "every switch off"
         assert page.locator("#notify-rules input[type=number]:not([disabled])").count() == 0, "every value off"
-        with page.expect_response(lambda r: r.request.method == "GET" and r.url.endswith("/api/v1/me/preferences")) as answer:
+        with taken(page, lambda r: r.request.method == "GET" and r.url.endswith("/api/v1/me/preferences")):
             for r in held:
                 r.fulfill(status=200, content_type="application/json", body=json.dumps(STORED))
-        answer.value.finished()
         frames(page)
         frames(page)
         assert page.locator(STALE).is_checked() and page.locator(STALE).is_enabled(), "the stored rule, on"

@@ -57,6 +57,7 @@ var actions = map[string]string{
 	"POST /api/v1/login/key":                                     "login.key",
 	"POST /api/v1/logout":                                        "logout",
 	"DELETE /api/v1/me/token":                                    "token.revoke",
+	"POST /api/v1/tokens/revoke":                                 "token.revoke_code",
 	"POST /api/v1/cubes":                                         "cube.add",
 	"PUT /api/v1/cubes/{sn}":                                     "cube.update",
 	"DELETE /api/v1/cubes/{sn}":                                  "cube.remove",
@@ -102,6 +103,8 @@ var actions = map[string]string{
 	"DELETE /api/v1/users/{name}":                                "user.remove",
 	"POST /api/v1/users/{name}/tokens":                           "token.add",
 	"POST /api/v1/users/{name}/register":                         "", // nothing is kept
+	"PUT /api/v1/users/{name}/tokens/{id}":                       "token.update",
+	"POST /api/v1/users/{name}/tokens/{id}/rekey":                "token.rekey",
 	"DELETE /api/v1/users/{name}/tokens/{id}":                    "token.revoke",
 	"POST /api/v1/users/{name}/identities":                       "identity.add",
 	"PUT /api/v1/users/{name}/identities/{id}":                   "identity.update",
@@ -168,7 +171,7 @@ var changeLines = map[string]string{
 	"pairing.start": "change", "pairing.stop": "change",
 	"repair.reset": "change", "repair.master": "change", "repair.relink": "change", "repair.unlink_relink": "change",
 	"repair.config": "change", "repair.place": "change", "repair.list": "change",
-	"user.add": "change", "user.update": "change", "user.remove": "change", "token.add": "change", "token.revoke": "change",
+	"user.add": "change", "user.update": "change", "user.remove": "change", "token.add": "change", "token.update": "change", "token.rekey": "change", "token.revoke": "change", "token.revoke_code": "change",
 	"identity.add": "change", "identity.update": "change", "identity.link": "change", "identity.remove": "change", "provider.add": "change", "provider.update": "change", "provider.remove": "change",
 	"integration.request": "change", "integration.approve": "change", "integration.refuse": "change", "integration.accept_instance": "change",
 	"integration.update": "change", "integration.revoke": "change", "integration.link": "change",
@@ -183,9 +186,11 @@ var changeLines = map[string]string{
 
 // noCommand are the actions that are audited but are no command: they
 // send nothing to a Cube and a retry of them is harmless (commands.go).
+// A revoke by code is among them: anyone may post one, and its retry
+// is the same 204.
 var noCommand = map[string]bool{"login": true, "login.start": true, "login.key": true, "logout": true, "integration.request": true, "preference.set": true, "preference.delete": true,
 	"push.subscribe": true, "push.unsubscribe": true, "server.reload": true, "identity.link.start": true,
-	"identity.link.cancel": true, "serverbackup.upload": true, "serverbackup.target_test": true}
+	"identity.link.cancel": true, "serverbackup.upload": true, "serverbackup.target_test": true, "token.revoke_code": true}
 
 // secretFields are the body fields an audit row never keeps, and the
 // answer's a command row never keeps: a server backup target's secret, a

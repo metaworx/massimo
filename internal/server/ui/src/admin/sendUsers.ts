@@ -26,7 +26,7 @@ import { actionRunner } from "../shared/action";
 import { forgetForms } from "../shared/forms";
 import { session, stillSession } from "../shared/session";
 import { wordNameError } from "../shared/username";
-import { enabled, keptOff, passwordLogin, passwordReveal, reads, roles, said, userFormKey, userUI, users } from "./store";
+import { enabled, keptOff, keyIdleDays, passwordLogin, passwordReveal, reads, roles, said, userFormKey, userUI, users } from "./store";
 import { reveal } from "../shared/password";
 import { can, canManageUsersOf, isMe, me } from "../shared/me";
 
@@ -189,7 +189,7 @@ export function createUser(body: Record<string, unknown> & { name: string }, pas
   return run(body.name, create, t("users.created", { name: body.name }));
 }
 
-/** loadPasswordLogin reads whether the server takes the password sign-in and whether the password fields offer their eye, for a holder of settings, who alone sees the switches. */
+/** loadPasswordLogin reads whether the server takes the password sign-in, whether the password fields offer their eye and the days an API key may stay unused, for a holder of settings, who alone sees them. */
 export async function loadPasswordLogin(): Promise<void> {
   if (!can("settings")) return;
   const n = session();
@@ -200,8 +200,30 @@ export async function loadPasswordLogin(): Promise<void> {
     passwordLogin.value = !v || v.value !== "false";
     const eye = all["auth.password_reveal"];
     passwordReveal.value = !eye || eye.value !== "false";
+    const idle = all["auth.key_idle_days"];
+    keyIdleDays.value = idle ? Number(idle.value) || 0 : 0;
   } catch {
     // the switches stay as they were
+  }
+}
+
+/**
+ * setKeyIdleDays writes the days an API key may stay unused before it
+ * ends (auth.key_idle_days, 0 for off; AP KeyLife, Block 3), saved as its
+ * field is left, and says so; refused, the line says why and the field
+ * keeps what was typed. It resolves to whether it was taken.
+ */
+export async function setKeyIdleDays(days: number): Promise<boolean> {
+  const n = session();
+  try {
+    await api("PUT", "api/v1/settings", { "auth.key_idle_days": days });
+    if (!stillSession(n)) return false;
+    keyIdleDays.value = days;
+    usersMsg(days ? tn("users.keyIdleSaved", days) : t("users.keyIdleOff"), true);
+    return true;
+  } catch (e) {
+    if (stillSession(n)) usersMsg(t("users.failed", { name: "", error: (e as Error).message }), false);
+    return false;
   }
 }
 

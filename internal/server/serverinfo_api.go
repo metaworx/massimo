@@ -71,7 +71,7 @@ func (s *Server) SetConfigView(view func() ConfigView) {
 
 func (s *Server) getStore(w http.ResponseWriter, r *http.Request) error {
 	if s.opts.Store == nil {
-		return fail(http.StatusServiceUnavailable, "this server has no store")
+		return refuse(http.StatusServiceUnavailable, codeServerNoStore)
 	}
 	in, err := s.opts.Store.Info(r.Context())
 	if err != nil {
@@ -87,7 +87,7 @@ func (s *Server) getConfig(w http.ResponseWriter, r *http.Request) error {
 	view := s.configView
 	s.pendingMu.Unlock()
 	if view == nil {
-		return fail(http.StatusServiceUnavailable, "this server does not show its settings")
+		return refuse(http.StatusServiceUnavailable, codeConfigNotShown)
 	}
 	v := view()
 	v.Version = s.opts.Version

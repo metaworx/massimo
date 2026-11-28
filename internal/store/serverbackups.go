@@ -4,7 +4,7 @@
 package store
 
 // The catalogue of the server's own backups (AP ServerBackup v1.0, Block
-// 2; docs/store.md, "Server backups"; migration 0100): the keys a backup
+// 2; docs/store.md, "Server backups"; migration 0103): the keys a backup
 // is encrypted for, the targets its copies go to, the backups and their
 // copies. internal/serverbackup makes, reads and copies the files; the
 // store keeps what is known of them. The catalogue is this server's: no

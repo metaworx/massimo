@@ -202,7 +202,7 @@ func (s *Server) loginStart(w http.ResponseWriter, r *http.Request) error {
 	case full:
 		return passwordBusy(store.ErrBusy)
 	case !ok:
-		return &httpError{status: http.StatusTooManyRequests, msg: "a sign-in from this address is already running; try again when it is done", retryAfter: 1}
+		return withRetryAfter(refuse(http.StatusTooManyRequests, codeLoginRunning), 1)
 	}
 	held := false
 	defer func() {
@@ -261,7 +261,7 @@ func (s *Server) loginFinish(w http.ResponseWriter, r *http.Request) error {
 	now := time.Now()
 	p, ok := s.logins.take(req.Login, now)
 	if !ok {
-		return fail(http.StatusUnauthorized, "no sign-in started under this login, or it took too long; start again")
+		return refuse(http.StatusUnauthorized, codeLoginNotStarted)
 	}
 	defer s.signIns.release(p.addrKey)
 	auditTarget(r, "user:"+p.name)
@@ -280,7 +280,7 @@ func (s *Server) loginFinish(w http.ResponseWriter, r *http.Request) error {
 	if errors.Is(err, store.ErrBadPassword) {
 		auditAction(r, "login.failed")
 		s.logSignIn("login_failed", p.name, 0, p.ip)
-		return fail(http.StatusUnauthorized, "wrong user or password")
+		return refuse(http.StatusUnauthorized, codeLoginWrong)
 	}
 	if err != nil {
 		return fail(http.StatusInternalServerError, "%v", err)
@@ -331,7 +331,7 @@ func (s *Server) registerOpaque(w http.ResponseWriter, r *http.Request) error {
 	}
 	resp, err := st.OpaqueRegistration(name, b)
 	if err != nil {
-		return userFail(err)
+		return passwordFail(err)
 	}
 	writeJSON(w, http.StatusOK, map[string]any{"response": opaqueB64.EncodeToString(resp), "ksf": store.OpaqueKSF})
 	return nil
@@ -354,7 +354,7 @@ func (s *Server) mayRegister(r *http.Request, st *store.Store, name string) erro
 	}
 	if p.mode == modeOpen {
 		if !localPeer(s.clientIP(r)) {
-			return fail(http.StatusForbidden, "the first owner is created from the local network, or on the box with massimo user add")
+			return refuse(http.StatusForbidden, codeFirstOwnerNotLocal)
 		}
 		return nil
 	}
@@ -370,5 +370,5 @@ func (s *Server) mayRegister(r *http.Request, st *store.Store, name string) erro
 		// a call through an integration, which adds no user (AP AccessEnds, D41-A4)
 		return throughIntegration()
 	}
-	return fail(http.StatusNotFound, "no user %q", name)
+	return refuse(http.StatusNotFound, codeUserUnknown, name)
 }

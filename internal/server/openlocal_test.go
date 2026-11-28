@@ -36,7 +36,7 @@ func TestOpenServerAnswersItsNetwork(t *testing.T) {
 		"203.0.113.9:5000": 403, "[2001:db8::1]:5000": 403, "100.64.1.1:5000": 403, "8.8.8.8:5000": 403,
 	} {
 		rec := serveFrom(s, "GET", cubes, addr, nil)
-		if rec.Code != want || want == 403 && errorOf(rec.Body.String()) != openRefused {
+		if rec.Code != want || want == 403 && !isRefusal(rec.Code, rec.Body.String(), 403, "server_open_local_only", "", openRefused) {
 			t.Errorf("%s: %d %s, want %d", addr, rec.Code, rec.Body.String(), want)
 		}
 	}
@@ -92,7 +92,7 @@ func TestOpenLegacyServerAnswersItsNetwork(t *testing.T) {
 	if rec := serveFrom(s, "GET", "/api/v1/cubes", "192.168.1.20:5000", nil); rec.Code != http.StatusOK {
 		t.Errorf("from the LAN: %d %s", rec.Code, rec.Body.String())
 	}
-	if rec := serveFrom(s, "GET", "/api/v1/cubes", "203.0.113.9:5000", nil); rec.Code != http.StatusForbidden || errorOf(rec.Body.String()) != openRefused {
+	if rec := serveFrom(s, "GET", "/api/v1/cubes", "203.0.113.9:5000", nil); !isRefusal(rec.Code, rec.Body.String(), http.StatusForbidden, "server_open_local_only", "", openRefused) {
 		t.Errorf("from the internet: %d %s", rec.Code, rec.Body.String())
 	}
 	tok := New(Options{Token: "secret"})
