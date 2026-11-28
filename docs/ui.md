@@ -1796,6 +1796,7 @@ and a line of the settings file that comes to differ while the panel is shown
 gets its notice with **Take the file's value**.
 The pairing is part of the panel and follows in place too:
 the countdown counts down in its line, a device that joins is added under it,
+and stays where an answer of the pairing asked for before it joined comes after it,
 and the time typed and a joined device's name and room stay, with the focus,
 through the countdown, a pairing event, a device that joins and a poll;
 what a joined device's form holds stays while the panel moves
@@ -3328,6 +3329,8 @@ the last outcome, Start's or Stop's request under way,
 the seconds left, which its timer moves on every second,
 asking for the state every third second where the stream does not report it,
 and what each joined device's form keeps, made where the device is listed;
+a read's answer lists its devices and keeps those listed since it was asked for
+that it lacks, a paired event's among them (AP SteadyTests v1.2, Block 21);
 the Cube's rooms its forms offer, read from `GET …/rooms` for every Cube,
 the shown one too;
 and what it sends, as `pairing.js` sent it;
