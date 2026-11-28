@@ -473,7 +473,10 @@ func (s *Server) putSettings(w http.ResponseWriter, r *http.Request) error {
 		case store.BackupsKeepDaysAutoKey, store.BackupsKeepDaysManualKey, store.BackupsKeepNewestKey:
 			pruneBackups = true
 		}
-		if wr.key == store.StaleAfterKey || wr.key == store.StaleAfterWallKey {
+		// A stale threshold applies at once, but where a flag fixes it for
+		// this run (-stale-after, its fixed_by): the value is stored, and a
+		// start without the flag takes it (AP ServerLimits, D8-A).
+		if (wr.key == store.StaleAfterKey || wr.key == store.StaleAfterWallKey) && s.opts.SettingsFixedBy[wr.key] == "" {
 			set := s.SetStaleAfter
 			if wr.key == store.StaleAfterWallKey {
 				set = s.SetStaleAfterWall

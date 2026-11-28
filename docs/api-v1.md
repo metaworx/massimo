@@ -2663,6 +2663,11 @@ The server's settings in the store:
 `in_effect` is what this run uses, which a serve flag (`-poll`, `-refresh`,
 `-discover-interval`, `-stale-after`) overrides for one run;
 `fixed_by` then names the flag.
+A `PUT` of a key a flag fixes is stored and answered as any other,
+and leaves `in_effect` the flag's:
+a start without the flag takes the stored value.
+`applies` stays the setting's own, `now` for a stale threshold,
+and `fixed_by` wins over it for the run.
 `serve -poll 0` asks the Cubes for their device lists never,
 `in_effect` `"0"` and `fixed_by` `-poll`, while the setting keeps its range.
 `poll_interval` is how often the server asks each Cube for its device list,
