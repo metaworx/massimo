@@ -648,15 +648,14 @@ the server's and the test's, in order,
 
 ## 2. The guard of the page's parts
 
-The page's regions are parts that are built once and updated in place
-(AP UiParts), which draw from the page's data as signals.
+The page's regions are parts that are built once and updated in place (AP UiParts),
+which draw from the page's data as signals.
 `tools/ui-test/test_parts_guard.py` is the check that holds them to it:
-data that comes in with nothing changed takes nothing away from what the
-user holds.
-It knows nothing of a part, so a region drawn anew fails it without a test
-of its own.
-It runs in two of the suite's four cases, 1100 px in English and 390 px
-in German: each width and each language once.
+data that comes in with nothing changed takes nothing away from what the user holds.
+It knows nothing of a part,
+so a region drawn anew fails it without a test of its own.
+It runs in two of the suite's four cases,
+1100 px in English and 390 px in German: each width and each language once.
 In the other two its tests are deselected as the suite is collected,
 by the mark `cases` that `GUARD_CASES` gives the file (`conftest.py`),
 so that none loads a page only to be skipped:
@@ -683,77 +682,82 @@ a device list with the virtual thermostat's settings in expert mode,
 each configuration tab, a Cube's panel, the pairing form,
 a user's panel with the new user's form, the scheme editor.
 
-In each view, around each data source applied with the data as it was
-(`poll(false)`, `loadCubes()`, `loadRooms()`, `refresh()`,
+In each view, around each data source applied with the data as it was (`poll(false)`,
+`loadCubes()`, `loadRooms()`, `refresh()`,
 a `state` event per device on the page's `EventSource` as the server sends it,
-`MassimoParts.log.loadAlerts()`, the page's minute
-(`MassimoParts.minute()`), the log's `MassimoParts.log.poll()`,
-the settings applied again, `applyStoredSettings()`, and who is in read again, `loadMe()`,
-every one in every region, since every part follows the data it reads, UiParts D221),
-and around the region's own (`Region.sources`):
+`MassimoParts.log.loadAlerts()`, the page's minute (`MassimoParts.minute()`),
+the log's `MassimoParts.log.poll()`, the settings applied again,
+`applyStoredSettings()`, and who is in read again, `loadMe()`,
+every one in every region, since every part follows the data it reads,
+UiParts D221), and around the region's own (`Region.sources`):
 the header's check for an update, `MassimoParts.software.load(false)`,
 the page shown again, the `viewshown` event its loaders take,
 and the stream's server events of the kinds a region follows,
-dispatched on the page's stream, a forward guard for the three regions
-(the plain page read nothing for these events),
+dispatched on the page's stream,
+a forward guard for the three regions (the plain page read nothing for these events),
 after each of which the guard waits until the page's requests have answered,
 and a round whose requests had not answered within 5 s fails with that as its reason,
 with the timer's own poll stopped:
 
-1. **Identity:** every element a user can hold that the region shows
-   (a button, a field, a select, a summary, a link, a `details`,
+1. **Identity:**
+   every element a user can hold that the region shows (a button, a field,
+   a select, a summary, a link, a `details`,
    anything with a `tabindex`) is the same element, still in the document;
-2. **Open:** every `details` that was open is open;
-3. **Typed:** every field that takes text, a number, a date or a time holds
-   the value typed into it, valid for its type;
-4. **Focus:** the element of the region that had the focus has it;
+2. **Open:**
+   every `details` that was open is open;
+3. **Typed:**
+   every field that takes text, a number,
+   a date or a time holds the value typed into it, valid for its type;
+4. **Focus:**
+   the element of the region that had the focus has it;
 
 and 1 to 3 once more after the focus has left the region,
 where a redraw put off while the user was in it comes.
 Typing sets the value and sends an `input` event, as a key does;
 no `change` event, no Enter, no click on a button, so nothing is saved.
-A failure names the region, the view, the data source, the check and the
-element, by its path from the nearest ancestor with an id.
+A failure names the region, the view, the data source,
+the check and the element, by its path from the nearest ancestor with an id.
 
 The guard sends nothing:
 every request to the API other than a GET is refused and fails the test,
 so nothing reaches the fake Cube and nothing changes in the server's store.
 Two things the page itself does as it loads are not the guard's:
-its first sync of the settings to the server, which it schedules because
-conftest removed them, is dropped;
-and the event stream's ticket of a page loaded during a view
-(the home notice's, on the second server) is let through and named in
-the test's output.
+its first sync of the settings to the server,
+which it schedules because conftest removed them, is dropped;
+and the event stream's ticket of a page loaded during a view (the home notice's,
+on the second server) is let through and named in the test's output.
 
 ### How the regions came to pass it
 
 While the regions moved, a list, `NOT_MOVED`, named those not yet moved that
 failed the guard, each with a line on what it lost, and skipped them;
 it went with the move's end (AP UiParts, Block 15).
-On 2026-11-15 it held the room tiles, a tile's configuration,
-the House tile, the Cubes list and Cube settings, which lose what the user
-holds at a state event, a rooms reload or a poll
-(Cube settings its head's problem pill, which the fixture's open window
-brings once it is five minutes old),
+On 2026-11-15 it held the room tiles, a tile's configuration, the House tile,
+the Cubes list and Cube settings,
+which lose what the user holds at a state event,
+a rooms reload or a poll (Cube settings its head's problem pill,
+which the fixture's open window brings once it is five minutes old),
 and the three regions the fixture cannot show:
 the header's problems list (the fixture's Cube has nothing wrong the header
 lists before that time, and a test cannot set it),
-the devices without a room (one joins only through pairing, a write to the Cube)
-and the sign-in dialog (a page without a token loads no data while it is open).
+the devices without a room (one joins only through pairing,
+a write to the Cube) and the sign-in dialog (a page without a token loads no
+data while it is open).
 The other regions passed although none had moved:
 they are filled in place, or drawn again only by the user's own action,
 which the guard does not apply.
-The Cubes list and Cube settings left the list with their move to parts
-(AP UiParts, Block 5), the header's problems list with the header's
-(Block 6), with a view of the list open and one of the Cube choice open
-with the Cubes found, the room tiles and the House tile with theirs (Block 7).
-The devices without a room left it with the rooms too: their view answers
-`GET …/devices` with the server's answer and one device without a room
-(`UNLISTED_STUB`), and opens its form that puts it into a room.
-The sign-in left it last (Block 14): its views open its card on a page signed in,
-as a 401 opens it, and its sources are a second `askLogin`, the providers read again,
-the language drawn again and who is in read again;
-the first owner's form, a region of its own, shows by a stub of `GET /api/v1/me`.
+The Cubes list and Cube settings left the list with their move to parts (AP UiParts,
+Block 5), the header's problems list with the header's (Block 6),
+with a view of the list open and one of the Cube choice open with the Cubes found,
+the room tiles and the House tile with theirs (Block 7).
+The devices without a room left it with the rooms too:
+their view answers `GET …/devices` with the server's answer and one device
+without a room (`UNLISTED_STUB`), and opens its form that puts it into a room.
+The sign-in left it last (Block 14):
+its views open its card on a page signed in, as a 401 opens it,
+and its sources are a second `askLogin`, the providers read again,
+the language drawn again and who is in read again; the first owner's form,
+a region of its own, shows by a stub of `GET /api/v1/me`.
 The list was empty since.
 A tile's configuration left it with its own move (Block 8), in a view per tab;
 before, a data event filled it again, but while the focus was in it,
@@ -778,79 +782,90 @@ a listing's as of a device the Cube's list lacks,
 so that the device's box asks for its name;
 a run is a POST, which the guard refuses.
 System settings' lists (AP UiParts, Block 10) are checked with a panel open,
-every field of its form typed, a question asked in its place and the new item's
-form beside it: a user's Remove asking; a provider's panel, `GET /api/v1/providers`
-answered with one provider off (`PROVIDER_STUB`), since the fixture has none;
-a request and an integration with a user and the choice of whom it acts as, and
-an installation seen on the LAN with Register's address asked for,
-the integrations' reads answered so (`REQ_STUB`, `IG_STUB`, `IG_USER`, `FOUND_IG`);
-a kept backup's Delete asking on Cube settings, run.sh's backup taken by hand.
+every field of its form typed,
+a question asked in its place and the new item's form beside it:
+a user's Remove asking; a provider's panel,
+`GET /api/v1/providers` answered with one provider off (`PROVIDER_STUB`),
+since the fixture has none;
+a request and an integration with a user and the choice of whom it acts as,
+and an installation seen on the LAN with Register's address asked for,
+the integrations' reads answered so (`REQ_STUB`, `IG_STUB`, `IG_USER`,
+`FOUND_IG`); a kept backup's Delete asking on Cube settings,
+run.sh's backup taken by hand.
 These views passed on the page before the move as well, since none of the
 guard's sources draws the lists again: from now on they guard that a poll, a
 state event or a reload of the Cubes and the rooms leaves them as they were,
 and a comment beside each says so;
 the reads of their own (an action in another panel, the list read again,
 the page shown again) are `test_admin_updates.py`'s.
-Software update (AP UiParts, Block 12) is checked with Update asking in the section
-and the channel's choice above it, the focus on it,
+Software update (AP UiParts,
+Block 12) is checked with Update asking in the section and the channel's choice above it,
+the focus on it,
 `GET /api/v1/update` answered with an update offered (`UPDATE_STUB`),
 around the header's check and Maintenance shown again as well;
 it passed on the page before the move too, as its comment says,
-since `update.js` filled it in place but for a select's options and the last updates' lines,
-which nobody holds: what it lost is `test_maint_updates.py`'s.
-Maintenance is checked with the restart asking in its row and a delay typed for the reboot,
-`GET /api/v1/restart` and `GET /api/v1/reboot` answered as on a box with a service manager
-(`RESTART_STUB`, `REBOOT_STUB`), around Maintenance shown again as well;
-it passed on the page before the move too: `maintenance.js` lost the focus of a setting
-while it saved, which `test_maint_updates.py` shows.
-System info is checked with its folds open, the credits' and Preact's licence among them,
-around the page shown again as well,
-which failed on the page before the move:
-`system-info.js` made the version's and the proxies' copy icons and the proxy's link anew
-at each read.
-My profile (AP UiParts, Block 13) is checked around the personal page shown again as well,
+since `update.js` filled it in place but for a select's options and the last
+updates' lines, which nobody holds: what it lost is `test_maint_updates.py`'s.
+Maintenance is checked with the restart asking in its row and a delay typed for
+the reboot,
+`GET /api/v1/restart` and `GET /api/v1/reboot` answered as on a box with a
+service manager (`RESTART_STUB`, `REBOOT_STUB`),
+around Maintenance shown again as well;
+it passed on the page before the move too:
+`maintenance.js` lost the focus of a setting while it saved,
+which `test_maint_updates.py` shows.
+System info is checked with its folds open,
+the credits' and Preact's licence among them,
+around the page shown again as well, which failed on the page before the move:
+`system-info.js` made the version's and the proxies' copy icons and the proxy's
+link anew at each read.
+My profile (AP UiParts,
+Block 13) is checked around the personal page shown again as well,
 which failed on the page before the move:
 `profile.js` made the display name's form and the sessions and keys anew at each show.
-My settings are checked around the settings applied again as well, as when the user's
-arrive from the server at a sign-in (`applyStoredSettings()`),
-which failed on the page before the move: `applySettings` set the poll typed back;
-the Appearance card too, with the scheme editor open,
-which failed as well: `applyAppearance` made the editor anew.
+My settings are checked around the settings applied again as well,
+as when the user's arrive from the server at a sign-in (`applyStoredSettings()`),
+which failed on the page before the move:
+`applySettings` set the poll typed back; the Appearance card too,
+with the scheme editor open, which failed as well:
+`applyAppearance` made the editor anew.
 Notifications are checked around the personal page shown again,
-which failed on the page before the move: `notify.js` made the rules and the devices anew.
-The page's chrome (AP UiParts, Block 14) is checked with ☰ open, the focus on an entry,
-and with the personal page's sections menu open, the focus on an item,
-each around who is in read again as well (`loadMe()`), as at a sign-in;
-the personal page's failed on the page before the move, where `pageBar` emptied the menu
-at every read of who is in.
+which failed on the page before the move:
+`notify.js` made the rules and the devices anew.
+The page's chrome (AP UiParts, Block 14) is checked with ☰ open,
+the focus on an entry, and with the personal page's sections menu open,
+the focus on an item, each around who is in read again as well (`loadMe()`),
+as at a sign-in; the personal page's failed on the page before the move,
+where `pageBar` emptied the menu at every read of who is in.
 System settings' sections menu open,
 and a card folded and opened again, the focus on its fold,
 passed on the page before the move too, where nothing drew a card's head again.
-The log (AP UiParts, Block 11) is two regions here:
-its section with its head, checked as it is and with the kind's choice in focus,
-which passed on the page before the move too, where nothing built the head again;
-and its lines, `#log-lines`, which no round types into
-(the search typed filters every line out),
+The log (AP UiParts, Block 11) is two regions here: its section with its head,
+checked as it is and with the kind's choice in focus,
+which passed on the page before the move too,
+where nothing built the head again; and its lines, `#log-lines`,
+which no round types into (the search typed filters every line out),
 checked with the log's reads of the Cube answered with the log's lines of
 `helpers.py` (`StubLog`, which `test_log_updates.py` uses too),
-two of them problems not yet seen
-(`GET /api/v1/log/alerts` answered so) and a command's line with its detail:
-a problem's Mark seen in focus, and the command's detail open with the focus
-on its button; both failed on the page before the move,
+two of them problems not yet seen (`GET /api/v1/log/alerts` answered so) and a
+command's line with its detail: a problem's Mark seen in focus,
+and the command's detail open with the focus on its button;
+both failed on the page before the move,
 where `loadRooms()` and `refresh()` built every line again.
 Its stubs are taken away once its views are done (`Region.after`).
 
 ### A region that changes
 
 A block that changes a region, or adds one,
-adds a view where the part has something to open that the table does not
-open yet, and corrects the region's selectors where the part changed them;
+adds a view where the part has something to open that the table does not open yet,
+and corrects the region's selectors where the part changed them;
 a new region gets its line in `REGIONS`.
 One region alone runs with
 `PYTEST_ADDOPTS='test_parts_guard.py -k <region>' make ui-test`.
 The guard bites: with the room tiles and the Cubes list checked,
-it failed on the page of 2026-11-15, the tiles at every state event and
-rooms reload, the Cubes list's closed panels at every poll.
+it failed on the page of 2026-11-15,
+the tiles at every state event and rooms reload,
+the Cubes list's closed panels at every poll.
 
 ## 3. What the smoke test does today
 

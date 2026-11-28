@@ -160,12 +160,12 @@ and the box needs no port open to the internet.
    but writes that file with mode 644 (the 0700 directory protects it;
    the `chmod` makes it explicit).
    Debian's acme.sh brings no timer:
-   a oneshot service running `acme.sh --cron` with the same three
-   directory options, and a timer with `OnCalendar=daily`,
-   `RandomizedDelaySec=1h` and `Persistent=true`, renew 30 days before the end
-   and run the reload command.
-   Debian 13's lego (4.9.1) fails with Infomaniak
-   (`expected record, got: <id>`, the record is created but not removed),
+   a oneshot service running `acme.sh --cron` with the same three directory options,
+   and a timer with `OnCalendar=daily`,
+   `RandomizedDelaySec=1h` and `Persistent=true`,
+   renew 30 days before the end and run the reload command.
+   Debian 13's lego (4.9.1) fails with Infomaniak (`expected record, got: <id>`,
+   the record is created but not removed),
    since Infomaniak's API now answers a new record with its id;
    acme.sh's hook only checks for success.
 4. One nginx site with the name of its own, the server's own `location /`
@@ -211,12 +211,12 @@ The Cubes' LAN proxy (port 62910 and discovery) does not go through nginx:
 
 ### The box's own web console beside it
 
-A second name with its own certificate on the same nginx can carry the box's
-web console, Debian's Cockpit (`sudo apt install cockpit`):
-system state, the journal, services such as `massimo` and `nginx`,
-updates, a terminal, and a clean reboot or shutdown.
-Cockpit keeps listening on its own port 9090 on every interface with its own
-TLS, which stays usable while nginx is down or restarting,
+A second name with its own certificate on the same nginx can carry the box's web console,
+Debian's Cockpit (`sudo apt install cockpit`): system state, the journal,
+services such as `massimo` and `nginx`, updates, a terminal,
+and a clean reboot or shutdown.
+Cockpit keeps listening on its own port 9090 on every interface with its own TLS,
+which stays usable while nginx is down or restarting,
 and nginx serves the same at the name without a port:
 
 - The certificate for the second name comes from acme.sh as above;
@@ -255,8 +255,9 @@ and nginx serves the same at the name without a port:
 
 A WebSocket handshake to `/cockpit/socket` answers `101` with the console's own
 origin and `403` with another, through nginx and on 9090 alike.
-Cockpit logs in with the box's accounts, so a sudo user there is root in
-the browser: keep it to the LAN, with a strong password.
+Cockpit logs in with the box's accounts,
+so a sudo user there is root in the browser: keep it to the LAN,
+with a strong password.
 
 ## Caddy
 

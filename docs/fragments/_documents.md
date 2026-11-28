@@ -19,8 +19,8 @@ on a document under `docs/` that is not).
 - [docs/proxy.md](docs/proxy.md): the server as a Cube for other clients
 - [docs/homeassistant.md](docs/homeassistant.md): Home Assistant,
   through the proxy today and with an integration of its own later
-- [docs/reverse-proxy.md](docs/reverse-proxy.md): `massimo serve` behind a
-  reverse proxy
+- [docs/reverse-proxy.md](docs/reverse-proxy.md):
+  `massimo serve` behind a reverse proxy
 - [docs/oidc.md](docs/oidc.md): signing in through an OpenID Connect
   provider such as Nextcloud, Google or Microsoft
 
@@ -55,10 +55,12 @@ on a document under `docs/` that is not).
   the kits' helpers by pattern, then how a Go test waits
 - [docs/testing-writes.md](docs/testing-writes.md):
   the test plan for the configuration writes on real hardware,
-  [docs/reports/write-test-2026-11-05.md](docs/reports/write-test-2026-11-05.md) its results
+  [docs/reports/write-test-2026-11-05.md](docs/reports/write-test-2026-11-05.md)
+  its results
 - [docs/testing-windows.md](docs/testing-windows.md):
   the test plan for the Windows service on a real PC,
-  [docs/reports/windows-test-2026-11-05.md](docs/reports/windows-test-2026-11-05.md) its results
+  [docs/reports/windows-test-2026-11-05.md](docs/reports/windows-test-2026-11-05.md) its
+  results
 - [tools/ui-test/README.md](tools/ui-test/README.md): `make ui-test`,
   the web UI smoke test with Playwright, and its setup
 - [docs/ui-testing.md](docs/ui-testing.md): testing the web UI:

@@ -580,15 +580,15 @@ the ones an agent trips over most come first:
   and in `packaging/README.md` ("Learnings").
   A Cube serves one LAN client at a time:
   commands go through the proxy of a running `serve`,
-  never to a Cube another program holds (`-no-direct` refuses the direct
-  fallback, `-direct` forces it);
-  a radio write costs duty cycle (about 1.25 % each, 36 s of air time an hour),
+  never to a Cube another program holds (`-no-direct` refuses the direct fallback,
+  `-direct` forces it); a radio write costs duty cycle (about 1.25 % each,
+  36 s of air time an hour),
   so nothing is sent to a real Cube without the owner's go.
 - **Go code.**
   The Go of `go.mod`, the standard library first.
   `gofmt` and `go vet` clean, and no `//nolint` outside `third_party/`.
-  Every file opens with the SPDX line `AGPL-3.0-or-later` and the copyright
-  line; JavaScript and CSS carry a one-line licence comment.
+  Every file opens with the SPDX line `AGPL-3.0-or-later` and the copyright line;
+  JavaScript and CSS carry a one-line licence comment.
   A package comment says what the package is for;
   every exported symbol has a comment that is a sentence,
   an unexported helper one where its name does not say it.
@@ -619,19 +619,20 @@ the ones an agent trips over most come first:
     and the places the parts draw into.
     Its static texts take `data-i18n`, which `i18n.js` applies;
     no script writes one (`TestUINoHTMLInjection`).
-  - **A part** is Preact with signals, in TSX under `internal/server/ui/src/<region>/`,
-    bundled by `make ui` (esbuild as a Go tool, `tools/uibundle`) into `ui/parts.js`,
-    which is not committed.
+  - **A part** is Preact with signals,
+    in TSX under `internal/server/ui/src/<region>/`,
+    bundled by `make ui` (esbuild as a Go tool,
+    `tools/uibundle`) into `ui/parts.js`, which is not committed.
     Preact is vendored under `third_party/preact/`;
     no other library and no other build step.
     A part is built once per key and updated in place:
     data never replaces an element the user can hold.
     A field that shows stored data keeps a draft.
     A part that reads a signal reads everything it depends on as signals.
-    A part gives the focus in the handler of the user's action
-    (or in a timer that handler sets, where a listener of the page must
-    run first: the click outside an open menu, which closes it),
-    or in a layout effect, in the drawing that shows its place.
+    A part gives the focus in the handler of the user's action (or in a timer
+    that handler sets, where a listener of the page must run first:
+    the click outside an open menu, which closes it), or in a layout effect,
+    in the drawing that shows its place.
     A part calls `t()` and carries no `data-i18n`.
     Its shared elements come from `internal/server/ui/src/shared/`,
     which knows no region (`TestSharedPartsKnowNoRegion`):
@@ -643,52 +644,52 @@ the ones an agent trips over most come first:
     and an effect lists what it reads or says why not in a `biome-ignore`
     comment with its reason.
     A file under `ui/src/` opens with the SPDX and copyright lines,
-    then the `@file` header of `GUIDELINES/shared/lang/ts/LINTING.md`
-    (`TestUIFileHeaders`);
+    then the `@file` header of `GUIDELINES/shared/lang/ts/LINTING.md` (`TestUIFileHeaders`);
     `make ui-check` is the parts' lint and `make ui-test` their test:
     they have no unit-test runner.
-  - **The data are signals:** `state` of `app.js` and `themeState` of
-    `theme.js` stay the plain scripts' objects, and `shared/data.ts` makes
-    their fields signals.
+  - **The data are signals:**
+    `state` of `app.js` and `themeState` of `theme.js` stay the plain scripts' objects,
+    and `shared/data.ts` makes their fields signals.
     A field is written whole, never in place (`TestStateWrittenWhole`):
-    by the loads of `app.js` (the Cubes, the rooms, the settings, a sign-out's
-    clearing), and beside them by `home.js` (a Cube found),
-    `rooms.js` (a device's state), `header.js` (the server's answer, a new
-    version), `login.js` (who is in) and `theme.js` and the scheme editor
-    (the colour schemes); `docs/ui.md` ("The data") names each field's.
+    by the loads of `app.js` (the Cubes, the rooms, the settings,
+    a sign-out's clearing), and beside them by `home.js` (a Cube found),
+    `rooms.js` (a device's state), `header.js` (the server's answer,
+    a new version),
+    `login.js` (who is in) and `theme.js` and the scheme editor (the colour schemes);
+    `docs/ui.md` ("The data") names each field's.
     A part that draws from them follows them, and reads nothing again
     because they were written (`test_data_updates.py`).
     Who is in is `shared/me.ts`', the settings `state.settings`'.
     An answer that comes after a sign-out changes nothing:
     a part's request and a plain load take the session's number before it
     (`shared/session.ts`).
-  - **The plain scripts** are the texts (`i18n.js`) and the theme
-    (`theme.js`), applied before the page draws;
-    the session, the sign-in by OPAQUE and through a provider, the first
-    owner asked for, a running page held still behind the card the user
-    opened, and the settings' pushes (`login.js`), with the providers'
-    list (`providers.js`);
-    the API, the settings, the loads, the stream and the page's start (`app.js`);
-    what stays plain of the header: the radio budget, the server's clock,
-    a Cube's link sign and word, the certificate's text and the version
-    check (`header.js`);
+  - **The plain scripts** are the texts (`i18n.js`) and the theme (`theme.js`),
+    applied before the page draws; the session,
+    the sign-in by OPAQUE and through a provider, the first owner asked for,
+    a running page held still behind the card the user opened,
+    and the settings' pushes (`login.js`),
+    with the providers' list (`providers.js`); the API, the settings, the loads,
+    the stream and the page's start (`app.js`); what stays plain of the header:
+    the radio budget, the server's clock, a Cube's link sign and word,
+    the certificate's text and the version check (`header.js`);
     the home notice's facts and the Cubes found (`home.js`);
     the rooms' actions (`rooms.js`, `tiles.js`);
     the week programme editor (`week-program.js`) and its kit (`config.js`);
     the toast and the service worker (`notify.js`, `notifytext.js`, `sw.js`);
-    and the connect page (`connect.js`), which clones the `<template>`s
-    of `connect.html`.
+    and the connect page (`connect.js`),
+    which clones the `<template>`s of `connect.html`.
     A plain script builds an element with the builders of `components.js`
     and writes no copy of one (the week programme editor's and the
     connect page's own inputs aside).
     It looks up the skeleton's ids alone (`TestUIPage`),
     and in the whole page only what every element of a kind shares,
-    a part's too: the menus, one open at a time and closed by Escape
-    and by a click outside (`components.js`), the help slots of the cards'
-    heads (`app.js`), the static texts (`applyI18n`, which finds none in
-    a part) and the brand's marks (`brandMarks`, which passes over one a
-    part has drawn); `TestUIPage` refuses any other
-    `document.querySelector` of a plain script.
+    a part's too: the menus,
+    one open at a time and closed by Escape and by a click outside (`components.js`),
+    the help slots of the cards' heads (`app.js`),
+    the static texts (`applyI18n`,
+    which finds none in a part) and the brand's marks (`brandMarks`,
+    which passes over one a part has drawn);
+    `TestUIPage` refuses any other `document.querySelector` of a plain script.
     Anything else of a part it is handed by the part,
     or reaches through `window.MassimoParts`,
     which is also the UI tests' one handle.
@@ -715,8 +716,8 @@ the ones an agent trips over most come first:
 - **Branches and pull requests**:
   develop on `main` through pull requests the owner merges;
   `release/alpha` is the release branch, only ever fast-forwarded,
-  by the release once it is out (`GUIDELINES/project/CI.md`, "Releases");
-  `release/devel` and `release/nightly` are tags, moved by CI.
+  by the release once it is out (`GUIDELINES/project/CI.md`,
+  "Releases"); `release/devel` and `release/nightly` are tags, moved by CI.
   At a line's feature freeze `make freeze <x.y>` cuts `maint/<x.y>` from `origin/main`;
   completions and fixes for x.y then target `maint/<x.y>`,
   every x.y release is cut there,
@@ -725,12 +726,11 @@ the ones an agent trips over most come first:
   merges it upward into `main` with a `merge:` commit and pushes that
   straight away (AP MaintBranch, D1-A);
   an old maintenance branch releases nothing after the next freeze (D3-A).
-  A plan's own commits (its registration, revisions, NOTEs, analyses
-  and retirement) go onto the branch its work merges into:
+  A plan's own commits (its registration, revisions, NOTEs,
+  analyses and retirement) go onto the branch its work merges into:
   `maint/<x.y>` while any of its blocks ship in x.y, `main` otherwise,
   and reach `main` by the upward merge (D5-A);
-  a plan open at the freeze is retired on `maint/<x.y>` where its work
-  shipped in x.y.
+  a plan open at the freeze is retired on `maint/<x.y>` where its work shipped in x.y.
   A branch merges `origin/main` before its pull request (merge,
   never rebase a stack),
   or `origin/maint/<x.y>` where that is its base.
