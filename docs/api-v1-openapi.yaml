@@ -3417,8 +3417,10 @@ paths:
         only by a mark. A device's communication error and link error are
         alerts at warn while the device has them, at the state line that
         set them; its battery is one by its level, the battery event at
-        low, settled by the next at ok, not by the Cube's flag. The audit's
-        lines for a holder of audit only.
+        low, settled by the next at ok, not by the Cube's flag. A
+        wall_reset is settled by its room's members agreeing again (a
+        disagree of its room, outcome agree). The audit's lines for a
+        holder of audit only.
         A Cube without a row in the store adds nothing; without a store,
         none.
       parameters:
@@ -3463,7 +3465,7 @@ paths:
         hello, metadata, config, state, battery (a device's battery
         level changed; cause replaced in "summary" and who in "by" where
         someone marked new batteries), wall_reset (a wall thermostat back from a silence
-        on another mode, at warn), error_reset (the server reset the
+        on another mode, at warn; its room in "summary"), error_reset (the server reset the
         communication error of a device that reported while flagged, once a
         day at most: the room of its C line and automatic in "summary"),
         error_watch (a device's flags watched, "what" in "summary": back,

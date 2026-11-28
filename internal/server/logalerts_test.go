@@ -111,6 +111,44 @@ func TestBatterySettles(t *testing.T) {
 	}
 }
 
+// A wall thermostat's mode reset is settled by a later agreement of its
+// room, also as the store reads the room back, not by another room's,
+// nor by a room check's other outcome; a line without a room only by a
+// mark.
+func TestWallResetSettles(t *testing.T) {
+	t.Parallel()
+	now := time.Now()
+	ev := func(id int64, kind, level string, summary map[string]any) event {
+		return event{ID: id, Kind: kind, Level: level, CubeSerial: "KEQ0000100", Summary: summary, Time: now.Add(time.Duration(id-100) * time.Second)}
+	}
+	reset := func(id int64, room any) event {
+		summary := map[string]any{"mode": "auto", "was_mode": "manual"}
+		if room != nil {
+			summary["room"] = room
+		}
+		e := ev(id, "wall_reset", "warn", summary)
+		e.Device = "0a0201"
+		return e
+	}
+	agreed := func(id int64, room any, outcome string) event {
+		return ev(id, "disagree", "info", map[string]any{"room": room, "outcome": outcome})
+	}
+	lines := []event{reset(1, uint8(1)), reset(3, uint8(2)), reset(5, nil), reset(7, uint8(1))}
+	settling := []event{
+		agreed(2, uint8(1), "agree"),
+		agreed(4, float64(3), "agree"),      // another room's
+		agreed(6, float64(2), "not_resent"), // not agreeing
+		agreed(8, float64(1), "agree"),      // as the store reads it back
+	}
+	var got []int64
+	for _, a := range unsettled(lines, settling, now) {
+		got = append(got, a.ID)
+	}
+	if want := []int64{3, 5}; !slices.Equal(got, want) {
+		t.Fatalf("unsettled %v, want %v", got, want)
+	}
+}
+
 // GET /api/v1/log/alerts over a device's battery: its level's event at
 // low is an alert, at warn; another device's level back at ok leaves it,
 // the device's own settles it; a weak level's event, at info, is none.

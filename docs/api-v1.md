@@ -4146,6 +4146,7 @@ of the same Cube, or of the server for the server's own:
 | `error_watch` `back` or `lasting` | the same device's `error_watch` `clear` of the same `flag` |
 | `unconfirmed`, a room's setpoint or its re-send not confirmed, its re-send failed | an `unconfirmed` of the same `target` whose `outcome` is `resend_confirmed` |
 | `battery`, a device's battery level `low` | a `battery` of the same device whose `level` is `ok`: new batteries marked, or the server's rules (see the devices' `battery`) |
+| `wall_reset`, a wall thermostat back on another mode | a `disagree` of the same `room` whose `outcome` is `agree`, which the room checks write only after a `disagree` warning: a room put right within 10 minutes, or a line without a `room`, only by a mark |
 
 Any other, such as `proxy_discarded`, `proxy_delete_refused` and `open_setup`,
 is settled only by a person's mark.
@@ -4209,7 +4210,8 @@ with `cause` `replaced` in its `summary` and who in `by` where someone marked
 new batteries),
 `wall_reset` (a wall thermostat came back after five minutes or more without a
 state on another mode than it had, as after new batteries, at warn: its
-`summary` has the `mode` and the `was_mode`, the setpoints and `silent_min`),
+`summary` has the `mode` and the `was_mode`, the setpoints, `silent_min`
+and the thermostat's `room`, whose agreement settles it, see the alerts above),
 `error_reset` (the server reset a device's communication error,
 its `error` flag, with one `r:`, which costs no radio time,
 because the device reported while flagged:
