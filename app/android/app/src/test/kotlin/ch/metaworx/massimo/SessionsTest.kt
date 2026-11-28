@@ -98,7 +98,7 @@ class SessionsTest {
     private fun probe(urls: List<String>, fp: String?): List<ProbeResult> =
         urls.map { u -> if (u == base) ProbeResult(u, ok = true, node = "node-a") else ProbeResult(u, ok = false, error = "refused") }
 
-    private fun sessions() = Sessions(keeper, logins, api, ::probe) { logged.add(it) }
+    private fun sessions() = Sessions(keeper, logins, api, ::probe, log = Logger { logged.add(it) })
 
     private fun home(lan: String = base, remote: String = "", id: String = "s1", node: String = "node-a") =
         Server(id, "Home", node, lan, remote, "", Server.ASK_START, false)
@@ -301,6 +301,200 @@ class SessionsTest {
         assertFalse(st.revokeWithKey(home(lan = closed), closed, "anna", LoginSecret("key-secret", 42)))
         assertFalse(logged.last(), logged.last().contains("key-secret"))
         assertEquals(3, logged.size)
+    }
+
+    // held runs [test] against the revokes' fake server, with a store of
+    // servers and its KeysLeft, a server Home kept there at the fake's
+    // address, and its Sessions.
+    private fun held(test: (FakeServer, ServerStore, Sessions, Server) -> Unit) = FakeServer().use { fake ->
+        val servers = ServerStore(File(tmp.root, "servers.json"))
+        val left = KeysLeft(servers, logins, api, logged::add)
+        val s = servers.save(org.json.JSONObject().put("name", "Home").put("node", "node-a").put("lan", fake.base))
+        test(fake, servers, Sessions(keeper, logins, api, { urls, _ -> urls.map { ProbeResult(it, ok = false) } }, left, logged::add), s)
+    }
+
+    @Test
+    fun aSessionCheckedIsRecordedAsHeldUntilItEnds() {
+        // D102-A: its user, id and time once a check learns them, no secret; cleared where it ends, is left or replaced
+        held { fake, servers, st, s ->
+            st.put(s, "session-anna")
+            assertNull("not checked yet", servers.get(s.id)!!.held)
+            st.check(s, fake.base)
+            assertEquals(HeldSession("anna", 7, FakeServer.made(7)), servers.get(s.id)!!.held)
+            assertFalse("never to the page", servers.get(s.id)!!.toJson().has("held"))
+            assertFalse("no secret in the file", File(tmp.root, "servers.json").readText().contains("session-anna"))
+            assertTrue(st.signOut(s, fake.base))
+            assertNull("ended: cleared", servers.get(s.id)!!.held)
+            st.put(s, "session-anna")
+            st.check(s, fake.base)
+            assertFalse(st.signOut(s, ""))
+            assertNull("left: cleared", servers.get(s.id)!!.held)
+            assertEquals(listOf(SessionLeft("anna", 7, FakeServer.made(7))), servers.get(s.id)!!.unended)
+            servers.ended(s.id, servers.get(s.id)!!.unended)
+            st.put(s, "session-anna")
+            st.check(s, fake.base)
+            st.put(s, "session-bob")
+            assertNull("replaced: cleared", servers.get(s.id)!!.held)
+            st.check(s, fake.base)
+            assertEquals(9L, servers.get(s.id)!!.held!!.id)
+            st.put(s, null)
+            assertNull("forgotten: cleared", servers.get(s.id)!!.held)
+        }
+    }
+
+    @Test
+    fun aSessionInMemoryGoesIntoUnendedAtTheNextProcess() {
+        // F47: the process ends with the session in memory; the next one's start leaves it, a sealed one still held stays
+        held { fake, servers, st, s ->
+            logins.put(s.id, kept(42))
+            val sealed = servers.save(org.json.JSONObject().put("name", "Cabin").put("node", "node-a").put("lan", fake.base))
+            st.put(s, "session-anna")
+            st.check(s, fake.base)
+            assertTrue("kept at each start: in memory", keeper.inMemory(s.id))
+            st.put(sealed, "session-bob")
+            st.check(sealed, fake.base)
+            // the next process: a new keeper over the same file, its memory empty
+            val next = SessionKeeper(TokenStore(File(tmp.root, "tokens.json"), plain))
+            next.leaveForgotten(servers, logins)
+            assertNull(servers.get(s.id)!!.held)
+            assertEquals(listOf(SessionLeft("anna", 7, FakeServer.made(7))), servers.get(s.id)!!.unended)
+            assertEquals("a sealed session is still held", 9L, servers.get(sealed.id)!!.held!!.id)
+            assertTrue(servers.get(sealed.id)!!.unended.isEmpty())
+            assertEquals("once", 1, ServerStore(File(tmp.root, "servers.json")).get(s.id)!!.unended.size)
+            next.leaveForgotten(servers, logins)
+            assertEquals(1, servers.get(s.id)!!.unended.size)
+        }
+    }
+
+    @Test
+    fun aKeyTypedIntoTheCardIsNeverRecordedNorLeft() {
+        // the card's "API key" way: the page's token, of kind api; no held, nothing in unended after a new process or Exit
+        held { fake, servers, st, s ->
+            logins.put(s.id, kept(42))
+            st.put(s, "key-own")
+            assertEquals("anna", st.check(s, fake.base))
+            assertNull(servers.get(s.id)!!.held)
+            val next = SessionKeeper(TokenStore(File(tmp.root, "tokens.json"), plain))
+            next.leaveForgotten(servers, logins)
+            keeper.dropMemory()
+            keeper.leaveForgotten(servers, logins)
+            assertTrue(servers.get(s.id)!!.unended.isEmpty())
+        }
+    }
+
+    @Test
+    fun oneHolderOverTwoActivitiesKeepsWhatWasChecked() {
+        // D102-A: the activity made anew (dark mode, language, Appearance) takes the process's holders
+        held { fake, servers, _, s ->
+            val checks = Checks()
+            val left = KeysLeft(servers, logins, api, logged::add)
+            val first = Sessions(keeper, logins, api, { urls, _ -> urls.map { ProbeResult(it, ok = false) } }, left, logged::add, checks)
+            first.put(s, "session-anna")
+            first.check(s, fake.base)
+            val second = Sessions(keeper, logins, api, { urls, _ -> urls.map { ProbeResult(it, ok = false) } }, left, logged::add, checks)
+            assertEquals("the new activity's Sessions knows the user", "anna", second.user(s))
+            assertEquals("session-anna", second.held(s))
+            assertFalse(second.signOut(s, ""))
+            assertEquals("and leaves the session by the id the first one checked", listOf(SessionLeft("anna", 7, FakeServer.made(7))), servers.get(s.id)!!.unended)
+        }
+    }
+
+    @Test
+    fun aSessionTheSameKeyReplacesIsNotLoggedOut() {
+        // F41, D100-A: POST /api/v1/login/key ended the key's earlier session itself (D31-A)
+        held { fake, servers, st, s ->
+            assertNull(st.put(s, "session-anna-fp", fake.base, keyId = 42))
+            st.check(s, fake.base)
+            assertNull("made from the same key: no logout, nothing left", st.put(s, "session-anna", fake.base, keyId = 42))
+            assertTrue(servers.get(s.id)!!.unended.isEmpty())
+            // not checked yet, the key known from its making all the same
+            assertNull(st.put(s, "session-anna-expiring", fake.base, keyId = 42))
+            // a password session replaced is logged out as before
+            st.put(s, "session-bob", fake.base)!!.end()
+            assertEquals("POST /api/v1/logout session-anna-expiring", fake.requests().last())
+            assertTrue(fake.requests().none { it == "POST /api/v1/logout session-anna-fp" || it == "POST /api/v1/logout session-anna" })
+        }
+    }
+
+    @Test
+    fun turnOffForgetsASessionTheKeyEndedWithoutALogout() {
+        // F41, D100-A: a session made from the key revoked ended with it
+        held { fake, servers, st, s ->
+            logins.put(s.id, kept(42))
+            st.put(s, "session-anna-fp", fake.base, keyId = 42)
+            st.check(s, fake.base)
+            assertEquals(Sessions.Revoke.REVOKED, st.revokeWithSession(s, fake.base, kept(42)))
+            assertEquals("DELETE /api/v1/users/anna/tokens/42 session-anna-fp", fake.requests().last())
+            assertTrue("no logout of a session that ended", fake.requests().none { it.startsWith("POST /api/v1/logout") })
+            assertNull(st.held(s))
+            assertNull(servers.get(s.id)!!.held)
+            assertTrue(servers.get(s.id)!!.unended.isEmpty())
+        }
+    }
+
+    @Test
+    fun aCheckLogsWhatItSwallowsWithoutASecret() {
+        // D102-A: a server's failure and a broken connection, as end writes them
+        val st = sessions()
+        st.put(home(lan = closed), "session-anna")
+        st.check(home(lan = closed), closed)
+        assertTrue(logged.single(), logged.single().contains("s1") && logged.single().contains("not checked"))
+        held { fake, _, sf, s ->
+            sf.put(s, "no-such-session")
+            sf.check(s, fake.base) // refused: forgotten, no failure
+            assertEquals(1, logged.size)
+            // the server's failure (500), as end writes one
+            sf.put(s, "session-anna-broken")
+            assertNull(sf.check(s, fake.base))
+            assertEquals(2, logged.size)
+            assertTrue(logged.last(), logged.last().contains(s.id) && logged.last().contains("not checked") && logged.last().contains("status 500"))
+        }
+        assertTrue(logged.toString(), logged.none { it.contains("session-") })
+    }
+
+    @Test
+    fun aSealedSessionNoCheckOfThisProcessSawIsLeftByItsRecord() {
+        // the review: after a restart Checks is empty; the record as held stands in for the check
+        held { fake, servers, st, s ->
+            fun restart(): Sessions {
+                val k = SessionKeeper(TokenStore(File(tmp.root, "tokens.json"), plain))
+                return Sessions(k, logins, api, { urls, _ -> urls.map { ProbeResult(it, ok = false) } }, KeysLeft(servers, logins, api, logged::add), logged::add, Checks())
+            }
+            val left7 = listOf(SessionLeft("anna", 7, FakeServer.made(7)))
+            st.put(s, "session-anna")
+            st.check(s, fake.base)
+            // Sign out where the server does not answer
+            assertFalse(restart().signOut(s, ""))
+            assertEquals(left7, servers.get(s.id)!!.unended)
+            servers.ended(s.id, left7)
+            // a session the page's new one replaces, before its ending runs
+            st.put(s, "session-anna")
+            st.check(s, fake.base)
+            val ending = restart().put(s, "session-bob", fake.base)
+            assertEquals("left by its record until its ending", left7, servers.get(s.id)!!.unended)
+            ending!!.end()
+            assertTrue("and taken away once ended", servers.get(s.id)!!.unended.isEmpty())
+            // Sign out of all, the server not answering (this probe answers nowhere)
+            st.put(s, "session-anna")
+            st.check(s, fake.base)
+            assertEquals(0, restart().signOutAll(listOf(servers.get(s.id)!!)))
+            assertEquals(left7, servers.get(s.id)!!.unended)
+            assertNull(servers.get(s.id)!!.held)
+        }
+    }
+
+    @Test
+    fun aSignOutLeavesTheSessionRecordedWhileTheServerIsAsked() {
+        // the review: an app that ends during the logout leaves the session in unended, not unrecorded
+        held { fake, servers, st, s ->
+            st.put(s, "session-anna")
+            st.check(s, fake.base)
+            var during: List<SessionLeft>? = null
+            fake.onRequest = { line -> if (line == "POST /api/v1/logout session-anna") during = ServerStore(File(tmp.root, "servers.json")).get(s.id)!!.unended }
+            assertTrue(st.signOut(s, fake.base))
+            assertEquals("in the file while the server was asked", listOf(SessionLeft("anna", 7, FakeServer.made(7))), during)
+            assertTrue("gone once it ended", servers.get(s.id)!!.unended.isEmpty())
+        }
     }
 
     @Test

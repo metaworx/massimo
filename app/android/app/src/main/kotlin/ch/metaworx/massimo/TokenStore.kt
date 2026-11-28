@@ -39,6 +39,10 @@ class TokenStore(private val file: File, private val sealer: Sealer) {
         }
     }
 
+    /** has reports whether a token is kept for the server, without opening it. */
+    @Synchronized
+    fun has(id: String): Boolean = read().opt(id) is String
+
     /** put keeps [token] for the server, or forgets it for null. */
     @Synchronized
     fun put(id: String, token: String?) {

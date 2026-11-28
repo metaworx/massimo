@@ -446,13 +446,20 @@ class Bridge(
     }
 
     // openKept opens the kept login of [s] for fingerprint, on io, and
-    // makes the session with it.
+    // makes the session with it; the session is checked at once, as
+    // setToken checks a page's (D102-A, F43): its id learnt before the page
+    // opens, so that nothing forgets it unrecorded, and the keys and
+    // sessions left there revoked as at any check. A session it replaces,
+    // made from the same key, the server ended with this one's making, and
+    // is not logged out (D100-A).
     private fun openKept(s: Server, url: String, kept: KeptLogin, answer: Answer, then: (String?) -> Unit) {
         appKey.open(texts.get(R.string.login_title, s.name), s.id, kept) { r ->
             when (r) {
                 is AppKey.Result.Opened -> try {
                     val session = api.loginKey(url, s.fp, r.secret.key)
-                    val ending = sessions.put(s, session, url) // a session it replaces ended there (D68-A), after the answer
+                    val keyId = r.secret.id.takeIf { it > 0 } ?: kept.keyId
+                    val ending = sessions.put(s, session, url, keyId) // a session it replaces ended there (D68-A), after the answer
+                    runCatching { sessions.look(s, url) }
                     main.post { then(session) }
                     ending?.let { runCatching { it.end() } }
                 } catch (e: ServerApi.Refused) {

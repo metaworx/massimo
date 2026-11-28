@@ -360,4 +360,23 @@ class KeysLeftTest {
         assertFalse("once", logins.setKeyId(s.id, anew.copy(keyId = 42), 43))
         assertEquals(42L, logins.get(s.id)!!.keyId)
     }
+
+    @Test
+    fun aSessionTheProcessForgotIsRevokedAtTheNextSession() {
+        // F47, D102-A: the session held when the process ended, left at the next start, revoked by the next session there
+        val s = home()
+        logins.put(s.id, KeptLogin("anna", "node-a", "", byteArrayOf(1), byteArrayOf(2), 42))
+        sessions.put(s, "session-anna")
+        sessions.check(s, fake.base)
+        assertEquals(7L, servers.get(s.id)!!.held!!.id)
+        val next = SessionKeeper(TokenStore(File(tmp.root, "tokens.json"), plain))
+        next.leaveForgotten(servers, logins)
+        assertEquals(listOf(left(7)), sessionsLeft(s.id))
+        val after = Sessions(next, logins, api, { urls, _ -> urls.map { ProbeResult(it, ok = false) } }, left, logged::add)
+        after.put(s, "session-anna-fp")
+        after.check(s, fake.base)
+        assertTrue(fake.requests().contains("DELETE /api/v1/users/anna/tokens/7 session-anna-fp"))
+        assertTrue(sessionsLeft(s.id).isEmpty())
+        assertEquals("the new one held now", 8L, servers.get(s.id)!!.held!!.id)
+    }
 }

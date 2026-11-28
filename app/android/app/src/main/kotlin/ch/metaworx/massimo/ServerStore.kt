@@ -39,12 +39,29 @@ data class SessionLeft(val user: String, val id: Long, val createdAt: String = "
 }
 
 /**
+ * The session the app holds at a server, as a check found it (AP
+ * MobileApp, D102-A): its user, its row at the server and when it was made,
+ * no secret. It is kept in the app's file alone, never given to the page,
+ * so that a session the process forgets with its memory, a swipe from the
+ * recent apps or Android ending a hidden app, goes into [Server.unended]
+ * at the next process's start (SessionKeeper.leaveForgotten).
+ */
+data class HeldSession(val user: String, val id: Long, val createdAt: String = "") {
+    /** fileJson is the session as the store keeps it, `{user, id, created_at}`. */
+    fun fileJson(): JSONObject = JSONObject().put("user", user).put("id", id).put("created_at", createdAt)
+
+    /** left is the session as one left valid at the server. */
+    fun left(): SessionLeft = SessionLeft(user, id, createdAt)
+}
+
+/**
  * A server the app keeps (docs/app.md, "A server"); [ask] is when the
  * fingerprint is asked once a login is kept, one of [ASKS]; [start] marks
  * the one server the app opens at its start; [trustedAt] is when its
  * pinned fingerprint was trusted (RFC 3339), "" for none; [unrevoked] are
  * the keys of the phone's left valid there (contract version 4), [unended]
- * its sessions left valid there (version 5).
+ * its sessions left valid there (version 5); [held] the session the app
+ * holds there, once a check learnt its id, kept in the file alone.
  */
 data class Server(
     val id: String,
@@ -59,6 +76,7 @@ data class Server(
     val trustedAt: String = "",
     val unrevoked: List<KeyLeft> = emptyList(),
     val unended: List<SessionLeft> = emptyList(),
+    val held: HeldSession? = null,
 ) {
     /**
      * toJson is the server as the connect page sees it, with the user whose
@@ -84,11 +102,16 @@ data class Server(
         .put("unrevoked", JSONArray().apply { unrevoked.forEach { put(it.toJson()) } })
         .put("unended", JSONArray().apply { unended.forEach { put(it.toJson()) } })
 
-    /** fileJson is the server as the store keeps it: what the page sees, but the login, its key and the session, which are kept elsewhere. */
+    /**
+     * fileJson is the server as the store keeps it: what the page sees, but
+     * the login, its key and the session, which are kept elsewhere, and with
+     * the session held, which the page never sees.
+     */
     fun fileJson(): JSONObject = toJson().apply {
         remove("login")
         remove("login_key")
         remove("session")
+        held?.let { put("held", it.fileJson()) }
     }
 
     /** has reports whether [url] is one of the server's two addresses. */
@@ -147,9 +170,10 @@ class ServerStore(private val file: File, private val now: () -> String = { nowU
     /**
      * save adds [input] where it has no `id`, giving it one, or replaces the
      * server with its `id`, in place. `fp` and `trusted_at` are kept as
-     * [trust] set them, `unrevoked` as [leave] and [revoked] set it, and
-     * `unended` as [leaveSession] and [ended], both dropped where the node
-     * changed: those keys and sessions are another server's.
+     * [trust] set them, `unrevoked` as [leave] and [revoked] set it,
+     * `unended` as [leaveSession] and [ended], and `held` as [hold] set it,
+     * all dropped where the node changed: those keys and sessions are
+     * another server's.
      * `start` true turns it off at every other server; the first server
      * added opens at start whatever it says.
      */
@@ -176,6 +200,7 @@ class ServerStore(private val file: File, private val now: () -> String = { nowU
             trustedAt = old?.trustedAt ?: "",
             unrevoked = if (old != null && old.node == node) old.unrevoked else emptyList(),
             unended = if (old != null && old.node == node) old.unended else emptyList(),
+            held = if (old != null && old.node == node) old.held else null,
         )
         if (s.start) servers.replaceAll { if (it.start && it.id != s.id) it.copy(start = false) else it }
         val at = servers.indexOfFirst { it.id == s.id }
@@ -256,6 +281,47 @@ class ServerStore(private val file: File, private val now: () -> String = { nowU
     }
 
     /**
+     * hold records [held] as the session the app holds at the server [id]
+     * (D102-A), in place of one recorded before; nothing for a server not
+     * kept.
+     */
+    @Synchronized
+    fun hold(id: String, held: HeldSession) {
+        val at = servers.indexOfFirst { it.id == id }
+        if (at < 0 || held.id <= 0 || held.user.isEmpty() || servers[at].held == held) return
+        servers[at] = servers[at].copy(held = held)
+        write()
+    }
+
+    /** unhold clears the session recorded as held at the server [id]: it ended, went into `unended`, or was replaced. */
+    @Synchronized
+    fun unhold(id: String) {
+        val at = servers.indexOfFirst { it.id == id }
+        if (at < 0 || servers[at].held == null) return
+        servers[at] = servers[at].copy(held = null)
+        write()
+    }
+
+    /**
+     * leaveHeld moves the session recorded as held at each server into its
+     * `unended` where [holds] says the app holds it no more (D102-A): at a
+     * new process's start, the sessions kept in memory gone with the last,
+     * and at Exit; a session the app still holds, sealed, stays recorded.
+     */
+    @Synchronized
+    fun leaveHeld(holds: (Server) -> Boolean) {
+        var changed = false
+        servers.replaceAll { s ->
+            val h = s.held
+            if (h == null || holds(s)) return@replaceAll s
+            changed = true
+            val left = h.left()
+            s.copy(held = null, unended = if (left in s.unended) s.unended else s.unended + left)
+        }
+        if (changed) write()
+    }
+
+    /**
      * takeLegacy is the ids of the servers that had version 1's switch on,
      * once: their sessions were kept behind a prompt the app no longer
      * asks, so the caller forgets them, and the file is written without
@@ -290,6 +356,7 @@ class ServerStore(private val file: File, private val now: () -> String = { nowU
                     trustedAt = str(o, "trusted_at"),
                     unrevoked = keysLeft(o.optJSONArray("unrevoked")),
                     unended = sessionsLeft(o.optJSONArray("unended")),
+                    held = heldOf(o.optJSONObject("held")),
                 )
             }.filter { it.id.isNotEmpty() }.let(::oneAtStart).toMutableList()
         } catch (e: JSONException) {
@@ -334,6 +401,13 @@ class ServerStore(private val file: File, private val now: () -> String = { nowU
                 val o = a.optJSONObject(i) ?: return@mapNotNull null
                 SessionLeft(str(o, "user"), o.optLong("id"), str(o, "created_at")).takeIf { it.user.isNotEmpty() && it.id > 0 }
             }.distinct()
+        }
+
+        // heldOf reads a server's session held, {user, id, created_at}, null
+        // for none or what is not one.
+        private fun heldOf(o: JSONObject?): HeldSession? {
+            if (o == null) return null
+            return HeldSession(str(o, "user"), o.optLong("id"), str(o, "created_at")).takeIf { it.user.isNotEmpty() && it.id > 0 }
         }
 
         // oneAtStart keeps the first server marked to open at start, and no other.

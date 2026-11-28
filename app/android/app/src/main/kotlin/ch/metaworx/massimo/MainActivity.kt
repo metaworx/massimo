@@ -128,13 +128,13 @@ class MainActivity : AppCompatActivity() {
         val agent = agent()
         discovery = Discovery(this, main)
         biometric = Biometric(this, getString(android.R.string.cancel))
-        val servers = ServerStore(File(filesDir, "servers.json"))
-        val tokens = TokenStore(File(filesDir, "tokens.json"), KeystoreSealer())
-        // Version 1's switch kept a session behind a prompt the app asks no more.
-        servers.takeLegacy().forEach { tokens.remove(it) }
+        // The servers, the sessions held and what was checked of them are
+        // the process's (MassimoApp), so that an activity made anew keeps them.
+        val process = application as MassimoApp
+        val servers = process.servers
         val settings = AppSettings(File(filesDir, SETTINGS))
         val log = Logger { Log.w(LOG_TAG, it) }
-        val keeper = SessionKeeper(tokens)
+        val keeper = process.keeper
         val logins = LoginStore(File(filesDir, "logins.json"))
         val api = ServerApi(agent)
         prober = Prober(agent, texts)
@@ -153,7 +153,7 @@ class MainActivity : AppCompatActivity() {
             },
             servers = servers,
             keeper = keeper,
-            sessions = Sessions(keeper, logins, api, prober::probe, left, log),
+            sessions = Sessions(keeper, logins, api, prober::probe, left, log, process.checks),
             left = left,
             logins = logins,
             keys = LoginKey(),

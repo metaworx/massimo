@@ -299,4 +299,29 @@ class ServerStoreTest {
             assertNull(bad, s.opening(bad))
         }
     }
+
+    @Test
+    fun theSessionHeldIsKeptInTheFileAloneAndDroppedWithTheNode() {
+        // D102-A: {user, id, created_at}, no secret, never to the page; save keeps it, a new node drops it
+        val st = ServerStore(file())
+        val a = st.save(input("name" to "Home", "node" to "node-a", "lan" to "http://192.168.1.20:8099/"))
+        st.hold(a.id, HeldSession("anna", 7, "2026-11-20T10:00:07Z"))
+        assertEquals(HeldSession("anna", 7, "2026-11-20T10:00:07Z"), ServerStore(file()).get(a.id)!!.held)
+        assertFalse(st.get(a.id)!!.toJson().has("held"))
+        assertTrue(st.get(a.id)!!.fileJson().has("held"))
+        st.save(input("id" to a.id, "name" to "House", "node" to "node-a", "lan" to "http://192.168.1.20:8099/"))
+        assertEquals("kept by save", 7L, st.get(a.id)!!.held!!.id)
+        st.save(input("id" to a.id, "name" to "House", "node" to "node-b", "lan" to "http://192.168.1.20:8099/"))
+        assertNull("another node's", st.get(a.id)!!.held)
+        st.hold(a.id, HeldSession("anna", 8, ""))
+        st.unhold(a.id)
+        assertNull(ServerStore(file()).get(a.id)!!.held)
+        // moved into unended where the app holds it no more, once
+        st.hold(a.id, HeldSession("anna", 9, "2026-11-20T10:00:09Z"))
+        st.leaveHeld { true }
+        assertEquals(9L, st.get(a.id)!!.held!!.id)
+        st.leaveHeld { false }
+        assertNull(st.get(a.id)!!.held)
+        assertEquals(listOf(SessionLeft("anna", 9, "2026-11-20T10:00:09Z")), ServerStore(file()).get(a.id)!!.unended)
+    }
 }

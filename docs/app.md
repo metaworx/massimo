@@ -483,6 +483,37 @@ under My profile → Sessions and keys by the phone's name, ends the session.
   and names in its message a session it could not end;
   one whose id was never learnt is forgotten on the phone alone,
   valid at the server until it ends by itself, 30 days after its last use.
+- **The sessions held** (AP MobileApp, F43, F47; D102-A).
+  The sessions held in memory and what was checked of them live with the
+  app's process (`MassimoApp`), not with the activity,
+  so that the phone's dark mode or language, or the app's Appearance,
+  which make the activity anew, keep them.
+  What a process's end loses no holder keeps:
+  so each server records the session the app holds there once a check has
+  learnt its id, its user, id and time and no secret
+  (`held`, in the app's file alone, never given to the page),
+  cleared where the session ends, goes into `unended` or is replaced.
+  At the next process's start, before any activity,
+  a `held` whose session the app no longer holds, none in memory,
+  moves into `unended`, a swipe from the recent apps and Android ending a
+  hidden app alike, and the next session there for that user ends it;
+  a sealed session is still held, and stays.
+  `MassimoApp.exit` moves them so at once, for the list's Exit,
+  which AP MobileApp's Block 19 adds.
+  A fingerprint tap's session is checked at once, as `setToken` checks a
+  page's, one more `GET /api/v1/me`, so that its id is known before
+  anything can forget it; a check's failure goes to the phone's log,
+  without any secret.
+  A key typed into the card's "API key" way is the page's, not the app's:
+  it gets no `held`, and nothing of it reaches `unended`.
+- **A logout the server would refuse** (F41, D100-A).
+  The server ends a session itself where the app makes the next session
+  from the same key (`POST /api/v1/login/key`, D31-A),
+  and where a key is revoked with its sessions (Turn off, Forget all,
+  Remove): the app forgets such a session without `POST /api/v1/logout`,
+  and leaves it in no `unended`; a password session replaced is logged out
+  as before. The app knows the key a session was made from by
+  `GET /api/v1/me`'s `token.key_id`, or by the kept key it made it with.
 - **Kept and matched**: one key per server, used at whichever of its
   two addresses the page opened (D34-B); the record is bound to the
   server's id, its `node`, its pinned fingerprint and the user's name,

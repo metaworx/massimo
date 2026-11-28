@@ -37,6 +37,15 @@ class KeysLeft(private val servers: ServerStore, private val logins: LoginStore,
     /** endedSession drops the session [sessionId] of [user]'s, made at [createdAt], from those left on the server [id]: it was ended after all. */
     fun endedSession(id: String, user: String, sessionId: Long, createdAt: String = "") = servers.ended(id, listOf(SessionLeft(user, sessionId, createdAt)))
 
+    /** hold records [held] as the session the app holds at the server [id] (D102-A). */
+    fun hold(id: String, held: HeldSession) = servers.hold(id, held)
+
+    /** unhold clears the server's record of the session held: it ended, was left or replaced. */
+    fun unhold(id: String) = servers.unhold(id)
+
+    /** held is the server's record of the session held, null for none. */
+    fun held(id: String): HeldSession? = servers.get(id)?.held
+
     /**
      * revoke revokes the keys and the sessions left on [s] whose user is
      * [me]'s, the user of [session], at [url], an address of the server's

@@ -1533,6 +1533,33 @@ def test_server_page_this_devices_key(new_context, case, watch, guard):
                 *[lambda tid=tid: undo("the session", lambda: api_call("DELETE", "api/v1/users/operator/tokens/%d" % tid)) for tid in made])
 
 
+def test_server_page_revoked_at_once(new_context, case, watch, guard):
+    """D103-A's case of the UI suite (AP MobileApp, F44): My profile opened
+    at #profile?key=<id> for a key the sign-in revokes, the bridge's
+    setToken answering {revoked: [id]} at once, before My profile reads its
+    list: the toast names the key, and the key is not marked."""
+    gone = api_call("POST", "api/v1/users/operator/tokens", {"label": f"ui-test-left-at-once-{case.width}-{case.lang}"})
+    made = []  # the sign-in's session, revoked at the end
+    try:
+        status = {"can": True, "user": "operator", "ask": "start", "plain": False}
+        page = server_page(new_context, guard, watch, {"status": status}, address=f"#profile?key={gone['id']}",
+                           more={"revokeAtSignIn": {"user": "operator", "ids": [gone["id"]], "ms": 0}})
+        page.locator("#login-dialog[open]").wait_for()
+        page.locator("#login-user").fill("operator")
+        page.locator("#login-password").fill(OPERATOR_PASSWORD)
+        page.locator("#login-form button[type=submit]").click()
+        assert wait_until(page, "!document.getElementById('toast').classList.contains('hidden') && document.getElementById('toast').textContent"
+                                f".includes({json.dumps(REVOKED_AT_SIGN_IN[case.lang].format(id=gone['id']))})", 10), \
+            f"a toast names the key the sign-in revoked at once: {page.locator('#toast').inner_text()!r}"
+        page.locator("#profile-tokens li[data-id]").first.wait_for(timeout=10000)
+        made.append(page.evaluate("state.me.token.id"))
+        assert page.locator(f"#profile-tokens li[data-id='{gone['id']}']").count() == 0, "the key revoked is not listed"
+        assert page.locator("#profile-tokens li.token-marked").count() == 0, "nor marked"
+    finally:
+        cleanup(lambda: undo("the key left", lambda: api_call("DELETE", "api/v1/users/operator/tokens/%d" % gone["id"])),
+                *[lambda tid=tid: undo("the session", lambda: api_call("DELETE", "api/v1/users/operator/tokens/%d" % tid)) for tid in made])
+
+
 LOGIN_KEPT_KEY = {"en": "Login by fingerprint: anna, key 45", "de": "Anmeldung mit Fingerabdruck: anna, Schlüssel 45"}
 LOGIN_KEPT = {"en": "Login by fingerprint: bob", "de": "Anmeldung mit Fingerabdruck: bob"}
 
