@@ -1096,7 +1096,7 @@ function fillCert(panel, s) {
   const c = answers ? p.cert : null;
   const plain = (answers && !c) || (!answers && !s.fp && [s.lan, s.remote].filter(Boolean).every((u) => u.startsWith("http:")));
   let kind = c ? "cert" : plain ? "plain" : s.fp ? "pinned" : "waiting";
-  if (st === "probing") kind = "waiting";
+  if (st === "probing" && kind !== "plain") kind = "waiting"; // plain HTTP alone, nothing pinned: none, whatever the probe finds
   if (st === "cert") kind = "changed";
   const key = JSON.stringify([kind, c, answers ? p.url : "", s.fp || "", s.trusted_at || "", kind === "changed" ? p.fingerprint : ""]);
   if (box.dataset.key === key) return;

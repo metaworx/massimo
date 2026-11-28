@@ -1230,6 +1230,11 @@ def test_connect_certificate(new_context, case, watch, guard):
     assert panel.locator(".server-certificate").inner_text() == said(slow, "connect.certWaiting"), "waiting, not down"
     panel.locator(".server-certificate .cert-fp").wait_for(state="visible", timeout=8000)
     assert panel.locator(".server-certificate .cert-fp").inner_text() == FP1
+    # a server of plain HTTP alone, no fingerprint pinned: none, also while its first probe runs
+    slow = open_connect(new_context, guard, watch, dict(config, probeMs=1500))
+    assert wait_until(slow, "!!conn.probes.s2 && conn.probes.s2.state === 'probing'", 3)
+    panel = settings_of(slow, "Cabin", "certificate")
+    assert panel.locator(".server-certificate").inner_text() == said(slow, "connect.certPlain"), "plain HTTP while the probe runs"
 
 
 TABS = {"en": ["Connection", "Login", "Certificate"], "de": ["Verbindung", "Anmeldung", "Zertifikat"]}
@@ -2337,6 +2342,8 @@ def test_connect_unreachable_from_address(new_context, case, watch, guard):
     nameless.wait_for_timeout(200)
     nameless.evaluate("window.dispatchEvent(new CustomEvent('massimo', { detail: { type: 'network' } }))")
     wait_toast(nameless, said(nameless, "connect.unreachable", name="192.168.1.90:8099"), bad=True)
+    # only a finished probe carries its reason: the toast came after the newer one, not at the first's end (probed)
+    assert "connection refused" in nameless.locator("#toast").inner_text(), f"said once the newer probe answered: {nameless.locator('#toast').inner_text()!r}"
 
 
 def test_connect_show_in_profile_probes_first(new_context, case, watch, guard):
