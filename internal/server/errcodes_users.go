@@ -145,12 +145,15 @@ var (
 // The settings the page sends (settings_api.go): auth.keep_open on a
 // server with users; a value not among a setting's choices, each site
 // in its own words; a duration outside its setting's range, with or
-// without 0 for off.
+// without 0 for off; the window's alert under its warning, the two
+// durations as the request leaves them in effect, which Maintenance's
+// Limits card sends (AP ServerLimits, Block 1).
 var (
-	codeSettingKeepOpenUsers    = errorCode("setting_keep_open_users", "%s counts only on a server without users: this one has users", "setting")
-	codeSettingChoiceBad        = errorCode("setting_choice_bad", "%s: want one of %s", "setting", "choices")
-	codeSettingDurationRange    = errorCode("setting_duration_range", "%s %s: between %s and %s", "setting", "value", "min", "max")
-	codeSettingDurationRangeOff = errorCode("setting_duration_range_off", "%s %s: between %s and %s, or 0 for off", "setting", "value", "min", "max")
+	codeSettingKeepOpenUsers     = errorCode("setting_keep_open_users", "%s counts only on a server without users: this one has users", "setting")
+	codeSettingChoiceBad         = errorCode("setting_choice_bad", "%s: want one of %s", "setting", "choices")
+	codeSettingDurationRange     = errorCode("setting_duration_range", "%s %s: between %s and %s", "setting", "value", "min", "max")
+	codeSettingDurationRangeOff  = errorCode("setting_duration_range_off", "%s %s: between %s and %s, or 0 for off", "setting", "value", "min", "max")
+	codeSettingAlertUnderWarning = errorCode("setting_alert_under_warning", "window_alert_after (%s) must not be under window_warn_after (%s)", "alert", "warning")
 )
 
 // The signed-in user's own preferences and push subscriptions

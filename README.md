@@ -1369,7 +1369,10 @@ and `-stale-after` over `stale_after` and `stale_after_wall` (`duty_wait`,
 how long radio commands wait at a used-up duty cycle, has no flag),
 also below the hour the API allows, so that a test sees a thermostat go stale;
 the settings then name the flag (`fixed_by`),
-and System settings → Maintenance shows those intervals read-only.
+a value set through the API meanwhile is stored,
+and a start without the flag takes it,
+and Maintenance shows those intervals read-only,
+and Maintenance → Limits those thresholds.
 
 Room 255 is the room for hidden devices:
 a device that is paired but never reports blocks every command to the room the

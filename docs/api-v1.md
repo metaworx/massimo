@@ -781,6 +781,7 @@ a wrong name and a wrong password are one code, as their `error` is one:
 | `setting_choice_bad` | 400 | `setting`, `choices` | a value not among the setting's `choices`, joined by commas |
 | `setting_duration_range` | 400 | `setting`, `value`, `min`, `max` | a duration outside the setting's range |
 | `setting_duration_range_off` | 400 | `setting`, `value`, `min`, `max` | a duration outside the setting's range, which `0` switches off |
+| `setting_alert_under_warning` | 400 | `alert`, `warning` | `window_alert_after`, its duration `alert`, under `window_warn_after`, its duration `warning`, each as the request leaves it in effect |
 
 **Preferences, notifications and commands**
 (see "Preferences", "Notifications" and "Commands and Idempotency-Key"):
@@ -2662,6 +2663,11 @@ The server's settings in the store:
 `in_effect` is what this run uses, which a serve flag (`-poll`, `-refresh`,
 `-discover-interval`, `-stale-after`) overrides for one run;
 `fixed_by` then names the flag.
+A `PUT` of a key a flag fixes is stored and answered as any other,
+and leaves `in_effect` the flag's:
+a start without the flag takes the stored value.
+`applies` stays the setting's own, `now` for a stale threshold,
+and `fixed_by` wins over it for the run.
 `serve -poll 0` asks the Cubes for their device lists never,
 `in_effect` `"0"` and `fixed_by` `-poll`, while the setting keeps its range.
 `poll_interval` is how often the server asks each Cube for its device list,
@@ -3158,6 +3164,9 @@ see `GET /api/v1/settings`):
 
 A client tells the window's state from its clock, between two answers too;
 the web UI shows it blue, then amber, then red.
+`warn_at` and `alert_at` follow a change of the two settings at once,
+with no `state` event of the device: a client reads the devices again
+at the settings' `change` event to see it, as the web UI does.
 
 ### The virtual wall thermostat
 

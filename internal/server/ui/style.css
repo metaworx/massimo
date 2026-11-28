@@ -2215,11 +2215,11 @@ massimo-week-program { display: contents; }
 .integration-register input[type="url"] { flex: 1 1 14em; min-width: 0; }
 .integration-request .kv dd:first-of-type { font-size: 1.3rem; letter-spacing: 0.15em; }
 .user-integration-links { margin: 0 0 8px; }
-/* System settings → Maintenance: the announcement on the LAN and the Cube intervals (maintenance.js) */
-.announce-row, .interval-row { padding: 10px 0; border-top: 1px solid var(--line); }
-.announce-row:first-child { border-top: none; padding-top: 0; } /* Maintenance's first row */
-.announce-row p, .interval-row p { margin: 0; overflow-wrap: anywhere; }
-.announce-row .field-hint, .interval-row .field-hint { margin-top: 2px; }
+/* Maintenance → Maintenance: the announcement on the LAN and the Cube intervals; Maintenance → Limits: its rows (ui/src/maintenance/) */
+.announce-row, .interval-row, .limit-row { padding: 10px 0; border-top: 1px solid var(--line); }
+.announce-row:first-child, .limit-row:first-child { border-top: none; padding-top: 0; } /* each card's first row */
+.announce-row p, .interval-row p, .limit-row p { margin: 0; overflow-wrap: anywhere; }
+.announce-row .field-hint, .interval-row .field-hint, .limit-row .field-hint { margin-top: 2px; }
 .login-providers { display: flex; flex-direction: column; gap: 8px; margin-bottom: 12px; padding-bottom: 12px; border-bottom: 1px solid var(--line); }
 .login-provider-buttons { display: flex; flex-direction: column; gap: 8px; }
 .login-providers button { width: 100%; }

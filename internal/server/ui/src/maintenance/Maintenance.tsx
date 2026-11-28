@@ -32,8 +32,8 @@ import {
 import { type BadgeSpec, cardBadges } from "../shared/card";
 import { useLook } from "../shared/look";
 
-/** intervalLabel is seconds in the language's short units ("10 s", "6 h", "1 min, 30 s"), Off for 0. */
-function intervalLabel(sec: number): string {
+/** intervalLabel is seconds in the language's short units ("10 s", "6 h", "1 min, 30 s"), Off for 0; the Limits card's steps too (Limits.tsx). */
+export function intervalLabel(sec: number): string {
   if (isNaN(sec)) return "–";
   if (sec === 0) return t("maint.off");
   const parts: string[] = [];

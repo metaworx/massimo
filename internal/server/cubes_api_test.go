@@ -537,6 +537,42 @@ func TestSettingsAPI(t *testing.T) {
 	}
 }
 
+// A stale threshold that a flag fixes for the run (-stale-after, its
+// fixed_by) is stored by a PUT, which answers 200, and stays the flag's
+// in effect: the stored value is the one a start without the flag
+// takes (internal/serve, open). Set back to its default, it is stored as
+// none, and the flag's still holds (AP ServerLimits, D8-A).
+func TestStaleAfterFixedByFlag(t *testing.T) {
+	t.Parallel()
+	fixed := map[string]string{store.StaleAfterKey: "-stale-after", store.StaleAfterWallKey: "-stale-after"}
+	r := startServer(t, stored(), withOptions(Options{StaleAfter: 2 * time.Minute, StaleAfterWall: 2 * time.Minute, SettingsFixedBy: fixed}))
+	ts, srv, st := r.ts, r.s, r.st
+	for _, c := range []struct {
+		key, put string
+		want     time.Duration
+		inEffect func() time.Duration
+	}{
+		{store.StaleAfterKey, `{"stale_after":"36h"}`, 36 * time.Hour, srv.StaleAfter},
+		{store.StaleAfterWallKey, `{"stale_after_wall":"12h"}`, 12 * time.Hour, srv.StaleAfterWall},
+	} {
+		code, out := do(t, ts, "PUT", "/api/v1/settings", c.put)
+		m, _ := out[c.key].(map[string]any)
+		if code != 200 || m["value"] != fmtDuration(c.want) || m["set"] != true || m["in_effect"] != "2m" || m["fixed_by"] != "-stale-after" {
+			t.Errorf("%s: %d %v", c.put, code, m)
+		}
+		if got := c.inEffect(); got != 2*time.Minute {
+			t.Errorf("%s: in effect %v, want the flag's 2m", c.put, got)
+		}
+		if d, ok, _ := st.SettingDuration(context.Background(), c.key); !ok || d != c.want {
+			t.Errorf("%s: stored %v %v", c.put, d, ok)
+		}
+		code, out = do(t, ts, "PUT", "/api/v1/settings", `{"`+c.key+`":null}`)
+		if m, _ = out[c.key].(map[string]any); code != 200 || m["set"] != false || m["in_effect"] != "2m" || c.inEffect() != 2*time.Minute {
+			t.Errorf("%s back to its default: %d %v, in effect %v", c.key, code, m, c.inEffect())
+		}
+	}
+}
+
 // The setting announce: its value, this run's announcement as in_effect,
 // what fixes it, at the next start; auto, on and off taken, null back to
 // auto, anything else refused.
