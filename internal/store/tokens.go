@@ -10,7 +10,9 @@ package store
 // that keeps its row, so that the audit's token_id still
 // points at something. A session made from a key names it (parent_id,
 // migration 0025): it lives while the key does, and the key's next
-// session ends it.
+// session ends it. A token whose secret the store made keeps the hash of
+// its revoke code (revoke_hash, migration 0100), by which a client that
+// forgot the token ends it (RevokeByCode).
 
 import (
 	"context"
@@ -48,6 +50,11 @@ type Token struct {
 	// ParentID is the key a session was made from (AddKeySession), 0
 	// for a session of a sign-in and for a key.
 	ParentID int64
+	// RevokeKept says the row holds the hash of the token's revoke code
+	// (revoke_hash); a token made before migration 0100 gets it at its
+	// first use after it (TouchToken), one whose secret the store never
+	// held none.
+	RevokeKept bool
 }
 
 // Expired reports whether the token's end has passed at now.
@@ -59,6 +66,33 @@ func HashToken(secret string) string {
 	return hex.EncodeToString(h[:])
 }
 
+// revokeLabel is what RevokeCode puts before the secret: the label
+// holds a version, so that another derivation could follow beside it.
+const revokeLabel = "massimo revoke v1"
+
+// RevokeCode returns a token's revoke code: the hex of SHA-256 of
+// "massimo revoke v1" followed by the secret as the server gave it, 64
+// hex digits (AP MobileApp v1.6, D112-A). The store keeps HashToken of
+// the code (revoke_hash), from which no code can be had back, so that
+// only a client that once held the secret ends the token by its code,
+// and neither the store nor a backup of it can. The code lets nothing
+// in: no request is authenticated by it.
+func RevokeCode(secret string) string {
+	h := sha256.Sum256([]byte(revokeLabel + secret))
+	return hex.EncodeToString(h[:])
+}
+
+// revokeHashOf is the revoke_hash of a token's secret.
+func revokeHashOf(secret string) string { return HashToken(RevokeCode(secret)) }
+
+// nullText is a text as the store writes it, NULL for "".
+func nullText(v string) any {
+	if v == "" {
+		return nil
+	}
+	return v
+}
+
 // NewSecret returns a new token: 32 random bytes, hex.
 func NewSecret() (string, error) {
 	var b [32]byte
@@ -68,7 +102,7 @@ func NewSecret() (string, error) {
 	return hex.EncodeToString(b[:]), nil
 }
 
-const tokenColumns = `t.id, t.uuid, t.user_id, t.kind, t.label, t.created_at, t.expires_at, t.last_used_at, t.last_used_from, t.deleted_at, t.version, t.parent_id`
+const tokenColumns = `t.id, t.uuid, t.user_id, t.kind, t.label, t.created_at, t.expires_at, t.last_used_at, t.last_used_from, t.deleted_at, t.version, t.parent_id, t.revoke_hash IS NOT NULL`
 
 // liveKey is the condition on a token t joined to its key p (LEFT JOIN
 // tokens p ON p.id = t.parent_id): a session made from a key counts only
@@ -80,7 +114,7 @@ func scanToken(row scanner) (Token, error) {
 	var t Token
 	var created, expires, used, deleted sql.NullString
 	var parent sql.NullInt64
-	if err := row.Scan(&t.ID, &t.UUID, &t.UserID, &t.Kind, &t.Label, &created, &expires, &used, &t.LastUsedFrom, &deleted, &t.Version, &parent); err != nil {
+	if err := row.Scan(&t.ID, &t.UUID, &t.UserID, &t.Kind, &t.Label, &created, &expires, &used, &t.LastUsedFrom, &deleted, &t.Version, &parent, &t.RevokeKept); err != nil {
 		return Token{}, err
 	}
 	t.CreatedAt, t.ExpiresAt, t.LastUsedAt, t.DeletedAt = parseTime(created), parseTime(expires), parseTime(used), parseTime(deleted)
@@ -97,25 +131,28 @@ func (s *Store) AddToken(ctx context.Context, userID int64, kind, label string, 
 }
 
 // addToken is AddToken; ofIntegration lets an integration's user have
-// it, for the integration's own key.
+// it, for the integration's own key. The store makes the secret, so the
+// row keeps the hash of its revoke code.
 func (s *Store) addToken(ctx context.Context, userID int64, kind, label string, expires time.Time, ofIntegration bool) (Token, string, error) {
 	secret, err := NewSecret()
 	if err != nil {
 		return Token{}, "", err
 	}
-	t, err := s.addTokenHash(ctx, userID, kind, label, HashToken(secret), expires, ofIntegration)
+	t, err := s.addTokenHash(ctx, userID, kind, label, HashToken(secret), revokeHashOf(secret), expires, ofIntegration)
 	return t, secret, err
 }
 
 // AddTokenHash creates a token whose secret the caller holds, as the
 // bootstrap does with MASSIMO_API_TOKEN; an integration's user is
-// ErrIntegrationUser, as with AddToken.
+// ErrIntegrationUser, as with AddToken. The store never sees the
+// secret, so the row keeps no revoke code's hash.
 func (s *Store) AddTokenHash(ctx context.Context, userID int64, kind, label, hash string, expires time.Time) (Token, error) {
-	return s.addTokenHash(ctx, userID, kind, label, hash, expires, false)
+	return s.addTokenHash(ctx, userID, kind, label, hash, "", expires, false)
 }
 
-// addTokenHash is AddTokenHash, with addToken's ofIntegration.
-func (s *Store) addTokenHash(ctx context.Context, userID int64, kind, label, hash string, expires time.Time, ofIntegration bool) (Token, error) {
+// addTokenHash is AddTokenHash, with addToken's ofIntegration and the
+// hash of the token's revoke code, "" for none.
+func (s *Store) addTokenHash(ctx context.Context, userID int64, kind, label, hash, revokeHash string, expires time.Time, ofIntegration bool) (Token, error) {
 	if err := s.writable(); err != nil {
 		return Token{}, err
 	}
@@ -127,8 +164,8 @@ func (s *Store) addTokenHash(ctx context.Context, userID int64, kind, label, has
 			return Token{}, err
 		}
 	}
-	res, err := s.db.ExecContext(ctx, `INSERT INTO tokens (uuid, user_id, kind, hash, label, created_at, expires_at, origin) VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
-		newUUID(), userID, kind, hash, label, s.nowText(), nullTime(expires), s.nodeID)
+	res, err := s.db.ExecContext(ctx, `INSERT INTO tokens (uuid, user_id, kind, hash, label, created_at, expires_at, origin, revoke_hash) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+		newUUID(), userID, kind, hash, label, s.nowText(), nullTime(expires), s.nodeID, nullText(revokeHash))
 	if err != nil {
 		return Token{}, fmt.Errorf("store: add token: %w", err)
 	}
@@ -216,6 +253,18 @@ func (s *Store) RevokeToken(ctx context.Context, id int64) error {
 		return fmt.Errorf("store: token %d: %w", id, err)
 	}
 	defer tx.Rollback()
+	if err := s.revokeToken(ctx, tx, id); err != nil {
+		return err
+	}
+	if err := tx.Commit(); err != nil {
+		return fmt.Errorf("store: token %d: %w", id, err)
+	}
+	return nil
+}
+
+// revokeToken is RevokeToken within tx, which RevokeByCode shares, so
+// that a revoke by code ends what a revoke ends.
+func (s *Store) revokeToken(ctx context.Context, tx *sql.Tx, id int64) error {
 	now := s.nowText()
 	res, err := tx.ExecContext(ctx, `UPDATE tokens SET deleted_at = ?, origin = ?, version = version + 1 WHERE id = ? AND deleted_at IS NULL`, now, s.nodeID, id)
 	if err != nil {
@@ -231,10 +280,48 @@ func (s *Store) RevokeToken(ctx context.Context, id int64) error {
 	if err := removePushSubscriptions(ctx, tx, 0, id); err != nil {
 		return fmt.Errorf("store: token %d: %w", id, err)
 	}
-	if err := tx.Commit(); err != nil {
-		return fmt.Errorf("store: token %d: %w", id, err)
-	}
 	return nil
+}
+
+// RevokeByCode revokes, as RevokeToken does, the token whose revoke
+// code is code (RevokeCode), a key's sessions with it, and returns it as
+// it was before, ok false where none matched: no row of that code, one
+// revoked already, or the token whose hash is keep, the settings file's
+// key, which no revoke ends ("" keeps none). A token past its end is
+// revoked all the same, so that what its revoke ends goes with it. The
+// code is looked up by a plain read first, so that one that matches
+// nothing, which anyone may post, takes no write transaction; a match is
+// read again inside it.
+func (s *Store) RevokeByCode(ctx context.Context, code, keep string) (Token, bool, error) {
+	const live = `SELECT ` + tokenColumns + ` FROM tokens t WHERE t.revoke_hash = ? AND t.deleted_at IS NULL AND t.hash <> ?`
+	hash := HashToken(code)
+	if _, err := scanToken(s.db.QueryRowContext(ctx, live, hash, keep)); errors.Is(err, sql.ErrNoRows) {
+		return Token{}, false, nil
+	} else if err != nil {
+		return Token{}, false, fmt.Errorf("store: revoke by code: %w", err)
+	}
+	if err := s.writable(); err != nil {
+		return Token{}, false, err
+	}
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return Token{}, false, fmt.Errorf("store: revoke by code: %w", err)
+	}
+	defer tx.Rollback()
+	t, err := scanToken(tx.QueryRowContext(ctx, live, hash, keep))
+	if errors.Is(err, sql.ErrNoRows) {
+		return Token{}, false, nil // revoked meanwhile
+	}
+	if err != nil {
+		return Token{}, false, fmt.Errorf("store: revoke by code: %w", err)
+	}
+	if err := s.revokeToken(ctx, tx, t.ID); err != nil {
+		return Token{}, false, err
+	}
+	if err := tx.Commit(); err != nil {
+		return Token{}, false, fmt.Errorf("store: token %d: %w", t.ID, err)
+	}
+	return t, true, nil
 }
 
 // revokeSessionsOf revokes the live sessions made from the key keyID,
@@ -281,8 +368,8 @@ func (s *Store) AddKeySession(ctx context.Context, keyID int64, label string, ex
 	if err := revokeSessionsOf(ctx, tx, keyID, now, s.nodeID); err != nil {
 		return Token{}, "", fmt.Errorf("store: session of key %d: %w", keyID, err)
 	}
-	res, err := tx.ExecContext(ctx, `INSERT INTO tokens (uuid, user_id, kind, hash, label, created_at, expires_at, origin, parent_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-		newUUID(), userID, TokenSession, HashToken(secret), label, now, nullTime(expires), s.nodeID, keyID)
+	res, err := tx.ExecContext(ctx, `INSERT INTO tokens (uuid, user_id, kind, hash, label, created_at, expires_at, origin, parent_id, revoke_hash) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+		newUUID(), userID, TokenSession, HashToken(secret), label, now, nullTime(expires), s.nodeID, keyID, revokeHashOf(secret))
 	if err != nil {
 		return Token{}, "", fmt.Errorf("store: session of key %d: %w", keyID, err)
 	}
@@ -310,13 +397,16 @@ func (s *Store) RevokeSessions(ctx context.Context, userID int64) error {
 }
 
 // TouchToken records a use at now from an address and, for a session,
-// moves its end to expires (zero keeps it). The server calls it at most
-// once an hour per token.
-func (s *Store) TouchToken(ctx context.Context, id int64, from string, expires time.Time) error {
+// moves its end to expires (zero keeps it); revokeHash, the hash of the
+// token's revoke code, fills a row without one and leaves one written
+// alone ("" writes none). The server calls it at most once an hour per
+// token, and at the first use of a token without the hash.
+func (s *Store) TouchToken(ctx context.Context, id int64, from string, expires time.Time, revokeHash string) error {
 	if err := s.writable(); err != nil {
 		return err
 	}
-	if _, err := s.db.ExecContext(ctx, `UPDATE tokens SET last_used_at = ?, last_used_from = ?, expires_at = coalesce(?, expires_at) WHERE id = ?`, s.nowText(), from, nullTime(expires), id); err != nil {
+	if _, err := s.db.ExecContext(ctx, `UPDATE tokens SET last_used_at = ?, last_used_from = ?, expires_at = coalesce(?, expires_at), revoke_hash = coalesce(revoke_hash, ?) WHERE id = ?`,
+		s.nowText(), from, nullTime(expires), nullText(revokeHash), id); err != nil {
 		return fmt.Errorf("store: token %d: %w", id, err)
 	}
 	return nil

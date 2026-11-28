@@ -432,10 +432,13 @@ and `params`, the values its text names, by name (AP ErrorCodes):
   one code may come with more than one status (a `409` on a write,
   a `404` on a read).
   The table below lists them.
-- `params` holds a room as its `{id}`, a number,
+- `params` holds a room as its `{id}`, a number
+  (so does a parameter whose name ends in `_room`),
   a device as the request named it, its radio address or its serial,
   and devices as a list of radio addresses;
   it is absent where the text names nothing.
+  `reason`, where a refusal names another one that stopped it,
+  is that one as an error answer, its `error`, `code` and `params`.
 - `error` stays the server's English text, as the log has it:
   a client that finds no `code`, or one it does not know,
   shows `error` and goes by the status.
@@ -484,6 +487,54 @@ which its setpoint, its configuration and its week programme go to:
 | `room_no_thermostat` | 409, 404 | `room` | the room has no thermostat: a write is `409`, a read of its programme `404` |
 | `room_thermostat_unplaced` | 409, 404 | `room`, `device` | the Cube's list has a thermostat in the room, `device` the first, but its C line names another room or none, so that the Cube has no thermostat there; the repair `…/devices/{rf}/repair/place` puts it there |
 
+**Rooms and devices**, their names, the rooms they are in,
+and the Cube's structure, which one change at a time writes:
+
+| Code | Status | Params | Refused because |
+|------|--------|--------|-----------------|
+| `structure_change_running` | 503 | – | another change of the Cube's rooms and devices did not end within the request's time |
+| `name_empty` | 400 | – | a room's or a device's name is empty |
+| `name_too_long` | 400 | `max` | the name is longer than `max` bytes, the Cube's limit |
+| `room_not_empty` | 409 | `room`, `device` | a room to delete still has a device, `device` the first |
+| `room_wall_thermostat_taken` | 409 | `room`, `device` | a wall thermostat moved, added, placed or listed into a room that has one, `device` |
+| `device_room_needed` | 409 | `device` | a device in no room yet, written without a `room_id` |
+| `device_settings_not_copied` | 502, 409 | `device`, `room`, `reason` | the device is in the room, but copying the room's settings to it stopped, for `reason`, with its status |
+| `setpoint_mode_invalid` | 400 | – | a setpoint's `mode` is none of `auto`, `manual`, `vacation`, `boost` |
+
+**A device's and a room's configuration**,
+a value out of the range the original software offers:
+
+| Code | Status | Params | Refused because |
+|------|--------|--------|-----------------|
+| `config_temp_offset_invalid` | 400 | – | `temp_offset` is no multiple of 0.5 from -3.5 to 3.5 |
+| `config_window_minutes_invalid` | 400 | – | `window_open_minutes` is not 0..60 in steps of 5 |
+| `config_boost_minutes_invalid` | 400 | – | `boost_minutes` is not 0..30 in steps of 5, or 60 |
+| `config_boost_valve_invalid` | 400 | – | `boost_valve_pct` is not 0..100 in steps of 5 |
+| `config_decalc_hour_invalid` | 400 | – | `decalc_hour` is not 0..23 |
+| `config_valve_pct_invalid` | 400 | `field` | `max_valve_pct` or `valve_offset_pct`, `field`, is not 0..100 |
+| `program_changed` | 412 | – | a week programme's `If-Match` names another tag than its current one, which `etag` carries |
+
+**A room's virtual wall thermostat** (see "The virtual wall thermostat"):
+
+| Code | Status | Params | Refused because |
+|------|--------|--------|-----------------|
+| `vwt_lock_no_wall_thermostat` | 409 | `room` | a lock of a room without a real wall thermostat |
+| `vwt_rename_with_room` | 409 | `room` | a rename or a move of the virtual wall thermostat, which goes with its room |
+| `vwt_remove_with_room` | 409 | `room` | a removal of the virtual wall thermostat, which goes with its room |
+| `vwt_temp_method_invalid` | 400 | – | `temp_method` is neither `median` nor `mean` |
+| `vwt_address_invalid` | 400 | – | `rf_address` is neither six hex digits nor `""` |
+| `vwt_address_real` | 409 | `device` | `rf_address` is a real device's, `device` |
+| `vwt_address_taken` | 409 | `address`, `room` | `rf_address`, `address`, is the virtual wall thermostat's of another room |
+
+**The pairing and new batteries**:
+
+| Code | Status | Params | Refused because |
+|------|--------|--------|-----------------|
+| `pairing_seconds_invalid` | 400 | `max` | `seconds` is not 1..`max` |
+| `pairing_running` | 409 | – | the Cube is in pairing mode already |
+| `battery_no_report` | 409 | `device` | the Cube holds no current report of the device |
+| `battery_still_low` | 409 | `device` | the device still reports its batteries low |
+
 **A command's result**, of a write sent to the Cube through its queue;
 `error` is the result's own:
 
@@ -493,7 +544,7 @@ which its setpoint, its configuration and its week programme go to:
 | `command_discarded` | 502 | – | the Cube discarded the command |
 | `command_discarded_no_state` | 502 | `room`, `devices` | the Cube discarded a room command, since it holds no state for those members of the room, also in `no_state` |
 | `command_unwanted` | 502 | – | the command was no longer wanted when its turn came |
-| `cube_not_connected` | 502, 503 | – | the server's connection to the Cube is down: `503` for a backup or a restore that needs it |
+| `cube_not_connected` | 502, 503 | – | the server's connection to the Cube is down: a command's result `502`; `503` for a request that needs the connection before it sends, as pairing, a removal, a repair, a backup or a restore |
 | `cube_busy` | 502 | – | another command is waiting for the Cube's reply |
 | `command_timed_out` | 502 | – | the command's time ran out before the Cube answered, waiting for the radio budget or its turn |
 
@@ -606,7 +657,31 @@ whose `error` names the link that refused:
 
 | Code | Status | Params | Refused because |
 |------|--------|--------|-----------------|
+| `repair_changed` | 409 | – | the repair as it is now differs from the preview whose plan the run names |
+| `repair_duty_cycle` | 409 | `duty`, `cost`, `max` | the duty cycle, `duty` %, and the repair's, about `cost` %, would reach the queue's hold at `max` % |
+| `repair_memory_slots` | 409 | `free`, `held`, `min` | the slots the repair's room radiograms hold, `held`, would leave fewer free than `min` |
+| `repair_stopped` | 502, 409, … | `step`, `steps`, `reason` | the run stopped at `step` of `steps`, for `reason`, with its status |
+| `repair_none_flagged` | 409 | – | no device of the Cube has a communication error |
+| `repair_room_none_flagged` | 409 | `room` | no device of the room has a communication error |
+| `repair_master_valid` | 409 | `room`, `device` | the room's master, `device`, is a thermostat of the room |
+| `repair_master_none` | 409 | `room` | the room has no thermostat to name as its master |
+| `repair_room_disagrees` | 409 | `room`, `devices` | the Cube and its list disagree on these devices of the room |
+| `repair_link_too_few` | 409 | `room` | the room has fewer than two devices to link |
+| `repair_device_no_room` | 409 | `device` | the Cube has the device in no room |
+| `repair_rooms_differ` | 409 | `device`, `room`, `list_room` | the Cube has the device in `room`, its list in `list_room` |
+| `repair_config_same` | 409 | `device`, `room`, `thermostats` | the device has the room's temperatures and week programme already |
+| `repair_device_unlisted` | 409 | `device` | the Cube's list does not list the device |
+| `repair_list_no_room` | 409 | `device` | the Cube's list places the device in no room |
+| `repair_placed_already` | 409 | `device`, `room` | the Cube has the device in the room its list has |
+| `repair_hidden_room` | 409 | `device`, `room` | the Cube has the device in its hidden room |
+| `repair_listed_already` | 409 | `device`, `room` | the Cube's list has the device in the room the Cube has |
 | `room_name_needed` | 409 | `room` | a listing into a room the Cube's list does not have, without `room_name`; `room` is also at the top level |
+
+**A revoke by code** (`POST /api/v1/tokens/revoke`):
+
+| Code | Status | Params | Refused because |
+|------|--------|--------|-----------------|
+| `revoke_code_malformed` | 400 | – | the body is not `{"code": …}` with 64 lower-case hex digits |
 
 ## Routes
 
@@ -692,7 +767,12 @@ a user whose role is disabled logs in and is then refused every route.
 The server hashes at most one password a core at once, four at the most,
 with eight more waiting;
 a login beyond them is `503` with `Retry-After`, and so is a user add or a
-password change (`docs/store.md` section 6, "The lockout").
+password change (`docs/store.md` section 6, "The lockout"),
+and one whose client went away while it waited for its turn.
+Any other request of the users' routes whose client went away before the
+store answered, a token's revoke the client gave up on among them,
+is audited as `failed` with "the client went away before the answer",
+a `503` no client reads, and never as a password check that waited.
 `409` on a server without users, where the first owner is created with
 `POST /api/v1/users` or `massimo user add`,
 and on one without a store (`serve -addr`), which takes the API token.
@@ -726,6 +806,44 @@ The settings file's token, `MASSIMO_API_TOKEN`, is `409`:
 the next start would not add the owner's key back, its hash being taken,
 so it is changed or removed in the settings file;
 a revoke under the user's tokens is `409` too (below).
+
+`POST /api/v1/tokens/revoke` with `{"code": "…"}`, and no token,
+ends a token by its revoke code, for a client that forgot the token without
+its server answering, as the apps do at a sign-out, a turned-off login or a
+removed server (`docs/app.md`; AP MobileApp, D112-A).
+The code is the hex of SHA-256 of `massimo revoke v1` followed by the token
+as the server gave it, 64 lower-case hex digits:
+only a client that once held the token can work it out,
+and the store keeps the code's own SHA-256 (`tokens.revoke_hash`,
+`docs/store.md` section 5), from which no code can be had back,
+so that neither the store nor a backup of it can revoke a token.
+The code lets nothing in: no request is authenticated by it.
+The server keeps it for every token it makes,
+and for a token made before the update from its first use after it;
+a token not used since its update has none, and its code matches nothing.
+The live token of the code is revoked, an API key's sessions with it,
+as by `DELETE /api/v1/me/token`;
+the settings file's token is left live, as no revoke ends it.
+The answer is `204` whether the code matched or not
+(a live token, one that ended, the settings file's, none),
+so that it tells nobody which codes are live.
+A body that is not that object, or a code that is not 64 lower-case hex digits,
+is `400` with `revoke_code_malformed`;
+a client drops such a code rather than post it again.
+While the address is locked out it is `429` with `Retry-After`,
+but a code never counts toward the lockout, matched or not:
+one that matches nothing is a code taken already,
+a token that ended by itself, or one the server has not seen since its update.
+A match is audited as `token.revoke_code`, the token its target and its user
+its subject, with a line under Configuration and the log's Info line
+"token revoked" `by=code`;
+a code that matches nothing, the settings file's, a malformed body and a
+locked-out address write no row of their own:
+they are counted per address and minute as refused requests are,
+in rows of their own apart from the address's other refused requests,
+with no line.
+No row and no line carries the code.
+A server without a store has no token to revoke and answers `204` at once.
 
 `GET /api/v1/me` says who the caller is:
 
@@ -1220,7 +1338,8 @@ An integration is registered by the owner, without a key typed anywhere:
    the integration's maximum, within the role `integration` and all of it
    by default; `"attach": "<uuid>"` makes the request an integration of the
    same kind that was registered before, with its users, links and maximum,
-   as after a key lost or revoked.
+   as after a key lost or revoked,
+   and gives it the request's installation id as an acceptance does (below).
    `POST …/refuse` refuses it.
 3. The integration collects its key:
    `GET /api/v1/integrations/requests/{id}?code=K7Q2PX`,
@@ -1262,6 +1381,12 @@ its users, links and maximum kept for a request from the same installation.
 A call that came with another installation id than the accepted one is
 refused and the id recorded as `pending_instance`, which
 `POST …/accept-instance` accepts.
+The installation accepted before then loses the event streams it opened for
+the integration's users, each at its next keep-alive,
+as its calls are refused (AP LinkedRemoval, D4-A),
+also where an attach gave the integration another installation id;
+the integration's own stream, without the header,
+carries no installation id and is not held to one.
 
 **On the LAN.**
 A server that announces itself (README.md, "Server") also looks for
@@ -1369,8 +1494,9 @@ on a server with regular users: on an open server the header is not read
   with the role and the state the owner left it (D2-A).
   An event stream opened for one ends at its next keep-alive,
   once it is removed, disabled, unlinked or linked anew,
-  or its own or its linked user is removed, disabled or past its end
-  ("GET /api/v1/cubes/{sn}/events").
+  its own or its linked user is removed, disabled or past its end,
+  or another installation id than the one the stream came from is accepted
+  or attached ("GET /api/v1/cubes/{sn}/events").
   Its own user and its system user are not removed ("Users", above).
 - **Without the header** the key acts as the integration itself:
   its role and its maximum (an integration's own polls and stream),
@@ -1724,7 +1850,7 @@ and `result` how it went: `ok` for a 2xx, `refused` for a `401`,
 `403` or `429`, `failed` otherwise.
 `detail` keeps the method, the path, the status, the milliseconds,
 the body's size and, when it is JSON of at most 4 KB,
-the body with `password`, `current_password` and `token` replaced by `…`,
+the body with `password`, `current_password`, `token` and `code` replaced by `…`,
 and the error of a failed answer.
 A request refused for a known user (a capability it lacks,
 a disabled user or role) is a row with who was refused, without its body.
@@ -3985,6 +4111,8 @@ either would stop it halfway.
 A repair with nothing to send now has a preview without `plan` and
 `steps`, and `nothing` says why, as the table names it;
 its run is refused with `409` and that message.
+`code` and `params` are those of `nothing` or of `refused`, whichever is set,
+as the run's refusal has them (see "Error codes").
 A listing into a room the Cube's list does not have says so with
 `details` `{"code": "room_name_needed", "room": 7}`, and its run's `409`
 carries the same `code` and `room`.
@@ -4012,7 +4140,8 @@ for resets, the device list read about two seconds after them:
 `still_flagged` names the devices whose flag it still shows.
 A step the Cube discarded or that failed stops the run there:
 `502` (`409` when superseded) with `error` naming the step and the same
-`steps`, so that a client sees how far it got.
+`steps`, so that a client sees how far it got;
+its `code` is `repair_stopped`, the refusal that stopped it its `reason`.
 Room repairs and placements run under the Cube's structure lock,
 as moves and removals do.
 A room is its members by their C lines, the Cube's own idea of it.
@@ -4639,8 +4768,9 @@ At each keep-alive, every 30 seconds,
 the server asks whether the stream's caller would be let in now,
 and ends the stream when not:
 a key revoked or expired, a user or role disabled,
-for a call through an integration for one of its users
-a chain that no longer lets it in or that acts as another user now
+for a call through an integration for one of its users a chain that no longer lets it in,
+that acts as another user now
+or that came from another installation than the one accepted or attached
 ("Acting for an integration's users"),
 a server that was open when the stream opened and has a user since,
 or, without a store, another token.
@@ -4654,6 +4784,12 @@ A single-use ticket for that Cube's event stream, valid for a minute:
 {"ticket": "9f86d081884c7d659a2feaa0c55ad015a3bf4f1b2b0b822c", "expires_at": "2026-11-05T15:31:12+01:00"}
 ```
 
+The stream's `?ticket=` asks first, as each keep-alive does,
+whether the ticket's caller would still be let in:
+a ticket whose key was revoked since it was issued,
+or whose caller is no longer let in for another reason,
+is refused `401` as a token that ended is, counting toward no lockout,
+and the stream sends nothing.
 Without a token configured the stream is open and the ticket not needed,
 but the route answers all the same.
 

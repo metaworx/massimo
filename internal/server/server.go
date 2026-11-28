@@ -406,6 +406,10 @@ type Server struct {
 	oidc                oidcFlows         // the sign-ins through a provider started, and their codes (oidc.go)
 	tickets             *ticketStore
 	refusals            *refusalAudit // nil without a store
+	// codeRefusals are the revokes by code that matched no token, or were
+	// refused: one row per address and minute of their own, apart from
+	// the other refused requests (quietAudit); nil without a store.
+	codeRefusals *refusalAudit
 	// steps writes the queues' step rows in order (commands.go).
 	steps   serialWorker
 	updates updateCheck
@@ -597,7 +601,7 @@ func (rt *runtime) lockStructure(ctx context.Context) (func(), error) {
 	case rt.structure <- struct{}{}:
 		return func() { <-rt.structure }, nil
 	case <-ctx.Done():
-		return nil, fail(http.StatusServiceUnavailable, "another change of the cube's rooms and devices is still running")
+		return nil, refuse(http.StatusServiceUnavailable, codeStructureBusy)
 	}
 }
 
@@ -870,6 +874,7 @@ func New(opts Options) *Server {
 		s.notify = s.newNotify()
 		s.webPush = s.newWebPush()
 		s.refusals = newRefusalAudit(s.writeRefusal)
+		s.codeRefusals = newRefusalAudit(s.writeRefusal)
 		// MASSIMO_API_TOKEN becomes the owner's key, or follows the file (docs/store.md section 6);
 		// an owner made from it is told what the open server left (AP AccessEnds, D14).
 		if res, err := opts.Store.Bootstrap(context.Background(), opts.Token); err != nil {
@@ -964,6 +969,7 @@ func (s *Server) Run(ctx context.Context) error {
 	s.wg.Wait()
 	s.steps.flush(5 * time.Second) // the drained commands' steps, before the store closes
 	s.refusals.close()
+	s.codeRefusals.close()
 	stopWriter()
 	<-writerDone
 	return ctx.Err()
@@ -1510,6 +1516,7 @@ func (s *Server) routes() {
 	api("POST /api/v1/login/key", "any", s.loginKey)
 	api("POST /api/v1/logout", "any", s.logout)
 	api("DELETE /api/v1/me/token", "any", s.deleteMyToken)
+	api("POST /api/v1/tokens/revoke", "none", s.revokeByCode)
 	api("GET /api/v1/me", "any", s.me)
 	api("GET /api/v1/audit", "audit", s.getAudit)
 	api("GET /api/v1/commands/{id}", "read", s.getCommand)
@@ -1982,7 +1989,7 @@ func (s *Server) getDevice(w http.ResponseWriter, r *http.Request) error {
 		writeJSON(w, http.StatusOK, s.virtualDetail(rt, room))
 		return nil
 	} else if roomAlias.MatchString(r.PathValue("rf")) {
-		return fail(http.StatusNotFound, "no room %s", strings.TrimPrefix(strings.ToLower(r.PathValue("rf")), "room-"))
+		return noAliasRoom(r.PathValue("rf"))
 	}
 	rf, err := deviceOf(rt, r.PathValue("rf"))
 	if err != nil {
@@ -2111,7 +2118,7 @@ func (s *Server) deleteRoom(w http.ResponseWriter, r *http.Request) error {
 	}
 	for _, d := range md.Devices {
 		if int(d.RoomID) == id {
-			return fail(http.StatusConflict, "room %d still has device %s; move it first", id, d.RFAddress)
+			return refuse(http.StatusConflict, codeRoomNotEmpty, id, d.RFAddress.String())
 		}
 	}
 	cp := *md
@@ -2162,7 +2169,7 @@ func (s *Server) setpoint(w http.ResponseWriter, r *http.Request, rt *runtime, t
 	}
 	mode, err := cube.ParseMode(req.Mode)
 	if err != nil {
-		return fail(http.StatusBadRequest, "mode must be auto, manual, vacation or boost")
+		return refuse(http.StatusBadRequest, codeSetpointModeInvalid)
 	}
 	if mode == cube.ModeBoost && req.Temp == 0 {
 		// The thermostats ignore the temperature of a boost: they open

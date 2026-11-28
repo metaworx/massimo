@@ -24,6 +24,14 @@ object Origins {
     fun settingsOf(id: String): String = "#settings=" + URLEncoder.encode(id, "UTF-8")
 
     /**
+     * unreachableOf is the connect page's fragment of the server [id] whose
+     * page failed to load (contract version 7; AP MobileApp, D108-A): the
+     * list probes it at its start and says it does not answer, with the
+     * probe's reason (connect.js unreachableFromAddress).
+     */
+    fun unreachableOf(id: String): String = "#unreachable=" + URLEncoder.encode(id, "UTF-8")
+
+    /**
      * appServes reports whether the shell serves a request of [method] on
      * its own origin: GET alone. A form a page posts there would keep its
      * fragment, since shouldOverrideUrlLoading is not called for a POST
@@ -46,9 +54,10 @@ object Origins {
         return url.substring(0, at)
     }
 
+    // about, exit and keep (contract version 7): the app's version, Exit, and Store login in a server's settings (AP MobileApp, Block 19)
     private val connectCalls = setOf(
         "hello", "servers", "save", "remove", "discover", "probe", "trust", "open", "forget", "forgetAll",
-        "session", "signOut", "signOutAll", "settings", "saveSettings",
+        "session", "signOut", "signOutAll", "settings", "saveSettings", "about", "exit", "keep",
     )
     // openServerSettings and openAppSettings (contract version 5) hand over to the connect page, as connect does: the server's
     // page passes no id and reads nothing of them (AP MobileApp, D73-A)
