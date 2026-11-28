@@ -19,7 +19,7 @@ The script:
    which resets it before each test file (`conftest.py`, `known_cube`);
    `massimo serve` against the fake Cube,
    with the API token `ui-test-token` and without its poll of the Cube
-   (`-poll 0`, `docs/ui-testing.md` section 9);
+   (`-poll 0`, `docs/ui-testing.md` section 1);
    the Cube comes from `MASSIMO_CUBE_KEQ0000100_ADDRESS` and `_NAME` ("Fake Cube"),
    which the server seeds into its store,
    `massimo.db` in the set's temporary directory;
@@ -136,7 +136,7 @@ a test's set-up, which loads the page, took up to 3.8 times as long
 with them as without, a test's call twice as long at the median
 (1100-en, three files, 2026-11-26).
 A window that waits for nothing to come is not scaled
-(`docs/ui-testing.md`, section 9, "The scale").
+(`docs/ui-testing.md`, section 1, "The scale").
 
 `UI_TEST_REPEAT=<n>` runs every test n times,
 each repeat a test of its own, its id ending in `1of<n>` to `<n>of<n>`
@@ -251,7 +251,7 @@ makes, sweeps and keeps it (`tools/workdir/README.md`; AP EmulatorRuns, D3-B).
   has none counted against an address, or the test errors at teardown;
 - `ended_sessions` (autouse): after every test, the sessions on the server
   that it made, by a sign-in in a context of its own or in its page,
-  are ended (`docs/ui-testing.md`, section 9);
+  are ended (`docs/ui-testing.md`, section 1);
 - `reads`: the page's own reads answered with the server's data and what
   the test put in (`helpers.Reads`), so that the page's poll and the reads
   that events and actions start keep it:
@@ -271,13 +271,13 @@ with `holds` the preference `ui`, the values given over the page's defaults,
 without it none (AP SteadyTests v1.1, D14-A).
 A sign-in and a page's load take what it holds, and hand a server that holds
 none the browser's, so a test whose outcome depends on which sets it
-(`docs/ui-testing.md`, section 9).
+(`docs/ui-testing.md`, section 1).
 
 The page fixture puts `helpers.PAGE_KIT` into the page before its own
 scripts: it records the events the page's listeners take, for `stream`,
 and lets `isolate_log` and `wait_log_live` work on the log;
 the page's code is not changed.
-`docs/ui-testing.md`, section 9, says when a test needs which.
+`docs/ui-testing.md`, section 1, says when a test needs which.
 
 `fake_bridge.js` is the app's bridge for `test_connect.py`,
 `window.massimo` as docs/app.md describes it,
@@ -316,7 +316,7 @@ The four cases share the one server of a worker,
 so a test that changes the server's store puts it back,
 and a file that leaves it otherwise than it found it fails at its last
 test's tear-down, naming what it left (`known_cube`, `server_left`;
-`docs/ui-testing.md`, section 9);
+`docs/ui-testing.md`, section 1);
 what a test stores in the browser goes with its context.
 So do the files of a worker, in whatever order the scheduler gives them,
 and the API's lockout is the server's too:
@@ -757,7 +757,7 @@ hence `failed_checks_forgotten`.
   a scheme deleted in one browser stays deleted when another that had it loads.
   Since the four cases share the server,
   the page fixture removes the token's user's preferences before every page,
-  and marks every warning of the log seen (`docs/ui-testing.md`, section 9).
+  and marks every warning of the log seen (`docs/ui-testing.md`, section 1).
 - `test_log.py`:
   the log opens, and a state event with changes shows what changed;
   `state` chosen as the kind shows only state events,
@@ -924,7 +924,7 @@ hence `failed_checks_forgotten`.
   and each test removes what it made.
   axe-core finds no violation on the page in each of its states.
 - `test_parts_guard.py`, the guard of the page's parts (AP UiParts, Block 3;
-  `docs/ui-testing.md`, section 8):
+  `docs/ui-testing.md`, section 2):
   for every region of the page in its table (`REGIONS`: its containers,
   and its views, which open its menus, panels and forms),
   around each data source (`SOURCES`: `poll(false)`, `loadCubes()`,
@@ -1095,7 +1095,7 @@ Node is not needed.
   against the lists in `idioms/`, which may only fall:
   a new one fails it, and so does one taken out,
   until its line there is lowered in the same commit
-  (`docs/ui-testing.md`, section 9,
+  (`docs/ui-testing.md`, section 1,
   "The old idioms counted" and "The page's state written").
 - A wait that returns whether it was met is asserted where it is called.
 - What a test's look depends on does not grow with the run:
@@ -1108,7 +1108,7 @@ Node is not needed.
   a window that waits for nothing to come does not take it.
 - A check that compares where elements are reads their boxes at one moment,
   with `boxes(page, …)` of `helpers.py`, not with a `bounding_box()` each:
-  the page may draw between two calls (`docs/ui-testing.md`, section 9).
+  the page may draw between two calls (`docs/ui-testing.md`, section 1).
 - A check of what a request carried waits for the request itself
   (`wait_held` on the route's list, or on `sent_requests` for the page's own),
   not for what the page draws before it sends it.
@@ -1118,7 +1118,7 @@ Node is not needed.
   (`with taken(page, predicate):` of `helpers.py`),
   not for Playwright's `expect_response` alone, nor its `.finished()` with frames:
   the page goes on with an answer after Playwright has it
-  (`docs/ui-testing.md`, section 9, "The answer taken").
+  (`docs/ui-testing.md`, section 1, "The answer taken").
 - A state the page takes back on a timer of its own, "Copied" or the toast,
   is held while a test checks it after more than one look
   (`with held_timers(page, "copied"):`), not raced.
@@ -1135,13 +1135,13 @@ Node is not needed.
   waits with `answered(page)` of `helpers.py` until the page's reads have all answered,
   a read the page starts only after another's answer among them;
   the routes the test holds are given as `held`
-  (`docs/ui-testing.md`, section 9, "The page's reads all answered").
+  (`docs/ui-testing.md`, section 1, "The page's reads all answered").
 - "Nothing came" is checked against an end, not after a fixed wait:
   a read sent after the action through the same route,
   the page's state that says nothing waits,
   a count of what the action started,
   or a timer of the page's own due after the one it rules out (`docs/ui-testing.md`,
-  section 9).
+  section 1).
 - A test that measures what the page does by itself,
   its drawings or times that stand still,
   holds the page's poll meanwhile (`with held_poll(page):`),

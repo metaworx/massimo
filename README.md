@@ -100,8 +100,9 @@ on a document under `docs/` that is not).
 - [GUIDELINES/README.md](GUIDELINES/README.md): how the project is worked on:
   the guidelines, the project's contract and its coding standard
 - [docs/roadmap.md](docs/roadmap.md): what comes next, in order
-- [docs/testing.md](docs/testing.md): how a Go test waits:
-  the test kit and the scale of every wait
+- [docs/testing.md](docs/testing.md): the front page of the tests:
+  every suite and how it runs, the rules of a steady test, the authors' rule,
+  the kits' helpers by pattern, then how a Go test waits
 - [docs/testing-writes.md](docs/testing-writes.md):
   the test plan for the configuration writes on real hardware,
   [docs/reports/write-test-2026-11-05.md](docs/reports/write-test-2026-11-05.md)
@@ -113,8 +114,9 @@ on a document under `docs/` that is not).
 - [tools/ui-test/README.md](tools/ui-test/README.md): `make ui-test`,
   the web UI smoke test with Playwright, and its setup
 - [docs/ui-testing.md](docs/ui-testing.md): testing the web UI:
-  the smoke test, Cypress and Playwright compared, screenshots,
-  the recommendation
+  its kit first, for the page's own reads and its stream, and the guard of
+  the page's parts; then the evaluation of 2026-11-06, the smoke test,
+  Cypress and Playwright compared, screenshots, the recommendation
 <!-- END GENERATED PARTIAL docs/fragments/_documents.md -->
 
 ## Installing

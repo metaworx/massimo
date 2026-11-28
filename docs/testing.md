@@ -1,13 +1,240 @@
-# Testing: how a test waits
+# Testing: every suite, and how a test stays steady
+
+The front page of the project's tests:
+the suites and how each runs,
+the rules a steady test keeps,
+the authors' rule for the fix of a flaky test,
+and the kits' helpers by the pattern each closes,
+the Go tests' and the web UI's, each with where it is described in full.
+How a Go test waits follows them, in full ("How a Go test waits").
+The web UI's kit in full is in [docs/ui-testing.md](ui-testing.md),
+its sections 1 and 2;
+how its suite runs, in [tools/ui-test/README.md](../tools/ui-test/README.md).
+Which suites and checks a change needs before its pull request,
+the contract says ([AGENTS.md](../AGENTS.md), "Project Facts"):
+its test gate and its lint command.
+
+## The suites
+
+No suite but the plans on hardware reaches a real Cube:
+the fake Cube (`massimo fakecube`) stands in for one, with placeholders,
+and a run on the machine sets `MASSIMO_ENV_FILE=/dev/null`:
+the checkout's `.env` points at real hardware,
+as the contract says ("Secrets and identities").
+CI's jobs run the same targets (`GUIDELINES/project/CI.md`, section 2).
+
+| Suite | Run with | What it runs | In full |
+|-------|----------|--------------|---------|
+| Go | `MASSIMO_ENV_FILE=/dev/null go test ./...` after `make ui`, the contract's gate; `MASSIMO_ENV_FILE=/dev/null make test`, which builds the bundle first | every package's tests against the fake Cube, the guards among them: `tools/identifiers` (placeholders only) and `tools/ui-test/idioms` (the UI suite's old idioms counted) | "How a Go test waits", below |
+| Go with the race detector | `make race`; one package or test with `RACEPKGS=` and `TESTFLAGS=` | the packages whose goroutines meet (`RACEPKGS`) under `-race`, every wait twice as long | "The scale", "The race detector" |
+| Go on 32-bit ARM | `make test-armv6`, with `qemu-arm` (Debian's `qemu-user`) | every package's tests with `-short`, run by QEMU as the Raspberry Pi 1's core, every wait four times as long | "The scale" |
+| Fuzz | `make fuzz` (`FUZZTIME`, 10 s a target) | the fuzz targets of the packages that parse untrusted bytes, one after the other; in CI on a push to `main` | the `Makefile`'s `fuzz` |
+| Web UI | `make ui-test`; a file or a test with `PYTEST_ADDOPTS`, some cases with `UI_TEST_CASES` | the pytest suite of `tools/ui-test/`, Playwright with Chromium, in four cases (1100 and 390 px, English and German), each worker against a server set of its own over a fake Cube | [tools/ui-test/README.md](../tools/ui-test/README.md); its kit [docs/ui-testing.md](ui-testing.md), sections 1 and 2 |
+| UI soak | [ui-soak.yml](../.github/workflows/ui-soak.yml): daily at 00:20 UTC, by hand `gh workflow run ui-soak.yml --ref main` (`-f repeat=<n>`, `-f seed=<n>`); on a machine `UI_TEST_REPEAT=3 UI_TEST_SHUFFLE=<seed> make ui-test` | the UI suite, each test three times, in the order of a seed, the four cases a job each; red where a test failed once, and gating nothing: a report of the tests to fix | `GUIDELINES/project/CI.md`, section 2; [tools/ui-test/README.md](../tools/ui-test/README.md) |
+| LAN | `make lan-test`, with Docker and Compose v2 | discovery, `serve`'s mDNS announcement and `massimo discover` on a LAN of hosts in Docker, against avahi | [tools/lan-test/README.md](../tools/lan-test/README.md) |
+| Android emulator | `make app-emulator-test`, with KVM, the pinned Android SDK and JDK 17 | the app's instrumented tests on an emulator, against two servers built from the tree with the fake Cube, the fingerprint simulated | [tools/app-emulator/README.md](../tools/app-emulator/README.md) |
+| Packages | `make deb-test`, `make deb-systemd-test`, `make apt-test`, after `make packages`, with Docker | the Debian package installed and purged in a container, under systemd, and from an apt repository built with a throwaway key | [packaging/README.md](../packaging/README.md), "Debian package", "The apt repository" |
+| On hardware | by hand, at the owner's word | the configuration writes on a real Cube; the Windows service on a real PC; each plan's report in `docs/reports/` | [docs/testing-writes.md](testing-writes.md), [docs/testing-windows.md](testing-windows.md) |
+
+A radio write costs duty cycle:
+the plans on hardware send nothing to a real Cube without the owner's go,
+as the contract says ("The Cube").
+
+## A steady test
+
+A steady test fails only where the product is wrong:
+it passes on a slow, loaded or shuffled run as it passes alone.
+A test that failed once and passed when run again is flaky:
+CI's retry names it, the soak finds it,
+and it is fixed at its cause, never with a longer wait or a retry.
+The rules:
+
+- **It waits for what it checks, never for a fixed time.**
+  A thing that is to happen is waited for until it holds;
+  a thing that is not to happen is checked against an end
+  that shows it would have come by then.
+- **Every deadline takes the scale**
+  (`MASSIMO_TEST_SCALE`, `UI_TEST_SCALE`), so that a slow runner waits longer;
+  a window that waits for nothing to come does not,
+  nor a time the test checks as the product's.
+- **A window the product times is the test's to set**:
+  through an option, a hold or a clock of the kit's,
+  never by fitting the test's steps into it.
+- **It marks the moment before its action and waits from it**:
+  for the line, the event, the request or the answer the action brought,
+  not for a state that may have held before it;
+  what it compares, it reads at one moment.
+- **It starts from a known state and leaves it as it found it.**
+  A Go test starts a server, a fake Cube and a store of its own;
+  a UI test file starts from the recorded Cube
+  and leaves the server it shares as it found it.
+  What a test shows the page, it tells the page's reads, not the page alone.
+- **Where the fake does less than a Cube, the fake learns it**,
+  or the test names what it stands in for.
+- **The host's noise is the host's**:
+  a test holds the ports it uses,
+  skips only where the platform lacks what it needs,
+  and waits longer on a slow, loaded or busy host.
+- **Its failure says what it waited for and what came**,
+  so that a flake seen once, in the soak or in CI's retry,
+  is fixed at its cause without being caught again.
+
+## The authors' rule
+
+The owner's rule for whoever fixes a flaky test (AP SteadyTests, 2026-11-27),
+in the contract's "Tests" too:
+a fix that is a pattern is no local fix.
+
+- **The sweep first.**
+  Before the fix is written,
+  its author looks for the pattern's other places in every suite.
+- **The fix is a helper of the kit**:
+  of `internal/testkit`, the fake Cube or a package's rig for the Go tests,
+  of `tools/ui-test/helpers.py` or `conftest.py` for the web UI's;
+  every place the sweep found takes it.
+- **It is documented** in full where its kit is described:
+  this page's sections below "How a Go test waits" for the Go tests,
+  `docs/ui-testing.md`, section 1, for the web UI's;
+  and by name on this page, under its pattern ("The kit by pattern"),
+  so that the next test's author finds it before writing a copy.
+- **A local fix stays only where the sweep finds the pattern once**,
+  and its commit says so.
+- **No test file copies a helper of the kit**:
+  the idioms guard counts a copy ("The guards and the soak").
+
+## The kit by pattern
+
+The flaky tests the suites had fell into five patterns (AP SteadyTests),
+and each pattern has the helpers below.
+"In full" is the section that describes a helper:
+of this page for the Go tests,
+of `docs/ui-testing.md`, section 1, by its entry's title, for the web UI's,
+unless it names another document.
+
+### A window the test should set
+
+A product timer or a rig's window that a slow runner overruns:
+a write applied before the test read it as pending,
+a deadline run out before the test's check,
+a client's timeout, a fade that the test's next step came after.
+The test sets the window, or holds what it checks while it checks it.
+
+| Suite | Helper | When a test takes it | In full |
+|-------|--------|----------------------|---------|
+| Go | `fc.HoldApply()` of the fake Cube | a write checked while it is on its way: pending, its tag, a 412 for a tag from before it | "A write on its way" |
+| Go | `r.dueNow(room)` of `internal/server`'s rig, the writes' deadline an hour (`confirming`) | what a write's deadline brings: its warning, its re-send | "A write's deadline" |
+| Go | `testkit.NewClock(at)`; the drift tests' `checkClock` | a day, a window or a timer the test moves on itself | "The kit" |
+| Go | an option of the product's that only the test sets, 0 for its default (`cubelan.NetWaits`, `Options.discoveryLate`) | a product timer the test would wait out | "The scale" |
+| Go | `MASSIMO_TEST_SCALE`, `testkit.Scale(d)` | a deadline the kit's waits do not hold, such as a `select` on a channel | "The scale" |
+| UI | `held_timers(page, *kinds)` | a state the page takes back on a timer of its own: "Copied", the toast, the settings' push | "A timed state held" |
+| UI | `held_poll(page)` | a measure of what the page does by itself, which its poll would change | "The poll held" |
+| UI | `pause_clock(page)`, with the marker `clock` | a timer of the page's that the test runs itself | `tools/ui-test/README.md`, "The fixtures" |
+| UI | `scaled(seconds)`, `UI_TEST_SCALE` | a wait or a loop of the test's own | "The scale" |
+| UI | `reads.age(rid, seconds, already=False)` | a look that depends on a value's age, which grows with the run | "How old the values are" |
+
+### A wait on the wrong moment
+
+A wait that holds before the moment its check is about:
+a state that held before the action, a line the action did not cause,
+a check before the request it checks,
+an answer that Playwright has and the page has not read yet,
+two reads where one moment is compared.
+
+| Suite | Helper | When a test takes it | In full |
+|-------|--------|----------------------|---------|
+| Go | `testkit.Watch`: `Mark`, then `Await`, `AwaitN` or `AwaitAll` from the mark; `Has`, `HasNot` once the action is over; `Never` with an end | the next line or event after an action: the fake Cube's lines (`cubewatch.Lines`), the server's log (`testkit.LogWatch`), a stream (`testkit.StreamWatch`), a channel (`testkit.ChanWatch`) | "The watcher" |
+| Go | `testkit.Eventually`, `testkit.Within`, `testkit.Never` | a state that is to come, or one that is not to come before an end | "The kit" |
+| Go | `logMark`, `logAfter`, `logAfterN`, `logLines` | the next line of the log's API after an action, in `internal/server` | "The log's cursor" |
+| Go | `pumpSync` | after a change seen through the API, before the log, the stream's events, the alerts or the next change | "The pump" |
+| UI | `answered(page, held=…)`, `ApiReads` | before a test counts what an action read, or checks what the answers drew | "The page's reads all answered" |
+| UI | `taken(page, predicate)` | a check of what an answer drew, or a step it must come before: the page has read its body | "The answer taken" |
+| UI | `wait_held(page, sent, n=…)`, `sent_requests(page, method, pattern)` | what a request carried, or that a write was not sent again | "The request itself" |
+| UI | `boxes(page, *targets)` | where several elements are, compared: their boxes read at one moment | "One moment for several boxes" |
+| UI | `wait_until`, `settled(page, look, ok)` | a state the page is to draw; a look that takes several calls | "Waits and cleanups"; "What a test tells of a device or a room" |
+| UI | `stream.mark()`, `stream.wait(…)` | the page's next event after a mark | "The stream watched" |
+| UI | `wait_started`, `wait_log_live` | the page's start; the log taking the stream's state events | "The page's start"; "The log live" |
+| UI | `open_fold`, `close_fold`, `toggle_fold` | a step inside a fold, after the fold's `toggle` | "A fold opened" |
+| UI | `mark`, `replaced`, `frames` | that data which came took nothing from the user | "The same element" |
+| UI | `safe_route(page, pattern, handler)` | every route of a test's: a request still on its way when its page closes is let go | "One safe route" |
+| UI | an end of the page's own: a later read through the same route, a timer it has not set | that an action brought nothing | "Nothing came, against an end" |
+
+### The server's own traffic, or an earlier test's leftovers
+
+What reaches a test that it did not cause:
+the server's poll, a reconnect and the events they bring,
+and what a test before it left on a server or a fake Cube it shares:
+a write on its way, a session, a warning, an integration, a setting.
+
+| Suite | Helper | When a test takes it | In full |
+|-------|--------|----------------------|---------|
+| Go | `startServer(t, …)` | every test of `internal/server`: a server, a fake Cube and a store of its own | "The start" |
+| Go | `quiet()` | a test that no poll or refresh of the server's may meet | "The start" |
+| Go | `cubewatch.Except('l')` | what the fake Cube received since a mark, without the polls | "The watcher" |
+| Go | `storekit.Open(t, dir)` | a store of the test's own, a copy of the template | "The store's template" |
+| Go | `serialTests`, `testkit.Swapping(t)`, `testkit.ParallelOrListed` | a test that changes what the whole process shares | "Parallel tests" |
+| UI | `serve -poll 0`; `POST …/cubes/<serial>/refresh` | the server sends its fake Cube nothing between a test's steps; a test that needs a read asks for it | "The server sets"; "A test that needs a read asks for it" |
+| UI | `known_cube`, which resets the fake Cube (`Reset`, through its control's `POST /reset`), and `writes_shown` | each test file from the recorded Cube, with no write on its way | "A test file starts from the recorded Cube" |
+| UI | `server_as_found`, `server_left`, `LEFT_FOR_GOOD` | each test file leaves the server as it found it, or fails naming what it left | "A test file leaves the server as it found it" |
+| UI | `ended_sessions` | the sessions a test's sign-ins made, ended after it | "A test's sessions ended" |
+| UI | `clear_preferences` | before every page: the token's user's preferences gone, the log's warnings seen | "The warnings seen" |
+| UI | `own_id(what)` | what a test makes on the shared server that no API removes | "An id of the test's own" |
+| UI | `server_holds_settings(holds, token=None, **values)` | a test whose outcome depends on whether the server holds the user's settings | "Whether the server holds the user's settings" |
+| UI | `Reads`: `reads.cube`, `reads.device`, `reads.room`, `reads.change`, `reads.keep` | what a test shows the page, kept through the page's reads and the server's own events | "The page's reads answered"; "What the reads keep"; "What a test tells of a device or a room" |
+| UI | `isolate_log(page, reads)` | a log of the test's own lines | "A log of the test's own lines" |
+| UI | `stub_me(page, capabilities)` | the page signed in with given capabilities, without a user made on the server | `tools/ui-test/README.md`, "The fixtures" |
+
+### The fake doing less than a Cube
+
+A test that passes against the fake only because it does less than a Cube,
+or fails because of it:
+a command the fake answers and never applies,
+a line it records only while it answers,
+a device or a problem it never has.
+
+| Suite | Helper | When a test takes it | In full |
+|-------|--------|----------------------|---------|
+| Go | `TestFakeHandlesEveryCommand`, with its `acknowledgedOnly` | a new command builder: the fake carries it out, or the test names why not | "A write's deadline" |
+| Go | `fc.OnReceive` and `cubewatch.Lines`, with `fc.SetSilent` | a line written behind a poll the fake's silence holds | "The watcher" |
+| Go | `takeConfig` | a C line a reconnect is to keep, as a Cube's greeting carries what its devices took | "Parallel tests" |
+| Go | `fc.Pause()`, `fc.Resume()` | a Cube that goes and comes back on its address | "Ports" |
+| UI | the fake's `-free-slots 50` and `-pair` (`run.sh`) | a Cube's free memory slots; a device that joins pairing | "The server sets"; `tools/ui-test/README.md` |
+| UI | `reads.device(rf, like=…)`; the guard's stubs (`CUBES_STUB`, `FOUND_STUB`, `JOINED_STUB`) | a device, a problem or a found Cube the fixture lacks, told with GETs alone | "What a test tells of a device or a room"; section 2, "How the regions came to pass it" |
+
+### Host noise
+
+What the host does beside the test:
+a slow or loaded runner, the pace of the race detector or of QEMU,
+a port another program takes, the tests running beside it.
+
+| Suite | Helper | When a test takes it | In full |
+|-------|--------|----------------------|---------|
+| Go | `testkit.Listen(t)`, `testkit.ListenPacket(t)`; `heldPorts` in `internal/server` | a port the test uses, held from its first listen to its end | "Ports" |
+| Go | `testkit.BindOrSkip(t, err)` | a listen that failed: a skip only where the platform lacks the address | "Ports" |
+| Go | `make race`, with its scale and `RACEGCFLAGS` | a `-race` run, by hand too | "The scale"; "The race detector" |
+| Go | `awayWait` | a wait for the Cube client to see a fake that closed, on a busy machine | "Parallel tests" |
+| UI | `UI_TEST_SCALE`; `run.sh`'s retry, at four times the scale, with the trace | a slow or loaded runner; the retry's trace slows the page too | "The scale" |
+| UI | the run's ports (`UI_TEST_API_PORT`, `UI_TEST_CUBE_PORT`, `UI_TEST_DISCOVERY_PORT`, `UI_TEST_CONTROL_PORT`) | a run beside another, each on ports of its own | `tools/ui-test/README.md` |
+
+### The guards and the soak
+
+A guard keeps a pattern closed once its helper is there;
+the soak finds a flaky test that the runs of its pull request did not.
+
+| Suite | Guard | What it holds | In full |
+|-------|-------|---------------|---------|
+| UI | `tools/ui-test/idioms/` (`go test ./tools/ui-test/idioms`) | per test file, the fixed pauses (`wait_for_timeout`), the plain routes, a copy of a kit helper's name and the writes of the page's state, each against its list, whose counts may fall and may not rise | "The old idioms counted"; "The page's state written" |
+| UI | `guard` (`conftest.py`, autouse) | a test fails on a console error, a page error, a route's problem (`safe_route`) or a horizontal scroll left at its end | `tools/ui-test/README.md`, "The fixtures" |
+| Go | `TestOnlyTestsImportTheKit`; `TestParallelOrListed` | only test files import the kit; each test runs in parallel or is listed with its reason | "The kit"; "Parallel tests" |
+| UI | the soak: `UI_TEST_REPEAT`, `UI_TEST_SHUFFLE`, `soak_summary.py` | each test three times in a seed's order: one that leans on the test before it, on a file before it on its worker or on a window a loaded runner overruns fails in some of its repeats | `GUIDELINES/project/CI.md`, section 2; `tools/ui-test/README.md` |
+
+## How a Go test waits
 
 The Go tests run against the fake Cube and need no hardware and no network
 (the contract, "Tests").
 Most of what they check happens a little later than the call that caused it:
 a line reaches the fake Cube, the event pump hands an event on,
 a backup is written.
-This document says how a test waits for that.
-The web UI's tests are [docs/ui-testing.md](ui-testing.md)
-and [tools/ui-test/README.md](../tools/ui-test/README.md).
+The sections from here to the end say how a test waits for that.
 
 ## The rule
 
