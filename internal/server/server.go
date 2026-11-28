@@ -601,7 +601,7 @@ func (rt *runtime) lockStructure(ctx context.Context) (func(), error) {
 	case rt.structure <- struct{}{}:
 		return func() { <-rt.structure }, nil
 	case <-ctx.Done():
-		return nil, fail(http.StatusServiceUnavailable, "another change of the cube's rooms and devices is still running")
+		return nil, refuse(http.StatusServiceUnavailable, codeStructureBusy)
 	}
 }
 
@@ -1989,7 +1989,7 @@ func (s *Server) getDevice(w http.ResponseWriter, r *http.Request) error {
 		writeJSON(w, http.StatusOK, s.virtualDetail(rt, room))
 		return nil
 	} else if roomAlias.MatchString(r.PathValue("rf")) {
-		return fail(http.StatusNotFound, "no room %s", strings.TrimPrefix(strings.ToLower(r.PathValue("rf")), "room-"))
+		return noAliasRoom(r.PathValue("rf"))
 	}
 	rf, err := deviceOf(rt, r.PathValue("rf"))
 	if err != nil {
@@ -2118,7 +2118,7 @@ func (s *Server) deleteRoom(w http.ResponseWriter, r *http.Request) error {
 	}
 	for _, d := range md.Devices {
 		if int(d.RoomID) == id {
-			return fail(http.StatusConflict, "room %d still has device %s; move it first", id, d.RFAddress)
+			return refuse(http.StatusConflict, codeRoomNotEmpty, id, d.RFAddress.String())
 		}
 	}
 	cp := *md
@@ -2169,7 +2169,7 @@ func (s *Server) setpoint(w http.ResponseWriter, r *http.Request, rt *runtime, t
 	}
 	mode, err := cube.ParseMode(req.Mode)
 	if err != nil {
-		return fail(http.StatusBadRequest, "mode must be auto, manual, vacation or boost")
+		return refuse(http.StatusBadRequest, codeSetpointModeInvalid)
 	}
 	if mode == cube.ModeBoost && req.Temp == 0 {
 		// The thermostats ignore the temperature of a boost: they open

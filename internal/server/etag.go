@@ -236,8 +236,8 @@ func writeProgram(w http.ResponseWriter, rp roomProgram) error {
 }
 
 // checkIfMatch refuses a write whose If-Match names another tag than the
-// current one with 412, carrying the current tag; a write without it is
-// unconditional, "*" matches any.
+// current one with 412 and program_changed, carrying the current tag; a
+// write without it is unconditional, "*" matches any.
 func checkIfMatch(r *http.Request, current string) error {
 	h := strings.TrimSpace(r.Header.Get("If-Match"))
 	if h == "" || h == "*" {
@@ -250,8 +250,9 @@ func checkIfMatch(r *http.Request, current string) error {
 			return nil
 		}
 	}
-	return &httpError{status: http.StatusPreconditionFailed, etag: current,
-		msg: "the week programme changed since it was read (or a write to it is still on its way): read it again, then write"}
+	he := refuse(http.StatusPreconditionFailed, codeProgramChanged).(*httpError)
+	he.etag = current
+	return he
 }
 
 // quoteTag is a tag as the ETag header carries it.
