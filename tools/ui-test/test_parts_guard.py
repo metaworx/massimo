@@ -719,6 +719,14 @@ def software_question(page):
     page.locator("#update-channel").wait_for(state="visible")
 
 
+def limits_question(page):
+    """Maintenance with a shorter log chosen, 14 days under the default's
+    30, asking in its row before anything is sent (AP ServerLimits, D7-A)."""
+    maint(page)
+    page.locator("#limit-log-keep").select_option("14")
+    page.locator(".limit-row .confirm-box").wait_for()
+
+
 def maint_question(page):
     """Maintenance with the restart and the reboot offered, the restart
     asking in its row; the guard types a delay into the reboot's."""
@@ -1013,6 +1021,7 @@ REGIONS = (
         View("Maintenance", maint),
         View("the restart asking, a delay typed for the reboot", maint_question),
         View("a window limit's choice in focus", maint, "#limit-window-warn"),
+        View("the log's shorter days asking in its row", limits_question),
     ), sources=("the page shown again: maint", "the stream's events: resync change reboot reboot_cancelled settings_read")),
     Region("system-info", ("#sys-info-body",), (View("System info, its folds open, a licence among them", info),), sources=("the page shown again: info", "the stream's events: resync settings_read change.cube")),
     # the settings applied again, as when the user's arrive from the server at a sign-in, are one of SOURCES
@@ -1203,7 +1212,7 @@ GUARD_JS = r"""() => {
     if (source.startsWith("the stream's events: ")) {
       // what the server sends when what the region shows changed; a change sets every setting the regions show
       const set = { "update.channel": null, announce: null, poll_interval: null, refresh_interval: null, discover_interval: null, duty_wait: null,
-        window_warn_after: null, window_alert_after: null };
+        window_warn_after: null, window_alert_after: null, stale_after: null, stale_after_wall: null, "log.keep_days": null };
       // change.cube is a change of a Cube, whose proxy System info lists
       const summary = { change: { action: "settings.update", set }, "change.cube": { action: "cube.update", target: "cube:KEQ0000100" },
         settings_read: { why: "SIGHUP", changed: [], at_next_start: [] } };

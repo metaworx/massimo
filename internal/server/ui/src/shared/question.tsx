@@ -111,24 +111,31 @@ export function busyProps(cls: string, busy: boolean, off?: boolean) {
 /**
  * Question asks whether to go on: text, then No and Yes (their labels),
  * Yes the primary; Yes runs onYes, which returns the request's promise,
- * No and Escape run onNo. The focus goes to No when it comes. boxRef,
- * where given, holds the box (useAsk's box), which tells whether the
- * focus is in it as it goes.
+ * No and Escape run onNo. The focus goes to No when it comes, but with
+ * stay, where it stays where it is: on a list whose choice the question
+ * follows as the arrow keys move through it (the Limits card's log),
+ * No and Yes reached by Tab. off keeps Yes off while something it waits
+ * for runs (the row's own save still under way). boxRef, where given,
+ * holds the box (useAsk's box), which tells whether the focus is in it
+ * as it goes.
  */
-export function Question({ text, yes, no, onYes, onNo, boxRef }: {
+export function Question({ text, yes, no, onYes, onNo, boxRef, stay, off }: {
   text: string;
   yes: string;
   no: string;
   onYes: () => Promise<unknown>;
   onNo: () => void;
   boxRef?: Ref<HTMLDivElement>;
+  stay?: boolean;
+  off?: boolean;
 }) {
   const id = useId();
   const noRef = useRef<HTMLButtonElement>(null);
   const sending = useBusy();
   // in the drawing's own turn, as the plain question did, not after the next frame
+  // biome-ignore lint/correctness/useExhaustiveDependencies: the focus goes to No once, as the question comes, never again at a change of stay
   useLayoutEffect(() => {
-    noRef.current?.focus();
+    if (!stay) noRef.current?.focus();
   }, []);
   return (
     <div
@@ -146,7 +153,7 @@ export function Question({ text, yes, no, onYes, onNo, boxRef }: {
       <span id={id} class="confirm-text">{text}</span>
       <div class="actions">
         <button ref={noRef} type="button" class="confirm-no" disabled={sending.busy} onClick={onNo}>{no}</button>
-        <button type="button" {...busyProps("confirm-yes primary", sending.busy)} onClick={() => sending.run(onYes)}>{yes}</button>
+        <button type="button" {...busyProps("confirm-yes primary", sending.busy, off)} onClick={() => sending.run(onYes)}>{yes}</button>
       </div>
     </div>
   );

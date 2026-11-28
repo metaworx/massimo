@@ -826,7 +826,9 @@ Every room has a tile:
   which names the devices that have not.
   The tile's other notices are in that list alone.
 - **Values may be old**:
-  a thermostat of the room has not been heard from for more than 24 hours,
+  a thermostat of the room has reported nothing new for longer than its time,
+  50 hours for a radiator thermostat and 24 for a wall thermostat by default
+  (Maintenance → **Limits**),
   and its entry says how long, "Not seen for 30 hours".
   It may be out of range or its batteries flat,
   but a thermostat whose valve stays shut outside the heating season can be quiet as well.
@@ -2815,13 +2817,14 @@ The server's sign, when it says an update is out, opens it at Software update.
 
   | Event | When the server sends it | What Maintenance reads |
   |---|---|---|
-  | `change` of `announce`, an interval or a window limit | the setting set, from any browser | the settings (`GET /api/v1/settings`), Limits' with them; for a window limit the rooms too, whatever page is shown |
+  | `change` of `announce`, an interval or a limit | the setting set, from any browser | the settings (`GET /api/v1/settings`), Limits' with them; for a window limit or a stale threshold the rooms too, whatever page is shown |
   | `settings_read` | the settings file read again: changed on disk, SIGHUP, Reload now; and at the start, after `server_started`, where the start found notes on the file | at `info` nothing: the event names what waits for the next start, its time is when the file was read, and the next start refuses nothing, so the card takes a refusal away; at `warn` the restart's row (`GET /api/v1/restart`): the read found the next start refuses something, or a note on the file, and the row names what the next start refuses, never a note |
   | `reboot` | a reboot asked for, begun or failed | the reboot's state (`GET /api/v1/reboot`) |
   | `reboot_cancelled` | a reboot taken back, or the owner's switch turned off | the same |
   | `resync` | the stream opened again with no replay: after the server's restart | the settings, the restart's row and the reboot's |
 
-  A `change` of a window limit reads the rooms on every page, not only here:
+  A `change` of a window limit or a stale threshold reads the rooms on every page,
+  not only here:
   the server sends a `change` to every stream, which needs `read` alone,
   so the rooms are read again for every role, `settings` held or not.
   `restart` reads nothing: the server is going away,
@@ -2835,7 +2838,7 @@ The server's sign, when it says an update is out, opens it at Software update.
   and its answer shows nothing where one was made meanwhile.
 - **Limits** (with `settings`, AP ServerLimits), after Maintenance:
   how long a thing may last before the page warns of it,
-  with its help in the card's head.
+  and how long the log keeps its entries, with its help in the card's head.
   **Window open: warning after** and **Window open: alert after**
   choose the settings `window_warn_after` and `window_alert_after` (`docs/api-v1.md`,
   "GET and PUT /api/v1/settings"):
@@ -2867,10 +2870,41 @@ The server's sign, when it says an update is out, opens it at Software update.
   as it does under **Announce on the LAN**;
   the next read that succeeds takes that back from every row it was said on,
   Announce on the LAN's too, and leaves a change's own line.
-  At a change of either, made on this page or another,
-  the page reads its rooms again, whatever page is shown:
-  the server gives each open window its times by them (`docs/api-v1.md`,
-  a device's `window`), and an open window's sign follows at once.
+  **Radiator thermostat unreachable after** and **Wall thermostat unreachable after**
+  choose `stale_after` and `stale_after_wall`:
+  how long a thermostat may report nothing new before its values count as out of date,
+  its room's tile shows the clock and its entry says how long:
+  Rooms, "Values may be old".
+  A radiator thermostat's steps are 12, 24, 36 and 50 hours,
+  3, 4, 5, 7, 14 and 30 days, 50 hours by default;
+  a wall thermostat's 6, 12, 24, 36 and 48 hours, 3 and 7 days,
+  24 hours by default.
+  Where `-stale-after` fixes them for the run (`fixed_by`), both are read-only,
+  and their lines name the flag and its value;
+  a value set through the API meanwhile is the one a start without the flag takes.
+  **Keep the log** chooses `log.keep_days`:
+  14, 30, 60, 90, 180 and 365 days, 2, 5 and 10 years, and **Forever**,
+  30 days by default.
+  A time shorter than the one in effect removes the older entries at once,
+  so it asks first in the row, naming the time, the choice shown meanwhile,
+  and the focus stays on the list:
+  the arrow keys, which a closed list takes at once in Chromium off the Mac,
+  move on through the times, the question following the choice,
+  and one that shortens nothing takes it back.
+  Tab reaches **Cancel** and **Shorten**;
+  **Shorten** saves the time,
+  off while the row's save of an earlier choice runs,
+  and **Cancel** or Escape leaves the value as it was, the focus on the list.
+  A read or a save after which the choice shortens nothing takes the question back,
+  another browser's shorter time among them.
+  Forever and a longer time are saved at once,
+  the row's line saying that the change applies at once.
+  At a change of a window limit or a stale threshold,
+  made on this page or another, the page reads its rooms again,
+  whatever page is shown:
+  the server gives each open window its times and each thermostat its stale flag
+  by them (`docs/api-v1.md`, a device's `window`),
+  and the tiles' signs follow at once.
   The server sends the `change` to every stream,
   so the rooms are read again for every role, `settings` held or not.
   The card is read with Maintenance's settings, in one read,
@@ -3224,8 +3258,9 @@ a restore's to `MassimoParts.backups`, `cube_found` to `addFound`,
 `notification` to `notifyToast`,
 and every other kind the log knows (`MassimoParts.log.kinds`) to the log and to
 `MassimoParts.serverEvent`.
-A `change` of a window limit has the maintenance region call `loadRooms` on every page,
-so that the tiles' window signs follow at once (AP ServerLimits, D5-A):
+A `change` of a window limit or a stale threshold has the maintenance region
+call `loadRooms` on every page,
+so that the tiles' signs follow at once (AP ServerLimits, D5-A):
 the server sends a `change` to every stream, whatever the role holds.
 An event's read of a thing waits for the page's own request for it to end,
 and reads once (`burstReader` of `shared/burst.ts`).
@@ -3441,7 +3476,7 @@ for the first owner's toast and the log's `open_setup` line.
 | `unsavedTone` | `forms.ts` | the worse state of the unsaved and the failed forms under keys, as their disks show it: `bad` after a failed save, else `warn`, else ""; a section's pill and ☰'s mark | `keys` |
 | `changedItems`, `leaveForms` | `forms.ts` | every form with changes not saved, the merely changed and the saving ones too, as `unsavedItems` draws them: what leaving the page drops; every changed form counted as left, unsaved, at an attempt to leave the page | – |
 | `FormsDialog` | `dialog.tsx` | a modal `<dialog>` that lists forms with changes, each a button that closes it and opens its form, with a button that stays (Escape too, and any close without a button of its own) and one that goes on, of the classes `dialog-stay` and `dialog-go` in every use; the focus on the one that stays, given back where it was when it closes | `shown`, `title`, `text`, `forms` (items, as `changedItems` gives them), `stay` (its label), `onStay`, `go` (`{ label, onGo }`, none without) |
-| `Question` | `question.tsx` | a question in the page, No and Yes, Escape for No, the focus on No as it is drawn (`confirmBox`) | `text`, `yes`, `no`, `onYes` (its request's promise), `onNo`, `boxRef` (`useAsk`'s `box`) |
+| `Question` | `question.tsx` | a question in the page, No and Yes, Escape for No, the focus on No as it is drawn (`confirmBox`), or with `stay` where it was: on a list whose choice the question follows as the arrow keys move through it (the Limits card's log), No and Yes reached by Tab | `text`, `yes`, `no`, `onYes` (its request's promise), `onNo`, `boxRef` (`useAsk`'s `box`), `stay`, `off` (Yes off while what it waits for runs: the row's own save) |
 | `useAsk` | `question.tsx` | a row that asks in its own place, the focus back on its button in the drawing's own turn, as `confirmInPlace` gave it at once (a layout effect); with `held`, whether it asks is a store's live state, which the store takes back where what it asked about changed and at a sign-out (a part drawn once for the page's life: Software update, Maintenance); a question the store takes back while the focus is in its box (`box`, handed to the `Question`'s `boxRef`, judged as the drawing that takes it away begins) gives it back to the button, or to the row where the button cannot take it, in the same turn; `done(false)` gives it to nothing, as before | `held` (`{ asking }`); gives `asking`, `ask`, `done`, `ref`, `row` (the row of the caller's, which holds the focus with `tabindex` -1 until it leaves, where the button cannot), `box` |
 | `useBusy`, `busyProps` | `question.tsx` | a button's request under way: busy, off, `aria-busy` (`whileBusy`, `setBusy`); with an epoch, a request belongs to the epoch it ran in, the button ready again in a later one (the sign-in card's opening) | `useBusy(epoch)`, `run(fn)`; `busyProps(cls, busy, off)` |
 | `useSetAtOnce` | `question.tsx` | a setting saved at once, a switch without a Save: the user's choice shown while its request runs, the control on so that the focus stays on it, a change meanwhile sending nothing and drawn back, then what is stored, the old value where it was refused (the password sign-in, a capability for every role, whether integrations may ask, an integration's Enabled) | `stored`; gives `value`, `busy`, `set(v, fn)` |
