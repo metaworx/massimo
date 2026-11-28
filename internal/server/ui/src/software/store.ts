@@ -9,8 +9,10 @@
  * newest release on it (GET /api/v1/update, ?refresh=1 to ask now), the
  * settings update.channel, update.auto and update.auto_window for a
  * holder of settings (GET and PUT /api/v1/settings), the request to the
- * update helper (POST /api/v1/update) and the answer to the automatic
- * update's question (PUT /api/v1/update/answer), and the reading every
+ * update helper (POST /api/v1/update; no_backup for Update without a
+ * backup, where the backup before the last update failed) and the
+ * answer to the automatic update's question (PUT
+ * /api/v1/update/answer), and the reading every
  * 3 s while the helper works,
  * which rides out the server's restart. Update and Install now read
  * first whether the server's next start refuses the settings file (GET
@@ -69,10 +71,11 @@ export const data = live({
 /**
  * The question Update asks in place of the section's buttons: the
  * version it asked about, whether the server's next start refuses the
- * settings file, as read at the press (refused), and whether that read
- * runs (reading), Update turning meanwhile.
+ * settings file, as read at the press (refused), whether that read
+ * runs (reading), Update turning meanwhile, and whether it was Update
+ * without a backup that asked (noBackup), which the request then says.
  */
-export const question = live({ asking: false, version: "", refused: false, reading: false });
+export const question = live({ asking: false, version: "", refused: false, reading: false, noBackup: false });
 
 /**
  * The question Install now asks while the server's next start refuses
@@ -116,6 +119,15 @@ export function updateBusy(h: UpdateStatus | undefined): boolean {
   return !!h && ["checking", "installing", "restarting"].includes(h.state);
 }
 
+/**
+ * updateWorking reports whether an update is under way: being started,
+ * the server's backup running before the helper is asked (AP
+ * ServerBackup, Block 10), or at the helper.
+ */
+function updateWorking(u: UpdateInfo): boolean {
+  return !!u.starting || updateBusy(u.helper);
+}
+
 /** setBusy turns Update and greys out Check while an update runs (update.js setUpdateBusy). */
 function setBusy(busy: boolean): void {
   data.busy = busy;
@@ -146,8 +158,8 @@ export async function loadUpdate(refresh: boolean, mine: () => boolean = () => t
   data.said = null;
   if (question.asking && (!u.can_update || u.latest !== question.version)) question.asking = false;
   takeNowBack(u);
-  if (updateBusy(u.helper)) {
-    // busy follows what a read finds: the helper at work greys the buttons out, whoever started it
+  if (updateWorking(u)) {
+    // busy follows what a read finds: the backup or the helper at work greys the buttons out, whoever started it
     setBusy(true);
     if (!follow.on) followUpdate();
   }
@@ -264,7 +276,9 @@ function followUpdate(): void {
     }
     const u = await loadUpdate(false);
     if (!stillSession(n) || gen !== follow.gen) return; // stopped meanwhile: the sign-out, or a reading begun anew
-    const busy = !u || updateBusy(u.helper) || Date.now() < follow.grace;
+    // the server's backup before the update may outlast the reading's five minutes: they count from its end
+    if (u && u.starting) follow.until = Math.max(follow.until, Date.now() + 5 * 60 * 1000);
+    const busy = !u || updateWorking(u) || Date.now() < follow.grace;
     if (!busy || Date.now() > follow.until) {
       stopFollow();
       setBusy(false);
@@ -304,10 +318,13 @@ export async function readRefused(): Promise<boolean | null> {
  * failed read asks as before. Update turns while it reads, and a press
  * meanwhile reads nothing more; the question names the release offered
  * once the answer is in, and goes nowhere where none is to be installed
- * then, or the session changed.
+ * then, or the session changed. noBackup is Update without a backup's
+ * press, offered where the last update's backup failed (AP ServerBackup,
+ * Block 10): the question says that no backup is taken first.
  */
-export async function ask(): Promise<void> {
+export async function ask(noBackup = false): Promise<void> {
   if (question.reading || !update.value || !update.value.latest) return;
+  question.noBackup = noBackup;
   question.reading = true;
   const refused = await readRefused();
   if (refused === null) return; // signed out meanwhile: forgetSoftware has ended the read
@@ -361,14 +378,23 @@ function takeNowBack(u: UpdateInfo): void {
   }
 }
 
-/** runUpdate asks the server's update helper to install the version asked about, then follows it. */
+/**
+ * runUpdate asks the server's update helper to install the version asked
+ * about, then follows it: the server takes a backup of itself first,
+ * unless Update without a backup asked (no_backup), and answers at once
+ * while it is being started; the reading follows the backup too, and a
+ * start that failed after the answer, its backup's among them, is said
+ * in the helper's line from GET's start_error. A refusal is said there
+ * once the versions are read again.
+ */
 export async function runUpdate(): Promise<void> {
   const version = question.version;
+  const noBackup = question.noBackup;
   const n = session();
   setBusy(true);
   let requested = version;
   try {
-    const r = await api<{ requested?: string } | null>("POST", "api/v1/update", {});
+    const r = await api<{ requested?: string } | null>("POST", "api/v1/update", noBackup ? { no_backup: true } : {});
     // the server checks again and installs its newest: the line names what it says it asked for
     if (r && r.requested) requested = r.requested;
   } catch (e) {
@@ -377,6 +403,8 @@ export async function runUpdate(): Promise<void> {
     if (follow.on) return;
     setBusy(false);
     const error = (e as Error).message;
+    await loadUpdate(false); // the versions again: a start under way, or the backup that failed with Update without a backup
+    if (!stillSession(n)) return;
     data.said = () => t("update.notStarted", { error });
     return;
   }
@@ -516,6 +544,7 @@ export function forgetSoftware(): void {
   question.version = "";
   question.refused = false;
   question.reading = false;
+  question.noBackup = false;
   for (const q of Object.values(nowAsks)) {
     q.asking = false;
     q.version = "";

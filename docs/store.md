@@ -2773,6 +2773,61 @@ which a `serve` that has it open refuses (`store.ErrInUse`);
 `-plan` prints what it would do and changes nothing,
 a file uploaded for it removed again where the server did not hold it.
 
+A new box starts from a backup in its first owner's window (AP ServerBackup,
+Block 11; docs/api-v1.md, "A new box from a backup"): every scope,
+no backup taken first, since the box has nothing to keep and no key yet,
+and the restore refused, counted in the restore's own transaction,
+where the store has a regular user (`RestoreSelection.NoUsers`),
+so that a first owner another request made meanwhile is never restored over;
+where it holds a configured Cube, a room or an integration (`NoData`,
+`Store.NewBoxHolds`), which a restore without a backup first would lose; and,
+with users and sign-in,
+where the backup leaves no enabled regular owner (`NoUsers`,
+`ErrRestoreNoOwner`): the box would stay open,
+to be restored and restarted again, or have nobody to sign in as its owner.
+The backup handed waits in `.serverbackup-newbox-*` in the data directory,
+encrypted as it came, for at most an hour,
+and goes with the first owner made and at the server's next start.
+`massimo store restore` on a new box, a store without a regular user, a key,
+a configured Cube, a room or an integration,
+takes no backup first either and says so on standard error:
+on the store with `NoUsers` and `NoData` too, any scopes;
+through the box's open `serve` by these routes,
+a file and every scope (`-scope all`).
+Elsewhere it takes the backup first as before.
+
+#### Before an update
+
+Every update the server starts, by hand, at night or as Install now,
+first takes a backup, trigger `before-update`,
+to the local targets alone and pinned for 30 days,
+as the server and under whoever holds `update`, with no backup capability;
+its `uuid` goes into the update's history (`update.history`) and its log line.
+A request is answered at once, the update being started while the backup runs,
+on a context of its own that a client giving up does not end,
+within 30 minutes, the wait for another backup job included.
+Without a key the update goes on, and says so.
+A backup that fails stops the update, which says why,
+and leaves no row, as no backup by hand does;
+Update without a backup goes on without one,
+`no_backup`, an audit row of its own.
+A new backup before an update takes the pin of an earlier one no update used,
+so that tries in a row, or the route's calls, keep one pinned.
+`massimo update` by hand has this box's running `serve` take it
+(`POST /api/v1/update/backup`), found and proved by its node
+as the server backups' commands find it,
+with the key, the address and the TLS of the environment,
+and where nobody names a data directory or a settings file, as for root,
+of the service's settings file for what the environment leaves unset.
+Where no `serve` takes it, none answering or the key refused,
+the store's keys decide, read without writing:
+without a key the update goes on, with a line;
+with one the backup is made on the store, under the jobs' lock,
+carrying the service's settings file and TLS files,
+but never by root on a store that is another user's:
+it stops instead, and `-no-backup` installs without one.
+The update helper takes none: the server that wrote its request took it.
+
 ## 8. Migration of an installed box
 
 The Pi runs `massimo serve` as a systemd service with `/etc/massimo/env`,

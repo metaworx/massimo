@@ -347,8 +347,13 @@ function logSummaryText(kind: string, s: Loose, serial: string): string {
       return t("log.sum.reboot");
     case "reboot_cancelled":
       return t(s.why ? "log.sum.rebootOff" : "log.sum.rebootCancelled");
-    case "update":
-      return t(s.auto ? "log.sum.updateAuto" : "log.sum.update", { from: s.from || "–", to: s.to || "–" });
+    case "update": {
+      const text = t(s.auto ? "log.sum.updateAuto" : "log.sum.update", { from: s.from || "–", to: s.to || "–" });
+      // the server's backup it took first, or why none (AP ServerBackup, Block 10)
+      if (s.backup) return text + ", " + t("log.sum.updateBackup", { id: String(s.backup).slice(-12) });
+      if (s.backup_skipped) return text + ", " + t(s.backup_skipped === "no_key" ? "log.sum.updateNoKey" : "log.sum.updateNoBackup");
+      return text;
+    }
     case "update_result":
       return t("log.sum.updateResult", { from: s.from || "–", to: s.to || "–", state: logWord("log.updateState.", s.state) });
     case "update_postponed":

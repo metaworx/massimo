@@ -139,6 +139,10 @@ type meView struct {
 	// purpose, the setting auth.keep_open: the web UI does not ask for the
 	// first owner (AP FirstOwner, D11). Only on an open server.
 	KeptOpen bool `json:"kept_open,omitempty"`
+	// NewBox says that the server may start from a backup instead (AP
+	// ServerBackup, Block 11; newbox.go): Setup, and a store that holds no
+	// configured Cube, room or integration. Only on an open server.
+	NewBox bool `json:"new_box,omitempty"`
 	// Token is the one the caller presented.
 	Token *tokenView `json:"token,omitempty"`
 	// Integration is the registered integration whose key it is, null
@@ -617,6 +621,7 @@ func (s *Server) meOf(r *http.Request, p *principal) (meView, error) {
 		me.Setup = p != nil && p.mode == modeOpen && localPeer(s.clientIP(r))
 		// An open server has a store (authMode).
 		me.KeptOpen = p != nil && p.mode == modeOpen && s.opts.Store.KeepOpen(r.Context())
+		me.NewBox = me.Setup && s.newBoxNew(r.Context(), p.mode)
 		return me, nil
 	}
 	st := s.opts.Store

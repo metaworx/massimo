@@ -1040,6 +1040,12 @@ downloads the binary for this machine (`massimo-linux-armv6` on a Pi 1),
 for as long as the line needs but given up after a minute without data,
 and checks its SHA-256 against the manifest,
 runs `<new binary> version` to make sure it starts here,
+has the running server take a backup of itself,
+asked with the key, the address and the TLS of `/etc/massimo/env`
+(root writes no store of the service's user,
+so where a key is set and the service is stopped it stops here;
+without a key for the server's backups it goes on, `-no-backup` skips it;
+docs/store.md, "Before an update"),
 keeps the old binary as `/usr/local/bin/massimo.prev` and renames the new one into place.
 With `-restart` it restarts the unit,
 with `-health` it waits until `/healthz` reports the new version and otherwise

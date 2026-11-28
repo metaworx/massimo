@@ -52,7 +52,9 @@ func runStore(args []string) error {
                  cube:<serial>, history, all; -identity takes its node.key, -env its
                  env file, -tls its TLS files, each file replaced kept beside as
                  <name>.before-restore; -plan prints what it would do and changes
-                 nothing; the key is read into memory and written nowhere
+                 nothing; the key is read into memory and written nowhere; a new
+                 box, without a regular user or a key, takes no backup first, and
+                 through its open serve takes a file and every scope (-scope all)
                  (backup, backups, push, pull and restore go through this box's
                  running serve, with MASSIMO_API_TOKEN, at the address it publishes
                  in the data directory, serve.api, else MASSIMO_LISTEN's, and only

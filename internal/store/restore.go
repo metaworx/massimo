@@ -78,9 +78,68 @@ var (
 	// restored that this store lacks: RestoreReport.Missing lists them.
 	ErrRestoreMissing = errors.New("store: the backup's rows name rows of other scopes that this store lacks; restore those scopes too")
 	// ErrRestoreNoOwner is a restore of users and sign-in that would
-	// leave a store with an owner without one.
+	// leave a store with an owner without one, or a new box's
+	// (RestoreSelection.NoUsers) without an enabled one.
 	ErrRestoreNoOwner = errors.New("store: the backup holds no owner; restoring users and sign-in would leave this server without one")
+	// ErrRestoreHasData is a new box's restore (RestoreSelection.NoData)
+	// on a store that holds what a restore without a backup first would
+	// lose: a Cube, a room, an integration.
+	ErrRestoreHasData = errors.New("store: this server holds data a restore without a backup first would lose")
 )
+
+// NewBoxHolds counts what a store holds that a restore without a backup
+// first would lose (AP ServerBackup, Block 11): its configured Cubes,
+// its rooms and its integrations, none removed. A Cube discovery found
+// and nobody added is none.
+type NewBoxHolds struct {
+	Cubes        int `json:"cubes"`
+	Rooms        int `json:"rooms"`
+	Integrations int `json:"integrations"`
+}
+
+// Empty reports whether the store holds none of them.
+func (h NewBoxHolds) Empty() bool { return h.Cubes == 0 && h.Rooms == 0 && h.Integrations == 0 }
+
+// String names what the store holds, for a refusal: "1 Cube, 6 rooms".
+func (h NewBoxHolds) String() string {
+	var parts []string
+	add := func(n int, one, many string) {
+		switch {
+		case n == 1:
+			parts = append(parts, "1 "+one)
+		case n > 1:
+			parts = append(parts, fmt.Sprintf("%d %s", n, many))
+		}
+	}
+	add(h.Cubes, "Cube", "Cubes")
+	add(h.Rooms, "room", "rooms")
+	add(h.Integrations, "integration", "integrations")
+	return strings.Join(parts, ", ")
+}
+
+// NewBoxHolds counts what the store holds that a new box's restore,
+// without a backup first, would lose.
+func (s *Store) NewBoxHolds(ctx context.Context) (NewBoxHolds, error) {
+	return newBoxHolds(ctx, s.db)
+}
+
+// newBoxHolds counts them through q, the store or a transaction.
+func newBoxHolds(ctx context.Context, q queryer) (NewBoxHolds, error) {
+	var h NewBoxHolds
+	for _, c := range []struct {
+		n     *int
+		query string
+	}{
+		{&h.Cubes, `SELECT count(*) FROM main.cubes WHERE configured = 1 AND deleted_at IS NULL`},
+		{&h.Rooms, `SELECT count(*) FROM main.rooms WHERE deleted_at IS NULL`},
+		{&h.Integrations, `SELECT count(*) FROM main.integrations WHERE deleted_at IS NULL`},
+	} {
+		if err := q.QueryRowContext(ctx, c.query).Scan(c.n); err != nil {
+			return NewBoxHolds{}, fmt.Errorf("store: what the store holds: %w", err)
+		}
+	}
+	return h, nil
+}
 
 // scopeTable is the rows of a table that belong to a scope.
 type scopeTable struct {
@@ -216,6 +275,19 @@ type RestoreSelection struct {
 	OpaqueKey bool
 	// DryRun answers what the restore would do and changes nothing.
 	DryRun bool
+	// NoUsers refuses the restore with ErrHasUsers where this store has
+	// a regular user, counted in the restore's transaction: a new box
+	// started from a backup in the first owner's window (AP ServerBackup
+	// v1.0, Block 11), which a first owner made meanwhile closes. With
+	// users and sign-in it also refuses, with ErrRestoreNoOwner, a backup
+	// that leaves no enabled regular owner: the box would stay open, or
+	// have nobody to sign in as its owner.
+	NoUsers bool
+	// NoData refuses the restore with ErrRestoreHasData where this store
+	// holds a configured Cube, a room or an integration (NewBoxHolds),
+	// counted in the restore's transaction: a new box takes no backup
+	// first, so a store with anything to lose is none.
+	NoData bool
 }
 
 // RestoreReport is what a restore did, or would do.
@@ -553,6 +625,20 @@ func (r *restorer) temp(ctx context.Context, name, def string) error {
 
 // run is the restore inside its transaction.
 func (r *restorer) run(ctx context.Context) error {
+	if r.sel.NoUsers {
+		if err := r.s.noUsers(ctx, r.tx); err != nil {
+			return err
+		}
+	}
+	if r.sel.NoData {
+		h, err := newBoxHolds(ctx, r.tx)
+		if err != nil {
+			return err
+		}
+		if !h.Empty() {
+			return fmt.Errorf("%w: it holds %s", ErrRestoreHasData, h)
+		}
+	}
 	var bkVersion int
 	if err := r.tx.QueryRowContext(ctx, `SELECT coalesce(max(version), 0) FROM bk.schema_version`).Scan(&bkVersion); err != nil {
 		return fmt.Errorf("store: restore: the backup's store: %w", err)
@@ -609,8 +695,13 @@ func (r *restorer) run(ctx context.Context) error {
 		if err != nil {
 			return err
 		}
-		if after == 0 && ownersBefore > 0 {
+		switch {
+		case after == 0 && ownersBefore > 0:
 			return ErrRestoreNoOwner
+		case after == 0 && r.sel.NoUsers:
+			// a new box: open again after its restart, or closed with
+			// nobody to sign in as its owner
+			return fmt.Errorf("%w: a new box starts only from a backup with an enabled owner", ErrRestoreNoOwner)
 		}
 	}
 	if r.scopes[ScopeUsers] || r.scopes[ScopeIntegrations] {

@@ -181,7 +181,9 @@ those that are not an integration's, disabled ones included:
   `the server is open: its last regular user was removed; create the owner`,
   naming whom and by whom.
   `POST /api/v1/users` from an address on the local network creates the first
-  owner (see that route), and `massimo user add` does the same on the box.
+  owner (see that route), and `massimo user add` does the same on the box;
+  or the server starts from another box's backup, with that box's users
+  ("A new box from a backup", under "Server backups").
   The first regular user,
   made either way or from `MASSIMO_API_TOKEN` at a start or a reload of the settings file,
   is told once what was set up before it and still works, where anything was,
@@ -273,7 +275,7 @@ and the OpenAPI file carries each operation's as `x-capability`:
 | `cubes` | add, configure and remove Cubes | `POST /api/v1/cubes`, `PUT`/`DELETE /api/v1/cubes/{sn}` |
 | `cubes.reboot` | reboot a Cube, which drops the radiograms it has not delivered; seeded for no role | `POST /api/v1/cubes/{sn}/reboot` |
 | `settings` | the server's settings, its store and the settings in effect | `GET`/`PUT /api/v1/settings`, `GET /api/v1/store`, `GET /api/v1/config` |
-| `update` | start a software update and answer the automatic update's question; includes `restart` | `POST /api/v1/update`, `PUT /api/v1/update/answer` |
+| `update` | start a software update, its backup of the server first, take that backup alone, and answer the automatic update's question; includes `restart` | `POST /api/v1/update`, `POST /api/v1/update/backup`, `PUT /api/v1/update/answer` |
 | `restart` | restart the server through the service manager that runs it, read its settings file again, and read a Cube again at once | `GET`/`POST /api/v1/restart`, `POST /api/v1/reload`, `POST /api/v1/cubes/{sn}/refresh` |
 | `reboot` | reboot the computer the server runs on, where its owner switched that on; includes `restart`; seeded for no role | `GET`/`POST`/`DELETE /api/v1/reboot` |
 | `audit` | read the audit | `GET /api/v1/audit` |
@@ -1021,6 +1023,9 @@ the one that may create the first owner,
 an integration's users beside it or not.
 `kept_open` is true on an open server while the setting `auth.keep_open` is on,
 and absent otherwise: the web UI then does not ask for the first owner.
+`new_box` is true where `setup` is and the store holds no configured Cube,
+room or integration, and absent otherwise:
+the server may start from a backup instead ("A new box from a backup").
 `auth_version` 1 says the server hashes the password;
 2, that the user signs in by OPAQUE (below) and the server never sees it.
 
@@ -2155,10 +2160,11 @@ Needs `audit`, which only `owner` has by default; `503` without a store.
 Every route but the `GET`s and the stream ticket leaves a row:
 `action` names what was asked (`setpoint`, `device.lock`, `device.update`,
 `room.rename`, `room.config`, `room.program`, `room.delete`, `update.answer`,
-`pairing.start`, `restore.start`, `cube.add`, `settings.update`, `login`,
-`login.failed`, `logout`, `user.add`, `token.add`, `role.update`,
-`capability.disable`, …), `cube` the Cube of the route, `target` the device,
-room, user, role, token or Cube concerned,
+`update.no_backup` (an update started without its backup), `pairing.start`,
+`restore.start`, `cube.add`, `settings.update`, `login`, `login.failed`,
+`logout`, `user.add`, `token.add`, `role.update`, `capability.disable`, …),
+`cube` the Cube of the route, `target` the device, room, user, role,
+token or Cube concerned,
 `user` and `token_id` who asked (absent without authentication,
 for a failed login, and for `massimo user` on the box, whose `remote` is `cli`),
 `effective_user` and `real_user` the users of the row ("Who did it", below),
@@ -4852,7 +4858,7 @@ which set nothing (a later line of a name given twice, a line without a name,
 a `MASSIMO_ENV_FILE` line), after "the settings file: ",
 each naming its lines by their numbers, never a value,
 and after the refusals where both stand:
-`the next start refuses: -hsts or MASSIMO_HSTS "-1": want a number of days, 0 or more; the settings file: MASSIMO_HSTS is given on lines 3 and 4; the first wins`, each list joined by "; ", one line holding all that its read found; a read whose settings did not change writes its `settings_read` where its notes differ from the last read's, and GET /api/v1/restart's `refused` never names a note; a start whose read found notes writes a `settings_read` of them, `why` `start`, after its `server_started`, which settles every earlier warning of the kind, so that a note that stands stays a warning across a restart), `restart`, `reboot`, `reboot_cancelled`, `update` (`from`, `to`, `channel`, and `auto` for one the server started itself at night, by nobody), `update_result` (the helper's outcome after the restart, once: `state`, `from`, `to`; a failure at `warn` with its `error`), `update_postponed` (the night's window closed while the radio, or a settings file the next start refuses, held a due automatic update back: `version`, `why`, `window`), `backup` (`reason`, `id`, `bytes`; an automatic one that failed at `warn`), `backup_deleted` (`id`), `backups_pruned`, `log_pruned` and `audit_pruned` (`removed`), `log_rotated` (serve's `-log` file rotated: `why`, `size`, `format`, `sighup` or `reload`; `previous`, the name the old file has now; `kept` and `removed`, the rotated files kept and those deleted; at `warn` with its `error` where a step failed), `restore_started` (`id`, `steps`, `radio_commands`), `open_setup` at `warn`, what was set up before the first regular user and still works (Authentication): the `user` and its `role`, the lists of `open_setup` where it holds any, and `via` `cli` where `massimo user add` made the user.
+`the next start refuses: -hsts or MASSIMO_HSTS "-1": want a number of days, 0 or more; the settings file: MASSIMO_HSTS is given on lines 3 and 4; the first wins`, each list joined by "; ", one line holding all that its read found; a read whose settings did not change writes its `settings_read` where its notes differ from the last read's, and GET /api/v1/restart's `refused` never names a note; a start whose read found notes writes a `settings_read` of them, `why` `start`, after its `server_started`, which settles every earlier warning of the kind, so that a note that stands stays a warning across a restart), `restart`, `reboot`, `reboot_cancelled`, `update` (`from`, `to`, `channel`, and `auto` for one the server started itself at night, by nobody; `backup`, the uuid of the server's backup it took first, or `backup_skipped`, `asked` or `no_key`, where it took none; one whose backup failed at `error`, with its `error`, and not started), `update_result` (the helper's outcome after the restart, once: `state`, `from`, `to`; a failure at `warn` with its `error`), `update_postponed` (the night's window closed while the radio, or a settings file the next start refuses, held a due automatic update back: `version`, `why`, `window`), `backup` (`reason`, `id`, `bytes`; an automatic one that failed at `warn`), `backup_deleted` (`id`), `backups_pruned`, `log_pruned` and `audit_pruned` (`removed`), `log_rotated` (serve's `-log` file rotated: `why`, `size`, `format`, `sighup` or `reload`; `previous`, the name the old file has now; `kept` and `removed`, the rotated files kept and those deleted; at `warn` with its `error` where a step failed), `restore_started` (`id`, `steps`, `radio_commands`), `open_setup` at `warn`, what was set up before the first regular user and still works (Authentication): the `user` and its `role`, the lists of `open_setup` where it holds any, and `via` `cli` where `massimo user add` made the user.
 A Cube's own: `address_changed` (`from`, `to`,
 for a Cube that follows discovery) and `cube_gone` (with `cube`,
 a Cube found before that no longer answers).
@@ -5229,8 +5235,9 @@ a channel set later is checked within a minute.
   "can_update": true,
   "helper": {"state": "done", "from": "v0.1.0-alpha.8", "to": "v0.1.0-alpha.9", "channel": "alpha", "time": "…"},
   "auto": {"mode": "night", "window": "03:00-05:00", "next": "2026-11-06T03:00:00+01:00"},
+  "backup": {"state": "ready"},
   "history": [
-    {"at": "2026-11-05T12:01:00Z", "by": {"name": "anna", "display_name": "Anna"}, "from": "v0.1.0-alpha.8", "to": "v0.1.0-alpha.9", "channel": "alpha", "reached": "v0.1.0-alpha.9", "reached_at": "2026-11-05T12:02:10Z"},
+    {"at": "2026-11-05T12:01:00Z", "by": {"name": "anna", "display_name": "Anna"}, "from": "v0.1.0-alpha.8", "to": "v0.1.0-alpha.9", "channel": "alpha", "backup": "0193…", "reached": "v0.1.0-alpha.9", "reached_at": "2026-11-05T12:02:10Z"},
     {"at": "2026-10-30T07:15:00Z", "outside": true, "manager": "apt", "from": "v0.1.0-alpha.7", "channel": "alpha", "reached": "v0.1.0-alpha.8", "reached_at": "2026-10-30T07:15:00Z"}
   ]
 }
@@ -5341,7 +5348,24 @@ An outcome the helper reports while the server runs on,
 is taken at the next read of this route or at the next update started;
 one that comes with a restart, at that start.
 An entry the helper reports no outcome for stays open.
+`backup` is the uuid of the server's backup the update took first (`POST`),
+`backup_skipped` why it took none:
+`asked` (`no_backup`, Update without a backup) or `no_key`;
+both are absent for an update from outside Massimo.
 The log keeps an update's lines for a month only.
+`backup`, outside the history, is the backup an update takes first,
+absent without a store or with one opened read-only:
+`state` `ready`, where it takes one;
+`no_key`, where no key is set and an update goes on without one;
+or `failed`, where the last update's backup failed,
+and no update has started since, with its `error` and `at`;
+the server keeps that in memory,
+and after a restart the next update tries again.
+`starting` is an update being started, until the helper is asked:
+`step` `backup` while the server's backup runs,
+the `version` it asks for and `since`; `can_update` is false meanwhile.
+`start_error` is the last start that failed before the helper was asked,
+its backup's among them, with its `error` and `at`, until an update starts.
 
 ### POST /api/v1/update
 
@@ -5370,6 +5394,28 @@ so the most the API can do is install the newest signed release,
 or what the box's package source has of it (`latest`).
 Answers `202` with `{"ok":true,"requested":"v…", "channel":"…"}`;
 follow the progress with GET.
+Where the server takes a backup first, the `202` comes at once with `starting`,
+GET's while the backup runs:
+the backup and the request then run on a context of their own,
+which a client that gives up does not end, within 30 minutes,
+the wait for a backup job that runs included.
+
+Before it asks the helper, the server takes a backup of itself (docs/store.md,
+"Server backups"):
+to its local targets alone, trigger `before-update`,
+pinned for 30 days, as the server and with no backup capability,
+after a scheduled backup that runs;
+its uuid goes into the history's entry and the `update` line of the log.
+The night's update and `PUT /api/v1/update/answer`'s `now` take it too.
+Without a key the update goes on, and its line says `no_key`.
+A backup that fails stops the update before the request:
+an `update` line at `error`, GET's `backup` says `failed` and `start_error` why;
+the night's try for that night is spent.
+A new backup before an update takes the pin of an earlier one no update used,
+made by the version that runs and named by no entry of the history,
+so that tries in a row keep one pinned.
+`{"no_backup": true}` (Update without a backup) starts it without one,
+for any holder of `update`, audited as `update.no_backup`.
 
 Needs the API token: without `MASSIMO_API_TOKEN` it answers `403` even though
 the other routes are open.
@@ -5377,10 +5423,28 @@ the other routes are open.
 and with GET's `blocked` as the error wherever that names a reason;
 `409` when already up to date,
 when the channel has no release, while an update is running (on Windows also
-in the moment between the start of the helper and its first status),
+in the moment between the start of the helper and its first status) or being started,
 when the package source has the release not yet, or while it is held;
-`500` on Windows when the helper could not be started (the request is withdrawn);
+`500` on Windows when the helper could not be started (the request is withdrawn),
+where no backup ran first; after one, GET's `start_error` says it;
 `502` when GitHub or the package source could not be asked.
+
+### POST /api/v1/update/backup
+
+The backup `POST /api/v1/update` takes first, alone, for a holder of `update`:
+`massimo update` by hand asks a running server for it,
+then installs the release itself.
+`{"to": "v0.17.0"}` names the version the update installs,
+another than the one that runs (`400` without one, `409` for the running one),
+and a new backup takes the pin of an earlier one no update used,
+as `POST /api/v1/update`'s does.
+Answers `201` with the backup and its steps,
+as `POST /api/v1/server-backups` does,
+and `200` with `{"skipped": "no_key"}` where no key is set,
+which lets the update go on;
+a failure as `POST /api/v1/update`'s backup fails, `500` or `409`,
+which stops it; `503` without a store or with one opened read-only.
+Audited as `update.backup`; the job writes its own `server_backup` lines.
 
 ### PUT /api/v1/update/answer
 
@@ -5467,6 +5531,8 @@ a loopback peer with no `X-Forwarded-For`, `X-Real-IP` or `Forwarded` header,
 so that nobody on the LAN, and no client of a reverse proxy on the box,
 can restart it;
 anyone else gets `403` with the reason.
+A new box started from a backup restarts after its restore all the same ("Server backups",
+"A new box from a backup"), since its users came with it.
 `403` also without the capability `restart`;
 `409` when no service manager would start the server again (`serve` in a terminal,
 or `-restart off`),
@@ -5617,6 +5683,8 @@ each target keeping them by its retention.
 A backup is one file, the same on every target,
 its copies the targets that hold it.
 Nothing is made while no key is set.
+Each update takes one first, to the local targets, pinned for 30 days,
+under `update` and no backup capability (`POST /api/v1/update`).
 `backup.server` makes, pushes and pulls; `backup.retry` sees the state and
 retries what failed, and `backup.server` includes it.
 The keys are the owner's alone.
@@ -5723,7 +5791,8 @@ the web UI's texts `serverbackup.field.<kind>.<key>`:
 
 A field's `type` is `text`, `number`, `path` (a directory of this box,
 relative to the data directory), `secret`, `bool` or `choice` (with `choices`);
-`secret` names the kind's secret field, given apart and kept sealed.
+`secret` names the kind's secret field, given apart and kept sealed,
+and `makes_secret` marks a kind whose secret the server makes itself (`sftp`'s key).
 A field's `warn`, where it has one,
 is a pattern in the syntax RE2 and JavaScript share,
 of the values the card warns of beside the field,
@@ -5857,6 +5926,82 @@ the rows `missing`, each with its `table`, `uuid`,
 the references `cleared` and the rows `removed` with a row the restore removed;
 and the sealed secrets that did not open (`secrets_lost`),
 each to be entered again.
+
+#### A new box from a backup
+
+A new box starts from another box's backup while it is open,
+before its first regular user ("Authentication"):
+whoever may make that user may instead hand it a backup and its key,
+and the server takes every scope of it and restarts, with the backup's users.
+The routes of `/api/v1/setup/backup…` answer in that window alone,
+every caller of the local network as every route of an open server;
+once a regular user exists they are `401` without a session,
+`403` for a user who is not the owner, and `409` for the owner,
+who restores from the routes above.
+The OpenAPI file gives them `x-capability: owner` for that.
+Since no backup of the box is taken first,
+they answer only while its store holds no configured Cube, room or integration,
+and are `409` otherwise, naming what it holds:
+a server kept open on purpose, or one whose only users are an integration's,
+may hold them; `GET /api/v1/me` says `new_box` where they answer.
+
+- `POST /api/v1/setup/backup`, the file as the body (at most 8 GiB),
+  hands the server the backup, `400` for a file that is no backup,
+  `422` for one of a newer format or changed since it was made.
+  It waits in a temporary directory of the data directory, one at a time,
+  for at most an hour:
+  another backup handed replaces it, the restore removes it,
+  and so do the first owner made, a later request of these routes
+  once the hour has passed, and the server's next start;
+  a second upload while one is received is `409`.
+  The answer is its manifest, read without the key,
+  `{"backup": {"uuid": "0193…", "time": "…", "trigger": "scheduled", "version": "v0.18.0", "schema": 100, "newer": false, "fingerprint": "SHA256:…", "size": 26717, "counts": {"users": 3, "cubes": 1, …}, "files": {"env": true, "tls": 2}, "recipients": [{"label": "laptop", "fingerprint": "…"}]}}`, `newer` where its store is of a newer schema than this server's, which takes it once updated.
+- `POST /api/v1/setup/backup/list`,
+  `{"kind": "webdav", "config": {"url": "https://…", "user": "…"}, "secret": "…"}`,
+  lists the backups on that target,
+  which is used for the request alone and stored nowhere:
+  `{"backups": [{…, "name": "massimo-20261127-023000-0193….zip"}], "skipped": 1}`,
+  found by their manifests, the newest first,
+  `skipped` counting the files that are no backup.
+  A kind whose `makes_secret` is set, `sftp`, is `400`:
+  it signs in with the old box's key, which only that box's backup holds;
+  download the backup from it and hand the file.
+  The restore of the settings brings the old box's targets back.
+- `POST /api/v1/setup/backup/fetch`, the same with `"name"`,
+  a file the list names, fetches that backup and holds it as an upload;
+  `404` for a name it does not list.
+- `POST /api/v1/setup/backup/plan`,
+  `{"backup": "0193…", "key_file": "…", "take_identity": false, "env": false,
+  "tls": false}`,
+  answers as `POST …/server-backups/{id}/restore/plan` does, for every scope,
+  and changes nothing;
+  `backup` is the uuid the upload or the fetch answered,
+  so that the plan and the restore are of the backup planned:
+  another handed since is `409`;
+  `404` where no backup was handed or the one handed waited more than an hour.
+  A backup without an enabled regular owner is refused (`refused`):
+  its restore would leave the box open, to be restored and restarted again,
+  or closed with nobody to sign in as its owner.
+- `POST /api/v1/setup/backup/restore`, the same body,
+  restores every scope without a backup first,
+  since the box has nothing to keep, and restarts the server,
+  answering as `POST …/server-backups/{id}/restore` does.
+  The store counts its regular users, and what it holds, again in the restore's
+  own transaction: a first owner made meanwhile by another request stays,
+  and the restore is `409`; a backup without an enabled regular owner is `409`
+  with `"code": "no_owner"`, nothing changed and no restart.
+  The restart, which the restore of users and sign-in needs,
+  is started from the local network too,
+  though an open server otherwise restarts only from the box itself
+  (`POST /api/v1/restart`);
+  a server that cannot restart itself is refused with `409` before anything is done:
+  stop it and run `massimo store restore` on the box.
+
+The key is held in memory for the request alone, never written,
+and kept by no audit row, nor is a target's secret.
+After the restart the server has the backup's users,
+and a client signs in as on the old box: a password of version 2 too,
+since `opaque.key` came with the users.
 
 ## The LAN proxy
 

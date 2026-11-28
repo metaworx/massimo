@@ -969,11 +969,14 @@ func (s *Server) listServerBackupTargets(w http.ResponseWriter, r *http.Request)
 	return nil
 }
 
-// kindView is a kind of target as GET …/kinds shows it.
+// kindView is a kind of target as GET …/kinds shows it; MakesSecret
+// says that the server makes its secret, which nobody enters (an SFTP
+// target's key), so that a new box cannot read from it (newbox.go).
 type kindView struct {
-	Name   string      `json:"name"`
-	Secret string      `json:"secret,omitempty"`
-	Fields []fieldView `json:"fields"`
+	Name        string      `json:"name"`
+	Secret      string      `json:"secret,omitempty"`
+	MakesSecret bool        `json:"makes_secret,omitempty"`
+	Fields      []fieldView `json:"fields"`
 }
 
 // fieldView is one field of a kind's form; its text is
@@ -994,7 +997,7 @@ type fieldView struct {
 func (s *Server) serverBackupKinds(w http.ResponseWriter, r *http.Request) error {
 	out := []kindView{}
 	for _, k := range serverbackup.Kinds() {
-		kv := kindView{Name: k.Name, Fields: []fieldView{}}
+		kv := kindView{Name: k.Name, MakesSecret: k.MakeSecret != nil, Fields: []fieldView{}}
 		if f, ok := k.Secret(); ok {
 			kv.Secret = f.Key
 		}

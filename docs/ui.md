@@ -338,6 +338,44 @@ Keep it open writes the setting `auth.keep_open`, reads who is in,
 and closes the card as Skip for now does, Back and Select server off meanwhile;
 a refusal is said under the field, and one that says the server has users now
 turns the card to the sign-in.
+**Start from a backup…**,
+beside them where who is in says `new_box` (a store without a Cube,
+a room or an integration, which a restore without a backup first would lose),
+shows in the form's place, at its own height,
+the start from another box's backup (AP ServerBackup, Block 11; docs/api-v1.md,
+"A new box from a backup"), titled so, its source in focus:
+**A file on this device**, whose **Choose the backup file…** sends it as it is,
+or **On a backup target**,
+its kind chosen of those the server reads from (not SFTP,
+whose key only the old box's backup holds),
+its fields drawn from what the server says of the kind,
+as Server backups' form is, the secret a password field,
+whose **List its backups** lists the target's backups and **Fetch this backup**
+fetches the one picked; the target is stored nowhere,
+and its fields and secret are emptied once the backup is fetched,
+when the card closes and at a sign-out.
+The backup's line says when it was made, by which Massimo,
+its users, Cubes and rooms, and under the key's field which keys it opens with;
+one of a newer Massimo says to update first, and is not opened.
+The key is pasted into its field, or read into it from a file
+by **Read the key from a file…** in the browser;
+it goes in the body of the plan and of the restore alone,
+and the field is emptied at each opening, at Back, when the card closes
+and once the restore is sent.
+**Open with the key** plans the restore: everything replaced, the Cubes,
+and the switches of the old server's identity, with a warning where that server
+still answers on the network, of its settings file and of its certificate files
+where the backup holds them, each switch planned again;
+a refusal of the plan, such as a server that cannot restart itself, is said,
+and **Start from this backup** is off with it.
+Start from this backup asks first, then restores and follows the restart
+by `/healthz`'s start as Maintenance's restart does;
+then the card turns to the sign-in, saying that the backup's users sign in now,
+and the page signs in as before.
+A backup without an enabled owner is refused by its plan, and so never restored.
+While a request of the step runs, Back and the card's Select server are off,
+and Escape leaves nothing;
+a refusal that says the server has users now turns the card to the sign-in.
 The page behind the card is hidden as at a sign-in.
 At the page's start and after a sign-out the start waits for the card:
 the Cubes, the rooms, the stream and the providers are read,
@@ -2593,6 +2631,20 @@ The server's sign, when it says an update is out, opens it at Software update.
   On a box with the update helper installed (packaging/README.md, "Updating"),
   **Update** (with `update`) installs it and restarts the server.
   If the new version does not come up, the old one is put back.
+  Before it installs, the server takes a backup of itself, kept 30 days,
+  which a line under the version says where an update is out (`docs/store.md`,
+  "Before an update");
+  without a key for the server's backups,
+  the line says that an update goes on without one.
+  While the backup runs the line under the notes says
+  "Backing up the server before the update to v0.17.0 …",
+  and both buttons are off, as while the helper works;
+  a start that failed after it, at the helper, says why there.
+  Where the backup failed, the update does not start:
+  the line says why,
+  and **Update without a backup** (with `update`) asks as Update does,
+  its question saying that no backup is taken first;
+  Update tries the backup again.
   While the server's next start refuses the settings file,
   Update's question ends with the sentence that the server stays down
   until the file is fixed, as the restart's and the reboot's do:
@@ -2619,11 +2671,12 @@ The server's sign, when it says an update is out, opens it at Software update.
   "GET /api/v1/update?refresh=1").
   While the helper works, **Check for updates** and **Update** are greyed out,
   also after a reload of the page, until it reports that it is done.
-  **Last updates** lists the last three under the version lines,
-  the date first, then the version with its channel in brackets,
-  then who started it, "automatically" for one the server started at night,
-  or "outside Massimo" with apt or brew where Massimo did not start it:
-  "24.11.2026, 15:53 · v0.16.0-alpha.1 (devel) · by Anna".
+  **Last updates** lists the last three under the version lines, the date first,
+  then the version with its channel in brackets, then who started it,
+  "automatically" for one the server started at night,
+  or "outside Massimo" with apt or brew where Massimo did not start it,
+  then the server's backup it took first, or that it took none: "24.11.2026,
+  15:53 · v0.16.0-alpha.1 (devel) · by Anna · backup 54277e08f80e first".
   The version is the one reached, the one apt chose where it is another,
   or the one asked for with "under way" while the update runs;
   the channel is the one the update asked for,
@@ -4349,6 +4402,18 @@ whose Keep it open writes `auth.keep_open`, reads who is in and closes the card,
 the card's `card.working` keeping Back and Select server off meanwhile;
 `keepAsk` and `keepBack` of `signin/store.ts` go there and back,
 what is typed in both kept.
+Start from a backup… shows the third step (`FromBackup.tsx`,
+`card.ownerStep` `backup`) in place of both,
+outside their one place of one height,
+since what it shows grows with the backup;
+`backupAsk` and `backupBack` go there and back, the key's field emptied,
+a sign-out's `forgetCard` empties the whole step (`card.forgot`),
+and `restoring` marks a restore sent,
+so that the turn to the sign-in that follows the restart (`toSignIn`) says that
+the backup's users sign in now.
+Its requests take no session's number, as the card's other two:
+they run on an open server,
+`card.working` keeping every way out of the card off.
 A part's place among plain siblings is an element of the class `part-slot`,
 which takes no box of its own (`display: contents`),
 so that the part's element is laid out as if it stood there itself.

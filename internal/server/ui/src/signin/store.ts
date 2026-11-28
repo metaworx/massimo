@@ -13,8 +13,10 @@
  * without users whether the card asks for the first owner (asksOwner),
  * Skip for now, which holds for the page's load (AP FirstOwner, D10),
  * and the card turned to the sign-in where the server has users after
- * all; the step of the first owner's place, the form or the confirmation
- * that keeps the server open (AP FirstOwner, Block 3), its line,
+ * all; the step of the first owner's place, the form, the confirmation
+ * that keeps the server open (AP FirstOwner, Block 3) or the start from a
+ * backup, whose turn to the sign-in says so (AP ServerBackup, Block 11),
+ * its line,
  * whether a request of the card is under way, which keeps every control
  * that ends the card off, and whether the card is open, for Escape, which
  * leaves a card the user opened (AP LooseEnds, D3), the successes whose
@@ -39,16 +41,16 @@ import { session, stillSession } from "../shared/session";
 /** A way to sign in, by the button's data-way: the name and the password, or an API key. */
 export type Way = "password" | "key";
 
-/** Where the focus is asked to go: the chosen way's first field, the password, the API key's field after its refusal, Try again, the first owner's name, the confirmation that keeps the server open, the button that opens it. */
-export type FocusOn = "way" | "password" | "key" | "retry" | "owner" | "keep" | "keepButton";
+/** Where the focus is asked to go: the chosen way's first field, the password, the API key's field after its refusal, Try again, the first owner's name, the confirmation that keeps the server open, the button that opens it, the start from a backup and its button. */
+export type FocusOn = "way" | "password" | "key" | "retry" | "owner" | "keep" | "keepButton" | "backup" | "backupButton";
 
-/** The first owner's place: the form, or the confirmation that keeps the server open. */
-export type OwnerStep = "form" | "keep";
+/** The first owner's place: the form, the confirmation that keeps the server open, or the start from a backup (FromBackup.tsx). */
+export type OwnerStep = "form" | "keep" | "backup";
 
 /** BANNER is the browser's key for the open server's warning hidden, per origin and so per server, while there is no owner (AP FirstOwner, D2, D38). */
 const BANNER = "massimo.openBanner";
 
-/** The card's state; opened counts the openings, succeeded the successes whose secret fields are to be emptied now (settled), shown says the card is open, owner says the first owner's form is shown instead of the ways, focus the focus asked for. */
+/** The card's state; opened counts the openings, succeeded the successes whose secret fields are to be emptied now (settled), shown says the card is open, owner says the first owner's form is shown instead of the ways, focus the focus asked for, forgot the sign-outs that emptied the start from a backup (forgetCard). */
 export const card = live({
   opened: 0,
   succeeded: 0,
@@ -70,6 +72,7 @@ export const card = live({
   keepFailed: null as string | null,
   waysOff: false,
   focus: { n: 0, on: "way" as FocusOn },
+  forgot: 0,
 });
 
 /** The control that asked for the first owner's card (shared/owner.ts askOwner), given the focus back when the card is left; null for none. */
@@ -80,6 +83,9 @@ let asking: SignInAsk | null = null;
 
 /** skipped is Skip for now taken in this load of the page: the card asks for the first owner no more until the next (AP FirstOwner, D10). */
 let skipped = false;
+
+/** restored is a start from a backup under way or done (AP ServerBackup, Block 11): the turn to the sign-in that follows says that the backup's users sign in now. */
+let restored = false;
 
 /** The choice the login by fingerprint not kept waits for: true Try again, false Sign in without it, null dropped. */
 let choose: ((again: boolean | null) => void) | null = null;
@@ -119,6 +125,7 @@ function dropChoice(): void {
 export function open(on: Way | "owner", said: string, ask: SignInAsk): void {
   dropChoice();
   asking = ask;
+  restored = false;
   card.owner = on === "owner";
   if (on !== "owner") bannerAgain(); // a sign-in asked for: the server has users, and the warning's hiding is forgotten (D45)
   asker = on === "owner" ? takeAsker() : null;
@@ -157,8 +164,9 @@ export function asksOwner(): boolean {
  * refusal is over as far as the card goes, so its ways out are on again.
  * Not while the card's own creation of the owner has no session yet: a
  * refusal of another request then comes from the owner just made, and
- * the creation ends in its sign-in or turns the card itself. It reports
- * whether it turned.
+ * the creation ends in its sign-in or turns the card itself. After a
+ * start from a backup (restoring) its line says that the backup's users
+ * sign in now. It reports whether it turned.
  */
 export function toSignIn(): boolean {
   if (!card.owner) return false;
@@ -173,9 +181,27 @@ export function toSignIn(): boolean {
   card.ownerStep = "form";
   card.ownerSaid = null;
   card.keepSaid = null;
-  card.said = { text: t("setup.exists"), ok: false };
+  card.said = restored ? { text: t("newBox.signIn"), ok: true } : { text: t("setup.exists"), ok: false };
+  restored = false;
   askFocus("way");
   return true;
+}
+
+/** backupAsk shows the start from a backup in the form's place (AP ServerBackup, Block 11). */
+export function backupAsk(): void {
+  card.ownerStep = "backup";
+  askFocus("backup");
+}
+
+/** backupBack shows the first owner's form again, the focus on the button that asked. */
+export function backupBack(): void {
+  card.ownerStep = "form";
+  askFocus("backupButton");
+}
+
+/** restoring marks a start from a backup sent (on), or refused before the server changed (off), for the line of the turn to the sign-in that follows (toSignIn). */
+export function restoring(on: boolean): void {
+  restored = on;
 }
 
 /** keepAsk shows the confirmation that keeps the server open in the form's place, its line cleared (AP FirstOwner, D4). */
@@ -370,7 +396,7 @@ export function keepEnded(): void {
   card.waysOff = false;
 }
 
-/** forgetCard forgets at a sign-out what the card holds of the last opening: a choice waited for, the lines (MassimoParts.signedOut). */
+/** forgetCard forgets at a sign-out what the card holds of the last opening: a choice waited for, the lines, and the start from a backup's key, target and secret (forgot, FromBackup.tsx; MassimoParts.signedOut). */
 export function forgetCard(): void {
   dropChoice();
   card.said = null;
@@ -378,4 +404,5 @@ export function forgetCard(): void {
   card.ownerSaid = null;
   card.keepSaid = null;
   card.providersSaid = null;
+  card.forgot++;
 }

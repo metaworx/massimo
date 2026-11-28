@@ -781,6 +781,11 @@ export interface Me {
    * UI does not ask for the first owner
    */
   kept_open?: boolean;
+  /**
+   * With setup, a store that holds no configured Cube, room or integration: the
+   * server may start from a backup (POST /api/v1/setup/backup)
+   */
+  new_box?: boolean;
   token?: Token;
   /**
    * The registered integration whose key it is; null for any other key, and on
@@ -1363,6 +1368,46 @@ export interface UpdateInfo {
   };
   /** The last ten updates, newest first; empty without a store */
   history: UpdateEntry[];
+  /**
+   * The backup of the server an update takes first; absent without a store, or
+   * with one opened read-only
+   */
+  backup?: {
+    /**
+     * ready: an update takes one, local and pinned for 30 days; no_key: no key
+     * is set, and an update goes on without one; failed: the last update's
+     * backup failed, and no update has started since
+     */
+    state: "ready" | "no_key" | "failed";
+    /** Why it failed, for failed */
+    error?: string;
+    /**
+     * When it failed, for failed
+     * @format date-time
+     */
+    at?: string;
+  };
+  starting?: UpdateStarting;
+  /**
+   * The last start that failed before the helper was asked, its backup's among
+   * them, until an update starts
+   */
+  start_error?: {
+    error: string;
+    /** @format date-time */
+    at: string;
+  };
+}
+
+/**
+ * An update being started: the server's backup runs before the helper is asked
+ */
+export interface UpdateStarting {
+  step: "backup";
+  /** The version it asks for */
+  version: string;
+  /** @format date-time */
+  since: string;
 }
 
 /**
@@ -1411,6 +1456,13 @@ export interface UpdateEntry {
    * started where the helper did not restart the server, else at the next start
    */
   result?: "failed" | "rolled-back" | "up-to-date";
+  /** The uuid of the server's backup the update took first */
+  backup?: string;
+  /**
+   * Why it took none: asked, Update without a backup (no_backup); no_key, no
+   * key was set
+   */
+  backup_skipped?: "asked" | "no_key";
 }
 
 /** The update helper's last run */
@@ -2490,6 +2542,11 @@ export interface ServerBackupKind {
   name?: string;
   /** The key of its secret field, given apart */
   secret?: string;
+  /**
+   * The server makes its secret, which nobody enters (an SFTP target's key): a
+   * new box cannot read from such a target
+   */
+  makes_secret?: boolean;
   fields?: ({
     key?: string;
     type?: "text" | "number" | "path" | "secret" | "bool" | "choice";
@@ -2668,6 +2725,82 @@ export interface ServerRestoreResult {
   report?: ServerRestoreReport;
   files?: ServerRestoreFile[];
   cubes?: ServerRestoreCube[];
+}
+
+/**
+ * A backup handed to a new box, or on a target, as its manifest says it, read
+ * without the key
+ */
+export interface NewBoxBackup {
+  uuid?: string;
+  /** @format date-time */
+  time?: string;
+  trigger?: string;
+  label?: string;
+  /** Massimo's, of the server that made it */
+  version?: string;
+  schema?: number;
+  /**
+   * Its store is of a newer schema than this server's: update this server first
+   */
+  newer?: boolean;
+  /** The fingerprint of the node key of the box that made it */
+  fingerprint?: string;
+  size?: number;
+  /** Its rows per scope */
+  counts?: {
+    users?: number;
+    integrations?: number;
+    cubes?: number;
+    rooms?: number;
+    audit?: number;
+    log?: number;
+  };
+  files?: {
+    /** It holds an env file */
+    env?: boolean;
+    /** The TLS files it holds */
+    tls?: number;
+  };
+  /** Its file on the target */
+  name?: string;
+  /** The keys it is encrypted for, by their labels and fingerprints */
+  recipients?: {
+    label?: string;
+    fingerprint?: string;
+  }[];
+}
+
+/** A target for a new box's request alone, stored nowhere */
+export interface NewBoxTarget {
+  /**
+   * A kind of GET /api/v1/server-backup-targets/kinds that does not make its
+   * own key: not sftp
+   */
+  kind: string;
+  /** Its fields */
+  config?: Record<string, string>;
+  /** Its secret field's value */
+  secret?: string;
+}
+
+export interface NewBoxRestoreRequest {
+  /**
+   * The uuid of the backup handed, as POST /api/v1/setup/backup or …/fetch
+   * answered it; another handed since is 409
+   */
+  backup: string;
+  /**
+   * The key file's text: an age identity, or an OpenSSH ssh-ed25519 key without
+   * a passphrase
+   */
+  key_file: string;
+  /** Take the backup's node.key and node id; this box keeps its own without */
+  take_identity?: boolean;
+  /** Put the backup's env file where this server reads its own */
+  env?: boolean;
+  /** Put the backup's TLS files where this server keeps its own */
+  tls?: boolean;
 }
 
 export interface ServerBackupKey {

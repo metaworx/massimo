@@ -9,10 +9,13 @@
  * automatic update at night and its window, the running version and
  * whether a newer release is out, the automatic update's question
  * (Ask.tsx), the release's
- * notes, the helper's last state, the last three updates, Check for
- * updates and Update, which asks in place of the buttons, saying that the
- * server stays down until the settings file is fixed while its next
- * start refuses it. A load that comes in leaves the channel's choice,
+ * notes, the helper's last state, the last three updates with the
+ * server's backup each took first, Check for updates and Update, which
+ * asks in place of the buttons, saying that the server stays down until
+ * the settings file is fixed while its next start refuses it. A line
+ * says the server's backup an update takes first, and where the last one
+ * failed, Update without a backup asks as Update does (AP ServerBackup,
+ * Block 10). A load that comes in leaves the channel's choice,
  * its focus and the question where they are; the card's badge says up to
  * date or what is out, also while the card is folded.
  */
@@ -54,7 +57,9 @@ function helperText(h: UpdateStatus): string {
  * not reached), the version with its channel in brackets, and the
  * helper's outcome where it has one, a rollback after the version reached
  * included; and by whom, automatically where the server started it at
- * night, or from outside Massimo with the package manager.
+ * night, or from outside Massimo with the package manager; then the
+ * server's backup it took first, or that it took none (AP ServerBackup,
+ * Block 10).
  */
 function historyLine(e: UpdateEntry, newest: boolean): string {
   const withChannel = (version: string) => (version && e.channel ? t("update.history.withChannel", { version, channel: e.channel }) : version);
@@ -70,7 +75,36 @@ function historyLine(e: UpdateEntry, newest: boolean): string {
   if (e.outside) parts.push(e.manager ? t("update.history.outsideWith", { manager: e.manager }) : t("update.history.outside"));
   else if (e.auto) parts.push(t("update.history.auto"));
   else if (e.by) parts.push(t("update.history.by", { name: e.by.display_name || e.by.name || "" }));
+  // a backup's id as the log names it: the last twelve digits of its uuid
+  if (e.backup) parts.push(t("update.history.backup", { id: e.backup.slice(-12) }));
+  else if (e.backup_skipped) parts.push(t(e.backup_skipped === "no_key" ? "update.history.noKey" : "update.history.noBackup"));
   return parts.join(" · ");
+}
+
+/**
+ * startLine is the line under the release's notes: an update being
+ * started, the server's backup running before the helper is asked; the
+ * last start that failed before it, until an update starts, where it was
+ * not its backup, which the backup's line says (AP ServerBackup, Block
+ * 10); else the helper's last state.
+ */
+function startLine(u: UpdateInfo): string {
+  if (u.starting) return t("update.backingUp", { version: u.starting.version });
+  if (u.start_error && !(u.backup && u.backup.state === "failed")) return t("update.notStarted", { error: u.start_error.error });
+  return u.helper ? t("update.last", { state: helperText(u.helper) }) : "";
+}
+
+/**
+ * backupLine is what the section says of the server's backup an update
+ * takes first, where an update is out: that it takes one, kept 30 days;
+ * that it takes none, no key being set; or that the last one failed, and
+ * why, where Update without a backup is offered. "" without a store.
+ */
+function backupLine(u: UpdateInfo): string {
+  const b = u.backup;
+  if (!b || !u.available) return "";
+  if (b.state === "failed") return t("update.backup.failed", { error: b.error || "" });
+  return t(b.state === "no_key" ? "update.backup.noKey" : "update.backup.ready");
 }
 
 /**
@@ -250,12 +284,17 @@ export function Software() {
   const said = data.said;
   const version = question.version;
   const askedVersion = asked();
+  const backup = u ? backupLine(u) : "";
+  // the last update's backup failed: Update without a backup, for whoever may update
+  const noBackup = !!u && u.can_update && !!u.backup && u.backup.state === "failed";
+  const noBackupAsks = question.noBackup;
   return (
     <>
       {u && setting && can("settings") && <Channel u={u} setting={setting} />}
       {u && data.auto && data.window && can("settings") && <Auto u={u} auto={data.auto} win={data.window} />}
       <div ref={asking.row as Ref<HTMLDivElement>} class="update" aria-live="polite">
         <p id="update-text">{failed ? failed() : u ? versionLine(u) : "–"}</p>
+        <p id="update-backup" class={"muted small" + hid(!backup)}>{backup}</p>
         {askedVersion && (
           // the automatic update's question, as the banner under the header asks it (Ask.tsx)
           <div id="update-card-ask" class="update-card-ask">
@@ -267,18 +306,19 @@ export function Software() {
             {u && u.release_url ? t("update.notes", { version: u.released || u.latest || "" }) : ""}
           </a>
         </p>
-        <p id="update-helper" class="muted small">{said ? said() : u && u.helper ? t("update.last", { state: helperText(u.helper) }) : ""}</p>
+        <p id="update-helper" class="muted small">{said ? said() : u ? startLine(u) : ""}</p>
         <div id="update-history" class={"update-history" + hid(!history.length)}>
           <h4>{t("update.history")}</h4>
           <ul id="update-history-list">{history.slice(0, 3).map((e, i) => <li key={i}>{historyLine(e, i === 0)}</li>)}</ul>
         </div>
         <div class={"actions" + hid(asking.asking)}>
           <BusyButton id="update-check" label={t("update.check")} off={busy} run={() => loadUpdate(true)} />
-          <button ref={asking.ref} type="button" id="update-btn" {...busyProps("primary needs-update" + hid(!u || !u.can_update), busy || question.reading)} onClick={ask}>{u ? t("update.to", { version: u.latest || "" }) : t("update.button")}</button>
+          <button ref={asking.ref} type="button" id="update-btn" {...busyProps("primary needs-update" + hid(!u || !u.can_update), busy || question.reading)} onClick={() => ask()}>{u ? t("update.to", { version: u.latest || "" }) : t("update.button")}</button>
+          <button type="button" id="update-no-backup" class={"needs-update" + hid(!noBackup)} disabled={busy || question.reading} onClick={() => ask(true)}>{t("update.withoutBackup")}</button>
         </div>
         {asking.asking && (
-          <Question text={updateQuestion(u, version, question.refused)}
-            yes={t("update.to", { version })} no={t("action.cancel")} onNo={() => asking.done()} boxRef={asking.box}
+          <Question text={updateQuestion(u, version, question.refused) + (noBackupAsks ? " " + t("update.confirmNoBackup") : "")}
+            yes={noBackupAsks ? t("update.withoutBackup") : t("update.to", { version })} no={t("action.cancel")} onNo={() => asking.done()} boxRef={asking.box}
             onYes={() => {
               asking.done(false);
               runUpdate();

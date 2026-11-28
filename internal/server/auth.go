@@ -348,6 +348,7 @@ func (s *Server) SetToken(ctx context.Context, token string) error {
 	s.log.Info("api token applied", "owner_created", res.OwnerCreated, "key_added", res.TokenAdded, "revoked", res.Revoked, "heirs", res.Heirs, "auth", s.AuthMode())
 	if res.OwnerCreated {
 		s.tellOpenSetup(ctx, store.BootstrapUser, store.RoleOwner)
+		s.dropNewBox() // the window of a new box has closed (newbox.go)
 	}
 	return nil
 }

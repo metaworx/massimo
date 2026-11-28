@@ -466,6 +466,9 @@ paths:
         setup is true on an open server for a caller on the local
         network, which may create the first owner; kept_open is true on an
         open server while the setting auth.keep_open is on, and absent
+        otherwise; new_box is true where setup is and the store holds no
+        configured Cube, room or integration, so that the server may start
+        from a backup instead (POST /api/v1/setup/backup), and absent
         otherwise.
       responses:
         "200":
@@ -3909,14 +3912,29 @@ paths:
         "403": {$ref: "#/components/responses/Forbidden"}
         "429": {$ref: "#/components/responses/LockedOut"}
     post:
-      summary: Ask the update helper to install the newest release
+      summary: Ask the update helper to install the newest release, a backup of the server first
       x-capability: update
       description: |
         Needs a configured API token even where the other routes are open.
-        The helper (massimo-update.service, root) verifies the release
-        signature and checksum, replaces the binary, restarts the server and
-        rolls back if the new version does not come up.
+        The server first takes a backup of itself to its local targets,
+        pinned for 30 days, its id in the history's entry; without a key it
+        goes on. Where it takes one, 202 comes at once with starting, and
+        GET says starting until the helper is asked; a backup that fails
+        stops the update (GET's backup says failed, start_error why).
+        no_backup goes on without one, audited as update.no_backup. The
+        helper (massimo-update.service, root)
+        verifies the release signature and checksum, replaces the binary,
+        restarts the server and rolls back if the new version does not
+        come up.
       parameters: [{$ref: "#/components/parameters/idempotencyKey"}]
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                no_backup: {type: boolean, description: "Update without a backup: no backup of the server first"}
       responses:
         "202":
           description: Requested; follow the progress with GET
@@ -3928,6 +3946,8 @@ paths:
                   ok: {type: boolean}
                   requested: {type: string, description: The release tag that is newest now}
                   channel: {type: string}
+                  starting: {$ref: "#/components/schemas/UpdateStarting"}
+        "400": {$ref: "#/components/responses/BadRequest"}
         "401": {$ref: "#/components/responses/Unauthorized"}
         "429": {$ref: "#/components/responses/LockedOut"}
         "403":
@@ -3936,7 +3956,12 @@ paths:
             application/json:
               schema: {$ref: "#/components/schemas/Error"}
         "409":
-          description: Up to date, no release on the channel, or an update is running
+          description: Up to date, no release on the channel, an update is running or being started
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/Error"}
+        "500":
+          description: The helper could not be asked or started
           content:
             application/json:
               schema: {$ref: "#/components/schemas/Error"}
@@ -3985,6 +4010,7 @@ paths:
                   ok: {type: boolean}
                   requested: {type: string}
                   channel: {type: string}
+                  starting: {$ref: "#/components/schemas/UpdateStarting"}
         "400":
           description: Not a version and an answer
           content:
@@ -4004,6 +4030,61 @@ paths:
         "429": {$ref: "#/components/responses/LockedOut"}
         "503":
           description: The server has no store
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/Error"}
+  /api/v1/update/backup:
+    post:
+      summary: Take the backup of the server an update takes first, alone
+      x-capability: update
+      description: |
+        For massimo update by hand, which then installs the release
+        itself: the backup POST /api/v1/update takes first, to the local
+        targets, pinned for 30 days, its trigger before-update; to is the
+        version the update installs, another than the running one. A new
+        backup before an update takes the pin of an earlier one no update
+        used. Audited as update.backup.
+      parameters: [{$ref: "#/components/parameters/idempotencyKey"}]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [to]
+              properties:
+                to: {type: string, description: "The version the update installs, such as v0.17.0"}
+      responses:
+        "200":
+          description: No key is set; the update goes on without a backup
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [skipped]
+                properties:
+                  skipped: {type: string, enum: [no_key]}
+        "201":
+          description: The backup made and the steps that copied and pruned it
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/ServerBackupResult"}
+        "400": {$ref: "#/components/responses/BadRequest"}
+        "401": {$ref: "#/components/responses/Unauthorized"}
+        "403": {$ref: "#/components/responses/Forbidden"}
+        "409":
+          description: to is the version that runs, or no local target is switched on
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/Error"}
+        "429": {$ref: "#/components/responses/LockedOut"}
+        "500":
+          description: The backup failed; the update is not to go on
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/Error"}
+        "503":
+          description: The server has no store, or one opened read-only
           content:
             application/json:
               schema: {$ref: "#/components/schemas/Error"}
@@ -4938,6 +5019,257 @@ paths:
               schema: {$ref: "#/components/schemas/Error"}
         "404": {$ref: "#/components/responses/NotFound"}
         "429": {$ref: "#/components/responses/LockedOut"}
+  /api/v1/setup/backup:
+    post:
+      summary: Hand a new box the backup it starts from; only while the server is open
+      x-capability: owner
+      description: |
+        A new box started from a backup (docs/api-v1.md, "A new box from a
+        backup"): only while the server is open, before its first regular
+        user, to every caller of the local network, and only while its store
+        holds no configured Cube, room or integration, since no backup of it
+        is taken first (409 naming what it holds; GET /api/v1/me says
+        new_box where it may); once a regular user exists, 401 without a
+        session, 403 for a user who is not the owner, 409 for the owner. The body is the file, at most 8 GiB, refused
+        where it is no backup (400), of a newer format, or changed since it
+        was made (422). It is held in a temporary directory of the data
+        directory for the plan and the restore, for at most an hour, one
+        at a time: a backup handed replaces the one before, and a second
+        upload while one is received is 409. The answer is its manifest,
+        read without the key.
+      requestBody:
+        required: true
+        content:
+          application/zip:
+            schema: {type: string, format: binary}
+      responses:
+        "200":
+          description: The backup held
+          content:
+            application/json:
+              schema: {type: object, properties: {backup: {$ref: "#/components/schemas/NewBoxBackup"}}}
+        "400": {$ref: "#/components/responses/BadRequest"}
+        "401": {$ref: "#/components/responses/Unauthorized"}
+        "403":
+          description: Beyond the local network, or a user who is not the owner
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/Error"}
+        "409":
+          description: The server has users, or a backup is being received
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/Error"}
+        "413": {description: Larger than 8 GiB}
+        "422":
+          description: Of a newer format, or changed since it was made
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/Error"}
+        "429": {$ref: "#/components/responses/LockedOut"}
+  /api/v1/setup/backup/list:
+    post:
+      summary: The backups on a target, for a new box; only while the server is open
+      x-capability: owner
+      description: |
+        The target the body describes, of a kind of GET
+        /api/v1/server-backup-targets/kinds but one that makes its own key
+        (SFTP: its key is in the old box's backup alone), is used for this
+        request and stored nowhere; its backups are found by their
+        manifests, without the key, the newest first, and the files that
+        are none counted in skipped. Open as POST /api/v1/setup/backup is.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: "#/components/schemas/NewBoxTarget"}
+      responses:
+        "200":
+          description: The target's backups
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  backups: {type: array, items: {$ref: "#/components/schemas/NewBoxBackup"}}
+                  skipped: {type: integer, description: Files on the target that are no backup this server reads}
+        "400": {$ref: "#/components/responses/BadRequest"}
+        "401": {$ref: "#/components/responses/Unauthorized"}
+        "403":
+          description: Beyond the local network, or a user who is not the owner
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/Error"}
+        "409":
+          description: The server has users
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/Error"}
+        "413": {description: A body of more than 1 MiB}
+        "429": {$ref: "#/components/responses/LockedOut"}
+        "502":
+          description: The target could not be listed
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/Error"}
+  /api/v1/setup/backup/fetch:
+    post:
+      summary: Fetch a backup from a target for a new box; only while the server is open
+      x-capability: owner
+      description: |
+        The backup of name, a file the target lists, fetched from the
+        target the body describes, which is stored nowhere, and held as
+        POST /api/v1/setup/backup holds an upload. Open as that route is.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              allOf:
+                - {$ref: "#/components/schemas/NewBoxTarget"}
+                - type: object
+                  required: [name]
+                  properties:
+                    name: {type: string, description: The backup's file on the target, as the list names it}
+      responses:
+        "200":
+          description: The backup held
+          content:
+            application/json:
+              schema: {type: object, properties: {backup: {$ref: "#/components/schemas/NewBoxBackup"}}}
+        "400": {$ref: "#/components/responses/BadRequest"}
+        "401": {$ref: "#/components/responses/Unauthorized"}
+        "403":
+          description: Beyond the local network, or a user who is not the owner
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/Error"}
+        "404": {$ref: "#/components/responses/NotFound"}
+        "409":
+          description: The server has users, or a backup is being received
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/Error"}
+        "413": {description: Larger than 8 GiB, or a body of more than 1 MiB}
+        "422":
+          description: Of a newer format, or changed since it was made
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/Error"}
+        "429": {$ref: "#/components/responses/LockedOut"}
+        "502":
+          description: The target could not be read
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/Error"}
+  /api/v1/setup/backup/plan:
+    post:
+      summary: What a new box's restore of the backup held would do; only while the server is open
+      x-capability: owner
+      description: |
+        As POST /api/v1/server-backups/{id}/restore/plan, of every scope
+        of the backup handed, named by its uuid (backup; another handed
+        since is 409): changing nothing, refused where a regular user
+        exists or data came, the store counting again (409); a backup
+        without an enabled regular owner is answered in refused. The server's restart,
+        which the restore of users and sign-in needs, is offered from the
+        local network too. Open as POST /api/v1/setup/backup is.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: "#/components/schemas/NewBoxRestoreRequest"}
+      responses:
+        "200":
+          description: The plan
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/ServerRestorePlan"}
+        "400": {$ref: "#/components/responses/BadRequest"}
+        "401": {$ref: "#/components/responses/Unauthorized"}
+        "403":
+          description: Beyond the local network, or a user who is not the owner
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/Error"}
+        "404":
+          description: No backup handed, or the one handed waited more than an hour
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/Error"}
+        "409":
+          description: The server has users
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/Error"}
+        "413": {description: A body of more than 1 MiB}
+        "422":
+          description: The key does not open the backup, its file was changed, or its store is newer than this server's (update first)
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/Error"}
+        "429": {$ref: "#/components/responses/LockedOut"}
+  /api/v1/setup/backup/restore:
+    post:
+      summary: Start a new box from the backup held, then restart; only while the server is open
+      x-capability: owner
+      description: |
+        Every scope of the backup handed, named by its uuid (backup;
+        another handed since is 409), each replaced whole in one
+        transaction, refused where a regular user exists or data came,
+        the store counting again in that transaction (409), so that a
+        first owner made meanwhile stays, and refused for a backup without
+        an enabled regular owner (409, code no_owner), which would leave
+        the box open or with nobody to sign in as its owner; no backup
+        taken first, since the box has nothing to keep; opaque.key with the users, the backup's node.key
+        and node id with take_identity, the env file with env and the TLS
+        files with tls, each file replaced kept beside as
+        <name>.before-restore. Then the server restarts, from the local
+        network too, and the answer says so first; a server that cannot
+        restart itself is refused before anything is done. The backup held
+        goes once the server changed. The key is held in memory for the
+        request alone, never written, and kept by no audit row. Open as
+        POST /api/v1/setup/backup is.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: "#/components/schemas/NewBoxRestoreRequest"}
+      responses:
+        "200":
+          description: Restored
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/ServerRestoreResult"}
+        "500":
+          description: Restored, but a file failed after the store's commit; the server restarts all the same
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/ServerRestoreResult"}
+        "400": {$ref: "#/components/responses/BadRequest"}
+        "401": {$ref: "#/components/responses/Unauthorized"}
+        "403":
+          description: Beyond the local network, or a user who is not the owner
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/Error"}
+        "404":
+          description: No backup handed, or the one handed waited more than an hour
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/Error"}
+        "409":
+          description: The server has users, a restart or an update is under way, or the server cannot restart itself
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/Error"}
+        "413": {description: A body of more than 1 MiB}
+        "422":
+          description: The key does not open the backup, its file was changed, or its store is newer than this server's (update first)
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/Error"}
+        "429": {$ref: "#/components/responses/LockedOut"}
 components:
   securitySchemes:
     bearer:
@@ -5818,6 +6150,7 @@ components:
           items: {type: string}
         setup: {type: boolean, description: The first owner can be created from here}
         kept_open: {type: boolean, description: "An open server kept open on purpose (the setting auth.keep_open): the web UI does not ask for the first owner"}
+        new_box: {type: boolean, description: "With setup, a store that holds no configured Cube, room or integration: the server may start from a backup (POST /api/v1/setup/backup)"}
         token: {$ref: "#/components/schemas/Token"}
         integration:
           type: object
@@ -6211,6 +6544,30 @@ components:
           type: array
           description: The last ten updates, newest first; empty without a store
           items: {$ref: "#/components/schemas/UpdateEntry"}
+        backup:
+          type: object
+          description: "The backup of the server an update takes first; absent without a store, or with one opened read-only"
+          required: [state]
+          properties:
+            state: {type: string, enum: [ready, no_key, failed], description: "ready: an update takes one, local and pinned for 30 days; no_key: no key is set, and an update goes on without one; failed: the last update's backup failed, and no update has started since"}
+            error: {type: string, description: "Why it failed, for failed"}
+            at: {type: string, format: date-time, description: "When it failed, for failed"}
+        starting: {$ref: "#/components/schemas/UpdateStarting"}
+        start_error:
+          type: object
+          description: "The last start that failed before the helper was asked, its backup's among them, until an update starts"
+          required: [error, at]
+          properties:
+            error: {type: string}
+            at: {type: string, format: date-time}
+    UpdateStarting:
+      type: object
+      description: "An update being started: the server's backup runs before the helper is asked"
+      required: [step, version, since]
+      properties:
+        step: {type: string, enum: [backup]}
+        version: {type: string, description: The version it asks for}
+        since: {type: string, format: date-time}
     UpdateEntry:
       type: object
       description: "An update: started in Massimo (by, to), or found at a start (outside); completed by the next start with another version"
@@ -6231,6 +6588,8 @@ components:
         reached_at: {type: string, format: date-time}
         auto: {type: boolean, description: "The server started it itself, at night; by is absent then"}
         result: {type: string, enum: [failed, rolled-back, up-to-date], description: "The update helper's outcome where the box did not stay on a new version, rolled-back after reached ran: taken at the next read or the next update started where the helper did not restart the server, else at the next start"}
+        backup: {type: string, description: "The uuid of the server's backup the update took first"}
+        backup_skipped: {type: string, enum: [asked, no_key], description: "Why it took none: asked, Update without a backup (no_backup); no_key, no key was set"}
     UpdateStatus:
       type: object
       description: The update helper's last run
@@ -6919,6 +7278,7 @@ components:
       properties:
         name: {type: string}
         secret: {type: string, description: 'The key of its secret field, given apart'}
+        makes_secret: {type: boolean, description: 'The server makes its secret, which nobody enters (an SFTP target''s key): a new box cannot read from such a target'}
         fields:
           type: array
           items:
@@ -7058,6 +7418,60 @@ components:
         report: {$ref: "#/components/schemas/ServerRestoreReport"}
         files: {type: array, items: {$ref: "#/components/schemas/ServerRestoreFile"}}
         cubes: {type: array, items: {$ref: "#/components/schemas/ServerRestoreCube"}}
+    NewBoxBackup:
+      type: object
+      description: A backup handed to a new box, or on a target, as its manifest says it, read without the key
+      properties:
+        uuid: {type: string}
+        time: {type: string, format: date-time}
+        trigger: {type: string}
+        label: {type: string}
+        version: {type: string, description: 'Massimo''s, of the server that made it'}
+        schema: {type: integer}
+        newer: {type: boolean, description: 'Its store is of a newer schema than this server''s: update this server first'}
+        fingerprint: {type: string, description: The fingerprint of the node key of the box that made it}
+        size: {type: integer}
+        counts:
+          type: object
+          description: Its rows per scope
+          properties:
+            users: {type: integer}
+            integrations: {type: integer}
+            cubes: {type: integer}
+            rooms: {type: integer}
+            audit: {type: integer}
+            log: {type: integer}
+        files:
+          type: object
+          properties:
+            env: {type: boolean, description: It holds an env file}
+            tls: {type: integer, description: The TLS files it holds}
+        name: {type: string, description: Its file on the target}
+        recipients:
+          type: array
+          description: The keys it is encrypted for, by their labels and fingerprints
+          items:
+            type: object
+            properties:
+              label: {type: string}
+              fingerprint: {type: string}
+    NewBoxTarget:
+      type: object
+      required: [kind]
+      description: A target for a new box's request alone, stored nowhere
+      properties:
+        kind: {type: string, description: 'A kind of GET /api/v1/server-backup-targets/kinds that does not make its own key: not sftp'}
+        config: {type: object, additionalProperties: {type: string}, description: Its fields}
+        secret: {type: string, description: Its secret field's value}
+    NewBoxRestoreRequest:
+      type: object
+      required: [backup, key_file]
+      properties:
+        backup: {type: string, description: 'The uuid of the backup handed, as POST /api/v1/setup/backup or …/fetch answered it; another handed since is 409'}
+        key_file: {type: string, description: 'The key file''s text: an age identity, or an OpenSSH ssh-ed25519 key without a passphrase'}
+        take_identity: {type: boolean, description: Take the backup's node.key and node id; this box keeps its own without}
+        env: {type: boolean, description: Put the backup's env file where this server reads its own}
+        tls: {type: boolean, description: Put the backup's TLS files where this server keeps its own}
     ServerBackupKey:
       type: object
       properties:

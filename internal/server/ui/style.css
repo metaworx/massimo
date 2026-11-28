@@ -2235,6 +2235,27 @@ massimo-week-program { display: contents; }
 #keep-open-warning { font-weight: 600; }
 .keep-open-origin { overflow-wrap: anywhere; }
 .login-owner-more { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 12px; padding-top: 12px; border-top: 1px solid var(--line); }
+/* the start from a backup in the first owner's place (ui/src/signin/
+   FromBackup.tsx), at its own height: what it shows grows with the
+   backup, the key's field a few lines of monospace that keeps its lines */
+.new-box, .new-box-target, .new-box-held, .new-box-plan { display: flex; flex-direction: column; gap: 8px; }
+.new-box p { margin: 0; overflow-wrap: anywhere; }
+.new-box .notice { margin: 0; }
+.new-box .actions { margin-top: 0; }
+.new-box-plan { padding-top: 8px; border-top: 1px solid var(--line); }
+.new-box-key {
+  font: inherit;
+  font-family: var(--mono, monospace);
+  font-size: 0.8rem;
+  color: var(--fg);
+  background: var(--card);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 6px 8px;
+  box-sizing: border-box;
+  resize: vertical;
+  min-height: 4.5em;
+}
 #me-line { margin: 8px 0 4px; }
 #me-password { margin-bottom: 8px; }
 #me-password summary { cursor: pointer; color: var(--muted); font-size: 0.9rem; }

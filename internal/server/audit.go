@@ -92,6 +92,7 @@ var actions = map[string]string{
 	"DELETE /api/v1/cubes/{sn}/pairing":                          "pairing.stop",
 	"POST /api/v1/update":                                        "update.start",
 	"PUT /api/v1/update/answer":                                  "update.answer",
+	"POST /api/v1/update/backup":                                 "update.backup",
 	"POST /api/v1/restart":                                       "server.restart",
 	"POST /api/v1/reload":                                        "server.reload",
 	"POST /api/v1/cubes/{sn}/reboot":                             "cube.reboot",
@@ -150,12 +151,17 @@ var actions = map[string]string{
 	"POST /api/v1/server-backups/{id}/restore/plan":              "serverbackup.restore_plan",
 	"POST /api/v1/server-backups/{id}/restore":                   "serverbackup.restore",
 	"POST /api/v1/server-backups/{id}/check-key":                 "serverbackup.check_key",
+	"POST /api/v1/setup/backup":                                  "serverbackup.newbox_upload",
+	"POST /api/v1/setup/backup/list":                             "serverbackup.newbox_list",
+	"POST /api/v1/setup/backup/fetch":                            "serverbackup.newbox_fetch",
+	"POST /api/v1/setup/backup/plan":                             "serverbackup.newbox_plan",
+	"POST /api/v1/setup/backup/restore":                          "serverbackup.newbox_restore",
 }
 
 // streamedBodies are the routes whose body the audit does not read
 // ahead: a server backup uploaded, of up to gigabytes, which the handler
 // streams to a file; its row keeps the body's absence.
-var streamedBodies = map[string]bool{"POST /api/v1/server-backups/upload": true}
+var streamedBodies = map[string]bool{"POST /api/v1/server-backups/upload": true, "POST /api/v1/setup/backup": true}
 
 // changeLines says which line of the log each audited action writes once
 // it succeeded (AP Logging v1.1, Block 6): "change", a line under
@@ -166,7 +172,7 @@ var streamedBodies = map[string]bool{"POST /api/v1/server-backups/upload": true}
 var changeLines = map[string]string{
 	"login": "", "login.start": "", "login.key": "", "logout": "", "preference.set": "", "preference.delete": "", "discover": "", "restore.plan": "",
 	"push.subscribe": "", "push.unsubscribe": "", "identity.link.start": "", "identity.link.cancel": "",
-	"update.start": "system", "update.answer": "change", "server.restart": "system", "server.reload": "system", "server.reboot": "system",
+	"update.start": "system", "update.answer": "change", "update.backup": "system", "server.restart": "system", "server.reload": "system", "server.reboot": "system",
 	"server.reboot.cancel": "system", "backup.take": "system", "backup.delete": "system", "restore.start": "system",
 	"cube.add": "change", "cube.update": "change", "cube.remove": "change", "cube.reboot": "change", "cube.refresh": "change", "settings.update": "change",
 	"setpoint": "change", "room.delete": "change", "room.rename": "change", "device.update": "change", "device.remove": "change",
@@ -188,6 +194,11 @@ var changeLines = map[string]string{
 	// a restore: the backup it takes first writes its line, and the
 	// server restarts; its plan and a check with the key change nothing
 	"serverbackup.restore": "system", "serverbackup.restore_plan": "", "serverbackup.check_key": "",
+	// a new box started from a backup (newbox.go): the restart after the
+	// restore writes its line; the backup handed, a target's list and
+	// the plan change nothing of the store
+	"serverbackup.newbox_restore": "system", "serverbackup.newbox_upload": "", "serverbackup.newbox_list": "", "serverbackup.newbox_fetch": "",
+	"serverbackup.newbox_plan": "",
 }
 
 // noCommand are the actions that are audited but are no command: they
@@ -199,7 +210,10 @@ var noCommand = map[string]bool{"login": true, "login.start": true, "login.key":
 	"identity.link.cancel": true, "serverbackup.upload": true, "serverbackup.target_test": true, "token.revoke_code": true,
 	// a restore replaces the commands themselves, and its plan and a
 	// check with the key send nothing
-	"serverbackup.restore": true, "serverbackup.restore_plan": true, "serverbackup.check_key": true}
+	"serverbackup.restore": true, "serverbackup.restore_plan": true, "serverbackup.check_key": true,
+	// a new box's: its restore as a restore, the rest send nothing
+	"serverbackup.newbox_upload": true, "serverbackup.newbox_list": true, "serverbackup.newbox_fetch": true, "serverbackup.newbox_plan": true,
+	"serverbackup.newbox_restore": true}
 
 // secretFields are the body fields an audit row never keeps, and the
 // answer's a command row never keeps: a server backup target's secret, a

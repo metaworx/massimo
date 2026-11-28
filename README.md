@@ -14,7 +14,8 @@ every release is a pre-release on the `alpha` channel (see [Versions](#versions)
 - [Documentation](#documentation)
 - [Installing](#installing): [Linux](#linux), [Windows](#windows),
   [macOS](#macos), [From source](#from-source)
-- [Server](#server), with [Screenshots](#screenshots)
+- [Server](#server), with [Moving to a new box](#moving-to-a-new-box) and
+  [Screenshots](#screenshots)
 - [Command line](#command-line), with the [Cube variables](#cube-variables)
 - [Original software](#original-software)
 - [Versions](#versions)
@@ -302,6 +303,11 @@ sudo massimo install -remove              # -purge: the settings, state, logs an
 ([Versions](#versions)) and puts the old
 binary back when the restarted server does not report the new version
 (`-rollback` goes back by hand);
+before it installs, the running server takes a backup of itself, kept 30 days,
+asked with the key of the service's settings file ([docs/store.md](docs/store.md),
+"Before an update"):
+without a key for the server's backups it goes on,
+where the backup fails it stops, and `-no-backup` installs without one;
 the button under System settings → Software in the web UI asks the helper to do the same,
 which needs `MASSIMO_API_TOKEN`.
 Running `install` again from a newer binary replaces the binary and the units
@@ -913,6 +919,34 @@ Windows' mDNS);
 where multicast is missing, as in a container without it,
 `serve` logs that it is not announced and runs on.
 
+### Moving to a new box
+
+A new box takes over from an old one by a server backup of the old box
+(`massimo store backup`, or Maintenance → Server backups) and its key.
+Install Massimo on the new box and open its page before anyone is made there
+and before a Cube is added:
+the sign-in card that asks for the first owner offers **Start from a backup…**
+while the new box holds no Cube, room or integration,
+since it takes no backup of itself first.
+Choose the backup's file, or the target that holds it (WebDAV, SMB, S3
+or a directory of the new box; for SFTP download the file first),
+paste its key or read it from its file, and **Open with the key**:
+the card says what the backup holds and what it replaces.
+A backup without an enabled owner is refused.
+**Start from this backup** takes every part of it, its users and sign-in,
+settings and targets, integrations, Cubes and history,
+then the server restarts and the old box's users sign in as before.
+The key is used for that start alone and stored nowhere.
+The old box's identity is taken only where ticked, best once the old box is off,
+and its settings file and certificate files likewise where the new box may write them.
+This is open only while the new box has no user,
+to anyone on the local network who has the backup and its key,
+as making the first owner is (docs/api-v1.md, "A new box from a backup").
+On the box itself, `massimo store restore <file> -scope all -key key.txt` does the same,
+through the running service, or on the store with the service stopped:
+a new box, without a regular user or a key, takes no backup of itself first,
+and the command says so.
+
 ### Screenshots
 
 The web UI against the fake Cube, light and dark,
@@ -1261,12 +1295,18 @@ a pinned backup of the store taken first;
 each file replaced kept beside as `<name>.before-restore`;
 `-plan` prints what it would do and changes nothing.
 The key is read into memory and written nowhere.
+A new box, without a regular user or a key, takes no backup of itself first
+and says so on standard error;
+through its open `serve` it takes a file and every scope, `-scope all`
+("Moving to a new box").
 On the store, without a `serve`, the restore needs the store alone:
 stop the service first.
 These five go through this box's running `serve`, with `MASSIMO_API_TOKEN`,
 found by the address it publishes in the data directory (`serve.api`)
 and proved by its node, and act on the store otherwise,
 one job at a time with serve's; a restore through `serve` restarts it.
+Every update first takes one to the local targets, kept 30 days:
+the web UI's, the night's and `massimo update`'s, which `-no-backup` skips.
 The details are in docs/store.md, "Server backups",
 and the API's in docs/api-v1.md, "Server backups".
 
