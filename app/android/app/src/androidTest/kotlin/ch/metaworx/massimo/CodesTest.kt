@@ -7,6 +7,7 @@ import androidx.test.ext.junit.runners.AndroidJUnit4
 import org.json.JSONArray
 import org.json.JSONObject
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Assert.fail
 import org.junit.Test
@@ -24,7 +25,9 @@ import java.io.File
  * test can end and go on, and nothing stops the host's serve. D103-A's
  * case keeps a login as one kept before version 6, without a code, so that
  * the next sign-in revokes its key left and My profile's toast says so;
- * one with its code is taken at the probe, and no toast shows.
+ * one with its code is taken at the probe, and no toast shows. A server
+ * removed while it did not answer and added again with its node takes its
+ * codes back (Block 20, D117-A), which the next contact posts.
  */
 @RunWith(AndroidJUnit4::class)
 class CodesTest : EmulatorTest() {
@@ -114,6 +117,46 @@ class CodesTest : EmulatorTest() {
         val mark = h.mark()
         relaunch()
         list() // the list shown posts a removed server's codes
+        revokedByCode(h, mark, session)
+        assertEquals(401, h.status(token))
+    }
+
+    @Test
+    fun aServerAddedAgainWithItsNodeTakesItsCodesBack() {
+        // D117-A: Remove while the server does not answer keeps the session's code in gone.json; the server added again
+        // with its node takes it back into its entry, which shows it waiting, gone.json drops it, and the next contact
+        // ends the session by its code
+        val t = Rig.a
+        val h = Host(t)
+        val id = add(t, A)
+        tap(id)
+        signIn(t, A, keep = false)
+        val token = token()
+        val session = h.sessionId(token)
+        toList()
+        down(id)
+        val res = page.run("return await massimo.remove(${q(id)}, '');", "Remove while the server does not answer") as JSONObject
+        assertTrue("its codes wait: $res", res.optBoolean("pending"))
+        val gone = File(Rig.app.filesDir, "gone.json")
+        assertTrue("kept in gone.json", gone.isFile)
+        val mark = h.mark()
+        // added again as the Add card adds it, with the node the probe finds
+        val again = page.run(
+            """
+            const [r] = (await massimo.probe([${q(t.url)}], ${q(t.fp)})) || [];
+            if (!r || !r.ok || !r.node) throw new Error("the probe found " + JSON.stringify(r));
+            return await massimo.save({ name: ${q(A)}, node: r.node, lan: ${q(t.url)}, remote: "", fp: "", ask: "start", push: false, start: false });
+            """.trimIndent(),
+            "adding $A again",
+        ) as JSONObject
+        val left = again.getJSONArray("unended")
+        assertTrue(
+            "the session taken back, waiting: $again",
+            (0 until left.length()).any { left.getJSONObject(it).optLong("id") == session && left.getJSONObject(it).optBoolean("pending") },
+        )
+        assertFalse("gone.json still holds it", gone.isFile)
+        page.run("await massimo.trust(${q(again.getString("id"))}, ${q(t.fp)}); return 1;", "trusting $A again")
+        reloadList() // the list's probe finds it, and its check posts the codes first
         revokedByCode(h, mark, session)
         assertEquals(401, h.status(token))
     }

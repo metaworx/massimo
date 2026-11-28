@@ -488,3 +488,51 @@ func TestPasswordLoginOff(t *testing.T) {
 		t.Errorf("back to the default: %d", code)
 	}
 }
+
+// A name with the trailing space a password manager's autofill leaves
+// signs in on every path (AP MobileApp, D107-A): the first owner created
+// by a registration under it, the sign-in by OPAQUE, a password sign-in
+// of a user still of version 1, and its fallback after a start, each
+// taking the name trimmed, as store.NormalName does.
+func TestSignInTrimsTheName(t *testing.T) {
+	t.Parallel()
+	open := startServer(t, withOptions(storeOptions(t, t.TempDir(), ""))).ts
+	rec := opaqueRecord(t, open, "", "root%20", "pw-root-01")
+	code, body := callAPI(t, open, "POST", "/api/v1/users", "", `{"name":"root ","role":"owner","record":"`+rec+`","ksf":"`+store.OpaqueKSF+`"}`)
+	var u userView
+	json.Unmarshal([]byte(body), &u)
+	if code != 201 || u.Name != "root" {
+		t.Fatalf("the first owner under a name with a space: %d %s", code, body)
+	}
+	for _, name := range []string{"root ", "root", " Root\t"} {
+		if _, code, body := opaqueSignIn(t, open, name, "pw-root-01", ""); code != 200 {
+			t.Errorf("by OPAQUE as %q: %d %s", name, code, body)
+		}
+	}
+
+	r := startServer(t, withOptions(storeOptions(t, t.TempDir(), "secret")))
+	ts, st := r.ts, r.s.opts.Store
+	if _, err := st.AddUser(t.Context(), store.User{Name: "bert", Role: store.RoleOperator}, "b-pass-001", 0); err != nil {
+		t.Fatal(err)
+	}
+	if code, body := callAPI(t, ts, "POST", "/api/v1/login", "", `{"user":"bert ","password":"b-pass-001"}`); code != 200 {
+		t.Errorf("a password sign-in as \"bert \": %d %s", code, body)
+	}
+	// the browser's way for a user of version 1 (login.js signIn): a start, which its client cannot open, then the
+	// password sign-in with its login, the start's name and this one's compared trimmed
+	ke1, err := opaqueClient(t).GenerateKE1([]byte("b-pass-001"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	start, _ := json.Marshal(map[string]string{"user": "bert ", "ke1": opaqueB64.EncodeToString(ke1.Serialize())})
+	code, body = callAPI(t, ts, "POST", "/api/v1/login/start", "", string(start))
+	var started loginStarted
+	json.Unmarshal([]byte(body), &started)
+	if code != 200 || !started.V1 || started.Login == "" {
+		t.Fatalf("the start as \"bert \": %d %s", code, body)
+	}
+	code, body = callAPI(t, ts, "POST", "/api/v1/login", "", `{"user":"bert ","password":"b-pass-001","login":"`+started.Login+`"}`)
+	if code != 200 || !strings.Contains(body, `"upgrade"`) {
+		t.Errorf("the password sign-in after a start as \"bert \": %d %s", code, body)
+	}
+}

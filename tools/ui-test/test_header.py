@@ -443,16 +443,16 @@ def test_each_page_keeps_its_scroll(page, case):
 
 def test_versions_copy(page, case):
     """☰'s version and System Info's copy the whole version, as
-    the tooltip names it, without " (server version)"; System Info's by a
-    click on it and by its icon (D94-A)."""
+    the tooltip names it, without " (server version)"; ☰'s closing ☰ (AP
+    MobileApp, Block 20; test_main_menu.py); System Info's by a click on
+    it and by its icon (D94-A)."""
     page.context.grant_permissions(["clipboard-read", "clipboard-write"], origin=page.evaluate("location.origin"))
     whole = page.evaluate("state.version")
     page.evaluate("navigator.clipboard.writeText('')")
     page.locator("#nav-menu > summary").click()
     page.locator("#version-short").click()
     assert wait_until(page, "navigator.clipboard.readText().then((t) => t === state.version)", 3), "☰'s version copies whole"
-    assert page.evaluate("document.getElementById('nav-menu').open"), "☰ stays open"
-    page.keyboard.press("Escape")
+    assert wait_until(page, "!document.getElementById('nav-menu').open", 3), "☰ closed"
     assert "(" not in whole or "server version" not in whole, "without the tooltip's words"
     show_view(page, "info")
     cell = page.locator("#info-version")

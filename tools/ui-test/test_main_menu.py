@@ -2,24 +2,28 @@
 # Copyright (C) 2026 The Massimo Authors
 """☰, the page's one menu (AP GlobalMenu, Block 3), at every width: the
 log; Cube settings, System settings, Maintenance and System info;
-Personal settings
+Personal settings; in the app App settings, This server's settings and
+Select server, a rule before and after them (AP MobileApp, Block 20);
 and Sign out, each for the roles that may open it, a separator between
-the groups. Each opens its page, puts it into the address, highlights ☰,
-marks its entry current and closes the menu; back returns to the page
-before. Sign out is the personal page's button: Forget key for a key,
-gone where that button is."""
+the groups, a browser drawing one rule where the app's three are not.
+Each opens its page, puts it into the address, highlights ☰, marks its
+entry current and closes the menu; back returns to the page before.
+Sign out is the personal page's button: Forget key for a key, gone
+where that button is. The version row's tap copies the whole version,
+says so at the window's foot and closes ☰ (D115-D)."""
 import json
 
 from conftest import URL
-from helpers import OPERATOR_PASSWORD, VIEWER, boxes, css_hidden, open_main_menu, show_view, wait_until
+from helpers import OPERATOR_PASSWORD, VIEWER, boxes, css_hidden, held_timers, open_main_menu, show_view, wait_bubble_foot, wait_until
 from test_login import sign_in
 
-ORDER = ["#menu-log", "hr", "#menu-cube", "#menu-system", "#menu-maint", "#menu-info", "hr", "#menu-me", "#menu-servers", "#menu-server-settings",
-         "#menu-app-settings", "#menu-logout", "#menu-owner"]
-# in the app alone: Select server…, back to the app's servers, and This server's settings… and App settings… on the
-# app's own page (AP MobileApp, D73-A; test_connect.py); on a server without users alone, in Sign out's place: Create
-# the owner… (AP FirstOwner, test_ways.py)
-APP_ONLY = {"#menu-servers", "#menu-server-settings", "#menu-app-settings", "#menu-owner"}
+ORDER = ["#menu-log", "hr", "#menu-cube", "#menu-system", "#menu-maint", "#menu-info", "hr", "#menu-me", "#menu-app-sep", "#menu-app-settings",
+         "#menu-server-settings", "#menu-servers", "#menu-out-sep", "#menu-logout", "#menu-owner"]
+# in the app alone: App settings and This server's settings on the app's own page, and Select server, back to the
+# app's servers (AP MobileApp, D73-A; test_connect.py), and the rule after them, before Sign out (Block 20); on a
+# server without users alone, in Sign out's place: Create the owner… (AP FirstOwner, test_ways.py)
+APP_ONLY = {"#menu-servers", "#menu-server-settings", "#menu-app-settings", "#menu-out-sep", "#menu-owner"}
+RULES = {"hr", "#menu-app-sep", "#menu-out-sep"}
 PAGES = {"log": ("#logview", "#log", "#menu-log"), "cube": ("#cube-page", "#cube", "#menu-cube"),
          "system": ("#system", "#system", "#menu-system"), "maint": ("#maint-page", "#maintenance", "#menu-maint"),
          "info": ("#info-page", "#info", "#menu-info"),
@@ -38,14 +42,16 @@ def test_main_menu_entries(page, case):
     got = got[2:]
     assert got == ORDER, f"☰'s entries in this order: {got}"
     for sel in ORDER:
-        if sel == "hr":
-            continue
-        assert page.locator(sel + " > svg.ni").count() == 1, f"{sel} with its icon"
         if sel in APP_ONLY:
             assert page.locator(sel).is_hidden(), f"{sel} not shown to the owner of a browser"
             continue
+        if sel in RULES:
+            continue
+        assert page.locator(sel + " > svg.ni").count() == 1, f"{sel} with its icon"
         assert page.locator(sel).is_visible(), f"{sel} shown to the owner"
-    ys = [b["y"] for b in boxes(page, *(sel for sel in ORDER if sel != "hr" and sel not in APP_ONLY))]
+    shown = m.locator(".menu-items > *").evaluate_all("(es) => es.filter((e) => e.getClientRects().length).map((e) => e.id ? '#' + e.id : e.tagName.toLowerCase())")
+    assert shown[shown.index("#menu-me"):] == ["#menu-me", "#menu-app-sep", "#menu-logout"], f"one rule between Personal settings and Sign out: {shown}"
+    ys = [b["y"] for b in boxes(page, *(sel for sel in ORDER if sel not in RULES and sel not in APP_ONLY))]
     assert ys == sorted(ys), "one under the other"
     assert page.locator("#menu-logout-label").inner_text() == page.evaluate("document.getElementById('logout-label').textContent"), \
         "Sign out says what the personal page's button says"
@@ -55,6 +61,31 @@ def test_main_menu_entries(page, case):
         "in the accent and bold, as the personal page's button"
     assert page.locator("#menu-logout").evaluate(look) != page.locator("#menu-me").evaluate(look), "unlike the other entries"
     m.locator("summary").click()
+
+
+def test_the_version_row_copies_and_closes(page, case):
+    """☰'s version row, the version and its copy icon: a tap on either
+    copies the whole version, says "Copied" at the window's foot, not over
+    the row, which goes with ☰, and closes ☰, the focus back on its button;
+    the keyboard's Enter too (AP MobileApp, Block 20, D115-D)."""
+    page.context.grant_permissions(["clipboard-read", "clipboard-write"], origin=page.evaluate("location.origin"))
+    done = page.evaluate("t('copy.done')")
+    row = page.locator("#nav-menu .menu-items > .menu-version")
+    for sel, how in (("#version-short", "click"), ("#nav-menu .menu-version .copy-icon", "click"), ("#version-short", "Enter")):
+        open_main_menu(page)
+        assert row.locator(".copy-icon").count() == 1 and row.locator(".copy-icon").is_visible(), "the row's copy icon"
+        page.evaluate("navigator.clipboard.writeText('')")
+        with held_timers(page, "copied"):
+            if how == "Enter":
+                page.locator(sel).focus()
+                page.keyboard.press("Enter")
+            else:
+                page.locator(sel).click()
+            assert wait_until(page, "navigator.clipboard.readText().then((t) => t === state.version)", 3), f"{sel} by {how}: the whole version"
+            where = wait_bubble_foot(page, done)
+            assert where == "foot", f"{sel} by {how}: Copied at the window's foot: {where}"
+            assert page.locator("#nav-menu").get_attribute("open") is None, f"{sel} by {how}: ☰ closed"
+            assert page.evaluate("document.activeElement === document.querySelector('#nav-menu > summary')"), f"{sel} by {how}: the focus on ☰"
 
 
 def test_main_menu_opens_each_page(page, case):
@@ -113,13 +144,15 @@ def test_a_viewer_has_its_entries_alone(page, case):
 
 def test_an_open_server_has_no_sign_out(page, case):
     """On an open server (/me stubbed) there is nothing to sign out of:
-    ☰ has no Sign out, as the personal page has no button."""
+    ☰ has no Sign out, as the personal page has no button, and no rule
+    stands at its end."""
     page.route("**/api/v1/me", lambda route: route.fulfill(status=200, content_type="application/json",
                                                            body=json.dumps({"mode": "open", "capabilities": ["read"]})))
     try:
         page.evaluate("loadMe()")
         assert wait_until(page, "document.getElementById('menu-logout').classList.contains('hidden')", 5), "no Sign out in ☰"
         assert page.locator("#logout-btn").evaluate("(e) => e.classList.contains('hidden')"), "as on the personal page"
+        assert page.evaluate("document.getElementById('menu-app-sep').classList.contains('hidden')"), "and no rule left at ☰'s end"
     finally:
         page.unroute("**/api/v1/me")
 

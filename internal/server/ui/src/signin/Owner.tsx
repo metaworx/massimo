@@ -7,7 +7,9 @@
  * The first owner's form in the sign-in card (AP FirstOwner, Block 2;
  * Setup.tsx, a tile among the rooms, before): on a server without users
  * the card opens with it instead of the ways to sign in (askLogin
- * "owner" of login.js). The name, checked as Add a user checks it
+ * "owner" of login.js). Its text, then the command that creates the
+ * owner on the box, `massimo user add`, on a line of its own, copied by
+ * a tap or by its icon (AP MobileApp, Block 20). The name, checked as Add a user checks it
  * (shared/username.tsx), the password twice (shared/password.tsx), each
  * with its eye, hidden again at each opening and after a success, and in
  * the app where the phone can and the address takes a key the switch that
@@ -54,6 +56,7 @@ import { openSetupText } from "../model/opensetup";
 import { app, toServers } from "../shared/app";
 import { showCard } from "../shared/card";
 import { ResultLine } from "../shared/badge";
+import { Copy } from "../shared/copy";
 import { hid } from "../shared/cls";
 import { useLang } from "../shared/lang";
 import { NewPassword, newPasswordProblem } from "../shared/password";
@@ -96,6 +99,9 @@ function doneToast(name: string, kept: boolean, open?: OpenSetup): void {
   };
   showToast(text + " " + t("setup.openSetup", { what }), { ms: 30000, tone: "warn", action: { label: t("setup.openSetupShow"), run: show } });
 }
+
+/** OWNER_COMMAND is the command that creates the owner on the server's box, as setup.text names it. */
+const OWNER_COMMAND = "massimo user add";
 
 /** Owner is the first owner's place in the card: the form, and under it the row with Skip for now. */
 export function Owner() {
@@ -235,6 +241,8 @@ export function Owner() {
         <div id="setup-step" class={"owner-step" + hid(step !== "form")}>
           <form id="setup-form" class="setup-form" onSubmit={submit}>
             <p class="muted">{t("setup.text")}</p>
+            {/* the command on a line of its own, never wrapped, copied by a tap or by its icon (AP MobileApp, Block 20) */}
+            <p id="setup-command" class="setup-command" translate={false}><Copy text={OWNER_COMMAND} icon cls="mono setup-command-text" /></p>
             <p id="setup-tls" class={"notice small" + hid(!card.selfSigned)} role="note">{t("header.selfSigned")}</p>
             <UserNameField label={t("users.name")} id="setup-user" msgId="setup-name-msg" nc={nc} autocomplete="username" inputRef={nameRef} typed={setTypedName} />
             <NewPassword ids={["setup-password", "setup-again"]} label={t("login.password")} inputRefs={[passRef, againRef]} required reset={opened + succeeded}

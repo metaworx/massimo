@@ -8,12 +8,17 @@ package ch.metaworx.massimo
  * D112-A; docs/app.md, "The revoke codes") at each contact with their
  * server: the connect page's `session` before its check, `open` at the
  * address it opens, and a removed server's ([gone]) where the probe finds
- * it at its node, at the app's start and each time the list is shown. A
+ * it at its node, at its own addresses or at those of a server of the list
+ * with its node (AP MobileApp, D117-A), at the app's start and each time
+ * the list is shown; a server added or saved with a removed one's node
+ * takes that one's codes back into its entry ([adopt]). A
  * code taken (`204`) marks its entry taken; a server that takes no codes
  * drops it, the entry staying as before codes; a malformed one goes,
  * logged; a broken connection, 429 and 5xx keep it, the rest of the
  * server's codes waiting with it. [log] never gets a code. Once
  * [stopped] (the list's Exit, AP MobileApp D91-A), nothing more is posted.
+ * [revoke] posts one code at an address with the pin to hold the
+ * certificate to, [api]'s by default; a test records the pin there.
  */
 class Codes(
     private val servers: ServerStore,
@@ -22,6 +27,7 @@ class Codes(
     private val probe: (List<String>, String?) -> List<ProbeResult>,
     private val log: Logger,
     private val stopped: () -> Boolean = { false },
+    private val revoke: (url: String, fp: String, code: String) -> ServerApi.Taken = api::revokeCode,
 ) {
     /**
      * post posts the codes waiting for [s] at [url], an address of the
@@ -35,7 +41,7 @@ class Codes(
         var changed = false
         for (code in now.codes()) {
             if (stopped()) return changed // the list's Exit meanwhile: nothing more posted
-            when (api.revokeCode(url, now.fp, code)) {
+            when (revoke(url, now.fp, code)) {
                 ServerApi.Taken.TAKEN -> changed = servers.took(s.id, code) || changed
                 ServerApi.Taken.NONE -> changed = servers.dropCode(s.id, code) || changed
                 ServerApi.Taken.MALFORMED -> {
@@ -60,8 +66,9 @@ class Codes(
      * still to post, for [GoneStore.add]: Remove's.
      */
     fun removing(s: Server, url: String): Removing {
-        val left = s.unrevoked.filter { !it.taken && RevokeCode.valid(it.code) }.map { GoneCode(it.code, false) } +
-            s.unended.filter { !it.taken && RevokeCode.valid(it.code) }.map { GoneCode(it.code, true, it.leftAt) }
+        // each with its token, so that a server added again with the node takes it back (D117-A)
+        val left = s.unrevoked.filter { !it.taken && RevokeCode.valid(it.code) }.map { GoneCode(it.code, false, user = it.user, id = it.id) } +
+            s.unended.filter { !it.taken && RevokeCode.valid(it.code) }.map { GoneCode(it.code, true, it.leftAt, it.user, it.id, it.createdAt) }
         if (left.isEmpty() || !s.has(url)) return Removing(emptySet(), left)
         val taken = mutableSetOf<String>()
         val rest = mutableListOf<GoneCode>()
@@ -71,7 +78,7 @@ class Codes(
                 rest.add(c)
                 continue
             }
-            when (api.revokeCode(url, s.fp, c.code)) {
+            when (revoke(url, s.fp, c.code)) {
                 ServerApi.Taken.TAKEN -> taken.add(c.code)
                 ServerApi.Taken.NONE -> Unit
                 ServerApi.Taken.MALFORMED -> log.warn("revoke code: ${s.id} called a code malformed at ${where(url)}; dropped")
@@ -89,8 +96,11 @@ class Codes(
      * postGone probes each removed server's addresses and posts its codes
      * at the one that answers with its node, the LAN one first
      * ([Addresses.answering]), so that an address given to another host
-     * spends no code. One run at a time; a run asked for meanwhile is
-     * skipped.
+     * spends no code; where none does and it has a node, the addresses of
+     * each server of the list with that node, each with its own pin, and
+     * posts them at the first that answers with the node (D117-A). A
+     * removed server without a node is found at its own addresses alone.
+     * One run at a time; a run asked for meanwhile is skipped.
      */
     fun postGone() {
         synchronized(this) {
@@ -99,12 +109,10 @@ class Codes(
         }
         try {
             for (g in gone.list()) {
-                val s = g.server()
-                val urls = listOf(s.lan, s.remote).filter { it.isNotEmpty() }
-                val url = Addresses.answering(s, runCatching { probe(urls, s.fp.ifEmpty { null }) }.getOrDefault(emptyList())) ?: continue
+                val (url, fp) = found(g) ?: continue
                 for (c in g.codes) {
                     if (stopped()) return // the list's Exit meanwhile: nothing more posted
-                    when (api.revokeCode(url, s.fp, c.code)) {
+                    when (revoke(url, fp, c.code)) {
                         ServerApi.Taken.TAKEN, ServerApi.Taken.NONE -> gone.drop(g.id, c.code)
                         ServerApi.Taken.MALFORMED -> {
                             log.warn("revoke code: the removed ${g.id} called a code malformed at ${where(url)}; dropped")
@@ -117,6 +125,54 @@ class Codes(
         } finally {
             synchronized(this) { running = false }
         }
+    }
+
+    // found is where the removed server [g] answers with its node, and the
+    // pin the codes are posted with there: its own addresses with its pin,
+    // else, where it has a node, a server of the list with that node at its
+    // addresses with its own pin (D117-A); null where none answers.
+    private fun found(g: GoneServer): Pair<String, String>? {
+        val own = g.server()
+        answering(own)?.let { return it to own.fp }
+        if (g.node.isEmpty()) return null
+        for (s in servers.list()) {
+            if (s.node != g.node || (s.lan == own.lan && s.remote == own.remote && s.fp == own.fp)) continue
+            answering(s)?.let { return it to s.fp }
+        }
+        return null
+    }
+
+    // answering probes [s]'s addresses with its pin and is the first that
+    // answers with its node, the LAN one first, or null.
+    private fun answering(s: Server): String? {
+        val urls = listOf(s.lan, s.remote).filter { it.isNotEmpty() }
+        if (urls.isEmpty()) return null
+        return Addresses.answering(s, runCatching { probe(urls, s.fp.ifEmpty { null }) }.getOrDefault(emptyList()))
+    }
+
+    /**
+     * adopt takes the codes of each removed server of [s]'s node back into
+     * [s], a server of the list just added or saved (D117-A): as the keys
+     * and sessions left there, with their codes, which the next contact
+     * posts, a session's left when it was, or at the Remove where that is
+     * not known; each removed server then drops them, and goes once it has
+     * none left. A code without its token stays with the removed server,
+     * posted where [postGone] finds the node. Nothing for a server without
+     * a node, nor one not kept. [s]'s entry is written before the removed
+     * server drops a code, so that a write that fails loses none. It
+     * reports whether a code was taken back.
+     */
+    fun adopt(s: Server): Boolean {
+        if (s.node.isEmpty()) return false
+        var changed = false
+        for (g in gone.ofNode(s.node)) {
+            val back = g.codes.filter { it.takeable() }.map { if (it.session && it.leftAt.isEmpty()) it.copy(leftAt = g.removedAt) else it }
+            if (back.isEmpty()) continue
+            if (!servers.takeBack(s.id, back)) return changed
+            gone.dropAll(g.id, back.map { it.code }.toSet())
+            changed = true
+        }
+        return changed
     }
 
     private var running = false

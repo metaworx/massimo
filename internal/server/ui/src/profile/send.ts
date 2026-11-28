@@ -13,8 +13,10 @@
  * the sessions, keys and identities through shared/account.ts with this
  * card's runner. A change reads the users again where the signed-in user
  * may read them (System settings → Users), then My profile, and says how
- * it went under the card; an answer after a sign-out is dropped
- * (shared/session.ts).
+ * it went under the card, a failure also in the page's toast, in red,
+ * since the card's foot may be out of view on a long card (AP MobileApp,
+ * D104-A, F45), the line keeping it after the toast goes; an answer after
+ * a sign-out is dropped (shared/session.ts).
  */
 
 import type { PendingLink, User } from "../api";
@@ -24,10 +26,11 @@ import { canManageUsersOf, me, profileOf } from "../shared/me";
 import { session, stillSession } from "../shared/session";
 import { profile, said } from "./store";
 
-/** My profile's runner: its message under the card; a change read again, System settings' users and My profile with its sessions, keys and identities. */
+/** My profile's runner: its message under the card, a failure also in the page's toast (D104-A); a change read again, System settings' users and My profile with its sessions, keys and identities. */
 const runner = actionRunner({
   set: (res) => {
     said.profile = res;
+    if (res && !res.ok) showToast(res.text, { tone: "bad" });
   },
   reload: async () => {
     if (canManageUsersOf()) await window.MassimoParts.users.load(); // System settings → Users, another region
@@ -36,7 +39,7 @@ const runner = actionRunner({
   bound: true,
 });
 
-/** profileMsg shows text under the card, ok green, else red; no text hides it. */
+/** profileMsg shows text under the card, ok green, else red and in the page's toast too; no text hides it. */
 export const profileMsg = runner.say;
 
 /** run sends a change of the user name, says ok, or that it failed and why: what this card and its sessions, keys and identities send. */
