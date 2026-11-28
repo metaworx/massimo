@@ -613,6 +613,9 @@ hence `failed_checks_forgotten`.
   it fails at once and says so where its result shows, also once the page
   is back, a setpoint, a backup's file, a Cube's and a role's Save, a
   settings change on the page's message line and a deletion among them;
+  a settings change so refused goes back to the value that held and is
+  not sent after the sign-in, whether or not the server holds the user's
+  settings then (AP SteadyTests v1.1, D14-A);
   a read is sent again, and the stream's ticket waits for the sign-in;
   a stepped setpoint is dropped as the sign-in opens; another user sees and
   sends nothing of the first one's; and a read sent while the card is open,

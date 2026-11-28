@@ -217,7 +217,8 @@ function forgetUserSettings() {
 
 // setSetting changes a setting: on this device only where it is kept for
 // this device, else the user's value, which goes to the server as well
-// (login.js schedulePreferences).
+// (login.js schedulePreferences), and goes back where its push meets a
+// 401 (login.js noteHeld, takeBack).
 function setSetting(key, v) {
   state.settings[key] = v;
   const d = deviceOverrides();
@@ -226,6 +227,7 @@ function setSetting(key, v) {
     storeDeviceOverrides(d);
     return;
   }
+  noteHeld(); // login.js: the settings before the change, where the page knows none that hold
   storeUserSetting(key, v);
   schedulePreferences("ui");
 }
