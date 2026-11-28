@@ -2938,7 +2938,7 @@ Whatever a store keeps of a user, a question or a typed value is forgotten in
 (`MassimoParts.session()`, UiParts D212).
 The UI tests count what each data source reads on each page (`test_data_updates.py`)
 and what each showing of a page reads (`test_shell_updates.py`), and the guard
-applies every source in every region (docs/ui-testing.md, sections 8 and 9).
+applies every source in every region (docs/ui-testing.md, sections 1 and 2).
 
 ### The plain scripts
 

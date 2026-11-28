@@ -4,7 +4,7 @@
 # SteadyTests, Block 6): a test file and its count a line. Data put into
 # the page alone lasts until its next read or event; a test tells the
 # page's reads through Reads of helpers.py, or the fake Cube, what it
-# wants shown (docs/ui-testing.md, section 9). A count may fall and may
+# wants shown (docs/ui-testing.md, section 1). A count may fall and may
 # not rise: a new write fails `go test`, and so does a write taken out
 # until its line here is lowered in the same commit, or taken out at 0.
 test_admin_updates.py 1

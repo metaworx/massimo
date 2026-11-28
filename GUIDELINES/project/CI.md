@@ -1,4 +1,4 @@
-# Massimo — CI Conventions (v1.77.0)
+# Massimo — CI Conventions (v1.77.1)
 
 What CI does in this project, for whoever has to change it.
 `/AGENTS.md` names this file as the canonical owner of CI conventions,
@@ -581,7 +581,7 @@ and no video,
 which took a quarter of a second of every test's set-up and tear-down,
 13 % of a case (D8-A);
 the failed tests run once more with both.
-The parts guard runs in two of the four cases (`docs/ui-testing.md`, section 8),
+The parts guard runs in two of the four cases (`docs/ui-testing.md`, section 2),
 and in the other two its tests are deselected at collection
 rather than each loading a page to be skipped (D9-A),
 so that the 1100-de and 390-en jobs report only the suite's real skips.

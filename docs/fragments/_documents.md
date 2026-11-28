@@ -61,5 +61,6 @@ on a document under `docs/` that is not).
 - [tools/ui-test/README.md](tools/ui-test/README.md): `make ui-test`,
   the web UI smoke test with Playwright, and its setup
 - [docs/ui-testing.md](docs/ui-testing.md): testing the web UI:
-  the smoke test, Cypress and Playwright compared, screenshots,
-  the recommendation
+  its kit first, for the page's own reads and its stream, and the guard of
+  the page's parts; then the evaluation of 2026-11-06, the smoke test,
+  Cypress and Playwright compared, screenshots, the recommendation
