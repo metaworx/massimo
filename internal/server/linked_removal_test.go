@@ -243,3 +243,114 @@ func TestStreamEndsWithTheLink(t *testing.T) {
 		})
 	}
 }
+
+// An event stream opened through an integration for one of its users
+// ends at a keep-alive once the owner accepts another installation id,
+// as the old installation's calls are refused: one opened with the key
+// and the header, and one opened with a ticket the old installation
+// asked for. The keep-alive records no installation pending. A new
+// installation's call, which records its id, ends nothing, nor does the
+// old installation's call that records its own id again once the new
+// one is accepted; a ticket the old installation asked for before the
+// acceptance opens no stream then. The new installation's stream, the
+// integration's own without the header, the owner's and a plain key's
+// go on; the old installation accepted again, the new one's stream ends
+// in turn (AP LinkedRemoval, D4-A).
+func TestStreamEndsWithItsInstallation(t *testing.T) {
+	t.Parallel()
+	r := startServer(t, withOptions(storeOptions(t, t.TempDir(), "secret")))
+	ts, s := r.ts, r.s
+	s.streamKeepAlive.Store(int64(30 * time.Millisecond))
+	st := s.opts.Store
+	i, key := registerHA(t, st, []string{"read", "preferences", "setpoint", "lock"})
+	const newer = "fedcba9876543210fedcba9876543210"
+	call := func(instance string) (int, string) {
+		rec := sendFromWith(s, "GET", "/api/v1/me", lan, key, "", asFrom(haAnna, LevelControl, instance))
+		return rec.Code, rec.Body.String()
+	}
+	pending := func(instance string) {
+		t.Helper()
+		if code, text := call(instance); code != 403 || !strings.Contains(text, `"code": "instance_pending"`) {
+			t.Fatalf("a call from %s: %d %s", instance, code, text)
+		}
+		if got, _, _ := st.IntegrationByUUID(t.Context(), i.UUID); got.PendingInstance != instance {
+			t.Fatalf("%s not recorded: %+v", instance, got)
+		}
+	}
+	accept := func(instance string) {
+		t.Helper()
+		rec := sendFrom(s, "POST", "/api/v1/integrations/"+i.UUID+"/accept-instance", lan, "secret", "")
+		if rec.Code != 200 || !strings.Contains(rec.Body.String(), `"instance_id": "`+instance+`"`) {
+			t.Fatalf("accept %s: %d %s", instance, rec.Code, rec.Body.String())
+		}
+	}
+	old := openStreamWith(t, ts, key, as(haAnna, LevelControl))
+	ticket := openTicketStream(t, ts, ticketForWith(t, ts, key, "KEQ0000100", as(haBruno, LevelView)))
+	own := openStreamWith(t, ts, key, nil)
+	stay := []*testkit.Watch[testkit.Event]{own, openStream(t, ts, "secret"), openStream(t, ts, userToken(t, st, "viewer1", store.RoleViewer))}
+	for _, w := range append([]*testkit.Watch[testkit.Event]{old, ticket}, stay...) {
+		w.Await(t, 0, "a keep-alive", isKeepAlive)
+	}
+
+	pending(newer)
+	old.AwaitN(t, old.Mark(), "two keep-alives of the old installation's stream while it is the accepted one", 2, isKeepAlive)
+	late := ticketForWith(t, ts, key, "KEQ0000100", as(haAnna, LevelView))
+	accept(newer)
+	testkit.Eventually(t, "the end of the old installation's stream", old.Ended)
+	testkit.Eventually(t, "the end of the stream of the old installation's ticket", ticket.Ended)
+	if old.Err() != nil || ticket.Err() != nil {
+		t.Fatalf("the streams were cut, not ended: %v, %v", old.Err(), ticket.Err())
+	}
+	if got, _, _ := st.IntegrationByUUID(t.Context(), i.UUID); got.InstanceID != newer || got.PendingInstance != "" {
+		t.Fatalf("the keep-alives after the acceptance wrote: %+v", got)
+	}
+
+	news := openStreamWith(t, ts, key, asFrom(haAnna, LevelControl, newer))
+	pending(haInstance)
+	if code, text := call(newer); code != 200 {
+		t.Fatalf("a call from the new installation: %d %s", code, text)
+	}
+	if code, text := callAPI(t, ts, "GET", "/api/v1/cubes/KEQ0000100/events?ticket="+late, "", ""); code != 401 {
+		t.Fatalf("a ticket the old installation asked for before the acceptance: %d %s", code, text)
+	}
+	for _, w := range append(stay, news) {
+		w.AwaitN(t, w.Mark(), "three keep-alives of a stream that stays, after the old installation's end", 3, isKeepAlive)
+	}
+
+	accept(haInstance)
+	testkit.Eventually(t, "the end of the new installation's stream, the old one accepted again", news.Ended)
+	own.AwaitN(t, own.Mark(), "three keep-alives of the integration's own stream after that end", 3, isKeepAlive)
+}
+
+// A request attached to the integration gives it the request's
+// installation id, as an acceptance does: the event stream the
+// installation accepted before opened for one of its users ends at a
+// keep-alive, as its calls are refused, and the integration's own stream
+// without the header goes on (AP LinkedRemoval, D4-A).
+func TestStreamEndsAtAnAttach(t *testing.T) {
+	t.Parallel()
+	r := startServer(t, withOptions(storeOptions(t, t.TempDir(), "secret")))
+	ts, s := r.ts, r.s
+	s.streamKeepAlive.Store(int64(30 * time.Millisecond))
+	st := s.opts.Store
+	i, key := registerHA(t, st, []string{"read", "preferences", "setpoint", "lock"})
+	old := openStreamWith(t, ts, key, as(haAnna, LevelControl))
+	own := openStreamWith(t, ts, key, nil)
+	old.Await(t, 0, "a keep-alive of the installation's stream", isKeepAlive)
+	own.Await(t, 0, "a keep-alive of the integration's own stream", isKeepAlive)
+	req, err := st.AddIntegrationRequest(t.Context(), store.IntegrationRequest{Kind: store.KindHomeAssistant, Name: "Casa Leone", InstanceID: "abcdef0123456789abcdef0123456789"}, "GHIJKL")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if rec := sendFrom(s, "POST", "/api/v1/integrations/"+req.UUID+"/approve", lan, "secret", `{"attach":"`+i.UUID+`"}`); rec.Code != 200 {
+		t.Fatalf("the attach: %d %s", rec.Code, rec.Body.String())
+	}
+	testkit.Eventually(t, "the end of the stream of the installation accepted before the attach", old.Ended)
+	if old.Err() != nil {
+		t.Fatalf("the stream was cut, not ended: %v", old.Err())
+	}
+	own.AwaitN(t, own.Mark(), "three keep-alives of the integration's own stream after that end", 3, isKeepAlive)
+	if rec := sendFromWith(s, "GET", "/api/v1/me", lan, key, "", as(haAnna, LevelControl)); rec.Code != 403 || !strings.Contains(rec.Body.String(), `"code": "instance_pending"`) {
+		t.Fatalf("a call of the installation accepted before the attach: %d %s", rec.Code, rec.Body.String())
+	}
+}

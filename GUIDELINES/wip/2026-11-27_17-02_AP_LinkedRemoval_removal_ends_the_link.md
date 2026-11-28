@@ -1,10 +1,11 @@
-# AP LinkedRemoval v1.0: Removal ends the link
+# AP LinkedRemoval v1.1: Removal ends the link
 
 ## TL;DR
 
 Removing an integration's user that is linked to a Massimo user ends the link,
-where its calls went on acting as that user (AccessEnds.D54-A); for 0.17,
-on `maint/0.17`.
+where its calls went on acting as that user (AccessEnds.D54-A);
+and an event stream of an integration's old installation ends once a new one is
+accepted (D4-A); for 0.17, on `maint/0.17`.
 
 - removal → the integration user's identity goes with it;
   its next call makes it anew, unlinked, role `integration`, within the maximum
@@ -12,11 +13,16 @@ on `maint/0.17`.
   made anew at its next call, not acted on
 - the linked Massimo user removed → the integration's next call finds its own
   user again, unlinked, where it failed on the name
-- documents → `docs/api-v1.md`, `docs/store.md`
+- a stream through an integration → ends with the link (Block 1, merged)
+- a new installation id accepted → the old installation's stream ends at its
+  next keep-alive, where it went on
+- a push subscription made through the integration → next version (D3-A)
 
 ### Blocks
 
-1. Removal: an integration user's removal ends its link, in every store
+1. Removal: an integration user's removal ends its link, in every store (merged,
+   #483)
+2. Installation: accepting a new installation ends the old one's streams
 
 ## Discussion
 
@@ -60,11 +66,40 @@ The owner, 2026-11-27, at the completion gate of AP AccessEnds:
   - **B.**
     The integration's user is removed with the link, and made anew.
 
+### Decided at the completion gate of 2026-11-27
+
+The owner, at the completion gate of Block 1: "PLAN++ D3-A D4-A".
+Block 1's own account is the NOTE "how block 1 went";
+its reading found both points, each older than the plan.
+
+- **D3-A.
+  A push subscription made through the integration for the linked user** still
+  gets messages after the link ends (and after an unlink or a disabling);
+  the linked user sees it in their own list and can delete it.
+  - **A (taken).**
+    The next version, as a roadmap item written at this plan's retirement:
+    the subscription records the integration's user it was made for,
+    so that its removal or unlink takes it.
+    It needs a store migration, kept out of 0.17.
+  - **B.**
+    Left as it is.
+- **D4-A.
+  Accepting a new installation id leaves the old installation's open stream
+  running**, where its calls are refused (`instance_pending`).
+  - **A (taken).**
+    Block 2 of this plan, for 0.17:
+    the stream keeps the installation id it was opened with and ends at its next
+    keep-alive once another is accepted; small, no migration.
+  - **B.**
+    The next version, as a roadmap item.
+
 ### What stays as it is
 
 - Disabling an integration's user stops its calls, a linked one's too.
 - The integration's own users (`<uuid>:`, `<uuid>:system`) cannot be removed
   through the users routes (AccessEnds' Block 9).
+- The integration's own key without the header carries no installation id,
+  and its calls and its stream are not held to one (Block 2 neither).
 - Any retirement, a release.
 
 ## Analysis
@@ -96,9 +131,35 @@ Read on `maint/0.17` at `chore(aps): +ErrorCodes v1.0`, 2026-11-27.
   again, which the integration's live user still holds:
   the block finds what that does today and makes it right (D2-A).
 
+### For Block 2: an installation's stream
+
+Read on `maint/0.17` at `merge(LinkedRemoval/Block-1): …`, 2026-11-27.
+
+- **The installation id** comes with every call through an integration for one
+  of its users, in the header's `instance` (`parseOnBehalf`);
+  a call whose id is not the accepted one is refused, 403 `instance_pending`,
+  and the id recorded as `pending_instance` (`integrationPrincipal`,
+  `NotePendingInstance`);
+  `POST /api/v1/integrations/{uuid}/accept-instance` makes it the accepted one
+  (`acceptInstance`, `AcceptInstance`).
+- **An open stream** asks at each keep-alive whether its caller would be let in
+  now (`stillAdmitted`);
+  for a call through an integration for one of its users it asks the chain again
+  since Block 1 (`stillActsFor`): the integration, the identity,
+  both users and the chain at the stream's level, but not the installation id,
+  which the principal does not keep.
+  So the old installation's stream goes on after a new one is accepted,
+  carrying what is sent to the user it acts as (Block 1's second reading,
+  a probe).
+- **A ticket's stream** takes the principal of the call that asked for the
+  ticket, so it carries that call's installation id too.
+
 ## Implementation Plan
 
 ### Block 1: Removal
+
+Merged into `maint/0.17` (#483) and merged up into main;
+its account is the NOTE "how block 1 went".
 
 - **Goal:**
   an integration's user that is removed no longer acts as the Massimo user it
@@ -147,9 +208,55 @@ Read on `maint/0.17` at `chore(aps): +ErrorCodes v1.0`, 2026-11-27.
   `changelog.sh check --staged --strict`.
   No page changes, so no UI test is the block's; CI runs the suite.
 
+### Block 2: Installation
+
+- **Goal:**
+  an event stream opened through an integration for one of its users from an
+  installation id that is no longer the accepted one ends at its next keep-alive
+  (D4-A), as its calls are refused.
+- **Changes:**
+  1. `internal/server/onbehalf.go`:
+     the principal of a call through an integration for one of its users keeps
+     the installation id the call came with;
+     `stillActsFor` ends the stream where it is not the integration's accepted
+     id now.
+     It writes nothing: no `pending_instance` recorded at a keep-alive.
+  2. Nothing for the integration's own key without the header,
+     which carries no installation id.
+- **Tests:**
+  `internal/server`: a stream opened for a user through the integration;
+  a call from another installation (its id recorded),
+  the owner's `POST …/accept-instance`; the old installation's stream ends,
+  waited for as a signal, never a sleep;
+  a stream of the newly accepted installation and the integration's own stream
+  without the header go on;
+  a ticket's stream from the old installation ends too.
+  Each seen failing before the change.
+- **Documents:**
+  `docs/api-v1.md` (the stream's keep-alive, "GET /api/v1/cubes/{sn}/events";
+  the installation id, where it says what `POST …/accept-instance` does;
+  "Acting for an integration's users", where it says when an event stream ends),
+  `docs/api-v1-openapi.yaml` (`POST …/accept-instance`).
+- **CHANGELOG:**
+  `CHANGELOG.d/Security/claude-linkedremoval-old-installation-stream.md`:
+  "- Accepting an integration's new installation ends an event stream that
+  the old one still held open."
+- **Commit:**
+  `fix(security:server): Accepting an integration's new installation ends the old one's streams`
+- **Verification,** each by its exit code: `gofmt -l .` printing nothing;
+  `go vet ./...` for linux, windows and darwin;
+  `MASSIMO_ENV_FILE=/dev/null go test -count=1` of `internal/server`
+  and `cmd/massimo`;
+  `MASSIMO_TEST_SCALE=2 go test -race -count=1 ./internal/server`; `make cross`;
+  `reflow.sh --check` on `docs/api-v1.md`;
+  `changelog.sh check --staged --strict`;
+  the whole UI suite once in `1100-en` (no page changes;
+  the stream is the page's too).
+
 ## Proposed commit message
 
-The plan: `chore(aps): +LinkedRemoval v1.0`
+The plan: `chore(aps): +LinkedRemoval v1.0`,
+then `chore(aps): LinkedRemoval v1.1`
 
 Block 1:
 
@@ -166,7 +273,26 @@ Key changes:
 Assisted-by: claude-code:claude-opus-5-5
 ```
 
+Block 2:
+
+```
+fix(security:server): Accepting an integration's new installation ends the old one's streams
+
+AP LinkedRemoval v1.1, Block 2 (D4-A): an event stream opened through an integration for one of its users keeps the installation id it was opened with, and ends at its next keep-alive once the owner accepts another, where it went on carrying what was sent to the user it acts as while the old installation's calls were refused.
+
+Key changes:
+- internal/server/onbehalf.go: the principal keeps the call's installation id; stillActsFor ends a stream whose id is no longer the accepted one
+- Tests: the old installation's stream and its ticket's stream end at the acceptance; the new installation's and the integration's own stream go on
+- Docs: docs/api-v1.md, docs/api-v1-openapi.yaml; a Security fragment
+
+Assisted-by: claude-code:claude-opus-5-5
+```
+
 ## Change History
 
 - v1.0 (2026-11-27): first revision, from the owner's "PLAN++ D54-A"
   at the completion gate of AP AccessEnds; D1-A and D2-A taken with PLAN++.
+- v1.1 (2026-11-27): Block 2, an installation's stream (D4-A), and D3-A,
+  a push subscription made through an integration, for the next version;
+  from the owner's "PLAN++ D3-A D4-A" at the completion gate of Block 1,
+  which is merged (#483).

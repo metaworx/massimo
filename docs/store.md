@@ -415,11 +415,13 @@ CREATE TABLE tokens (
     last_used_from TEXT    NOT NULL DEFAULT '',  -- the client's address
     deleted_at     TEXT,                         -- revoked; revoked_at until migration 0024 (D7)
     parent_id      INTEGER,                      -- migration 0025: the key a session was made from; NULL for a sign-in's and for a key
-    made_by        INTEGER                       -- migration 0100: the API key that made a key; NULL for every other token
+    revoke_hash    TEXT,                         -- migration 0100: SHA-256 of the token's revoke code, hex; NULL where the store never held the secret
+    made_by        INTEGER                       -- migration 0101: the API key that made a key; NULL for every other token
 );
 CREATE INDEX tokens_user ON tokens (user_id);
 CREATE INDEX tokens_parent ON tokens (parent_id) WHERE parent_id IS NOT NULL;  -- migration 0025
-CREATE INDEX tokens_made_by ON tokens (made_by) WHERE made_by IS NOT NULL;  -- migration 0100
+CREATE UNIQUE INDEX tokens_revoke ON tokens (revoke_hash) WHERE revoke_hash IS NOT NULL;  -- migration 0100
+CREATE INDEX tokens_made_by ON tokens (made_by) WHERE made_by IS NOT NULL;  -- migration 0101
 
 CREATE TABLE settings (
     key        TEXT    NOT NULL,   -- 'stale_after', 'poll_interval', 'log.keep_days', 'backups.keep_days_auto', …
@@ -1058,17 +1060,24 @@ names another reference in `ref`, and this binary's next start deletes it.
 Its down part, `0026_backup_pending.down.sql`, drops the table;
 it loses the windows of a pending backup, and only that,
 which the binary of 25 begins again at its first look.
-`0100_token_maker.sql`, the first of `main`'s block
-("Two lines of releases", below;
-AP KeyLife v1.0, Block 2, D5-A), adds `tokens.made_by` and its index,
+`0100_token_revoke.sql`, the first of `main`'s block after the freeze of 0.17
+("Two lines of releases"), adds `tokens.revoke_hash` and its unique index
+(AP MobileApp v1.6, Block 21, D112-A), additively, keeping `min_reader` 24:
+the hash of a token's revoke code (section 6, "A token's revoke code").
+A binary for 24 to 26 writes its tokens without the column,
+which this binary fills at a token's next use.
+Its down part, `0100_token_revoke.down.sql`, drops the column and the index;
+it loses the tokens' revoke codes, and only that.
+`0101_token_maker.sql`, the second of `main`'s block, after 0100
+(AP KeyLife v1.0, Block 2, D5-A), adds `tokens.made_by` and its index,
 additively, keeping `min_reader` 24:
 the API key that made a key, where the bearer of its making was that key
 (section 6, "Keys made by keys").
-A binary for 24 to 26 writes its tokens without the column,
+A binary for 24 to 100 writes its tokens without the column,
 so a key it makes has no maker,
-and its revoke of a key leaves the keys that key made,
-which a revoke by this binary of the key's own maker still reaches,
-the makers being followed through a revoked key.
+and its revoke of a key, by its id or by its code, leaves the keys that
+key made, which a revoke by this binary of the key's own maker still
+reaches, the makers being followed through a revoked key.
 It keeps `min_reader` by the rules below:
 it adds a nullable column and an index, and changes the meaning of no column.
 What such a binary does not do, revoke the heirs and refuse a session whose key
@@ -1076,13 +1085,14 @@ is past its end, is its code's, not the file's:
 `expires_at` and `parent_id` mean what they meant,
 and a binary that runs reads them its own way,
 as one for 24 left the sessions of a key it revoked (0025).
-A raise would make every rollback to the 0.17 line a downgrade of the file,
-and would protect nothing a file can carry:
+A raise would make every rollback to the 0.17 line, or to a binary of 100,
+a downgrade of the file, and would protect nothing a file can carry:
 the heirs a rollback's revoke leaves are reached again by this binary's
 revoke of their maker's maker,
 and no key has an end before AP KeyLife's Block 4.
 The column has no foreign key, so that its down part,
-`0100_token_maker.down.sql`, can drop it and the index;
+`0101_token_maker.down.sql`, can drop it and the index,
+taking the file back to 100;
 it loses which key made a key, and only that.
 On a store of 500 000 log rows (149 MB, a tenth with a user) a desktop took
 2.0 s for the raise, its copy `massimo.db.before-24` included, and 2.2 s for the
@@ -1565,7 +1575,7 @@ Any key of a user makes keys, for its user and for those its user manages,
 so a key that leaked could make more keys, which its revoke would leave
 (AP KeyLife v1.0, Block 2, D5-A).
 A key made by `POST /api/v1/users/{name}/tokens` whose bearer is an API key
-names that key in `tokens.made_by` (migration 0100), its heir;
+names that key in `tokens.made_by` (migration 0101), its heir;
 a key made by a session, of a sign-in or made from a key by
 `POST /api/v1/login/key`, by `massimo user token`, by the bootstrap
 or at an integration's collection of its key names none.
@@ -1578,6 +1588,8 @@ a request whose bearer was let in before its revoke,
 and makes its key after it, makes none,
 so that no live key names a revoked maker that no later revoke reaches.
 `RevokeToken` revokes, in its transaction, the heirs of the token it revokes,
+and so does `RevokeByCode`, a revoke by the token's code
+("A token's revoke code", below), in its own,
 followed through `made_by` from key to key in any state,
 so that a key past its end, or one an older binary revoked alone,
 passes the revoke on to the keys it made,
@@ -1597,6 +1609,37 @@ whoever made it, as the API revokes it neither by a revoke nor with its user
 `massimo user`, which runs no bootstrap, knows no such hash.
 A key's end, by its end date, takes none:
 an heir lives past its maker's end, and only a revoke reaches it.
+
+### A token's revoke code
+
+A client that forgot a token without its server answering ends it by its
+revoke code at the next contact (`POST /api/v1/tokens/revoke`,
+docs/api-v1.md; the apps, docs/app.md).
+The code is `RevokeCode(secret)`, the hex of SHA-256 of `massimo revoke v1`
+followed by the token as the server gave it,
+and the store keeps `HashToken` of the code in `tokens.revoke_hash`
+(migration 0100), not the hash it keeps of the token:
+with that, the store and every backup of it could revoke every token,
+while no code can be had back from its hash.
+The store writes the column where it makes the secret (`addToken`,
+`AddKey`, `AddKeySession`); a token whose hash it is handed (`AddTokenHash`)
+and the settings file's key (`Bootstrap`) get none.
+A token made before 0100 gets it at its first use after it:
+the server works it out from the secret presented and `TouchToken` writes it,
+within the hour of the last use too, keeping one written;
+the settings file's key is passed over there.
+`RevokeByCode` revokes the token of a code as `RevokeToken` does,
+in one transaction with its sessions, its heirs, the keys a key made and
+theirs with their sessions ("Keys made by keys", above),
+and what they all subscribed to push, a token past its end included,
+and returns the heirs it revoked;
+a token revoked already, an unknown code and the settings file's key
+match nothing, the store knowing that key by the hash `Bootstrap` last
+applied, as the heirs of a revoke do, so that a key made by
+`POST …/tokens` and then named in the file keeps its code but is not
+ended by it while the file names it;
+the code is looked up by a plain read first, so that one that matches
+nothing takes no write transaction, and a match is read again inside it.
 
 ### The sign-in by OPAQUE
 

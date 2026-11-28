@@ -12,20 +12,20 @@ import (
 	"testing"
 )
 
-// Migration 0100 is additive (AP KeyLife, Block 2): a key written as a
-// binary for 26 writes one, without the column, has no maker; a binary
-// for 26 opens the file; and the down part takes the schema back to the
-// one of 26, losing which key made a key and only that.
+// Migration 0101 is additive (AP KeyLife, Block 2): a key written as a
+// binary for 100 writes one, without the column, has no maker; binaries
+// for 26 and for 100 open the file; and the down part takes the schema
+// back to the one of 100, losing which key made a key and only that.
 func TestTokenMakerMigration(t *testing.T) {
 	t.Parallel()
 	ctx := context.Background()
 	clock := fixedClock()
-	at26 := t.TempDir()
-	migrateOnly(t, at26, migrationsUpTo(t, 26), clock)
-	dir := copyStore(t, at26)
-	upTo100 := migrationsUpTo(t, 100) // 0100 alone, whatever comes after it
-	migrateOnly(t, dir, upTo100, clock)
-	s, err := Open(dir, Options{Logger: quiet(), Now: clock, migrations: upTo100})
+	at100 := t.TempDir()
+	migrateOnly(t, at100, migrationsUpTo(t, 100), clock)
+	dir := copyStore(t, at100)
+	upTo101 := migrationsUpTo(t, 101) // 0101 alone, whatever comes after it
+	migrateOnly(t, dir, upTo101, clock)
+	s, err := Open(dir, Options{Logger: quiet(), Now: clock, migrations: upTo101})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -36,27 +36,29 @@ func TestTokenMakerMigration(t *testing.T) {
 	maker, _, _ := s.AddKey(ctx, anna.ID, KeyOptions{Label: "maker"})
 	_, heirSecret, _ := s.AddKey(ctx, anna.ID, KeyOptions{Label: "heir", MadeBy: maker.ID})
 	if _, err := s.db.ExecContext(ctx, `INSERT INTO tokens (uuid, user_id, kind, hash, label, created_at, origin) VALUES (?, ?, ?, ?, ?, ?, ?)`,
-		newUUID(), anna.ID, TokenAPI, HashToken("placeholder-old-binary"), "written as 26 writes it", s.nowText(), s.nodeID); err != nil {
+		newUUID(), anna.ID, TokenAPI, HashToken("placeholder-old-binary"), "written as 100 writes it", s.nowText(), s.nodeID); err != nil {
 		t.Fatal(err)
 	}
 	if got, ok, err := s.TokenByHash(ctx, HashToken("placeholder-old-binary")); err != nil || !ok || got.MadeBy != 0 {
-		t.Fatalf("a key written as 26 writes it: %+v %v %v", got, ok, err)
+		t.Fatalf("a key written as 100 writes it: %+v %v %v", got, ok, err)
 	}
 	if got, ok, _ := s.TokenByHash(ctx, HashToken(heirSecret)); !ok || got.MadeBy != maker.ID {
 		t.Fatalf("the heir: %+v %v", got, ok)
 	}
 	s.Close()
 
-	old, err := Open(dir, Options{Logger: quiet(), migrations: migrationsUpTo(t, 26), readerVersion: 26})
-	if err != nil {
-		t.Fatalf("a binary for 26: %v", err)
+	for _, reader := range []int{26, 100} {
+		old, err := Open(dir, Options{Logger: quiet(), migrations: migrationsUpTo(t, reader), readerVersion: reader})
+		if err != nil {
+			t.Fatalf("a binary for %d: %v", reader, err)
+		}
+		if v, mr := old.SchemaVersion(); v != 101 || mr != 24 {
+			t.Fatalf("a binary for %d reads version %d, min_reader %d", reader, v, mr)
+		}
+		old.Close()
 	}
-	if v, mr := old.SchemaVersion(); v != 100 || mr != 24 {
-		t.Fatalf("a binary for 26 reads version %d, min_reader %d", v, mr)
-	}
-	old.Close()
 
-	down, err := fs.ReadFile(embeddedMigrations(), "0100_token_maker.down.sql")
+	down, err := fs.ReadFile(embeddedMigrations(), "0101_token_maker.down.sql")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -68,9 +70,9 @@ func TestTokenMakerMigration(t *testing.T) {
 	if _, err := db.ExecContext(ctx, string(down)); err != nil {
 		t.Fatal(err)
 	}
-	want, got := fileSchema(t, rawDB(t, at26)), fileSchema(t, db)
+	want, got := fileSchema(t, rawDB(t, at100)), fileSchema(t, db)
 	if fmt.Sprint(got) != fmt.Sprint(want) {
-		t.Fatalf("after the down part:\n%v\nwant the schema of 26:\n%v", got, want)
+		t.Fatalf("after the down part:\n%v\nwant the schema of 100:\n%v", got, want)
 	}
 	var n int
 	if err := db.QueryRowContext(ctx, `SELECT count(*) FROM tokens`).Scan(&n); err != nil || n != 3 {

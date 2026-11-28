@@ -329,8 +329,9 @@ func TestLogRingOneLock(t *testing.T) {
 // ring of a server without a store and of a Cube without a row beside a
 // store: with each filter, inside a window before an id and since a
 // time, a Cube's log with the server's lines; 0 is the log's start. A
-// bad cursor is 400, one beyond the newest line 409 with its error on
-// both routes; the newest line's id answers an empty page.
+// bad cursor is 400, one beyond the newest line 409 with its error, the
+// code log_after_beyond and the cursor as after, on both routes; the
+// newest line's id answers an empty page.
 func TestLogAfterAnswers(t *testing.T) {
 	t.Parallel()
 	for _, c := range []struct {
@@ -430,9 +431,14 @@ func TestLogAfterAnswers(t *testing.T) {
 			beyond := strconv.FormatInt(id[5]+1, 10)
 			for _, q := range []string{cubeLogPath + "?after=" + beyond, cubeLogPath + "?kind=state&after=" + beyond, allLogPath + "?after=" + beyond} {
 				code, text := callAPI(t, ts, "GET", q, "", "")
-				var e map[string]string
+				var e struct {
+					Error  string                 `json:"error"`
+					Code   string                 `json:"code"`
+					Params map[string]json.Number `json:"params"`
+				}
 				json.Unmarshal([]byte(text), &e)
-				if code != 409 || len(e) != 1 || e["error"] != "after "+beyond+" is beyond the log's newest line: reload the log" {
+				if code != 409 || e.Error != "after "+beyond+" is beyond the log's newest line: reload the log" ||
+					e.Code != "log_after_beyond" || len(e.Params) != 1 || e.Params["after"].String() != beyond {
 					t.Errorf("%s: %d %s", q, code, text)
 				}
 			}

@@ -64,7 +64,7 @@ func userToken(t *testing.T, st *store.Store, name, role string) string {
 // token's end to the one it is given, with a use at the same moment.
 func endToken(t *testing.T, st *store.Store, id int64) {
 	t.Helper()
-	if err := st.TouchToken(t.Context(), id, "", time.Now().Add(-time.Second)); err != nil {
+	if err := st.TouchToken(t.Context(), id, "", time.Now().Add(-time.Second), ""); err != nil {
 		t.Fatal(err)
 	}
 }

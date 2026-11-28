@@ -196,3 +196,69 @@ func TestSettingsFileTakesAKeyItsOldKeyMade(t *testing.T) {
 		t.Fatalf("the file's old key after the reloads: %d", code)
 	}
 }
+
+// A key ended by its code (POST /api/v1/tokens/revoke) takes its heirs
+// as its revoke does, the keys made with it and theirs, and names them in
+// its Info line and its change line's subject; its answer stays 204.
+func TestRevokeByCodeTakesTheHeirs(t *testing.T) {
+	t.Parallel()
+	r := startServer(t, quiet(), withLog(slog.LevelInfo), withOptions(storeOptions(t, t.TempDir(), "secret")))
+	ts, st := r.ts, r.s.opts.Store
+	ctx := t.Context()
+	anna, err := st.AddUser(ctx, store.User{Name: "anna", Role: store.RoleManager}, "", 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := st.AddUser(ctx, store.User{Name: "gina", Role: store.RoleGuest}, "", 0); err != nil {
+		t.Fatal(err)
+	}
+	key, keySecret, _ := st.AddToken(ctx, anna.ID, store.TokenAPI, "anna's", time.Time{})
+	create := func(bearer, user, label string) (int64, string) {
+		t.Helper()
+		code, text := callAPI(t, ts, "POST", "/api/v1/users/"+user+"/tokens", bearer, `{"label":"`+label+`"}`)
+		var m struct {
+			Token string `json:"token"`
+			ID    int64  `json:"id"`
+		}
+		if err := json.Unmarshal([]byte(text), &m); err != nil || code != 201 || m.Token == "" {
+			t.Fatalf("a key %q for %s: %d %s %v", label, user, code, text, err)
+		}
+		return m.ID, m.Token
+	}
+	childID, child := create(keySecret, "anna", "child")
+	grandchildID, grandchild := create(child, "gina", "grandchild")
+	_, other := create("secret", "anna", "other")
+	logged := r.log.Mark()
+	if code, text, _ := postCode(t, ts, codeBody(keySecret), ""); code != 204 || text != "" {
+		t.Fatalf("the key's code: %d %q", code, text)
+	}
+	want := []int64{childID, grandchildID}
+	r.log.Await(t, logged, "the line naming the heirs", testkit.Msg("token revoked", "by", "code", "token", strconv.FormatInt(key.ID, 10), "heirs", fmt.Sprint(want)))
+	for what, tok := range map[string]string{"the key": keySecret, "the child": child, "the grandchild": grandchild} {
+		if code, _ := callAPI(t, ts, "GET", "/api/v1/me", tok, ""); code != 401 {
+			t.Errorf("%s after the key's code: %d", what, code)
+		}
+	}
+	if code, _ := callAPI(t, ts, "GET", "/api/v1/me", other, ""); code != 200 {
+		t.Errorf("another key after the key's code: %d", code)
+	}
+	if err := st.FlushEvents(ctx); err != nil {
+		t.Fatal(err)
+	}
+	var lines []map[string]any
+	getJSON(t, ts, "secret", "/api/v1/cubes/KEQ0000100/log?kind=change&limit=100", &lines)
+	found := false
+	for _, l := range lines {
+		sum, _ := l["summary"].(map[string]any)
+		subject, _ := sum["subject"].(map[string]any)
+		if sum["action"] == "token.revoke_code" && sum["target"] == "token:"+strconv.FormatInt(key.ID, 10) {
+			found = fmt.Sprint(subject["heirs"]) == fmt.Sprint([]any{float64(childID), float64(grandchildID)})
+			if !found {
+				t.Errorf("the change line of the revoke by code: %v", l)
+			}
+		}
+	}
+	if !found {
+		t.Errorf("no change line of the revoke by code naming the heirs: %v", lines)
+	}
+}

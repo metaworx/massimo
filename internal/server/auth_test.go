@@ -100,8 +100,18 @@ func send(t *testing.T, method, url, token string) *http.Response {
 
 func ticketFor(t *testing.T, ts *httptest.Server, token, sn string) string {
 	t.Helper()
+	return ticketForWith(t, ts, token, sn, nil)
+}
+
+// ticketForWith is ticketFor with the headers given, such as an
+// integration's X-MassimoHA-On-Behalf-Of (as, onbehalf_test.go).
+func ticketForWith(t *testing.T, ts *httptest.Server, token, sn string, headers map[string]string) string {
+	t.Helper()
 	req, _ := http.NewRequest("POST", ts.URL+"/api/v1/cubes/"+sn+"/events/ticket", nil)
 	req.Header.Set("Authorization", "Bearer "+token)
+	for k, v := range headers {
+		req.Header.Set(k, v)
+	}
 	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
 		t.Fatal(err)
@@ -143,6 +153,40 @@ func TestEventStreamTicket(t *testing.T) {
 	if r := send(t, "GET", events+"?token=secret", ""); r.StatusCode != 200 || r.Header.Get("Deprecation") != tokenQueryDeprecated {
 		t.Fatalf("stream with ?token=: %d %v", r.StatusCode, r.Header)
 	}
+}
+
+// A ticket opens the stream only while its caller would be let in, as
+// the stream's keep-alive asks: tickets of a key revoked after they were
+// issued are refused as a token that ended is, with no state sent and
+// none of them counted toward the lockout, more of them than it takes;
+// a ticket of a caller still let in opens the stream as before.
+func TestTicketOfACallerLetOut(t *testing.T) {
+	t.Parallel()
+	r := startServer(t, withOptions(storeOptions(t, t.TempDir(), "secret")))
+	ts, s, st := r.ts, r.s, r.s.opts.Store
+	s.streamKeepAlive.Store(int64(30 * time.Millisecond))
+	viewer := userToken(t, st, "viewer1", store.RoleViewer)
+	var tickets []string
+	for range DefaultAuthFailures + 1 {
+		tickets = append(tickets, ticketFor(t, ts, viewer, "KEQ0000100"))
+	}
+	toks, err := st.Tokens(t.Context(), mustUser(t, st, "viewer1").ID)
+	if err != nil || len(toks) != 1 {
+		t.Fatalf("the viewer's tokens: %v %v", toks, err)
+	}
+	if _, err := st.RevokeToken(t.Context(), toks[0].ID); err != nil {
+		t.Fatal(err)
+	}
+	for n, tk := range tickets {
+		if code, text := callAPI(t, ts, "GET", "/api/v1/cubes/KEQ0000100/events?ticket="+tk, "", ""); code != 401 || !strings.Contains(text, errBadToken.Error()) {
+			t.Fatalf("the revoked key's ticket %d: %d %s", n+1, code, text)
+		}
+	}
+	if keys, err := st.Lockout(DefaultAuthFailures, DefaultAuthWindow, DefaultAuthLockout).Keys(t.Context()); err != nil || len(keys) != 0 {
+		t.Fatalf("the revoked key's tickets counted: %v %v", keys, err)
+	}
+	stays := openTicketStream(t, ts, ticketFor(t, ts, "secret", "KEQ0000100"))
+	stays.Await(t, 0, "a keep-alive on the stream of a caller still let in", isKeepAlive)
 }
 
 func TestFailedTokensLockTheAddressOut(t *testing.T) {

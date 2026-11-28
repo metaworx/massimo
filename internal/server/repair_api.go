@@ -24,6 +24,7 @@ import (
 	"encoding/hex"
 	"errors"
 	"fmt"
+	"maps"
 	"net/http"
 	"slices"
 	"strconv"
@@ -126,6 +127,11 @@ type repairPlan struct {
 	// plan; a run of it is refused with 409.
 	Nothing string   `json:"nothing,omitempty"`
 	Notes   []string `json:"notes"`
+	// Code and Params are the code of nothing or of refused, whichever
+	// is set, and its parameters, as an error answer has them
+	// (errcodes_rooms.go), so that a client says why in its own words.
+	Code   string         `json:"code,omitempty"`
+	Params map[string]any `json:"params,omitempty"`
 	// Untested says that the repair has not yet run on hardware.
 	Untested bool           `json:"untested,omitempty"`
 	Details  map[string]any `json:"details,omitempty"`
@@ -172,7 +178,8 @@ func (s *Server) repair(action string, build func(*http.Request, *runtime) (*rep
 		var he *httpError
 		switch {
 		case errors.As(err, &need):
-			writeJSON(w, http.StatusOK, repairNothing(rt, action, err, map[string]any{"code": codeRoomNameNeeded.name, "room": need.room}))
+			why := refuse(http.StatusConflict, codeRoomNameNeeded, need.room)
+			writeJSON(w, http.StatusOK, repairNothing(rt, action, why, map[string]any{"code": codeRoomNameNeeded.name, "room": need.room}))
 			return nil
 		case errors.As(err, &he) && he.status == http.StatusConflict:
 			writeJSON(w, http.StatusOK, repairNothing(rt, action, err, nil))
@@ -186,10 +193,13 @@ func (s *Server) repair(action string, build func(*http.Request, *runtime) (*rep
 }
 
 // repairNothing is the preview of a repair with nothing to send now:
-// no plan and no steps, nothing saying why, and in details what a client
-// may give to change that (a listing's room name).
+// no plan and no steps, nothing saying why, with why's code and params,
+// and in details what a client may give to change that (a listing's room
+// name).
 func repairNothing(rt *runtime, action string, why error, details map[string]any) repairPlan {
-	return repairPlan{Action: action, Steps: []repairStep{}, Notes: []string{}, Budget: rt.client.Budget(), Nothing: why.Error(), Details: details}
+	p := repairPlan{Action: action, Steps: []repairStep{}, Notes: []string{}, Budget: rt.client.Budget(), Nothing: why.Error(), Details: details}
+	p.Code, p.Params = codeOf(why)
+	return p
 }
 
 // errRoomNameNeeded refuses a listing into a room the Cube's list does
@@ -273,7 +283,10 @@ func (s *Server) repairView(rt *runtime, a *repairAction) repairPlan {
 	}
 	v.Plan = hex.EncodeToString(h.Sum(nil))
 	v.DutyCostPct = float64(v.Radiograms) * radioCostPct
-	v.Refused = s.repairRefused(v)
+	if err := s.repairRefused(v); err != nil {
+		v.Refused = err.Error()
+		v.Code, v.Params = codeOf(err)
+	}
 	return v
 }
 
@@ -286,15 +299,15 @@ func wireLines(lines []cube.Message) []string {
 	return out
 }
 
-// repairRefused says why a run of v would be refused now, "" where it
+// repairRefused is the refusal of a run of v now (409), nil where it
 // fits the budget the Cube last reported: with its cost the duty cycle
 // would reach the queue's hold, or the slots its room radiograms hold
 // would leave fewer free than the queue waits for; either would stop it
 // halfway (engine.Options.MaxDutyPct, MinFreeSlots).
-func (s *Server) repairRefused(v repairPlan) string {
+func (s *Server) repairRefused(v repairPlan) error {
 	b := v.Budget
 	if v.Radiograms == 0 || b.UpdatedAt.IsZero() {
-		return ""
+		return nil
 	}
 	maxDuty, minFree := s.opts.Queue.MaxDutyPct, s.opts.Queue.MinFreeSlots
 	if maxDuty == 0 {
@@ -304,14 +317,12 @@ func (s *Server) repairRefused(v repairPlan) string {
 		minFree = 5
 	}
 	if float64(b.DutyCyclePct)+v.DutyCostPct >= float64(maxDuty) {
-		return fmt.Sprintf("the radio duty cycle at %d %% and the repair's about %.1f %% would reach the hold at %d %%, which would stop it halfway; wait for the duty cycle to fall",
-			b.DutyCyclePct, v.DutyCostPct, maxDuty)
+		return refuse(http.StatusConflict, codeRepairDutyCycle, b.DutyCyclePct, v.DutyCostPct, maxDuty)
 	}
 	if b.FreeMemorySlots-v.Held < minFree {
-		return fmt.Sprintf("the Cube has %d memory slots free and the repair's room radiograms hold %d until the devices' next wakeup, which would leave fewer than %d and stop it halfway",
-			b.FreeMemorySlots, v.Held, minFree)
+		return refuse(http.StatusConflict, codeRepairSlots, b.FreeMemorySlots, v.Held, minFree)
 	}
-	return ""
+	return nil
 }
 
 // runRepair runs a repair whose preview's hash the request names: built
@@ -344,13 +355,14 @@ func (s *Server) runRepair(w http.ResponseWriter, r *http.Request, rt *runtime, 
 	}
 	v := s.repairView(rt, a)
 	if v.Plan != want {
-		return fail(http.StatusConflict, "the repair changed since its preview (plan %s, now %s); preview it again", want, v.Plan)
+		msg := fmt.Sprintf("the repair changed since its preview (plan %s, now %s); preview it again", want, v.Plan)
+		return refuseSaying(http.StatusConflict, msg, codeRepairChanged)
 	}
 	if v.Refused != "" {
-		return fail(http.StatusConflict, "%s", v.Refused)
+		return s.repairRefused(v)
 	}
 	if !rt.client.Connected() {
-		return fail(http.StatusServiceUnavailable, "cube not connected")
+		return refuseSaying(http.StatusServiceUnavailable, "cube not connected", codeCubeNotConnected)
 	}
 	var was before
 	if a.hold != 0 {
@@ -414,7 +426,10 @@ func (s *Server) runRepair(w http.ResponseWriter, r *http.Request, rt *runtime, 
 			status = he.status
 		}
 		s.log.Warn("repair stopped", append(a.logAttrs(rt), "steps_done", len(results)-1, "steps", len(a.steps), "error", failed)...)
-		answer["error"] = fmt.Sprintf("%s: stopped at step %d of %d: %v", a.name, len(results), len(v.Steps), failed)
+		// error, code and params, the refusal that stopped it the reason
+		msg := fmt.Sprintf("%s: stopped at step %d of %d: %v", a.name, len(results), len(v.Steps), failed)
+		stopped := refuseSaying(status, msg, codeRepairStopped, len(results), len(v.Steps), refusalOf(failed))
+		maps.Copy(answer, refusalOf(stopped))
 		writeJSON(w, status, answer)
 		return nil
 	}
@@ -474,11 +489,11 @@ func (s *Server) stillFlagged(ctx context.Context, rt *runtime, devices []cube.R
 // r: each, at no radio cost (item 1).
 func (s *Server) buildCubeReset(r *http.Request, rt *runtime) (*repairAction, error) {
 	if rt.client.Snapshot().Metadata() == nil {
-		return nil, fail(http.StatusServiceUnavailable, "cube not connected yet")
+		return nil, refuse(http.StatusServiceUnavailable, codeCubeNotConnectedYet)
 	}
 	flagged := cubeio.Flagged(rt.client.Snapshot(), 0, rt.hidden())
 	if len(flagged) == 0 {
-		return nil, fail(http.StatusConflict, "no device of the cube has a communication error")
+		return nil, refuse(http.StatusConflict, codeRepairNoneFlagged)
 	}
 	return resetAction(rt, "reset", flagged, "repair-reset"), nil
 }
@@ -492,7 +507,7 @@ func (s *Server) buildRoomReset(r *http.Request, rt *runtime) (*repairAction, er
 	}
 	flagged := cubeio.Flagged(rt.client.Snapshot(), room.ID, rt.hidden())
 	if len(flagged) == 0 {
-		return nil, fail(http.StatusConflict, "no device of room %d has a communication error", room.ID)
+		return nil, refuse(http.StatusConflict, codeRepairRoomUnflagged, room.ID)
 	}
 	a := resetAction(rt, "reset", flagged, fmt.Sprintf("repair-reset:room:%d", room.ID))
 	a.rooms = []uint8{room.ID}
@@ -522,11 +537,11 @@ func (s *Server) buildMaster(r *http.Request, rt *runtime) (*repairAction, error
 	}
 	snap, hidden := rt.client.Snapshot(), rt.hidden()
 	if cubeio.MasterValid(snap, room.ID, hidden) {
-		return nil, fail(http.StatusConflict, "room %d's master %s is a thermostat of the room already", room.ID, room.RFAddress)
+		return nil, refuse(http.StatusConflict, codeRepairMasterValid, room.ID, room.RFAddress.String())
 	}
 	next, ok := cubeio.MasterCandidate(snap, room.ID, hidden)
 	if !ok {
-		return nil, fail(http.StatusConflict, "room %d has no thermostat to name as its master", room.ID)
+		return nil, refuse(http.StatusConflict, codeRepairMasterNone, room.ID)
 	}
 	cp := *md
 	cp.Rooms = append([]cube.RoomMeta(nil), md.Rooms...)
@@ -551,8 +566,8 @@ func (s *Server) roomToLink(r *http.Request, rt *runtime) (cube.RoomMeta, error)
 		for _, rf := range off {
 			names = append(names, rf.String())
 		}
-		return room, fail(http.StatusConflict, "the Cube and its list disagree on the devices of room %d (%s): place or list them first",
-			room.ID, strings.Join(names, ", "))
+		msg := fmt.Sprintf("the Cube and its list disagree on the devices of room %d (%s): place or list them first", room.ID, strings.Join(names, ", "))
+		return room, refuseSaying(http.StatusConflict, msg, codeRepairRoomDisagrees, room.ID, names)
 	}
 	return room, nil
 }
@@ -565,7 +580,7 @@ func (s *Server) buildRelink(r *http.Request, rt *runtime) (*repairAction, error
 	}
 	cmds := cubeio.RelinkCommands(rt.client.Snapshot(), room.ID, rt.hidden())
 	if len(cmds) < 2 {
-		return nil, fail(http.StatusConflict, "room %d has fewer than two devices to link", room.ID)
+		return nil, refuse(http.StatusConflict, codeRepairLinkTooFew, room.ID)
 	}
 	a := &repairAction{name: "relink", rooms: []uint8{room.ID}, structure: true}
 	for _, c := range cmds {
@@ -593,7 +608,7 @@ func (s *Server) buildUnlinkRelink(r *http.Request, rt *runtime) (*repairAction,
 		}
 	}
 	if links < 2 {
-		return nil, fail(http.StatusConflict, "room %d has fewer than two devices to link", room.ID)
+		return nil, refuse(http.StatusConflict, codeRepairLinkTooFew, room.ID)
 	}
 	a := &repairAction{name: "unlink_relink", rooms: []uint8{room.ID}, structure: true, untested: true,
 		notes: []string{"not yet run on hardware: every link of the room is removed before it is built again, and a run that stops halfway leaves the room's devices without their partners until it is run again"}}
@@ -623,7 +638,7 @@ func (s *Server) repairDevice(r *http.Request, rt *runtime) (*cube.DeviceConfig,
 	}
 	md := rt.client.Snapshot().Metadata()
 	if md == nil {
-		return nil, nil, nil, fail(http.StatusServiceUnavailable, "cube not connected yet")
+		return nil, nil, nil, refuse(http.StatusServiceUnavailable, codeCubeNotConnectedYet)
 	}
 	for i := range md.Devices {
 		if md.Devices[i].RFAddress == c.RFAddress {
@@ -650,10 +665,10 @@ func (s *Server) buildResend(r *http.Request, rt *runtime) (*repairAction, error
 	}
 	room := c.RoomID
 	if room == 0 {
-		return nil, fail(http.StatusConflict, "the Cube has device %s in no room", c.RFAddress)
+		return nil, refuse(http.StatusConflict, codeRepairDeviceNoRoom, c.RFAddress.String())
 	}
 	if listed != nil && listed.RoomID != room {
-		return nil, fail(http.StatusConflict, "the Cube has device %s in room %d and its list in room %d: place or list it first", c.RFAddress, room, listed.RoomID)
+		return nil, refuse(http.StatusConflict, codeRepairRoomsDiffer, c.RFAddress.String(), room, listed.RoomID)
 	}
 	cmds, sent, agree, others, err := cubeio.ResendCommands(rt.client.Snapshot(), c.RFAddress, room, rt.hidden())
 	var none *cubeio.NoMajorityError
@@ -663,8 +678,7 @@ func (s *Server) buildResend(r *http.Request, rt *runtime) (*repairAction, error
 	case err != nil:
 		return nil, fail(http.StatusBadRequest, "%v", err)
 	case len(cmds) == 0:
-		return nil, fail(http.StatusConflict, "device %s has room %d's temperatures and week programme already (what most of the room's %d thermostats share, else what the first of the room's order has); nothing to re-send",
-			c.RFAddress, room, agree.Others)
+		return nil, refuse(http.StatusConflict, codeRepairConfigSame, c.RFAddress.String(), room, agree.Others)
 	}
 	days := []string{}
 	for _, d := range sent.Days {
@@ -697,20 +711,20 @@ func (s *Server) buildPlace(r *http.Request, rt *runtime) (*repairAction, error)
 	}
 	switch {
 	case listed == nil:
-		return nil, fail(http.StatusConflict, "the Cube's list does not list device %s: list it instead", c.RFAddress)
+		return nil, refuse(http.StatusConflict, codeRepairUnlisted, c.RFAddress.String())
 	case listed.RoomID == 0:
-		return nil, fail(http.StatusConflict, "the Cube's list places device %s in no room", c.RFAddress)
+		return nil, refuse(http.StatusConflict, codeRepairListNoRoom, c.RFAddress.String())
 	case listed.RoomID == c.RoomID:
-		return nil, fail(http.StatusConflict, "the Cube has device %s in room %d already, as its list", c.RFAddress, c.RoomID)
+		return nil, refuse(http.StatusConflict, codeRepairPlacedAlready, c.RFAddress.String(), c.RoomID)
 	case c.RoomID == cube.HiddenRoom:
-		return nil, fail(http.StatusConflict, "the Cube has device %s in the hidden room %d", c.RFAddress, cube.HiddenRoom)
+		return nil, refuse(http.StatusConflict, codeRepairHiddenRoom, c.RFAddress.String(), cube.HiddenRoom)
 	}
 	to := listed.RoomID
 	if _, ok := rt.hidden().Room(md, to); !ok {
-		return nil, fail(http.StatusNotFound, "no room %d", to)
+		return nil, refuse(http.StatusNotFound, codeRoomUnknown, to)
 	}
 	if other, ok := secondWall(md, c.RFAddress, to); ok && c.Type == cube.DeviceWallThermostat {
-		return nil, fail(http.StatusConflict, "room %d has a wall thermostat already (%s); a room takes one, as in the original software", to, other)
+		return nil, refuse(http.StatusConflict, codeRoomWallTaken, to, other.String())
 	}
 	var members []cube.DeviceMeta
 	for _, d := range md.Devices {
@@ -746,14 +760,14 @@ func (s *Server) buildList(r *http.Request, rt *runtime) (*repairAction, error) 
 	to := c.RoomID
 	switch {
 	case to == 0:
-		return nil, fail(http.StatusConflict, "the Cube has device %s in no room", c.RFAddress)
+		return nil, refuse(http.StatusConflict, codeRepairDeviceNoRoom, c.RFAddress.String())
 	case to == cube.HiddenRoom:
-		return nil, fail(http.StatusConflict, "the Cube has device %s in the hidden room %d", c.RFAddress, cube.HiddenRoom)
+		return nil, refuse(http.StatusConflict, codeRepairHiddenRoom, c.RFAddress.String(), cube.HiddenRoom)
 	case listed != nil && listed.RoomID == to:
-		return nil, fail(http.StatusConflict, "the Cube's list has device %s in room %d already, as the Cube", c.RFAddress, to)
+		return nil, refuse(http.StatusConflict, codeRepairListedAlready, c.RFAddress.String(), to)
 	}
 	if other, ok := secondWall(md, c.RFAddress, to); ok && c.Type == cube.DeviceWallThermostat {
-		return nil, fail(http.StatusConflict, "room %d has a wall thermostat already (%s); a room takes one, as in the original software", to, other)
+		return nil, refuse(http.StatusConflict, codeRoomWallTaken, to, other.String())
 	}
 	cp := *md
 	cp.Rooms = append([]cube.RoomMeta(nil), md.Rooms...)
@@ -773,7 +787,7 @@ func (s *Server) buildList(r *http.Request, rt *runtime) (*repairAction, error) 
 	} else if room, ok := rt.hidden().Room(md, to); ok {
 		roomName = room.Name
 	} else {
-		return nil, fail(http.StatusNotFound, "no room %d", to)
+		return nil, refuse(http.StatusNotFound, codeRoomUnknown, to)
 	}
 	details := map[string]any{"to": to, "listed": listed != nil, "new_room": newRoom}
 	from := uint8(0)

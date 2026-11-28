@@ -94,4 +94,18 @@ class SessionKeeperTest {
         k.forget("s2")
         assertNull(k.get("s2", inMemory = true))
     }
+
+    @Test
+    fun holdsWithoutOpeningAndDropsTheMemory() {
+        // what a new process's start and Exit read (D102-A): held or not, a sealed one unopened
+        val k = SessionKeeper(tokens())
+        k.put("s1", "session-1", inMemory = true)
+        k.put("s2", "session-2", inMemory = false)
+        assertTrue(k.holds("s1", inMemory = true))
+        assertTrue(k.holds("s2", inMemory = false))
+        assertFalse(k.holds("s1", inMemory = false))
+        k.dropMemory()
+        assertFalse("Exit drops the memory", k.holds("s1", inMemory = true))
+        assertTrue("and leaves the sealed", k.holds("s2", inMemory = false))
+    }
 }
