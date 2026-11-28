@@ -63,6 +63,7 @@ import (
 	"fmt"
 	"maps"
 	"math"
+	"strings"
 	"sync"
 	"time"
 
@@ -680,6 +681,89 @@ func switchedSince(ms []roomMember, then, now time.Time) bool {
 	return false
 }
 
+// leftOut is why a check of the room checks leaves a room out, a bit
+// for each reason, zero where it checks the room. roomChecks reads it
+// from scanRooms alone, and so does the tests' drift rig, which waits
+// until none holds before it runs a check: a reason the checks come to
+// know is one the rig waits for.
+type leftOut uint8
+
+// The reasons a check leaves a room out.
+const (
+	leftOutStructure  leftOut = 1 << iota // a structure change is being sent (lockStructure), for every room
+	leftOutWindow                         // a window contact of the room is open
+	leftOutWatched                        // a structure change of Massimo's that concerns it is read back (structureRooms)
+	leftOutQueued                         // a command to it waits or runs in the queue (toRoom)
+	leftOutConfirming                     // a write to it is open or not confirmed (roomConfirmation)
+)
+
+// leftOutNames name the reasons, in the order of their bits.
+var leftOutNames = [...]string{"structure", "window", "watched", "queued", "confirming"}
+
+// String names the reasons, "queued+confirming", or "none": for a
+// test's failure.
+func (l leftOut) String() string {
+	var names []string
+	for i, n := range leftOutNames {
+		if l&(1<<i) != 0 {
+			names = append(names, n)
+		}
+	}
+	if len(names) == 0 {
+		return "none"
+	}
+	return strings.Join(names, "+")
+}
+
+// checkedRoom is a room as a check of the room checks reads it.
+type checkedRoom struct {
+	id   uint8
+	scan roomScan
+	why  leftOut // why the check leaves it out, zero where it checks it
+}
+
+// scanRooms reads every room of the Cube for a check of the room checks
+// from snap and its metadata md (scanRoom), the Cube's time cubeNow
+// known where clock says so, and why the check leaves each out
+// (leftOut).
+func (rt *runtime) scanRooms(snap *cubelan.Snapshot, md *cube.Metadata, cubeNow time.Time, clock bool) []checkedRoom {
+	skip := view.NewHidden(rt.config().Hidden, md, false)
+	busy := len(rt.structure) > 0 // a structure change is being sent
+	watched := rt.structureRooms(snap)
+	var rooms []checkedRoom
+	for _, r := range md.Rooms {
+		if r.ID == 0 || r.ID == cube.HiddenRoom {
+			continue
+		}
+		sc := scanRoom(snap, r.ID, skip, cubeNow, clock)
+		rooms = append(rooms, checkedRoom{id: r.ID, scan: sc, why: rt.roomLeftOut(r.ID, sc, busy, watched)})
+	}
+	return rooms
+}
+
+// roomLeftOut is why a check leaves room, read as sc, out: busy says
+// that a structure change is being sent, watched are the rooms whose
+// structure change is read back, both read once for the check.
+func (rt *runtime) roomLeftOut(room uint8, sc roomScan, busy bool, watched map[uint8]bool) leftOut {
+	var why leftOut
+	if busy {
+		why |= leftOutStructure
+	}
+	if sc.window {
+		why |= leftOutWindow
+	}
+	if watched[room] {
+		why |= leftOutWatched
+	}
+	if rt.queue.Pending(toRoom(room, sc.all)) {
+		why |= leftOutQueued
+	}
+	if rt.roomConfirmation(room) != nil {
+		why |= leftOutConfirming
+	}
+	return why
+}
+
 // roomChecks runs the room checks of every room of the Cube once.
 func (s *Server) roomChecks(ctx context.Context, rt *runtime) {
 	if !rt.client.Connected() {
@@ -693,24 +777,8 @@ func (s *Server) roomChecks(ctx context.Context, rt *runtime) {
 	now := s.roomNow()
 	s.seedRoomChecks(ctx, rt, now)
 	cubeNow, clock := snap.CubeClock(now)
-	skip := view.NewHidden(rt.config().Hidden, md, false)
-	busy := len(rt.structure) > 0 // a structure change is being sent
 	radioHeld := rt.queue.Holding()
-	watched := rt.structureRooms(snap)
-	type room struct {
-		id    uint8
-		scan  roomScan
-		pause bool
-	}
-	var rooms []room
-	for _, r := range md.Rooms {
-		if r.ID == 0 || r.ID == cube.HiddenRoom {
-			continue
-		}
-		sc := scanRoom(snap, r.ID, skip, cubeNow, clock)
-		pause := busy || sc.window || watched[r.ID] || rt.queue.Pending(toRoom(r.ID, sc.all)) || rt.roomConfirmation(r.ID) != nil
-		rooms = append(rooms, room{r.ID, sc, pause})
-	}
+	rooms := rt.scanRooms(snap, md, cubeNow, clock)
 
 	d := &rt.drift
 	d.mu.Lock()
@@ -724,7 +792,7 @@ func (s *Server) roomChecks(ctx context.Context, rt *runtime) {
 		for rf := range r.scan.all {
 			present[rf] = true
 		}
-		if r.pause {
+		if r.why != 0 {
 			d.pause(r.id, r.scan)
 			continue
 		}
