@@ -9,6 +9,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"net/url"
+	"reflect"
 	"slices"
 	"strings"
 	"testing"
@@ -247,7 +248,8 @@ func TestRepairPreviewCountsTheQueuesResets(t *testing.T) {
 }
 
 // nothingOf asserts that a repair's preview has nothing to send, why
-// naming want, and that its run is refused with 409.
+// naming want, and that its run is refused with 409, with the preview's
+// code and params.
 func nothingOf(t *testing.T, ts *httptest.Server, path, want string) repairPlan {
 	t.Helper()
 	code, p, body := previewOf(t, ts, path)
@@ -258,8 +260,13 @@ func nothingOf(t *testing.T, ts *httptest.Server, path, want string) repairPlan 
 	if strings.Contains(path, "?") {
 		sep = "&"
 	}
-	if code, out := do(t, ts, "POST", path+sep+"plan=0", ""); code != http.StatusConflict {
-		t.Fatalf("POST %s: %d %v, want 409", path, code, out)
+	code, out := do(t, ts, "POST", path+sep+"plan=0", "")
+	var params any
+	if p.Params != nil {
+		params = p.Params
+	}
+	if code != http.StatusConflict || out["code"] != nil && out["code"] != p.Code || out["code"] == nil && p.Code != "" || !reflect.DeepEqual(out["params"], params) {
+		t.Fatalf("POST %s: %d %v, want 409 with %q %v", path, code, out, p.Code, p.Params)
 	}
 	return p
 }
@@ -311,10 +318,10 @@ func TestRepairRefusedForTheSlots(t *testing.T) {
 	received := cubewatch.Lines(fc)
 	sent := received.Mark()
 	code, p, body := previewOf(t, ts, path)
-	if code != 200 || !strings.Contains(p.Refused, "memory slots") {
+	if code != 200 || !strings.Contains(p.Refused, "memory slots") || p.Code != "repair_memory_slots" || p.Params["free"] != float64(8) || p.Params["min"] != float64(5) {
 		t.Fatalf("preview with 8 slots free: %d %s", code, body)
 	}
-	if code, out := do(t, ts, "POST", path+"?plan="+p.Plan, ""); code != http.StatusConflict {
+	if code, out := do(t, ts, "POST", path+"?plan="+p.Plan, ""); code != http.StatusConflict || out["code"] != "repair_memory_slots" || out["error"] != p.Refused {
 		t.Fatalf("run: %d %v", code, out)
 	}
 	if got := received.Since(sent, cubewatch.Except('l')); len(got) != 0 {
@@ -508,7 +515,9 @@ func TestRepairResendRefused(t *testing.T) {
 
 // A device the metadata lists in room 1 whose C line names no room is
 // placed there with the placement's link half, the metadata left as it
-// is; one whose C line names room 6 is moved from there.
+// is; one whose C line names room 6 is moved from there. The link half
+// wakes the device itself after room 1, whose group it is not in yet,
+// which the preview counts.
 func TestRepairPlace(t *testing.T) {
 	t.Parallel()
 	t.Run("from no room", func(t *testing.T) {
@@ -519,13 +528,13 @@ func TestRepairPlace(t *testing.T) {
 		received := cubewatch.Lines(fc)
 		sent := received.Mark()
 		p, code, out := runRepairOf(t, ts, "/api/v1/cubes/KEQ0000100/devices/0d0e0f/repair/place", "")
-		if p.Action != "move" || len(p.Steps) != 1 || p.Radiograms != 4 {
+		if p.Action != "move" || len(p.Steps) != 1 || p.Radiograms != 4 || p.Wakeups != 2 { // room 1's and the contact's own
 			t.Fatalf("preview %+v", p)
 		}
 		if code != 200 || out["confirmation"] != "pending" {
 			t.Fatalf("run: %d %v", code, out)
 		}
-		sameLines(t, received, sent, []string{"z:1e,G,01",
+		sameLines(t, received, sent, []string{"z:1e,G,01", "z:1e,D,0d0e0f",
 			linkPartner(room1(0x0a010a), true, copyContact, cube.DeviceShutterContact),
 			linkPartner(direct(copyContact), true, 0x0a010a, cube.DeviceRadiatorThermostat),
 			linkPartner(direct(copyContact), true, copyWall, cube.DeviceWallThermostat),
@@ -545,7 +554,7 @@ func TestRepairPlace(t *testing.T) {
 			cube.CmdSetGroup(copyWall, 6, true).String(),
 			linkPartner(cube.Target{RFAddress: 0x0a010d, RoomID: 6, Room: true}, false, copyWall, cube.DeviceWallThermostat),
 			linkPartner(direct(copyWall), false, 0x0a010d, cube.DeviceRadiatorThermostat),
-			"z:1e,G,01",
+			"z:1e,G,01", "z:1e,D,0c0d0e",
 			linkPartner(room1(0x0a010a), true, copyWall, cube.DeviceWallThermostat),
 			linkPartner(direct(copyWall), true, 0x0a010a, cube.DeviceRadiatorThermostat),
 			cube.CmdSetGroup(copyWall, 1, false).String(),

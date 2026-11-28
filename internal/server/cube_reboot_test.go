@@ -12,8 +12,8 @@ import (
 )
 
 // A Cube's reboot: refused while a radiogram is pending and the request
-// does not accept it, then R to the Cube's discovery port, its answer,
-// the restart and the connection after it.
+// does not accept it (cube_reboot_pending), then R to the Cube's
+// discovery port, its answer, the restart and the connection after it.
 func TestRebootACube(t *testing.T) {
 	t.Parallel()
 	at, err := fakecube.StartDiscovery("127.0.0.1:0", "KEQ0000100", 0x0a0107)
@@ -40,13 +40,15 @@ func TestRebootACube(t *testing.T) {
 	if code, body := do(t, ts, "PUT", "/api/v1/cubes/KEQ0000100/devices/0a010d/setpoint", `{"mode":"manual","temp":21.5}`); code != 200 {
 		t.Fatalf("setpoint: %d %v", code, body)
 	}
-	if code, body := do(t, ts, "POST", "/api/v1/cubes/KEQ0000100/reboot", `{}`); code != 409 || !strings.Contains(body["error"].(string), "1 radiograms pending") {
+	code, body := do(t, ts, "POST", "/api/v1/cubes/KEQ0000100/reboot", `{}`)
+	if code != 409 || !strings.Contains(body["error"].(string), "1 radiograms pending") {
 		t.Fatalf("reboot with a radiogram pending: %d %v", code, body)
 	}
+	refusedWithCode(t, "reboot with a radiogram pending", code, body, 409, "cube_reboot_pending", `{"pending":1}`)
 	if at.Reboots() != 0 {
 		t.Fatal("R sent though refused")
 	}
-	code, body := do(t, ts, "POST", "/api/v1/cubes/KEQ0000100/reboot", `{"pending":1}`)
+	code, body = do(t, ts, "POST", "/api/v1/cubes/KEQ0000100/reboot", `{"pending":1}`)
 	if code != 202 || body["sent"] != true || body["answered"] != true || body["status"] != float64(2) {
 		t.Fatalf("reboot: %d %v", code, body)
 	}

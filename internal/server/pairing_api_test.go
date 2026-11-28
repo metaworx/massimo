@@ -4,6 +4,7 @@
 package server
 
 import (
+	"reflect"
 	"testing"
 	"time"
 
@@ -43,8 +44,8 @@ func TestPairingAndAddingToARoom(t *testing.T) {
 	if code != 200 || st["active"] != true || st["until"] == nil {
 		t.Fatalf("start: %d %v", code, st)
 	}
-	if code, _ := do(t, ts, "POST", base+"/pairing", ""); code != 409 {
-		t.Fatalf("second start: %d", code)
+	if code, out := do(t, ts, "POST", base+"/pairing", ""); code != 409 || out["code"] != "pairing_running" || out["error"] != "pairing is already running" {
+		t.Fatalf("second start: %d %v", code, out)
 	}
 	// n: gets no answer, so the fake may hold it only after the API's.
 	// The device joins 50 ms after it, and the server reads its C line,
@@ -103,15 +104,16 @@ func TestPairingAndAddingToARoom(t *testing.T) {
 	}
 	// Room 1 has one radiator thermostat, 0a010a. As the original
 	// software: wakeup, a link in each direction, the group, then the
-	// metadata and a re-read of the C line; the copy of the room's
+	// metadata and a re-read of the C line, the device woken itself after
+	// its room, whose group it is not in yet; the copy of the room's
 	// settings, which follows by default, has tests of its own
 	// (TestAddCopiesTheRoomsSettings and those after it).
 	partner := cube.CmdLinkPartner(cube.Target{RFAddress: 0x0a010a, RoomID: 1, Room: true}, true, newDevice, cube.DeviceRadiatorThermostat)
 	own := cube.CmdLinkPartner(cube.Target{RFAddress: newDevice}, true, 0x0a010a, cube.DeviceRadiatorThermostat)
 	group := cube.CmdSetGroup(newDevice, 1, false)
 	got := received.Since(before, cubewatch.Except('l'))
-	want := []string{"z:1e,G,01", partner.String(), own.String(), group.String()}
-	if len(got) != 6 {
+	want := []string{"z:1e,G,01", "z:1e,D,0a0b0c", partner.String(), own.String(), group.String()}
+	if len(got) != 7 {
 		t.Fatalf("cube received %v", got)
 	}
 	for i, w := range want {
@@ -119,8 +121,8 @@ func TestPairingAndAddingToARoom(t *testing.T) {
 			t.Fatalf("line %d: %s, want %s", i, got[i], w)
 		}
 	}
-	if got[4].Type != 'm' || got[5].String() != "c:0a0b0c" {
-		t.Fatalf("metadata and re-read: %v", got[4:])
+	if got[5].Type != 'm' || got[6].String() != "c:0a0b0c" {
+		t.Fatalf("metadata and re-read: %v", got[5:])
 	}
 	_, d := do(t, ts, "GET", base+"/devices/0a0b0c", "")
 	if d["unlisted"] == true || d["name"] != "Neu" || d["room_id"] != float64(1) {
@@ -168,7 +170,8 @@ func TestPairingTimeLimit(t *testing.T) {
 	received := cubewatch.Lines(fc)
 	const base = "/api/v1/cubes/KEQ0000100"
 	for _, body := range []string{`{"seconds":256}`, `{"seconds":600}`} {
-		if code, out := do(t, ts, "POST", base+"/pairing", body); code != 400 || out["error"] != "seconds must be 1..255" {
+		if code, out := do(t, ts, "POST", base+"/pairing", body); code != 400 || out["error"] != "seconds must be 1..255" ||
+			out["code"] != "pairing_seconds_invalid" || !reflect.DeepEqual(out["params"], map[string]any{"max": float64(255)}) {
 			t.Fatalf("%s: %d %v", body, code, out)
 		}
 	}

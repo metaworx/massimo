@@ -112,3 +112,6 @@ GUIDELINES/wip/HANDOVER.md is the context a session needs to work here.
     published on F-Droid and on Google Play.
 17. **An iOS app**:
     the same as the Android app; published on the App Store.
+18. **Rooms in the page, for v0.18**:
+    create a room, and move a device into a new room;
+    the page offers neither today (the owner, 2026-11-26).

@@ -83,6 +83,13 @@ type Server struct {
 	control  *http.Server            // the control's HTTP server, see Control
 	closed   bool                    // Close was called
 
+	// What Reset goes back to, taken at Serve: the greeting and the NTP
+	// servers; gen counts the resets, so that a command or a join due
+	// from before one is dropped (Reset).
+	initial    []cube.Message
+	initialNTP []string
+	gen        uint64
+
 	// A pause (Pause): paused until Resume; hold holds the port while the
 	// listener is closed, nil where the listener stays open.
 	paused bool
@@ -174,10 +181,14 @@ func (s *Server) audibleOr(gone <-chan struct{}) bool {
 // liveGreetingLocked). A device that joins while it is one already
 // keeps what changed in its lines; one a t: deleted starts again from
 // the Pairing's. No other line changes: a greeting SetGreeting gives is
-// sent as it is, the joined device's lines added.
-func (s *Server) join(p *Pairing) {
+// sent as it is, the joined device's lines added. An inclusion begun
+// before a Reset (gen) joins nothing, and join reports false.
+func (s *Server) join(p *Pairing, gen uint64) bool {
 	s.mu.Lock()
 	defer s.mu.Unlock()
+	if gen != s.gen {
+		return false
+	}
 	rf := p.Device.RFAddress
 	if s.deleted[rf] && s.list != nil {
 		// The L line the fake changed still holds the entry of before.
@@ -193,6 +204,7 @@ func (s *Server) join(p *Pairing) {
 	}
 	s.joined = true
 	delete(s.deleted, rf)
+	return true
 }
 
 // joinedLocked returns the Pair device while it is one of the fake's.
@@ -336,6 +348,73 @@ func (s *Server) Drop() {
 	}
 }
 
+// Reset puts the fake back as it began to serve, so that a test starts
+// from a known Cube: the greeting it was given (Greeting at Serve) with
+// its devices, their states, rooms and M lines, and its NTP servers;
+// what SetGreeting, SetConfig, SetDeviceList, the control's SetState,
+// an m:, an f: and the commands applied changed is undone, and no
+// device is joined by pairing, deleted by t:, taken out by Remove or
+// deaf (SetDeaf), nor boosted. Nothing of before is applied after it: a
+// command acknowledged before it, held (HoldApply) or due after
+// ApplyAfter, is dropped when it falls due, and a device whose
+// inclusion began before it does not join. A silence ends
+// and a dead session is let go. Then every client connection is
+// closed, as by Drop, and leaves the slot at once, so that the clients
+// connect again and read the greeting anew. What configures the fake
+// stays as it is: its fields, the free slots, a pause, and a HoldApply
+// not yet released, which holds what comes after the reset; so do the
+// lines received and the connections counted.
+func (s *Server) Reset() {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.gen++
+	if s.initial != nil {
+		s.Greeting, s.NTP = slices.Clone(s.initial), slices.Clone(s.initialNTP)
+	}
+	s.meta, s.blocks, s.configs, s.list = nil, nil, nil, nil
+	s.deleted, s.removed, s.deaf, s.joined, s.live = nil, nil, nil, false, false
+	for _, b := range s.boosts {
+		if b.timer != nil {
+			b.timer.Stop()
+		}
+	}
+	s.boosts = nil
+	if s.quiet != nil {
+		close(s.quiet)
+		s.quiet = nil
+	}
+	if s.deadTimer != nil {
+		s.deadTimer.Stop()
+		s.deadTimer = nil
+	}
+	s.deadUntil = time.Time{}
+	// The clients leave the slot at once, as at a Pause: one that dials
+	// right after the reset is greeted by a SingleClient fake too.
+	for c := range s.open {
+		c.Close()
+		delete(s.open, c)
+	}
+	s.changedLocked()
+}
+
+// generation is the count of resets so far (Reset).
+func (s *Server) generation() uint64 {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.gen
+}
+
+// ntp takes an f:: the NTP servers it gives, where it gives any, are the
+// fake's from now on; the reply names the fake's.
+func (s *Server) ntp(data string) string {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if data != "" {
+		s.NTP = strings.Split(data, ",")
+	}
+	return "F:" + strings.Join(s.NTP, ",") + "\r\n"
+}
+
 // SetDeviceList makes l: answer with line from now on, as the real Cube
 // does once devices reported new states.
 func (s *Server) SetDeviceList(line cube.Message) {
@@ -455,6 +534,9 @@ func (s *Server) Serve(ln net.Listener) string {
 		s.mu.Unlock()
 		ln.Close()
 		return ln.Addr().String()
+	}
+	if s.initial == nil {
+		s.initial, s.initialNTP = slices.Clone(s.Greeting), slices.Clone(s.NTP)
 	}
 	s.ln = ln
 	if s.paused {
@@ -818,10 +900,7 @@ func (s *Server) serve(conn net.Conn) {
 			}
 			reply = fmt.Sprintf("S:%02x,%d,%s\r\n", s.Duty, d, s.freeSlots())
 		case 'f':
-			if m.Data != "" {
-				s.NTP = strings.Split(m.Data, ",")
-			}
-			reply = "F:" + strings.Join(s.NTP, ",") + "\r\n"
+			reply = s.ntp(m.Data)
 		case 't':
 			// One A line per address, as the Cube answered on hardware.
 			reply = "A:\r\n"
@@ -861,9 +940,11 @@ func (s *Server) serve(conn net.Conn) {
 				join.Stop() // a second n: makes the device join once
 			}
 			if p := s.Pair; p != nil {
+				gen := s.generation()
 				join = time.AfterFunc(p.Delay, func() {
-					s.join(p)
-					write(NewDeviceLine(p.Device).Wire())
+					if s.join(p, gen) {
+						write(NewDeviceLine(p.Device).Wire())
+					}
 				})
 			}
 			inclusion = time.AfterFunc(time.Duration(secs)*time.Second, func() { write("N:\r\n") })

@@ -299,4 +299,75 @@ class ServerStoreTest {
             assertNull(bad, s.opening(bad))
         }
     }
+
+    @Test
+    fun theSessionHeldIsKeptInTheFileAloneAndDroppedWithTheNode() {
+        // D102-A: {user, id, created_at}, no secret, never to the page; save keeps it, a new node drops it
+        val st = ServerStore(file())
+        val a = st.save(input("name" to "Home", "node" to "node-a", "lan" to "http://192.168.1.20:8099/"))
+        st.hold(a.id, HeldSession("anna", 7, "2026-11-20T10:00:07Z"))
+        assertEquals(HeldSession("anna", 7, "2026-11-20T10:00:07Z"), ServerStore(file()).get(a.id)!!.held)
+        assertFalse(st.get(a.id)!!.toJson().has("held"))
+        assertTrue(st.get(a.id)!!.fileJson().has("held"))
+        st.save(input("id" to a.id, "name" to "House", "node" to "node-a", "lan" to "http://192.168.1.20:8099/"))
+        assertEquals("kept by save", 7L, st.get(a.id)!!.held!!.id)
+        st.save(input("id" to a.id, "name" to "House", "node" to "node-b", "lan" to "http://192.168.1.20:8099/"))
+        assertNull("another node's", st.get(a.id)!!.held)
+        st.hold(a.id, HeldSession("anna", 8, ""))
+        st.unhold(a.id, 7)
+        assertEquals("another session's record stays", 8L, st.get(a.id)!!.held!!.id)
+        st.unhold(a.id, 8)
+        assertNull(ServerStore(file()).get(a.id)!!.held)
+        // moved into unended where the app holds it no more, once
+        st.hold(a.id, HeldSession("anna", 9, "2026-11-20T10:00:09Z"))
+        st.leaveHeld { true }
+        assertEquals(9L, st.get(a.id)!!.held!!.id)
+        st.leaveHeld { false }
+        assertNull(st.get(a.id)!!.held)
+        assertEquals(listOf(SessionLeft("anna", 9, "2026-11-20T10:00:09Z")), ServerStore(file()).get(a.id)!!.unended)
+    }
+
+    @Test
+    fun theCodesAreKeptInTheFileAloneAndDroppedWithTheNode() {
+        // D112-A: an entry's code and taken in the file; the page sees pending, no code and no taken entry
+        val st = ServerStore(file())
+        val a = st.save(input("name" to "Home", "node" to "node-a", "lan" to "http://192.168.1.20:8099/"))
+        val key = RevokeCode.of("key")
+        val session = RevokeCode.of("session")
+        assertTrue(st.leave(a.id, "anna", 42, key))
+        assertTrue(st.leaveSession(a.id, "anna", 7, "2026-11-20T10:00:07Z", session))
+        assertTrue(st.leave(a.id, "anna", 43))
+        assertTrue("noted again: once, its code taken where it had none", st.leave(a.id, "anna", 43, RevokeCode.of("late")))
+        assertEquals(RevokeCode.of("late"), st.get(a.id)!!.unrevoked[1].code)
+        assertTrue(st.took(a.id, key))
+        st.hold(a.id, HeldSession("anna", 8, "2026-11-20T10:00:08Z", RevokeCode.of("held")))
+        val again = ServerStore(file()).get(a.id)!!
+        assertEquals(KeyLeft("anna", 42), again.unrevoked[0])
+        assertTrue(again.unrevoked[0].taken && again.unrevoked[0].code.isEmpty())
+        assertEquals(session, again.unended.single().code)
+        assertTrue("left at a time", again.unended.single().leftAt.isNotEmpty())
+        assertEquals(RevokeCode.of("held"), again.held!!.code)
+        val page = again.toJson().toString()
+        for (secretish in listOf(key, session, RevokeCode.of("late"), RevokeCode.of("held"), "\"taken\"", "\"held\"")) {
+            assertFalse("the page sees no $secretish", page.contains(secretish))
+        }
+        assertEquals("the taken key not shown", 1, again.toJson().getJSONArray("unrevoked").length())
+        assertTrue(again.toJson().getJSONArray("unended").getJSONObject(0).getBoolean("pending"))
+        assertEquals(listOf(RevokeCode.of("late"), session), again.codes())
+        // kept by save; dropped with the node
+        st.save(input("id" to a.id, "name" to "House", "node" to "node-a", "lan" to "http://192.168.1.20:8099/"))
+        assertEquals(session, st.get(a.id)!!.unended.single().code)
+        st.save(input("id" to a.id, "name" to "House", "node" to "node-b", "lan" to "http://192.168.1.20:8099/"))
+        assertTrue(st.get(a.id)!!.unrevoked.isEmpty() && st.get(a.id)!!.unended.isEmpty() && st.get(a.id)!!.held == null)
+        // a held session left at Exit or a new process takes its code with it
+        st.hold(a.id, HeldSession("anna", 9, "2026-11-20T10:00:09Z", RevokeCode.of("nine")))
+        st.leaveHeld { false }
+        assertEquals(RevokeCode.of("nine"), st.get(a.id)!!.unended.single().code)
+        // dropped where a server takes none: the entry as before codes
+        assertTrue(st.dropCode(a.id, RevokeCode.of("nine")))
+        assertTrue(st.get(a.id)!!.unended.single().let { it.code.isEmpty() && !it.taken })
+        // ended by its identity, whatever its code
+        st.ended(a.id, listOf(SessionLeft("anna", 9, "2026-11-20T10:00:09Z")))
+        assertTrue(st.get(a.id)!!.unended.isEmpty())
+    }
 }

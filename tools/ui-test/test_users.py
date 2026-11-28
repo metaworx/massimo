@@ -10,8 +10,8 @@ import re
 import pytest
 
 from conftest import URL, api_call
-from helpers import (NAME_BAD, NAME_TAKEN, assert_busy, cleanup, close_fold, frames, hold, named_buttons, open_fold, safe_route, scroll_width, show_view, sign_out, undo,
-                     wait_held, wait_until)
+from helpers import (KEY_COPY, NAME_BAD, NAME_TAKEN, assert_busy, cleanup, close_fold, copies, frames, grant_clipboard, hold, icon_after_last_line, named_buttons,
+                     open_fold, own_id, safe_route, scroll_width, show_view, sign_out, stub_me, undo, wait_held, wait_until)
 
 
 def test_users_and_roles(page, case):
@@ -383,9 +383,15 @@ def test_new_key_shown_once(page, case):
     """In an open user panel, Create key shows the new key, which the
     server shows only once, lists every token once, and sends one POST
     per click: the panel loads its tokens through one path, not through
-    the toggle of a panel built open and a direct call both."""
+    the toggle of a panel built open and a direct call both. The key
+    shown copies as the page's other texts do (AP KeyLife, D1-A): a
+    button to the keyboard named Copy the key, not by the key, with its
+    copy icon right after the key's last line; a click, Enter, Space and
+    the icon each copy it. Fails on the page before: the key a paragraph
+    alone."""
     prefix = f"ui-test-key-{case.width}-{case.lang}-"
     revoke_keys(prefix)
+    grant_clipboard(page)
     posts, loads = [], []
     page.on("request", lambda r: posts.append(r.url) if r.method == "POST" and r.url.endswith("/users/operator/tokens") else None)
     page.on("request", lambda r: loads.append(r.url) if r.method == "GET" and r.url.endswith("/users/operator/tokens") else None)
@@ -408,7 +414,12 @@ def test_new_key_shown_once(page, case):
             # for before it: counted, not waited for
             assert len(loads) - before == 1, f"one load of the tokens for key {n}, not {len(loads) - before}"
             key = panel.locator(".user-key-box")
-            assert key.is_visible() and panel.locator(".user-key").inner_text().strip(), f"key {n} is shown, once"
+            shown = panel.locator(".user-key").inner_text().strip()
+            assert key.is_visible() and shown, f"key {n} is shown, once"
+            sel = ".user-panel[data-name='operator'] .user-key"
+            placed, m = icon_after_last_line(page, sel)
+            assert placed, f"key {n}: its copy icon right after its last line: {m}"
+            copies(page, sel, shown, KEY_COPY[case.lang])
             ids = page.evaluate("[...document.querySelectorAll(%r)].map((li) => li.dataset.id).filter((id) => id)" % tokens)
             assert len(ids) == len(set(ids)), f"every token once after key {n}: {ids}"
             assert len(posts) == n, f"one POST per click, {len(posts)} after {n}"
@@ -652,13 +663,15 @@ def test_a_double_click_on_yes_removes_once(page, case):
 
 
 def test_a_refused_removal_says_the_servers_words(page, case, watch):
-    """A removal the server refuses (409) says the server's words in the
-    users' line, as a failure, and the user's panel stays, Remove in place
-    of the question again: here the words for the user that holds the
-    settings file's key (AP MobileApp v1.4, D89-A). The test makes the
-    user and answers its DELETE itself, so that nothing is removed and the
-    suite's own owner, which holds that key, is never asked for; the
-    server's refusal is TestSettingsFileKeyHolder's."""
+    """A removal the server refuses (409) says the refusal in the users'
+    line, in the page's language from its code (AP ErrorCodes), as a
+    failure, and the user's panel stays, Remove in place of the question
+    again: here the words for the user that holds the settings file's key
+    (AP MobileApp v1.4, D89-A). The test makes the user and answers its
+    DELETE itself, with the server's body, so that nothing is removed and
+    the suite's own owner, which holds that key, is never asked for; the
+    server's refusal is TestSettingsFileKeyHolder's and
+    TestUserRefusalCodes'."""
     name = f"held-{case.width}-{case.lang}"
     remove_user(name)
     api_call("POST", "api/v1/users", {"name": name, "role": "viewer", "password": "kept-pass"})
@@ -669,7 +682,8 @@ def test_a_refused_removal_says_the_servers_words(page, case, watch):
     def refuse(route):
         if route.request.method == "DELETE":
             deletes.append(route.request.url)
-            route.fulfill(status=409, content_type="application/json", body=json.dumps({"error": words}))
+            route.fulfill(status=409, content_type="application/json",
+                          body=json.dumps({"error": words, "code": "user_holds_settings_key", "params": {"user": name}}))
         else:
             route.continue_()
 
@@ -683,9 +697,11 @@ def test_a_refused_removal_says_the_servers_words(page, case, watch):
         panel.locator(".remove-user").click()
         panel.locator(".confirm-box .confirm-yes").click()
         line = page.locator("#users-msg")
-        assert wait_until(page, "document.getElementById('users-msg').textContent.includes(%r)" % words, 5), \
-            f"the users' line says the server's words: {line.text_content()}"
-        assert line.text_content() == f"{name}: {words}", f"after the user's name, as the page's other failures: {line.text_content()}"
+        said = page.evaluate("(n) => t('err.user_holds_settings_key', { user: n })", name)
+        assert said != words, "the page's own text, not the server's English"
+        assert wait_until(page, "document.getElementById('users-msg').textContent.includes(%r)" % said, 5), \
+            f"the users' line says the refusal: {line.text_content()}"
+        assert line.text_content() == f"{name}: {said}", f"after the user's name, as the page's other failures: {line.text_content()}"
         assert "bad" in line.get_attribute("class").split(), "as a failure"
         assert len(deletes) == 1, f"one DELETE: {deletes}"
         assert panel.count() == 1 and panel.locator(".confirm-box").count() == 0 and panel.locator(".remove-user").is_visible(), \
@@ -939,8 +955,8 @@ def test_an_integrations_holder_manages_its_users(new_context, case, watch, guar
     from test_login import sign_in
     tag = f"{case.width}{case.lang}"
     key, name, manager = f"igs{tag}", f"igs-{tag}", f"igm-{tag}"
-    instance = ("b9%04d%s" % (case.width, case.lang)).encode().hex().ljust(32, "0")[:32]
-    subject = ("b9u%04d%s" % (case.width, case.lang)).encode().hex().ljust(32, "c")[:32]
+    # of this run's own: its next repeat on the server would join this one's integration, disabled
+    instance, subject = own_id(f"b9{tag}"), own_id(f"b9u{tag}")
     status, req = raw_call("POST", "api/v1/integrations/requests",
                            {"kind": "homeassistant", "name": f"Home {tag}", "instance_id": instance, "url": "http://192.0.2.21:8123", "version": "2026.11.1"})
     assert status == 201, "the request is taken"
@@ -1040,16 +1056,18 @@ def test_add_a_user_for_users_or_guests_alone(page, case):
     """Add a user is drawn for who may add a user, a holder of users or
     guests, and goes for a holder of passwords or integrations alone, whom
     the server refuses a new user (who is in read again as each, the
-    page's own capabilities). Fails where it was drawn for every reader
-    of Users."""
+    server's answer stubbed by stub_me). Fails where it was drawn for
+    every reader of Users."""
     show_view(page, "system")
     add = page.locator("#user-add")
     add.wait_for()
     try:
         for caps, drawn in ((["read", "passwords"], False), (["read", "integrations"], False), (["read", "guests"], True), (["read", "users"], True)):
-            page.evaluate("(caps) => { state.me = { ...state.me, mode: 'users', capabilities: caps }; }", caps)
+            stub_me(page, caps)
             assert wait_until(page, f"document.querySelectorAll('#user-add').length === {1 if drawn else 0}", 5), f"Add a user {'drawn' if drawn else 'gone'} with {caps}"
+            page.unroute("**/api/v1/me")
     finally:
+        page.unroute("**/api/v1/me")
         page.evaluate("loadMe()")
     show_view(page, "tiles")
 

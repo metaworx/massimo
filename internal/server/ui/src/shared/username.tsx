@@ -33,10 +33,10 @@ function nameProblem(name: string, taken: string[]): string {
   return "";
 }
 
-/** wordNameError words the server's refusal of a new user's name as the check does, or returns "" for another error: 409, the name is in use; 400 about the name, the rule. */
-export function wordNameError(e: Error & { status?: number }, name: string): string {
+/** wordNameError words the server's refusal of a new user's name as the check does, or returns "" for another error: 409, the name is in use; the code user_name_bad, the rule. */
+export function wordNameError(e: Error & { status?: number; code?: string }, name: string): string {
   if (e.status === 409) return t("users.nameTaken", { name: name.trim().toLowerCase() });
-  if (e.status === 400 && /user name/.test(e.message)) return t("users.nameBad");
+  if (e.code === "user_name_bad") return t("users.nameBad");
   return "";
 }
 

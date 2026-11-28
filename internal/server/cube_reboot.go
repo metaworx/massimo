@@ -7,6 +7,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"io"
 	"net"
 	"net/http"
@@ -48,15 +49,17 @@ func (s *Server) rebootCube(w http.ResponseWriter, r *http.Request) error {
 		if !b.UpdatedAt.IsZero() {
 			at = b.UpdatedAt.Format(time.RFC3339)
 		}
-		return fail(http.StatusConflict, "%d radiograms pending as the Cube last said (%s): a reboot drops them; send {\"pending\": %d} to reboot all the same", n, at, n)
+		return refuseSaying(http.StatusConflict,
+			fmt.Sprintf("%d radiograms pending as the Cube last said (%s): a reboot drops them; send {\"pending\": %d} to reboot all the same", n, at, n),
+			codeCubeRebootPending, n)
 	}
 	serial := rt.cubeSerial()
 	if serial == "" {
-		return fail(http.StatusConflict, "the Cube's serial is not known yet")
+		return refuse(http.StatusConflict, codeCubeSerialNotKnownYet)
 	}
 	to := s.rebootTarget(rt)
 	if to == "" {
-		return fail(http.StatusConflict, "the Cube's address is not known yet")
+		return refuse(http.StatusConflict, codeCubeAddressNotKnownYet)
 	}
 	ctx, cancel := context.WithTimeout(r.Context(), 5*time.Second)
 	defer cancel()

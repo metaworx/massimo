@@ -136,6 +136,11 @@ func TestMoveCommands(t *testing.T) {
 	if out.RoomID != 6 || in.RoomID != 1 || !out.Wakeup || !in.Wakeup || len(out.Lines) != 1 || len(in.Lines) != 3 {
 		t.Fatalf("out %+v in %+v", out, in)
 	}
+	// Room 6's wakeup reaches the device, whose C line names room 6; room
+	// 1's does not: the device is woken itself before the in half.
+	if out.WakeTarget || !in.WakeTarget {
+		t.Fatalf("the device's own wakeup: out %v, in %v; want in alone", out.WakeTarget, in.WakeTarget)
+	}
 	// Out: 0x23 alone, room 6 holding no partner. In, as the original's
 	// capture of 2026-11-04: one 0x20 with the room flag to room 1's
 	// master naming the device, one to the device naming its partner, 0x22.
@@ -150,11 +155,16 @@ func TestMoveCommands(t *testing.T) {
 			t.Fatalf("in line %d: %s, want %s", i, in.Lines[i], want[i])
 		}
 	}
-	// Out of room 1, whose master 0a010a stays: the 0x23, one 0x21 with
-	// the room flag to 0a010a naming the device, one to the device naming
-	// 0a010a.
+	// Out of room 1, whose master 0a010a stays, while its C line names
+	// room 6: the 0x23 of room 6, as the device refuses one of another
+	// room, one 0x21 with the room flag to 0a010a naming the device, one
+	// to the device naming 0a010a; room 1's wakeup misses the device,
+	// which is woken itself.
 	out, _ = MoveCommands(snap, 0x0a010d, c.Type, 1, 6, nil, nil)
-	want = []cube.Message{cube.CmdSetGroup(0x0a010d, 1, true),
+	if !out.Wakeup || out.RoomID != 1 || !out.WakeTarget {
+		t.Fatalf("out of room 1: %+v, want room 1's wakeup and the device's own", out)
+	}
+	want = []cube.Message{cube.CmdSetGroup(0x0a010d, 6, true),
 		cube.CmdLinkPartner(cube.Target{RFAddress: 0x0a010a, RoomID: 1, Room: true}, false, 0x0a010d, c.Type),
 		cube.CmdLinkPartner(cube.Target{RFAddress: 0x0a010d}, false, 0x0a010a, cube.DeviceRadiatorThermostat)}
 	if len(out.Lines) != len(want) {

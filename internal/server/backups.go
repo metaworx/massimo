@@ -170,7 +170,7 @@ func (s *Server) backupMinute() time.Duration {
 
 // errNoHistory answers a backup request for a Cube without a row in the
 // store, whose backups have nowhere to go.
-var errNoHistory = fail(http.StatusServiceUnavailable, "this Cube has no row in the store, so no backup history")
+var errNoHistory = refuse(http.StatusServiceUnavailable, codeBackupNoHistory)
 
 // backupLoop looks at the Cube's configuration once a minute and takes
 // its automatic backup when it is due.
@@ -273,7 +273,7 @@ func (s *Server) backupLook(ctx context.Context, rt *runtime, now time.Time) {
 	case keep != nil:
 		w.writes.Add(1)
 		if err := rt.store.SetBackupPending(ctx, *keep); err != nil && ctx.Err() == nil {
-			s.log.Error("backup: the pending backup's windows not kept in the store; a start before its backup begins them again", "cube", rt.serial, "error", err)
+			s.log.Error("backup: the pending backup's windows not kept in the store; a start before its backup begins them again", "cube", rt.cubeSerial(), "error", err)
 		}
 	case drop:
 		s.dropKept(ctx, rt)
@@ -304,10 +304,10 @@ func (s *Server) backupReference(ctx context.Context, rt *runtime) {
 	}
 	w.mu.Unlock()
 	if err != nil {
-		s.log.Warn("backup: the newest backup is not readable; the next is taken as after a change", "cube", rt.serial, "error", err)
+		s.log.Warn("backup: the newest backup is not readable; the next is taken as after a change", "cube", rt.cubeSerial(), "error", err)
 	}
 	if perr != nil {
-		s.log.Warn("backup: the pending backup's windows are not readable; they begin at the next look", "cube", rt.serial, "error", perr)
+		s.log.Warn("backup: the pending backup's windows are not readable; they begin at the next look", "cube", rt.cubeSerial(), "error", perr)
 	}
 	if stale && !st.ReadOnly() {
 		s.dropKept(ctx, rt)
@@ -336,7 +336,7 @@ func (s *Server) resumeBackupWatch(ctx context.Context, rt *runtime) {
 func (s *Server) dropKept(ctx context.Context, rt *runtime) {
 	rt.bk.writes.Add(1)
 	if err := rt.store.DeleteBackupPending(context.WithoutCancel(ctx), rt.storeID.Load()); err != nil {
-		s.log.Error("backup: the pending backup's windows not deleted from the store; the next start finds them left over", "cube", rt.serial, "error", err)
+		s.log.Error("backup: the pending backup's windows not deleted from the store; the next start finds them left over", "cube", rt.cubeSerial(), "error", err)
 	}
 }
 
@@ -371,7 +371,7 @@ func (s *Server) backupAtStop(ctx context.Context, rt *runtime) {
 	}
 	w := &rt.bk
 	if !w.lockLook(ctx) {
-		s.log.Warn("backup: none at the stop, the look under way took its time; a change pending waits for the next start", "cube", rt.serial)
+		s.log.Warn("backup: none at the stop, the look under way took its time; a change pending waits for the next start", "cube", rt.cubeSerial())
 		return
 	}
 	defer w.unlockLook()
@@ -386,10 +386,10 @@ func (s *Server) backupAtStop(ctx context.Context, rt *runtime) {
 	case !pending:
 		return
 	case !connected:
-		s.log.Warn("backup: none at the stop, the cube is not connected; its change waits for the next start", "cube", rt.serial)
+		s.log.Warn("backup: none at the stop, the cube is not connected; its change waits for the next start", "cube", rt.cubeSerial())
 		return
 	case restoring:
-		s.log.Warn("backup: none at the stop, a restore is under way; its change waits for the next start", "cube", rt.serial)
+		s.log.Warn("backup: none at the stop, a restore is under way; its change waits for the next start", "cube", rt.cubeSerial())
 		return
 	}
 	if _, _, err := s.takeBackup(ctx, rt, store.ReasonAuto, 0, ""); err != nil {
@@ -432,7 +432,7 @@ func (s *Server) takeBackup(ctx context.Context, rt *runtime, reason string, use
 		return store.Backup{}, nil, errNoHistory
 	}
 	if !rt.client.Connected() {
-		return store.Backup{}, nil, fail(http.StatusServiceUnavailable, "cube not connected")
+		return store.Backup{}, nil, refuseSaying(http.StatusServiceUnavailable, "cube not connected", codeCubeNotConnected)
 	}
 	// Within a deadline, as at a stop, the NTP servers take half the time
 	// left at most, so that the backup is stored within the rest.
@@ -444,7 +444,7 @@ func (s *Server) takeBackup(ctx context.Context, rt *runtime, reason string, use
 	}
 	ntp, err := s.readNTP(nctx, rt)
 	if err != nil {
-		s.log.Debug("backup without the NTP servers", "cube", rt.serial, "error", err)
+		s.log.Debug("backup without the NTP servers", "cube", rt.cubeSerial(), "error", err)
 	}
 	f, err := backup.Take(rt.client.Snapshot(), ntp, s.opts.Version, time.Now(), rt.hidden())
 	if err != nil {

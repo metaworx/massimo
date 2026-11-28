@@ -37,13 +37,13 @@ func (s *Server) refreshCube(w http.ResponseWriter, r *http.Request) error {
 	}
 	serial := rt.cubeSerial()
 	if serial == "" {
-		return fail(http.StatusConflict, "the Cube's serial is not known yet")
+		return refuse(http.StatusConflict, codeCubeSerialNotKnownYet)
 	}
 	if rt.client.Address() == "" {
-		return fail(http.StatusConflict, "the Cube's address is not known yet")
+		return refuse(http.StatusConflict, codeCubeAddressNotKnownYet)
 	}
 	if rt.client.Link().State == cubelan.LinkRebooting {
-		return fail(http.StatusConflict, "the Cube is rebooting: its greeting after the reboot reads it again")
+		return refuse(http.StatusConflict, codeCubeRebooting)
 	}
 	ctx, cancel := context.WithTimeout(r.Context(), refreshTimeout)
 	defer cancel()

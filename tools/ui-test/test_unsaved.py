@@ -38,7 +38,8 @@ import time
 import pytest
 
 from conftest import URL, api_call
-from helpers import CUBES, OPERATOR_PASSWORD, choose_cube, describe_event, focus_in_turn, found_only, held_poll, hold, open_personal_page, show_view, sign_out, wait_held, wait_until
+from helpers import (CUBES, OPERATOR_PASSWORD, answered, choose_cube, open_cube_panel, describe_event, focus_in_turn, found_only, held_poll, hold, open_personal_page, show_view,
+                     sign_out, wait_held, wait_until)
 from test_login import sign_in
 
 pytestmark = pytest.mark.clock
@@ -49,17 +50,6 @@ CUBE_PATH = "**/api/v1/cubes/KEQ0000100"
 UNSAVED = {"en": "Cube settings: not saved", "de": "Cube-Einstellungen: nicht gespeichert"}
 FAILED = {"en": "Cube settings: saving failed", "de": "Cube-Einstellungen: Speichern fehlgeschlagen"}
 REFUSED = "address: not a host:port"
-
-
-def open_panel(page):
-    """System settings → Cubes with the fake Cube's panel open; its form."""
-    show_view(page, "system")
-    panel = page.locator(PANEL)
-    if panel.get_attribute("open") is None:
-        panel.locator(":scope > summary .cube-head-who").click()
-    form = panel.locator("form.cube-form")
-    form.wait_for(state="visible")
-    return panel, form
 
 
 def save_state(form):
@@ -95,7 +85,7 @@ def test_save_shows_the_state(page, case):
     """Clean, changed, unsaved once the focus left, changed again at the
     next key, saving, then saved with the check, which goes after five
     seconds; Reset off while clean."""
-    panel, form = open_panel(page)
+    panel, form = open_cube_panel(page)
     name = form.locator("input[name=name]")
     reset = form.locator(".form-reset")
     assert save_state(form) == [True, False, False, ""], "clean: off, plain, no sign"
@@ -134,7 +124,7 @@ def test_save_shows_the_state(page, case):
 def test_unsaved_a_minute_after_the_last_change(page, case):
     """The focus kept in the form: amber a minute after the last change,
     not before; Reset takes the stored value back."""
-    panel, form = open_panel(page)
+    panel, form = open_cube_panel(page)
     name = form.locator("input[name=name]")
     name.fill("Slow typist")
     page.clock.fast_forward(30_000)
@@ -157,7 +147,7 @@ def test_failed_save_turns_red(page, case, watch, how):
     """A save the server does not answer, and one it refuses: the cross on
     Save, the message line red with the error, the disk red; no field
     outlined; Reset takes the stored values and clears it."""
-    panel, form = open_panel(page)
+    panel, form = open_cube_panel(page)
     address = form.locator("input[name=address]")
 
     def handle(route):
@@ -199,7 +189,7 @@ def test_typing_kept_and_the_disk_opens_it(page, case):
     """What is typed in System settings stays on Cube settings and back;
     from Rooms, the header's problem list shows the disk under the Cube,
     and a click on it opens Cube settings with the focus in the form."""
-    panel, form = open_panel(page)
+    panel, form = open_cube_panel(page)
     form.locator("input[name=name]").fill("Kept across pages")
     form.locator("input[name=proxy]").fill("127.0.0.1:62999")
     show_view(page, "cube")
@@ -219,7 +209,7 @@ def test_typing_kept_and_the_disk_opens_it(page, case):
     name = page.locator(PAGE_PANEL + " form.cube-form input[name=name]")
     assert name.input_value() == "Kept across pages", "with what was typed"
     show_view(page, "system")
-    _, form = open_panel(page)
+    _, form = open_cube_panel(page)
     assert form.locator("input[name=name]").input_value() == "Kept across pages", "and back in System settings"
     form.locator(".form-reset").click()
     assert page.locator("#cube-problems .problems-list .problem-action").count() == 0, "Reset takes the disk away"
@@ -228,7 +218,7 @@ def test_typing_kept_and_the_disk_opens_it(page, case):
 def test_forgotten_when_the_cube_goes(page, case, reads):
     """A Cube the list no longer gives takes what was typed for it: back
     in the list, its form shows the stored values and no disk."""
-    panel, form = open_panel(page)
+    panel, form = open_cube_panel(page)
     form.locator("input[name=name]").fill("Typed for a Cube that goes")
     leave(page)
     wait_save(page, form, [False, True, False, "warn"], "left")
@@ -241,7 +231,7 @@ def test_forgotten_when_the_cube_goes(page, case, reads):
         reads.clear(CUBES)
     page.evaluate("loadCubes()")
     assert wait_until(page, "state.cubes.some((c) => c.serial === 'KEQ0000100')", 5), "the Cube back"
-    panel, form = open_panel(page)
+    panel, form = open_cube_panel(page)
     assert form.locator("input[name=name]").input_value() == "Fake Cube", "its stored name"
     assert save_state(form) == [True, False, False, ""], "clean"
     assert item(page, PANEL + " > summary .cube-pill").count() == 0, "no disk"
@@ -254,7 +244,7 @@ def test_taken_away_after_reset_or_save(page, case, how):
     that the form is not drawn again before it goes), or one saved and
     then taken away: nothing is left unsaved, no disk anywhere, and the
     form shows the stored values where it is drawn next."""
-    panel, form = open_panel(page)
+    panel, form = open_cube_panel(page)
     form.locator("input[name=name]").fill("Typed, then " + how)
     leave(page)
     wait_save(page, form, [False, True, False, "warn"], "left")
@@ -379,38 +369,6 @@ def drawings(page, ms, poll=False):
     }""", [ms, poll])
 
 
-def answered(page, action):
-    """Runs action(), then waits until every request it started has been
-    answered, the stream's left out: what the page draws from their
-    answers is drawn then, those the action did not await among them (a
-    poll's check of the version, its log alerts). Returns action's
-    result."""
-    started, ended = [], []
-
-    def start(r):
-        if "/events?" not in r.url:
-            started.append(r)
-
-    def end(r):
-        ended.append(r)
-
-    page.on("request", start)
-    page.on("requestfinished", end)
-    page.on("requestfailed", end)
-    try:
-        result = action()
-        until = time.time() + 5
-        while any(r not in ended for r in started) and time.time() < until:
-            page.wait_for_timeout(50)
-        assert all(r in ended for r in started), f"the requests answered: {[r.url for r in started if r not in ended]}"
-    finally:
-        page.remove_listener("request", start)
-        page.remove_listener("requestfinished", end)
-        page.remove_listener("requestfailed", end)
-    page.evaluate("new Promise((done) => requestAnimationFrame(() => setTimeout(done)))")  # their answers handled
-    return result
-
-
 def came(stream, mark):
     """The events the page's stream brought since mark, in a few words
     each, for a failure's message: a stray event of the server's can then
@@ -486,7 +444,8 @@ def test_vwt_settings_kept_and_the_disk_opens_them(page, case, reads, stream):
             mark = stream.mark()
             n = drawings(page, 2000)
             assert not n, f"the page settles while the form is unsaved: drawn {n} in 2 s with nothing changed; {came(stream, mark)}"
-            n = answered(page, lambda: drawings(page, 0, poll=True))
+            n = drawings(page, 0, poll=True)
+            answered(page)  # the reads the poll did not await too, its check of the version and its log alerts
             assert sum(n.values()) < 10, f"a poll draws the pills a few times: {n}"
             mark = stream.mark()
             n = drawings(page, 1000)
@@ -1174,7 +1133,7 @@ def test_leaving_without_changes_asks_nothing(page, case, how):
     seen = prompts(page)
     activated(page)
     if how == "reset":
-        _, form = open_panel(page)
+        _, form = open_cube_panel(page)
         form.locator("input[name=name]").fill("Typed, then reset")
         form.locator(".form-reset").click()
         wait_save(page, form, [True, False, False, ""], "reset")
@@ -1192,7 +1151,7 @@ def test_leaving_with_a_changed_form_asks(page, case):
     of the form closes it and opens Cube settings with the focus in the
     form and what was typed."""
     seen = prompts(page)
-    _, form = open_panel(page)
+    _, form = open_cube_panel(page)
     name = form.locator("input[name=name]")
     name.click()
     name.press("End")
@@ -1226,7 +1185,7 @@ def test_leaving_with_a_changed_form_asks(page, case):
 def test_leaving_accepted_drops_the_draft(page, case):
     """The prompt accepted, the page reloads, and what was typed is gone."""
     seen = prompts(page, accept=True)
-    _, form = open_panel(page)
+    _, form = open_cube_panel(page)
     form.locator("input[name=name]").click()
     page.keyboard.type("Dropped")
     listed(page)
@@ -1234,7 +1193,7 @@ def test_leaving_accepted_drops_the_draft(page, case):
     reloaded(page)
     assert seen == ["beforeunload"], f"the browser's prompt asked: {seen}"
     assert not dialog_open(page), "no dialog on the page that comes back"
-    _, form = open_panel(page)
+    _, form = open_cube_panel(page)
     assert form.locator("input[name=name]").input_value() == "Fake Cube", "the stored name"
     assert save_state(form) == [True, False, False, ""], "clean"
 
@@ -1246,7 +1205,7 @@ def test_moving_inside_asks_nothing(page, case):
     seen = prompts(page)
     added = False
     try:
-        _, form = open_panel(page)
+        _, form = open_cube_panel(page)
         form.locator("input[name=name]").click()
         page.keyboard.type("Kept")
         for view in ("tiles", "cube", "log", "me", "system"):
@@ -1270,7 +1229,7 @@ def test_moving_inside_asks_nothing(page, case):
 
 def changed_cube_form(page, text):
     """Cube settings in System settings with the name typed into; the form."""
-    _, form = open_panel(page)
+    _, form = open_cube_panel(page)
     name = form.locator("input[name=name]")
     name.click()
     name.press("End")
@@ -1356,7 +1315,7 @@ def test_sign_out_with_a_key_says_forget_key(page, case):
     assert not dialog_open(page), "Stay closes it"
     assert page.evaluate("!!state.token && !!state.me"), "the key kept"
     show_view(page, "system")
-    _, form = open_panel(page)
+    _, form = open_cube_panel(page)
     form.locator(".form-reset").click()
 
 

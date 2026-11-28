@@ -10,8 +10,10 @@ import (
 	"errors"
 	"fmt"
 	"maps"
+	"net"
 	"net/http"
 	"net/http/httptest"
+	"reflect"
 	"slices"
 	"strings"
 	"sync"
@@ -398,7 +400,7 @@ func TestAddCopiesTheRoomsSettings(t *testing.T) {
 	mode, _ := cube.CmdSetTemperature(cube.Target{RFAddress: copyNew}, 0, cube.ModeAuto, cube.Until{})
 	valve, _ := cube.CmdSetValveConfig(cube.Target{RFAddress: copyNew}, cube.ValveSettings{BoostMinutes: 5, BoostValvePct: 80, DecalcDay: cube.Saturday,
 		DecalcHour: 12, MaxValvePct: 100})
-	want := []string{"z:1e,G,01",
+	want := []string{"z:1e,G,01", "z:1e,D,0a0b0c",
 		cube.CmdLinkPartner(cube.Target{RFAddress: 0x0a010a, RoomID: 1, Room: true}, true, copyNew, cube.DeviceRadiatorThermostat).String(),
 		cube.CmdLinkPartner(cube.Target{RFAddress: copyNew}, true, 0x0a010a, cube.DeviceRadiatorThermostat).String(),
 		cube.CmdLinkPartner(cube.Target{RFAddress: copyNew}, true, copyWall, cube.DeviceWallThermostat).String(),
@@ -440,7 +442,7 @@ func TestAddWithoutCopy(t *testing.T) {
 	if code != 200 || out["copied"] != nil {
 		t.Fatalf("add without copy: %d %v", code, out)
 	}
-	sameLines(t, received, before, []string{"z:1e,G,01",
+	sameLines(t, received, before, []string{"z:1e,G,01", "z:1e,D,0a0b0c",
 		cube.CmdLinkPartner(cube.Target{RFAddress: 0x0a010a, RoomID: 1, Room: true}, true, copyNew, cube.DeviceRadiatorThermostat).String(),
 		cube.CmdLinkPartner(cube.Target{RFAddress: copyNew}, true, 0x0a010a, cube.DeviceRadiatorThermostat).String(),
 		cube.CmdLinkPartner(cube.Target{RFAddress: copyNew}, true, copyWall, cube.DeviceWallThermostat).String(),
@@ -497,7 +499,7 @@ func TestAddWithoutANameTakesTheDefault(t *testing.T) {
 			if err != nil || len(lines) != 1 {
 				t.Fatalf("metadata %v %v", lines, err)
 			}
-			sameLines(t, received, before, []string{"z:1e,G,01",
+			sameLines(t, received, before, []string{"z:1e,G,01", "z:1e,D,0a0b0c",
 				cube.CmdLinkPartner(cube.Target{RFAddress: 0x0a010a, RoomID: 1, Room: true}, true, copyNew, cube.DeviceRadiatorThermostat).String(),
 				cube.CmdLinkPartner(cube.Target{RFAddress: copyNew}, true, 0x0a010a, cube.DeviceRadiatorThermostat).String(),
 				cube.CmdLinkPartner(cube.Target{RFAddress: copyNew}, true, copyWall, cube.DeviceWallThermostat).String(),
@@ -521,7 +523,7 @@ func TestAddContactCopiesNothing(t *testing.T) {
 	if code != 200 || out["copied"] != nil {
 		t.Fatalf("add a contact: %d %v", code, out)
 	}
-	sameLines(t, received, before, []string{"z:1e,G,01",
+	sameLines(t, received, before, []string{"z:1e,G,01", "z:1e,D,0d0e0f",
 		cube.CmdLinkPartner(cube.Target{RFAddress: 0x0a010a, RoomID: 1, Room: true}, true, copyContact, cube.DeviceShutterContact).String(),
 		cube.CmdLinkPartner(cube.Target{RFAddress: copyContact}, true, 0x0a010a, cube.DeviceRadiatorThermostat).String(),
 		cube.CmdLinkPartner(cube.Target{RFAddress: copyContact}, true, copyWall, cube.DeviceWallThermostat).String(),
@@ -588,6 +590,11 @@ func TestCopyStopsAtADiscard(t *testing.T) {
 	code, out := do(t, ts, "PUT", base+"/devices/0a0b0c", `{"room_id":1}`)
 	if msg, _ := out["error"].(string); code != 502 || !strings.Contains(msg, "device 0a0b0c is in room 1, but copying the room's settings stopped") {
 		t.Fatalf("a discarded 0x11: %d %v", code, out)
+	}
+	// Its code says so, the discard its reason.
+	if params, _ := out["params"].(map[string]any); out["code"] != "device_settings_not_copied" || params["device"] != "0a0b0c" || params["room"] != float64(1) ||
+		!reflect.DeepEqual(params["reason"], map[string]any{"code": "command_discarded", "error": "engine: command discarded by the cube"}) {
+		t.Fatalf("a discarded 0x11's code: %v", out)
 	}
 	for _, l := range radioBytes(cubewatch.Lines(fc).Since(0, cubewatch.Type('s'))) {
 		if l[2] == cube.RFSetValveConfig || l[2] == cube.RFSetWeekProgram {
@@ -1121,9 +1128,8 @@ const newcomer cube.RFAddress = 0x0a0201
 // none, and the list has it in listed, out of the list for 0. change
 // changes the greeting after that, fake the fake Cube. The structure
 // changes are read back within a fraction of a second. The fake Cube
-// does not take a group (0x22) itself; as the Cube does once the device
-// acknowledged, it answers 0a0201's C line with the room its 0x22 named
-// from then on.
+// takes the group as the Cube does once the device acknowledged it: a
+// 0x22 names its room in the device's C line.
 func startNewcomer(t *testing.T, listed uint8, change func([]cube.Message) []cube.Message, fake func(*fakecube.Server)) *driftRig {
 	t.Helper()
 	clock := &checkClock{}
@@ -1150,15 +1156,6 @@ func startNewcomer(t *testing.T, listed uint8, change func([]cube.Message) []cub
 				lines = change(lines)
 			}
 			return lines
-		}),
-		withFake(func(fc *fakecube.Server) {
-			raw := rawConfig(t, fc.Greeting, newcomer)
-			fc.OnReceive(func(m cube.Message) {
-				rc, err := cube.ParseRadioCommand(m.Data)
-				if m.Type == 's' && err == nil && rc.Command == cube.RFSetGroupAddress && rc.Target.RFAddress == newcomer && len(rc.Payload) > 0 {
-					fc.SetConfig(configLine(raw, newcomer, rc.Payload[0], string(raw[8:18])))
-				}
-			})
 		}),
 	}
 	if fake != nil {
@@ -1196,10 +1193,11 @@ func (r *driftRig) heldIn(room uint8) (resend, bool) {
 	return resend{}, false
 }
 
-// newcomerLink is 0a0201's link half into room 1 beside 0a0202, the
-// metadata and the re-read, as the fake Cube receives them.
+// newcomerLink is 0a0201's link half into room 1 beside 0a0202, after
+// room 1's wakeup and its own, the metadata and the re-read, as the fake
+// Cube receives them.
 func newcomerLink() []string {
-	return []string{"z:1e,G,01",
+	return []string{"z:1e,G,01", "z:1e,D,0a0201",
 		linkPartner(room1(0x0a0202), true, newcomer, cube.DeviceWallThermostat),
 		linkPartner(direct(newcomer), true, 0x0a0202, cube.DeviceRadiatorThermostat),
 		cube.CmdSetGroup(newcomer, 1, false).String(), "m:", "c:0a0201"}
@@ -1449,7 +1447,7 @@ func TestRepairPlaceHoldsTheRoomsState(t *testing.T) {
 	if code != 200 {
 		t.Fatalf("the placement: %d %v", code, out)
 	}
-	sameLines(t, r.lines, sent, []string{"z:1e,G,01",
+	sameLines(t, r.lines, sent, []string{"z:1e,G,01", "z:1e,D,0a0201",
 		linkPartner(room1(0x0a0202), true, newcomer, cube.DeviceWallThermostat),
 		linkPartner(direct(newcomer), true, 0x0a0202, cube.DeviceRadiatorThermostat),
 		cube.CmdSetGroup(newcomer, 1, false).String(), "c:0a0201"})
@@ -1497,7 +1495,7 @@ func TestCopyTakesTheRoomsConfigurationPerGroup(t *testing.T) {
 	base := *snap.Config(0x0a0202).Thermostat // the fixture's radiator thermostat, as none of room 2's is now
 	sent := r.lines.Mark()
 	r.putNewcomer(2)
-	want := []string{"z:1e,G,02",
+	want := []string{"z:1e,G,02", "z:1e,D,0a0201",
 		linkPartner(cube.Target{RFAddress: 0x0a0206, RoomID: 2, Room: true}, true, newcomer, cube.DeviceWallThermostat),
 		linkPartner(direct(newcomer), true, 0x0a0204, cube.DeviceRadiatorThermostat),
 		linkPartner(direct(newcomer), true, 0x0a0205, cube.DeviceRadiatorThermostat),
@@ -1570,6 +1568,131 @@ func TestMoveGivesTheRoomsState(t *testing.T) {
 	}
 	if copied, _ := out["copied"].(map[string]any); fmt.Sprint(copied["state"]) != "map[mode:manual setpoint:5]" {
 		t.Fatalf("copied %v", out["copied"])
+	}
+}
+
+// A move and an add leave the device's C line in its new room, as the
+// fake Cube takes the 0x22 as the Cube does (AP FakeGroup, Block 2): no
+// line finding of the device follows. 0a0204 moves from room 2, its C
+// line's room too, into room 1, and the move's leave-out ends at the
+// check of its re-read, which follows the change's end, not
+// mismatchSettle later; the newcomer 0a0201, in no room and not listed,
+// is put into room 1, its re-read before the change's end.
+func TestMoveAndAddLeaveTheCLineInTheRoom(t *testing.T) {
+	t.Parallel()
+	for _, c := range []struct {
+		name  string
+		rf    cube.RFAddress
+		ended bool // the leave-out ends at the re-read's check
+	}{{"a move", 0x0a0204, true}, {"an add", newcomer, false}} {
+		t.Run(c.name, func(t *testing.T) {
+			t.Parallel()
+			r := startNewcomer(t, 0, nil, nil)
+			path := fmt.Sprintf("/api/v1/cubes/KEQ0000100/devices/%s", c.rf)
+			if code, out := do(t, r.ts, "PUT", path, `{"room_id":1}`); code != 200 {
+				t.Fatalf("%s into room 1: %d %v", c.rf, code, out)
+			}
+			settling := func() bool {
+				r.rt.cong.mu.Lock()
+				defer r.rt.cong.mu.Unlock()
+				return r.rt.cong.settling[c.rf] != nil
+			}
+			testkit.Eventually(t, "the C line in room 1", func() bool {
+				cfg := r.rt.client.Snapshot().Config(c.rf)
+				return cfg != nil && cfg.RoomID == 1 && (!c.ended || !settling())
+			})
+			snap := r.rt.client.Snapshot()
+			found, _ := findMismatches(snap, snap.Metadata(), view.Hidden{}, nil)
+			for _, m := range found {
+				if m.Device == c.rf.String() && lineFinding(m.Finding) {
+					t.Fatalf("a finding of %s after it went into room 1: %+v", c.rf, m)
+				}
+			}
+		})
+	}
+}
+
+// fakeDevice is rf's C line and L entry as a new connection to the fake
+// Cube at addr reads them in its greeting.
+func fakeDevice(t *testing.T, addr string, rf cube.RFAddress) (*cube.DeviceConfig, cube.DeviceState) {
+	t.Helper()
+	conn, err := net.Dial("tcp", addr)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer conn.Close()
+	conn.SetDeadline(time.Now().Add(testkit.Scale(5 * time.Second)))
+	rd := cube.NewReader(conn)
+	var cfg *cube.DeviceConfig
+	for {
+		m, err := rd.Read()
+		if err != nil {
+			t.Fatalf("the fake Cube's greeting: %v", err)
+		}
+		switch m.Type {
+		case 'C':
+			if strings.HasPrefix(m.Data, rf.String()+",") {
+				if cfg, err = cube.ParseConfig(m.Data); err != nil {
+					t.Fatal(err)
+				}
+			}
+		case 'L':
+			states, err := cube.ParseDeviceList(m.Data, nil)
+			if err != nil {
+				t.Fatal(err)
+			}
+			for _, st := range states {
+				if st.RFAddress == rf && cfg != nil {
+					return cfg, st
+				}
+			}
+			t.Fatalf("no C line or L entry of %s in the fake Cube's greeting", rf)
+		}
+	}
+}
+
+// A move's 0x23 names the room the device's C line names, none where it
+// names no room, and the device is woken itself where a room's wakeup
+// misses it (AP FakeGroup, Block 4): 0a0204, listed in room 2, its C
+// line in room 3 or in none, moves into room 1. The fake Cube refuses a
+// 0x23 of a room the C line does not name and flags the device, as the
+// test Cube did; the move ends with the C line in room 1 and no flag.
+// Each half wakes its room, room 2 whose members the out half unlinks,
+// then the device.
+func TestMoveNamesTheCLinesRoom(t *testing.T) {
+	t.Parallel()
+	const moved cube.RFAddress = 0x0a0204
+	for _, c := range []struct {
+		name  string
+		cLine uint8
+	}{{"its C line in another room", 3}, {"its C line in no room", 0}} {
+		t.Run(c.name, func(t *testing.T) {
+			t.Parallel()
+			r := startServer(t, rooms(), changeGreeting(func(lines []cube.Message) []cube.Message {
+				withConfigRoom(t, lines, moved, c.cLine)
+				return lines
+			}))
+			received := cubewatch.Lines(r.fc)
+			from := received.Mark()
+			if code, out := do(t, r.ts, "PUT", "/api/v1/cubes/KEQ0000100/devices/0a0204", `{"room_id":1,"copy":false}`); code != 200 {
+				t.Fatalf("the move: %d %v", code, out)
+			}
+			if cfg, st := fakeDevice(t, r.addr, moved); cfg.RoomID != 1 || st.Error {
+				t.Fatalf("after the move: C line in room %d, %+v; want room 1, no flag", cfg.RoomID, st)
+			}
+			got := lineStrings(received.Since(from, cubewatch.Except('l')))
+			want := []string{"z:1e,G,02", "z:1e,D,0a0204"}
+			if c.cLine != 0 {
+				want = append(want, cube.CmdSetGroup(moved, c.cLine, true).String())
+			}
+			in := slices.Index(got, "z:1e,G,01")
+			if len(got) < len(want) || !slices.Equal(got[:len(want)], want) || in < 0 || in+1 >= len(got) || got[in+1] != "z:1e,D,0a0204" {
+				t.Fatalf("the move sent\n%s\nwant it to start with %v, and room 1's wakeup followed by the device's", strings.Join(got, "\n"), want)
+			}
+			if slices.Contains(got, cube.CmdSetGroup(moved, 2, true).String()) {
+				t.Fatalf("a 0x23 of the list's room 2: %v", got)
+			}
+		})
 	}
 }
 
@@ -1699,8 +1822,9 @@ func TestCopyTakesANewerSetpoint(t *testing.T) {
 		t.Fatalf("the room setpoint: %d", code)
 	}
 	link := newcomerLink()
-	want := append(append([]string(nil), link[:4]...), setTemp(t, room1(0x0a0202), 21, cube.ModeManual, cube.Until{}))
-	want = append(want, link[4:]...)
+	half := slices.Index(link, "m:") // the link half, before the metadata
+	want := append(append([]string(nil), link[:half]...), setTemp(t, room1(0x0a0202), 21, cube.ModeManual, cube.Until{}))
+	want = append(want, link[half:]...)
 	want = append(want, setTemp(t, direct(newcomer), 21, cube.ModeManual, cube.Until{}))
 	want = append(want, copyOf(t, 1, []cube.RFAddress{0x0a0202}, *r.rt.client.Snapshot().Config(0x0a0202).Thermostat)...)
 	sameLines(t, r.lines, sent, append(want, setTemp(t, room1(0x0a0202), 21, cube.ModeManual, cube.Until{})))

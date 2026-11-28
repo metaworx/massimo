@@ -388,10 +388,13 @@ function refusalText(obj, serial, fallback) {
 }
 
 // refusalParams are a refusal's params as its text shows them: room, a
-// room's id, by the room's name, device, a radio address or a serial, by
-// the device's (deviceName), and each of devices so, where serial is the
-// selected Cube's and its rooms are loaded; every other value, and these
-// of another Cube, as given, a list joined by commas.
+// room's id, by the room's name, and so a parameter whose name ends in
+// _room, device, a radio address or a serial, by the device's
+// (deviceName), and each of devices so, where serial is the selected
+// Cube's and its rooms are loaded; a refusal that stopped this one (an
+// object with its error, code and params, as reason) by its own text
+// (refusalText); every other value, and these of another Cube, as given,
+// a list joined by commas.
 function refusalParams(params, serial) {
   const out = {};
   const own = !!serial && !!state.serial && state.roomsOf === state.serial && String(serial).toLowerCase() === String(state.serial).toLowerCase();
@@ -402,13 +405,15 @@ function refusalParams(params, serial) {
     return d ? deviceName(d) : String(v);
   };
   for (const [k, v] of Object.entries(params && typeof params === "object" ? params : {})) {
-    if (k === "room" && own) {
+    if ((k === "room" || k.endsWith("_room")) && own) {
       const r = state.rooms.find((x) => x.id === Number(v));
       out[k] = r ? r.name : String(v);
     } else if (k === "device" && own) {
       out[k] = device(v);
     } else if (Array.isArray(v)) {
       out[k] = v.map((x) => (k === "devices" && own ? device(x) : String(x))).join(", ");
+    } else if (v && typeof v === "object") {
+      out[k] = refusalText(v, serial, "");
     } else {
       out[k] = v;
     }

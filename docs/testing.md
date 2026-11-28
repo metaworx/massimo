@@ -240,6 +240,15 @@ r.dueNow(2) // room 2's write is due: the follow-up judges it at once
   `TestUnconfirmedRoomCommandNotResent`'s "superseded behind the hold",
   still has the hold's wait to do it in.
 
+**The fake carries out every command the server builds, or says why not.**
+`TestFakeHandlesEveryCommand` in `internal/cubelan/fakecube`
+reads the builders of `internal/protocol/cube` from their source,
+sends each command to a fake, and checks its effect in the fake's lines.
+A command the fake only answers, as it answers `z:`,
+is named in the test's `acknowledgedOnly` with its reason,
+and changes none of the fake's lines.
+A new builder fails the test until its case does one or the other.
+
 ## The race detector
 
 `-race` turns on `checkptr` too, which checks, as the code runs,
