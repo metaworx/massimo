@@ -77,6 +77,33 @@ def test_sign_in_by_opaque(new_context, case, watch, guard):
         api_call("DELETE", f"api/v1/users/{name}")
 
 
+def test_a_name_with_a_trailing_space_signs_in(new_context, case, watch, guard):
+    """The trailing space a password manager's autofill leaves after the
+    name stays in the field, and the sign-in passes all the same, by
+    OPAQUE, the name the user's (AP MobileApp, D107-A); the page's own
+    client and the server's routes take it trimmed alike (TestSignInTrimsTheName)."""
+    name = f"trim-{case.width}-{case.lang}"
+    ctx = new_context()
+    page = ctx.new_page()
+    guard.page = page
+    page.set_default_timeout(5000)
+    page.on("pageerror", lambda e: watch.problems.append(f"page error: {e}"))
+    page.goto(URL)
+    assert wait_until(page, "document.getElementById('login-dialog').open", 5), "the sign-in dialog opens without a token"
+    status, user = register(page, name, "trim-pass-01")
+    try:
+        assert status == 201, f"registered: {status} {user}"
+        assert sign_in_in(page, name + " ", "trim-pass-01"), "the page's client signs in with the space"
+        page.locator("#login-user").fill(name + " ")
+        page.locator("#login-password").fill("trim-pass-01")
+        page.locator("#login-form button[type=submit]").click()
+        page.wait_for_selector(".room", timeout=10000)
+        assert page.evaluate("state.me.user.name") == name, "signed in as the user"
+        assert page.locator("#login-user").input_value() == name + " ", "the space left in the field"
+    finally:
+        api_call("DELETE", f"api/v1/users/{name}")
+
+
 def sign_in_in(page, name, password):
     """A sign-in by the page's own client (login.js), no dialog: whether
     the password opens the user's record."""

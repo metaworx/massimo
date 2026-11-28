@@ -328,12 +328,12 @@ Block 7 adds what else Block 1's `Status()` carries.
 |---|---|---|
 | `token()` | a string, or `null` | the session or API key kept for the server it opened, `null` for none |
 | `setToken(t)` | `{revoked}`, or `null` | keeps `t` for that server, `null` forgets it (but from a page whose session is withheld, at its sign-in card, where it forgets nothing: version 5): sealed by the Keystore (Android) or the Keychain (iOS), or, for a server with a kept login whose `ask` is `return` or `start`, in the app's memory alone; what the connect page's `session` last found of the one before holds no more. A session `t` replaces is ended at the address the page was opened at once the answer is given (`POST /api/v1/logout`, AP MobileApp D68-A), so that a server slow to answer holds no sign-in up, the page leaving that to the app; a key it replaces is not, the server's `400` there going to no log, and one the server does not end is left in its `unended`. A new session is then checked as `session` checks one, at the address the page was opened at, before the answer: its id kept, and the server's `unrevoked` keys and `unended` sessions of its user revoked; `revoked` names the ids the server revoked so (AP MobileApp, D67-A), which My profile waits for before it reads its keys; `null` for `null`, and from an app before version 5 |
-| `login.status()` | `{can, user, ask, plain, key_id, server}` | `can`: the phone has a strong biometric enrolled; `user`: the user whose key is kept for the server, `""` for none; `ask`, as the server's; `plain`: the page is open over plain HTTP outside the private ranges, where no key is sent; `key_id` (version 5): the id of the key kept, `0` for none or not known, which My profile tags "this device's key" (AP MobileApp, D65-A); `server` (version 5): the server the page was opened for, `{name, url, node, fp}`, its name in the list, the address it was opened at, its `node` (the instance id of `/healthz`) and its pinned fingerprint, `""` for none, which the sign-in card shows under its title in place of the address bar the app has not (D62-A) |
+| `login.status()` | `{can, user, ask, plain, key_id, server}` | `can`: the phone has a strong biometric enrolled; `user`: the user whose key is kept for the server, `""` for none; `ask`, as the server's; `plain`: the page is open over plain HTTP outside the private ranges, where no key is sent; `key_id` (version 5): the id of the key kept, `0` for none or not known, which My profile tags "this device's key" (AP MobileApp, D65-A); `server` (version 5): the server the page was opened for, `{name, url, node, fp}`, its name in the list, the address it was opened at, its `node` (the instance id of `/healthz`) and its pinned fingerprint, `""` for none, which the sign-in card shows above its title in place of the address bar the app has not (D62-A; Block 20) |
 | `login.keep()` | `true`, or `false` | for a page just signed in: makes an API key of the signed-in user's at the server with the page's session (`POST /api/v1/users/{name}/tokens`, labelled with the phone), asks for the fingerprint once and keeps the key sealed under the app key behind it; `false`, nothing kept and the key revoked again, where the prompt was not passed |
 | `login.fingerprint()` | a string, or `null` | asks for the fingerprint, opens the kept key, makes a session with it (`POST /api/v1/login/key`) and resolves to that session, which it keeps as `setToken` would; `null` where the prompt was dismissed; a key the server refuses is forgotten and rejects |
-| `connect()` | `null` | shows the connect page, "Select server…" and the sign-in's "Cancel"; the server's session stays as it was |
-| `openServerSettings()` | `null` | shows the connect page with the settings of the server the page was opened for open (`ui/connect.html#settings=<id>`, the id the adapter's), ☰'s "This server's settings…" (version 5; AP MobileApp, D73-A); the page passes no id and reads and saves nothing of them, since a server's page that could would turn its own login off, trust another certificate or see the other servers |
-| `openAppSettings()` | `null` | shows the connect page with App settings open (`ui/connect.html#app-settings`), ☰'s "App settings…" (version 5) |
+| `connect()` | `null` | shows the connect page, "Select server", the sign-in's "Cancel", and Sign out once the page has ended and forgotten its session (AP MobileApp, Block 20); the server's session stays as the page left it |
+| `openServerSettings()` | `null` | shows the connect page with the settings of the server the page was opened for open (`ui/connect.html#settings=<id>`, the id the adapter's), ☰'s "This server's settings" (version 5; AP MobileApp, D73-A); the page passes no id and reads and saves nothing of them, since a server's page that could would turn its own login off, trust another certificate or see the other servers |
+| `openAppSettings()` | `null` | shows the connect page with App settings open (`ui/connect.html#app-settings`), ☰'s "App settings" (version 5) |
 
 The page asks `token()` once, at its start, before it asks the server who is in;
 without a token, or with one the server refuses, it shows its sign-in as a browser does,
@@ -343,6 +343,8 @@ and Sign out and Forget key hand it `null`;
 so does the page at the first request the server refuses with `401`,
 a session that expired or was revoked, which the app then forgets
 rather than hand it to the page again at the next start.
+Sign out then shows the list (`connect()`, once `setToken(null)` has answered)
+in place of the server's sign-in card, which shows only where `connect()` fails.
 The page then keeps no token in `localStorage`
 (in a browser it keeps it there, as before).
 OPAQUE runs in the page as in a browser;
@@ -473,7 +475,7 @@ under My profile → Sessions and keys by the phone's name, ends the session.
   Where a key is kept (`user`), the form shows "Login by fingerprint",
   which calls `login.fingerprint()` and is signed in with the session it
   resolves to; the password stays the other way.
-  "Select server…", last in the form's ☰, calls `connect()`,
+  "Select server", last in the form's ☰, calls `connect()`,
   as does "Cancel" left of each form's "Sign in" and of "Create the owner";
   in the app the Cube choice ends with the same entry.
 - **When the fingerprint is asked** (`ask`, chosen per server on the
@@ -706,7 +708,7 @@ bridge in `test_connect.py`, put into the page by Playwright's
 the page holds no code for tests.
 The same fake bridge checks the server's page's `token` and `setToken`,
 the sign-in form's login by fingerprint and its "Cancel",
-the Cube choice's "Select server…",
+the Cube choice's "Select server", Sign out to the list,
 and the self-signed notice left out there (`test_tls.py`).
 On a server's page, its `login.status()` answers the test's `key_id` and `server`,
 and its `setToken` revokes the test's `revokeAtSignIn` at the server with the

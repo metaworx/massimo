@@ -645,8 +645,10 @@ hence `failed_checks_forgotten`.
   marks nothing for an id that is not one of the user's keys,
   and nothing once the address or the page shown changes.
 - `test_password_eye.py`, the password fields' eye (AP MobileApp, D84-A):
-  the sign-in's password, the first owner's two, My profile's three and the
-  new user's each have it, which turns the field to text and back with the
+  the sign-in's password, My profile's current one and the new user's each
+  have it, and a new password typed twice, the first owner's and My
+  profile's, has one for both on its first field (Block 20), which turns
+  the field, or the two, to text and back with the
   value, the caret and the focus kept, by a click and by the keyboard,
   labelled Show password and Hide password and pressed while it shows;
   an API key's field has none; the password hidden again at the submit, at
@@ -871,17 +873,20 @@ hence `failed_checks_forgotten`.
   and the server's page in the app takes its token from the bridge,
   keeps none in the browser, and hands a sign-in and a sign-out to the bridge;
   its sign-in card has Cancel left of each Sign in and of Create the owner,
-  and "Select server…" last in its ☰, each calling `connect()`;
+  and "Select server" last in its ☰, each calling `connect()`;
   with a login kept, the row with the fingerprint is on one line at 390 px
   in all six languages, the card centred,
   and the fingerprint's spinner turns inside its button in the icon's place;
-  the card names its server under its title, in the app alone, with the
-  name once where it is the address and an ⓘ for the instance id and the
-  fingerprint, each copied with a tap, fitting the card at 390 px in all six
-  languages (and in `test_keep_open.py` on the first owner's steps);
-  ☰ in the app has This server's settings… and App settings… after Select
-  server…, each calling the bridge, fitting ☰ in all six languages, and the
-  connect page opens a server's settings from `#settings=<id>`;
+  the card names its server above its title, in the app alone, with the
+  name once where it is the address and an ⓘ on the address's line for the
+  instance id and the fingerprint, each copied with a tap and by its icon,
+  fitting the card at 390 px in all six languages (and in
+  `test_keep_open.py` on the first owner's steps);
+  ☰ in the app has App settings and This server's settings before Select
+  server, none with "…", between two rules, each calling the bridge,
+  fitting ☰ in all six languages, and the connect page opens a server's
+  settings from `#settings=<id>`; Sign out on a server's page shows the
+  app's list (Block 20);
   My profile in the app tags the key the phone keeps "this device's key",
   by `login.status()`'s `key_id`, and reads its keys once the sign-in's
   revoke is done, a key it revoked not marked but named in a toast;
