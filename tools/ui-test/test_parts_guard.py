@@ -764,7 +764,7 @@ def server_backups(page):
     page.locator(f".sb-target[data-uuid='{SB_TARGET}'] form input[name=name]").wait_for(state="visible")
     page.locator("#sb-key-add").click()
     page.locator("#sb-key-label").wait_for(state="visible")
-    settle(page)
+    answered(page)
 
 
 def info(page):
