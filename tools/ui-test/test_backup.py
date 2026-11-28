@@ -146,7 +146,7 @@ def test_backup_alone_has_maintenance(page, case):
     and its list, and not the Maintenance card, its sections menu naming
     Cube backups; System settings does not open."""
     me = dict(VIEWER, capabilities=["read", "preferences", "backup"])
-    page.route("**/api/v1/me", lambda route: route.fulfill(status=200, content_type="application/json", body=json.dumps(me)))
+    safe_route(page, "**/api/v1/me", lambda route: route.fulfill(status=200, content_type="application/json", body=json.dumps(me)))
     try:
         page.evaluate("loadMe()")
         assert wait_until(page, "document.body.classList.contains('no-system') && !document.body.classList.contains('no-maint')"
