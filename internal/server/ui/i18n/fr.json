@@ -960,7 +960,7 @@
   "log.kind.slots": "emplacements mémoire",
   "log.kind.mismatch": "liste des pièces",
   "log.kind.battery": "piles",
-  "log.kind.wall_reset": "thermostat mural réinitialisé",
+  "log.kind.wall_reset": "mode du thermostat mural réinitialisé",
   "log.kind.error_reset": "erreur de communication réinitialisée",
   "log.kind.error_watch": "surveillance des erreurs",
   "log.kind.login": "connexion",
