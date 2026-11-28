@@ -101,6 +101,28 @@ func TestLoginKey(t *testing.T) {
 		t.Fatalf("an integration's key: %d %s", code, text)
 	}
 
+	// A key past its end ends its session with it (AP KeyLife, Block 2):
+	// the session is refused, has ended and so does not count toward the
+	// lockout, and neither does the key.
+	endingTok, ending, _ := st.AddToken(ctx, anna.ID, store.TokenAPI, "SM-Y, login by fingerprint", time.Time{})
+	code, text = callAPI(t, ts, "POST", "/api/v1/login/key", ending, "")
+	var ofEnding session
+	if err := json.Unmarshal([]byte(text), &ofEnding); err != nil || code != 200 || ofEnding.Token == "" {
+		t.Fatalf("a session from the key that will end: %d %s %v", code, text, err)
+	}
+	endToken(t, st, endingTok.ID)
+	for i := 0; i < 3; i++ {
+		if code, _ := callAPI(t, ts, "GET", "/api/v1/cubes", ofEnding.Token, ""); code != 401 {
+			t.Fatalf("the session of a key past its end, try %d: %d", i+1, code)
+		}
+		if code, _ := callAPI(t, ts, "POST", "/api/v1/login/key", ending, ""); code != 401 {
+			t.Fatalf("a key past its end, try %d: %d", i+1, code)
+		}
+	}
+	if code, _ := callAPI(t, ts, "GET", "/api/v1/cubes", "secret", ""); code != 200 {
+		t.Fatalf("after a key past its end and its session three times: %d", code)
+	}
+
 	// Revoking the key ends its session at the session's next request;
 	// the revoked key is refused, but has ended, which is no guess and
 	// does not count toward the lockout (D64-A); a wrong key counts.

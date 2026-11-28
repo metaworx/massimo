@@ -3,7 +3,7 @@
 # (idioms_test.go; AP SteadyTests, Block 4): a test file and its count a
 # line. A plain handler races the page that closes with a request on its
 # way; a test routes with safe_route, or tells the page's own reads
-# through Reads (docs/ui-testing.md, section 9). A count may fall and may
+# through Reads (docs/ui-testing.md, section 1). A count may fall and may
 # not rise: a new route fails `go test`, and so does a route taken out
 # until its line here is lowered in the same commit, or taken out at 0.
 test_admin_updates.py 2

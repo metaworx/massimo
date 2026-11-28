@@ -260,7 +260,7 @@ def takes_the_rooms_setpoint(page, room, before):
     Block 3). The room's state, its other thermostat's, is put back. The
     UI run's server has no poll (serve -poll 0), so after each write the
     test asks for the read that shows it (POST …/refresh, docs/ui-
-    testing.md, section 9)."""
+    testing.md, section 1)."""
     other = page.evaluate("(state.rooms.find((r) => r.id === %d).devices.find((d) => d.rf_address !== '%s' && d.state) || {}).rf_address"
                           % (room, DEV))
     assert other, "another thermostat in the room, whose state is put back"

@@ -174,7 +174,7 @@ func TestTicketOfACallerLetOut(t *testing.T) {
 	if err != nil || len(toks) != 1 {
 		t.Fatalf("the viewer's tokens: %v %v", toks, err)
 	}
-	if err := st.RevokeToken(t.Context(), toks[0].ID); err != nil {
+	if _, err := st.RevokeToken(t.Context(), toks[0].ID); err != nil {
 		t.Fatal(err)
 	}
 	for n, tk := range tickets {
@@ -280,7 +280,8 @@ func TestRequestsWithoutTokenAreNotCounted(t *testing.T) {
 // address's lockout (AP MobileApp v1.4, D64-A): more refusals than the
 // limit within its window, of a revoked session, a session logged out,
 // one past its end, a revoked key at POST /api/v1/login/key, a session
-// whose key was revoked, and one on the stream's ?token=, lock nothing
+// whose key was revoked, one whose key is past its end (AP KeyLife,
+// Block 2), and one on the stream's ?token=, lock nothing
 // out; as many unknown tokens do, as before, a wrong ?token= on the
 // stream among them, and so does a wrong ticket beside an ended token.
 func TestEndedTokensAreNotCounted(t *testing.T) {
@@ -303,7 +304,7 @@ func TestEndedTokensAreNotCounted(t *testing.T) {
 	}
 	live := time.Now().Add(SessionLifetime)
 	revokedTok, revoked := session(live)
-	if err := st.RevokeToken(ctx, revokedTok.ID); err != nil {
+	if _, err := st.RevokeToken(ctx, revokedTok.ID); err != nil {
 		t.Fatal(err)
 	}
 	_, loggedOut := session(live)
@@ -322,9 +323,21 @@ func TestEndedTokensAreNotCounted(t *testing.T) {
 	if err := json.Unmarshal([]byte(text), &made); err != nil || code != 200 || made.Token == "" {
 		t.Fatalf("login by key: %d %s %v", code, text, err)
 	}
-	if err := st.RevokeToken(ctx, keyTok.ID); err != nil {
+	if _, err := st.RevokeToken(ctx, keyTok.ID); err != nil {
 		t.Fatal(err)
 	}
+	endingTok, ending, err := st.AddToken(ctx, anna.ID, store.TokenAPI, "SM-Y, login by fingerprint", time.Time{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	code, text = callAPI(t, ts, "POST", "/api/v1/login/key", ending, "")
+	var ofEnding struct {
+		Token string `json:"token"`
+	}
+	if err := json.Unmarshal([]byte(text), &ofEnding); err != nil || code != 200 || ofEnding.Token == "" {
+		t.Fatalf("login by the key that will end: %d %s %v", code, text, err)
+	}
+	endToken(t, st, endingTok.ID)
 	cubes := "/api/v1/cubes"
 	stream := cubes + "/KEQ0000100/events"
 	for i := 0; i < DefaultAuthFailures+1; i++ {
@@ -334,6 +347,7 @@ func TestEndedTokensAreNotCounted(t *testing.T) {
 			{"a session past its end", "GET", cubes, expired},
 			{"a revoked key", "POST", "/api/v1/login/key", key},
 			{"the session of a revoked key", "GET", cubes, made.Token},
+			{"the session of a key past its end", "GET", cubes, ofEnding.Token},
 			{"a revoked session on the stream", "GET", stream + "?token=" + revoked, ""},
 		} {
 			if code, text := callAPI(t, ts, c.method, c.path, c.token, ""); code != 401 || !strings.Contains(text, errBadToken.Error()) {

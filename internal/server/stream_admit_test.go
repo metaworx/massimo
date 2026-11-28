@@ -4,6 +4,7 @@
 package server
 
 import (
+	"encoding/json"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -60,8 +61,9 @@ func isKeepAlive(e testkit.Event) bool { return e.Kind == "" && e.Comment == "ke
 
 // An event stream asks at each keep-alive whether its caller would be
 // let in now: one opened on an open server ends once a user exists, one
-// opened with a key ends once the key is revoked, and one whose caller
-// is still allowed goes on.
+// opened with a key ends once the key is revoked, one opened with a
+// key's session once the key is past its end, and one whose caller is
+// still allowed goes on.
 func TestStreamEndsWhenItsCallerIsNotLetIn(t *testing.T) {
 	t.Parallel()
 	r := startServer(t, withOptions(storeOptions(t, t.TempDir(), "")))
@@ -83,13 +85,80 @@ func TestStreamEndsWhenItsCallerIsNotLetIn(t *testing.T) {
 	if err != nil || len(toks) != 1 {
 		t.Fatalf("the viewer's tokens: %v %v", toks, err)
 	}
-	if err := st.RevokeToken(t.Context(), toks[0].ID); err != nil {
+	if _, err := st.RevokeToken(t.Context(), toks[0].ID); err != nil {
 		t.Fatal(err)
 	}
 	testkit.Eventually(t, "the end of the stream of a revoked key", revoked.Ended)
 	// Counted from the revoked stream's end: keep-alives that came before
 	// the revocation say nothing of it.
 	stays.AwaitN(t, stays.Mark(), "three keep-alives for a caller still allowed, after the revocation", 3, isKeepAlive)
+
+	// One opened with a session made from a key ends once the key is past
+	// its end (AP KeyLife, Block 2).
+	key := userToken(t, st, "viewer2", store.RoleViewer)
+	code, text := callAPI(t, ts, "POST", "/api/v1/login/key", key, "")
+	var made struct {
+		Token string `json:"token"`
+	}
+	if err := json.Unmarshal([]byte(text), &made); err != nil || code != 200 || made.Token == "" {
+		t.Fatalf("a session from the key: %d %s %v", code, text, err)
+	}
+	ofKey := openStream(t, ts, made.Token)
+	ofKey.Await(t, 0, "a keep-alive of the key's session", isKeepAlive)
+	keyID := int64(0)
+	toks, err = st.Tokens(t.Context(), mustUser(t, st, "viewer2").ID)
+	for _, tk := range toks {
+		if tk.Kind == store.TokenAPI {
+			keyID = tk.ID
+		}
+	}
+	if err != nil || keyID == 0 {
+		t.Fatalf("the key of viewer2: %+v %v", toks, err)
+	}
+	endToken(t, st, keyID)
+	testkit.Eventually(t, "the end of the stream of a key's session at the key's end", ofKey.Ended)
+}
+
+// A stream opened with a key's old secret ends at the key's new secret
+// (AP KeyLife, Block 5), as at a revoke, though the key keeps its id: one
+// opened by the Bearer header and one opened with a ticket taken with the
+// old secret; a ticket taken with it and redeemed after the new secret
+// opens none, 401 counted toward no lockout, as the redemption asks the
+// caller again (stillAdmitted, AP LinkedRemoval). A stream of another key
+// goes on, and the new secret opens one.
+func TestStreamEndsAtANewSecret(t *testing.T) {
+	t.Parallel()
+	r := startServer(t, withOptions(storeOptions(t, t.TempDir(), "")))
+	ts, s := r.ts, r.s
+	s.streamKeepAlive.Store(int64(30 * time.Millisecond))
+	st := s.opts.Store
+	old := userToken(t, st, "viewer1", store.RoleViewer)
+	other := userToken(t, st, "viewer2", store.RoleViewer)
+	key, ok, err := st.TokenByHash(t.Context(), store.HashToken(old))
+	if err != nil || !ok {
+		t.Fatalf("the key: %v %v", ok, err)
+	}
+	byBearer := openStream(t, ts, old)
+	byTicket := openTicketStream(t, ts, ticketFor(t, ts, old, "KEQ0000100"))
+	later := ticketFor(t, ts, old, "KEQ0000100")
+	stays := openStream(t, ts, other)
+	for what, w := range map[string]*testkit.Watch[testkit.Event]{"by the header": byBearer, "by a ticket": byTicket} {
+		w.Await(t, 0, "a keep-alive of the stream "+what+", before the new secret", isKeepAlive)
+	}
+	_, secret, err := st.RekeyToken(t.Context(), key.ID, 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	testkit.Eventually(t, "the end of the stream opened by the header with the old secret", byBearer.Ended)
+	testkit.Eventually(t, "the end of the stream opened with a ticket taken with the old secret", byTicket.Ended)
+	if code, text := callAPI(t, ts, "GET", "/api/v1/cubes/KEQ0000100/events?ticket="+later, "", ""); code != 401 {
+		t.Errorf("a ticket taken with the old secret, redeemed after the new one: %d %s", code, text)
+	}
+	if keys, err := st.Lockout(DefaultAuthFailures, DefaultAuthWindow, DefaultAuthLockout).Keys(t.Context()); err != nil || len(keys) != 0 {
+		t.Errorf("the late ticket counted toward a lockout: %v %v", keys, err)
+	}
+	stays.AwaitN(t, stays.Mark(), "three keep-alives of another key's stream, after the new secret", 3, isKeepAlive)
+	openStream(t, ts, secret).Await(t, 0, "a keep-alive of a stream opened with the new secret", isKeepAlive)
 }
 
 func mustUser(t *testing.T, st *store.Store, name string) store.User {

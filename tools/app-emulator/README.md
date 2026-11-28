@@ -1,19 +1,17 @@
 # App emulator test
 
 `make app-emulator-test` runs `run.sh`:
-the Android app's instrumented tests (`app/android/app/src/androidTest/`)
-on an emulator, against two servers on the host built from this tree,
-the fingerprint simulated
-(AP MobileApp, D71-A).
+the Android app's instrumented tests (`app/android/app/src/androidTest/`) on an emulator,
+against two servers on the host built from this tree,
+the fingerprint simulated (AP MobileApp, D71-A).
 An emulator runs the WebView, the bridge, the Keystore and the system's
 biometric prompt as a phone does;
 the JVM tests of `app/android/app/src/test/` reach none of them,
 and the UI suite (`tools/ui-test/`) puts a fake bridge in the app's place.
 
 It needs Linux with KVM,
-the Android SDK with the pinned emulator and system image,
-JDK 17, Go, `curl` and `openssl`
-(and `unzip` and `sha1sum` for `sdk.sh fetch`),
+the Android SDK with the pinned emulator and system image, JDK 17, Go,
+`curl` and `openssl` (and `unzip` and `sha1sum` for `sdk.sh fetch`),
 and says which is missing before it starts anything.
 How long a run takes, its first runs in CI will say;
 the first one on a machine also fetches the test libraries.
@@ -31,23 +29,23 @@ the first one on a machine also fetches the test libraries.
   it says that KVM is not accessible, and stops.
   Until that new login, `sg kvm -c 'make app-emulator-test'`
   runs the target with the group, from a shell that predates it.
-  CI's runners give the runner's user the device with a udev rule
-  (below, "In CI").
-- **The SDK** at `ANDROID_HOME`, as `app/README.md` sets it up
-  ("The toolchain in WSL"), with `platform-tools`,
+  CI's runners give the runner's user the device with a udev rule (below,
+  "In CI").
+- **The SDK** at `ANDROID_HOME`,
+  as `app/README.md` sets it up ("The toolchain in WSL"), with `platform-tools`,
   and the emulator and the image that `pins.sh` names:
 
   ```bash
   sdkmanager emulator "system-images;android-34;google_apis;x86_64"
   ```
 
-  `sdkmanager` installs the newest revision of each, which may be newer than
-  the pins: `sdk.sh check` says so, and the run goes on with it.
+  `sdkmanager` installs the newest revision of each,
+  which may be newer than the pins: `sdk.sh check` says so,
+  and the run goes on with it.
   `tools/app-emulator/sdk.sh fetch` installs the pinned revisions themselves,
-  from Google's SDK repository, each archive held to the size and the
-  SHA-1 the repository gives;
-  it needs the SDK's licence accepted (`sdkmanager --licenses`)
-  and accepts none itself.
+  from Google's SDK repository,
+  each archive held to the size and the SHA-1 the repository gives;
+  it needs the SDK's licence accepted (`sdkmanager --licenses`) and accepts none itself.
   The two downloads are about 350 MB and 1.6 GB,
   some 5 GB once unpacked.
 - **JDK 17** for Gradle, `JAVA_HOME=/usr/lib/jvm/java-17-openjdk-amd64`
@@ -55,11 +53,12 @@ the first one on a machine also fetches the test libraries.
 - **Room in `TMPDIR`** (`/tmp` where it is not set) for the run's AVD,
   about 1.2 GB after a run, its data partition able to grow to 4 GB:
   where `/tmp` is a tmpfs, that is memory, and `TMPDIR` names another place.
-- **The host's tools**: Go, `curl` and `openssl` for the servers;
-  `unzip` and `sha1sum` for `sdk.sh fetch`;
-  GNU coreutils' `timeout`, `env -C` and `tail --pid` for the run;
-  `flock` (util-linux), which takes the run's locks,
-  and `ss` (iproute2), which finds the ports in use (below, "The ports").
+- **The host's tools**:
+  Go, `curl` and `openssl` for the servers;
+  `unzip` and `sha1sum` for `sdk.sh fetch`; GNU coreutils' `timeout`,
+  `env -C` and `tail --pid` for the run; `flock` (util-linux),
+  which takes the run's locks, and `ss` (iproute2),
+  which finds the ports in use (below, "The ports").
 
 ## What it does
 
@@ -108,10 +107,9 @@ the first one on a machine also fetches the test libraries.
    since `dumpsys window`'s whole dump opens with the last ANR's copy of the state.
 6. The finger enrolled by `EnrollTest` alone (below, "The fingerprint");
    where that fails, the run stops there.
-7. `:app:connectedFossDebugAndroidTest` on that emulator alone
-   (`ANDROID_SERIAL`), given the servers' addresses and fingerprints,
-   the user, the PIN and the name of the key's file
-   as the instrumentation's arguments;
+7. `:app:connectedFossDebugAndroidTest` on that emulator alone (`ANDROID_SERIAL`),
+   given the servers' addresses and fingerprints, the user,
+   the PIN and the name of the key's file as the instrumentation's arguments;
    `APP_EMU_CLASS` runs one class, or one `class#method`.
    After it, and after the enrollment's run,
    what the run ran (below, "The results").
@@ -123,9 +121,8 @@ the first one on a machine also fetches the test libraries.
    and the cleanup takes the screens and the report home first,
    each step of it bounded.
 
-Every `adb` command names the emulator by its serial:
-a phone that `adb` knows, over USB or wireless debugging, is never sent
-anything.
+Every `adb` command names the emulator by its serial: a phone that `adb` knows,
+over USB or wireless debugging, is never sent anything.
 The orchestrator runs each test in an instrumentation of its own,
 the app's data cleared before it (`clearPackageData`),
 its Keystore keys with it,
@@ -135,28 +132,25 @@ so that every test starts from the app installed anew.
 
 `servers.sh` builds `massimo` from the checkout, the page's parts first,
 and starts two servers on the slot's ports,
-in slot 0 `a` on `127.0.0.1:9443` and `b` on `127.0.0.1:9444`
-(`APP_EMU_API_PORT_A`, `_B`; below, "The ports"),
-each in a temporary directory of its own with its store,
-`MASSIMO_ENV_FILE=/dev/null`, so that nothing of the checkout's `.env`
-is read,
+in slot 0 `a` on `127.0.0.1:9443` and `b` on `127.0.0.1:9444` (`APP_EMU_API_PORT_A`, `_B`;
+below, "The ports"), each in a temporary directory of its own with its store,
+`MASSIMO_ENV_FILE=/dev/null`, so that nothing of the checkout's `.env` is read,
 over HTTPS with the self-signed certificate it makes at its start,
-against a fake Cube of its own with the UI suite's greeting
-(`tools/ui-test/greeting.txt`, the serial `KEQ0000100`),
-with no proxy, no announcement and no search but at its fake Cube.
+against a fake Cube of its own with the UI suite's greeting (`tools/ui-test/greeting.txt`,
+the serial `KEQ0000100`), with no proxy,
+no announcement and no search but at its fake Cube.
 The owner's key, the servers' `MASSIMO_API_TOKEN`, is made for the run;
 the user `tester` (role operator) signs in with a password.
-The fingerprint each server's log names as it makes its certificate is
-checked against the one it answers with, and handed to the tests,
-which compare it with the app's fingerprint sheet and pin it to read the
-audit.
+The fingerprint each server's log names as it makes its certificate is checked
+against the one it answers with, and handed to the tests,
+which compare it with the app's fingerprint sheet and pin it to read the audit.
 The directories go at the end of the run.
 
 ## The ports
 
 A run holds a slot, which gives it seven ports of its own,
-so that runs from two checkouts at once need no setting
-(`slots.sh`; AP EmulatorRuns, D2-A).
+so that runs from two checkouts at once need no setting (`slots.sh`;
+AP EmulatorRuns, D2-A).
 Slot `k`, from 0 to 7, gives the console port of slot 0 - 2k,
 and each other port of slot 0 + 2k:
 
@@ -177,21 +171,22 @@ So `APP_EMU_PORT` takes an even port from 5554 to 5584 alone,
 and any other stops the run before it starts anything (AP EmulatorRuns, D6-B).
 A setting given replaces that port alone, in every slot.
 The run takes the first slot whose lock it can take,
-whose emulator `adb` does not list (one left by a killed run, which holds no lock)
-and none of whose ports listens, the console's pair (its port + 1, adb's) among them;
+whose emulator `adb` does not list (one left by a killed run,
+which holds no lock) and none of whose ports listens,
+the console's pair (its port + 1, adb's) among them;
 `ss -Hltun` reads the listening sockets without connecting to them,
 since a connection to another program's server would put an error in its log.
 It says each slot it passed over and why,
 then the slot and its ports;
 where none of the eight is free, it stops before it starts anything.
 
-A slot's lock is a `flock` of the file `massimo-app-emulator-slot.<k>.lock`
-in `APP_EMU_LOCK_DIR`, `/tmp` where it is not set,
-not `TMPDIR`, so that runs with other `TMPDIR`s see one another's;
-the file is made where missing, readable by everyone,
-opened for reading, so that one another user made serves too,
-and it stays;
-a lock path that is a link or no regular file, a FIFO among them, is passed over.
+A slot's lock is a `flock` of the file `massimo-app-emulator-slot.<k>.lock` in
+`APP_EMU_LOCK_DIR`, `/tmp` where it is not set, not `TMPDIR`,
+so that runs with other `TMPDIR`s see one another's;
+the file is made where missing, readable by everyone, opened for reading,
+so that one another user made serves too, and it stays;
+a lock path that is a link or no regular file, a FIFO among them,
+is passed over.
 A run also locks this directory, `tools/app-emulator/`:
 a second run of the same checkout would take the first one's `results/`
 and the build and the reports in `app/android/`,
@@ -203,7 +198,8 @@ then handed to one holder, `tail --pid` of the run,
 which a subshell starts and leaves, so that it is none of the run's children,
 and which ignores `INT`, `TERM`, `HUP` and `QUIT`:
 it keeps them until `run.sh` has ended and been reaped, however it ends,
-a signal to its whole process group (Ctrl-C, `timeout`) and a `kill -9` among it,
+a signal to its whole process group (Ctrl-C,
+`timeout`) and a `kill -9` among it,
 so also while the cleanup still writes `results/`,
 and lets them go within about a second.
 Nothing else the run starts holds them,
@@ -265,17 +261,17 @@ two runs at once want a host with cores to spare.
 A test inside the emulator cannot reach the emulator's console,
 which alone touches its fingerprint sensor (`adb emu finger touch`).
 So a test asks for each touch with a line in the log,
-`touch <n>` under the tag `MassimoEmu`, `n` rising across the suite
-(`Rig.touch`),
-once the prompt it waits for shows,
-and `fingers.sh` reads the log (`adb logcat -v raw -s MassimoEmu:I`)
-and answers each such line once,
-with `finger touch 1` and `finger remove`, a touch and its lift.
+`touch <n>` under the tag `MassimoEmu`,
+`n` rising across the suite (`Rig.touch`), once the prompt it waits for shows,
+and `fingers.sh` reads the log (`adb logcat -v raw -s MassimoEmu:I`) and answers
+each such line once, with `finger touch 1` and `finger remove`,
+a touch and its lift.
 It refuses a serial that is not an emulator's before it calls `adb`.
 A prompt still shown after a touch is touched again, three times at most.
 A test that cancels a prompt presses its Cancel through UiAutomator,
 and where the prompt has none, as from Android 11 on,
-where it takes the PIN and shows "Use PIN" instead, presses Back, as a user does.
+where it takes the PIN and shows "Use PIN" instead, presses Back,
+as a user does.
 
 A touch the console refuses is said in `fingers.log`, and the helper goes on;
 a log that ends while `adb` still sees the emulator is read again,
@@ -328,44 +324,41 @@ In the suite's own run `EnrollTest` passes at once.
 | `ConnectPageTest` (two tests) | the connect page and the bridge at contract version 7, a server's call refused | 3, 19 |
 | `EnrollTest.aFingerIsEnrolled` | the finger enrolled through Settings, run alone before the others | 18 |
 
-A step on the list or a server's page is a script in the WebView
-(`Page`), as a tap would reach the page;
-the prompt is the system's, found by its title, the app's text.
-What the server did is read from its audit
-(`GET /api/v1/audit?user=tester`, with the owner's key)
-and from `GET /api/v1/me`.
+A step on the list or a server's page is a script in the WebView (`Page`),
+as a tap would reach the page; the prompt is the system's, found by its title,
+the app's text.
+What the server did is read from its audit (`GET /api/v1/audit?user=tester`,
+with the owner's key) and from `GET /api/v1/me`.
 
 ## What it does not cover
 
 What the owner's phone check keeps:
 a real fingerprint sensor, the phone maker's autofill and password manager,
 and the look.
-Nor does it cover discovery (an emulator hears no `serve` on the host's
-LAN), push, a server over plain HTTP outside the home network,
-or Android 8 to 10, whose prompt takes no PIN.
+Nor does it cover discovery (an emulator hears no `serve` on the host's LAN),
+push, a server over plain HTTP outside the home network, or Android 8 to 10,
+whose prompt takes no PIN.
 
 ## The results
 
-The AVD, the servers' stores, their `massimo` and `tally`
-are in the run's work directory,
+The AVD, the servers' stores,
+their `massimo` and `tally` are in the run's work directory,
 `massimo-app-emulator.XXXXXX` under `TMPDIR` (`/tmp` where it is not set),
-the AVD in its `avd/`;
-the directory goes at the end of the run,
+the AVD in its `avd/`; the directory goes at the end of the run,
 and `KEEP=1 make app-emulator-test` keeps it, the AVD with it,
-about 1.2 GB after a run, and prints its path
-(AP CleanRuns, D4-A).
+about 1.2 GB after a run, and prints its path (AP CleanRuns, D4-A).
 The directory holds the run's PID and the emulator's in `pid`.
 A run that was killed, whose cleanup could not run, leaves its own;
 a later run removes it once neither runs and it is older than a day,
-as the UI suite does with its own
-(`tools/workdir/README.md`; AP EmulatorRuns, D1-A, D3-B).
+as the UI suite does with its own (`tools/workdir/README.md`; AP EmulatorRuns,
+D1-A, D3-B).
 
 `results/`, emptied at each run and not kept by git:
 `emulator.log` with the kernel's messages,
-the device's `logcat.txt` from the boot on (the suite's steps under
-`MassimoEmu`, and for a failed test the window's hierarchy and the page's
-text), its crash buffer `crash.txt` (each crash's stack whole),
-`fingers.log`, `keyguard.log`, each server's and fake Cube's log,
+the device's `logcat.txt` from the boot on (the suite's steps under `MassimoEmu`,
+and for a failed test the window's hierarchy and the page's text),
+its crash buffer `crash.txt` (each crash's stack whole), `fingers.log`,
+`keyguard.log`, each server's and fake Cube's log,
 `shots/` with the screen of each failed test,
 Gradle's `report/` and `test-results/` (its JUnit results, `TEST-*.xml`),
 and `enroll/`, the enrollment's report and results where it passed.
@@ -437,9 +430,9 @@ and a step that fails names the script it ran, never its text.
 
 `pins.sh` pins the image, Android 14 with Google's APIs on x86_64,
 by its revision, and the emulator by its version,
-each with its archive's address, size and SHA-1
-as Google's SDK repository lists them
-(`repository2-3.xml`, `sys-img/google_apis/sys-img2-3.xml`).
+each with its archive's address,
+size and SHA-1 as Google's SDK repository lists them (`repository2-3.xml`,
+`sys-img/google_apis/sys-img2-3.xml`).
 A pin moves by a decision, its values together;
 `TestPinsHoldTogether` (`scripts_test.go`) checks that they fit.
 A move of the image also rechecks the three texts that `setup_ended` looks for,
@@ -456,19 +449,15 @@ where a phone's updated WebView passes it.
 
 The job "Android emulator" (`.github/workflows/ci.yml`;
 `GUIDELINES/project/CI.md`, section 2) runs beside "Android app",
-where What to test answers `app`:
-KVM given to the runner's user by a udev rule,
-the pinned emulator and image fetched into a directory of the run's
-(`APP_EMU_SDK`, `sdk.sh fetch`),
-then `make app-emulator-test`'s two steps, `make ui` and `run.sh`,
-in a step with a time limit of its own (32 minutes, inside the job's 45),
-`run.sh` in the shell's place (`exec`),
-so that the runner's signal at that limit reaches it and its cleanup
-keeps the results;
+where What to test answers `app`: KVM given to the runner's user by a udev rule,
+the pinned emulator and image fetched into a directory of the run's (`APP_EMU_SDK`,
+`sdk.sh fetch`), then `make app-emulator-test`'s two steps,
+`make ui` and `run.sh`, in a step with a time limit of its own (32 minutes,
+inside the job's 45), `run.sh` in the shell's place (`exec`),
+so that the runner's signal at that limit reaches it and its cleanup keeps the results;
 `results/` is the artifact `app-emulator-results`,
-on a failure or a cancellation,
-and on a pass too, kept seven days, so that a passing run can be read;
-the run is strict there (`CI=true`).
+on a failure or a cancellation, and on a pass too, kept seven days,
+so that a passing run can be read; the run is strict there (`CI=true`).
 Its result counts with Android app's in the Tested record's `app=`.
 
 ## Files

@@ -122,7 +122,7 @@ SAY = """(texts) => {
 # and due after any say the bubbles shown before it set: showBubble says
 # its text 50 ms after it shows (components.js, bubbleState.say), and of
 # two timers of the same time the one set first runs first. A text said
-# again by its end is in window.__said (docs/ui-testing.md, section 9,
+# again by its end is in window.__said (docs/ui-testing.md, section 1,
 # "Nothing came, against an end").
 SAYS_DUE = "() => new Promise((done) => setTimeout(done, 50))"
 

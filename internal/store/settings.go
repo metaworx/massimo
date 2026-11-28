@@ -280,6 +280,15 @@ func (s *Store) PasswordLogin(ctx context.Context) bool {
 	return !ok || on
 }
 
+// KeyIdleDaysKey is the idle limit of API keys, in whole days (AP
+// KeyLife, Block 3): a key unused for that many days, counted from its
+// last use or its making where it was never used, ends, its session
+// with it; 0 or unset, the limit is off (D2-A). A key kept from it
+// (Token.IdleExempt) and the settings file's key (D3-A) never end by it.
+// The rule alive reads it at each check (tokens.go), so a change applies
+// at once.
+const KeyIdleDaysKey = "auth.key_idle_days"
+
 // PasswordRevealKey says whether the web UI's password fields offer their
 // eye, the button that shows the password as it is typed (true by
 // default, AP MobileApp D84-A): off, no field shows one. The page learns

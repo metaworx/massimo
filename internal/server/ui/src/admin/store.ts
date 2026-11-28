@@ -38,6 +38,9 @@ export const passwordLogin = signal<boolean | null>(null);
 /** Whether the password fields offer their eye (the setting auth.password_reveal), null before it is read. */
 export const passwordReveal = signal<boolean | null>(null);
 
+/** The days an API key may stay unused before it ends (the setting auth.key_idle_days, 0 for off; AP KeyLife, Block 3), null before it is read. */
+export const keyIdleDays = signal<number | null>(null);
+
 /** Keeping the server open turned off in this showing of System settings, whose row stays in sight, off, until it is shown again (AP FirstOwner, D32). */
 export const keptOff = live({ showing: false });
 
@@ -96,6 +99,7 @@ export function forgetAdmin(): void {
   enabled.value = [];
   passwordLogin.value = null;
   passwordReveal.value = null;
+  keyIdleDays.value = null;
   keptOff.showing = false;
   userUI.clear();
   identityUI.clear();

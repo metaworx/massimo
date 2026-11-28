@@ -54,7 +54,7 @@ The page has helpers.PAGE_KIT before its own scripts, which records
 what its event stream brings. The fixture reads answers the page's own
 reads with the server's data and what the test put in (helpers.Reads),
 and stream watches the page's event stream from a mark (helpers.Stream);
-docs/ui-testing.md, section 9, says when a test needs them.
+docs/ui-testing.md, section 1, says when a test needs them.
 
 A test marked used_ticket gets a used ticket for its first stream
 (`watch.refused`), which the server refuses with a 401; its page is
@@ -662,6 +662,30 @@ def clear_preferences():
     alerts = (api_call("GET", "api/v1/log/alerts") or {}).get("alerts") or []
     if alerts:
         api_call("PUT", "api/v1/me/preferences/log.seen", {"all": max(a["id"] for a in alerts), "lines": []})
+
+
+# SETTINGS_DEFAULTS are the page's settings in a browser that keeps none
+# (storedSettings() of app.js), the preference ui as the page sends it.
+SETTINGS_DEFAULTS = {"poll": 10, "expert": False, "clock": "browser", "lang": "auto", "theme": "system", "scheme": "massimo",
+                     "blink": "system", "iconWindow": "sash", "iconRadio": "wifi"}
+
+
+def server_holds_settings(holds, token=None, **values):
+    """Sets whether the server holds the settings of the token's user, the
+    test token's (the page fixture's user) unless another is given: with
+    holds, the preference ui with values over the page's defaults
+    (SETTINGS_DEFAULTS); without, none, as clear_preferences leaves it.
+    A sign-in and a page's load take the settings the server holds, and
+    hand a server that holds none the browser's (loadPreferences of
+    login.js), so a test whose outcome depends on which sets it at the
+    moment that decides, rather than taking what the page's own pushes or
+    an earlier test left (docs/ui-testing.md, section 1; AP SteadyTests
+    v1.1, D14-A): while its page is signed out, or before the load,
+    where no push of the page's own comes after it."""
+    if holds:
+        api_call("PUT", "api/v1/me/preferences/ui", {**SETTINGS_DEFAULTS, **values}, token=token)
+    else:
+        api_call("DELETE", "api/v1/me/preferences/ui", token=token)
 
 
 @pytest.fixture
