@@ -430,7 +430,7 @@ func (s *Server) putSettings(w http.ResponseWriter, r *http.Request) error {
 		}
 	}
 	if alert < warn {
-		return fail(http.StatusBadRequest, "%s (%s) must not be under %s (%s)", store.WindowAlertKey, fmtDuration(alert), store.WindowWarnKey, fmtDuration(warn))
+		return refuse(http.StatusBadRequest, codeSettingAlertUnderWarning, fmtDuration(alert), fmtDuration(warn))
 	}
 	// auth.keep_open first: its write counts the users again and may be
 	// refused (409), and a refusal then comes before any other key is

@@ -96,9 +96,9 @@ export function canManageUsersOf(m: Me | null = me.value): boolean {
   return can("users", m) || can("guests", m) || can("passwords", m) || can("integrations", m);
 }
 
-/** systemOf reports whether who is in sees System settings or Maintenance: a capability of one of their cards (hasSystem of login.js). */
+/** systemOf reports whether who is in sees System settings or Maintenance: a capability of one of their cards, settings for Maintenance's and Limits' rows (hasSystem of login.js; AP ServerLimits, D6-A). */
 export function systemOf(m: Me | null = me.value): boolean {
-  return ["cubes", "pair", "backup", "roles", "capabilities", "auth", "integrations", "update", "restart", "reboot"].some((c) => can(c, m)) || canManageUsersOf(m);
+  return ["cubes", "pair", "backup", "roles", "capabilities", "auth", "integrations", "update", "restart", "reboot", "settings"].some((c) => can(c, m)) || canManageUsersOf(m);
 }
 
 /** settingsPageOf reports whether who is in may open System settings: a capability of one of its cards, not of Maintenance's alone (hasSettingsPage of login.js). */

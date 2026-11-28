@@ -633,7 +633,7 @@ The compacted header has **↑**, back to the top, first of the page buttons:
   each for the roles that may open it and with the icon of its page: **Log**;
   **Cube settings**, the chosen Cube's, for a role with `cubes` or with `pair`,
   **System settings**, for a role with one of its capabilities, **Maintenance**,
-  for those and a role with `update`, `restart` or `reboot`,
+  for those and a role with `settings`, `update`, `restart` or `reboot`,
   and **System info**, for every role with `read`; **Personal settings**,
   its tooltip naming whose they are, by display name and login,
   in the app **Select server…**, back to the app's servers,
@@ -790,7 +790,9 @@ Every room has a tile:
   a window contact reporting it:
   blue for its first 5 minutes, then amber with a triangle,
   red with a cross after 10
-  (the server's settings `window_warn_after` and `window_alert_after`);
+  (the server's settings `window_warn_after` and `window_alert_after`,
+  Maintenance → **Limits**, see Maintenance),
+  and at a change of them, from this page or another, the sign follows at once;
   an hourglass, amber, a device that has not shown a write by its deadline
   (`docs/api-v1.md`, "Writes confirmed by the devices"):
   five minutes after a setpoint, a key lock or a display mode,
@@ -2561,10 +2563,11 @@ settings forms and have none of it.
 ## Maintenance
 
 ☰ → **Maintenance** keeps the server itself going,
-in two cards as wide as the page, **Software update** and **Maintenance**,
+in three cards as wide as the page,
+**Software update**, **Maintenance** and **Limits**,
 under the page's row with **Sections** at its right end, as System settings has.
 It is for every role that has System settings,
-Software update being for all of them, and for one with `update`,
+Software update being for all of them, and for one with `settings`, `update`,
 `restart` or `reboot` alone; a viewer has no such entry in ☰.
 The server's sign, when it says an update is out, opens it at Software update.
 
@@ -2812,12 +2815,15 @@ The server's sign, when it says an update is out, opens it at Software update.
 
   | Event | When the server sends it | What Maintenance reads |
   |---|---|---|
-  | `change` of `announce` or an interval | the setting set, from any browser | the settings (`GET /api/v1/settings`) |
+  | `change` of `announce`, an interval or a window limit | the setting set, from any browser | the settings (`GET /api/v1/settings`), Limits' with them; for a window limit the rooms too, whatever page is shown |
   | `settings_read` | the settings file read again: changed on disk, SIGHUP, Reload now; and at the start, after `server_started`, where the start found notes on the file | at `info` nothing: the event names what waits for the next start, its time is when the file was read, and the next start refuses nothing, so the card takes a refusal away; at `warn` the restart's row (`GET /api/v1/restart`): the read found the next start refuses something, or a note on the file, and the row names what the next start refuses, never a note |
   | `reboot` | a reboot asked for, begun or failed | the reboot's state (`GET /api/v1/reboot`) |
   | `reboot_cancelled` | a reboot taken back, or the owner's switch turned off | the same |
   | `resync` | the stream opened again with no replay: after the server's restart | the settings, the restart's row and the reboot's |
 
+  A `change` of a window limit reads the rooms on every page, not only here:
+  the server sends a `change` to every stream, which needs `read` alone,
+  so the rooms are read again for every role, `settings` held or not.
   `restart` reads nothing: the server is going away,
   and its start says what it is like when it is back.
   A restart or a reboot this page follows reads at its own pace,
@@ -2827,6 +2833,49 @@ The server's sign, when it says an update is out, opens it at Software update.
   An event's read of the settings or of the reboot waits
   while this page's own request of them is under way and is made once when it has ended,
   and its answer shows nothing where one was made meanwhile.
+- **Limits** (with `settings`, AP ServerLimits), after Maintenance:
+  how long a thing may last before the page warns of it,
+  with its help in the card's head.
+  **Window open: warning after** and **Window open: alert after**
+  choose the settings `window_warn_after` and `window_alert_after` (`docs/api-v1.md`,
+  "GET and PUT /api/v1/settings"):
+  how long a window may stay open before its sign on its room's tile,
+  in the room's list and in the Cube's problems turns amber with a triangle,
+  and then red with a cross.
+  Each is a list saved as it is chosen, as the Cube intervals are,
+  staying on with the choice in it while its request runs:
+  first **Default** with the server's value,
+  "Default (5 min)" and "Default (10 min)",
+  which is sent as none, so that the store keeps no copy of it;
+  then the steps 1, 2, 3, 5, 10, 15, 20, 30 and 45 minutes,
+  1, 2, 4, 8, 12 and 24 hours,
+  and a value set through the API that is none of them, listed as itself.
+  The line under each says what it does, and names the steps it cannot take.
+  The server refuses an alert under the warning, equal allowed,
+  and the steps it would refuse are listed but off,
+  by the other's value in effect as the page last read it:
+  in the warning's list each step above the alert in effect,
+  in the alert's each step under the warning in effect,
+  Default too where its value would be refused.
+  The line under the row says the change was saved, and it applies at once,
+  or why it was not, the server's refusal in the page's language
+  (`setting_alert_under_warning`, `docs/api-v1.md`, "Error codes");
+  a change that failed reads the settings again,
+  so that the steps that are off follow what the server holds.
+  A read that fails says so on each row,
+  but on one whose line says already that its own change failed,
+  as it does under **Announce on the LAN**;
+  the next read that succeeds takes that back from every row it was said on,
+  Announce on the LAN's too, and leaves a change's own line.
+  At a change of either, made on this page or another,
+  the page reads its rooms again, whatever page is shown:
+  the server gives each open window its times by them (`docs/api-v1.md`,
+  a device's `window`), and an open window's sign follows at once.
+  The server sends the `change` to every stream,
+  so the rooms are read again for every role, `settings` held or not.
+  The card is read with Maintenance's settings, in one read,
+  each time Maintenance is shown and at the events that read them (above),
+  and is drawn in place, the focus where it was.
 
 ## In the apps
 
@@ -2932,7 +2981,7 @@ with its frames from `ui/partials/`,
 in the order `uiPartials` in `internal/server/ui.go` lists them,
 and serves the result at `/`: the header, My settings' notes,
 System settings' section cards (in three markers, before,
-in and after the cards that flow in two columns), Maintenance's two cards,
+in and after the cards that flow in two columns), Maintenance's three cards,
 System info's card, the Cube page, the devices without a room and the toast.
 A frame that would be one element, the place a part draws into,
 is in `index.html` itself.
@@ -2990,7 +3039,7 @@ A region's root is drawn once into its place in the skeleton (`mounter` of
 | Backup and restore | `backups/` | `#backups-cubes`, `#cube-backup-body` | `backups.cubeChanged`, `backups.restoreEvent`, `backups.resynced` (app.js) |
 | the log | `log/` | `#logview` | `log.mount`, `log.event`, `log.render`, `log.load`, `log.poll`, `log.prune`, `log.cubesPolled`, `log.cubeChanged`, `log.selects`, `log.choicesChanged`, `log.loadAlerts`, `log.sign`, `log.kinds` (app.js); `log.focusHead` (the sign-in's first owner's toast); `log.state`, `log.alerts`, `log.matches`, `log.ofChoices`, `log.rangeStart`, `log.upperFirst` (the UI tests) |
 | Software update | `software/` | `#sys-software-body` | `software.load` (header.js) |
-| Maintenance | `maintenance/` | `#sys-maint-body` | — |
+| Maintenance and Limits | `maintenance/` | `#sys-maint-body`, `#sys-limits-body` | — |
 | System info | `sysinfo/` | `#sys-info-body` | — |
 | My settings | `prefs/` | `#prefs-rows`, `#appearance` | — |
 | Notifications | `notify/` | `#notify-sec` | `notify.render`, `notify.save`, `notify.takeSave`, `notify.sendNow` (app.js, login.js) |
@@ -3175,6 +3224,9 @@ a restore's to `MassimoParts.backups`, `cube_found` to `addFound`,
 `notification` to `notifyToast`,
 and every other kind the log knows (`MassimoParts.log.kinds`) to the log and to
 `MassimoParts.serverEvent`.
+A `change` of a window limit has the maintenance region call `loadRooms` on every page,
+so that the tiles' window signs follow at once (AP ServerLimits, D5-A):
+the server sends a `change` to every stream, whatever the role holds.
 An event's read of a thing waits for the page's own request for it to end,
 and reads once (`burstReader` of `shared/burst.ts`).
 
