@@ -26,7 +26,7 @@ import time
 
 import pytest
 
-from conftest import TOKEN, URL, api_call, clear_preferences
+from conftest import TOKEN, URL, api_call, clear_preferences, server_holds_settings
 from helpers import OPERATOR_PASSWORD, frames, held_timers, open_personal_page, scaled, sent_requests, show_view, sign_out, wait_held, wait_until
 from test_login import sign_in
 
@@ -318,7 +318,6 @@ def test_another_user_gets_nothing_of_the_first(new_context, case, watch, guard)
     and in a form. The owner signs in with the key, with no settings on
     the server: the page shows none of the three texts, and the owner's
     first settings push carries the defaults, not the operator's poll."""
-    clear_preferences()
     page = own_page(new_context, guard, watch)
     page.goto(URL)
     sign_in(page, "operator", OPERATOR_PASSWORD)
@@ -350,6 +349,7 @@ def test_another_user_gets_nothing_of_the_first(new_context, case, watch, guard)
             page.wait_for_timeout(200)
         assert page.evaluate(said, where), f"#{where} says it was not sent"
     assert NOT_SENT[case.lang] in page.locator(".room .tile-result").first.inner_text(), "the tile says it was not sent"
+    server_holds_settings(False)  # the owner's, which an earlier test's page pushed: none, so the sign-in hands over this browser's
     before, pushed = len(seen), len(pushes)
     sign_in_key(page)
     back(page, seen, before)
