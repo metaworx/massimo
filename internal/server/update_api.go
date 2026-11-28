@@ -16,6 +16,7 @@ package server
 import (
 	"context"
 	"errors"
+	"fmt"
 	"net/http"
 	"os"
 	goruntime "runtime"
@@ -319,28 +320,30 @@ func (s *Server) heldBack(rc releaseCheck, offer string) string {
 	return h.version
 }
 
-// updateBlocked says why an update cannot be started from the API, or "".
-func (s *Server) updateBlocked(ctx context.Context) string {
+// updateBlocked says why an update cannot be started from the API: the
+// 403 a request for one meets, its text the view's blocked; nil where it
+// can be.
+func (s *Server) updateBlocked(ctx context.Context) error {
 	switch {
 	case s.opts.Update.Managed != "":
-		return s.opts.Update.Managed
+		return refuseSaying(http.StatusForbidden, s.opts.Update.Managed, codeUpdateManaged)
 	case !s.authenticated(ctx):
-		return "set MASSIMO_API_TOKEN or create a user to start updates from the API"
+		return refuse(http.StatusForbidden, codeUpdateOpen)
 	case s.opts.Update.Request == "" && goruntime.GOOS == "windows":
-		return "start updates from the installed service (massimo install)"
+		return refuse(http.StatusForbidden, codeUpdateFromService)
 	case s.opts.Update.Request == "":
-		return "no update helper installed (see packaging/README.md)"
+		return refuse(http.StatusForbidden, codeUpdateNoHelper)
 	case s.opts.Update.Helper != nil && s.opts.Update.Helper() != "":
-		return s.opts.Update.Helper()
+		return refuseSaying(http.StatusForbidden, s.opts.Update.Helper(), codeUpdateHelperOff)
 	case s.opts.Update.Blocked != "":
-		return s.opts.Update.Blocked
+		return refuseSaying(http.StatusForbidden, s.opts.Update.Blocked, codeUpdateUnstartable)
 	case !update.ValidChannel(s.updateChannel(ctx)):
-		return "no update channel: set the setting update.channel or MASSIMO_UPDATE_CHANNEL (a build without the Makefile has no flavour)"
+		return refuse(http.StatusForbidden, codeUpdateNoChannel)
 	}
 	if v, ok := update.ParseVersion(s.opts.Update.Version); !ok || v.Dirty {
-		return "this is a development or modified build; update it by hand (massimo update -force)"
+		return refuse(http.StatusForbidden, codeUpdateDevBuild)
 	}
-	return ""
+	return nil
 }
 
 type updateView struct {
@@ -385,7 +388,10 @@ func (s *Server) updateState(ctx context.Context, refresh bool) updateView {
 // updateRelease is updateState with the release it found, if any.
 func (s *Server) updateRelease(ctx context.Context, refresh bool) (updateView, *update.Release) {
 	u := s.opts.Update
-	v := updateView{Current: u.Version, Flavour: u.Flavour, Channel: s.updateChannel(ctx), Suite: s.aptSuite(), Manager: u.Manager, Blocked: s.updateBlocked(ctx)}
+	v := updateView{Current: u.Version, Flavour: u.Flavour, Channel: s.updateChannel(ctx), Suite: s.aptSuite(), Manager: u.Manager}
+	if why := s.updateBlocked(ctx); why != nil {
+		v.Blocked = why.Error()
+	}
 	if u.Status != "" {
 		if st, err := update.ReadStatus(u.Status); err == nil && !st.Time.IsZero() {
 			v.Helper = &st
@@ -461,25 +467,25 @@ func (s *Server) startUpdate(w http.ResponseWriter, r *http.Request) error {
 func (s *Server) beginUpdate(ctx context.Context, userID int64, auto bool) (updateView, error) {
 	// Replacing the binary is never open to an unauthenticated API, even
 	// where reading and setting temperatures are.
-	if why := s.updateBlocked(ctx); why != "" {
-		return updateView{}, fail(http.StatusForbidden, "%s", why)
+	if why := s.updateBlocked(ctx); why != nil {
+		return updateView{}, why
 	}
 	v, rel := s.updateRelease(ctx, true)
 	switch {
 	case v.Helper != nil && v.Helper.Running():
-		return v, fail(http.StatusConflict, "an update is already running (%s)", v.Helper.State)
+		return v, refuseSaying(http.StatusConflict, fmt.Sprintf("an update is already running (%s)", v.Helper.State), codeUpdateRunning)
 	case v.Latest == "" && v.CheckError != "":
 		return v, fail(http.StatusBadGateway, "release check failed: %s", v.CheckError)
 	case v.SourceError != "":
 		return v, fail(http.StatusBadGateway, "reading what %s has failed: %s", sourceName(v.Manager), v.SourceError)
 	case v.Held != "":
-		return v, fail(http.StatusConflict, "%s is held back: the update helper found nothing to install for it, and no check since has found it in %s", v.Held, sourceName(v.Manager))
+		return v, refuse(http.StatusConflict, codeUpdateHeld, v.Held, sourceName(v.Manager))
 	case v.Released != "" && !v.Available:
-		return v, fail(http.StatusConflict, "%s is out, but %s has it not yet", v.Released, sourceName(v.Manager))
+		return v, refuse(http.StatusConflict, codeUpdateNotInSource, v.Released, sourceName(v.Manager))
 	case v.Latest == "":
-		return v, fail(http.StatusConflict, "no release on channel %s", v.Channel)
+		return v, refuse(http.StatusConflict, codeUpdateNoRelease, v.Channel)
 	case !v.Available:
-		return v, fail(http.StatusConflict, "already up to date (%s)", v.Current)
+		return v, refuse(http.StatusConflict, codeUpdateUpToDate, v.Current)
 	}
 	// One request at a time: a second POST waits for the first's write
 	// and start, and the helper that start left at work answers it.
@@ -492,7 +498,7 @@ func (s *Server) beginUpdate(ctx context.Context, userID int64, auto bool) (upda
 	// second run and which the Windows starter's guard leaves behind.
 	if path := s.opts.Update.Status; path != "" {
 		if st, err := update.ReadStatus(path); err == nil && st.Running() {
-			return v, fail(http.StatusConflict, "an update is already running (%s)", st.State)
+			return v, refuseSaying(http.StatusConflict, fmt.Sprintf("an update is already running (%s)", st.State), codeUpdateRunning)
 		}
 	}
 	s.keepChannel(ctx, v.Channel, rel)

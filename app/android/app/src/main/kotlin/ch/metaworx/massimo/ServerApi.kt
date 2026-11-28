@@ -50,6 +50,21 @@ class ServerApi(
     /** Token is a row of a user's sessions and keys: its id, its kind, `session` or `api`, and when it was made, as the server writes it. */
     data class Token(val id: Long, val kind: String, val createdAt: String = "")
 
+    /** Taken is how a server answered a revoke code (`POST /api/v1/tokens/revoke`, D112-A). */
+    enum class Taken {
+        /** 204: taken, whether it matched a live token or not; the code goes. */
+        TAKEN,
+
+        /** 400: the server calls the code malformed; it goes, logged. */
+        MALFORMED,
+
+        /** A broken connection, 429 or 5xx: the code waits for the next contact. */
+        LATER,
+
+        /** Any other answer, 404 first: a server that takes no codes; the code goes, the entry as before codes. */
+        NONE,
+    }
+
     /** me is the name of the user whose [session] it is (`GET /api/v1/me`). */
     fun me(base: String, fp: String, session: String): String = whoami(base, fp, session).user
 
@@ -110,6 +125,30 @@ class ServerApi(
     }
 
     /**
+     * revokeCode posts the revoke code [code] of a token the app forgot
+     * (`POST /api/v1/tokens/revoke`, D112-A), without `Authorization`: a code
+     * lets nothing in, so plain HTTP outside the private ranges carries it
+     * too. 204 is [Taken.TAKEN], 400 [Taken.MALFORMED], a broken connection,
+     * 429 and 5xx [Taken.LATER], and any other answer, a server older than
+     * the route (404), 401, 403, 405, 409, a redirect or a proxy's page of
+     * 200, [Taken.NONE].
+     */
+    fun revokeCode(base: String, fp: String, code: String): Taken = try {
+        send("POST", base, "api/v1/tokens/revoke", fp, null, JSONObject().put("code", code), HttpURLConnection.HTTP_NO_CONTENT)
+        Taken.TAKEN
+    } catch (e: Refused) {
+        Taken.NONE
+    } catch (e: Failed) {
+        when {
+            e.status == HttpURLConnection.HTTP_BAD_REQUEST -> Taken.MALFORMED
+            e.status == HTTP_TOO_MANY || e.status >= HttpURLConnection.HTTP_INTERNAL_ERROR -> Taken.LATER
+            else -> Taken.NONE
+        }
+    } catch (e: IOException) {
+        Taken.LATER
+    }
+
+    /**
      * revokeSelf revokes [key], a key of [user]'s whose id is [id], with the
      * key itself as the bearer: `DELETE /api/v1/me/token` (AP MobileApp,
      * D80-B), which needs neither the name nor the id, and at a server older
@@ -136,8 +175,8 @@ class ServerApi(
 
     // send makes a request and returns the answer's text where its status
     // is [want]; [Refused] for a 401, [Failed] with the server's words for
-    // any other.
-    private fun send(method: String, base: String, path: String, fp: String, bearer: String, body: JSONObject?, want: Int): String {
+    // any other. A null [bearer] sends no Authorization.
+    private fun send(method: String, base: String, path: String, fp: String, bearer: String?, body: JSONObject?, want: Int): String {
         val target = Prober.healthz(base)?.removeSuffix("healthz")?.plus(path) ?: throw IOException("not the address of a server")
         val conn = URL(target).openConnection() as HttpURLConnection
         conn.connectTimeout = TIMEOUT_MS
@@ -147,7 +186,7 @@ class ServerApi(
         conn.requestMethod = method
         conn.setRequestProperty("User-Agent", userAgent)
         conn.setRequestProperty("Accept", "application/json")
-        conn.setRequestProperty("Authorization", "Bearer $bearer")
+        if (bearer != null) conn.setRequestProperty("Authorization", "Bearer $bearer")
         (conn as? HttpsURLConnection)?.let { https ->
             val accept = fp.ifEmpty { null }?.let(Fingerprint::canonical)
             val tm = PinningTrustManager(systemTrust, https.url.host.removePrefix("[").removeSuffix("]"), accept)
@@ -179,6 +218,7 @@ class ServerApi(
     companion object {
         private const val TIMEOUT_MS = 10_000
         private const val MAX_BODY = 64 * 1024
+        private const val HTTP_TOO_MANY = 429
 
         /** segment is [s] as one segment of a URL's path. */
         fun segment(s: String): String = URLEncoder.encode(s, "UTF-8").replace("+", "%20")

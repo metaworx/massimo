@@ -12,17 +12,17 @@ import (
 	"time"
 )
 
-// Migration 0101 is additive (AP KeyLife, Block 3): a key written as a
-// binary for 100 writes one, without the column, is held to the idle
-// limit, one kept from it reads so, a binary for 100 opens the file, and
-// the down part takes the schema back to the one of 100, losing which
-// keys were kept from the limit and only that.
+// Migration 0102 is additive (AP KeyLife, Block 3): a key written as a
+// binary for 101 writes one, without the column, is held to the idle
+// limit, one kept from it reads so, binaries for 26, 100 and 101 open the
+// file, and the down part takes the schema back to the one of 101, losing
+// which keys were kept from the limit and only that.
 func TestTokenIdleMigration(t *testing.T) {
 	t.Parallel()
 	ctx := context.Background()
 	clock := fixedClock()
 	at := formatTime(clock())
-	dir := additiveMigration(t, 100, 101, "0101_token_idle", func(ctx context.Context, db *sql.DB) {
+	dir := additiveMigration(t, 101, 102, "0102_token_idle", func(ctx context.Context, db *sql.DB) {
 		exec := func(q string, args ...any) {
 			t.Helper()
 			if _, err := db.ExecContext(ctx, q, args...); err != nil {
@@ -31,17 +31,17 @@ func TestTokenIdleMigration(t *testing.T) {
 		}
 		exec(`INSERT INTO users (uuid, name, role_id, created_at, updated_at) SELECT ?, 'anna', id, ?, ? FROM roles WHERE key = ?`, newUUID(), at, at, RoleOperator)
 		exec(`INSERT INTO tokens (uuid, user_id, kind, hash, label, created_at, origin) SELECT ?, id, 'api', ?, ?, ?, '' FROM users WHERE name = 'anna'`,
-			newUUID(), HashToken("placeholder-old-binary"), "written as 100 writes it", at)
+			newUUID(), HashToken("placeholder-old-binary"), "written as 101 writes it", at)
 		exec(`INSERT INTO tokens (uuid, user_id, kind, hash, label, created_at, origin, idle_exempt) SELECT ?, id, 'api', ?, ?, ?, '', 1 FROM users WHERE name = 'anna'`,
 			newUUID(), HashToken("placeholder-kept"), "kept from the limit", at)
-	})
+	}, 26, 100)
 	s, err := Open(dir, Options{Logger: quiet(), Now: clock})
 	if err != nil {
 		t.Fatal(err)
 	}
 	defer s.Close()
 	if got, ok, err := s.TokenByHash(ctx, HashToken("placeholder-old-binary")); err != nil || !ok || got.IdleExempt {
-		t.Fatalf("a key written as 100 writes it: %+v %v %v", got, ok, err)
+		t.Fatalf("a key written as 101 writes it: %+v %v %v", got, ok, err)
 	}
 	if got, ok, err := s.TokenByHash(ctx, HashToken("placeholder-kept")); err != nil || !ok || !got.IdleExempt {
 		t.Fatalf("a key kept from the limit: %+v %v %v", got, ok, err)
@@ -134,7 +134,7 @@ func TestKeyIdle(t *testing.T) {
 		{"a key kept", keptSecret}, {"the integration's", integSecret}, {"a sign-in's session", signSecret}} {
 		alive(c.what+", the limit unset", c.secret, true)
 	}
-	if err := s.TouchToken(ctx, phone.ID, "192.0.2.10", zeroTime); err != nil {
+	if err := s.TouchToken(ctx, phone.ID, "192.0.2.10", zeroTime, ""); err != nil {
 		t.Fatal(err)
 	}
 	for id, tk := range listed(anna.ID) {
@@ -377,5 +377,91 @@ func TestKeyEndRule(t *testing.T) {
 		if inSQL != (row.Ended == "") || row.Ended != c.ended {
 			t.Errorf("%s: alive in SQL %v, ended in Go %q, want %q (%+v)", c.what, inSQL, row.Ended, c.ended, row)
 		}
+	}
+}
+
+// A key ended unused is no revoked key (AP KeyLife, D6-A): its code
+// still revokes it, the keys it made with it and an heir's session, as a
+// revoke by its id would, and RevokeByCode names the heirs. Its use after
+// the end is refused by the rule and writes nothing, so a key made before
+// the store kept codes, ended before its first use since, gets no revoke
+// hash then, and its code matches nothing.
+func TestIdleKeyRevokedByCode(t *testing.T) {
+	t.Parallel()
+	t0 := time.Date(2026, 11, 28, 12, 0, 0, 0, time.UTC)
+	clock := t0
+	s, err := Open(copied(t), Options{Logger: quiet(), Now: func() time.Time { return clock }})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer s.Close()
+	ctx := context.Background()
+	day := 24 * time.Hour
+	anna, _ := s.AddUser(ctx, User{Name: "anna", Role: RoleManager}, "", 0)
+	key, keySecret, _ := s.AddKey(ctx, anna.ID, KeyOptions{Label: "phone"})
+	heir, heirSecret, err := s.AddKey(ctx, anna.ID, KeyOptions{Label: "heir, kept from the limit", MadeBy: key.ID, IdleExempt: true})
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, heirSessSecret, err := s.AddKeySession(ctx, heir.ID, "tablet", t0.Add(30*day))
+	if err != nil {
+		t.Fatal(err)
+	}
+	old, oldSecret, _ := s.AddKey(ctx, anna.ID, KeyOptions{Label: "made before 0100"})
+	if _, err := s.db.ExecContext(ctx, `UPDATE tokens SET revoke_hash = NULL WHERE id = ?`, old.ID); err != nil {
+		t.Fatal(err)
+	}
+	if err := s.SetSetting(ctx, KeyIdleDaysKey, 7); err != nil {
+		t.Fatal(err)
+	}
+	clock = t0.Add(8 * day)
+	list, err := s.Tokens(ctx, anna.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	ended := map[int64]string{}
+	for _, tok := range list {
+		ended[tok.ID] = tok.Ended
+	}
+	if ended[key.ID] != EndedIdle || ended[old.ID] != EndedIdle || ended[heir.ID] != "" {
+		t.Fatalf("the ends before the codes: %v", ended)
+	}
+
+	// The use after the end: refused, and nothing written.
+	before, _, _ := s.Token(ctx, old.ID)
+	if _, ok, _ := s.TokenByHash(ctx, HashToken(oldSecret)); ok {
+		t.Fatal("a key ended unused let in")
+	}
+	if after, _, _ := s.Token(ctx, old.ID); after.RevokeKept || after.Version != before.Version || !after.LastUsedAt.Equal(before.LastUsedAt) {
+		t.Fatalf("the ended key's use was written: %+v, before %+v", after, before)
+	}
+	if _, _, ok, err := s.RevokeByCode(ctx, RevokeCode(oldSecret)); ok || err != nil {
+		t.Fatalf("the code of an ended key without a revoke hash: %v %v", ok, err)
+	}
+
+	got, heirs, ok, err := s.RevokeByCode(ctx, RevokeCode(keySecret))
+	if err != nil || !ok || got.ID != key.ID {
+		t.Fatalf("the code of a key ended unused: %+v %v %v", got, ok, err)
+	}
+	if fmt.Sprint(heirs) != fmt.Sprint([]int64{heir.ID}) {
+		t.Errorf("the heirs: %v, want [%d]", heirs, heir.ID)
+	}
+	if now, _, _ := s.Token(ctx, key.ID); now.DeletedAt.IsZero() {
+		t.Error("the key ended unused is not revoked by its code")
+	}
+	for what, secret := range map[string]string{"the heir": heirSecret, "the heir's session": heirSessSecret} {
+		if _, ok, _ := s.TokenByHash(ctx, HashToken(secret)); ok {
+			t.Errorf("%s lives on after the code of a key ended unused", what)
+		}
+	}
+	// Raised again, the limit brings back no key a code revoked.
+	if err := s.SetSetting(ctx, KeyIdleDaysKey, 0); err != nil {
+		t.Fatal(err)
+	}
+	if _, ok, _ := s.TokenByHash(ctx, HashToken(keySecret)); ok {
+		t.Error("the key revoked by its code lives again with the limit off")
+	}
+	if _, ok, _ := s.TokenByHash(ctx, HashToken(oldSecret)); !ok {
+		t.Error("the key that only ended unused does not live again with the limit off")
 	}
 }

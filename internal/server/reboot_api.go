@@ -120,8 +120,9 @@ func (s *Server) rebootWaits() bool {
 }
 
 // rebootState says whether the request could reboot the computer, and
-// why not; open is set when the reason is an open server.
-func (s *Server) rebootState(r *http.Request) (v rebootView, open bool) {
+// why not: the refusal a request for it meets, nil where it could, its
+// text the view's blocked; a 403 for an open server's, else a 409.
+func (s *Server) rebootState(r *http.Request) (v rebootView, why error) {
 	o := s.opts.Reboot
 	p := &s.reboot
 	p.mu.Lock()
@@ -132,11 +133,12 @@ func (s *Server) rebootState(r *http.Request) (v rebootView, open bool) {
 		v.At = &at
 	}
 	if o.Reboot == nil || o.By == "" {
-		v.Blocked = o.Blocked
-		if v.Blocked == "" {
-			v.Blocked = "this server does not reboot the computer it runs on"
+		why = refuse(http.StatusConflict, codeRebootUnavailable)
+		if o.Blocked != "" {
+			why = refuseSaying(http.StatusConflict, o.Blocked, codeRebootUnavailable)
 		}
-		return v, false
+		v.Blocked = why.Error()
+		return v, why
 	}
 	helper := ""
 	if o.Helper != nil && allowed {
@@ -144,22 +146,25 @@ func (s *Server) rebootState(r *http.Request) (v rebootView, open bool) {
 	}
 	switch {
 	case !allowed:
-		v.Blocked = rebootSwitchedOff
+		why = refuse(http.StatusConflict, codeRebootSwitchedOff)
 	case helper != "":
-		v.Blocked = helper
+		why = refuseSaying(http.StatusConflict, helper, codeRebootNoHelper)
 	case begun:
-		v.Blocked = rebootBegun
+		why = refuse(http.StatusConflict, codeRebootBegun)
 	case !at.IsZero():
-		v.Blocked = rebootWaiting
+		why = refuse(http.StatusConflict, codeRebootWaiting)
 	case s.restartGate.asked.Load():
-		v.Blocked = "a restart is under way"
+		why = refuse(http.StatusConflict, codeRestartUnderWay)
 	case s.updateRunning():
-		v.Blocked = "an update is running"
+		why = refuse(http.StatusConflict, codeUpdateRunning)
 	case !s.authenticated(r.Context()) && !fromTheBox(r):
-		v.Blocked, open = openRebootRefused, true
+		why = refuse(http.StatusForbidden, codeRebootOpen)
 	}
-	v.By, v.Available = o.By, v.Blocked == ""
-	return v, open
+	if why != nil {
+		v.Blocked = why.Error()
+	}
+	v.By, v.Available = o.By, why == nil
+	return v, why
 }
 
 func (s *Server) getReboot(w http.ResponseWriter, r *http.Request) error {
@@ -178,20 +183,17 @@ func (s *Server) startReboot(w http.ResponseWriter, r *http.Request) error {
 	delay := DefaultRebootDelay
 	if req.Delay != nil {
 		if *req.Delay < 0 || *req.Delay > int(MaxRebootDelay/time.Second) {
-			return fail(http.StatusBadRequest, "delay: want 0 to %d seconds", int(MaxRebootDelay/time.Second))
+			return refuse(http.StatusBadRequest, codeRebootDelayBad, int(MaxRebootDelay/time.Second))
 		}
 		delay = time.Duration(*req.Delay) * time.Second
 	}
-	v, open := s.rebootState(r)
-	switch {
-	case open:
-		return fail(http.StatusForbidden, "%s", v.Blocked)
-	case !v.Available:
-		return fail(http.StatusConflict, "%s", v.Blocked)
+	v, why := s.rebootState(r)
+	if why != nil {
+		return why
 	}
 	at, ok := s.planReboot(delay)
 	if !ok {
-		return fail(http.StatusConflict, rebootWaiting)
+		return refuse(http.StatusConflict, codeRebootWaiting)
 	}
 	s.noteStop("reboot")
 	s.logServer(systemEvent("reboot", userIDOf(r), map[string]any{"by": v.By, "at": at.UTC().Format(time.RFC3339)}))
@@ -261,7 +263,7 @@ func (p *rebootPlan) failed(gen uint64, why string) bool {
 // only from the box, as the request.
 func (s *Server) cancelReboot(w http.ResponseWriter, r *http.Request) error {
 	if !s.authenticated(r.Context()) && !fromTheBox(r) {
-		return fail(http.StatusForbidden, openRebootRefused)
+		return refuse(http.StatusForbidden, codeRebootOpen)
 	}
 	p := &s.reboot
 	p.mu.Lock()
@@ -270,9 +272,9 @@ func (s *Server) cancelReboot(w http.ResponseWriter, r *http.Request) error {
 	p.mu.Unlock()
 	switch {
 	case begun:
-		return fail(http.StatusConflict, rebootBegun)
+		return refuse(http.StatusConflict, codeRebootBegun)
 	case !waits || !taken:
-		return fail(http.StatusConflict, "no reboot is waiting")
+		return refuse(http.StatusConflict, codeRebootNotWaiting)
 	}
 	s.noteStop("")
 	s.logServer(systemEvent("reboot_cancelled", userIDOf(r), nil))

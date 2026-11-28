@@ -5,11 +5,12 @@
 // with, each a function that returns an element or fills one, for the
 // connect page (connect.js), the sign-in's plain code (login.js), the
 // week programme's kit (config.js) and app.js' help; and what the parts
-// call of the page's (the menus' placing, a copy, a toast, a sign's
-// blinking, a result line). Texts arrive translated (t() in i18n.js) and
-// go in through textContent only; a component never builds markup from a
-// string. Loaded after i18n.js and before app.js; the helpers that read
-// the page's state (fmtAge, helpParts, fmtTemp) are in app.js.
+// call of the page's (the menus' placing, a copy, a bubble, a toast, a
+// sign's blinking, a result line). Texts arrive translated (t() in
+// i18n.js) and go in through textContent only; a component never builds
+// markup from a string. Loaded after i18n.js and before app.js; the
+// helpers that read the page's state (fmtAge, helpParts, fmtTemp) are in
+// app.js.
 "use strict";
 
 // How long a result that went well stays shown, in ms: a result line's
@@ -206,6 +207,33 @@ function signOf(kind) {
   return ICON_CHOICES[kind] ? iconChoice(kind).sign : SIGNS[kind];
 }
 
+// signEl is the icon of a kind of SIGNS in a state, as the parts' Sign
+// (ui/src/shared/icon.tsx) draws it, for a plain script (the connect
+// page's "changed here" mark, AP MobileApp, Block 19): "" or "ok" plain,
+// "warn" with a triangle, "bad" with a cross, coloured by the state
+// (tone-…); the mark a part of its own (use.mark), which is what blinks.
+// cls adds classes, key names the mark across redraws (keepBlink), and
+// label, where given, names the sign for a screen reader, which is else
+// hidden from one.
+function signEl(kind, state, { cls, key, label } = {}) {
+  const s = signOf(kind);
+  const mark = s[state];
+  const svg = iconEl(mark ? s.base : s.icon, "ni sign" + (state ? " tone-" + state : "") + (cls ? " " + cls : ""));
+  if (label) {
+    svg.removeAttribute("aria-hidden");
+    svg.setAttribute("role", "img");
+    svg.setAttribute("aria-label", label);
+  }
+  if (mark) {
+    const use = document.createElementNS("http://www.w3.org/2000/svg", "use");
+    use.setAttribute("href", "#" + mark);
+    use.setAttribute("class", state === "bad" ? "mark x" : "mark");
+    svg.appendChild(use);
+    keepBlink(use, key);
+  }
+  return svg;
+}
+
 // markEl is a mark alone, the triangle of a warning or the cross of a
 // failure, for a badge or a list; key as for keepBlink.
 function markEl(state, key) {
@@ -318,26 +346,128 @@ async function copyText(text) {
   return ok;
 }
 
-// copied says that something was copied: "Copied" on the control for a
-// moment, and in the page's polite live region for a screen reader.
+// copied says that something was copied, or that it could not be: in a
+// bubble above the control (showBubble).
 function copied(el, ok) {
-  let live = document.getElementById("copy-status");
-  if (!live) {
-    live = textEl("span", "", "visually-hidden");
-    live.id = "copy-status";
-    live.setAttribute("role", "status");
-    live.setAttribute("aria-live", "polite");
-    document.body.appendChild(live);
+  showBubble(t(ok ? "copy.done" : "copy.failed"), el);
+}
+
+// The page's bubble (showBubble): its element and its live region, made
+// at the first bubble and kept; the control it shows at, where that was
+// when it was last placed, the page's scroll when it was shown, and its
+// timers and frame.
+const bubbleState = { el: null, live: null, ctrl: null, at: null, scroll: null, timer: 0, say: 0, frame: 0 };
+
+// How far a bubble keeps from its control, and from the window's edges,
+// in px.
+const BUBBLE_GAP = 4;
+const BUBBLE_EDGE = 8;
+
+// showBubble shows a short text for a moment in a bubble: with ctrl,
+// above ctrl's centre, as near to it as the window's edges let it, and
+// below ctrl where the window has no room above it; without one, at the
+// window's bottom centre, above the safe area. It stays ms milliseconds,
+// 1.4 s by default, and goes earlier at a scroll that moves ctrl (or,
+// without one, at a scroll of the page), and once ctrl has left the page
+// or is hidden; a newer bubble takes its place. Its text is said once in
+// the page's polite live region, the bubble itself hidden from a screen
+// reader. The bubble and the region are made at the first bubble, on the
+// page and the connect page alike, and kept.
+function showBubble(text, ctrl, { ms = 1400 } = {}) {
+  const b = bubbleState;
+  if (!b.el) {
+    b.el = textEl("div", "", "bubble hidden");
+    b.el.id = "bubble";
+    b.el.setAttribute("aria-hidden", "true");
+    b.live = textEl("span", "", "visually-hidden");
+    b.live.id = "bubble-status";
+    b.live.setAttribute("role", "status");
+    b.live.setAttribute("aria-live", "polite");
+    addEventListener("scroll", bubbleScrolled, { capture: true, passive: true });
   }
-  const text = t(ok ? "copy.done" : "copy.failed");
-  live.textContent = "";
-  setTimeout(() => {
-    live.textContent = text;
+  if (!b.el.isConnected) document.body.append(b.live, b.el);
+  clearTimeout(b.timer);
+  clearTimeout(b.say);
+  cancelAnimationFrame(b.frame);
+  b.ctrl = ctrl || null;
+  b.scroll = [window.scrollX, window.scrollY];
+  b.el.textContent = text;
+  b.el.classList.toggle("foot", !b.ctrl);
+  b.el.classList.remove("hidden");
+  if (b.ctrl) followBubble();
+  else Object.assign(b.el.style, { left: "", top: "" });
+  b.timer = setTimeout(hideBubble, ms);
+  // emptied, then the words, so that a screen reader hears a text the
+  // region holds already
+  b.live.textContent = "";
+  b.say = setTimeout(() => {
+    b.live.textContent = text;
   }, 50);
-  el.dataset.copied = text;
-  el.classList.add("copied");
-  clearTimeout(el.copiedTimer);
-  el.copiedTimer = setTimeout(() => el.classList.remove("copied"), 1400);
+}
+
+// hideBubble takes the bubble away (showBubble); what its live region
+// said stays there.
+function hideBubble() {
+  const b = bubbleState;
+  clearTimeout(b.timer);
+  cancelAnimationFrame(b.frame);
+  b.timer = 0;
+  b.frame = 0;
+  b.ctrl = null;
+  b.at = null;
+  if (b.el) b.el.classList.add("hidden");
+}
+
+// followBubble keeps the bubble at its control, frame by frame while it
+// shows, where the page's layout moves the control, and takes it away
+// once the control has left the page or is hidden: a bubble over the
+// element drawn in its place (a new suggested password) would say what
+// was not done to it.
+function followBubble() {
+  const b = bubbleState;
+  b.frame = 0;
+  if (!b.ctrl) return;
+  if (!b.ctrl.isConnected || !b.ctrl.getClientRects().length) {
+    hideBubble();
+    return;
+  }
+  placeBubble();
+  b.frame = requestAnimationFrame(followBubble);
+}
+
+// placeBubble places the bubble above its control's centre, kept
+// BUBBLE_EDGE inside the window's edges, or below the control where the
+// window has no room above it.
+function placeBubble() {
+  const b = bubbleState;
+  const r = b.ctrl.getBoundingClientRect();
+  const vw = document.documentElement.clientWidth;
+  const vh = document.documentElement.clientHeight;
+  const w = b.el.offsetWidth;
+  const h = b.el.offsetHeight;
+  const left = Math.max(BUBBLE_EDGE, Math.min(r.left + r.width / 2 - w / 2, vw - BUBBLE_EDGE - w));
+  let top = r.top - BUBBLE_GAP - h;
+  if (top < BUBBLE_EDGE) top = Math.max(BUBBLE_EDGE, Math.min(r.bottom + BUBBLE_GAP, vh - BUBBLE_EDGE - h));
+  b.el.style.left = left + "px";
+  b.el.style.top = top + "px";
+  b.at = r;
+}
+
+// bubbleScrolled takes the bubble away at a scroll that has moved its
+// control, the page's or a box's that holds it, since a bubble fixed in
+// the window would stay where the control was; without a control, at a
+// scroll of the page. A scroll elsewhere, or one that had ended before
+// the bubble showed, leaves it.
+function bubbleScrolled() {
+  const b = bubbleState;
+  if (!b.el || b.el.classList.contains("hidden")) return;
+  if (b.ctrl) {
+    const r = b.ctrl.getBoundingClientRect();
+    if (b.at && Math.abs(r.left - b.at.left) < 0.5 && Math.abs(r.top - b.at.top) < 0.5) return;
+  } else if (b.scroll && window.scrollX === b.scroll[0] && window.scrollY === b.scroll[1]) {
+    return;
+  }
+  hideBubble();
 }
 
 // copyable makes an element copy what get() returns on a click, and on
@@ -559,12 +689,14 @@ function confirmBox(text, { yes, no }, onYes, onNo) {
 // confirmInPlace asks in place of a row of actions, as a panel's Remove
 // does: the question takes the row's place, Yes runs onYes (which
 // returns the removal's promise, see confirmBox), and No and Escape put
-// the row back with the focus on the element of focusSelector in it.
-function confirmInPlace(actions, text, labels, onYes, focusSelector) {
+// the row back with the focus on the element of focusSelector in it,
+// then tell onNo, where given.
+function confirmInPlace(actions, text, labels, onYes, focusSelector, onNo) {
   const box = confirmBox(text, labels, onYes, () => {
     box.replaceWith(actions);
     const el = focusSelector && actions.querySelector(focusSelector);
     if (el) el.focus();
+    if (onNo) onNo();
   });
   actions.replaceWith(box);
   box.focusFirst();
