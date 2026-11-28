@@ -32,6 +32,15 @@
 # runs at four times it, since the trace slows the page as well: a
 # test's set-up, which loads the page, took up to 3.8 times as long with
 # the trace and the video as without them (2026-11-26).
+# UI_TEST_REPEAT and UI_TEST_SHUFFLE are conftest.py's: each test so
+# many times, and the tests in a seed's order; under a seed the workers
+# are handed the files in the order it gives them
+# (--no-loadscope-reorder), not the largest first. UI_TEST_JUNIT names a
+# file for the first pass's JUnit XML report (--junitxml), from the
+# caller's directory, which the UI soak reads for its summary
+# (.github/workflows/ui-soak.yml, AP SteadyTests, Block 8); the retry
+# writes its own beside it, the name's .xml turned into .retry.xml, so
+# that the summary says what the retry did with each failure (Block 11).
 # `run.sh screenshots` (make ui-screenshots) starts one set and runs
 # screenshots.py instead, which takes the screenshot set into
 # docs/screenshots/.
@@ -55,7 +64,16 @@
 # still run then, since a server of another run on one of the ports would
 # answer the same token. For the suite, each set's Cube then gets a
 # backup taken by hand, so that its server takes no automatic one while
-# the tests run (backed_up); its poll of the fake Cube stays at 10 s.
+# the tests run (backed_up).
+#
+# Both servers run without their poll of the Cube (-poll 0, AP
+# SteadyTests, Block 5, D4-A), so that a server sends its fake Cube no
+# line of its own between a test's steps; a test that needs the server to
+# read what the fake holds asks for it (POST …/refresh). The fake Cube
+# has its control on a loopback port of its own (-control), whose POST
+# /reset puts it back to the greeting before each test file
+# (conftest.py, known_cube); the suite gets set 0's in
+# UI_TEST_CONTROL_URL, worker gw<n> set n's in UI_TEST_CONTROL_URL_<n>.
 #
 # The fake Cube has a device that joins pairing mode two seconds after
 # n:, a copy of the radiator thermostat 0a010d as 0abcde (TEQ0000001),
@@ -91,11 +109,13 @@
 # Environment: UI_TEST_PYTHON (default tools/ui-test/.venv/bin/python
 # when present, else python3), UI_TEST_REQUIRED, UI_TEST_WORKERS (4),
 # UI_TEST_CASES (the cases to run, such as 390-en,390-de; all four),
-# UI_TEST_SCALE (1; the retry four times it), and
+# UI_TEST_SCALE (1; the retry four times it), UI_TEST_REPEAT,
+# UI_TEST_SHUFFLE, UI_TEST_JUNIT, and
 # set 0's ports: UI_TEST_CUBE_PORT (62919), UI_TEST_API_PORT (8119),
-# UI_TEST_DISCOVERY_PORT (23919), UI_TEST_DOWN_PORT (the second server's,
-# UI_TEST_API_PORT + 1); set n takes the fake Cube's two ports + n and
-# the servers' two + 2n; KEEP (1 keeps the work directory).
+# UI_TEST_DISCOVERY_PORT (23919), UI_TEST_CONTROL_PORT (the fake Cube's
+# control, UI_TEST_CUBE_PORT + 100), UI_TEST_DOWN_PORT (the second
+# server's, UI_TEST_API_PORT + 1); set n takes the fake Cube's three
+# ports + n and the servers' two + 2n; KEEP (1 keeps the work directory).
 set -eu
 
 mode=${1:-smoke}
@@ -135,6 +155,12 @@ if ! awk -v s="$scale" 'BEGIN { exit !(s ~ /^([0-9]+[.]?[0-9]*|[.][0-9]+)$/ && s
 fi
 retry_scale=$(awk -v s="$scale" 'BEGIN { print s * 4 }')
 export UI_TEST_SCALE="$scale"
+# the first pass's JUnit report, from the caller's directory
+junit=${UI_TEST_JUNIT:-}
+case "$junit" in
+	'' | /*) ;;
+	*) junit="$PWD/$junit" ;;
+esac
 if [ "$mode" = screenshots ]; then
 	workers=1
 elif [ "$workers" -gt 1 ] && ! "$py" -c 'import xdist' 2>/dev/null; then
@@ -149,6 +175,7 @@ fi
 cube_port=${UI_TEST_CUBE_PORT:-62919}
 api_port=${UI_TEST_API_PORT:-8119}
 discovery_port=${UI_TEST_DISCOVERY_PORT:-23919}
+control_port=${UI_TEST_CONTROL_PORT:-$((cube_port + 100))}
 down_port=${UI_TEST_DOWN_PORT:-$((api_port + 1))}
 token=ui-test-token
 
@@ -176,19 +203,19 @@ start_set() {
 	mkdir -p "$d/down"
 	cd "$d"
 	env -i PATH="$PATH" HOME="$HOME" "$work/massimo" fakecube -greeting "$here/greeting.txt" \
-		-listen "$cube" -discovery "$disc" -free-slots 50 \
+		-listen "$cube" -discovery "$disc" -control "127.0.0.1:$((control_port + $1))" -free-slots 50 \
 		-pair 0a010d,0abcde,TEQ0000001 > fakecube.log 2>&1 &
 	pids="$pids $!"
 	env -i PATH="$PATH" HOME="$HOME" MASSIMO_API_TOKEN="$token" \
 		MASSIMO_CUBE_KEQ0000100_ADDRESS="$cube" MASSIMO_CUBE_KEQ0000100_NAME="Fake Cube" \
-		"$work/massimo" serve -proxy off \
+		"$work/massimo" serve -proxy off -poll 0 \
 		-listen "127.0.0.1:$((api_port + 2 * $1))" -update-status "$d/no-update-status.json" \
 		-discover-target "$disc" -discover-listen 127.0.0.1:0 -discover-interval 0 > serve.log 2>&1 &
 	pids="$pids $!"
 	cd "$d/down"
 	env -i PATH="$PATH" HOME="$HOME" MASSIMO_API_TOKEN="$token" \
 		MASSIMO_CUBE_KEQ0000200_ADDRESS="127.0.0.1:9" MASSIMO_CUBE_KEQ0000200_NAME="Cellar Cube" \
-		"$work/massimo" serve -proxy off \
+		"$work/massimo" serve -proxy off -poll 0 \
 		-listen "127.0.0.1:$((down_port + 2 * $1))" -update-status "$d/no-update-status.json" \
 		-discover-target "127.0.0.1:9" -discover-listen 127.0.0.1:0 -discover-interval 0 > ../serve-down.log 2>&1 &
 	pids="$pids $!"
@@ -216,6 +243,7 @@ ready_set() {
 	api="127.0.0.1:$((api_port + 2 * $1))"
 	listening "$d/fakecube.log" "fake cube listening on 127.0.0.1:$((cube_port + $1)) " "the fake Cube of set $1"
 	listening "$d/fakecube.log" "answering discovery on 127.0.0.1:$((discovery_port + $1)) " "the fake Cube's discovery of set $1"
+	listening "$d/fakecube.log" "control listening on 127.0.0.1:$((control_port + $1))" "the fake Cube's control of set $1"
 	listening "$d/serve.log" "msg=\"api listening\" source=system addr=$api " "the server of set $1"
 	listening "$d/serve-down.log" "msg=\"api listening\" source=system addr=127.0.0.1:$((down_port + 2 * $1)) " "the second server of set $1"
 	i=0
@@ -289,14 +317,16 @@ n=0
 while [ $n -lt "$workers" ]; do
 	export "UI_TEST_URL_$n=http://127.0.0.1:$((api_port + 2 * n))/" \
 		"UI_TEST_DOWN_URL_$n=http://127.0.0.1:$((down_port + 2 * n))/" \
-		"UI_TEST_SERVE_LOG_$n=$work/set$n/serve.log"
+		"UI_TEST_SERVE_LOG_$n=$work/set$n/serve.log" \
+		"UI_TEST_CONTROL_URL_$n=http://127.0.0.1:$((control_port + n))/"
 	n=$((n + 1))
 done
 if [ "$workers" -gt 1 ]; then
+	if [ -n "${UI_TEST_SHUFFLE:-}" ]; then set -- --no-loadscope-reorder "$@"; fi
 	set -- -n "$workers" --dist loadfile "$@"
 fi
 export UI_TEST_URL="http://127.0.0.1:$api_port/" UI_TEST_DOWN_URL="http://127.0.0.1:$down_port/" UI_TEST_TOKEN="$token" \
-	UI_TEST_SERVE_LOG="$work/set0/serve.log"
+	UI_TEST_SERVE_LOG="$work/set0/serve.log" UI_TEST_CONTROL_URL="http://127.0.0.1:$control_port/"
 
 # keep_logs: each set's serve.log and fakecube.log copied into
 # results/logs/set<n>/, for a run whose tests failed, after the retry, so
@@ -313,12 +343,12 @@ keep_logs() {
 }
 
 rc=0
-PYTEST_ADDOPTS="--durations=20 ${PYTEST_ADDOPTS:-}" "$py" -m pytest --output "$here/results" "$@" || rc=$?
+PYTEST_ADDOPTS="--durations=20 ${PYTEST_ADDOPTS:-}" "$py" -m pytest --output "$here/results" ${junit:+"--junitxml=$junit"} "$@" || rc=$?
 # Only failed tests (exit 1) run again: not an interrupted or empty run.
 [ $rc -eq 1 ] || exit $rc
 echo "ui-test: tests failed; they run once more, with the video and the trace (tools/ui-test/results/retry/), at UI_TEST_SCALE=$retry_scale" >&2
 if UI_TEST_SCALE="$retry_scale" "$py" -m pytest --last-failed --last-failed-no-failures none --video retain-on-failure --tracing retain-on-failure \
-	--output "$here/results/retry" "$@"; then
+	--output "$here/results/retry" ${junit:+"--junitxml=${junit%.xml}.retry.xml"} "$@"; then
 	echo "ui-test: the failed tests passed the second time, and the run fails all the same: they are flaky" >&2
 else
 	echo "ui-test: tests failed again; their videos and traces are in tools/ui-test/results/retry/" >&2

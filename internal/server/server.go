@@ -166,7 +166,9 @@ type Options struct {
 	AuthFailures int
 	AuthWindow   time.Duration
 	AuthLockout  time.Duration
-	PollInterval time.Duration // L polling; 0 is DefaultPollInterval
+	// PollInterval is how often each Cube is asked for its device list:
+	// 0 is DefaultPollInterval, a negative value never (serve -poll 0).
+	PollInterval time.Duration
 	// SettingsFixedBy names, by a setting's key, the flag that decides
 	// its value for this run instead of the store (serve -poll for
 	// poll_interval), for GET /api/v1/settings' fixed_by.

@@ -103,8 +103,10 @@ var durationSettings = []durationSetting{
 		inEffect: func(s *Server) time.Duration { return s.StaleAfter() }},
 	{key: store.StaleAfterWallKey, def: view.StaleAfterWall, min: time.Hour, max: 30 * 24 * time.Hour, now: true,
 		inEffect: func(s *Server) time.Duration { return s.StaleAfterWall() }},
+	// serve -poll 0 polls never for one run, in effect 0; the setting
+	// keeps its range.
 	{key: store.PollIntervalKey, def: DefaultPollInterval, min: 10 * time.Second, max: time.Hour,
-		inEffect: func(s *Server) time.Duration { return s.opts.PollInterval }},
+		inEffect: func(s *Server) time.Duration { return max(s.opts.PollInterval, 0) }},
 	{key: store.RefreshIntervalKey, def: DefaultRefreshInterval, min: 10 * time.Minute, max: 7 * 24 * time.Hour, zero: true,
 		inEffect: func(s *Server) time.Duration { return s.opts.RefreshInterval }},
 	{key: store.DiscoverIntervalKey, def: DefaultDiscoverInterval, min: time.Minute, max: 24 * time.Hour, zero: true,

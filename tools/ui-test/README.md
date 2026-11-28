@@ -14,13 +14,17 @@ The script:
    `L:` line with device states (measured temperatures included),
    a window contact, "Fenster Kind 1", that reports an open window,
    and an eco button, "Eco-Taster Kind 2" (0a010e, `test_rooms.py`),
-   each with its `C:` line as a Cube sends one for every device;
+   each with its `C:` line as a Cube sends one for every device,
+   and its control (`-control`) on a loopback port of its own,
+   which resets it before each test file (`conftest.py`, `known_cube`);
    `massimo serve` against the fake Cube,
-   with the API token `ui-test-token`;
+   with the API token `ui-test-token` and without its poll of the Cube
+   (`-poll 0`, `docs/ui-testing.md` section 9);
    the Cube comes from `MASSIMO_CUBE_KEQ0000100_ADDRESS` and `_NAME` ("Fake Cube"),
    which the server seeds into its store,
    `massimo.db` in the set's temporary directory;
-   and the second server, of a Cube that is not connected (`test_home.py`);
+   and the second server, of a Cube that is not connected (`test_home.py`),
+   also with `-poll 0`;
 3. waits until every program of every set says it listens on its own port
    and every server is connected to its fake Cube,
    and stops if one of them has stopped meanwhile:
@@ -32,17 +36,19 @@ The script:
 4. runs the pytest suite in this directory with `pytest-playwright` (Chromium),
    in the workers, a file's tests together in one worker (`--dist loadfile`),
    handing worker `gw<n>` set n's page address in `UI_TEST_URL`,
-   the token in `UI_TEST_TOKEN` and the server's log in `UI_TEST_SERVE_LOG`
+   the token in `UI_TEST_TOKEN`, the server's log in `UI_TEST_SERVE_LOG`
+   and the fake Cube's control in `UI_TEST_CONTROL_URL`
    (`conftest.py` takes them from `UI_TEST_URL_<n>` and the others).
 
 Set 0 runs on loopback ports of its own:
 the fake Cube on 62919 (`UI_TEST_CUBE_PORT`) with its discovery on 23919
-(`UI_TEST_DISCOVERY_PORT`),
+(`UI_TEST_DISCOVERY_PORT`)
+and its control on 63019 (`UI_TEST_CONTROL_PORT`, the fake Cube's + 100),
 the server on 8119 (`UI_TEST_API_PORT`)
 and the second server on 8120 (`UI_TEST_DOWN_PORT`, the server's + 1).
-Set n takes the fake Cube's two ports + n and the servers' two + 2n,
+Set n takes the fake Cube's three ports + n and the servers' two + 2n,
 so another session running the suite at the same time needs ports further apart
-than twice its workers.
+than twice its workers, and a fake Cube's port 100 away from another's control.
 The programs run in empty temporary directories without the caller's environment,
 so a `.env` or `MASSIMO_*` variables can't point them at real hardware.
 All are stopped at the end.
@@ -67,6 +73,7 @@ tools/ui-test/run.sh smoke 'test_log.py::test_log_changes[1100-en-chromium]' -x
 UI_TEST_WORKERS=1 make ui-test                        # in one process
 KEEP=1 make ui-test                                   # the work directory kept
 UI_TEST_SCALE=2 make ui-test                          # every wait twice as long
+UI_TEST_REPEAT=3 UI_TEST_SHUFFLE=42 make ui-test      # each test 3 times, in seed 42's order
 PYTEST_ADDOPTS='test_parts_guard.py' make ui-test    # the parts' guard alone
 PYTEST_ADDOPTS='test_parts_guard.py -k rooms' make ui-test  # the guard of one region
 ```
@@ -75,7 +82,7 @@ PYTEST_ADDOPTS='test_parts_guard.py -k rooms' make ui-test  # the guard of one r
 `run.sh smoke` hands the arguments after it to pytest,
 whose working directory is `tools/ui-test/`, so files are named from there.
 A test's id carries its case: `1100-en`, `390-en`, `1100-de`, `390-de`,
-then the browser.
+then the browser, and under `UI_TEST_REPEAT` its repeat (below).
 
 pytest-playwright keeps a failed test's screenshot in `tools/ui-test/results/`,
 one directory per test (gitignored).
@@ -130,6 +137,42 @@ with them as without, a test's call twice as long at the median
 (1100-en, three files, 2026-11-26).
 A window that waits for nothing to come is not scaled
 (`docs/ui-testing.md`, section 9, "The scale").
+
+`UI_TEST_REPEAT=<n>` runs every test n times,
+each repeat a test of its own, its id ending in `1of<n>` to `<n>of<n>`
+(`test_scroll.py::test_slow_scroll_goes_down[1100-en-chromium-2of3]`),
+so that `--last-failed` and the workers tell them apart.
+`UI_TEST_SHUFFLE=<seed>` orders the tests by the seed,
+a whole number, which the run's header prints with the repeat:
+the files by a hash of the seed and each file's name,
+a file's tests together, by one of the seed and each test's id.
+A test's place depends on its own name alone,
+so the same seed with the same tests and cases gives the same order,
+and one file, a `-k` or the retry's `--last-failed`
+keeps the order it had in the whole run.
+The workers (`--dist loadfile`) are handed whole files
+in that order (`run.sh` passes `--no-loadscope-reorder`,
+which pytest-xdist 3.8 has; without it they take the largest file first),
+and each runs a file's tests in it;
+which worker takes which file still depends on when each is free.
+Without a seed the order is pytest's, the files' and their tests' own.
+A value that is not a whole number, or a repeat of 0, stops the run.
+No plugin is needed: `conftest.py` parametrizes and sorts the tests itself.
+`UI_TEST_JUNIT=<file>`, from the caller's directory,
+has the first pass write its JUnit XML report there (`--junitxml`),
+and the retry its own beside it, the name's `.xml` turned into `.retry.xml`;
+each test's carries the property `worker`, the pytest-xdist worker,
+`gw<n>`, whose server set it ran against (`conftest.py`).
+The UI soak (`.github/workflows/ui-soak.yml`,
+`GUIDELINES/project/CI.md`, section 2)
+runs every test three times, shuffled, in each case,
+and lists in each job's summary the tests that failed in a repeat,
+each with its case, how many of its runs failed,
+and each failed run's worker and what the retry did with it, on which worker,
+from those reports (`soak_summary.py <junit.xml> [<title>]`;
+AP SteadyTests, Blocks 8 and 11):
+a test that fails on one worker alone met what an earlier file left on its server,
+and a retry lands on whichever worker is free.
 
 The run's sets, its `massimo` and the servers' logs and stores
 are in its work directory,
@@ -206,6 +249,9 @@ makes, sweeps and keeps it (`tools/workdir/README.md`; AP EmulatorRuns, D3-B).
   failed token checks its pages counted against 127.0.0.1;
   after every test, the set's store (`massimo.db` beside `UI_TEST_SERVE_LOG`)
   has none counted against an address, or the test errors at teardown;
+- `ended_sessions` (autouse): after every test, the sessions on the server
+  that it made, by a sign-in in a context of its own or in its page,
+  are ended (`docs/ui-testing.md`, section 9);
 - `reads`: the page's own reads answered with the server's data and what
   the test put in (`helpers.Reads`), so that the page's poll and the reads
   that events and actions start keep it:
@@ -242,11 +288,24 @@ and `isolate_log` (the log holds the test's own lines alone),
 fixed wait of 1.6 s), `safe_route` (the one route handler that lets go
 a request the page no longer waits for, and reports to the guard any
 other error and a request it had to abort), `undo` (a cleanup's step
-that says what it could not undo) and `cleanup`
+that says what it could not undo), `own_id` (an id of the test's own,
+new at each call, for what it makes that no API removes), `taken`
+(Playwright's `expect_response` for a block, and a wait at its end until
+the page has read that answer's body too, with `TAKEN_KIT`) and `cleanup`
 (every step of a cleanup runs, the first error raised at the end).
+What several test files did alike is there too:
+`load_cubes` (a load of the Cubes' list, its reads answered),
+`same_and_open` (a list that `mark` marked, still the same and open),
+`stub_me` (the page signed in with given capabilities),
+`open_cube_panel` (the fake Cube's panel in System settings, open),
+`same_box` (the sign-in card where it was, by `LOGIN_BOX`)
+and `scrolled_to` (the window scrolled at once, and at rest).
 
 The four cases share the one server of a worker,
-so a test that changes the server's store puts it back;
+so a test that changes the server's store puts it back,
+and a file that leaves it otherwise than it found it fails at its last
+test's tear-down, naming what it left (`known_cube`, `server_left`;
+`docs/ui-testing.md`, section 9);
 what a test stores in the browser goes with its context.
 So do the files of a worker, in whatever order the scheduler gives them,
 and the API's lockout is the server's too:
@@ -325,7 +384,8 @@ hence `failed_checks_forgotten`.
   clocks and just after midnight on the day of the autumn one,
   the page in `Europe/Zurich` under Playwright's clock.
 - `test_pairing_updates.py`, a Cube's pairing as a part (AP UiParts, Block 9),
-  `GET …/pairing` answered as running with a device that joined:
+  `GET …/pairing` answered as running with a device that joined,
+  and with the second from its paired event on:
   the joined device's form, its name and room, the countdown and Stop
   stay the elements they were, with what is typed and the focus,
   through the countdown, a pairing event, another device that joins
@@ -682,7 +742,8 @@ hence `failed_checks_forgotten`.
   and the owner signing in next with its key gets neither;
   a scheme deleted in one browser stays deleted when another that had it loads.
   Since the four cases share the server,
-  the page fixture removes the token's user's preferences before every page.
+  the page fixture removes the token's user's preferences before every page,
+  and marks every warning of the log seen (`docs/ui-testing.md`, section 9).
 - `test_log.py`:
   the log opens, and a state event with changes shows what changed;
   `state` chosen as the kind shows only state events,
@@ -1003,6 +1064,9 @@ Node is not needed.
 - Data a test puts into the page goes through the fixture `reads`,
   not into `state`: the page's poll and the reads that events start
   take `state` back.
+  An event a test gives the page whose data a server's read would hold,
+  a device that joined by `pairingJoined`, is told to `reads` too,
+  so that the page's next read keeps it (`test_pairing_updates.py`).
   A route handler of the test's is routed with `safe_route`,
   never wrapped in `try`/`except Exception`.
 - A test of the log that sends events opens the log, calls
@@ -1010,6 +1074,15 @@ Node is not needed.
   a test that waits for an event the server sends marks the stream before
   its action and waits with `stream.wait`,
   and finds the event's line by what the event names, not by `.first`.
+- `go test ./...` counts per test file its fixed pauses (`wait_for_timeout`),
+  its plain routes (`.route(`, not `safe_route`),
+  its own definitions of a name `helpers.py` defines
+  and its page scripts' writes of the page's `state`,
+  against the lists in `idioms/`, which may only fall:
+  a new one fails it, and so does one taken out,
+  until its line there is lowered in the same commit
+  (`docs/ui-testing.md`, section 9,
+  "The old idioms counted" and "The page's state written").
 - A wait that returns whether it was met is asserted where it is called.
 - What a test's look depends on does not grow with the run:
   a look at the values' ages, their text or their width,
@@ -1025,6 +1098,13 @@ Node is not needed.
 - A check of what a request carried waits for the request itself
   (`wait_held` on the route's list, or on `sent_requests` for the page's own),
   not for what the page draws before it sends it.
+- A check of what an answer drew, or that it drew nothing,
+  and a step that answer must come before,
+  wait until the page has read the answer's body
+  (`with taken(page, predicate):` of `helpers.py`),
+  not for Playwright's `expect_response` alone, nor its `.finished()` with frames:
+  the page goes on with an answer after Playwright has it
+  (`docs/ui-testing.md`, section 9, "The answer taken").
 - A state the page takes back on a timer of its own, "Copied" or the toast,
   is held while a test checks it after more than one look
   (`with held_timers(page, "copied"):`), not raced.
@@ -1032,6 +1112,11 @@ Node is not needed.
   not looked at once right after another wait:
   the page goes on after the moment the first wait saw
   (`test_header.py`, the reload of the log).
+- A count of what an action read, or a check of what the answers drew,
+  waits with `answered(page)` of `helpers.py` until the page's reads have all answered,
+  a read the page starts only after another's answer among them;
+  the routes the test holds are given as `held`
+  (`docs/ui-testing.md`, section 9, "The page's reads all answered").
 - "Nothing came" is checked against an end, not after a fixed wait:
   a read sent after the action through the same route,
   the page's state that says nothing waits,

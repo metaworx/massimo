@@ -24,7 +24,7 @@ from helpers import LOG_CMD_DETAIL as DETAIL
 from helpers import LOG_CMD_LINE as CMD_LINE
 from helpers import LOG_FIRST as FIRST
 from helpers import LOG_TEXT_LINE as TEXT_LINE
-from helpers import OPERATOR_PASSWORD, StubLog, frames, isolate_log, mark, owner_page, replaced, safe_route, show_view, sign_out, wait_until
+from helpers import OPERATOR_PASSWORD, StubLog, frames, isolate_log, mark, owner_page, replaced, safe_route, show_view, sign_out, taken, wait_until
 from helpers import log_event as ev
 from helpers import log_lines as lines
 from helpers import stub_log_command as stub_command
@@ -386,18 +386,17 @@ class Held:
         assert self.routes, f"{what} held"
 
     def let_go(self, ended="true"):
-        """The held request answered, and waited for until the page took it:
-        the response finished, then ended (an expression: the page's own
-        read over, a promise it gave) holds, then a drawing."""
+        """The held request answered, and waited for until the page took it
+        (taken), then ended (an expression: the page's own read over, a
+        promise it gave) holds, then a drawing."""
         route = self.routes[0]
         url = route.request.url
-        with self.page.expect_response(lambda r: r.url == url) as info:
+        with taken(self.page, lambda r: r.url == url):
             body = self.answer(url) if self.answer else None
             if body is None:
                 route.fallback()
             else:
                 route.fulfill(status=200, content_type="application/json", body=json.dumps(body))
-        info.value.finished()
         self.page.evaluate("async () => { await (%s); }" % ended)
         frames(self.page)
 

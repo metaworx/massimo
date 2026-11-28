@@ -4,9 +4,20 @@
 ui-test) against the server and the fake Cube it starts; it hands over
 the page's address in UI_TEST_URL and the API token in UI_TEST_TOKEN.
 In pytest-xdist's workers, which run.sh starts with a server set each,
-worker gw<n> takes set n's addresses and log from UI_TEST_URL_<n>,
-UI_TEST_DOWN_URL_<n> and UI_TEST_SERVE_LOG_<n> in place of the plain
-names, before this module or a test file reads them.
+worker gw<n> takes set n's addresses, log and fake Cube's control from
+UI_TEST_URL_<n>, UI_TEST_DOWN_URL_<n>, UI_TEST_SERVE_LOG_<n> and
+UI_TEST_CONTROL_URL_<n> in place of the plain names, before this module
+or a test file reads them.
+
+Each test file starts from the recorded Cube (known_cube, autouse for
+the module): the worker's fake Cube goes back to the greeting it started
+with, and the server has connected to it again and read it, before the
+file's first test. The servers run without their poll of the Cube (run.sh,
+-poll 0), so nothing of the server's own reaches the fake between a
+test's steps. A file also leaves the server as it found it: one that
+leaves a user, an integration, a setting or the like otherwise fails at
+its last test's tear-down, naming what it left (server_left), but for
+what no API takes back (LEFT_FOR_GOOD, with its reasons).
 
 Every test runs four times, at 1100 and 390 px wide and in English and
 German, the language from the browser context's locale (`case`, with the
@@ -19,10 +30,25 @@ browser context of its own from pytest-playwright, with the token in
 localStorage before the page loads, and `page` is the page loaded with
 its room tiles and its event stream open. The four cases share the one server of a worker,
 so a test that changes the server's store puts it back; the settings the page
-keeps on the server for the token's user are removed before every page.
+keeps on the server for the token's user are removed before every page,
+and every warning of the log there is marked seen (clear_preferences).
 The page fixture's default timeout and its waits, as every wait of
 helpers.py, last their seconds times UI_TEST_SCALE (helpers.scaled),
 which run.sh passes on and raises for its retry.
+
+UI_TEST_REPEAT=<n>, a whole number from 1, runs every collected test n
+times, its ids ending in 1of<n> to <n>of<n>; UI_TEST_SHUFFLE=<seed>, a
+whole number, orders the collected tests by the seed, which the run's
+header prints: the files in the order of a hash of the seed and each
+file's name, a file's tests together in that of the seed and each
+test's id, so that one file, a -k or a --last-failed keeps the order it
+had in the whole run, and the same seed with the same tests gives the
+same order. run.sh's workers (--dist loadfile, which hands out whole
+files) are handed the files in that order rather than the largest
+first, each running a file's tests in it; which worker takes which file
+still depends on when each is free. A bad value of either stops the
+run. The UI soak (.github/workflows/ui-soak.yml) runs each test three
+times, shuffled (AP SteadyTests, Block 8).
 
 The page has helpers.PAGE_KIT before its own scripts, which records
 what its event stream brings. The fixture reads answers the page's own
@@ -57,7 +83,9 @@ the address out for five minutes (429). After a test that used
 new_context, one request with the token forgets them (the autouse
 fixture failed_checks_forgotten); after every test, the set's store,
 massimo.db beside UI_TEST_SERVE_LOG, has none counted against an address,
-or the test errors at teardown.
+or the test errors at teardown. A sign-in a test makes leaves a session
+on the server where its context closes without a sign-out: after every
+test the sessions it made are ended (the autouse fixture ended_sessions).
 
 The guard (autouse) fails a test on any console error, page error or a
 horizontal scroll left at its end; the refused stream of a used_ticket
@@ -68,19 +96,24 @@ under the directory run.sh names with --output, tools/ui-test/results/,
 and the screenshot, the video and the trace of a failed test that run.sh
 runs once more under results/retry/.
 """
+import hashlib
 import io
 import json
 import os
+import re
 import sqlite3
 import ssl
+import time
 import tokenize
+import urllib.error
+import urllib.parse
 import urllib.request
 
 import pytest
 
 _WORKER = os.environ.get("PYTEST_XDIST_WORKER", "")
 if _WORKER.startswith("gw"):
-    for _name in ("UI_TEST_URL", "UI_TEST_DOWN_URL", "UI_TEST_SERVE_LOG"):
+    for _name in ("UI_TEST_URL", "UI_TEST_DOWN_URL", "UI_TEST_SERVE_LOG", "UI_TEST_CONTROL_URL"):
         _set = f"{_name}_{_WORKER[2:]}"
         if _set not in os.environ:
             raise RuntimeError(f"worker {_WORKER} has no server set ({_set}): give run.sh UI_TEST_WORKERS rather than pytest -n")
@@ -88,8 +121,8 @@ if _WORKER.startswith("gw"):
 
 pytest.register_assert_rewrite("helpers")
 
-from helpers import (PAGE_KIT, USED, ApiReads, Stream, reads_of, report_to, scaled, scroll_width, used_ticket_first,  # noqa: E402
-                     wait_started, wait_until)
+from helpers import (PAGE_KIT, USED, ApiReads, Stream, cleanup, reads_of, report_to, scaled, scroll_width, undo,  # noqa: E402
+                     used_ticket_first, wait_started, wait_until)
 
 URL = os.environ.get("UI_TEST_URL", "http://127.0.0.1:8119/")
 TOKEN = os.environ.get("UI_TEST_TOKEN", "")
@@ -143,11 +176,91 @@ def case(request):
     return Case(*request.param)
 
 
+# The times each test runs (UI_TEST_REPEAT, 1 where it is not set) and
+# the seed of the tests' order (UI_TEST_SHUFFLE, None where it is not
+# set), read once by pytest_configure.
+REPEAT = pytest.StashKey[int]()
+SHUFFLE = pytest.StashKey[int | None]()
+
+
+def env_number(name, least, what):
+    """The whole number the environment variable name holds, at least
+    least; None where it is not set or empty. Any other value stops the
+    run with what the variable takes, before any test runs."""
+    value = os.environ.get(name, "")
+    if value == "":
+        return None
+    if not re.fullmatch(r"[0-9]+", value) or int(value) < least:
+        raise pytest.UsageError(f"{name} is {what}, not {value!r}")
+    return int(value)
+
+
+def pytest_configure(config):
+    """UI_TEST_REPEAT and UI_TEST_SHUFFLE, read and checked once, in
+    pytest-xdist's controller first, so that a bad value stops the run
+    before its workers start."""
+    config.stash[REPEAT] = env_number("UI_TEST_REPEAT", 1, "a whole number from 1, the times each test runs") or 1
+    config.stash[SHUFFLE] = env_number("UI_TEST_SHUFFLE", 0, "a seed, a whole number such as 42")
+
+
+def pytest_report_header(config):
+    """The repeat and the seed in the run's header, so that a shuffled
+    run can be run again in the same order."""
+    lines = []
+    n = config.stash[REPEAT]
+    if n > 1:
+        lines.append(f"UI_TEST_REPEAT={n}: each test {n} times, its ids ending in 1of{n} to {n}of{n}")
+    seed = config.stash[SHUFFLE]
+    if seed is not None:
+        lines.append(f"UI_TEST_SHUFFLE={seed}: the files and each file's tests in the seed's order")
+    return lines
+
+
+@pytest.fixture
+def ui_test_repeat(request):
+    """The repeat a test runs as, from 1 (UI_TEST_REPEAT)."""
+    return request.param
+
+
+@pytest.hookimpl(trylast=True)
+def pytest_generate_tests(metafunc):
+    """Under UI_TEST_REPEAT=<n>, every test parametrized n times more,
+    after the case and the browser, so that each repeat has an id of its
+    own, 1of<n> to <n>of<n>, which --last-failed and xdist tell apart."""
+    n = metafunc.config.stash[REPEAT]
+    if n > 1:
+        metafunc.fixturenames.append("ui_test_repeat")
+        metafunc.parametrize("ui_test_repeat", range(1, n + 1), indirect=True, ids=lambda i: f"{i}of{n}")
+
+
+def shuffled(items, seed):
+    """The items in the seed's order: the files, as xdist's loadfile takes
+    them (a node id's part before ::), by a hash of the seed and the
+    file's name, each file's tests together, by one of the seed and the
+    test's id. An item's place depends on its own name alone, so that any
+    selection of the items keeps the order it has among them all."""
+    def rank(name):
+        return hashlib.sha256(f"{seed} {name}".encode()).digest()
+    return sorted(items, key=lambda item: (rank(item.nodeid.split("::", 1)[0]), rank(item.nodeid)))
+
+
 # The message of a mark cases that names no case, kept with its test.
 BAD_CASES = pytest.StashKey[str]()
 
 
+@pytest.hookimpl(trylast=True)
 def pytest_collection_modifyitems(config, items):
+    """Under UI_TEST_SHUFFLE, the collected tests in the seed's order
+    (shuffled), after pytest's own order, which moves a file's tests
+    without a browser behind all others (test_parts_guard.py), so that a
+    file's tests stay together; then the cases (deselect_cases)."""
+    seed = config.stash[SHUFFLE]
+    if seed is not None:
+        items[:] = shuffled(items, seed)
+    deselect_cases(config, items)
+
+
+def deselect_cases(config, items):
     """A test marked cases runs only in the cases the mark names, ids
     such as 1100-en: in the others it is deselected here, as the suite is
     collected, rather than skipped by a fixture after the autouse guard
@@ -218,7 +331,12 @@ def pytest_collect_file(file_path, parent):
 @pytest.hookimpl(tryfirst=True)
 def pytest_runtest_setup(item):
     """A test whose mark cases names no case fails, before its fixtures
-    load a page, with what the mark names."""
+    load a page, with what the mark names. Under pytest-xdist each test
+    carries its worker, gw<n>, whose server set it runs against, as the
+    property worker of its JUnit report, which the soak's summary names
+    (soak_summary.py; AP SteadyTests, Block 11)."""
+    if _WORKER:
+        item.user_properties.append(("worker", _WORKER))
     if BAD_CASES in item.stash:
         pytest.fail(item.stash[BAD_CASES], pytrace=False)
 
@@ -233,9 +351,10 @@ def watch():
     return Watch()
 
 
-def api_call(method, path, body=None, token=None):
+def api_call(method, path, body=None, token=None, timeout=5):
     """A request to the server's API from the test itself, with the test
-    token unless another is given; the answer's JSON, None for none."""
+    token unless another is given, answered within timeout seconds; the
+    answer's JSON, None for none."""
     tls = ssl.create_default_context()
     tls.check_hostname, tls.verify_mode = False, ssl.CERT_NONE
     headers = {"Authorization": "Bearer " + (token or TOKEN)}
@@ -244,9 +363,214 @@ def api_call(method, path, body=None, token=None):
         data = json.dumps(body).encode()
         headers["Content-Type"] = "application/json"
     req = urllib.request.Request(URL.rstrip("/") + "/" + path.lstrip("/"), method=method, headers=headers, data=data)
-    with urllib.request.urlopen(req, timeout=5, context=tls) as resp:
+    with urllib.request.urlopen(req, timeout=timeout, context=tls) as resp:
         text = resp.read()
     return json.loads(text) if text else None
+
+
+# The fake Cube's control of the worker's set (massimo fakecube -control),
+# which run.sh hands over in UI_TEST_CONTROL_URL; "" for a server started
+# by hand, whose fake Cube is not reset.
+CONTROL = os.environ.get("UI_TEST_CONTROL_URL", "")
+# The Cube of the worker's set, the fake's serial (greeting.txt).
+CUBE = "KEQ0000100"
+# How long a reset may take, before the scale: the server connects again
+# a second after the drop (its backoff), and reads the greeting.
+RESET_SECONDS = 15
+# How long the writes a file left may take to show, before the scale: the
+# refresh that shows them reconnects to the Cube and reads its greeting.
+SHOWN_SECONDS = 20
+
+
+def newest_connected():
+    """The id of the newest connected event in the set's Cube's log, 0
+    for none."""
+    events = api_call("GET", f"api/v1/cubes/{CUBE}/log?kind=connected&limit=1") or []
+    return events[-1]["id"] if events else 0
+
+
+def cube_entry():
+    """The set's Cube as GET /api/v1/cubes lists it; {} where it lists
+    none."""
+    return next((c for c in api_call("GET", "api/v1/cubes") or [] if c.get("serial") == CUBE), {})
+
+
+def writes_on_their_way():
+    """The writes to the set's Cube whose devices do not show them yet,
+    as the server keeps them (their confirmation, pending or
+    unconfirmed, docs/api-v1.md): a line per device and per room, naming
+    its fields; empty where there are none."""
+    out = []
+    for d in api_call("GET", f"api/v1/cubes/{CUBE}/devices") or []:
+        c = d.get("confirmation")
+        if c:
+            out.append(f"device {d.get('rf_address')} ({d.get('name') or 'unlisted'}): "
+                       f"{c.get('state')} {', '.join(c.get('fields') or [])}")
+    for r in api_call("GET", f"api/v1/cubes/{CUBE}/rooms") or []:
+        c = r.get("confirmation")
+        if c:
+            out.append(f"room {r.get('id')} ({r.get('name')}): {c.get('state')} {', '.join(c.get('fields') or [])}"
+                       f" of {', '.join(c.get('devices') or [])}")
+    return out
+
+
+def writes_shown():
+    """No write of a test is on its way when the fake Cube is reset:
+    without its poll the server reads the devices' states only at a
+    connect, so where one is on its way it reads the Cube again (POST
+    …/refresh), whose greeting shows what the fake applied at once, and
+    the server has none left. A reset that came first would take the
+    write back, and the server would count it as not confirmed five
+    minutes later and send a room's setpoint again, into a later file.
+    One still on its way after SHOWN_SECONDS, scaled, fails, naming the
+    device or the room and the write's fields."""
+    left = writes_on_their_way()
+    if not left:
+        return
+    limit = scaled(SHOWN_SECONDS)
+    try:
+        api_call("POST", f"api/v1/cubes/{CUBE}/refresh", {}, timeout=limit)
+    except (OSError, ValueError) as e:  # urllib's errors, a timeout among them
+        raise RuntimeError(f"the refresh to show the writes on their way before the fake Cube's reset failed ({e}): "
+                           f"{'; '.join(left)}") from e
+    deadline = time.monotonic() + limit
+    while left:
+        if time.monotonic() > deadline:
+            raise RuntimeError(f"a write still on its way before the fake Cube's reset, {limit:g} s after the refresh "
+                               f"that was to show it: {'; '.join(left)}")
+        time.sleep(0.05)
+        left = writes_on_their_way()
+
+
+def reset_cube():
+    """The fake Cube back to the greeting it started with (its control's
+    POST /reset), and the server connected to it again: the reset drops
+    the server's connection, and the server connects again and reads
+    the greeting. Done once a connected event newer than the reset is in
+    the Cube's log and the Cube is listed connected; a timeout names
+    what it waited for and what it saw."""
+    before = newest_connected()
+    req = urllib.request.Request(CONTROL.rstrip("/") + "/reset", method="POST")
+    with urllib.request.urlopen(req, timeout=5) as resp:
+        if resp.status != 204:
+            raise RuntimeError(f"the fake Cube's reset (POST {CONTROL}/reset) answered {resp.status}")
+    limit = scaled(RESET_SECONDS)
+    deadline = time.monotonic() + limit
+    while True:
+        newest, entry = newest_connected(), cube_entry()
+        link = (entry.get("link") or {}).get("state")
+        if newest > before and entry.get("connected") and link == "connected":
+            return
+        if time.monotonic() > deadline:
+            raise RuntimeError(
+                f"the fake Cube's reset: the server did not connect to it again and read it within {limit:g} s: "
+                f"waited for a connected event in {CUBE}'s log newer than {before} (the newest is {newest}) "
+                f"and {CUBE} listed connected (connected {entry.get('connected')}, link {link})")
+        time.sleep(0.05)
+
+
+# What a test file may leave on the worker's server without failing the
+# check of what it left (server_left), each with its reason (AP
+# SteadyTests, Block 11, D11-A): no API takes it back, or the kit does
+# before every page. server_as_found reads none of it.
+LEFT_FOR_GOOD = {
+    "the log's lines": "the server keeps every line it logs; no API removes one",
+    "the log's warnings": "a warning stays until a later event settles it or a person marks it seen, a login_failed until a "
+                          "sign-in of the same name (docs/api-v1.md, GET /api/v1/log/alerts); clear_preferences marks every "
+                          "one present seen before every page",
+    "an integration registered, disabled, with its users and its role's count of them": "DELETE …/integrations/{uuid} "
+                          "revokes its key and disables it, its users, links and maximum kept for a request from the same "
+                          "installation, and no route removes them: a test registers it with an installation of its own "
+                          "(helpers.own_id), so that its next run makes another rather than join it",
+    "a Cube found by a search": "a Cube the server found stays found while it answers a search, which the fake Cube does at "
+                                "every one, and no API forgets it; a test that needs none found tells its page's reads "
+                                "(helpers.configured_only)",
+    "the token's user's preferences": "the page fixture removes them before every page (clear_preferences)",
+}
+
+
+def server_as_found():
+    """What the API shows of the worker's server that a test file may
+    leave changed, by kind, each entry by its key with what the check
+    compares of it: the users, but an integration's that is disabled,
+    with their sessions and keys and their identities; the roles; the
+    providers; the integrations and the requests waiting, but those
+    disabled; the settings' stored values; the Cubes configured; the
+    token's user's push subscriptions; and whether the set's Cube pairs.
+    What LEFT_FOR_GOOD names is left out."""
+    integrations = api_call("GET", "api/v1/integrations") or []
+    disabled = {i["uuid"] for i in integrations if i.get("state") == "disabled"}
+    found = {"user": {}, "session or key": {}, "identity": {}}
+    for u in api_call("GET", "api/v1/users") or []:
+        mine = (u.get("integration") or {}).get("uuid")
+        if mine in disabled:
+            continue
+        name = u["name"]
+        found["user"][name] = ", ".join(f"{k} {u.get(k)}" for k in ("role", "display_name", "disabled", "has_password", "auth_version",
+                                                                   "expires_at"))
+        for t in api_call("GET", f"api/v1/users/{_quoted(name)}/tokens") or []:
+            found["session or key"][f"{name} #{t['id']}"] = f"{t.get('kind')} {t.get('label', '')}".strip()
+        if not mine:
+            for i in api_call("GET", f"api/v1/users/{_quoted(name)}/identities") or []:
+                found["identity"][f"{name} #{i['id']}"] = f"{i.get('provider')} {i.get('email') or i.get('subject') or ''}".strip()
+    found["role"] = {r["key"]: f"capabilities {', '.join(r.get('capabilities') or [])}, disabled {r.get('disabled')}, name {r.get('name', '')}"
+                     for r in (api_call("GET", "api/v1/roles") or {}).get("roles", [])}
+    found["provider"] = {p["key"]: json.dumps({k: v for k, v in p.items() if k not in ("created_at", "updated_at")}, sort_keys=True)
+                         for p in api_call("GET", "api/v1/providers") or []}
+    found["integration"] = {i["uuid"]: f"{i.get('state')} {i.get('name')}, max {', '.join(i.get('max_caps') or [])}"
+                            for i in integrations if i["uuid"] not in disabled}
+    found["setting"] = {k: json.dumps(v.get("value")) for k, v in (api_call("GET", "api/v1/settings") or {}).items()}
+    found["Cube"] = {c["serial"]: f"{c.get('name')} at {c.get('address')}" for c in api_call("GET", "api/v1/cubes") or [] if c.get("configured")}
+    push = api_call("GET", "api/v1/me/push") or []
+    found["push subscription"] = {str(p.get("id")): str(p.get("label", "")) for p in (push if isinstance(push, list) else [])}
+    try:  # a pairing left running ends by its timer, in a later file, with a pairing_ended event
+        found["pairing"] = {CUBE: "running" if (api_call("GET", f"api/v1/cubes/{CUBE}/pairing") or {}).get("active") else "off"}
+    except urllib.error.HTTPError as e:
+        found["pairing"] = {CUBE: f"not read (HTTP {e.code})"}
+    return found
+
+
+def server_left(before):
+    """Fails, naming each, where the worker's server shows otherwise than
+    before, a server_as_found of the file's start: what the file added,
+    removed or changed, with what it was and is."""
+    after = server_as_found()
+    left = []
+    for kind in before:
+        b, a = before[kind], after.get(kind, {})
+        left += [f"{kind} {k} added ({a[k]})" for k in sorted(a.keys() - b.keys())]
+        left += [f"{kind} {k} removed ({b[k]})" for k in sorted(b.keys() - a.keys())]
+        left += [f"{kind} {k} changed from {b[k]} to {a[k]}" for k in sorted(a.keys() & b.keys()) if a[k] != b[k]]
+    if left:
+        raise RuntimeError("the file leaves the server otherwise than it found it: " + "; ".join(left)
+                           + " (what no API takes back is not counted: conftest.py, LEFT_FOR_GOOD)")
+
+
+@pytest.fixture(scope="module", autouse=True)
+def known_cube():
+    """Each test file starts from the recorded Cube and leaves no write
+    on its way (AP SteadyTests, Block 5): before its first test the
+    worker's fake Cube is reset and the server has read it again
+    (reset_cube), so that no earlier file's write, pairing or room list
+    reaches it; before the reset, and after the file's last test, every
+    write the server waits for its devices to show is shown
+    (writes_shown), so that a failure names the file that left it. It
+    also leaves the server as it found it (AP SteadyTests, Block 11,
+    D11-A): what the API shows of the server's users, integrations,
+    settings and the rest (server_as_found) is noted after the reset,
+    and after the file's last test the file fails, at that test's
+    tear-down, where it shows otherwise, naming what the file left
+    (server_left); LEFT_FOR_GOOD lists what is not counted, and why.
+    Without the control (UI_TEST_CONTROL_URL) or the token, as against a
+    server started by hand, nothing is reset or checked."""
+    if not (CONTROL and TOKEN):
+        yield
+        return
+    writes_shown()
+    reset_cube()
+    found = server_as_found()
+    yield
+    cleanup(writes_shown, lambda: server_left(found))
 
 
 def address_failures():
@@ -278,16 +602,66 @@ def failed_checks_forgotten(request):
     assert not left, f"the test leaves failed token checks counted against the address (key, count, locked until): {left}"
 
 
+def _quoted(name):
+    """A user's name as a segment of a path: an integration's users' hold ':'."""
+    return urllib.parse.quote(name, safe="")
+
+
+def live_sessions():
+    """The sessions the set's server holds, as (user name, token id), of
+    every user but an integration's, which signs in with no session: a
+    sign-in's and a key's sign-in's (kind session), not a key."""
+    out = set()
+    for u in api_call("GET", "api/v1/users") or []:
+        if u.get("integration"):
+            continue
+        for t in api_call("GET", f"api/v1/users/{_quoted(u['name'])}/tokens") or []:
+            if t.get("kind") == "session":
+                out.add((u["name"], t["id"]))
+    return out
+
+
+@pytest.fixture(autouse=True)
+def ended_sessions():
+    """A test's sign-in, in a context of its own (new_context, owner_page)
+    or in its page, leaves its session on the server where the context
+    closes without a sign-out, for whichever test the worker runs next:
+    after every test the sessions it made are ended (DELETE
+    …/users/{name}/tokens/{id}, undo), so that it leaves none (AP
+    SteadyTests, Block 11). Set up before the test's contexts, the
+    page's among them, this is torn down after them: pytest sets up a
+    conftest's autouse fixtures in the order of their names, and this
+    one's comes before guard's, which loads the page. Without the token,
+    nothing."""
+    if not TOKEN:
+        yield
+        return
+    before = live_sessions()
+    yield
+    cleanup(*[lambda name=name, sid=sid: undo(f"{name}'s session {sid}",
+                                              lambda: api_call("DELETE", f"api/v1/users/{_quoted(name)}/tokens/{sid}"))
+              for name, sid in sorted(live_sessions() - before)])
+
+
 def clear_preferences():
     """The token's user keeps the page's settings on the server, and the
     four cases share the server: its preferences are removed before
     every page, its notification rules and its marks of the log among
     them, so that a test starts from the defaults as a fresh browser
-    does."""
+    does. Then every warning of the log the server holds is marked seen,
+    log.seen up to the newest alert's id (AP SteadyTests, Block 11): a
+    warning stays until a later event settles it or a person marks it,
+    a refused sign-in's login_failed until a sign-in of the same name,
+    and one an earlier test left put the amber mark on ☰ for every later
+    page of the worker. A warning made once the page has loaded is
+    newer, and shows."""
     if not TOKEN:
         return
     for key in ("ui", "schemes", "notify", "log.seen"):
         api_call("DELETE", "api/v1/me/preferences/" + key)
+    alerts = (api_call("GET", "api/v1/log/alerts") or {}).get("alerts") or []
+    if alerts:
+        api_call("PUT", "api/v1/me/preferences/log.seen", {"all": max(a["id"] for a in alerts), "lines": []})
 
 
 @pytest.fixture
@@ -296,7 +670,8 @@ def page(context, case, watch, request):
     (helpers.wait_started: 30 s, longer than the page's own limit of a
     read, a timeout naming the reads still open) and, unless the test is
     marked used_ticket, the event stream open; the token's
-    user without preferences on the server (clear_preferences); marked
+    user without preferences on the server and every warning of the
+    log seen (clear_preferences); marked
     clock, under Playwright's clock. helpers.PAGE_KIT is in it before
     its own scripts, for the fixture stream, isolate_log and
     wait_log_live; what a route of safe_route's raises goes to the

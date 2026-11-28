@@ -2471,6 +2471,8 @@ The server's settings in the store:
 `in_effect` is what this run uses, which a serve flag (`-poll`, `-refresh`,
 `-discover-interval`, `-stale-after`) overrides for one run;
 `fixed_by` then names the flag.
+`serve -poll 0` asks the Cubes for their device lists never,
+`in_effect` `"0"` and `fixed_by` `-poll`, while the setting keeps its range.
 `poll_interval` is how often the server asks each Cube for its device list,
 10 seconds by default, which costs no radio time;
 `refresh_interval` how often it connects to each Cube anew and reads

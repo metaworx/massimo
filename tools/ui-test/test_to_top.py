@@ -4,7 +4,7 @@
 the bottom right of every page once it is a screen down, and the
 header's ↑ left of ☰ while the header is compacted; each
 takes the page back to its top."""
-from helpers import boxes, scroll_settled, show_view, wait_until
+from helpers import boxes, scrolled_to, show_view, wait_until
 
 PAGES = {"tiles": "rooms", "log": "logview", "me": "me", "cube": "cube-page", "system": "system", "maint": "maint-page", "info": "info-page"}
 SHOWN = "!document.getElementById('to-top').classList.contains('hidden')"
@@ -15,11 +15,6 @@ def long_page(page, section):
     on the test's server."""
     page.evaluate("""(id) => { const d = document.createElement('div');
       d.className = 'test-spacer'; d.style.height = '3000px'; document.getElementById(id).appendChild(d); }""", section)
-
-
-def scrolled_to(page, y):
-    page.evaluate("(y) => window.scrollTo({top: y, behavior: 'instant'})", y)
-    assert scroll_settled(page), f"the page rests at {y}"
 
 
 def test_to_top_on_every_page(page, case):

@@ -12,7 +12,7 @@ import json
 
 import pytest
 
-from helpers import CUBES, show_view, wait_until
+from helpers import CUBES, load_cubes, mark, same_and_open, show_view, wait_until
 
 PANEL = ".cube-panel[data-serial='KEQ0000100']"
 
@@ -28,22 +28,6 @@ DIFFERS = {"field": "name", "variable": "MASSIMO_CUBE_KEQ0000100_NAME", "file": 
 PENDING = {"en": "that 7 radiograms are not delivered yet", "de": "dass 7 Funktelegramme noch nicht zugestellt sind"}
 
 
-def loaded(page):
-    """A load of the Cubes' list, as the poll makes it."""
-    page.evaluate("loadCubes()")
-    page.wait_for_timeout(200)
-
-
-def mark(page, selector):
-    """Marks the element of selector, so that a later look can tell
-    whether it is still the same element."""
-    page.evaluate("(s) => { document.querySelector(s).__mark = true; }", selector)
-
-
-def same_and_open(page, selector):
-    return page.evaluate("(s) => { const d = document.querySelector(s); return !!d && !!d.__mark && d.open; }", selector)
-
-
 @pytest.mark.parametrize("where", ["closed", "open", "page"])
 def test_problem_list_stays_open_through_a_poll(page, case, where, reads):
     """The Cube's pill opened, a poll comes: the list is the same
@@ -57,7 +41,7 @@ def test_problem_list_stays_open_through_a_poll(page, case, where, reads):
         else:
             show_view(page, "system")
             panel = "#cubes-list " + PANEL
-        loaded(page)
+        load_cubes(page)
         pill = panel + " > summary .cube-pill details.problems"
         assert wait_until(page, "!!document.querySelector(%s)" % json.dumps(pill), 5), "the Cube's pill with its list"
         if where == "open":
@@ -65,16 +49,16 @@ def test_problem_list_stays_open_through_a_poll(page, case, where, reads):
             page.locator(panel + " .cube-form").wait_for(state="visible")
         page.locator(pill + " > summary").click()
         assert page.locator(pill).get_attribute("open") is not None, "the list open"
-        mark(page, pill)
+        mark(page, [pill])
         page.evaluate("poll(false)")
         page.wait_for_timeout(300)
         assert same_and_open(page, pill), f"the list stays open through a poll, the panel {where}"
-        loaded(page)
+        load_cubes(page)
         assert same_and_open(page, pill), f"and through a load of the Cubes, the panel {where}"
     finally:
         reads.clear(CUBES)
     page.keyboard.press("Escape")
-    loaded(page)
+    load_cubes(page)
     show_view(page, "tiles")
 
 
@@ -99,10 +83,10 @@ def test_reboot_names_the_radiograms_pending_now(page, case, where, reads):
             panel = page.locator("#cubes-list " + PANEL)
             panel.locator(":scope > summary .cube-head-who").click()
         panel.locator(".cube-reboot-btn").wait_for(state="visible")
-        loaded(page)
+        load_cubes(page)
         reads.cube("KEQ0000100", pending_radiograms=7, budget={"duty_cycle_pct": 0, "free_memory_slots": 43,
                                                                "updated_at": "2026-11-13T21:40:00+01:00"})
-        loaded(page)
+        load_cubes(page)
         assert wait_until(page, "state.cubes[0].pending_radiograms === 7", 5), "the Cube says 7 pending"
         panel.locator(".cube-reboot-btn").click()
         text = panel.locator(".confirm-box .confirm-text").inner_text()
@@ -113,7 +97,7 @@ def test_reboot_names_the_radiograms_pending_now(page, case, where, reads):
     finally:
         reads.clear(CUBES)
         page.unroute("**/api/v1/cubes/KEQ0000100/reboot")
-    loaded(page)
+    load_cubes(page)
     show_view(page, "tiles")
 
 
@@ -132,21 +116,21 @@ def test_a_file_difference_that_comes_later_gets_its_row(page, case, where, read
             panel = page.locator("#cubes-list " + PANEL)
             panel.locator(":scope > summary .cube-head-who").click()
         panel.locator(".cube-form").wait_for(state="visible")
-        loaded(page)
+        load_cubes(page)
         assert panel.locator(".cube-differs").count() == 0, "no difference at first"
         reads.cube("KEQ0000100", file_differs=[DIFFERS])
-        loaded(page)
+        load_cubes(page)
         assert wait_until(page, "state.cubes[0].file_differs && state.cubes[0].file_differs.length === 1", 5), "the difference in the data"
         row = panel.locator(".cube-differs")
         assert wait_until(page, "!!document.querySelector(\"%s .cube-differs .take-file[data-field=name]\")" % PANEL, 5), \
             "the row of the difference, with Take the file's value"
         assert "MASSIMO_CUBE_KEQ0000100_NAME" in row.inner_text() and "File name" in row.inner_text(), "naming the line and its value"
         reads.cube("KEQ0000100")
-        loaded(page)
+        load_cubes(page)
         assert wait_until(page, "!document.querySelector(\"%s .cube-differs\")" % PANEL, 5), "the row goes with the difference"
     finally:
         reads.clear(CUBES)
-    loaded(page)
+    load_cubes(page)
     show_view(page, "tiles")
 
 

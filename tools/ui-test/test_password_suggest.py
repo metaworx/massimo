@@ -36,8 +36,8 @@ import re
 import pytest
 
 from conftest import TOKEN, URL, api_call
-from helpers import (BUBBLE_STATUS, OPERATOR_PASSWORD, boxes, bubble, frames, held_timers, named_buttons, open_fold, scroll_width, show_view,
-                     toggle_fold, wait_bubble_at, wait_held, wait_until)
+from helpers import (BUBBLE_STATUS, OPERATOR_PASSWORD, boxes, bubble, frames, held_timers, named_buttons, open_fold, safe_route, scroll_width,
+                     show_view, toggle_fold, wait_bubble_at, wait_held, wait_until)
 from test_first_owner import OPEN, owner_card, start_page, stub_creation
 from test_login import sign_in
 from test_password_eye import STATE, eye_of, fresh_page, reopen, say_reveal
@@ -753,7 +753,7 @@ def test_the_rule_line_is_one_line_in_every_language(new_context, case, watch, g
         page = ctx.new_page()
         guard.page = page
         page.set_default_timeout(5000)
-        page.route("**/ui/words-en.txt", lambda route: route.fulfill(status=503, body="no"))
+        safe_route(page, "**/ui/words-en.txt", lambda route: route.fulfill(status=503, body="no"))
         page.goto(URL)
         page.wait_for_selector(".room", timeout=10000)
         assert wait_until(page, f"i18n.lang === {lang!r}", 5), f"the page in {lang}"

@@ -16,7 +16,8 @@ import time
 import pytest
 
 from conftest import TOKEN, URL, api_call
-from helpers import bubble_at, frames, held_timers, hold, mark, owner_page, replaced, safe_route, scaled, show_view, update_json, wait_bubble_at, wait_held, wait_until
+from helpers import (answered, bubble_at, frames, held_timers, hold, mark, owner_page, replaced, safe_route, scaled, show_view, taken, update_json,
+                     wait_bubble_at, wait_held, wait_until)
 from test_admin_updates import across
 from test_unsaved import expire
 from test_reboot import RebootStub, iso, reboot_text
@@ -166,7 +167,7 @@ def test_a_second_channel_during_the_first_ones_check(page, case):
         assert wait_until(page, "document.getElementById('update-text').textContent.includes('stable')", 5), "stable's check shown"
         assert wait_until(page, "document.getElementById('update-channel').value === 'stable'", 5), "stable chosen"
         late = json.loads(update_json("up-to-date", "v0.0.1-test", False, None, "beta"))
-        with page.expect_response(lambda r: "refresh=1" in r.url):
+        with taken(page, lambda r: "refresh=1" in r.url):
             checks[0].fulfill(status=200, content_type="application/json", body=json.dumps(late))
         frames(page)
         assert "stable" in page.locator("#update-text").inner_text() and sel.input_value() == "stable", \
@@ -254,14 +255,14 @@ def test_the_session_end_ends_the_helpers_reading(new_context, case, watch, guar
     assert wait_held(page, reads, 8), "the next reading asked for"
     across(page, how)
     assert not software_busy(page), "the reading ended with the session"
-    with page.expect_response(lambda r: "/api/v1/update" in r.url):
+    with taken(page, lambda r: "/api/v1/update" in r.url):
         for r in reads:
             r.fallback()
     frames(page)
     assert not software_busy(page), "the late answer started nothing"
     n = len(reads)
     page.clock.run_for(7000)
-    answered(page)
+    answered(page, held=reads)
     assert len(reads) == n, f"no reading for the next user ({len(reads) - n})"
 
 
@@ -321,12 +322,6 @@ def counted(page, pattern, method="GET"):
     return got
 
 
-def answered(page):
-    """A request of the page's own answered: one that the page sent before it has reached its route."""
-    page.evaluate("fetch('healthz').then((r) => r.status)")
-    frames(page)
-
-
 def settings_change(**want):
     """A match of Stream.wait: the change event of a PUT /api/v1/settings
     that set exactly want, as the server sends it for a write of the
@@ -373,14 +368,14 @@ def test_a_burst_of_events_makes_one_read_and_one_after_it(page, case):
         for _ in range(5):
             send(page, "resync")
         assert wait_held(page, held), "the first read"
-        answered(page)
+        answered(page, held=held)
         assert len(held) == 1, f"one read in flight ({len(held)})"
         held.pop().fallback()
         assert wait_held(page, held), "one more after it"
-        answered(page)
+        answered(page, held=held)
         assert len(held) == 1, f"one read for the four ({len(held)})"
         held.pop().fallback()
-        answered(page)
+        answered(page, held=held)
         assert not held, f"nothing more ({len(held)})"
     finally:
         page.unroute(UPDATE)
@@ -402,7 +397,7 @@ def test_a_burst_left_by_its_page_makes_no_second_read(page, case):
         show_view(page, "tiles")
         with page.expect_response(lambda r: "/api/v1/update" in r.url):
             held.pop().fallback()
-        answered(page)  # the first read's answer handled: the second would have been asked for by now
+        answered(page, held=held)  # the first read's answer handled: the second would have been asked for by now
         frames(page)
         assert not held, f"no second read for Rooms ({len(held)})"
     finally:
@@ -463,7 +458,7 @@ def test_the_channels_own_change_event_reads_nothing_behind_its_back(page, case)
             page.wait_for_timeout(50)
         n = len(reads)
         send(page, "change", {"action": "settings.update", "set": {"update.channel": "beta"}})
-        answered(page)
+        answered(page, held=checks)
         assert len(reads) == n, f"the late event reads nothing while the page's own change is under way ({len(reads) - n})"
         for c in checks:
             c.fallback()
@@ -595,7 +590,7 @@ def test_events_while_the_helper_is_followed_read_nothing(page, case):
         assert wait_held(page, held, 8), "the reading's next read"
         for kind in ("update", "resync", "resync"):
             send(page, kind, {"to": "v0.0.1-test"})
-        answered(page)
+        answered(page, held=held)
         assert len(held) == 1, f"the events read nothing beside the reading ({len(held)})"
         assert software_busy(page), "still followed"
         held.pop().fallback()
@@ -620,36 +615,38 @@ def test_a_read_asked_for_before_the_session_ended_is_not_made(new_context, case
     across(page, how)
     first = held.pop()
     first.fallback()
-    answered(page)
+    answered(page, held=held)
     assert not held, f"no read for the session before ({len(held)})"
 
 
 # --- Maintenance -------------------------------------------------------------
 
 def test_an_interval_keeps_the_focus_while_it_saves(page, case):
-    """The poll's interval chosen is saved at once: while the PUT runs the
-    choice stays on with 30 s in it and the focus on it, and the store's
-    answer, once let go, shows it waiting for the restart."""
-    api_call("PUT", "api/v1/settings", {"poll_interval": None})
+    """The refresh's interval chosen is saved at once: while the PUT runs
+    the choice stays on with 1 h in it and the focus on it, and the
+    store's answer, once let go, shows it waiting for the restart. (The
+    poll's is read-only: the test server runs with -poll 0.)"""
+    api_call("PUT", "api/v1/settings", {"refresh_interval": None})
     held = []
     try:
         show_view(page, "maint")
-        sel = page.locator("#interval-poll")
-        assert wait_until(page, "document.querySelector('#interval-poll-text').textContent.length > 0", 5), "the line is filled"
+        sel = page.locator("#interval-refresh")
+        assert wait_until(page, "document.querySelector('#interval-refresh-text').textContent.length > 0", 5), "the line is filled"
         hold(page, "**/api/v1/settings", "PUT", held, [])
         sel.focus()
-        sel.select_option("30")
+        sel.select_option("3600")
         assert wait_held(page, held), "the PUT sent"
         frames(page)
-        assert sel.is_enabled() and sel.input_value() == "30", "on, with 30 s, while it saves"
-        assert page.evaluate("document.activeElement.id") == "interval-poll", "the focus on it"
+        assert sel.is_enabled() and sel.input_value() == "3600", "on, with 1 h, while it saves"
+        assert page.evaluate("document.activeElement.id") == "interval-refresh", "the focus on it"
         for r in held:
             r.fallback()
-        assert wait_until(page, "!document.querySelector('#interval-poll-msg').classList.contains('hidden')", 5), "saved"
-        assert sel.input_value() == "30" and page.evaluate("document.activeElement.id") == "interval-poll", "30 s, the focus still on it"
+        assert wait_until(page, "!document.querySelector('#interval-refresh-msg').classList.contains('hidden')", 5), "saved"
+        assert sel.input_value() == "3600" and page.evaluate("document.activeElement.id") == "interval-refresh", \
+            "1 h, the focus still on it"
     finally:
         page.unroute("**/api/v1/settings")
-        api_call("PUT", "api/v1/settings", {"poll_interval": None})
+        api_call("PUT", "api/v1/settings", {"refresh_interval": None})
 
 
 def test_maintenance_keeps_what_it_holds_through_its_reads(page, case):
@@ -752,7 +749,7 @@ def test_the_session_end_ends_the_restarts_following(new_context, case, watch, g
     assert wait_held(page, checks, 8), "the next /healthz asked for"
     across(page, how)
     assert page.locator("#restart-text").inner_text() != restarting, "the following ended with the session"
-    with page.expect_response(lambda r: r.url.endswith("/healthz")):
+    with taken(page, lambda r: r.url.endswith("/healthz")):
         for r in checks:
             r.fulfill(status=200, content_type="application/json", body=later)
     frames(page)
@@ -791,27 +788,29 @@ def test_the_session_end_forgets_the_delay_and_the_questions(new_context, case, 
 
 
 def test_maintenance_follows_a_setting_set_elsewhere_while_shown_only(page, case, stream):
-    """Another browser sets the poll's interval (PUT, the server's change
-    event): with Rooms shown nothing is read; with Maintenance shown the
-    choice shows 30 s and the line that it waits, without a reload."""
-    api_call("PUT", "api/v1/settings", {"poll_interval": None})
+    """Another browser sets the refresh's interval (PUT, the server's
+    change event): with Rooms shown nothing is read; with Maintenance
+    shown the choice shows 1 h and the line that it waits, without a
+    reload. (The poll's is read-only: the test server runs with -poll 0,
+    and its setting waits for nothing.)"""
+    api_call("PUT", "api/v1/settings", {"refresh_interval": None})
     reads = counted(page, "**/api/v1/settings")
     try:
         show_view(page, "tiles")
         mark0 = stream.mark()
-        api_call("PUT", "api/v1/settings", {"poll_interval": "20s"})
-        stream.wait("the change", "change", match=settings_change(poll_interval="20s"), mark=mark0, server=True)
+        api_call("PUT", "api/v1/settings", {"refresh_interval": "2h"})
+        stream.wait("the change", "change", match=settings_change(refresh_interval="2h"), mark=mark0, server=True)
         answered(page)
         assert reads == [], f"no read for a page not shown ({reads})"
-        api_call("PUT", "api/v1/settings", {"poll_interval": None})
+        api_call("PUT", "api/v1/settings", {"refresh_interval": None})
         show_view(page, "maint")
-        assert wait_until(page, "document.getElementById('interval-poll').value === '10'", 5), "10 s"
-        api_call("PUT", "api/v1/settings", {"poll_interval": "30s"})
-        assert wait_until(page, "document.getElementById('interval-poll').value === '30'", 5), "30 s shown, no reload"
+        assert wait_until(page, "document.getElementById('interval-refresh').value === '21600'", 5), "6 h"
+        api_call("PUT", "api/v1/settings", {"refresh_interval": "1h"})
+        assert wait_until(page, "document.getElementById('interval-refresh').value === '3600'", 5), "1 h shown, no reload"
         assert wait_until(page, "document.querySelector('#sys-maint .section-badges').textContent.length > 0", 5), "counted as waiting"
     finally:
         page.unroute("**/api/v1/settings")
-        api_call("PUT", "api/v1/settings", {"poll_interval": None})
+        api_call("PUT", "api/v1/settings", {"refresh_interval": None})
 
 
 def test_the_settings_file_read_again_shows_what_waits_with_nothing_read(page, case):
@@ -960,8 +959,8 @@ def test_an_event_keeps_a_question_and_takes_back_one_whose_reboot_waits(page, c
         reads = counted(page, "**/api/v1/reboot")
         send(page, "change", {"action": "settings.update", "set": {"announce": "on"}})
         send(page, "reboot", {"by": "systemd"})
-        # the reboot's read waits behind the settings' read in the card's burst reader, so answered() alone,
-        # which waits for a request sent before its own, comes before it
+        # the reboot's read waits behind the settings' read in the card's burst reader: the read waited for,
+        # then answered, which follows a read started after another's answer, for any read after it
         assert wait_reads(page, reads, 1), f"the reboot read ({reads})"
         answered(page)
         assert len(reads) == 1, f"the reboot read ({reads})"
@@ -1043,52 +1042,54 @@ def test_a_resync_while_this_page_follows_its_restart_reads_no_row(page, case):
 
 
 def test_an_intervals_own_change_event_reads_nothing_behind_its_back(page, case, stream):
-    """The poll's interval chosen, its PUT held; the change event of a PUT
-    comes meanwhile: it reads the settings not at all while the page's
-    own request is under way, and 30 s stays chosen throughout. The
-    server's own change event of the reset is waited for before the
-    reads are counted, so that it adds none."""
+    """The refresh's interval chosen, its PUT held; the change event of a
+    PUT comes meanwhile: it reads the settings not at all while the
+    page's own request is under way, and 1 h stays chosen throughout.
+    The server's own change event of the reset is waited for before the
+    reads are counted, so that it adds none. (The poll's is read-only:
+    the test server runs with -poll 0.)"""
     m = stream.mark()
-    api_call("PUT", "api/v1/settings", {"poll_interval": None})
-    stream.wait("the reset's change", "change", match=settings_change(poll_interval=None), mark=m, server=True)
+    api_call("PUT", "api/v1/settings", {"refresh_interval": None})
+    stream.wait("the reset's change", "change", match=settings_change(refresh_interval=None), mark=m, server=True)
     held = []
     try:
         show_view(page, "maint")
-        sel = page.locator("#interval-poll")
-        assert wait_until(page, "document.querySelector('#interval-poll-text').textContent.length > 0", 5), "the line is filled"
+        sel = page.locator("#interval-refresh")
+        assert wait_until(page, "document.querySelector('#interval-refresh-text').textContent.length > 0", 5), "the line is filled"
         reads = counted(page, "**/api/v1/settings")
         page.route("**/api/v1/settings", lambda route: held.append(route) if route.request.method == "PUT" else route.fallback())
-        page.evaluate("""() => { window.__seen = []; const sel = document.getElementById('interval-poll');
+        page.evaluate("""() => { window.__seen = []; const sel = document.getElementById('interval-refresh');
           window.__watch = setInterval(() => window.__seen.push(sel.value), 5); }""")
-        sel.select_option("30")
+        sel.select_option("3600")
         assert wait_held(page, held), "the PUT sent"
-        send(page, "change", {"action": "settings.update", "set": {"poll_interval": "10s"}})
-        answered(page)
+        send(page, "change", {"action": "settings.update", "set": {"refresh_interval": "6h"}})
+        answered(page, held=held)
         assert reads == [], f"the event reads nothing while the PUT runs ({reads})"
         for r in held:
             r.fallback()
-        assert wait_until(page, "!document.querySelector('#interval-poll-msg').classList.contains('hidden')", 5), "saved"
+        assert wait_until(page, "!document.querySelector('#interval-refresh-msg').classList.contains('hidden')", 5), "saved"
         frames(page)
         seen = page.evaluate("() => { clearInterval(window.__watch); return window.__seen; }")
-        after = seen[seen.index("30"):] if "30" in seen else []
-        assert after and "10" not in after, f"10 s never shown after 30 s was chosen ({seen[-20:]})"
+        after = seen[seen.index("3600"):] if "3600" in seen else []
+        assert after and "21600" not in after, f"6 h never shown after 1 h was chosen ({seen[-20:]})"
     finally:
         page.unroute("**/api/v1/settings")
-        api_call("PUT", "api/v1/settings", {"poll_interval": None})
+        api_call("PUT", "api/v1/settings", {"refresh_interval": None})
 
 
 def test_another_setting_changed_during_the_own_put_is_read_after_it(page, case, stream):
-    """The poll's interval chosen, its PUT held; another browser sets the
-    announcement meanwhile (its change event): nothing is read while the
-    PUT runs, one read follows it, and the announcement shows On. The
+    """The refresh's interval chosen, its PUT held; another browser sets
+    the announcement meanwhile (its change event): nothing is read while
+    the PUT runs, one read follows it, and the announcement shows On. The
     server's own change event of each write is waited for, the page's
     own PUT's before the page has its answer, so that every one of them
     has come while the PUT runs and the reads are counted after them: an
     event that came later would read once more, as the page does for a
-    change it learns of after its own request."""
+    change it learns of after its own request. (The poll's interval is
+    read-only: the test server runs with -poll 0.)"""
     m = stream.mark()
-    api_call("PUT", "api/v1/settings", {"poll_interval": None, "announce": None})
-    stream.wait("the reset's change", "change", match=settings_change(poll_interval=None, announce=None), mark=m, server=True)
+    api_call("PUT", "api/v1/settings", {"refresh_interval": None, "announce": None})
+    stream.wait("the reset's change", "change", match=settings_change(refresh_interval=None, announce=None), mark=m, server=True)
     held = []
     try:
         show_view(page, "maint")
@@ -1096,16 +1097,16 @@ def test_another_setting_changed_during_the_own_put_is_read_after_it(page, case,
         assert page.locator("#announce-mode").input_value() == "auto"
         reads = counted(page, "**/api/v1/settings")
         page.route("**/api/v1/settings", lambda route: held.append(route) if route.request.method == "PUT" else route.fallback())
-        page.locator("#interval-poll").select_option("30")
+        page.locator("#interval-refresh").select_option("3600")
         assert wait_held(page, held), "the PUT sent"
         m = stream.mark()
         api_call("PUT", "api/v1/settings", {"announce": "on"})  # the other browser
         stream.wait("the other browser's change", "change", match=settings_change(announce="on"), mark=m, server=True)
-        answered(page)
+        answered(page, held=held)
         assert reads == [], f"nothing read while the PUT runs ({reads})"
         m = stream.mark()
         answers = [r.fetch() for r in held]  # at the server, the page still without its answer
-        stream.wait("the page's own change", "change", match=settings_change(poll_interval="30s"), mark=m, server=True)
+        stream.wait("the page's own change", "change", match=settings_change(refresh_interval="1h"), mark=m, server=True)
         for r, a in zip(held, answers):
             r.fulfill(response=a)
         assert wait_until(page, "document.getElementById('announce-mode').value === 'on'", 5), "the announcement read after the PUT"
@@ -1113,7 +1114,7 @@ def test_another_setting_changed_during_the_own_put_is_read_after_it(page, case,
         assert len(reads) == 1, f"one read after it ({len(reads)})"
     finally:
         page.unroute("**/api/v1/settings")
-        api_call("PUT", "api/v1/settings", {"poll_interval": None, "announce": None})
+        api_call("PUT", "api/v1/settings", {"refresh_interval": None, "announce": None})
 
 
 # --- System info -------------------------------------------------------------
@@ -1188,13 +1189,13 @@ def test_the_session_end_forgets_system_info(new_context, case, watch, guard, ho
     hold(page, "**/api/v1/system", "GET", held, [])
     assert wait_held(page, held, 8), "the certificate read again"
     across(page, how)
-    with page.expect_response(lambda r: r.url.endswith("/api/v1/system")):
+    with taken(page, lambda r: r.url.endswith("/api/v1/system")):
         for r in held:
             r.fallback()
     frames(page)
     n = len(held)
     page.clock.run_for(5000)
-    answered(page)
+    answered(page, held=held)
     assert len(held) == n, f"no reading of the certificate for the next user ({len(held) - n})"
     assert "MASSIMO_API_TOKEN" not in page.locator("#config-info-body").inner_text(), "no variable of the first"
     assert page.locator("#info-client").inner_text() == "–" and "massimo-box" not in page.locator("#info-host").inner_text(), "no fact"

@@ -12,7 +12,7 @@ import json
 import re
 
 from conftest import api_call
-from helpers import VIEWER, assert_busy, busy_state, css_hidden, named_buttons, scroll_width, show_view, wait_until
+from helpers import assert_busy, busy_state, css_hidden, named_buttons, scroll_width, show_view, stub_me, wait_until
 
 REFRESH = "**/api/v1/cubes/*/refresh"
 SECOND = "KEQ0000300"
@@ -141,14 +141,6 @@ def test_cube_refresh_beside_reboot(page, case, watch):
     finally:
         held.close()
     show_view(page, "tiles")
-
-
-def stub_me(page, capabilities):
-    """The page signed in with these capabilities (/me stubbed); the
-    owner's token still answers the reads."""
-    me = dict(VIEWER, capabilities=capabilities)
-    page.route("**/api/v1/me", lambda route: route.fulfill(status=200, content_type="application/json", body=json.dumps(me)))
-    page.evaluate("loadMe()")
 
 
 def test_refresh_needs_restart(page, case):

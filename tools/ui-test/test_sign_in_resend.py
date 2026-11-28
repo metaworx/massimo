@@ -27,7 +27,8 @@ import time
 import pytest
 
 from conftest import TOKEN, URL, api_call, clear_preferences
-from helpers import OPERATOR_PASSWORD, frames, held_timers, open_personal_page, scaled, sent_requests, show_view, sign_out, wait_held, wait_until
+from helpers import (OPERATOR_PASSWORD, frames, held_timers, open_cube_panel, open_personal_page, scaled, sent_requests, show_view, sign_out,
+                     wait_held, wait_until)
 from test_login import sign_in
 
 NOT_SENT = {"en": "not sent, since you were signed out: do it again once signed in",
@@ -207,11 +208,11 @@ def test_cube_save_after_the_sign_in(page, case, watch):
     """Cube settings' Save that meets a 401 is a failed save: the cross
     on Save, the draft kept, the region's line saying why, also after the
     sign-in, and nothing sent again; the next Save sends it once."""
-    from test_unsaved import open_panel, save_state, wait_save
+    from test_unsaved import save_state, wait_save
     watch.expected.append(("/cubes/" + SERIAL, 401))
     seen = tickets(page)
     refusal = Refusal(page, CUBE_PATH, "PUT", answer=ok)
-    _, form = open_panel(page)
+    _, form = open_cube_panel(page)
     field = form.locator("input[name=name]")
     field.fill("Typed before the sign-in")
     form.locator("button[type=submit]").click()

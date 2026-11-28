@@ -29,8 +29,8 @@ import os
 from axe_playwright_python.sync_playwright import Axe
 
 from conftest import TOKEN, URL, api_call, clear_preferences
-from helpers import (OPERATOR_PASSWORD, assert_login_card_centred, assert_login_row, cleanup, held_timers, named_buttons, open_personal_page, undo,
-                     wait_until)
+from helpers import (OPERATOR_PASSWORD, assert_login_card_centred, assert_login_row, cleanup, held_timers, named_buttons, open_personal_page, settled,
+                     undo, wait_until)
 
 CONNECT = URL + "ui/connect.html"
 FAKE_BRIDGE = os.path.join(os.path.dirname(os.path.abspath(__file__)), "fake_bridge.js")
@@ -90,14 +90,30 @@ def row(page, name):
 
 
 def wait_state(page, name, text):
-    """Waits until the server's row shows what its probe found."""
+    """Waits until the server's row shows what its probe found, for 5 s
+    (scaled, settled)."""
     badge = row(page, name).locator(".server-badges .flag").first
     badge.wait_for()
-    end = 50
-    while end and badge.inner_text() != text:
-        page.wait_for_timeout(100)
-        end -= 1
-    assert badge.inner_text() == text, f"{name} shows {text!r}, not {badge.inner_text()!r}"
+    shown, last = settled(page, badge.inner_text, lambda got: got == text)
+    assert shown, f"{name} shows {text!r}, not {last!r}"
+
+
+# Every server of the list probed, the latest probe of each answered
+# (connect.js probeServer): what the page does once the probes at its
+# start have run (sayUnreachable) is done by then.
+ALL_PROBED = "conn.servers.length > 0 && conn.servers.every((s) => !!conn.probes[s.id] && conn.probes[s.id].state !== 'probing')"
+
+
+def probes_started(page, url):
+    """How many probes at url the page has asked the fake bridge for."""
+    return len([c for c in calls(page, "probe") if url in c[1]])
+
+
+def probe_started(page, url, before=0):
+    """Waits until the page has asked the fake bridge for a probe at url
+    beyond the before it had asked for (probes_started), for 3 s (scaled):
+    the bridge notes a probe as it starts."""
+    return wait_until(page, f"window.__fakeBridge.calls.filter((c) => c[0] === 'probe' && c[1].includes({url!r})).length > {before}", 3)
 
 
 def wait_toast(page, text="", bad=False):
@@ -1595,7 +1611,9 @@ def test_server_page_first_owner_keeps_the_login(new_context, case, watch, guard
         page.evaluate("loadMe()")
         assert wait_until(page, "!document.getElementById('setup').classList.contains('hidden')", 5), "the first owner's form shows"
         if plain:
-            page.wait_for_timeout(300)
+            # the form's read of the app's status answered: the bridge answers
+            # its reads in turn, so a read of the page's after it ends after it
+            page.evaluate("MassimoParts.signIn.readApp()")
             assert page.locator("#setup-keep-row").is_hidden(), "plain HTTP: no switch"
         else:
             page.locator("#setup-keep-row").wait_for(state="visible")
@@ -2330,7 +2348,7 @@ def test_connect_unreachable_from_address(new_context, case, watch, guard):
         page.goto("about:blank")
         page.goto(CONNECT + address)
         wait_state(page, "Home", STATE[case.lang]["lan"])
-        page.wait_for_timeout(300)
+        assert wait_until(page, ALL_PROBED, 5), f"{address}: the probes at the start answered"
         assert page.locator("#toast").is_hidden(), f"{address}: nothing said"
         assert page.evaluate("location.hash") == ""
 
@@ -2339,7 +2357,7 @@ def test_connect_unreachable_from_address(new_context, case, watch, guard):
                                                             probeMs=600))
     nameless.goto("about:blank")
     nameless.goto(CONNECT + "#unreachable=s3")
-    nameless.wait_for_timeout(200)
+    assert probe_started(nameless, "http://192.168.1.90:8099/"), "the first probe started"
     nameless.evaluate("window.dispatchEvent(new CustomEvent('massimo', { detail: { type: 'network' } }))")
     wait_toast(nameless, said(nameless, "connect.unreachable", name="192.168.1.90:8099"), bad=True)
     # only a finished probe carries its reason: the toast came after the newer one, not at the first's end (probed)
@@ -2374,8 +2392,9 @@ def test_connect_show_in_profile_probes_first(new_context, case, watch, guard):
     # a newer probe replaces Show's own: waited for, the page opened, no toast
     assert wait_until(page, "!conn.opening", 3)
     page.evaluate("window.__fakeBridgeConfig.probeMs = 600")
+    before = probes_started(page, HOME_LAN)
     show.click()
-    page.wait_for_timeout(100)
+    assert probe_started(page, HOME_LAN, before), "Show's probe started"
     page.evaluate("window.dispatchEvent(new CustomEvent('massimo', { detail: { type: 'network' } }))")
     assert wait_until(page, "window.__fakeBridge.calls.filter((c) => c[0] === 'open').length === 2", 5), "opened once the newer probe answered"
     assert page.locator("#toast").is_hidden(), "nothing said"
@@ -2394,19 +2413,16 @@ def test_connect_show_in_profile_probes_first(new_context, case, watch, guard):
 
     # Turn off and Sign out that the server did not answer: probed again
     page.evaluate(f"delete window.__fakeBridgeConfig.answers[{CABIN_LAN!r}]")
-    probes_of = lambda url: len([c for c in calls(page, "probe") if url in c[1]])  # noqa: E731
     panel = settings_of(page, "Cabin", "login")
-    before = probes_of(CABIN_LAN)
+    before = probes_started(page, CABIN_LAN)
     panel.locator(".server-login-off").click()
     wait_toast(page, "Cabin")
-    assert wait_until(page, f"window.__fakeBridge.calls.filter((c) => c[0] === 'probe' && c[1].includes({CABIN_LAN!r})).length > {before}", 3), \
-        "Turn off that the server did not answer probes it again"
+    assert probe_started(page, CABIN_LAN, before), "Turn off that the server did not answer probes it again"
     wait_state(page, "Cabin", STATE[case.lang]["offline"])
     row(page, "Cabin").locator(".server-cog").click()
     close_toast(page)
     panel = settings_of(page, "Home", "login")
-    before = probes_of(HOME_LAN)
+    before = probes_started(page, HOME_LAN)
     panel.locator(".server-sign-out").click()
     wait_toast(page, "Home")
-    assert wait_until(page, f"window.__fakeBridge.calls.filter((c) => c[0] === 'probe' && c[1].includes({HOME_LAN!r})).length > {before}", 3), \
-        "Sign out that the server did not answer probes it again"
+    assert probe_started(page, HOME_LAN, before), "Sign out that the server did not answer probes it again"
