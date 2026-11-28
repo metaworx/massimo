@@ -403,6 +403,47 @@ paths:
             application/json:
               schema: {$ref: "#/components/schemas/Error"}
         "429": {$ref: "#/components/responses/LockedOut"}
+  /api/v1/tokens/revoke:
+    post:
+      summary: End a token by its revoke code
+      x-capability: none
+      description: |
+        For a client that forgot a token without its server answering, as
+        the apps do at a sign-out, a turned-off login or a removed server
+        (docs/app.md): the body names the token's revoke code, the hex of
+        SHA-256 of "massimo revoke v1" followed by the token as the server
+        gave it, which only a client that once held the token can work
+        out. The live token of that code is revoked, an API key's
+        sessions with it, as DELETE /api/v1/me/token revokes one; the
+        settings file's MASSIMO_API_TOKEN is left live. The answer is 204
+        whether the code matched or not, so that it tells nobody which
+        codes are live; a code never counts toward the address's lockout.
+        A match is audited as token.revoke_code, the token its target and
+        its user its subject; a code that matches nothing, and a
+        malformed body, are counted per address and minute, in rows of
+        their own apart from the address's other refused requests. No row
+        and no line of the log carries the code.
+        A server without a store answers 204 at once.
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [code]
+              additionalProperties: false
+              properties:
+                code: {type: string, pattern: "^[0-9a-f]{64}$", description: "The token's revoke code, 64 lower-case hex digits"}
+      responses:
+        "204":
+          description: Taken, whether it matched a live token or not
+        "400":
+          description: The body is not {"code"} with 64 lower-case hex digits (revoke_code_malformed)
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/Error"}
+        "429": {$ref: "#/components/responses/LockedOut"}
   /api/v1/me:
     get:
       summary: Who the caller is and what the caller may do

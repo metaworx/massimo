@@ -847,7 +847,7 @@ func (s *Server) resolve(ctx context.Context, mode authMode, secret, ip string) 
 	if err != nil {
 		return nil, err
 	}
-	s.touch(ctx, tok, ip, now)
+	s.touch(ctx, tok, secret, ip, now)
 	return p, nil
 }
 
@@ -955,16 +955,24 @@ func (s *Server) stillAdmitted(ctx context.Context, p *principal) bool {
 }
 
 // touch records a token's use at most once an hour, and moves a
-// session's end.
-func (s *Server) touch(ctx context.Context, tok store.Token, ip string, now time.Time) {
-	if !tok.LastUsedAt.IsZero() && now.Sub(tok.LastUsedAt) < touchEvery {
+// session's end. A token made before the store kept revoke codes gets
+// the hash of its code, from the secret presented, at its first use,
+// whatever touchEvery says (AP MobileApp v1.6, D112-A); the settings
+// file's key gets none and is touched at most once an hour, as no
+// revoke ends it (settingsKey).
+func (s *Server) touch(ctx context.Context, tok store.Token, secret, ip string, now time.Time) {
+	var revoke string
+	if !tok.RevokeKept && !tokenMatches(s.legacyToken(), secret) {
+		revoke = store.HashToken(store.RevokeCode(secret))
+	}
+	if revoke == "" && !tok.LastUsedAt.IsZero() && now.Sub(tok.LastUsedAt) < touchEvery {
 		return
 	}
 	var end time.Time
 	if tok.Kind == store.TokenSession {
 		end = now.Add(SessionLifetime)
 	}
-	if err := s.opts.Store.TouchToken(ctx, tok.ID, ip, end); err != nil {
+	if err := s.opts.Store.TouchToken(ctx, tok.ID, ip, end, revoke); err != nil {
 		s.log.Error("api: token use not recorded", "token", tok.ID, "error", err)
 	}
 }
@@ -1118,12 +1126,16 @@ func (s *Server) authorize(w http.ResponseWriter, r *http.Request, capability st
 }
 
 // lockedOut answers a sign-in from an address or for a name that is
-// locked out: 429 with Retry-After, nil when neither is.
+// locked out: 429 with Retry-After, nil when neither is. A key "" is
+// not checked: the revoke by code checks the address alone.
 func (s *Server) lockedOut(w http.ResponseWriter, ctx context.Context, addrKey, userKey string) error {
 	for _, k := range []struct{ key, msg string }{
 		{addrKey, "too many failed token checks from this address; try again later"},
 		{userKey, "too many failed logins for this user; try again later"},
 	} {
+		if k.key == "" {
+			continue
+		}
 		if d := s.limiter.lockedFor(ctx, k.key); d > 0 {
 			w.Header().Set("Retry-After", strconv.Itoa(int(d.Round(time.Second)/time.Second)))
 			return fail(http.StatusTooManyRequests, "%s", k.msg)
