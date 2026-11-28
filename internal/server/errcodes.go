@@ -115,3 +115,8 @@ var (
 	codeForbidden           = errorCode("forbidden", "the integration may not do this")
 	codeRoomNameNeeded      = errorCode("room_name_needed", "room %d is not in the Cube's room list; give room_name to list it there as a new room", "room")
 )
+
+// The revoke of a token by its code (POST /api/v1/tokens/revoke, AP
+// MobileApp v1.6, D112-A): a body that is not {"code": …} with 64
+// lower-case hex digits, which the apps drop rather than post again.
+var codeRevokeCodeMalformed = errorCode("revoke_code_malformed", "body must be {\"code\": \"<64 lower-case hex digits>\"}")

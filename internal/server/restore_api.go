@@ -444,7 +444,7 @@ func planHash(p *backup.Plan) string {
 	h := sha256.New()
 	for _, st := range p.Steps {
 		c := st.Command
-		fmt.Fprintf(h, "%s\n%s %d %v\n", st.What, c.Target, c.RoomID, c.Wakeup)
+		fmt.Fprintf(h, "%s\n%s %d %v %v\n", st.What, c.Target, c.RoomID, c.Wakeup, c.WakeTarget)
 		for _, l := range c.Lines {
 			fmt.Fprintln(h, l.String())
 		}

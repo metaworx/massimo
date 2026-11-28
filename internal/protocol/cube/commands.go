@@ -534,7 +534,16 @@ func CmdLinkPartner(t Target, add bool, partner RFAddress, partnerType DeviceTyp
 	return send(append(t.header(cmd), a[0], a[1], a[2], byte(partnerType)))
 }
 
-// CmdSetGroup assigns (or removes) a device's room/group address.
+// CmdSetGroup assigns (0x22) or removes (0x23) a device's group, the
+// room its C line names in byte 5 of its payload. Both are confirmed on
+// the test Cube (firmware 1.1.3, 2026-11-26, docs/cube-protocol.md):
+// 0x22 sets the byte to room, also a room the Cube's room and device list
+// does not have, once the device heard it; 0x23 sets it to 0 where room
+// is the room the byte names, and naming another room the device refuses
+// it: the byte stays, and the Cube sets the device's error flag with
+// 0x23 as the radiogram that failed. A room's wakeup reaches only the
+// devices whose C line names the room: a device in no group, or in
+// another, hears these only after a wakeup of its own (WakeupDevice).
 func CmdSetGroup(dev RFAddress, room uint8, remove bool) Message {
 	cmd := byte(RFSetGroupAddress)
 	if remove {

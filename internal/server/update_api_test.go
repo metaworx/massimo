@@ -13,6 +13,7 @@ import (
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	goruntime "runtime"
 	"slices"
 	"strings"
 	"sync"
@@ -140,9 +141,14 @@ func TestUpdateNeedsTokenAndHelper(t *testing.T) {
 	if _, err := os.Stat(req); !os.IsNotExist(err) {
 		t.Fatal("request written")
 	}
-	// A token but no helper.
+	// A token but no helper; on Windows, where the installed service is
+	// the helper, the refusal says to start updates from it.
 	ts, _ = updateServer(t, "secret", "", &fakeFinder{tag: "v0.1.0-alpha.10"})
-	if code, out := call(t, ts, "POST", "secret"); code != 403 || !refusalHas(t, out, "update_no_helper", "null") {
+	noHelper := "update_no_helper"
+	if goruntime.GOOS == "windows" {
+		noHelper = "update_from_service"
+	}
+	if code, out := call(t, ts, "POST", "secret"); code != 403 || !refusalHas(t, out, noHelper, "null") {
 		t.Fatalf("POST without a helper: %d %v", code, out)
 	}
 	// A helper that cannot be started here.

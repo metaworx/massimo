@@ -97,13 +97,20 @@ func (req userRequest) expiresAt() (t time.Time, set bool, err error) {
 
 // userFail maps a store error of the users and roles to a status and
 // its code (storeCodes), its English text the store's without "store: ".
+// A request whose client went away before the store answered says so
+// (clientGone): only a route that checks or hashes a password says
+// that it waited for its turn, through passwordFail (AP MobileApp v1.5,
+// D106-A).
 func userFail(err error) error {
 	var he *httpError
 	if errors.As(err, &he) {
 		return err
 	}
-	if busy := passwordBusy(err); busy != nil {
-		return busy
+	if errors.Is(err, store.ErrBusy) {
+		return passwordBusy(err)
+	}
+	if gone := clientGone(err); gone != nil {
+		return gone
 	}
 	// The store's "store: " says where the error came from, not what is
 	// wrong; a client shows the rest as it is.
@@ -175,6 +182,36 @@ const busyRetry = 5
 func passwordBusy(err error) error {
 	if errors.Is(err, store.ErrBusy) || errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
 		return withRetryAfter(refuse(http.StatusServiceUnavailable, codePasswordBusy), busyRetry)
+	}
+	return nil
+}
+
+// passwordFail is userFail for a route that checks or hashes a
+// password through the store, a password set, a user added with one, a
+// registration: a check or hash that waited until its client went away
+// keeps passwordBusy's answer, since it waited for its turn.
+func passwordFail(err error) error {
+	var he *httpError
+	if errors.As(err, &he) {
+		return err
+	}
+	if busy := passwordBusy(err); busy != nil {
+		return busy
+	}
+	return userFail(err)
+}
+
+// clientGoneText is the error of a request whose client went away
+// before the store answered: the audit's row says it, the result
+// failed; the client, gone, reads nothing.
+const clientGoneText = "the client went away before the answer"
+
+// clientGone is the answer to a store error of a request whose context
+// ended, its client gone or its time up, before the store answered; nil
+// for any other error.
+func clientGone(err error) error {
+	if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
+		return refuse(http.StatusServiceUnavailable, codeClientGone)
 	}
 	return nil
 }
@@ -668,7 +705,7 @@ func (s *Server) postUser(w http.ResponseWriter, r *http.Request) error {
 		return refuseSaying(http.StatusBadRequest, err.Error(), codeRoleNotFound)
 	}
 	if err != nil {
-		return userFail(err)
+		return passwordFail(err)
 	}
 	auditSubject(r, userSubject(created))
 	out := userCreated{userView: s.viewUserOf(r, st, nil, created)}
@@ -818,7 +855,7 @@ func (s *Server) putUser(w http.ResponseWriter, r *http.Request) error {
 			if errors.Is(err, store.ErrBadPassword) {
 				return refuse(http.StatusForbidden, codePasswordCurrentWrong)
 			}
-			return userFail(err)
+			return passwordFail(err)
 		}
 	}
 	end, setEnd, err := req.expiresAt()
@@ -866,10 +903,10 @@ func (s *Server) putUser(w http.ResponseWriter, r *http.Request) error {
 			}
 			err = st.SetOpaqueRecord(ctx, u.Name, rec, req.KSF, by)
 			if err != nil {
-				return userFail(err)
+				return passwordFail(err)
 			}
 		} else if err := st.SetPassword(ctx, u.Name, *req.Password, by); err != nil {
-			return userFail(err)
+			return passwordFail(err)
 		}
 		if !a.self {
 			if err := st.RevokeSessions(ctx, u.ID); err != nil {

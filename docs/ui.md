@@ -153,7 +153,7 @@ the field shows about three and a half of five words at 390 px.
 It is in the page's font at 16 px, to be read and copied by hand, broken after a "-",
 and it copies itself as the page's other strings do (AP AccessEnds, D44-A):
 a tap or a click on it, or Enter or Space, copies the suggestion,
-**Copied** showing above it and said in the page's status region,
+**Copied** showing above it in the page's bubble and said in its status region,
 over plain HTTP by the browser's copy command, as every copy of the page;
 its copy icon does the same,
 right after the words while they take one line,
@@ -455,6 +455,11 @@ What the page was reading when the session ended it reads again after the sign-i
 what the user did, a setpoint, a save, a deletion, any request but a read,
 is never sent again, whoever signs in and however much later:
 it fails at once, red where its result shows, as not sent since the user was signed out.
+A settings change so refused goes back at once to the value that held,
+which its field then shows:
+the page sends it neither with a later push nor with the settings a sign-in
+hands a server that holds none of the user's,
+and the user makes it again if they want it (AP SteadyTests v1.1, D14-A).
 A setpoint stepped and still waiting for its two seconds is dropped as the sign-in opens,
 and its tile says so; a settings change waiting for its second waits for the sign-in.
 For the same user a form's draft stays, so that it is one click on **Save** again,
@@ -990,6 +995,10 @@ Every room has a tile:
   a value's age on the line under its name;
   in expert mode also the exact time, under the value on the same line,
   and when the device was last heard from.
+  An age never widens its value's cell, however long it has grown ("≥ 17 min",
+  "≥ 999 days"): it takes the width the value's line gives it.
+  In expert mode, beside the exact time, it takes room the row has to spare,
+  never the values', and wraps between its words where there is none.
   Expert mode lists the room's virtual wall thermostat after the devices,
   a house with a thermometer its icon,
   with the devices its temperature comes from, by serial, and its two settings:
@@ -1560,7 +1569,13 @@ as the settings' ⓘ do:
   the key that is the settings file's `MASSIMO_API_TOKEN` (`from_settings`)
   says **from the settings file: change or remove it there** in place of Revoke,
   which the server refuses for it (D86-A);
-  **Create key** shows the new key once.
+  **Create key** shows the new key once,
+  and it copies as the page's other strings do (AP KeyLife, D1-A):
+  a tap or a click on it, or Enter or Space, copies the key,
+  **Copied** showing above it in the page's bubble and said in its status region;
+  its copy icon does the same, right after the key's last line.
+  Both are named **Copy the key**, not by the key,
+  so that neither a screen reader nor the tooltip says it again.
   In the app the list is read once the app has revoked what the last sign-in
   revoked there, the keys and sessions of the phone's left valid (D67-A),
   so that none of them is listed.
@@ -1859,8 +1874,10 @@ The server's version copies on a click, or by its copy icon, whole, with
 what it was built with (the header's does too, without the icon);
 so do each Cube proxy's serial, the serial it answers discovery with ("as …",
 where it answers discovery) and its address, which the original software connects to.
-A copy says "Copied"; on a page served over plain HTTP the browser gives no
-clipboard to the page, and the copy goes through its copy command instead,
+A copy says "Copied" in the page's bubble above what it copied
+(below it at the window's top, "Signs, texts and buttons");
+on a page served over plain HTTP the browser gives no clipboard to the page,
+and the copy goes through its copy command instead,
 the focus given back to where it was.
 At its end, for a holder of `settings`,
 **Store** opens to what `massimo store info` shows:
@@ -1912,7 +1929,7 @@ The page is drawn in place as its facts are read again,
 while a certificate is being read and each time the page is shown,
 and as its clock ticks:
 the folds stay open, a text selected stays selected
-and a copy says "Copied" until it fades.
+and a copy's bubble says "Copied" at it until it fades.
 A sign-out forgets the facts, the store, the settings in effect and the credits,
 and ends the readings of a certificate;
 the next user who opens the page reads them again.
@@ -2182,6 +2199,7 @@ settings forms and have none of it.
   as under My profile;
   and **Create key**, which shows the new key once: from the read that follows it
   until the next, in that panel alone, kept nowhere;
+  it copies with its copy icon, as under My profile;
   where a sign-in provider is enabled, the user's identities at the providers,
   each with its e-mail, or its user ID there,
   and whether it is bound or waits for its first sign-in,
@@ -2686,22 +2704,31 @@ The server's sign, when it says an update is out, opens it at Software update.
 ## In the apps
 
 The apps for Android and iOS (docs/app.md) open on a page of their own,
-`ui/connect.html`, or on the server marked **Open at start**:
-the servers the app keeps, each with what it found
+`ui/connect.html`, or on the server marked **Open at start**,
+its cards at the page's full width, up to 1100 px:
+the servers the app keeps, sorted by the name shown,
+case and accents ignored and numbers by their value,
+each with what it found
 when it last looked (on the LAN, remote, not reachable, a changed certificate)
 and, as a green badge, the user the app is signed in as there,
-checked at each look,
+checked at each look, grey while the server answers at neither address
+(a look still running keeps what the last one found),
 a tap opening the server, the app asking for the fingerprint first where it
 keeps a login (docs/app.md, "Opening from the list"),
 a cancel opening the server's sign-in card,
 the sign-in icon, where a login is kept, that card without the prompt,
 ⚙ or a long press its settings;
-the Servers card's ☰, with **Add server…**, **Sign out of all**,
+the list's ☰ in the header at the logo's right, where a server's page has its ☰:
+the app's version first, Massimo's mark and the version with its copy icon,
+a tap copying it whole and closing ☰,
+then **Add server…**, **Sign out of all**,
 **Forget all stored credentials** where a login is kept,
 asked first, under the list,
 which revokes each login's key at its server and signs out there,
 as **Turn off** does, its message naming the servers that keep a key,
-and **App settings…**;
+**App settings** and **Exit**, which ends the app as a swipe from the recent
+apps does, the sessions it held ended by their codes at the next start;
+the Servers card keeps ↻, and pulling the list down in the app does what it does;
 the card that adds a server, shown while the list is empty or from the ☰,
 with × and closed once a server is added:
 the servers on the network, searched for as it opens, and an address typed;
@@ -2709,23 +2736,46 @@ and the fingerprint of a self-signed certificate, compared with the
 server's log or `massimo tls show` before it is trusted.
 A server's settings take the focus themselves, not a field,
 so that a phone's keyboard stays closed:
-the name and the addresses, **Open at start** (one server at most),
-when the fingerprint is asked, the session with **Sign out**,
-the certificate's subject and end with **Certificate…**,
-a dialog with its issuer, names, validity, fingerprint and since when it
-is trusted, the login by fingerprint with **Turn off**,
+a head with the server's name and ✕, and three sections switched by tabs,
+as the settings pages are, their names alone, Connection first.
+**Connection** holds the name and the addresses, **Open at start** (one server at most),
+notifications, and when the fingerprint is asked,
+Cancel and Save, off while nothing differs from what is kept,
+its tab marked with the disk of unsaved changes while something does,
+and under them, after a rule, **Remove server** on a line of its own,
+with a line saying what it does, which turns a kept login off first, or signs out first,
+its question and its message naming a key or a session left.
+**Login**, each line acting at once, holds the session with **Sign out**,
+whose line says, while the server does not answer, that Sign out ends the
+session there the next time the app reaches the server,
+the login by fingerprint with **Turn off**,
 which revokes its key and signs out,
+or **Store login** where the app holds a session there and keeps no login,
+which keeps one made with that session after one prompt,
+off while the server does not answer, its title saying why,
 a line for each key of the phone's still valid there with **Show in My profile**,
-which opens the server's page at My profile with the key marked,
+which checks the server first and opens its page at My profile with the key marked,
+or says it does not answer,
 off while the server does not answer, its title saying why,
 a line for each session of the phone's still valid there,
 which the app forgot without the server ending it,
 the server not answering, and ends at the next sign-in there as its user,
-and under Cancel and Save, after a rule, **Remove server** on a line of its own,
-with a line saying what it does, which turns a kept login off first, or signs out first,
-its question and its message naming a key or a session left.
+a key or a session whose revoke code waits saying instead that it ends the
+next time the app reaches the server (docs/app.md, "The revoke codes"),
+its line gone once the server took the code;
+its tab has a dot while a key or a session is left there;
+the toasts of Sign out, Turn off and Remove that left a code say so.
+**Certificate** shows the certificate in place: its address, subject, issuer,
+names, validity, fingerprint and since when it is trusted,
+the fingerprint pinned while the server does not answer,
+and over plain HTTP that there is none.
 **App settings** hold the **Appearance**, as the phone, light or dark,
 for that page and for every server's page set to "as the system".
+A server's page that fails to load gives way to the list,
+which says that the server does not answer and why.
+Back closes the open menu first, then the panel opened last,
+a server's settings with changes asking once, Discard or Stay,
+and leaves the app from the bare list.
 A browser that opens that page sees a line saying it is the app's.
 A server's page in the app is this page,
 except that the app keeps its session in place of the browser,
@@ -2899,7 +2949,8 @@ in the order the page loads them:
   the connect page loads it too;
 - `components.js`, the builders the connect page, `login.js`, `config.js`' kit and
   `app.js`' help build with, and what the parts call of the page's
-  (the menus' placing, a copy, a toast, a sign's blinking, a result line);
+  (the menus' placing, a copy, a bubble, a toast, a sign's blinking,
+  a result line);
 - `app.js`, the core: the state, the storage and the settings with their scopes,
   the API with the token and the 401, the helpers the plain scripts and the parts
   share (a temperature, help, the Cube clock), and a setpoint as the devices show it,
@@ -2977,7 +3028,8 @@ and reads once (`burstReader` of `shared/burst.ts`).
 A state is a sign, a colour and a mark, so that it reads without its colour:
 nothing for a state that is fine, a triangle for a warning (amber),
 a cross for a failure (red).
-`Sign` of `shared/icon.tsx` draws a kind of thing in a state (`signOf` of
+`Sign` of `shared/icon.tsx`, and `signEl` of `components.js` for a plain script,
+draw a kind of thing in a state (`signOf` of
 `components.js`: the radio and the window as the person chooses, `ICON_CHOICES`,
 the Wi-Fi fan or the tower, the opening sash with the mark inside its frame
 or the paned window with it at the bottom right, as the original MAX! software has it;
@@ -2996,6 +3048,22 @@ its entries one format at every level:
 the icon in a column of its own, the name and a grey detail beside it,
 the badges under the name, and the entries under it (`subs`) indented to the name,
 a line down from its icon.
+A short text that says what was done, such as "Copied",
+shows for a moment in the page's bubble (`showBubble` of `components.js`,
+which `copied` calls):
+above the control the user acted on, centred on it as far as the window lets it,
+8 px inside the window's edges at most,
+and below the control where the window has no room above it;
+at the window's bottom centre, above the safe area, where no control is given.
+It stays 1.4 s, unless told otherwise, and a newer bubble takes its place;
+it goes earlier at a scroll that moves its control, the page's or a box's,
+and once the control has left the page or is hidden,
+so that it never says over a new element what was done to the one before
+(a suggested password's Copy, drawn anew at each suggestion).
+It is one element, made at the first bubble,
+on the page and the connect page alike,
+over the toast and everything else of the page, hidden from a screen reader;
+its text is said once in the page's polite live region beside it.
 A button that sends a request is busy from its click until the answer:
 off, with a turning ring after its text, and `aria-busy` (`BusyButton`, `useBusy`),
 so that a second click or Enter sends nothing.
@@ -3132,7 +3200,7 @@ for the first owner's toast and the log's `open_setup` line.
 | `usePopup`, `placePopup`, `closePopups` | `popup.ts` | a box that its button opens beside itself (a `Tip`'s text, a room tile's SET list): one popup open at a time, and one with the menus: the click that opens it closes an open menu or popup, as every click outside one does (`dropdown`), and a menu that opens, by a click, the keyboard or the page's code, closes it, as does a click outside it and, with `leave`, the focus moving to an element outside it; Escape closes it and nothing else, seen first and stopped there (`stopPropagation`, marked as the menus' Escape is), `escaped` told whether the focus was in it; placed again at a resize; `placePopup` keeps its box 16 px inside the window's sides, and with the element that scrolls in it inside its height too, 16 px under what is pinned at the window's top (`pinned`, a sticky header's bottom, which the caller reads): upward where the room below is short and the box fits above, else downward, that element's height capped to the room below, 160 px at least where the window has room for that; `closePopups` closes it at a sign-out (`MassimoParts.signedOut`) | `usePopup(prefix, { within, place, escaped, leave })`, giving `{ id, open, toggle, close }`; `placePopup(box, scroll, pinned)`; `closePopups()` |
 | `actionRunner`, `fader` | `action.ts` | a request, a reload, and its outcome (`Outcome`, `{ text, ok }`) in the region's message line (`showResult`) or in a part's state that a `ResultLine` draws, a success fading where a fade is given; `fader` is that fade alone, for a result set by other means | `where()`, `set(res)`, `fade` (ms), `reload()`, `bound` (an answer after a sign-out reloads and says nothing, `session.ts`); gives `run(fn, ok, fail)`, `say(text, ok)`; `set`, `ms` |
 | `Icon` | `icon.tsx` | a symbol of the page (`iconEl`) | `symbol`, `cls`, `mark` (the symbol is a mark, which blinks where the style makes it), `useId` (its `use` element's id, where the page names it) |
-| `Sign` | `icon.tsx` | a kind of `SIGNS` in a state, its mark blinking | `kind`, `state` ("", ok, warn, bad, open), `cls`, `blink` (the mark's key), `label` (named for a screen reader, else hidden) |
+| `Sign` | `icon.tsx` | a kind of `SIGNS` in a state, its mark blinking; `signEl` of `components.js` draws it so for a plain script, the connect page's "changed here" mark | `kind`, `state` ("", ok, warn, bad, open), `cls`, `blink` (the mark's key), `label` (named for a screen reader, else hidden) |
 | `Mark` | `icon.tsx` | a mark alone (`markEl`) | `state` (warn, bad), `blink` |
 | `CountIcon` | `icon.tsx` | an icon with a number in its corner | `symbol`, `n`, `cls` |
 | `IconButton` | `icon.tsx` | a button that is an icon alone, named for a screen reader (`iconButton`): a tile's info and cog, the copy icon, help's question mark | `symbol`, `label` (its name, and its tooltip without `title`), `title`, `cls`, `iconCls` (the icon's class, `ni` by default, `hi` for help's line drawing), `mark`, and the button's own attributes (`id`, `aria-expanded`, `aria-controls`, `data-…`, the handlers) |
@@ -3184,7 +3252,7 @@ for the first owner's toast and the log's `open_setup` line.
 | `Brand`, `BrandName` | `brand.tsx` | Massimo's logo and small mark from the sprite (`brandMarks` of `components.js`, which draws them over the skeleton's `data-brand`), of which the place's style shows one, hidden from screen readers: ☰'s first row; `BrandName`, the big name under the logo, the first owner's form and the sign-in's card | |
 | `page`, `isShown`, `showView`, `onView`, `mayShow`, `setAddress`, `definePages`, `pagesPart` | `pages.ts` | the page of the main area shown, a signal: a drawing that reads `page.value` follows it, `isShown` asks at that moment and follows nothing (a handler, a reader, a timer), so that no request is sent again at a change of page; showing a page puts it into the address, as a new entry of the history or in place of the current one, and brings each page back at the scroll it was left at; `onView` runs at each showing, on the `viewshown` event; `mayShow` says who may open which, reading who is in; a page with an address of its own (the log's, `ui/src/log/index.tsx`) hands it over with `ownAddress`, a card's region what the card's address holds after its `?` with `readCardAddress` (My profile's key to mark), told of every address read, null for another, before the page is shown; the page's chrome hands over the pages at the start (`definePages`, `chrome/pages.ts`), the log puts its choices into the address in place (`setAddress`), and the plain code calls these as `MassimoParts.pages` (`pagesPart`) | `view`, `address`, `card`; `card`, `read(q)` |
 | `userPath`, `Run`, `loadTokens`, `revokeToken`, `revokeOwn`, `createKey`, `loadIdentities`, `addIdentity`, `changeIdentity`, `removeIdentity` | `account.ts` | what a user's sessions, keys and identities read and send (`…/users/{name}/tokens`, `…/identities`), for System settings → Users and My profile alike; a change through the caller's runner (`Run`), which reloads what it shows and says how it went in its own line; Revoke of the token in use signs out | `name`, `rest`; `run`, `name`, and what each sends |
-| `Tokens` | `tokens.tsx` | a user's sessions and keys (a user's panel, My profile): each with its id and Revoke, the settings file's key (`from_settings`) saying so in Revoke's place, "this device" and "its key" by `own`, in the app "this device's key" by the app's status (`app.ts`), Create key and the key just made, shown once by the read that follows and kept in the part's own state alone; read when its place opens and again at each change of the caller's counter while open, in the app once the last sign-in's revoke is done (`signInRevoked`); an answer after a sign-out dropped; the API key the caller names tinted (`token-marked`), and the caller told of each read drawn with that row (My profile's key of its address) | `u`, `off`, `open`, `reads` (the caller's counter), `run`, `say` (the caller's message line), `labelId` (the new key's field's id), `help` (the group's ⓘ after Create key, My profile's), `marked` (the id of the API key marked), `drawn(row)` (told of each read drawn, with the row marked or null), `listOnly` (the list with Revoke, no new key: an integration's user's) |
+| `Tokens` | `tokens.tsx` | a user's sessions and keys (a user's panel, My profile): each with its id and Revoke, the settings file's key (`from_settings`) saying so in Revoke's place, "this device" and "its key" by `own`, in the app "this device's key" by the app's status (`app.ts`), Create key and the key just made, shown once by the read that follows and kept in the part's own state alone, a `Copy` of it with its icon, keyed by the key, both named Copy the key, not by the key (AP KeyLife, D1-A); read when its place opens and again at each change of the caller's counter while open, in the app once the last sign-in's revoke is done (`signInRevoked`); an answer after a sign-out dropped; the API key the caller names tinted (`token-marked`), and the caller told of each read drawn with that row (My profile's key of its address) | `u`, `off`, `open`, `reads` (the caller's counter), `run`, `say` (the caller's message line), `labelId` (the new key's field's id), `help` (the group's ⓘ after Create key, My profile's), `marked` (the id of the API key marked), `drawn(row)` (told of each read drawn, with the row marked or null), `listOnly` (the list with Revoke, no new key: an integration's user's) |
 | `Identities`, `Changes` | `identities.tsx` | a user's identities at the sign-in providers (a user's panel, My profile): each with what the provider said and Remove; with `changes`, Change of one no sign-in used, a settings form kept by its key, the forms of identities gone or made unchangeable forgotten, and all of them where the box goes off; with `assign`, Assign; `after` what follows the list once read (My profile's Link buttons); `quiet` draws nothing while the list is empty and the caller offers nothing after it (`offer`: My profile's Link buttons, none in the app, where the rows are still named from every provider) | `u`, `off`, `open`, `reads`, `providers` (the enabled ones), `run`, `say`, `title`, `none`, `cls`, `changes` (`key(id)`, `under`, `ui(key)`, `forget(key)`, `show(key)`: the caller's forms and how one is brought into sight), `assign`, `after(list)`, `quiet`, `offer` |
 | `FileButton` | `file.tsx` | a button that opens the browser's choice of a file of the types it accepts, the same file again too | `id` (the button's), `cls`, `label`, `accept`, `off`, `inputId` and `inputLabel` (the input's id and its name in the page's language: the Appearance card's Import…), `onFile(file)` |
 | `Adder` | `adder.tsx` | the end of a list that adds an item: the new item's form in its place while shown, the button that shows it hidden meanwhile, the focus in the form's first field when it comes, in the drawing's own turn, and back on the button when it goes (Users, Roles, Sign-in providers) | `id` (the button's), `formId` (the form's place), `label`, `shown`, `set(shown)`, the form as children |
@@ -3197,7 +3265,7 @@ for the first owner's toast and the log's `open_setup` line.
 | `toServerSettings`, `toAppSettings` | `app.ts` | to this server's settings and to the app's on the app's own page (`appServerSettings` and `appAppSettings` of `login.js`, contract version 5): ☰'s two entries after Select server | |
 | `app`, `readApp`, `appKeyId`, `signInRevoked` | `app.ts` | the app's status of the login by fingerprint, a signal read again at each opening of the sign-in, a fingerprint refused, the first owner's form and My profile shown (`login.status`), null in a browser; its key of this device's id, 0 for none; the ids of what the last sign-in's `setToken` revoked, `[]` in a browser (`tokenAnswer` of `login.js`) | `st` (the status) |
 | `KvList`, `CountList` | `kv.tsx` | a list of facts, a name and its value each, every fact given, the caller leaving out those it does not show; a list of counts by name, sorted, in columns | `facts` (`[name, value, mono]`); `counts` |
-| `Copy`, `CopyIcon`, `CopyPair` | `copy.tsx` | a text that copies itself, a copy icon (`copyEl`, `copyIcon`); something with its copy icon after it, a text or a link (an address served: an integration's, System info's) | `text`, `value` (what it copies, where it is not the text), `label` (named "Copy …"), `name` (its whole name in its place: the server's version, a suggested password's Copy the password), `icon`, `quiet` (the text hidden from a screen reader inside it, the name alone told, given only with `name`: a suggested password), `cls`, `id`; `get`, `label`; `get`, `label`, what it follows as children |
+| `Copy`, `CopyIcon`, `CopyPair` | `copy.tsx` | a text that copies itself, a copy icon (`copyEl`, `copyIcon`); something with its copy icon after it, a text or a link (an address served: an integration's, System info's) | `text`, `value` (what it copies, where it is not the text), `label` (named "Copy …"), `name` (its whole name in its place: the server's version, a suggested password's Copy the password, the key just made's Copy the key), `icon`, `quiet` (the text hidden from a screen reader inside it, the name alone told, given only with `name`: a suggested password), `cls`, `id`; `get`, `label`; `get`, `label`, what it follows as children |
 | `Link` | `link.tsx` | a link in a tab of its own, the text alone for a url that is not http(s) | `url`, `text`, `cls` |
 | `DeviceIds` | `device.tsx` | a device's serial and radio address | `serial`, `rf`, `always` |
 | `fmtSetpoint`, `TEMP_OFF` | `setpoint.tsx` | a setpoint as the devices' displays show it, OFF for 4.5 °C without a unit, else as `fmtTemp` gives it, no ON for 30.5 °C, in every text that shows one (a tile's SET, a device row, More, a write's result, the log's "OFF (4.5 °C)"); the number fields keep 4.5; `fmtSetpoint` of `app.js` is the plain scripts' | `v`, `unit` |

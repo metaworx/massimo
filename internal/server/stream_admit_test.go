@@ -17,9 +17,32 @@ import (
 // and returns the watch of what it sends, which ends with the stream.
 func openStream(t *testing.T, ts *httptest.Server, token string) *testkit.Watch[testkit.Event] {
 	t.Helper()
-	req, _ := http.NewRequest("GET", ts.URL+"/api/v1/cubes/KEQ0000100/events", nil)
+	return openStreamWith(t, ts, token, nil)
+}
+
+// openStreamWith is openStream with the headers given, such as an
+// integration's X-MassimoHA-On-Behalf-Of (as, onbehalf_test.go).
+func openStreamWith(t *testing.T, ts *httptest.Server, token string, headers map[string]string) *testkit.Watch[testkit.Event] {
+	t.Helper()
+	return openStreamAt(t, ts, "", token, headers)
+}
+
+// openTicketStream opens the stream with a ticket (ticketFor), without a
+// token or a header, as the page does.
+func openTicketStream(t *testing.T, ts *httptest.Server, ticket string) *testkit.Watch[testkit.Event] {
+	t.Helper()
+	return openStreamAt(t, ts, "?ticket="+ticket, "", nil)
+}
+
+// openStreamAt is openStreamWith with the query given, "" for none.
+func openStreamAt(t *testing.T, ts *httptest.Server, query, token string, headers map[string]string) *testkit.Watch[testkit.Event] {
+	t.Helper()
+	req, _ := http.NewRequest("GET", ts.URL+"/api/v1/cubes/KEQ0000100/events"+query, nil)
 	if token != "" {
 		req.Header.Set("Authorization", "Bearer "+token)
+	}
+	for k, v := range headers {
+		req.Header.Set(k, v)
 	}
 	resp, err := http.DefaultClient.Do(req)
 	if err != nil {

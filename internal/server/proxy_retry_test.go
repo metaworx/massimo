@@ -71,16 +71,21 @@ func TestProxyRetriedUntilThePortIsFree(t *testing.T) {
 }
 
 // A proxy address the host does not carry yet is tried again until the
-// host has it; a new error is logged at Error again.
+// host has it; a new error is logged at Error again. The listen counts
+// the tries since its error changed, so that the test waits for tries
+// made after the change: the slot's count can reach any number before
+// it, 5 ms apart.
 func TestProxyRetriedUntilTheAddressIsThere(t *testing.T) {
 	t.Parallel()
 	var mu sync.Mutex
 	failWith := errors.New("listen tcp 192.0.2.10:62910: bind: cannot assign requested address")
+	since := 0 // the listens since failWith last changed
 	ports := &heldPorts{}
 	addr := ports.hold(t)
 	listen := func(addr string) (net.Listener, error) {
 		mu.Lock()
 		defer mu.Unlock()
+		since++
 		if failWith != nil {
 			return nil, failWith
 		}
@@ -92,18 +97,20 @@ func TestProxyRetriedUntilTheAddressIsThere(t *testing.T) {
 	if code, out := do(t, ts, "PUT", "/api/v1/cubes/KEQ0000100", `{"proxy_address":"`+addr+`"}`); code != 200 || out["proxy_listening"] != nil {
 		t.Fatalf("put %d %v", code, out)
 	}
-	tries := func(n int) func() bool {
+	// A slot records each try's failure before its next try, so the
+	// state after n tries since the change shows try n-1's.
+	tried := func(n int) func() bool {
 		return func() bool {
-			s.proxyMu.Lock()
-			defer s.proxyMu.Unlock()
-			return len(s.proxies) == 1 && s.proxies[0].tries >= n
+			mu.Lock()
+			defer mu.Unlock()
+			return since >= n
 		}
 	}
-	testkit.Eventually(t, "three tries", tries(3))
+	testkit.Eventually(t, "three tries", tried(3))
 	mu.Lock()
-	failWith = errors.New("listen tcp " + addr + ": bind: address already in use")
+	failWith, since = errors.New("listen tcp "+addr+": bind: address already in use"), 0
 	mu.Unlock()
-	testkit.Eventually(t, "six tries", tries(6))
+	testkit.Eventually(t, "three tries with the new error", tried(3))
 	s.proxyMu.Lock()
 	pr := *s.proxies[0]
 	s.proxyMu.Unlock()

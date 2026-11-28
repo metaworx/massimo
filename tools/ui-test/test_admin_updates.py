@@ -16,7 +16,8 @@ import re
 import pytest
 
 from conftest import TOKEN, URL, api_call
-from helpers import OPERATOR_PASSWORD, focus_in_turn, frames, hold, mark, open_main_menu, owner_page, pause_clock, reads_of, replaced, safe_route, show_view, sign_out, undo, wait_held, wait_until
+from helpers import (OPERATOR_PASSWORD, focus_in_turn, frames, hold, mark, open_main_menu, own_id, owner_page, pause_clock, reads_of, replaced, safe_route,
+                     show_view, sign_out, taken, undo, wait_held, wait_until)
 from test_log_alerts import alerts_route
 from test_login import sign_in
 from test_oidc import provider  # noqa: F401, the fixture
@@ -898,7 +899,7 @@ def test_a_closed_panel_reads_no_identities(page, case, provider):
         page.on("request", lambda r: gets.append(r.url) if r.method == "GET" and r.url.endswith(f"/users/{user}/identities") else None)
         mine = open_panel(page, f".user-panel[data-name='{other}']")
         mine.locator("input[name=display_name]").fill("Saved elsewhere")
-        with page.expect_response(lambda r: r.request.method == "GET" and r.url.endswith(f"/users/{other}/identities")):  # the change's reads
+        with taken(page, lambda r: r.request.method == "GET" and r.url.endswith(f"/users/{other}/identities")):  # the change's reads
             mine.locator("button[type=submit]").click()
         frames(page)
         assert gets == [], f"no read of the closed panel's identities: {gets}"
@@ -985,13 +986,16 @@ def stub_integrations(page):
 
 
 def made_integrations(case, n=1, approve=True):
-    """Requests the test makes, the first approved; their uuids."""
+    """Requests the test makes, the first approved; their uuids. Each has
+    an installation of its own (own_id): an integration revoked at the
+    end stays, disabled, and a request from its installation, the next
+    run's, would join it."""
     from test_integrations import raw_call
     made = []
     for k in range(n):
         status, req = raw_call("POST", "api/v1/integrations/requests",
                                {"kind": "homeassistant", "name": f"Rw {k} {case.width} {case.lang}",
-                                "instance_id": ("rw%d%04d%s" % (k, case.width, case.lang)).encode().hex().ljust(32, "d")[:32],
+                                "instance_id": own_id(f"rw{k}{case.width}{case.lang}"),
                                 "url": "http://192.0.2.33:8123", "version": "2026.11.1"})
         assert status == 201, "the request is taken"
         made.append((req["id"], req["code"]))
@@ -1112,7 +1116,7 @@ def test_a_late_list_of_integrations_reaches_nothing_of_the_next_user(new_contex
         show_view(page, "system")
         assert wait_held(page, lists), "the list asked for"
         across(page, how)
-        with page.expect_response(lambda r: r.request.method == "GET" and r.url.endswith("/api/v1/integrations")):
+        with taken(page, lambda r: r.request.method == "GET" and r.url.endswith("/api/v1/integrations")):
             for r in lists:
                 r.fallback()  # to the stub's answer, which holds the first user's integrations
         frames(page)
@@ -1134,7 +1138,7 @@ def test_a_late_plan_reaches_nothing_of_the_next_user(new_context, case, watch, 
         first_row(page, CUBE_BOX).locator(".backup-actions button").nth(1).click()
         assert wait_held(page, plans), "the plan asked for"
         across(page, how)
-        with page.expect_response(lambda r: "/restore/plan" in r.url):
+        with taken(page, lambda r: "/restore/plan" in r.url):
             for r in plans:
                 r.continue_()
         frames(page)
@@ -1155,11 +1159,17 @@ def test_a_running_restore_stays_in_sight(page, case):
     restore are stubbed: nothing is restored."""
     bid = take_backup()
     safe_route(page, "**/restore/plan*", lambda r: r.fulfill(status=200, content_type="application/json", body=json.dumps(PLAN)))
-    safe_route(page, f"**/cubes/{SERIAL}/restore?*", lambda r: r.fulfill(status=202, content_type="application/json", body='{"id":"rw-run"}'))
+    restores = []
+
+    def restore(route):
+        restores.append(route.request.url)
+        route.fulfill(status=202, content_type="application/json", body='{"id":"rw-run"}')
+    safe_route(page, f"**/cubes/{SERIAL}/restore?*", restore)
     try:
         show_view(page, "cube")
         first_row(page, CUBE_BOX).locator(".backup-actions button").nth(1).click()
         page.locator(CUBE_BOX + " .restore-plan .restore-actions button.primary").click()
+        assert wait_held(page, restores), "the restore sent to its stub, before the test goes on and its route goes"
         page.evaluate("(s) => MassimoParts.backups.restoreEvent({kind: 'restore_step', cube: s, restore: {id: 'rw-run', step: 1, ok: true}})", SERIAL)
         frames(page)
         assert page.locator(CUBE_BOX + " .restore-file").is_disabled(), "Restore from file… off"
@@ -1186,11 +1196,17 @@ def test_a_restore_unseen_at_a_resync(page, case):
     The plan and the restore are stubbed: nothing is restored."""
     bid = take_backup()
     safe_route(page, "**/restore/plan*", lambda r: r.fulfill(status=200, content_type="application/json", body=json.dumps(PLAN)))
-    safe_route(page, f"**/cubes/{SERIAL}/restore?*", lambda r: r.fulfill(status=202, content_type="application/json", body='{"id":"rw-lost"}'))
+    restores = []
+
+    def restore(route):
+        restores.append(route.request.url)
+        route.fulfill(status=202, content_type="application/json", body='{"id":"rw-lost"}')
+    safe_route(page, f"**/cubes/{SERIAL}/restore?*", restore)
     try:
         show_view(page, "cube")
         first_row(page, CUBE_BOX).locator(".backup-actions button").nth(1).click()
         page.locator(CUBE_BOX + " .restore-plan .restore-actions button.primary").click()
+        assert wait_held(page, restores), "the restore sent to its stub, before the test goes on and its route goes"
         page.evaluate("(s) => MassimoParts.backups.restoreEvent({kind: 'restore_step', cube: s, restore: {id: 'rw-lost', step: 1, ok: true}})", SERIAL)
         assert wait_until(page, f"document.querySelector('{CUBE_BOX} .restore-file').disabled", 5), "running: Restore from file… off"
         page.evaluate("() => state.events.dispatchEvent(new MessageEvent('resync', { data: '{}' }))")

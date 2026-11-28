@@ -166,7 +166,9 @@ type Options struct {
 	AuthFailures int
 	AuthWindow   time.Duration
 	AuthLockout  time.Duration
-	PollInterval time.Duration // L polling; 0 is DefaultPollInterval
+	// PollInterval is how often each Cube is asked for its device list:
+	// 0 is DefaultPollInterval, a negative value never (serve -poll 0).
+	PollInterval time.Duration
 	// SettingsFixedBy names, by a setting's key, the flag that decides
 	// its value for this run instead of the store (serve -poll for
 	// poll_interval), for GET /api/v1/settings' fixed_by.
@@ -406,6 +408,10 @@ type Server struct {
 	oidc                oidcFlows         // the sign-ins through a provider started, and their codes (oidc.go)
 	tickets             *ticketStore
 	refusals            *refusalAudit // nil without a store
+	// codeRefusals are the revokes by code that matched no token, or were
+	// refused: one row per address and minute of their own, apart from
+	// the other refused requests (quietAudit); nil without a store.
+	codeRefusals *refusalAudit
 	// steps writes the queues' step rows in order (commands.go).
 	steps   serialWorker
 	updates updateCheck
@@ -876,6 +882,7 @@ func New(opts Options) *Server {
 		s.notify = s.newNotify()
 		s.webPush = s.newWebPush()
 		s.refusals = newRefusalAudit(s.writeRefusal)
+		s.codeRefusals = newRefusalAudit(s.writeRefusal)
 		// MASSIMO_API_TOKEN becomes the owner's key, or follows the file (docs/store.md section 6);
 		// an owner made from it is told what the open server left (AP AccessEnds, D14).
 		if res, err := opts.Store.Bootstrap(context.Background(), opts.Token); err != nil {
@@ -970,6 +977,7 @@ func (s *Server) Run(ctx context.Context) error {
 	s.wg.Wait()
 	s.steps.flush(5 * time.Second) // the drained commands' steps, before the store closes
 	s.refusals.close()
+	s.codeRefusals.close()
 	stopWriter()
 	<-writerDone
 	return ctx.Err()
@@ -1516,6 +1524,7 @@ func (s *Server) routes() {
 	api("POST /api/v1/login/key", "any", s.loginKey)
 	api("POST /api/v1/logout", "any", s.logout)
 	api("DELETE /api/v1/me/token", "any", s.deleteMyToken)
+	api("POST /api/v1/tokens/revoke", "none", s.revokeByCode)
 	api("GET /api/v1/me", "any", s.me)
 	api("GET /api/v1/audit", "audit", s.getAudit)
 	api("GET /api/v1/commands/{id}", "read", s.getCommand)
@@ -1814,8 +1823,8 @@ type cubeView struct {
 	MAC      string     `json:"mac,omitempty"`
 	LastSeen *time.Time `json:"last_seen,omitempty"`
 	// Problems are the Cube's devices with a problem, for a client that
-	// shows every Cube's (the web UI's header): a radio fault, a low
-	// battery, a window open, with its times (problems.go).
+	// shows every Cube's (the web UI's header): a radio fault, a weak or
+	// low battery, a window open, with its times (problems.go).
 	Problems []cubeProblem `json:"problems,omitempty"`
 	// FoundAddress is the host discovery last found the Cube at, which
 	// may differ from Address: the server connects through a proxy, or

@@ -5,10 +5,13 @@ package store
 
 import (
 	"context"
+	"database/sql"
 	"errors"
 	"strings"
 	"testing"
 	"time"
+
+	"go.metaworx.ch/massimo/internal/testkit"
 )
 
 const (
@@ -59,7 +62,7 @@ func TestIntegrationRegistration(t *testing.T) {
 		t.Fatal("the first key still valid")
 	}
 	tok, _, _ := s.TokenByHash(ctx, HashToken(k2))
-	if err := s.TouchToken(ctx, tok.ID, "192.0.2.7", time.Time{}); err != nil {
+	if err := s.TouchToken(ctx, tok.ID, "192.0.2.7", time.Time{}, ""); err != nil {
 		t.Fatal(err)
 	}
 	if _, _, err := s.CollectIntegrationKey(ctx, req.UUID, "K7Q2PX"); !errors.Is(err, ErrRequestGone) {
@@ -395,5 +398,274 @@ func TestLastOwnerBesideAnIntegrationsOwner(t *testing.T) {
 	}
 	if err := s.DeleteUser(ctx, i.UUID+":abc123", 0); err != nil {
 		t.Fatalf("an integration's user removed: %v", err)
+	}
+}
+
+// identityRow reads what the sync of rows between nodes reads of an
+// identity: its removal, its update time, its origin and its version.
+func identityRow(t *testing.T, s *Store, id int64) (deleted, updated, origin string, version int64) {
+	t.Helper()
+	var del sql.NullString
+	if err := s.db.QueryRow(`SELECT deleted_at, updated_at, origin, version FROM user_identities WHERE id = ?`, id).Scan(&del, &updated, &origin, &version); err != nil {
+		t.Fatalf("identity %d: %v", id, err)
+	}
+	return del.String, updated, origin, version
+}
+
+// fromAnotherNode gives the identity id another node's origin, as a row
+// the sync brought would have, so that its removal shows whose it is;
+// it returns the identity's version.
+func fromAnotherNode(t *testing.T, s *Store, id int64) int64 {
+	t.Helper()
+	if _, err := s.db.Exec(`UPDATE user_identities SET origin = 'another-node' WHERE id = ?`, id); err != nil {
+		t.Fatal(err)
+	}
+	_, _, _, version := identityRow(t, s, id)
+	return version
+}
+
+// removedAsTheStoreDoes checks that the identity id is a tombstone as
+// the store writes one: removed at its update time, by this node, one
+// version past was.
+func removedAsTheStoreDoes(t *testing.T, s *Store, id, was int64) {
+	t.Helper()
+	deleted, updated, origin, version := identityRow(t, s, id)
+	if deleted == "" || updated != deleted || origin != s.NodeID() || version != was+1 {
+		t.Errorf("identity %d: deleted_at %q updated_at %q origin %q version %d, want a tombstone of this node at version %d", id, deleted, updated, origin, version, was+1)
+	}
+}
+
+// Removing an integration's user ends its identity, linked or not: its
+// next call makes the identity and its user anew, unlinked, with the
+// role integration, and the Massimo user it was linked to stays
+// (AP AccessEnds, D54-A).
+func TestRemovedIntegrationUserEndsItsLink(t *testing.T) {
+	t.Parallel()
+	for _, linked := range []bool{true, false} {
+		t.Run(map[bool]string{true: "linked", false: "unlinked"}[linked], func(t *testing.T) {
+			t.Parallel()
+			s := open(t, t.TempDir())
+			ctx := context.Background()
+			req, _ := s.AddIntegrationRequest(ctx, haRequest(instanceA), "AAAAAA")
+			i, _ := s.ApproveIntegration(ctx, req.UUID, nil, "", 0)
+			anna, err := s.AddUser(ctx, User{Name: "anna", Role: RoleManager}, "", 0)
+			if err != nil {
+				t.Fatal(err)
+			}
+			seen := IntegrationSeen{Subject: "aaaaaaaa000000000000000000000000", Name: "Anna", Level: "control"}
+			a, err := s.IntegrationUser(ctx, i, seen)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if linked {
+				if a, err = s.LinkIntegrationUser(ctx, i.ID, a.Subject, anna.ID, 0); err != nil || !a.Linked() {
+					t.Fatalf("link %+v %v", a, err)
+				}
+			}
+			was := fromAnotherNode(t, s, a.ID)
+			if err := s.DeleteUser(ctx, i.UUID+":"+a.Subject, 0); err != nil {
+				t.Fatal(err)
+			}
+			removedAsTheStoreDoes(t, s, a.ID, was)
+			if list, _ := s.IntegrationIdentities(ctx, i.ID); len(list) != 1 || list[0].Subject != "system" {
+				t.Fatalf("the integration's users after the removal: %+v", list)
+			}
+			again, err := s.IntegrationUser(ctx, i, seen)
+			if err != nil {
+				t.Fatalf("the next call: %v", err)
+			}
+			own, _, _ := s.UserByID(ctx, again.RealUserID)
+			if again.ID == a.ID || again.Linked() || again.RealUserID == a.RealUserID || own.Name != i.UUID+":"+seen.Subject ||
+				own.Role != RoleIntegration || own.IntegrationID != i.ID || own.Disabled {
+				t.Fatalf("the next call: %+v, its user %+v", again, own)
+			}
+			if u, ok, _ := s.User(ctx, "anna"); !ok || u.ID != anna.ID {
+				t.Fatal("the Massimo user it was linked to went with it")
+			}
+		})
+	}
+}
+
+// An identity whose own user was removed while the identity stayed, as
+// an older store holds one, or whose linked user was, which only a link
+// racing that removal could leave, acts for nobody: no list shows it and
+// no link takes it, and the next call removes it, says so once in the
+// log, and makes the identity anew, unlinked, with its own user anew or,
+// where that user is left, that user again (AP LinkedRemoval, D1-A and
+// D2-A).
+func TestIdentityOfARemovedUserMadeAnew(t *testing.T) {
+	t.Parallel()
+	for _, gone := range []string{"own", "linked"} {
+		t.Run(gone, func(t *testing.T) {
+			t.Parallel()
+			log, logged := testkit.LogWatch(nil)
+			s, err := Open(copied(t), Options{Version: "test", Logger: log})
+			if err != nil {
+				t.Fatal(err)
+			}
+			t.Cleanup(func() { s.Close() })
+			ctx := context.Background()
+			req, _ := s.AddIntegrationRequest(ctx, haRequest(instanceA), "AAAAAA")
+			i, _ := s.ApproveIntegration(ctx, req.UUID, nil, "", 0)
+			anna, _ := s.AddUser(ctx, User{Name: "anna", Role: RoleManager}, "", 0)
+			bruno, _ := s.AddUser(ctx, User{Name: "bruno", Role: RoleViewer}, "", 0)
+			seen := IntegrationSeen{Subject: "aaaaaaaa000000000000000000000000", Name: "Anna", Level: "control"}
+			a, _ := s.IntegrationUser(ctx, i, seen)
+			if _, err := s.LinkIntegrationUser(ctx, i.ID, a.Subject, anna.ID, 0); err != nil {
+				t.Fatal(err)
+			}
+			// The removal past the store: the user's row alone, as an older
+			// store left the own user's, and as a link racing the linked
+			// user's removal could leave that one's.
+			removed := a.RealUserID
+			if gone == "linked" {
+				removed = anna.ID
+			}
+			if _, err := s.db.Exec(`UPDATE users SET deleted_at = ? WHERE id = ?`, s.nowText(), removed); err != nil {
+				t.Fatal(err)
+			}
+			was := fromAnotherNode(t, s, a.ID)
+			if list, _ := s.IntegrationIdentities(ctx, i.ID); len(list) != 1 {
+				t.Errorf("listed: %+v", list)
+			}
+			if all, _ := s.AllIntegrationIdentities(ctx); len(all) != 1 {
+				t.Errorf("all listed: %+v", all)
+			}
+			if _, err := s.LinkIntegrationUser(ctx, i.ID, a.Subject, bruno.ID, 0); !errors.Is(err, ErrNoIntegration) {
+				t.Errorf("linked again: %v", err)
+			}
+			again, err := s.IntegrationUser(ctx, i, seen)
+			if err != nil {
+				t.Fatalf("the next call: %v", err)
+			}
+			removedAsTheStoreDoes(t, s, a.ID, was)
+			own, _, _ := s.UserByID(ctx, again.RealUserID)
+			if again.ID == a.ID || again.Linked() || own.Name != i.UUID+":"+seen.Subject || own.Role != RoleIntegration || own.IntegrationID != i.ID {
+				t.Fatalf("the next call: %+v, its user %+v", again, own)
+			}
+			if fresh := again.RealUserID != a.RealUserID; fresh != (gone == "own") {
+				t.Fatalf("own user %d, was %d: made anew %v", again.RealUserID, a.RealUserID, fresh)
+			}
+			if _, err := s.IntegrationUser(ctx, i, seen); err != nil {
+				t.Fatal(err)
+			}
+			said := testkit.Msg("store: an integration's user whose own or linked user was removed acted for nobody; its call took it as a first call",
+				"integration", i.UUID, "user", seen.Subject)
+			if n := logged.Count(0, said); n != 1 {
+				t.Errorf("logged %d times: %v", n, logged.Since(0, nil))
+			}
+		})
+	}
+}
+
+// The Massimo user an integration's user is linked to removed, the next
+// call takes the integration's user that is left again, unlinked, as the
+// owner left it: its role, a role beyond the integration's maximum
+// included, its display name and its state (AP LinkedRemoval, D2-A). A
+// user of that name that is no user of this integration's left without
+// an identity is never taken, nor is an empty id the integration's own
+// user.
+func TestLinkedUserRemovedTakesItsUserBack(t *testing.T) {
+	t.Parallel()
+	s := open(t, t.TempDir())
+	ctx := context.Background()
+	req, _ := s.AddIntegrationRequest(ctx, haRequest(instanceA), "AAAAAA")
+	i, _ := s.ApproveIntegration(ctx, req.UUID, []string{"read"}, "", 0)
+	other, _ := s.AddIntegrationRequest(ctx, haRequest(instanceB), "BBBBBB")
+	j, _ := s.ApproveIntegration(ctx, other.UUID, nil, "", 0)
+	for n, c := range []struct {
+		role     string
+		disabled bool
+	}{{RoleIntegration, false}, {RoleViewer, false}, {RoleOwner, false}, {RoleIntegration, true}} {
+		name := []string{"anna", "bruno", "carla", "dario"}[n]
+		seen := IntegrationSeen{Subject: name[:1] + "0000000000000000000000000000000", Name: name, Level: "control"}
+		linkedTo, _ := s.AddUser(ctx, User{Name: name, Role: RoleManager}, "", 0)
+		a, _ := s.IntegrationUser(ctx, i, seen)
+		if _, err := s.LinkIntegrationUser(ctx, i.ID, a.Subject, linkedTo.ID, 0); err != nil {
+			t.Fatal(err)
+		}
+		was, err := s.UpdateUser(ctx, i.UUID+":"+a.Subject, func(u *User) error {
+			u.Role, u.Disabled, u.DisplayName = c.role, c.disabled, name+" (kitchen)"
+			return nil
+		}, 0)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if err := s.DeleteUser(ctx, name, 0); err != nil {
+			t.Fatal(err)
+		}
+		again, err := s.IntegrationUser(ctx, i, seen)
+		if err != nil {
+			t.Fatalf("%s: the next call: %v", name, err)
+		}
+		own, _, _ := s.UserByID(ctx, again.RealUserID)
+		if again.ID == a.ID || again.Linked() || again.RealUserID != a.RealUserID || own.Role != c.role || own.Disabled != c.disabled ||
+			own.DisplayName != name+" (kitchen)" || own.Version != was.Version {
+			t.Errorf("%s: the next call: %+v, its user %+v", name, again, own)
+		}
+	}
+
+	// Never taken: a user of that name left without an identity that is
+	// no user of this integration's, or that another identity holds.
+	never := func(what, subject string) {
+		t.Helper()
+		if _, err := s.IntegrationUser(ctx, i, IntegrationSeen{Subject: subject, Level: "view"}); !errors.Is(err, ErrUserExists) {
+			t.Errorf("%s: %v", what, err)
+		}
+	}
+	// Past the store, which names no such user so.
+	for _, c := range []struct {
+		what, subject string
+		integration   any
+	}{{"a regular user", "e0000000000000000000000000000000", nil}, {"another integration's", "f0000000000000000000000000000000", j.ID}} {
+		if _, err := s.db.Exec(`INSERT INTO users (uuid, name, role_id, integration_id, created_at, updated_at, origin)
+			VALUES (?, ?, (SELECT id FROM roles WHERE key = ?), ?, ?, ?, ?)`,
+			newUUID(), i.UUID+":"+c.subject, RoleIntegration, c.integration, s.nowText(), s.nowText(), s.NodeID()); err != nil {
+			t.Fatal(err)
+		}
+		never(c.what, c.subject)
+	}
+	// An id in upper case reaches the store alone: parseOnBehalf
+	// lower-cases the header's.
+	held, _ := s.IntegrationUser(ctx, i, IntegrationSeen{Subject: "a1000000000000000000000000000000", Level: "view"})
+	never("held by another identity", strings.ToUpper(held.Subject))
+	if _, err := s.IntegrationUser(ctx, i, IntegrationSeen{Subject: "", Level: "view"}); !errors.Is(err, ErrBadName) {
+		t.Errorf("an empty id: %v", err)
+	}
+	if own, _, _ := s.UserByID(ctx, i.UserID); own.Name != i.UUID+":" {
+		t.Fatalf("the integration's own user: %+v", own)
+	}
+	if list, _ := s.IntegrationIdentities(ctx, i.ID); len(list) != 6 {
+		t.Errorf("the integration's users: %d, want the system user, the four taken back and one", len(list))
+	}
+	// Nor the system user, whatever the case of the id, its identity
+	// removed past the store.
+	if _, err := s.db.Exec(`UPDATE user_identities SET deleted_at = ? WHERE integration_id = ? AND subject = 'system'`, s.nowText(), i.ID); err != nil {
+		t.Fatal(err)
+	}
+	never("the system user", "SYSTEM")
+}
+
+// A link to a user that is removed, or to none, is refused as a user not
+// found, and the identity stays as it was: the target is read in the
+// transaction that writes the link (AP LinkedRemoval, Block 1).
+func TestLinkToARemovedUser(t *testing.T) {
+	t.Parallel()
+	s := open(t, t.TempDir())
+	ctx := context.Background()
+	req, _ := s.AddIntegrationRequest(ctx, haRequest(instanceA), "AAAAAA")
+	i, _ := s.ApproveIntegration(ctx, req.UUID, nil, "", 0)
+	anna, _ := s.AddUser(ctx, User{Name: "anna", Role: RoleManager}, "", 0)
+	a, _ := s.IntegrationUser(ctx, i, IntegrationSeen{Subject: "aaaaaaaa000000000000000000000000", Level: "view"})
+	if err := s.DeleteUser(ctx, "anna", 0); err != nil {
+		t.Fatal(err)
+	}
+	for _, to := range []int64{anna.ID, anna.ID + 1000} {
+		if _, err := s.LinkIntegrationUser(ctx, i.ID, a.Subject, to, 0); !errors.Is(err, ErrNoUser) {
+			t.Errorf("linked to %d: %v", to, err)
+		}
+	}
+	if list, _ := s.IntegrationIdentities(ctx, i.ID); len(list) != 2 || list[1].Linked() {
+		t.Errorf("the integration's users: %+v", list)
 	}
 }

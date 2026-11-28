@@ -16,11 +16,21 @@ import (
 
 // The fake Cube applies the radio commands it acknowledges, when Apply is
 // set: a setpoint, mode or boost, a day's programme, the preset
-// temperatures, the valve settings, the key lock and a wall thermostat's
-// display. Each changes the device's entry in the L line, or its C line,
-// as the real Cube shows it once the device confirmed the command; a boost
-// ends by itself after the device's boost time, or BoostFor. Once anything
-// changed, a new connection's greeting carries the changed lines too.
+// temperatures, the valve settings, the key lock, a wall thermostat's
+// display, and the device's group. Each changes the device's entry in the
+// L line, or its C line, as the real Cube shows it once the device
+// confirmed the command; a boost ends by itself after the device's boost
+// time, or BoostFor. Once anything changed, a new connection's greeting
+// carries the changed lines too.
+//
+// The group is the room byte of the device's C line, as the test Cube
+// showed it (firmware 1.1.3, 2026-11-26, docs/cube-protocol.md): set
+// group (0x22) writes its group there, a room the room and device list
+// does not have too; remove group (0x23) naming the room the byte names
+// writes 0, and naming another the device refuses it: the byte stays, and
+// the device's L entry carries the error flag with 0x23 as the radiogram
+// that failed. A 0x23 of group 0 to a device in no room changes nothing,
+// which the Cube was not seen to do.
 //
 // The fake applies a command to every thermostat it addresses, as the
 // devices take it: a room command to each thermostat whose C line names
@@ -35,6 +45,8 @@ type boost struct {
 
 // Offsets of the L entry (with its length byte) the fake changes.
 const (
+	lFailed   = 4  // the type of the radiogram that failed, read with lError
+	lFlags1   = 5  // valid, error, initialized
 	lFlags2   = 6  // battery, link error, lock, mode
 	lValve    = 7  // valve of a radiator thermostat; display flag of a wall thermostat
 	lSetpoint = 8  // setpoint in half degrees; bit 7 a wall thermostat's temperature's ninth bit
@@ -42,29 +54,46 @@ const (
 	lTime     = 11 // vacation end time
 	lWallTemp = 12 // a wall thermostat's temperature, low byte
 
+	lError = 0x08 // of lFlags1: the Cube's last radiogram to the device failed
+
+	cRoom           = 5 // the room byte of a C payload (with its length byte): the device's group
 	weekProgramSize = cube.WeekProgramSize
 	radiatorProgram = 0x1d // the week programme in a radiator thermostat's C payload
 	wallProgram     = 0x16 // the week programme in a wall thermostat's C payload
 )
 
 // apply carries out a radio command the fake acknowledged, after
-// ApplyAfter when it is set, and once a hold ends (HoldApply).
+// ApplyAfter when it is set, and once a hold ends (HoldApply); not where
+// a Reset came in between.
 func (s *Server) apply(m cube.Message) {
 	raw, err := base64.StdEncoding.DecodeString(strings.TrimSpace(m.Data))
 	if err != nil || len(raw) < 11 {
 		return
 	}
+	c := command{raw: raw, gen: s.generation()}
 	if s.ApplyAfter > 0 {
-		time.AfterFunc(s.ApplyAfter, func() { s.applyOrHold(raw) })
+		time.AfterFunc(s.ApplyAfter, func() { s.applyOrHold(c) })
 		return
 	}
-	s.applyOrHold(raw)
+	s.applyOrHold(c)
 }
 
-// applyNow changes the addressed devices' lines for one radio command.
-func (s *Server) applyNow(raw []byte) {
+// command is a radio command acknowledged, with the count of resets at
+// its acknowledgement (Server.gen).
+type command struct {
+	raw []byte
+	gen uint64
+}
+
+// applyNow changes the addressed devices' lines for one radio command,
+// unless a Reset came since it was acknowledged.
+func (s *Server) applyNow(c command) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
+	if c.gen != s.gen {
+		return
+	}
+	raw := c.raw
 	cmd, room := raw[2], raw[9]
 	var targets []cube.RFAddress
 	if raw[1]&0x04 != 0 {
@@ -101,7 +130,36 @@ func (s *Server) applyNow(raw []byte) {
 					}
 				}
 			})
+		case cube.RFSetGroupAddress:
+			s.setGroupLocked(rf, raw[10])
+		case cube.RFRemoveGroup:
+			s.removeGroupLocked(rf, raw[10])
 		}
+	}
+}
+
+// setGroupLocked applies 0x22: rf's C line names group as its room.
+func (s *Server) setGroupLocked(rf cube.RFAddress, group byte) {
+	if raw := s.configRawLocked(rf); len(raw) <= cRoom || raw[cRoom] == group {
+		return
+	}
+	s.editConfigLocked(rf, func(c []byte, _ cube.DeviceType) { c[cRoom] = group })
+}
+
+// removeGroupLocked applies 0x23: where group is the room rf's C line
+// names, the line names none; else the device refuses it, and its L
+// entry carries the error flag with 0x23 as the radiogram that failed.
+func (s *Server) removeGroupLocked(rf cube.RFAddress, group byte) {
+	raw := s.configRawLocked(rf)
+	switch {
+	case len(raw) <= cRoom:
+	case raw[cRoom] != group:
+		s.editEntryLocked(rf, func(e []byte, _ cube.DeviceType) {
+			e[lFailed] = cube.RFRemoveGroup
+			e[lFlags1] |= lError
+		})
+	case group != 0:
+		s.editConfigLocked(rf, func(c []byte, _ cube.DeviceType) { c[cRoom] = 0 })
 	}
 }
 

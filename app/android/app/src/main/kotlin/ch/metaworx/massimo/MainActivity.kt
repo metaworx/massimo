@@ -28,6 +28,7 @@ import android.webkit.RenderProcessGoneDetail
 import android.webkit.SslErrorHandler
 import android.webkit.ValueCallback
 import android.webkit.WebChromeClient
+import android.webkit.WebResourceError
 import android.webkit.WebResourceRequest
 import android.webkit.WebResourceResponse
 import android.webkit.WebSettings
@@ -45,6 +46,7 @@ import androidx.appcompat.app.AppCompatActivity
 import androidx.appcompat.app.AppCompatDelegate
 import androidx.core.view.ViewCompat
 import androidx.core.view.WindowInsetsCompat
+import androidx.swiperefreshlayout.widget.SwipeRefreshLayout
 import androidx.webkit.ScriptHandler
 import androidx.webkit.WebViewAssetLoader
 import androidx.webkit.WebViewCompat
@@ -54,6 +56,7 @@ import java.io.ByteArrayInputStream
 import java.io.File
 import java.util.concurrent.ExecutorService
 import java.util.concurrent.Executors
+import java.util.concurrent.atomic.AtomicBoolean
 
 /**
  * MainActivity is the shell: one WebView that shows the connect page from
@@ -64,12 +67,17 @@ import java.util.concurrent.Executors
  * covered while the app is hidden, until the prompt is passed, and kept out
  * of Recents' pictures. An AppCompat activity, so that the app's appearance
  * (App settings, D53-A) is AppCompat's night mode, which the theme's
- * android:isLightTheme hands on to the WebView's prefers-color-scheme.
+ * android:isLightTheme hands on to the WebView's prefers-color-scheme. The
+ * list pulled down checks every server again (the event `refresh`), and its
+ * ☰'s Exit ends the task (AP MobileApp, Block 19), and a server's page that
+ * fails to load gives way to the list, which says the server does not
+ * answer (D108-A).
  */
 class MainActivity : AppCompatActivity() {
     private val main = Handler(Looper.getMainLooper())
     private val io: ExecutorService = Executors.newCachedThreadPool()
     private lateinit var web: WebView
+    private lateinit var swipe: SwipeRefreshLayout
     private lateinit var bridge: Bridge
     private lateinit var prober: Prober
     private lateinit var discovery: Discovery
@@ -78,6 +86,7 @@ class MainActivity : AppCompatActivity() {
     private lateinit var cover: View
     private var covered = false
     private var shown: String? = null // the origin of the page the WebView shows
+    private var listLoading = false // the list's own load started, not yet finished (onPageFinished)
     private var serverScript: ScriptHandler? = null
     private var channelFor: String? = null
     private var listening = false
@@ -128,17 +137,20 @@ class MainActivity : AppCompatActivity() {
         val agent = agent()
         discovery = Discovery(this, main)
         biometric = Biometric(this, getString(android.R.string.cancel))
-        val servers = ServerStore(File(filesDir, "servers.json"))
-        val tokens = TokenStore(File(filesDir, "tokens.json"), KeystoreSealer())
-        // Version 1's switch kept a session behind a prompt the app asks no more.
-        servers.takeLegacy().forEach { tokens.remove(it) }
+        // The servers, the sessions held and what was checked of them are
+        // the process's (MassimoApp), so that an activity made anew keeps them.
+        val process = application as MassimoApp
+        val servers = process.servers
         val settings = AppSettings(File(filesDir, SETTINGS))
         val log = Logger { Log.w(LOG_TAG, it) }
-        val keeper = SessionKeeper(tokens)
+        val keeper = process.keeper
         val logins = LoginStore(File(filesDir, "logins.json"))
         val api = ServerApi(agent)
         prober = Prober(agent, texts)
         val left = KeysLeft(servers, logins, api, log)
+        // set by the list's Exit (D91-A): nothing more of this activity's goes to a server
+        val exited = AtomicBoolean(false)
+        val codes = Codes(servers, process.gone, api, prober::probe, log, exited::get)
         bridge = Bridge(
             host = object : Bridge.Host {
                 override fun open(url: String) = openServer(url)
@@ -150,11 +162,22 @@ class MainActivity : AppCompatActivity() {
                 // Another night mode makes AppCompat create the activity
                 // anew, the WebView's state and the page's address kept.
                 override fun appearance(appearance: String) = AppCompatDelegate.setDefaultNightMode(AppSettings.nightMode(appearance))
+
+                // Exit (D91-A): the process's sessions dropped as its end
+                // drops them, off the main thread, then the task ended.
+                override fun exit() {
+                    io.execute {
+                        runCatching { process.exit() }
+                        main.post { finishAndRemoveTask() }
+                    }
+                }
             },
             servers = servers,
             keeper = keeper,
-            sessions = Sessions(keeper, logins, api, prober::probe, left, log),
+            sessions = Sessions(keeper, logins, api, prober::probe, left, log, process.checks, exited::get),
             left = left,
+            codes = codes,
+            gone = process.gone,
             logins = logins,
             keys = LoginKey(),
             api = api,
@@ -165,14 +188,17 @@ class MainActivity : AppCompatActivity() {
             texts = texts,
             log = log,
             keyLabel = getString(R.string.login_key_label, Build.MODEL),
+            version = BuildConfig.VERSION_NAME,
+            exited = exited,
             io = io,
             main = main,
         )
         web = WebView(this)
         web.id = R.id.web
         setUp(web, agent)
+        swipe = pullDown(web)
         cover = coverView()
-        setContentView(insetted(web, cover))
+        setContentView(insetted(swipe, cover))
 
         back = object : OnBackPressedCallback(false) {
             override fun handleOnBackPressed() = web.goBack()
@@ -189,7 +215,12 @@ class MainActivity : AppCompatActivity() {
         channel(bridge.opened?.origin)
         if (savedInstanceState == null || web.restoreState(savedInstanceState) == null) {
             val first = if (savedInstanceState == null) servers.atStart() else null
-            if (first == null) web.loadUrl(Origins.CONNECT_URL) else openAtStart(first)
+            if (first == null) {
+                web.loadUrl(Origins.CONNECT_URL)
+            } else {
+                openAtStart(first)
+                bridge.postGone() // the app's start, the list not shown
+            }
         }
     }
 
@@ -210,6 +241,7 @@ class MainActivity : AppCompatActivity() {
                 }
                 bridge.opened = Bridge.Opened(s.id, origin, url)
                 openServer(url)
+                bridge.postCodes(s.id, url)
             }
         }
     }
@@ -277,6 +309,21 @@ class MainActivity : AppCompatActivity() {
         web.webChromeClient = Chrome()
         web.setDownloadListener { _, _, _, _, _ ->
             Toast.makeText(this, R.string.download_unsupported, Toast.LENGTH_LONG).show()
+        }
+    }
+
+    // pullDown is [web] in a SwipeRefreshLayout: pulled down while the
+    // connect page is shown at its top (on in onPageStarted for the list
+    // alone; SwipeRefreshLayout takes the pull only where the page cannot
+    // scroll up), it sends the page the event `refresh` (contract version 7),
+    // which checks every server again as ↻ does, and the spinner stops as
+    // it is sent: the page's ↻ turns meanwhile.
+    private fun pullDown(web: WebView): SwipeRefreshLayout = SwipeRefreshLayout(this).apply {
+        addView(web, ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT)
+        isEnabled = false
+        setOnRefreshListener {
+            isRefreshing = false
+            bridge.event(JSONObject().put("type", "refresh"))
         }
     }
 
@@ -394,17 +441,42 @@ class MainActivity : AppCompatActivity() {
         // tap shows its card (Bridge.leaving, D72-B).
         override fun onPageStarted(view: WebView, url: String?, favicon: android.graphics.Bitmap?) {
             shown = url?.let(Origins::of)
+            listLoading = shown == Origins.APP
             if (shown == Origins.APP) bridge.leaving()
+            swipe.isEnabled = shown == Origins.APP // the list's pull down alone
             privacy()
         }
 
         // The list is the app's first page: once it has loaded, the pages
         // before it are forgotten, so that Back from it leaves the app, never
-        // back into a server's page past its prompt.
+        // back into a server's page past its prompt. Its own load alone, an
+        // onPageStarted's: the WebView may tell the end of a page's own
+        // history entry too (pushState, the list's menus and panels, AP
+        // MobileApp Block 19), which starts no load and keeps its entries,
+        // so that Back reaches the page.
         override fun onPageFinished(view: WebView, url: String?) {
-            if (url?.let(Origins::of) != Origins.APP) return
+            if (url?.let(Origins::of) != Origins.APP || !listLoading) return
+            listLoading = false
             view.clearHistory()
             back.isEnabled = view.canGoBack()
+            // the list shown: a removed server's revoke codes where the probe finds it (D112-A)
+            bridge.postGone()
+        }
+
+        // A main frame of the opened server's origin that fails to load (the
+        // server gone since the list's probe, a page's own link to it) shows
+        // the list, not the WebView's own error page: the opening dropped,
+        // the list given the server's id (#unreachable=<id>), which it probes
+        // and says it does not answer (D108-A). A certificate refused says so
+        // in its own dialog first (onReceivedSslError), which loads the list;
+        // a load given up for the list's own (ERR_ABORTED) is no failure. The
+        // origin alone says whose load failed (Bridge.failed), whatever the
+        // WebView has told of the page's start by then.
+        override fun onReceivedError(view: WebView, request: WebResourceRequest, error: WebResourceError) {
+            if (!request.isForMainFrame || warned) return
+            if (error.description?.toString()?.contains("ERR_ABORTED") == true) return
+            val id = bridge.failed(Origins.of(request.url.toString())) ?: return
+            main.post { if (!isFinishing && !isDestroyed) web.loadUrl(Origins.CONNECT_URL + Origins.unreachableOf(id)) }
         }
 
         // A certificate the system does not trust is the server's where it

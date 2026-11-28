@@ -10,8 +10,8 @@ import re
 import pytest
 
 from conftest import URL, api_call
-from helpers import (NAME_BAD, NAME_TAKEN, assert_busy, cleanup, close_fold, frames, hold, named_buttons, open_fold, safe_route, scroll_width, show_view, sign_out, undo,
-                     wait_held, wait_until)
+from helpers import (KEY_COPY, NAME_BAD, NAME_TAKEN, assert_busy, cleanup, close_fold, copies, frames, grant_clipboard, hold, icon_after_last_line, named_buttons,
+                     open_fold, own_id, safe_route, scroll_width, show_view, sign_out, stub_me, undo, wait_held, wait_until)
 
 
 def test_users_and_roles(page, case):
@@ -160,8 +160,9 @@ def test_an_integrations_user_has_no_way_in(page, case, reads):
                 row = panel.locator(f".user-tokens li[data-id='{held_key['id']}']")
                 row.wait_for()
                 assert row.locator(".revoke-token").count() == 1, "the held key's Revoke"
-                with page.expect_request(lambda r: r.method == "PUT" and phone_path.search(r.url)):
-                    panel.locator(".remove-password").click()
+                panel.locator(".remove-password").click()
+                # the route's own list: Playwright's request event of the PUT comes before the route has run
+                assert wait_held(page, sent), "the removal is sent"
                 assert sent == [{"password": ""}], f"the removal sends an empty password: {sent}"
             assert panel.locator(".remove-user").count() == 1, f"{name}: still removable"
             panel.locator("> summary").click()
@@ -382,9 +383,15 @@ def test_new_key_shown_once(page, case):
     """In an open user panel, Create key shows the new key, which the
     server shows only once, lists every token once, and sends one POST
     per click: the panel loads its tokens through one path, not through
-    the toggle of a panel built open and a direct call both."""
+    the toggle of a panel built open and a direct call both. The key
+    shown copies as the page's other texts do (AP KeyLife, D1-A): a
+    button to the keyboard named Copy the key, not by the key, with its
+    copy icon right after the key's last line; a click, Enter, Space and
+    the icon each copy it. Fails on the page before: the key a paragraph
+    alone."""
     prefix = f"ui-test-key-{case.width}-{case.lang}-"
     revoke_keys(prefix)
+    grant_clipboard(page)
     posts, loads = [], []
     page.on("request", lambda r: posts.append(r.url) if r.method == "POST" and r.url.endswith("/users/operator/tokens") else None)
     page.on("request", lambda r: loads.append(r.url) if r.method == "GET" and r.url.endswith("/users/operator/tokens") else None)
@@ -407,7 +414,12 @@ def test_new_key_shown_once(page, case):
             # for before it: counted, not waited for
             assert len(loads) - before == 1, f"one load of the tokens for key {n}, not {len(loads) - before}"
             key = panel.locator(".user-key-box")
-            assert key.is_visible() and panel.locator(".user-key").inner_text().strip(), f"key {n} is shown, once"
+            shown = panel.locator(".user-key").inner_text().strip()
+            assert key.is_visible() and shown, f"key {n} is shown, once"
+            sel = ".user-panel[data-name='operator'] .user-key"
+            placed, m = icon_after_last_line(page, sel)
+            assert placed, f"key {n}: its copy icon right after its last line: {m}"
+            copies(page, sel, shown, KEY_COPY[case.lang])
             ids = page.evaluate("[...document.querySelectorAll(%r)].map((li) => li.dataset.id).filter((id) => id)" % tokens)
             assert len(ids) == len(set(ids)), f"every token once after key {n}: {ids}"
             assert len(posts) == n, f"one POST per click, {len(posts)} after {n}"
@@ -943,8 +955,8 @@ def test_an_integrations_holder_manages_its_users(new_context, case, watch, guar
     from test_login import sign_in
     tag = f"{case.width}{case.lang}"
     key, name, manager = f"igs{tag}", f"igs-{tag}", f"igm-{tag}"
-    instance = ("b9%04d%s" % (case.width, case.lang)).encode().hex().ljust(32, "0")[:32]
-    subject = ("b9u%04d%s" % (case.width, case.lang)).encode().hex().ljust(32, "c")[:32]
+    # of this run's own: its next repeat on the server would join this one's integration, disabled
+    instance, subject = own_id(f"b9{tag}"), own_id(f"b9u{tag}")
     status, req = raw_call("POST", "api/v1/integrations/requests",
                            {"kind": "homeassistant", "name": f"Home {tag}", "instance_id": instance, "url": "http://192.0.2.21:8123", "version": "2026.11.1"})
     assert status == 201, "the request is taken"
@@ -1044,16 +1056,18 @@ def test_add_a_user_for_users_or_guests_alone(page, case):
     """Add a user is drawn for who may add a user, a holder of users or
     guests, and goes for a holder of passwords or integrations alone, whom
     the server refuses a new user (who is in read again as each, the
-    page's own capabilities). Fails where it was drawn for every reader
-    of Users."""
+    server's answer stubbed by stub_me). Fails where it was drawn for
+    every reader of Users."""
     show_view(page, "system")
     add = page.locator("#user-add")
     add.wait_for()
     try:
         for caps, drawn in ((["read", "passwords"], False), (["read", "integrations"], False), (["read", "guests"], True), (["read", "users"], True)):
-            page.evaluate("(caps) => { state.me = { ...state.me, mode: 'users', capabilities: caps }; }", caps)
+            stub_me(page, caps)
             assert wait_until(page, f"document.querySelectorAll('#user-add').length === {1 if drawn else 0}", 5), f"Add a user {'drawn' if drawn else 'gone'} with {caps}"
+            page.unroute("**/api/v1/me")
     finally:
+        page.unroute("**/api/v1/me")
         page.evaluate("loadMe()")
     show_view(page, "tiles")
 

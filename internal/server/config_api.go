@@ -446,6 +446,9 @@ func (s *Server) moveDevice(ctx context.Context, r *http.Request, rt *runtime, m
 			watch := rt.beginStructure("move", rf, cur.RoomID, newRoom)
 			out, in := cubeio.MoveCommands(rt.client.Snapshot(), rf, c.Type, cur.RoomID, newRoom, members, rt.hidden())
 			for _, cmd := range []engine.Command{out, in} {
+				if len(cmd.Lines) == 0 {
+					continue // nothing to leave: no room, no group
+				}
 				res := rt.enqueue(ctx, cmd).Wait(ctx)
 				if cmd.Key == in.Key {
 					was.hold(rt, cubeio.Reached(cmd, res)) // the link half reached the room

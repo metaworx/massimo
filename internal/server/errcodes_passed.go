@@ -125,6 +125,7 @@ var (
 	codePreferenceValueBad     = errorCode("preference_value_bad", "the preference %s is not one the server reads: %s", "preference", "reason")
 	codePreferenceTooLarge     = errorCode("preference_too_large", "a preference holds at most %d bytes", "max")
 	codeStreamTicketsTooMany   = errorCode("stream_tickets_too_many", "too many stream tickets outstanding")
+	codeClientGone             = errorCode("client_gone", clientGoneText)
 )
 
 // passed is err, a Go error a site passes on with status, as the

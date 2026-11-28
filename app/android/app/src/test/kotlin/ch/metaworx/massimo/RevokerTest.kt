@@ -515,8 +515,8 @@ class RevokerTest {
         prompt.shown.clear()
         keys.takeBack(LoginKey.APP)
         assertEquals(
-            "home by its session; the others no more opened, left by their ids",
-            Revoker.Summary(listOf(a.id), listOf(b.id, c.id), listOf()),
+            "home by its session; the others no more opened, left by their ids, with their keys' codes (kept since version 6)",
+            Revoker.Summary(listOf(a.id), listOf(b.id, c.id), listOf(), listOf(b.id, c.id)),
             forgetAll(appByKey(forgetAll = true)),
         )
         assertTrue("no prompt for a key taken back", prompt.shown.isEmpty())
@@ -555,8 +555,8 @@ class RevokerTest {
         prompt.shown.clear()
         prompt.dismiss = true
         assertEquals(
-            "each key left by its id, as a dismissed prompt leaves one",
-            Revoker.Summary(listOf(), listOf(a.id, b.id, c.id), listOf()),
+            "each key left by its id, as a dismissed prompt leaves one, with its code",
+            Revoker.Summary(listOf(), listOf(a.id, b.id, c.id), listOf(), listOf(a.id, b.id, c.id)),
             forgetAll(appByKey(forgetAll = true)),
         )
         assertEquals("one prompt, dismissed", listOf("Forget all ${LoginKey.APP}"), prompt.shown)
@@ -601,5 +601,62 @@ class RevokerTest {
         revoker.turnOff(s.id, fake.base, appByKey()) { off = it }
         assertEquals("the login still opens", Revoker.Off(revoked, 42), off)
         assertEquals(listOf("home ${LoginKey.APP}"), prompt.shown)
+    }
+
+    @Test
+    fun turnOffForgetAllAndRemoveLeaveTheirCodes() {
+        // D112-A: the kept key's code with the key left, the session's with the session; Remove keeps them in gone
+        fun down(name: String) = servers.save(JSONObject().put("name", name).put("node", "node-$name").put("lan", fake.closed).put("remote", fake.base))
+        fun keepWithCode(s: Server, keyId: Long) = logins.put(s.id, KeptLogin("anna", s.node, "", byteArrayOf(1), byteArrayOf(2), keyId, code = RevokeCode.of("key-$keyId")))
+        val a = down("home")
+        keepWithCode(a, 46)
+        sessions.put(a, "session-anna")
+        sessions.check(a, fake.base)
+        assertEquals("the key left with its code", Revoker.Off(leftHere, 46, pending = true), turnOff(a, ""))
+        assertEquals(listOf(RevokeCode.of("key-46")), left(a).map { it.code })
+        assertEquals(RevokeCode.of("session-anna"), servers.get(a.id)!!.unended.single().code)
+
+        // a login kept before version 6, without a code: its key left as before, not pending though a session left there has a code
+        val b = down("cabin")
+        keep(b, 49)
+        sessions.put(b, "session-anna")
+        sessions.check(b, fake.base)
+        val res = mutableListOf<Revoker.Summary>()
+        revoker.forgetAll(byKey(null)) { res.add(it) }
+        assertEquals(listOf(b.id), res.single().left)
+        assertEquals("the key this run left has no code", emptyList<String>(), res.single().pending)
+        assertEquals(listOf(""), left(b).map { it.code })
+        assertEquals(RevokeCode.of("session-anna"), servers.get(b.id)!!.unended.single().code)
+
+        // Remove where the server does not answer: its codes kept in gone
+        val gone = GoneStore(File(tmp.root, "gone.json"))
+        val codes = Codes(servers, gone, api, { urls, _ -> urls.map { ProbeResult(it, ok = false, error = "refused") } }, logged::add)
+        val withCodes = Revoker(servers, logins, sessions, left, { urls, _ -> urls.map { ProbeResult(it, ok = false) } }, Executor { it.run() }, codes, gone) { id ->
+            logins.forget(id)
+            forgotten.add(id)
+        }
+        var removed: Revoker.Removed? = null
+        withCodes.remove(a.id, "", byKey(null)) { removed = it.getOrThrow() }
+        assertEquals(Revoker.Removed(null, listOf(46L), listOf(7L), pending = true), removed)
+        assertEquals(setOf(RevokeCode.of("key-46"), RevokeCode.of("session-anna")), gone.list().single().codes.map { it.code }.toSet())
+        assertTrue(logged.joinToString("\n"), logged.none { it.contains("session-") || it.contains(RevokeCode.of("key-46")) })
+    }
+
+    @Test
+    fun removeSaysPendingOnlyWhereItKeptTheCodes() {
+        // the review: gone.json not written, Remove's answer says nothing waits, and the log says why without a code
+        val s = servers.save(JSONObject().put("name", "home").put("node", "node-home").put("lan", fake.closed).put("remote", fake.base))
+        sessions.put(s, "session-anna")
+        sessions.check(s, fake.base)
+        val gone = GoneStore(File(tmp.root, "missing/gone.json")) // its directory is not there: every write fails
+        val codes = Codes(servers, gone, api, { urls, _ -> urls.map { ProbeResult(it, ok = false) } }, logged::add)
+        val withCodes = Revoker(servers, logins, sessions, left, { urls, _ -> urls.map { ProbeResult(it, ok = false) } }, Executor { it.run() }, codes, gone, logged::add) { id ->
+            logins.forget(id)
+        }
+        var removed: Revoker.Removed? = null
+        withCodes.remove(s.id, "", byKey(null)) { removed = it.getOrThrow() }
+        assertEquals(Revoker.Removed(null, emptyList(), listOf(7L), pending = false), removed)
+        val line = logged.single { it.startsWith("remove:") }
+        assertTrue(line, line.contains(s.id) && !line.contains(RevokeCode.of("session-anna")))
     }
 }

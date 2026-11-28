@@ -19,6 +19,7 @@ import (
 	"io"
 	"maps"
 	"net/http"
+	"regexp"
 	"strconv"
 	"strings"
 	"sync"
@@ -352,7 +353,7 @@ func (s *Server) openSessionFrom(w http.ResponseWriter, r *http.Request, u store
 	if err != nil {
 		return fail(http.StatusInternalServerError, "%v", err)
 	}
-	if err := st.TouchToken(ctx, tok.ID, ip, time.Time{}); err != nil {
+	if err := st.TouchToken(ctx, tok.ID, ip, time.Time{}, ""); err != nil {
 		s.log.Warn("api: session not touched", "error", err)
 	}
 	if err := st.NoteLogin(ctx, u.ID); err != nil {
@@ -483,6 +484,89 @@ func (s *Server) deleteMyToken(w http.ResponseWriter, r *http.Request) error {
 	s.log.Info("token revoked", "user", s.logUserName(r.Context(), p.user), "token", p.token.ID, "kind", p.token.Kind, "by", "itself", "remote", s.clientIP(r))
 	writeJSON(w, http.StatusOK, map[string]any{"ok": true, "id": p.token.ID})
 	return nil
+}
+
+// revokeCodeRequest is the body of POST /api/v1/tokens/revoke.
+type revokeCodeRequest struct {
+	Code string `json:"code"`
+}
+
+// revokeCodeForm is a revoke code as store.RevokeCode makes it: 64
+// lower-case hex digits.
+var revokeCodeForm = regexp.MustCompile(`^[0-9a-f]{64}$`)
+
+// revokeByCode handles POST /api/v1/tokens/revoke, without a token: the
+// live token whose revoke code the body names is revoked, a key's
+// sessions with it, for a client that forgot the token without its
+// server answering (AP MobileApp v1.6, D112-A; docs/app.md). It answers
+// 204 whether the code matched or not, so that it tells nobody which
+// codes are live; a malformed body is 400 with revoke_code_malformed;
+// a locked-out address 429. The settings file's key is left live, as no
+// revoke ends it (settingsKey). A code never counts toward the lockout,
+// matched or not: one that matches nothing is a code taken already, a
+// token that ended by itself or one the server has not seen since its
+// update, and an app's codes would lock its own address out. A match is
+// a row of the audit, a change line and an Info line; anything else is
+// counted per address and minute as a refused request is (quietAudit),
+// since anyone may call it. No row nor line carries the code. A server
+// without a store keeps no token to revoke: 204 at once.
+func (s *Server) revokeByCode(w http.ResponseWriter, r *http.Request) error {
+	st := s.opts.Store
+	if st == nil {
+		w.WriteHeader(http.StatusNoContent)
+		return nil
+	}
+	ctx := r.Context()
+	ip := s.clientIP(r)
+	if err := s.lockedOut(w, ctx, store.LockoutAddr(ip), ""); err != nil {
+		s.quietAudit(r, ip, http.StatusTooManyRequests)
+		return err
+	}
+	var req revokeCodeRequest
+	dec := json.NewDecoder(r.Body)
+	dec.DisallowUnknownFields()
+	if err := dec.Decode(&req); err != nil || !revokeCodeForm.MatchString(req.Code) {
+		s.quietAudit(r, ip, http.StatusBadRequest)
+		return refuse(http.StatusBadRequest, codeRevokeCodeMalformed)
+	}
+	var keep string
+	if file := s.legacyToken(); file != "" {
+		keep = store.HashToken(file)
+	}
+	tok, ok, err := st.RevokeByCode(ctx, req.Code, keep)
+	if err != nil {
+		return userFail(err)
+	}
+	if !ok {
+		s.quietAudit(r, ip, http.StatusNoContent)
+		w.WriteHeader(http.StatusNoContent)
+		return nil
+	}
+	// The token is revoked: its user is read for the row and the line
+	// even where the client went away meanwhile.
+	u, _, err := st.UserByID(context.WithoutCancel(ctx), tok.UserID)
+	if err != nil {
+		s.log.Warn("api: user of a token revoked by code not read", "token", tok.ID, "error", err)
+	}
+	auditTarget(r, "token:"+strconv.FormatInt(tok.ID, 10))
+	auditSubject(r, tokenSubject(tok, u))
+	s.log.Info("token revoked", "user", s.logUserName(ctx, u), "token", tok.ID, "kind", tok.Kind, "by", "code", "remote", ip)
+	w.WriteHeader(http.StatusNoContent)
+	return nil
+}
+
+// quietAudit takes a request out of the audit's rows of their own and
+// counts it per address and minute as a refused request is
+// (refusalAudit), in rows apart from the other refused requests, with no
+// change line: a revoke by code that matched no token that may be
+// revoked, or was refused.
+func (s *Server) quietAudit(r *http.Request, ip string, status int) {
+	a := auditOf(r)
+	if a == nil {
+		return
+	}
+	a.skip = true
+	s.codeRefusals.note(r, a.pattern, a.action, ip, status)
 }
 
 // me handles GET /api/v1/me.

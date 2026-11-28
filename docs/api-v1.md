@@ -884,6 +884,13 @@ a wrong name and a wrong password are one code, as their `error` is one:
 | `preference_value_bad` | 400 | `preference`, `reason` | the document is not one the server reads as that preference, for `reason` |
 | `preference_too_large` | 413 | `max` | the preference is larger than `max` bytes |
 | `stream_tickets_too_many` | 503 | – | `POST …/events/ticket`: too many stream tickets are outstanding |
+| `client_gone` | 503 | – | the request ended, its client gone or its time up, before the store answered |
+
+**A revoke by code** (`POST /api/v1/tokens/revoke`):
+
+| Code | Status | Params | Refused because |
+|------|--------|--------|-----------------|
+| `revoke_code_malformed` | 400 | – | the body is not `{"code": …}` with 64 lower-case hex digits |
 
 ## Routes
 
@@ -969,7 +976,12 @@ a user whose role is disabled logs in and is then refused every route.
 The server hashes at most one password a core at once, four at the most,
 with eight more waiting;
 a login beyond them is `503` with `Retry-After`, and so is a user add or a
-password change (`docs/store.md` section 6, "The lockout").
+password change (`docs/store.md` section 6, "The lockout"),
+and one whose client went away while it waited for its turn.
+Any other request of the users' routes whose client went away before the
+store answered, a token's revoke the client gave up on among them,
+is audited as `failed` with "the client went away before the answer",
+a `503` no client reads, and never as a password check that waited.
 `409` on a server without users, where the first owner is created with
 `POST /api/v1/users` or `massimo user add`,
 and on one without a store (`serve -addr`), which takes the API token.
@@ -1003,6 +1015,44 @@ The settings file's token, `MASSIMO_API_TOKEN`, is `409`:
 the next start would not add the owner's key back, its hash being taken,
 so it is changed or removed in the settings file;
 a revoke under the user's tokens is `409` too (below).
+
+`POST /api/v1/tokens/revoke` with `{"code": "…"}`, and no token,
+ends a token by its revoke code, for a client that forgot the token without
+its server answering, as the apps do at a sign-out, a turned-off login or a
+removed server (`docs/app.md`; AP MobileApp, D112-A).
+The code is the hex of SHA-256 of `massimo revoke v1` followed by the token
+as the server gave it, 64 lower-case hex digits:
+only a client that once held the token can work it out,
+and the store keeps the code's own SHA-256 (`tokens.revoke_hash`,
+`docs/store.md` section 5), from which no code can be had back,
+so that neither the store nor a backup of it can revoke a token.
+The code lets nothing in: no request is authenticated by it.
+The server keeps it for every token it makes,
+and for a token made before the update from its first use after it;
+a token not used since its update has none, and its code matches nothing.
+The live token of the code is revoked, an API key's sessions with it,
+as by `DELETE /api/v1/me/token`;
+the settings file's token is left live, as no revoke ends it.
+The answer is `204` whether the code matched or not
+(a live token, one that ended, the settings file's, none),
+so that it tells nobody which codes are live.
+A body that is not that object, or a code that is not 64 lower-case hex digits,
+is `400` with `revoke_code_malformed`;
+a client drops such a code rather than post it again.
+While the address is locked out it is `429` with `Retry-After`,
+but a code never counts toward the lockout, matched or not:
+one that matches nothing is a code taken already,
+a token that ended by itself, or one the server has not seen since its update.
+A match is audited as `token.revoke_code`, the token its target and its user
+its subject, with a line under Configuration and the log's Info line
+"token revoked" `by=code`;
+a code that matches nothing, the settings file's, a malformed body and a
+locked-out address write no row of their own:
+they are counted per address and minute as refused requests are,
+in rows of their own apart from the address's other refused requests,
+with no line.
+No row and no line carries the code.
+A server without a store has no token to revoke and answers `204` at once.
 
 `GET /api/v1/me` says who the caller is:
 
@@ -1309,9 +1359,10 @@ nor does an integration's user, whatever its role.
 
 `DELETE /api/v1/users/{name}` removes a user: its sessions and keys are revoked,
 its preferences removed,
-and its row stays for the audit under the name `<name>-del-YYYYMMDD-HHNN`
-of the removal in UTC (`-<id>` added where that is taken),
-which frees the name; `{"ok": true, "name": "anna"}`.
+an integration's user's link ended,
+and its row stays for the audit with its name,
+which is free again (docs/store.md, migration 0024);
+`{"ok": true, "name": "anna"}`.
 The last enabled owner without an end date stays (`409`);
 a user cannot remove itself.
 An integration's own user, `<uuid>:`, which holds its key,
@@ -1496,7 +1547,8 @@ An integration is registered by the owner, without a key typed anywhere:
    the integration's maximum, within the role `integration` and all of it
    by default; `"attach": "<uuid>"` makes the request an integration of the
    same kind that was registered before, with its users, links and maximum,
-   as after a key lost or revoked.
+   as after a key lost or revoked,
+   and gives it the request's installation id as an acceptance does (below).
    `POST …/refuse` refuses it.
 3. The integration collects its key:
    `GET /api/v1/integrations/requests/{id}?code=K7Q2PX`,
@@ -1538,6 +1590,12 @@ its users, links and maximum kept for a request from the same installation.
 A call that came with another installation id than the accepted one is
 refused and the id recorded as `pending_instance`, which
 `POST …/accept-instance` accepts.
+The installation accepted before then loses the event streams it opened for
+the integration's users, each at its next keep-alive,
+as its calls are refused (AP LinkedRemoval, D4-A),
+also where an attach gave the integration another installation id;
+the integration's own stream, without the header,
+carries no installation id and is not held to one.
 
 **On the LAN.**
 A server that announces itself (README.md, "Server") also looks for
@@ -1635,8 +1693,19 @@ on a server with regular users: on an open server the header is not read
   no key, password, record, identity, link, name or field of that user's
   (AP AccessEnds, D41-A4 and A5);
   that user changes them signed in itself.
-  Disabling one stops its calls, a linked one's too;
-  removing one does not, where it is linked: disable it, or unlink it.
+  Disabling one stops its calls, a linked one's too.
+  Removing one ends its link (AP AccessEnds, D54-A):
+  its next call makes it anew, unlinked, with the role `integration`,
+  also where a version before kept the link of one removed,
+  without a migration (AP LinkedRemoval, D1-A).
+  Removing the Massimo user it is linked to unlinks it:
+  its next call acts as its own user again,
+  with the role and the state the owner left it (D2-A).
+  An event stream opened for one ends at its next keep-alive,
+  once it is removed, disabled, unlinked or linked anew,
+  its own or its linked user is removed, disabled or past its end,
+  or another installation id than the one the stream came from is accepted
+  or attached ("GET /api/v1/cubes/{sn}/events").
   Its own user and its system user are not removed ("Users", above).
 - **Without the header** the key acts as the integration itself:
   its role and its maximum (an integration's own polls and stream),
@@ -1990,7 +2059,7 @@ and `result` how it went: `ok` for a 2xx, `refused` for a `401`,
 `403` or `429`, `failed` otherwise.
 `detail` keeps the method, the path, the status, the milliseconds,
 the body's size and, when it is JSON of at most 4 KB,
-the body with `password`, `current_password` and `token` replaced by `…`,
+the body with `password`, `current_password`, `token` and `code` replaced by `…`,
 and the error of a failed answer.
 A request refused for a known user (a capability it lacks,
 a disabled user or role) is a row with who was refused, without its body.
@@ -2266,7 +2335,9 @@ among them.
 
 `problems` lists, where there are any, the Cube's visible devices with a problem,
 as `GET …/devices` shows them, each with its room's name (`room`):
-a communication or link error, a low battery, a window open (with its `window` times);
+a communication or link error, a battery level (`battery`) weak or low,
+or the Cube's flag (`battery_low`) where the server keeps no level,
+a window open (with its `window` times);
 a client that shows every Cube's problems, such as the web UI's header,
 needs no other request.
 It is the server's last state, also while the Cube is not connected.
@@ -2498,6 +2569,8 @@ The server's settings in the store:
 `in_effect` is what this run uses, which a serve flag (`-poll`, `-refresh`,
 `-discover-interval`, `-stale-after`) overrides for one run;
 `fixed_by` then names the flag.
+`serve -poll 0` asks the Cubes for their device lists never,
+`in_effect` `"0"` and `fixed_by` `-poll`, while the setting keeps its range.
 `poll_interval` is how often the server asks each Cube for its device list,
 10 seconds by default, which costs no radio time;
 `refresh_interval` how often it connects to each Cube anew and reads
@@ -3444,8 +3517,11 @@ A metadata write; answers `{"ok": true}`.
 Rename a device and/or move it to another room:
 `{"name": "Thermostat Küche", "room_id": 2}`, either field alone is fine.
 A move is done as the original software moved one in its capture of 2026-11-04:
-after a wakeup of the old room, one `r:` for each other member whose error flag is set,
-0x23 remove group,
+after a wakeup of the old room, and of the device itself (`z:1e,D,<rf>`)
+where its C line names another room or none,
+one `r:` for each other member whose error flag is set,
+0x23 remove group naming the room the device's C line names,
+left out where it names none,
 one 0x21 remove link partner radiogram with the room flag naming the device,
 which every member of the room takes,
 addressed to the first of the room's order, as a room command is
@@ -3455,8 +3531,14 @@ else its wall thermostat, else its first radiator thermostat,
 one the Cube holds no valid state for passed over,
 one to each window contact among its partners,
 and one to the device for each partner;
-then, after a wakeup of the new room, the same with 0x20 add link partner
-and 0x22 set group; then the metadata is written.
+then, after a wakeup of the new room and of the device,
+the same with 0x20 add link partner and 0x22 set group;
+then the metadata is written.
+The Cube takes a 0x23 only for the room the device's C line names,
+and a room's wakeup reaches only the devices whose C line names the room
+(seen on the test Cube on 2026-11-26, docs/cube-protocol.md):
+so the device is woken itself before a half whose room's wakeup misses it,
+and a device listed in no room whose C line names none leaves nothing.
 `room_id` must name an existing room; 0 is refused,
 a device outside every room would be a device that blocks no room but cannot be
 addressed by one either.
@@ -3465,7 +3547,8 @@ A device that is paired but in no room yet (`"unlisted": true`,
 such as one just paired, see Pairing) needs `room_id`;
 `name` alone answers `409`.
 It is added to the room as the original software adds a new device:
-after a wakeup of the room (`z:1e,G,<room>`)
+after a wakeup of the room (`z:1e,G,<room>`) and of the device,
+which is in no room's group yet (`z:1e,D,<rf>`),
 and one `r:` for each member whose error flag is set,
 one 0x20 add link partner radiogram with the room flag naming the device,
 addressed as in a move, which every member of the room takes,
@@ -4220,6 +4303,8 @@ the flagged devices its direct lines address, as the queue's prelude does
 for every command (D204-A),
 the room woken up before it (`z:1e,G,<room>`, not among `lines`),
 and its `lines` as they go to the Cube;
+a move's halves wake the device itself as well where a room's wakeup
+misses it (`z:1e,D,<rf>`, not among `lines` either, `PUT …/devices/{rf}`);
 a metadata write is a step of its own.
 `radiograms` counts the `s:` lines,
 `duty_cost_pct` is about what they cost of the hourly radio budget (1.25 % each),
@@ -4229,7 +4314,8 @@ and `held_slots` those that stay taken until the members' next wakeup,
 about ten minutes: a room radiogram's but its addressee's.
 `resets` counts the `r:` lines, those the queue sends before each step included,
 by the device list as it is now, which cost no radio time;
-`wakeups` the room wakeups; `metadata` a metadata write, no radio.
+`wakeups` the wakeups, a room's and a device's own;
+`metadata` a metadata write, no radio.
 `budget` is what the Cube last reported.
 `untested` marks a repair not yet run on hardware.
 `refused` says why a run would be refused now:
@@ -4509,6 +4595,7 @@ of the same Cube, or of the server for the server's own:
 | `restart`, `reboot`, `update` not started | `server_started`; for `update`, also an `update` started |
 | `error_watch` `back` or `lasting` | the same device's `error_watch` `clear` of the same `flag` |
 | `unconfirmed`, a room's setpoint or its re-send not confirmed, its re-send failed | an `unconfirmed` of the same `target` whose `outcome` is `resend_confirmed` |
+| `battery`, a device's battery level `low` | a `battery` of the same device whose `level` is `ok`: new batteries marked, or the server's rules (see the devices' `battery`) |
 
 Any other, such as `proxy_discarded`, `proxy_delete_refused` and `open_setup`,
 is settled only by a person's mark.
@@ -4516,7 +4603,11 @@ The alerts the signed-in user marked seen are left out:
 the preference `log.seen` (see "Preferences"),
 which the web UI writes and opening the log does not;
 a browser without a user keeps its marks itself and asks with `after`.
-A device's communication error, link error and low battery are in the log at info,
+A device's battery is an alert by its level, not by the Cube's flag,
+which flickers under the valve motor's load:
+its `battery` event at warn once the level is `low` (the table above);
+a `weak` level's event is at info, and no alert.
+A device's communication error and link error are in the log at info,
 in its state's changes:
 each is an alert at warn while the device has it,
 at the state line that set it (`flag`),
@@ -4892,6 +4983,10 @@ At each keep-alive, every 30 seconds,
 the server asks whether the stream's caller would be let in now,
 and ends the stream when not:
 a key revoked or expired, a user or role disabled,
+for a call through an integration for one of its users a chain that no longer lets it in,
+that acts as another user now
+or that came from another installation than the one accepted or attached
+("Acting for an integration's users"),
 a server that was open when the stream opened and has a user since,
 or, without a store, another token.
 The client's next ticket then asks it to sign in.
@@ -4904,6 +4999,12 @@ A single-use ticket for that Cube's event stream, valid for a minute:
 {"ticket": "9f86d081884c7d659a2feaa0c55ad015a3bf4f1b2b0b822c", "expires_at": "2026-11-05T15:31:12+01:00"}
 ```
 
+The stream's `?ticket=` asks first, as each keep-alive does,
+whether the ticket's caller would still be let in:
+a ticket whose key was revoked since it was issued,
+or whose caller is no longer let in for another reason,
+is refused `401` as a token that ended is, counting toward no lockout,
+and the stream sends nothing.
 Without a token configured the stream is open and the ticket not needed,
 but the route answers all the same.
 

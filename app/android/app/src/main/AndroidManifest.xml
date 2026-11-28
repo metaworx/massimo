@@ -10,7 +10,9 @@
 
     <!-- Nothing is backed up or moved to another phone: the tokens are
          sealed by a key that stays in this phone's Keystore. -->
+    <!-- MassimoApp holds the servers and the sessions for the process. -->
     <application
+        android:name=".MassimoApp"
         android:allowBackup="false"
         android:dataExtractionRules="@xml/data_extraction_rules"
         android:enableOnBackInvokedCallback="true"

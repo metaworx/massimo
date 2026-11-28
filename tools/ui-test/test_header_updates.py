@@ -10,7 +10,7 @@ reads), at the test's loads and the page's polls alike; nothing is sent
 to the fake Cube."""
 import json
 
-from helpers import CUBES, wait_until
+from helpers import CUBES, load_cubes, mark, same_and_open, wait_until
 
 # A radiator thermostat with a low battery, as the Cubes' list gives a
 # device with a problem: the header's pill has its list from the start.
@@ -26,36 +26,20 @@ PILL = "#cube-problems details.problems"
 ITEM = "#cube-menu .menu-items button[data-value='KEQ0000100']"
 
 
-def loaded(page):
-    """A load of the Cubes' list, as the poll makes it."""
-    page.evaluate("loadCubes()")
-    page.wait_for_timeout(300)
-
-
-def mark(page, selector):
-    """Marks the element of selector, so that a later look can tell
-    whether it is still the same element."""
-    page.evaluate("(s) => { document.querySelector(s).__mark = true; }", selector)
-
-
-def same_and_open(page, selector):
-    return page.evaluate("(s) => { const d = document.querySelector(s); return !!d && !!d.__mark && d.open; }", selector)
-
-
 def test_problem_list_follows_while_open(page, case, reads):
     """The header's pill opened on a Cube's device with a low battery, a
     poll brings a second device with a problem: the list is the same
     element, stays open, and lists the second device."""
     reads.cube("KEQ0000100", problems=[LOW])
     try:
-        loaded(page)
+        load_cubes(page)
         assert wait_until(page, "!!document.querySelector(%s)" % json.dumps(PILL), 5), "the header's pill with its list"
         page.locator(PILL + " > summary").click()
         page.locator(PILL + " .problems-list").wait_for(state="visible")
         assert "Kitchen › Radiator" in page.locator(PILL + " .problems-list").inner_text(), "the first device listed"
-        mark(page, PILL)
+        mark(page, [PILL])
         reads.cube("KEQ0000100", problems=[LOW, LINK])
-        loaded(page)
+        load_cubes(page)
         assert wait_until(page, "document.querySelector(%s).innerText.includes('Hall › Wall')" % json.dumps(PILL + " .problems-list"), 3), \
             "the open list follows the poll: the second device is listed"
         assert same_and_open(page, PILL), "the list is the same element and still open"
@@ -71,16 +55,16 @@ def test_cube_choice_follows_while_open(page, case, reads):
     entry, and the entry shows the name and the settings' cog."""
     reads.cube("KEQ0000100")
     try:
-        loaded(page)
+        load_cubes(page)
         page.locator("#cube-choice").click()
         page.locator(ITEM).wait_for(state="visible")
         assert wait_until(page, "document.activeElement === document.querySelector(%s)" % json.dumps(ITEM), 3), \
             "the focus on the chosen Cube"
-        mark(page, "#cube-menu")
+        mark(page, ["#cube-menu"])
         page.evaluate("(s) => { document.querySelector(s).__mark = true; }", ITEM)
         reads.cube("KEQ0000100", name="Renamed Cube", file_differs=[{"field": "name", "variable": "MASSIMO_CUBE_KEQ0000100_NAME",
                                                                      "file": "File name", "store": "Renamed Cube"}])
-        loaded(page)
+        load_cubes(page)
         assert wait_until(page, "document.querySelector(%s).innerText.includes('Renamed Cube')" % json.dumps(ITEM), 3), \
             "the open choice follows the poll: the Cube's new name"
         hrefs = page.locator(ITEM + " .menu-item-icons use").evaluate_all("(es) => es.map((e) => e.getAttribute('href'))")

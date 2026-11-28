@@ -17,14 +17,22 @@ restart (afterLogin) reads who is in, the rooms, and then asks for the
 stream's ticket. So once the ticket asked for after the sign-in is seen
 and the stream is open, a write sent again would have been seen; where
 a read waited too, its second request is the moment the write would
-have gone with it."""
+have gone with it. The settings are the exception: the page pushes them
+a second after the sign-in (schedulePreferences), after the stream is
+open, where the server held none of the user's or a push waited for the
+sign-in, so a test of a settings change waits for that push itself
+(sent_requests, wait_held of helpers.py) before it counts, and sets
+which the server holds (server_holds_settings of conftest.py): a
+settings change refused goes back to the value that held, and the page
+sends it in neither case (AP SteadyTests v1.1, D14-A)."""
 import json
 import time
 
 import pytest
 
-from conftest import TOKEN, URL, api_call, clear_preferences
-from helpers import OPERATOR_PASSWORD, frames, open_personal_page, scaled, show_view, sign_out, wait_held, wait_until
+from conftest import TOKEN, URL, api_call, clear_preferences, server_holds_settings
+from helpers import (OPERATOR_PASSWORD, frames, held_timers, open_cube_panel, open_personal_page, scaled, sent_requests, settled, show_view,
+                     sign_out, wait_held, wait_until)
 from test_login import sign_in
 
 NOT_SENT = {"en": "not sent, since you were signed out: do it again once signed in",
@@ -61,26 +69,19 @@ class Refusal:
             route.continue_()
 
 
-def wait_count(page, sent, n, what, seconds=5):
-    """Waits until sent holds n requests, for seconds (scaled), what
-    naming them."""
-    end = time.monotonic() + scaled(seconds)
-    while len(sent) < n:
-        if time.monotonic() >= end:
-            raise AssertionError(f"{what}: {len(sent)} request(s)")
-        page.wait_for_timeout(200)
-
-
 def ok(route):
     """The route's answer of a write taken, so that nothing reaches the server."""
     route.fulfill(status=200, content_type="application/json", body="{}")
 
 
 def tickets(page):
-    """The stream's tickets asked for, a list that grows."""
-    seen = []
-    page.on("request", lambda r: seen.append(r.url) if r.method == "POST" and r.url.endswith("/events/ticket") else None)
-    return seen
+    """The stream's tickets asked for, a list that grows (sent_requests)."""
+    return sent_requests(page, "POST", "**/events/ticket")
+
+
+def settings_pushes(page):
+    """The page's pushes of its settings, a list that grows (sent_requests)."""
+    return sent_requests(page, "PUT", "**/api/v1/me/preferences/ui")
 
 
 def back(page, seen, before):
@@ -145,7 +146,7 @@ def test_write_not_sent_again(new_context, case, watch, guard):
         "the tile says the setpoint was not sent, at once"
     assert not page.evaluate("!!document.querySelector('.room .mode-auto.busy')"), "its button no longer turns"
     page.evaluate("() => { window.readAgain = null; api('GET', 'api/v1/me?again=1').then((m) => { window.readAgain = m.user.name; }); }")
-    wait_count(page, reads.sent, 1, "the read meets the 401")
+    assert wait_held(page, reads.sent), "the read meets the 401"
     before = len(seen)
     sign_in(page, "operator", OPERATOR_PASSWORD)
     back(page, seen, before)
@@ -174,7 +175,7 @@ def test_stream_ticket_waits_for_the_sign_in(page, case, watch):
     refusal = Refusal(page, "**/events/ticket", "POST")
     page.evaluate("() => { connectEvents(); }")  # not awaited: it waits for the sign-in
     assert wait_until(page, DIALOG_OPEN, 5), "the sign-in opens"
-    wait_count(page, refusal.sent, 1, "the ticket meets the 401")
+    assert wait_held(page, refusal.sent), "the ticket meets the 401"
     # a ticket that failed at once would have planned the stream's retry (retryEvents)
     assert page.evaluate("eventsTimer === null"), "no retry of the stream planned while the sign-in is open"
     assert len(refusal.sent) == 1, f"no ticket asked for again while the sign-in is open: {len(refusal.sent)}"
@@ -211,11 +212,11 @@ def test_cube_save_after_the_sign_in(page, case, watch):
     """Cube settings' Save that meets a 401 is a failed save: the cross
     on Save, the draft kept, the region's line saying why, also after the
     sign-in, and nothing sent again; the next Save sends it once."""
-    from test_unsaved import open_panel, save_state, wait_save
+    from test_unsaved import save_state, wait_save
     watch.expected.append(("/cubes/" + SERIAL, 401))
     seen = tickets(page)
     refusal = Refusal(page, CUBE_PATH, "PUT", answer=ok)
-    _, form = open_panel(page)
+    _, form = open_cube_panel(page)
     field = form.locator("input[name=name]")
     field.fill("Typed before the sign-in")
     form.locator("button[type=submit]").click()
@@ -260,15 +261,27 @@ def test_role_save_says_not_sent(page, case, watch):
     assert page.evaluate(said), "the roles' line still says it after the sign-in"
 
 
-def test_message_line_after_the_sign_in(page, case, watch):
+@pytest.mark.parametrize("holds", [True, False], ids=["server-holds", "server-holds-none"])
+def test_message_line_after_the_sign_in(page, case, watch, holds):
     """The page's message line, which the reload after the sign-in clears:
     a settings change whose save meets a 401 says so there, and says it
-    again once the page is back; the change is not sent again. Only the
-    change's own PUTs are counted: the page's start sends the browser's
-    settings to a server without them by itself."""
+    again once the page is back. The change goes back as it is refused,
+    its field showing the value that holds, and is not sent again (AP
+    SteadyTests v1.1, D14-A), whether the server holds the user's
+    settings at the sign-in, which the sign-in takes, or holds none, which
+    the sign-in hands the browser's (loadPreferences): the test sets which
+    (server_holds_settings). Fails on the page before where the server
+    holds none: the browser still kept the change, and the sign-in handed
+    it over. Only the change's own PUTs are counted: the page's start
+    sends the browser's settings to a server without them by itself."""
     watch.expected.append(("/me/preferences/ui", 401))
-    seen = tickets(page)
+    seen, pushes = tickets(page), settings_pushes(page)
     refusal = Refusal(page, "**/api/v1/me/preferences/ui", "PUT", match=lambda r: (r.post_data_json or {}).get("poll") == 37)
+    # the page's start pushes the browser's settings to a server without them a second after it read them: gone before
+    # the change, so that the change is a push of its own
+    assert wait_until(page, "!prefsSync.timer", 5), "the page's start has pushed its settings"
+    was = page.evaluate("state.settings.poll")
+    shown = f"state.settings.poll === {was} && document.getElementById('poll-input').value === '{was}'"
     show_view(page, "prefs")
     page.locator("#poll-input").fill("37")
     page.locator("#poll-input").dispatch_event("change")
@@ -276,11 +289,24 @@ def test_message_line_after_the_sign_in(page, case, watch):
     said = "!document.getElementById('message').classList.contains('hidden') && " \
            f"document.getElementById('message').textContent.includes({json.dumps(NOT_SENT[case.lang])})"
     assert wait_until(page, said, 5), "the message line says it was not sent"
+    assert wait_until(page, shown, 5), f"the change goes back as it is refused, its field showing {was}"
+    refused = len(pushes)
+    server_holds_settings(holds, poll=was)  # the page is signed out: no push of its own reaches the server before the sign-in
     before = len(seen)
     sign_in_key(page)
     back(page, seen, before)
     assert page.evaluate(said), "the message line says it again after the sign-in"
-    assert len(refusal.sent) == 1, f"the change is not sent again: {len(refusal.sent)}"
+    # the sign-in read the settings before the stream opened (afterLogin): what waits to be sent goes, and a server that
+    # held none is handed the browser's, a second later, the push the change could go with
+    assert wait_until(page, "!prefsSync.timer", 5), "no push of the settings waits"
+    ok, ui = settled(page, lambda: (api_call("GET", "api/v1/me/preferences") or {}).get("ui"), lambda ui: ui is not None)
+    assert ok, "the server holds the user's settings: kept, or handed over at the sign-in"
+    frames(page)
+    bodies = [p.post_data_json or {} for p in pushes[refused:]]
+    assert ui["poll"] == was, f"the server holds the value that held, not the change: {ui['poll']}, the pushes {bodies}"
+    assert page.evaluate(shown), f"the field shows {was} after the sign-in"
+    assert all(b.get("poll") != 37 for b in bodies), f"no push after the refusal carries the change: {bodies}"
+    assert len(refusal.sent) == 1, f"the change is not sent again: {len(refusal.sent)}, with {bodies}"
 
 
 def test_stepped_setpoint_dropped_at_the_sign_in(new_context, case, watch, guard):
@@ -318,7 +344,6 @@ def test_another_user_gets_nothing_of_the_first(new_context, case, watch, guard)
     and in a form. The owner signs in with the key, with no settings on
     the server: the page shows none of the three texts, and the owner's
     first settings push carries the defaults, not the operator's poll."""
-    clear_preferences()
     page = own_page(new_context, guard, watch)
     page.goto(URL)
     sign_in(page, "operator", OPERATOR_PASSWORD)
@@ -327,14 +352,12 @@ def test_another_user_gets_nothing_of_the_first(new_context, case, watch, guard)
     Refusal(page, "**/api/v1/cubes/*/rooms/*/setpoint", "PUT", answer=ok)
     Refusal(page, "**/api/v1/users/operator/register", "POST")
     Refusal(page, "**/api/v1/users/operator", "PUT", armed=0, answer=ok)
-    pushes = []
-    page.on("request", lambda r: pushes.append(r.post_data_json or {})
-            if r.method == "PUT" and r.url.endswith("/me/preferences/ui") else None)
+    pushes = settings_pushes(page)
     prefs = Refusal(page, "**/api/v1/me/preferences/ui", "PUT", match=lambda r: (r.post_data_json or {}).get("poll") == 37)
     page.locator(THERMOSTAT_ROOM).first.locator(".mode-auto").click()
     assert wait_until(page, DIALOG_OPEN, 5), "the setpoint's 401 opens the sign-in"
     page.evaluate("setSetting('poll', 37)")
-    wait_count(page, prefs.sent, 1, "the settings push meets the 401")
+    assert wait_held(page, prefs.sent), "the settings push meets the 401"
     page.evaluate("""(current) => {
       for (const [id, v] of [["me-current", current], ["me-new", "not-set-1"], ["me-again", "not-set-1"]]) {
         const el = document.getElementById(id);
@@ -352,16 +375,15 @@ def test_another_user_gets_nothing_of_the_first(new_context, case, watch, guard)
             page.wait_for_timeout(200)
         assert page.evaluate(said, where), f"#{where} says it was not sent"
     assert NOT_SENT[case.lang] in page.locator(".room .tile-result").first.inner_text(), "the tile says it was not sent"
+    server_holds_settings(False)  # the owner's, which an earlier test's page pushed: none, so the sign-in hands over this browser's
     before, pushed = len(seen), len(pushes)
     sign_in_key(page)
     back(page, seen, before)
     assert page.evaluate("state.me.user.name") == "owner", "the owner"
-    for _ in range(25):  # the owner's server has no settings: the page sends this browser's, a second after it read them
-        if len(pushes) > pushed:
-            break
-        page.wait_for_timeout(200)
-    assert len(pushes) > pushed, "the owner's first settings push"
-    assert all(p.get("poll") != 37 for p in pushes[pushed:]), f"the operator's poll is not pushed to the owner: {pushes[pushed:]}"
+    # the owner's server has no settings: the page sends this browser's, a second after it read them
+    assert wait_held(page, pushes, n=pushed + 1), "the owner's first settings push"
+    bodies = [p.post_data_json or {} for p in pushes[pushed:]]
+    assert all(b.get("poll") != 37 for b in bodies), f"the operator's poll is not pushed to the owner: {bodies}"
     assert len(prefs.sent) == 1, f"the operator's poll is not sent again: {len(prefs.sent)}"
     assert page.evaluate("state.settings.poll") != 37, "the owner does not get the operator's poll"
     assert not shows_not_sent(page, case), "the page tells the owner nothing of the operator's writes"
@@ -417,7 +439,7 @@ def test_two_tiles_one_sign_in(page, case, watch):
     assert wait_until(page, DIALOG_OPEN, 5), "the sign-in opens"
     # the page is hidden behind the sign-in: the second tile's button clicked as the page would be
     page.evaluate("document.querySelectorAll(%s)[1].querySelector('.mode-auto').click()" % json.dumps(THERMOSTAT_ROOM))
-    wait_count(page, writes.sent, 2, "both setpoints meet the 401")
+    assert wait_held(page, writes.sent, n=2), f"both setpoints meet the 401: {len(writes.sent)}"
     for i in (0, 1):
         assert wait_until(page, "document.querySelectorAll(%s)[%d].querySelector('.tile-result').textContent.includes(%s)"
                           % (json.dumps(THERMOSTAT_ROOM), i, json.dumps(NOT_SENT[case.lang])), 5), f"tile {i + 1} says it was not sent"
@@ -525,12 +547,17 @@ def test_late_refusal_of_a_write(new_context, case, watch, guard):
     sign_out(page)
 
 
-def test_dismissed_then_a_later_sign_in(page, case, watch):
+@pytest.mark.parametrize("holds", [True, False], ids=["server-holds", "server-holds-none"])
+def test_dismissed_then_a_later_sign_in(page, case, watch, holds):
     """A settings change whose push meets a 401 says so on the page's
     message line; the sign-in dismissed, the page is back with the line.
-    A later read's 401 and its sign-in show nothing of that write again."""
+    A later read's 401 and its sign-in show nothing of that write again,
+    nor send it with the settings' push that sign-in held and sends on
+    (AP SteadyTests v1.1, D14-A), whether the server holds the user's
+    settings at the sign-in or holds none (server_holds_settings). Fails
+    on the page before where the server holds none."""
     watch.expected.extend([("/me/preferences/ui", 401), ("/me?again=1", 401)])
-    seen = tickets(page)
+    seen, pushes = tickets(page), settings_pushes(page)
     Refusal(page, "**/api/v1/me/preferences/ui", "PUT", match=lambda r: (r.post_data_json or {}).get("poll") == 37)
     reads = Refusal(page, "**/api/v1/me?again=1", "GET")
     show_view(page, "prefs")
@@ -540,14 +567,21 @@ def test_dismissed_then_a_later_sign_in(page, case, watch):
     said = "!document.getElementById('message').classList.contains('hidden') && " \
            f"document.getElementById('message').textContent.includes({json.dumps(NOT_SENT[case.lang])})"
     assert wait_until(page, said, 5), "the message line says it was not sent"
-    page.evaluate("document.getElementById('login-dialog').close()")
-    assert wait_until(page, "!document.body.classList.contains('signed-out')", 5), "dismissed: the page is back"
-    assert page.evaluate(said), "with the line"
-    page.evaluate("() => { api('GET', 'api/v1/me?again=1').catch(() => {}); }")
-    assert wait_until(page, DIALOG_OPEN, 5), "a read's 401 opens the sign-in again"
-    wait_count(page, reads.sent, 1, "the read meets the 401")
-    before = len(seen)
+    # the dismissal sends the settings' push it held a second later, without a session: refused and said not sent
+    # anew, it would open a sign-in of its own; held until the later read's 401 has opened the sign-in, which takes it
+    with held_timers(page, "push"):
+        page.evaluate("document.getElementById('login-dialog').close()")
+        assert wait_until(page, "!document.body.classList.contains('signed-out')", 5), "dismissed: the page is back"
+        assert page.evaluate(said), "with the line"
+        page.evaluate("() => { api('GET', 'api/v1/me?again=1').catch(() => {}); }")
+        assert wait_until(page, DIALOG_OPEN, 5), "a read's 401 opens the sign-in again"
+        assert wait_held(page, reads.sent), "the read meets the 401"
+    server_holds_settings(holds)  # the page is signed out: no push of its own reaches the server before the sign-in
+    before, pushed = len(seen), len(pushes)
     sign_in_key(page)
     back(page, seen, before)
+    assert wait_held(page, pushes, n=pushed + 1), "the settings pushed a second after the sign-in, which could say it again"
+    bodies = [p.post_data_json or {} for p in pushes[pushed:]]
+    assert all(b.get("poll") != 37 for b in bodies), f"the push after the sign-in does not carry the change: {bodies}"
     assert len(reads.sent) == 2, f"the read is sent again: {len(reads.sent)}"
     assert not page.evaluate(said), "the message line shows nothing of the write before"

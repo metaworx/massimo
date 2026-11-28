@@ -34,6 +34,9 @@ class Revoker(
     private val left: KeysLeft,
     private val probe: (List<String>, String?) -> List<ProbeResult>,
     private val run: Executor,
+    private val codes: Codes? = null,
+    private val gone: GoneStore? = null,
+    private val log: Logger = Logger {},
     private val forgetLogin: (String) -> Unit,
 ) {
     /**
@@ -60,22 +63,29 @@ class Revoker(
         LOCAL,
     }
 
-    /** Off is what turning one login off came to, and the id of its key, 0 where it is not known. */
-    data class Off(val outcome: Outcome, val keyId: Long)
+    /**
+     * Off is what turning one login off came to, and the id of its key, 0
+     * where it is not known; [pending] says the key it left carries its
+     * revoke code, which the next contact posts (contract version 6).
+     */
+    data class Off(val outcome: Outcome, val keyId: Long, val pending: Boolean = false)
 
     /**
      * Summary is what Forget all came to, by server id: the servers whose key
      * was revoked, those whose key was left in `unrevoked`, and those whose
-     * key was forgotten on the phone alone.
+     * key was forgotten on the phone alone; [pending] those among the left
+     * whose key carries its revoke code.
      */
-    data class Summary(val revoked: List<String>, val left: List<String>, val local: List<String>)
+    data class Summary(val revoked: List<String>, val left: List<String>, val local: List<String>, val pending: List<String> = emptyList())
 
     /**
      * Removed is what Remove came to: how the kept login was turned off,
      * null where none was kept, and the ids of the phone's keys and
-     * sessions still valid at the server, which goes with what noted them.
+     * sessions still valid at the server, which goes with what noted them;
+     * [pending] says their revoke codes wait in `gone`, to be posted where the
+     * server is found again (D112-A, D116-A).
      */
-    data class Removed(val off: Off?, val keys: List<Long>, val sessions: List<Long>)
+    data class Removed(val off: Off?, val keys: List<Long>, val sessions: List<Long>, val pending: Boolean = false)
 
     /**
      * turnOff turns the login kept for the server [id] off at [url], the
@@ -87,7 +97,11 @@ class Revoker(
      * trusted anew), and is another server's where it is not. [byKey]
      * is closed before [done] is called, or where a step throws.
      */
-    fun turnOff(id: String, url: String, byKey: ByKey, done: (Off) -> Unit) {
+    fun turnOff(id: String, url: String, byKey: ByKey, done: (Off) -> Unit) = turnOffAt(id, url, true, byKey, done)
+
+    // turnOffAt is turnOff; without [probe] it looks for no address where
+    // [url] is not one of the server's, its caller having looked (Remove).
+    private fun turnOffAt(id: String, url: String, probe: Boolean, byKey: ByKey, done: (Off) -> Unit) {
         val end = { o: Off ->
             byKey.close()
             done(o)
@@ -104,7 +118,7 @@ class Revoker(
                 end(forgetMismatched(s, kept))
                 return
             }
-            off(s, kept, if (s.has(url)) url else answering(s), byKey, end)
+            off(s, kept, if (s.has(url)) url else if (probe) answering(s) else "", byKey, end)
         } catch (e: Exception) {
             byKey.close()
             throw e
@@ -119,31 +133,44 @@ class Revoker(
      * not end left by its id as [Sessions.signOut] leaves it; then the
      * server goes, with its certificate, its session, its login and what it
      * noted of the keys and sessions left there, whose ids [done] gets with
-     * the outcome, or the failure of forgetting the server. [byKey] is
-     * closed before [done] is called, or where a step throws.
+     * the outcome, or the failure of forgetting the server. Their revoke
+     * codes are posted where the server answered, and those still to post
+     * kept in [gone] (D112-A). [byKey] is closed before [done] is called, or
+     * where a step throws.
      */
     fun remove(id: String, url: String, byKey: ByKey, done: (Result<Removed>) -> Unit) {
-        val drop = { off: Off? ->
+        val drop = { off: Off?, at: String ->
             done(
                 runCatching {
                     val s = servers.get(id)
-                    val keys = s?.unrevoked?.map { it.id } ?: emptyList()
-                    val unended = s?.unended?.map { it.id } ?: emptyList()
+                    val posted = s?.let { server -> codes?.let { c -> runCatching { c.removing(server, at) }.getOrNull() } }
+                    val taken = posted?.taken ?: emptySet()
+                    val waiting = posted?.waiting ?: emptyList()
+                    // what is still valid there: not taken before nor now
+                    val keys = s?.unrevoked?.filter { !it.taken && it.code !in taken }?.map { it.id } ?: emptyList()
+                    val unended = s?.unended?.filter { !it.taken && it.code !in taken }?.map { it.id } ?: emptyList()
+                    // pending only where the codes were kept; a failure said without them
+                    val kept = s != null && waiting.isNotEmpty() && gone != null &&
+                        runCatching { gone?.add(s, waiting) }.onFailure { e -> log.warn("remove: the revoke codes of $id were not kept: ${e.javaClass.simpleName}") }.isSuccess
                     servers.remove(id)
                     sessions.forget(id)
                     forgetLogin(id)
-                    Removed(off, keys, unended)
+                    Removed(off, keys, unended, kept)
                 },
             )
         }
+        val s = servers.get(id)
         if (logins.get(id) != null) {
-            turnOff(id, url, byKey, drop)
+            // the address looked for once, for the turn-off and the codes
+            val at = s?.let { if (it.has(url)) url else answering(it) } ?: ""
+            turnOffAt(id, at, false, byKey) { off -> drop(off, at) }
             return
         }
         byKey.close()
-        val s = servers.get(id)
-        if (s != null && sessions.held(s) != null) runCatching { sessions.signOut(s, if (s.has(url)) url else answering(s)) }
-        drop(null)
+        var at = ""
+        if (s != null && (sessions.held(s) != null || s.codes().isNotEmpty())) at = if (s.has(url)) url else answering(s)
+        if (s != null && sessions.held(s) != null) runCatching { sessions.signOut(s, at) }
+        drop(null, at)
     }
 
     /**
@@ -159,6 +186,7 @@ class Revoker(
         val listed = servers.list().map { it.id }
         val ids = ArrayDeque(listed.filter { it in kept } + kept.filter { it !in listed })
         val went = mapOf(Outcome.REVOKED to mutableListOf<String>(), Outcome.LEFT to mutableListOf(), Outcome.LOCAL to mutableListOf())
+        val pending = mutableListOf<String>()
         // next turns the next server's login off; on io through later, so
         // that a step that throws ends the run's ByKey before it goes on up.
         fun next() {
@@ -166,7 +194,7 @@ class Revoker(
                 val id = ids.removeFirstOrNull()
                 if (id == null) {
                     byKey.close()
-                    done(Summary(went.getValue(Outcome.REVOKED), went.getValue(Outcome.LEFT), went.getValue(Outcome.LOCAL)))
+                    done(Summary(went.getValue(Outcome.REVOKED), went.getValue(Outcome.LEFT), went.getValue(Outcome.LOCAL), pending))
                     return
                 }
                 val s = servers.get(id)
@@ -177,12 +205,15 @@ class Revoker(
                     return
                 }
                 if (!matches(s, login)) {
-                    went.getValue(forgetMismatched(s, login).outcome).add(id)
+                    val o = forgetMismatched(s, login)
+                    went.getValue(o.outcome).add(id)
+                    if (o.pending) pending.add(id)
                     later(byKey, ::next)
                     return
                 }
                 off(s, login, answering(s), byKey) { o ->
                     went.getValue(o.outcome).add(id)
+                    if (o.pending) pending.add(id)
                     // the next server from the executor, not from inside the
                     // prompt's answer, so that each server leaves the stack
                     later(byKey, ::next)
@@ -219,9 +250,9 @@ class Revoker(
     // else forgotten on the phone alone, being another server's.
     private fun forgetMismatched(s: Server, kept: KeptLogin): Off {
         val same = kept.node == s.node
-        val leftThere = same && runCatching { left.add(s.id, kept.user, kept.keyId) }.getOrDefault(false)
+        val leftThere = same && runCatching { left.add(s.id, kept.user, kept.keyId, kept.code) }.getOrDefault(false)
         forgetHere(s.id, s, "")
-        return Off(if (leftThere) Outcome.LEFT else Outcome.LOCAL, if (same) kept.keyId else 0)
+        return Off(if (leftThere) Outcome.LEFT else Outcome.LOCAL, if (same) kept.keyId else 0, leftThere && RevokeCode.valid(kept.code))
     }
 
     // off revokes the key of [kept] at [url] with the session held, else
@@ -261,11 +292,11 @@ class Revoker(
     private fun finish(s: Server, kept: KeptLogin, url: String, revoked: Boolean, keyId: Long, done: (Off) -> Unit) {
         val outcome = when {
             revoked -> Outcome.REVOKED
-            runCatching { left.add(s.id, kept.user, keyId) }.getOrDefault(false) -> Outcome.LEFT
+            runCatching { left.add(s.id, kept.user, keyId, kept.code) }.getOrDefault(false) -> Outcome.LEFT
             else -> Outcome.LOCAL
         }
         forgetHere(s.id, s, url)
-        done(Off(outcome, keyId))
+        done(Off(outcome, keyId, outcome == Outcome.LEFT && RevokeCode.valid(kept.code)))
     }
 
     // forgetHere signs the session of the server [id] out at [url] (forgets

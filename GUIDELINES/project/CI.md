@@ -1,4 +1,4 @@
-# Massimo — CI Conventions (v1.75.0)
+# Massimo — CI Conventions (v1.77.0)
 
 What CI does in this project, for whoever has to change it.
 `/AGENTS.md` names this file as the canonical owner of CI conventions,
@@ -26,7 +26,7 @@ this document is the source of truth for *why*.
 
 | Platform | Files |
 |----------|-------|
-| GitHub Actions | `.github/workflows/ci.yml` (a push to `main`, to a maintenance branch `maint/<x.y>` or of a version tag, a pull request), `.github/workflows/build.yml` (the release's build, called by ci.yml beside its tests and by nightly.yml), `.github/workflows/release.yml` (signing and publishing, called by ci.yml once its tests have passed and the build is done, and by nightly.yml), `.github/workflows/nightly.yml` (the nightly build, daily at 02:30 UTC and by hand on `main`), `.github/workflows/platforms.yml` (the Windows service and macOS LaunchDaemon jobs, called by ci.yml beside its tests and by nightly.yml before its build), `.github/workflows/retry.yml` (a macOS or Windows job no runner took, run again in a tag's run of ci.yml and in a nightly run, once that run has ended), `.github/workflows/publish.yml` (called by release.yml, or run by hand for a tag), `.github/workflows/caches.yml` (CodeQL's overlay databases of older commits deleted from the Actions caches, every hour) |
+| GitHub Actions | `.github/workflows/ci.yml` (a push to `main`, to a maintenance branch `maint/<x.y>` or of a version tag, a pull request), `.github/workflows/build.yml` (the release's build, called by ci.yml beside its tests and by nightly.yml), `.github/workflows/release.yml` (signing and publishing, called by ci.yml once its tests have passed and the build is done, and by nightly.yml), `.github/workflows/nightly.yml` (the nightly build, daily at 02:30 UTC and by hand on `main`), `.github/workflows/platforms.yml` (the Windows service and macOS LaunchDaemon jobs, called by ci.yml beside its tests and by nightly.yml before its build), `.github/workflows/retry.yml` (a macOS or Windows job no runner took, run again in a tag's run of ci.yml and in a nightly run, once that run has ended), `.github/workflows/publish.yml` (called by release.yml, or run by hand for a tag), `.github/workflows/caches.yml` (CodeQL's overlay databases of older commits deleted from the Actions caches, every hour), `.github/workflows/ui-soak.yml` (the UI suite, each test three times in a shuffled order, daily at 00:20 UTC, by hand and on a pull request that changes the soak; it gates nothing) |
 
 There is no other platform.
 
@@ -40,6 +40,7 @@ flowchart TD
     start{{"What started the run"}}
     start -->|"a pull request, a push to main or maint/x.y,<br/>a version tag: ci.yml"| relcommit
     start -->|"02:30 UTC or by hand: nightly.yml"| pick
+    start -->|"00:20 UTC, by hand or the soak's change: ui-soak.yml"| soak["UI soak: each test three times, shuffled,<br/>in the four cases; red where one failed,<br/>gating nothing"]
     start -->|"a push to a release branch"| idle["Nothing runs"]
 
     subgraph gate ["ci.yml, What to test: the answers every job reads"]
@@ -125,6 +126,7 @@ flowchart TD
 | push to a release branch (`release/alpha`, later `release/beta` and `release/stable`) | nothing: ci.yml listens to `main`, the maintenance branches and the tags; the release moved the branch to a commit ci.yml had tested |
 | a version tag | every job above, as for a push to `main`, Build included, a macOS or Windows job no runner took failing it, which Retry runs again; then release.yml: sign the manifest and `SHA256SUMS` with the release key, verify the signatures against the public key compiled into `massimo`, publish the GitHub release; with the app's keys set, sign the Android app, add it to the release and its lines to `SHA256SUMS`, sign that again and attest the signed files (section 6); then, with the deploy key set, the Homebrew formula of the release's channel rendered and pushed to the tap (publish.yml, section 6), and, with the apt key set, the apt repository rebuilt from the releases and deployed to GitHub Pages |
 | daily at 02:30 UTC, or by hand (`gh workflow run nightly.yml --ref main`) | nightly.yml: What to ship (`packaging/nightly-pick.sh`) picks the newest commit of `main` whose suite passed and that is newer than the one the nightly build carries, and Platforms runs the macOS or Windows job first, on `main`'s head, where the Tested records say the job did not run for its code, the night skipped where that commit is not `main`'s head; once Platforms passed or was not needed (Platforms passed), build.yml, then release.yml: the nightly build, `release/nightly`; nothing where there is no such commit, and nothing, the site included, where Platforms did not pass (section 6). By hand, `dry_run` ships nothing and `platforms` runs both jobs on `main`'s head |
+| daily at 00:20 UTC, by hand (`gh workflow run ui-soak.yml --ref main`, `-f repeat=<n>`, `-f seed=<n>`), or a pull request that changes `ui-soak.yml` or `tools/ui-test/soak_summary.py` | ui-soak.yml: the web UI's suite in its four cases, "UI soak (1100-en)", "UI soak (1100-de)", "UI soak (390-en)" and "UI soak (390-de)", each test three times (`UI_TEST_REPEAT`) in the order of a seed (`UI_TEST_SHUFFLE`), the run's id unless one is given; each job's summary lists the tests that failed in a repeat, with their case and how many of their runs failed; red where a test failed once, and no other workflow or check waits for it (below) |
 | a tag's run of ci.yml or a nightly run that ended failed | retry.yml: where a macOS or Windows job no runner took is all that failed, the run's failed jobs and those after them run again, about 20 minutes later, at most twice (`packaging/ci-retry.sh`; below) |
 | by hand (`gh workflow run publish.yml -f tag=<tag>`) | publish.yml: the formula of a release already out, such as the one published before the tap existed |
 | every hour at :23, or by hand (`gh workflow run caches.yml`, `-f dry_run=true` to delete nothing) | caches.yml: CodeQL's overlay databases of all but the three newest commits of `main` deleted from the Actions caches, for each language (`packaging/cache-prune.sh`; section 3) |
@@ -518,6 +520,9 @@ Race 40, 9.6, and Test (armv6, QEMU) 40, 10.3, both above their `-timeout 30m`;
 the UI test jobs a case's 30 and the screenshot set's 15,
 estimated from the two-case jobs' 15.4 before AP TestSpeed's Block 5
 until they have runs of their own;
+the UI soak's jobs 90, three times a case's 30,
+for each test three times,
+until they have runs of their own;
 the Android app keeps its 45, 7.0, and Code result its 70,
 which waits up to an hour for a run still going;
 the Android emulator 45, about three times the 15 or so it is estimated
@@ -610,6 +615,50 @@ so a What to test job that fails runs them rather than letting the pull request
 through untested.
 A push to `main` runs the job whatever it changes,
 so a change elsewhere that breaks the page shows on the merge commit's run.
+
+The UI soak (`ui-soak.yml`; AP SteadyTests, Block 8) runs the suite
+so that a flaky test shows on `main` overnight,
+not in the pull request of a feature that happens to run beside it.
+Its four jobs run the four cases as the UI test jobs do,
+in the same image with the same pins (section 3),
+but every test three times (`UI_TEST_REPEAT=3`),
+each repeat a test of its own,
+in the order of a seed (`UI_TEST_SHUFFLE`),
+the run's id unless one is given by hand, the same in all four,
+which the log's header and the summary name:
+the files by a hash of the seed and their names,
+each file's tests together by one of the seed and their ids,
+and the workers handed the files in that order rather than the largest first
+(`tools/ui-test/README.md`).
+A test that leans on the one before it, on a file that ran before on its worker,
+or on a window a loaded runner overruns,
+then fails in some of its repeats.
+Each job's summary lists the tests that failed in at least one repeat,
+each with its case, how many of its runs failed,
+each failed run's worker and what the retry did with it, on which worker,
+and the first failure's message,
+and the line that runs the case again in the same order
+(`tools/ui-test/soak_summary.py`,
+from the first pass's JUnit report, `UI_TEST_JUNIT`,
+and the retry's beside it, `ui-soak-junit.retry.xml`);
+a test that fails on one worker alone met what an earlier file left on its server,
+and a retry that passed may only have landed on another
+(AP SteadyTests, Block 11);
+a job is red where a test failed once,
+whatever its run once more with the trace did,
+whose screenshots, videos, traces and the servers' logs it uploads
+as `ui-soak-results-<case>`, kept two weeks.
+It gates nothing (AP SteadyTests):
+no other workflow waits for it, no check requires it,
+the Tested record and All tests passed do not read it,
+and Retry follows CI and Nightly alone;
+it is read as a report, each test it names fixed at its cause.
+It runs at 00:20 UTC, so that it ends before nightly.yml's 02:30;
+a case's job took 7 to 11 minutes in ci.yml in November 2026,
+so the soak's should take about 20 to 35.
+A pull request that changes the soak's own files runs it too,
+since GitHub starts a workflow by hand only once it is on the default branch;
+its check is red where a test failed, and required by nothing.
 
 The LAN job runs `make lan-test` (`tools/lan-test/README.md`):
 five hosts in Docker on a bridge network of their own,
@@ -1085,7 +1134,8 @@ Where CI differs, and why:
   The job pins `playwright==<version>` in its pip install,
   on top of `tools/ui-test/requirements.txt`, which keeps its minimum versions,
   because the browsers in the image fit that Playwright version only:
-  the image's tag and the pin move together.
+  the image's tag and the pin move together,
+  in `ui-soak.yml` as in `ci.yml`, with `GO_VERSION`.
   The jobs set `UI_TEST_REQUIRED=1`,
   so that a missing Playwright, pytest, pytest-playwright or pytest-xdist
   fails the job instead of skipping the tests or running them in one process,

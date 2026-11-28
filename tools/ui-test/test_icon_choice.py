@@ -16,6 +16,7 @@ closed it. The first tests set the choice in the page's settings and
 draw the signs again."""
 import json
 
+from conftest import server_holds_settings
 from helpers import settled, show_view, wait_until
 from test_room_more import open_list
 
@@ -152,6 +153,9 @@ def test_the_choice_in_my_settings(page, case, reads):
     show_view(page, "tiles")
     rid = problems(page, reads, 11)
     check(page, reads, rid, DRAWN[("paned", "tower")])
+    # the server holds none of the settings, so that the reload takes the browser's, whichever of the reload's read and
+    # the push of the choices comes first, the defaults the page's start pushed not among them
+    server_holds_settings(False)
     page.reload()
     page.wait_for_selector(".room", timeout=10000)
     assert page.evaluate("[state.settings.iconWindow, state.settings.iconRadio]") == ["paned", "tower"], "kept across a reload"

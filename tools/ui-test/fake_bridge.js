@@ -64,8 +64,24 @@
 //            check found it, {user, id} (contract version 5): where the app
 //            forgets it without reaching the server, it is left in the
 //            server's unended
+//   probeMs  how long a probe takes, 30 ms by default
+//   codes    true for an app that keeps the revoke codes of what it leaves
+//            (contract version 6): a key or a session it leaves is
+//            pending, signOut, forget and remove say pending where one
+//            waits, forgetAll names those servers, and session(id, url)
+//            takes the server's pending entries first, as a server that
+//            takes codes does, its entries gone from the list
+//   contract for kind "connect", the contract's version, 7 by default; 6
+//            leaves out version 7's about, exit and keep
+//   appVersion the app's version about() gives, "0.18.0-test" by default
+//   canStrong false for a phone without a strong biometric enrolled, as
+//            about()'s can says (true by default)
+//   storeLogin keep(id, url)'s answers in turn (Store login, contract
+//            version 7): true (the default), the server's session's user
+//            then its login, its key's id from keys; false; or
+//            "error:<message>"; a server without a session refuses it
 //
-// The connect page's bridge is version 5: save keeps start at one server
+// The connect page's bridge is version 7: save keeps start at one server
 // at most and turns it on for the first one added, as the adapters do,
 // and a server's unrevoked as it was; trust notes trusted_at; open takes
 // a server's lan or remote, alone or with #profile?key=<id>, and refuses
@@ -206,10 +222,12 @@
     const held = (cfg.sessionIds || {})[s.id];
     if (s.session && !reached && held && held.id > 0) {
       s.unended = s.unended || [];
-      if (!s.unended.some((x) => x.user === held.user && x.id === held.id)) s.unended.push(copy(held));
+      if (!s.unended.some((x) => x.user === held.user && x.id === held.id)) s.unended.push(Object.assign(copy(held), cfg.codes ? { pending: true } : {}));
     }
     s.session = null;
   };
+  // pending reports whether a key or a session left at s waits for its code (contract version 6).
+  const pending = (s) => !!s && [...(s.unrevoked || []), ...(s.unended || [])].some((x) => x.pending === true);
   // turnOff turns a server's kept login off, as the app's Revoker does,
   // and says how its key went: "revoked", "left" (by its id, once, in the
   // server's unrevoked) or "local"; the session signed out.
@@ -221,7 +239,7 @@
     if (reached && !(cfg.unrevokable || []).includes(s.id)) return "revoked";
     if (!key || !(key.id > 0)) return "local";
     s.unrevoked = s.unrevoked || [];
-    if (!s.unrevoked.some((k) => k.user === key.user && k.id === key.id)) s.unrevoked.push(copy(key));
+    if (!s.unrevoked.some((k) => k.user === key.user && k.id === key.id)) s.unrevoked.push(Object.assign(copy(key), cfg.codes ? { pending: true } : {}));
     return "left";
   };
   // reached reports whether the app reaches s: at url where the page gave
@@ -236,8 +254,9 @@
     return at < 0 || /^profile\?key=[1-9][0-9]{0,14}$/.test(url.slice(at + 1));
   };
   let seq = 0;
+  const stores = copy(cfg.storeLogin || [true]);
   window.massimo = {
-    version: 5,
+    version: cfg.contract || 7,
     servers() {
       call("servers");
       return later(rec.servers);
@@ -279,7 +298,7 @@
       const keys = s ? (s.unrevoked || []).map((k) => k.id) : [];
       const sessions = s ? (s.unended || []).map((x) => x.id) : [];
       rec.servers = rec.servers.filter((x) => x.id !== id);
-      return later({ revoked: went === "revoked", keys, sessions, local: went === "local" }, 30);
+      return later({ revoked: went === "revoked", keys, sessions, local: went === "local", pending: !!cfg.codes && pending(s) }, 30);
     },
     discover(ms) {
       call("discover", ms);
@@ -290,7 +309,7 @@
     },
     probe(urls, fp) {
       call("probe", urls, fp);
-      return later(urls.map((u) => answer(u, fp)), 30);
+      return later(urls.map((u) => answer(u, fp)), cfg.probeMs || 30);
     },
     trust(id, fp) {
       call("trust", id, fp);
@@ -316,19 +335,25 @@
       call("forget", id, url);
       const s = server(id);
       const went = s && s.login ? turnOff(s, reached(s, url)) : "local"; // Turn off signs out too
-      return later({ revoked: went === "revoked", left: went === "left" }, 30);
+      return later({ revoked: went === "revoked", left: went === "left", pending: went !== "revoked" && pending(s) }, 30);
     },
     forgetAll() {
       call("forgetAll");
-      const res = { revoked: [], left: [], local: [] };
+      const res = { revoked: [], left: [], local: [], pending: [] };
       for (const s of rec.servers) {
         if (s.login) res[turnOff(s, reached(s, ""))].push(s.id); // at the address that answers
+        if (pending(s)) res.pending.push(s.id);
       }
       return later(res, 30);
     },
     session(id, url) {
       call("session", id, url);
       const s = server(id);
+      if (s && cfg.codes) {
+        // the codes first, at the address that answered: taken, their entries gone from the list
+        s.unrevoked = (s.unrevoked || []).filter((k) => k.pending !== true);
+        s.unended = (s.unended || []).filter((x) => x.pending !== true);
+      }
       const found = cfg.sessions && id in cfg.sessions ? cfg.sessions[id] : s ? s.session || null : null;
       if (s && typeof found !== "string") s.session = null; // refused: forgotten
       if (s && typeof found === "string" && !found.startsWith("error:")) {
@@ -342,7 +367,7 @@
       call("signOut", id, url);
       const s = server(id);
       if (s) signedOut(s, !!url);
-      return later({ ended: !!url }, 30);
+      return later({ ended: !!url, pending: !url && pending(s) }, 30);
     },
     signOutAll() {
       call("signOutAll");
@@ -360,6 +385,31 @@
       return later(rec.settings, 20);
     },
   };
+  if (!(cfg.contract < 7)) {
+    // version 7: the app's version, Exit and Store login (AP MobileApp, Block 19)
+    Object.assign(window.massimo, {
+      about() {
+        call("about");
+        return later({ version: cfg.appVersion || "0.18.0-test", can: cfg.canStrong !== false });
+      },
+      exit() {
+        call("exit");
+        return later(null);
+      },
+      keep(id, url) {
+        call("keep", id, url);
+        const s = server(id);
+        if (!s || !s.session) return answerOf("error:Not signed in: sign in with your password first.", 20);
+        if (url !== s.lan && url !== s.remote) return answerOf("error:That address is not one of the server's.", 20);
+        const a = stores.length > 1 ? stores.shift() : stores[0];
+        if (a === true) {
+          s.login = s.session;
+          s.login_key = ((cfg.keys || {})[id] || {}).id || 0;
+        }
+        return answerOf(a, 30);
+      },
+    });
+  }
   if (cfg.push) window.massimo.push = {};
   if (cfg.core) {
     const st = copy(cfg.core);

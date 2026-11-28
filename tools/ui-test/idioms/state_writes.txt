@@ -1,0 +1,22 @@
+# The writes of the page's state in the UI suite's test files, a
+# field of app.js's state assigned, deleted, changed in place, or
+# Object.assign's target, in a page script (idioms_test.go; AP
+# SteadyTests, Block 6): a test file and its count a line. Data put into
+# the page alone lasts until its next read or event; a test tells the
+# page's reads through Reads of helpers.py, or the fake Cube, what it
+# wants shown (docs/ui-testing.md, section 9). A count may fall and may
+# not rise: a new write fails `go test`, and so does a write taken out
+# until its line here is lowered in the same commit, or taken out at 0.
+test_admin_updates.py 1
+test_discover.py 1
+test_header.py 5
+test_icon_choice.py 2
+test_log.py 3
+test_parts_guard.py 2
+test_room_marks.py 5
+test_room_updates.py 3
+test_rooms.py 8
+test_scroll.py 2
+test_server_sign.py 1
+test_unsaved.py 5
+test_update.py 3

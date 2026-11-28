@@ -12,7 +12,7 @@ from playwright.sync_api import TimeoutError as PlaywrightTimeoutError
 
 from conftest import TOKEN, URL, api_call
 from helpers import (OPERATOR_PASSWORD, ApiReads, assert_login_card_centred, assert_login_row, frames, named_buttons,
-                     open_personal_page, pause_clock, scroll_settled, show_view, sign_out, wait_held, wait_until)
+                     open_personal_page, pause_clock, scroll_settled, show_view, sign_out, taken, wait_held, wait_until)
 from test_connect import server_page
 
 
@@ -610,7 +610,7 @@ def test_a_refused_key_leaves_the_session(new_context, case, watch, guard):
     old, tid = page.evaluate("[state.token, state.me.token.id]")
     page.evaluate("() => { askLogin(); }")
     assert wait_until(page, DIALOG_OPEN, 5), "the sign-in opens on the running page"
-    with page.expect_response(read_with(WRONG_KEY)):
+    with taken(page, read_with(WRONG_KEY)):
         send_key(page, WRONG_KEY)
     frames(page)
     assert page.evaluate("[state.token, localStorage.getItem('massimo.token')]") == [old, old], "the session is still the page's token"
@@ -632,7 +632,7 @@ def test_the_app_keeps_no_refused_key(new_context, case, watch, guard):
     bridge kept the refused key."""
     page = server_page(new_context, guard, watch, {"status": {"can": False, "user": "", "ask": "start", "plain": False}})
     assert wait_until(page, DIALOG_OPEN, 5), "the sign-in card in the app"
-    with page.expect_response(read_with(WRONG_KEY)):
+    with taken(page, read_with(WRONG_KEY)):
         send_key(page, WRONG_KEY)
     frames(page)
     assert page.evaluate("window.__fakeBridge.calls.filter((c) => c[0] === 'setToken' && c[1]).length") == 0, "the refused key never handed to it"
@@ -664,7 +664,7 @@ def test_a_late_key_answer_makes_no_token(new_context, case, watch, guard):
     sign_in(page, "operator", OPERATOR_PASSWORD)
     session = page.evaluate("state.token")
     assert page.evaluate("state.me.token.kind") == "session", "in with the password"
-    with page.expect_response(read_with(TOKEN)):
+    with taken(page, read_with(TOKEN)):
         held.pop().continue_()
     frames(page)
     assert page.evaluate("[state.token, localStorage.getItem('massimo.token')]") == [session, session], "the session stays the page's token"
@@ -701,7 +701,7 @@ def test_a_late_key_refusal_writes_nothing(new_context, case, watch, guard):
     way.click()
     page.locator("#login-token").fill("typed-in-the-new-opening")
     way.focus()
-    with page.expect_response(read_with(WRONG_KEY)):
+    with taken(page, read_with(WRONG_KEY)):
         held.pop().continue_()
     frames(page)
     assert not page.evaluate(KEY_ERROR), "no refusal said in the new opening"
@@ -800,7 +800,7 @@ def test_a_late_password_refusal_writes_nothing(new_context, case, watch, guard)
     page.locator("#login-user").fill("typed-in-the-new-opening")
     page.locator("#login-user").focus()
     # the start answered, then the password's refusal, after argon2id has turned in the page
-    with page.expect_response(lambda r: r.request.method == "POST" and r.url.endswith(("/api/v1/login", "/api/v1/login/finish")), timeout=10000):
+    with taken(page, lambda r: r.request.method == "POST" and r.url.endswith(("/api/v1/login", "/api/v1/login/finish")), timeout=10000):
         held.pop().continue_()
     frames(page)
     assert page.locator("#login-error").is_hidden(), "no refusal said in the new opening"
@@ -889,7 +889,7 @@ def test_an_answer_after_another_way_set_its_token_makes_none(new_context, case,
     assert wait_held(page, settles, 10), "the password's sign-in has its token, its check of who signed in held"
     session = page.evaluate("state.token")
     assert session not in (first, TOKEN), "the password's session is the page's token"
-    with page.expect_response(read_with(TOKEN)):
+    with taken(page, read_with(TOKEN)):
         keys.pop().continue_()
     frames(page)
     assert page.evaluate("state.token") == session, "the key's answer sets no token over the session"
@@ -1085,9 +1085,8 @@ def test_profile_marks_a_key(new_context, case, watch, guard):
         def redrawn_unmarked(change, what):
             """change reads My profile's keys again, which its part draws in
             place (AP UiParts, Block 13); then none is marked."""
-            with at.expect_response(lambda r: r.request.method == "GET" and r.url.endswith("/api/v1/users/operator/tokens"), timeout=5000) as read:
+            with taken(at, lambda r: r.request.method == "GET" and r.url.endswith("/api/v1/users/operator/tokens"), timeout=5000):
                 change()
-            read.value.finished()
             frames(at)
             assert at.locator(f"#profile-tokens li[data-id='{last}']").count() == 1, f"the keys drawn again: {what}"
             assert at.locator("#profile-tokens li.token-marked").count() == 0, f"nothing marked: {what}"

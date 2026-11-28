@@ -9,7 +9,7 @@ sees the pairing."""
 import json
 
 from conftest import api_call
-from helpers import VIEWER, choose_cube, scroll_width, show_view, wait_until
+from helpers import VIEWER, boxes, choose_cube, scroll_width, show_view, wait_until
 
 PAGE_PANEL = "#cube-page .cube-panel"
 SECOND = "KEQ0000200"
@@ -38,7 +38,8 @@ def test_cube_page_shows_the_chosen_cube(page, case):
     assert bar.evaluate("(e) => getComputedStyle(e).position") == "sticky", "kept under the header"
     head = panel.locator(":scope > summary")
     assert head.evaluate("(e) => getComputedStyle(e).position") == "static", "the panel's head scrolls with it"
-    assert head.bounding_box()["y"] >= bar.bounding_box()["y"] + bar.bounding_box()["height"] - 1, "under the row"
+    h, b = boxes(page, head, bar)
+    assert h["y"] >= b["y"] + b["height"] - 1, f"under the row: {h} under {b}"
     assert scroll_width(page) <= case.width, "no horizontal scroll on Cube settings"
     show_view(page, "system")
     assert wait_until(page, "!!document.querySelector(\"#cubes-list .cube-panel[data-serial='KEQ0000100']\")", 5), \

@@ -476,6 +476,9 @@ func (s *Server) putIntegrationUser(w http.ResponseWriter, r *http.Request) erro
 	}
 	id, err := st.LinkIntegrationUser(r.Context(), i.ID, strings.ToLower(r.PathValue("id")), to, principalOf(r).userID())
 	switch {
+	case errors.Is(err, store.ErrNoUser):
+		// Removed since it was looked up above.
+		return refuseSaying(http.StatusNotFound, "no user "+*req.User, codeUserUnknown, *req.User)
 	case err != nil:
 		return integrationFail(err) // ErrBadLink a 400
 	}

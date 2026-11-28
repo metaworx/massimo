@@ -11,7 +11,7 @@ POST is held and answered by the test, and the route has its Go tests.
 The log says new batteries in the level's line and the change line."""
 import json
 
-from helpers import VIEWER, css_hidden, isolate_log, named_buttons, scroll_width, show_view, wait_log_live, wait_until
+from helpers import css_hidden, isolate_log, named_buttons, scroll_width, show_view, stub_me, wait_log_live, wait_until
 
 # The page's read of the chosen Cube's rooms (fetchRooms of app.js).
 ROOMS = "**/rooms?devices=all"
@@ -127,14 +127,6 @@ class Held:
 
     def close(self):
         self.page.unroute(BATTERY)
-
-
-def stub_me(page, capabilities):
-    """The page signed in with these capabilities (/me stubbed); the
-    owner's token still answers the reads."""
-    me = dict(VIEWER, capabilities=capabilities)
-    page.route("**/api/v1/me", lambda route: route.fulfill(status=200, content_type="application/json", body=json.dumps(me)))
-    page.evaluate("loadMe()")
 
 
 def test_new_batteries_offered(page, case, reads):

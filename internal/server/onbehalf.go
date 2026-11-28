@@ -137,10 +137,20 @@ func intersect(set map[string]bool, keep []string) map[string]bool {
 	return out
 }
 
+// withinIntegration is what links 2 and 4 of the chain leave of caps: the
+// role integration, the ceiling of every call through integ whatever role
+// its user was given, and integ's maximum. Every principal that comes
+// through an integration is bounded by it, a request's and a stream's at
+// each keep-alive alike (principalFor, integrationPrincipal, stillActsFor).
+func withinIntegration(caps map[string]bool, integ store.Integration) map[string]bool {
+	return intersect(intersect(caps, integrationCeiling), integ.MaxCaps)
+}
+
 // integrationPrincipal is the principal of a request with an
 // integration's key: the integration itself, or with the header the user
-// it acts for, with the capabilities the chain leaves. A key that is no
-// integration's comes back unchanged, unless the request names a user.
+// it acts for, with the capabilities the chain leaves and the
+// installation id the call came from. A key that is no integration's
+// comes back unchanged, unless the request names a user.
 func (s *Server) integrationPrincipal(ctx context.Context, r *http.Request, p *principal) (*principal, *onBehalfRefusal) {
 	h := r.Header.Get(OnBehalfHeader)
 	st := s.opts.Store
@@ -166,7 +176,7 @@ func (s *Server) integrationPrincipal(ctx context.Context, r *http.Request, p *p
 	// 2 and 4: the role integration bounds every call through the
 	// integration, whatever role its own user was given, and so does its
 	// maximum.
-	caps := intersect(intersect(p.caps, integrationCeiling), integ.MaxCaps)
+	caps := withinIntegration(p.caps, integ)
 	if h == "" {
 		q := *p
 		q.caps, q.integration = caps, &integ
@@ -186,7 +196,24 @@ func (s *Server) integrationPrincipal(ctx context.Context, r *http.Request, p *p
 	if err != nil {
 		return nil, &onBehalfRefusal{http.StatusInternalServerError, nil, err.Error()}
 	}
-	now := time.Now()
+	q, refused := s.actingFor(ctx, p, caps, &integ, &id, ob.level, time.Now())
+	if refused != nil {
+		return nil, refused
+	}
+	q.instance = ob.instance
+	return q, nil
+}
+
+// actingFor is the principal of a call through integration integ for its
+// user id, at level, the rest of the chain once the identity is known:
+// p is the key's principal and caps what links 2 and 4 left of it; the
+// integration user's own user (1) and the Massimo user it is linked to
+// (3), each enabled, not past its end and of a role that is not disabled,
+// narrow it, and then the level (5). It writes nothing, so that an event
+// stream asks it again at each keep-alive (stillAdmitted).
+func (s *Server) actingFor(ctx context.Context, p *principal, caps map[string]bool, integ *store.Integration, id *store.IntegrationIdentity,
+	level string, now time.Time) (*principal, *onBehalfRefusal) {
+	st := s.opts.Store
 	own, ok, err := st.UserByID(ctx, id.RealUserID)
 	if err != nil || !ok {
 		return nil, &onBehalfRefusal{http.StatusInternalServerError, nil, "the integration's user is missing"}
@@ -226,11 +253,41 @@ func (s *Server) integrationPrincipal(ctx context.Context, r *http.Request, p *p
 		off = union(off, linkedOff)
 		acting = linked
 	}
-	if allowed, bounded := levelCaps[ob.level]; bounded {
+	if allowed, bounded := levelCaps[level]; bounded {
 		caps = intersect(caps, allowed) // 5
 	}
-	q := &principal{mode: p.mode, user: acting, token: p.token, caps: caps, off: off, integration: &integ, actsFor: &id}
+	q := &principal{mode: p.mode, user: acting, token: p.token, caps: caps, off: off, integration: integ, actsFor: id}
 	return q, nil
+}
+
+// stillActsFor reports whether a call through an integration that p, its
+// principal, was let in with would be let in now, read again without a
+// write: np is the principal of its key now (principalFor). Its
+// integration is still the key's and active, the installation id the
+// call came from still the accepted one, its identity still acts for
+// someone (store.IntegrationIdentityByID), as the same user and of the
+// same own user, and the chain at the call's level still holds read, so
+// that the removal, a disabling or the end of either user, a role
+// disabled, an unlink or a link end the stream (AP LinkedRemoval,
+// Block 1), and so does another installation id accepted (D4-A).
+func (s *Server) stillActsFor(ctx context.Context, p, np *principal, now time.Time) bool {
+	st := s.opts.Store
+	integ, ok, err := st.IntegrationOfUser(ctx, np.user.ID)
+	if err != nil || !ok || integ.State != store.IntegrationActive || p.integration == nil || integ.ID != p.integration.ID {
+		return false
+	}
+	if p.instance != integ.InstanceID {
+		// As integrationPrincipal refuses a request of that installation,
+		// without recording it pending: a keep-alive writes nothing.
+		return false
+	}
+	id, ok, err := st.IntegrationIdentityByID(ctx, p.actsFor.ID)
+	if err != nil || !ok || id.EffectiveUserID != p.user.ID || id.RealUserID != p.actsFor.RealUserID {
+		return false
+	}
+	caps := withinIntegration(np.caps, integ)
+	q, refused := s.actingFor(ctx, np, caps, &integ, &id, p.actsFor.LastLevel, now)
+	return refused == nil && q.has("read")
 }
 
 // union is a set of capabilities with those of more added.
