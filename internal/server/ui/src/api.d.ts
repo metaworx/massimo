@@ -894,6 +894,13 @@ export interface RepairPlan {
    * of a re-sent configuration, the rooms of a placement or listing
    */
   details?: Record<string, unknown>;
+  /**
+   * The code of nothing or of refused, whichever is set, as an error answer has
+   * it (docs/api-v1.md, "Error codes")
+   */
+  code?: string;
+  /** The parameters of that code, as an error answer has them */
+  params?: Record<string, unknown>;
 }
 
 export interface RepairResult {
@@ -901,6 +908,13 @@ export interface RepairResult {
   action?: string;
   /** Where and why the repair stopped */
   error?: string;
+  /** repair_stopped where it stopped */
+  code?: string;
+  /**
+   * The step it stopped at, the steps, and the refusal that stopped it as
+   * reason (docs/api-v1.md, "Error codes")
+   */
+  params?: Record<string, unknown>;
   steps?: {
     what?: string;
     lines?: number;

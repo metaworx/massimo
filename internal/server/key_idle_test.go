@@ -200,7 +200,7 @@ func TestMeIdleEnd(t *testing.T) {
 		t.Fatal(err)
 	}
 	key, secret, _ := st.AddKey(ctx, anna.ID, store.KeyOptions{Label: "Loxone"})
-	if err := st.TouchToken(ctx, key.ID, "192.0.2.10", time.Time{}); err != nil {
+	if err := st.TouchToken(ctx, key.ID, "192.0.2.10", time.Time{}, ""); err != nil {
 		t.Fatal(err)
 	}
 	if err := st.SetSetting(ctx, store.KeyIdleDaysKey, 7); err != nil {
@@ -331,5 +331,68 @@ func TestPutToken(t *testing.T) {
 	}
 	if k := tokensOf(t, r, "secret", "anna")[created.ID]; !k.IdleExempt {
 		t.Errorf("the key made kept, listed: %+v", k)
+	}
+}
+
+// A key ended unused is ended by its code (POST /api/v1/tokens/revoke,
+// AP KeyLife, D6-A), its heir with it; and its use after the end, refused
+// with 401, writes no hash of its revoke code for a key made before the
+// store kept codes, which only a use while it lives fills. The store's
+// clock starts ten days back and catches up with the real time, as
+// TestKeyIdle's does.
+func TestIdleKeyEndedByCode(t *testing.T) {
+	t.Parallel()
+	day := 24 * time.Hour
+	clock := testkit.NewClock(time.Now().UTC().Add(-10 * day).Truncate(time.Millisecond))
+	r := startServer(t, withOptions(storeOptionsAt(t, t.TempDir(), "secret", clock.Now)))
+	ts, st := r.ts, r.s.opts.Store
+	ctx := t.Context()
+	anna, err := st.AddUser(ctx, store.User{Name: "anna", Role: store.RoleManager}, "", 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	key, keySecret, _ := st.AddKey(ctx, anna.ID, store.KeyOptions{Label: "phone"})
+	heir, heirSecret, err := st.AddKey(ctx, anna.ID, store.KeyOptions{Label: "heir", MadeBy: key.ID, IdleExempt: true})
+	if err != nil {
+		t.Fatal(err)
+	}
+	// A key made before the update, its secret one the store never made.
+	const oldSecret = "ffeeddccbbaa99887766554433221100ffeeddccbbaa99887766554433221100"
+	old, err := st.AddTokenHash(ctx, anna.ID, store.TokenAPI, "made before the codes", store.HashToken(oldSecret), time.Time{})
+	if err != nil || old.RevokeKept {
+		t.Fatalf("a key without a revoke code: %+v %v", old, err)
+	}
+	if code, text := callAPI(t, ts, "PUT", "/api/v1/settings", "secret", `{"auth.key_idle_days": 7}`); code != 200 {
+		t.Fatalf("the limit: %d %s", code, text)
+	}
+	clock.Add(8 * day)
+	if code, _ := callAPI(t, ts, "GET", "/api/v1/me", oldSecret, ""); code != 401 {
+		t.Fatalf("a key ended unused: %d", code)
+	}
+	if got, _, _ := st.Token(ctx, old.ID); got.RevokeKept {
+		t.Fatal("the use of a key ended unused wrote the hash of its code")
+	}
+	if code, _, _ := postCode(t, ts, codeBody(keySecret), ""); code != 204 {
+		t.Fatalf("the code of a key ended unused: %d", code)
+	}
+	if got, _, _ := st.Token(ctx, key.ID); got.DeletedAt.IsZero() {
+		t.Fatal("the key ended unused is not revoked by its code")
+	}
+	if got, _, _ := st.Token(ctx, heir.ID); got.DeletedAt.IsZero() {
+		t.Fatal("the heir of a key ended unused lives on after its maker's code")
+	}
+	if code, _ := callAPI(t, ts, "GET", "/api/v1/me", heirSecret, ""); code != 401 {
+		t.Fatalf("the heir after its maker's code: %d", code)
+	}
+	// The limit off, the key that only ended lives, and its first use
+	// fills the hash.
+	if code, text := callAPI(t, ts, "PUT", "/api/v1/settings", "secret", `{"auth.key_idle_days": 0}`); code != 200 {
+		t.Fatalf("the limit off: %d %s", code, text)
+	}
+	if code, _ := callAPI(t, ts, "GET", "/api/v1/me", oldSecret, ""); code != 200 {
+		t.Fatalf("the key with the limit off: %d", code)
+	}
+	if got, _, _ := st.Token(ctx, old.ID); !got.RevokeKept {
+		t.Fatal("the first use of a live key without the hash of its code did not write it")
 	}
 }

@@ -193,9 +193,13 @@ type principal struct {
 	// let the principal in, "" for none (stillAdmitted).
 	legacyToken string
 	// integration is the registered integration whose key it is, and
-	// actsFor the integration's user the call acts for (onbehalf.go).
+	// actsFor the integration's user the call acts for (onbehalf.go),
+	// with instance, the installation id the call came from, which its
+	// event stream asks again at each keep-alive (stillActsFor); "" for
+	// every other principal.
 	integration *store.Integration
 	actsFor     *store.IntegrationIdentity
+	instance    string
 }
 
 // realUserID is who makes the principal's calls: the integration's user
@@ -842,7 +846,7 @@ func (s *Server) resolve(ctx context.Context, mode authMode, secret, ip string) 
 	if err != nil {
 		return nil, err
 	}
-	s.touch(ctx, tok, ip, now)
+	s.touch(ctx, tok, secret, ip, now)
 	return p, nil
 }
 
@@ -912,14 +916,15 @@ func (s *Server) principalFor(ctx context.Context, tok store.Token, now time.Tim
 // for would be let in now: an open server still open, the one token of a
 // server without a store unchanged, a user's token alive (neither
 // revoked nor past its end, and a session made from a key only while the
-// key is neither) and still holding the secret it was let in with, so
-// that a stream opened with a key's old secret, or a ticket taken with
-// it, ends at the key's new secret (store.TokenAliveAs; AP KeyLife,
-// Block 5), its user and role still allowed and
-// holding read, and for a call through an integration for one of its
-// users the chain again (stillActsFor). A store that cannot be read ends
-// the stream, as authorize fails closed. The stream asks at each
-// keep-alive (server.go, events).
+// key is neither: AP KeyLife, Block 2) and still holding the secret it
+// was let in with, so that a stream opened with a key's old secret, or a
+// ticket taken with it, ends at the key's new secret (store.TokenAliveAs,
+// Block 5), its user and role still allowed and holding read, and for a
+// call through an integration for one of its users the chain and the
+// installation id again (stillActsFor). A store
+// that cannot be read ends the stream, as authorize fails closed. The
+// stream asks at each keep-alive (server.go, events), and authorize when
+// it redeems a stream's ticket.
 func (s *Server) stillAdmitted(ctx context.Context, p *principal) bool {
 	if p == nil {
 		return false
@@ -949,21 +954,31 @@ func (s *Server) stillAdmitted(ctx context.Context, p *principal) bool {
 // touch records a token's use at most once an hour, and moves a
 // session's end; a session made from a key records its key's use too,
 // with the same address, so that a phone in use keeps its key under the
-// idle limit (AP KeyLife, Block 3). A token reaches it only once the
-// rule has let it in, so an ended key's use is never written.
-func (s *Server) touch(ctx context.Context, tok store.Token, ip string, now time.Time) {
-	if !tok.LastUsedAt.IsZero() && now.Sub(tok.LastUsedAt) < touchEvery {
+// idle limit (AP KeyLife, Block 3). A token made before the store kept
+// revoke codes gets the hash of its code, from the secret presented, at
+// its first use, whatever touchEvery says (AP MobileApp v1.6, D112-A);
+// the settings file's key gets none and is touched at most once an hour,
+// as no revoke ends it (settingsKey). A token reaches it only once the
+// rule has let it in, so an ended key's use is never written, nor the
+// hash of its code.
+func (s *Server) touch(ctx context.Context, tok store.Token, secret, ip string, now time.Time) {
+	var revoke string
+	if !tok.RevokeKept && !tokenMatches(s.legacyToken(), secret) {
+		revoke = store.HashToken(store.RevokeCode(secret))
+	}
+	if revoke == "" && !tok.LastUsedAt.IsZero() && now.Sub(tok.LastUsedAt) < touchEvery {
 		return
 	}
 	var end time.Time
 	if tok.Kind == store.TokenSession {
 		end = now.Add(SessionLifetime)
 	}
-	if err := s.opts.Store.TouchToken(ctx, tok.ID, ip, end); err != nil {
+	if err := s.opts.Store.TouchToken(ctx, tok.ID, ip, end, revoke); err != nil {
 		s.log.Error("api: token use not recorded", "token", tok.ID, "error", err)
 	}
 	if tok.ParentID != 0 {
-		if err := s.opts.Store.TouchToken(ctx, tok.ParentID, ip, time.Time{}); err != nil {
+		// The key's use, not its code: the secret presented is the session's.
+		if err := s.opts.Store.TouchToken(ctx, tok.ParentID, ip, time.Time{}, ""); err != nil {
 			s.log.Error("api: key use not recorded", "token", tok.ParentID, "session", tok.ID, "error", err)
 		}
 	}
@@ -1047,7 +1062,17 @@ func (s *Server) authorize(w http.ResponseWriter, r *http.Request, capability st
 		q := r.URL.Query()
 		ticket, tok := q.Get("ticket"), q.Get("token")
 		if tp, ok := s.tickets.redeem(ticket, strings.ToLower(r.PathValue("sn"))); ok {
-			p = tp
+			// The ticket's caller is asked again before the stream sends
+			// anything, as at each keep-alive: one no longer let in since
+			// the ticket was issued (its key revoked, its user disabled,
+			// another installation accepted) is refused as a token that
+			// ended is, uncounted, and the page's next ticket asks it to
+			// sign in.
+			if s.stillAdmitted(ctx, tp) {
+				p = tp
+			} else {
+				why = errEndedToken
+			}
 		} else {
 			guess = guess || ticket != ""
 			if tok != "" {
@@ -1108,12 +1133,16 @@ func (s *Server) authorize(w http.ResponseWriter, r *http.Request, capability st
 }
 
 // lockedOut answers a sign-in from an address or for a name that is
-// locked out: 429 with Retry-After, nil when neither is.
+// locked out: 429 with Retry-After, nil when neither is. A key "" is
+// not checked: the revoke by code checks the address alone.
 func (s *Server) lockedOut(w http.ResponseWriter, ctx context.Context, addrKey, userKey string) error {
 	for _, k := range []struct{ key, msg string }{
 		{addrKey, "too many failed token checks from this address; try again later"},
 		{userKey, "too many failed logins for this user; try again later"},
 	} {
+		if k.key == "" {
+			continue
+		}
 		if d := s.limiter.lockedFor(ctx, k.key); d > 0 {
 			w.Header().Set("Retry-After", strconv.Itoa(int(d.Round(time.Second)/time.Second)))
 			return fail(http.StatusTooManyRequests, "%s", k.msg)

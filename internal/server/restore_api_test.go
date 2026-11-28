@@ -184,21 +184,24 @@ func TestRestorePlan(t *testing.T) {
 	// Refusals: another Cube's backup, no serial, bad files, too large.
 	g = backupOf(t, ts)
 	g.Cube.Serial = "KEQ0000000"
-	if code, out := postBackup(t, ts, restoreBase+"/plan", "application/json", marshal(t, g)); code != 400 || !strings.Contains(out["error"].(string), "KEQ0000000") {
+	if code, out := postBackup(t, ts, restoreBase+"/plan", "application/json", marshal(t, g)); code != 400 || !strings.Contains(out["error"].(string), "KEQ0000000") ||
+		!refusalHas(t, out, "restore_backup_other_cube", `{"cube":"KEQ0000100","from":"KEQ0000000"}`) {
 		t.Fatalf("other cube's backup: %d %v", code, out)
 	}
 	g.Cube.Serial = ""
-	if code, _ := postBackup(t, ts, restoreBase+"/plan", "application/json", marshal(t, g)); code != 400 {
-		t.Fatalf("backup without serial: %d", code)
+	if code, out := postBackup(t, ts, restoreBase+"/plan", "application/json", marshal(t, g)); code != 400 || !refusalHas(t, out, "restore_backup_no_cube", `{"cube":"KEQ0000100"}`) {
+		t.Fatalf("backup without serial: %d %v", code, out)
 	}
-	for _, body := range []string{"", `{"version": 99}`, `{"cube": [}`, "not: [a backup", "[1, 2]"} {
-		if code, _ := postBackup(t, ts, restoreBase+"/plan", "", []byte(body)); code != 400 {
-			t.Fatalf("body %q: %d, want 400", body, code)
+	// An empty file has its code; a file that does not parse keeps the
+	// parser's words and none.
+	for body, code := range map[string]string{"": "restore_file_empty", `{"version": 99}`: "", `{"cube": [}`: "", "not: [a backup": "", "[1, 2]": ""} {
+		if status, out := postBackup(t, ts, restoreBase+"/plan", "", []byte(body)); status != 400 || !refusalHas(t, out, code, "null") {
+			t.Fatalf("body %q: %d %v, want 400 %q", body, status, out, code)
 		}
 	}
 	big := append(marshal(t, f), bytes.Repeat([]byte(" "), maxBackupBytes)...)
-	if code, _ := postBackup(t, ts, restoreBase+"/plan", "application/json", big); code != 413 {
-		t.Fatalf("body of %d bytes: %d, want 413", len(big), code)
+	if code, out := postBackup(t, ts, restoreBase+"/plan", "application/json", big); code != 413 || !refusalHas(t, out, "restore_file_too_large", `{"max":1048576}`) {
+		t.Fatalf("body of %d bytes: %d %v, want 413", len(big), code, out)
 	}
 	// Planning writes nothing.
 	if got := lineStrings(received.Since(0, noReads)); len(got) != 0 {
@@ -327,7 +330,7 @@ func TestRestoreRefusals(t *testing.T) {
 	if code, _ := postBackup(t, ts, restoreBase, "application/json", marshal(t, f)); code != 400 {
 		t.Fatalf("restore without plan: %d, want 400", code)
 	}
-	if code, out := postBackup(t, ts, restoreBase+"?plan=0123abcd", "application/json", marshal(t, f)); code != 409 {
+	if code, out := postBackup(t, ts, restoreBase+"?plan=0123abcd", "application/json", marshal(t, f)); code != 409 || !refusalHas(t, out, "restore_plan_changed", "null") {
 		t.Fatalf("restore with another hash: %d %v", code, out)
 	}
 	g := backupWithEco(backupOf(t, ts), 17)
@@ -351,7 +354,8 @@ func TestRestoreRefusals(t *testing.T) {
 	if code != 202 || out["steps"] != 2.0 {
 		t.Fatalf("restore: %d %v", code, out)
 	}
-	if code, out := postBackup(t, ts, restoreBase+"?plan="+hash, "application/json", marshal(t, f)); code != 409 || !strings.Contains(out["error"].(string), "running") {
+	if code, out := postBackup(t, ts, restoreBase+"?plan="+hash, "application/json", marshal(t, f)); code != 409 || !strings.Contains(out["error"].(string), "running") ||
+		!refusalHas(t, out, "restore_running", "null") {
 		t.Fatalf("second restore: %d %v", code, out)
 	}
 	if code, st := do(t, ts, "GET", restoreBase, ""); code != 200 || st["state"] != "running" || st["id"] != out["id"] {
@@ -375,8 +379,8 @@ func TestRestoreRefusals(t *testing.T) {
 	// A Cube that is gone.
 	fc.Close()
 	testkit.Eventually(t, "the disconnect", func() bool { return !rt.client.Connected() }, awayWait)
-	if code, _ := postBackup(t, ts, restoreBase+"/plan", "application/json", marshal(t, f)); code != 503 {
-		t.Fatalf("plan without the cube: %d, want 503", code)
+	if code, out := postBackup(t, ts, restoreBase+"/plan", "application/json", marshal(t, f)); code != 503 || !refusalHas(t, out, "cube_not_connected", "null") {
+		t.Fatalf("plan without the cube: %d %v, want 503", code, out)
 	}
 }
 
@@ -394,7 +398,7 @@ func TestRestoreRefusesHighDutyCycle(t *testing.T) {
 	}
 	hash := p["plan"].(string)
 	code, out := postBackup(t, ts, restoreBase+"?plan="+hash, "application/json", marshal(t, f))
-	if code != 409 || !strings.Contains(out["error"].(string), "85 %") {
+	if code != 409 || !strings.Contains(out["error"].(string), "85 %") || !refusalHas(t, out, "restore_duty_cycle", `{"duty":85,"max":80}`) {
 		t.Fatalf("restore at 85 %%: %d %v", code, out)
 	}
 	// Without radio commands the budget does not matter.

@@ -6,6 +6,7 @@ package store
 import (
 	"context"
 	"errors"
+	"fmt"
 	"testing"
 	"time"
 )
@@ -271,5 +272,62 @@ func TestSettingsKeyNeverEnds(t *testing.T) {
 	}
 	if got, _, _ := s.Token(ctx, key.ID); got.IdleExempt || !got.ExpiresAt.Equal(t0.Add(day)) {
 		t.Errorf("a refused change of the settings file's key changed it: %+v", got)
+	}
+}
+
+// A key past its end date is no revoked key (AP KeyLife, D6-A): its code
+// still revokes it, the keys it made with it, of another user too, and an
+// heir's session, and RevokeByCode names the heirs; moved later after
+// that, the end brings back no key a code revoked.
+func TestEndedKeyRevokedByCode(t *testing.T) {
+	t.Parallel()
+	t0 := time.Date(2026, 11, 28, 12, 0, 0, 0, time.UTC)
+	clock := t0
+	s, err := Open(copied(t), Options{Logger: quiet(), Now: func() time.Time { return clock }})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer s.Close()
+	ctx := context.Background()
+	day := 24 * time.Hour
+	anna, _ := s.AddUser(ctx, User{Name: "anna", Role: RoleManager}, "", 0)
+	bob, _ := s.AddUser(ctx, User{Name: "bob", Role: RoleOperator}, "", 0)
+	key, keySecret, err := s.AddKey(ctx, anna.ID, KeyOptions{Label: "a week's key", Expires: t0.Add(7 * day)})
+	if err != nil {
+		t.Fatal(err)
+	}
+	heir, heirSecret, err := s.AddKey(ctx, bob.ID, KeyOptions{Label: "heir, without an end", MadeBy: key.ID})
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, heirSessSecret, err := s.AddKeySession(ctx, heir.ID, "tablet", t0.Add(30*day))
+	if err != nil {
+		t.Fatal(err)
+	}
+	clock = t0.Add(8 * day)
+	if _, ok, _ := s.TokenByHash(ctx, HashToken(keySecret)); ok {
+		t.Fatal("a key past its end date let in")
+	}
+	if _, ok, _ := s.TokenByHash(ctx, HashToken(heirSecret)); !ok {
+		t.Fatal("the heir of a key past its end date ended with it")
+	}
+	got, heirs, ok, err := s.RevokeByCode(ctx, RevokeCode(keySecret))
+	if err != nil || !ok || got.ID != key.ID {
+		t.Fatalf("the code of a key past its end date: %+v %v %v", got, ok, err)
+	}
+	if fmt.Sprint(heirs) != fmt.Sprint([]int64{heir.ID}) {
+		t.Errorf("the heirs: %v, want [%d]", heirs, heir.ID)
+	}
+	if now, _, _ := s.Token(ctx, key.ID); now.DeletedAt.IsZero() {
+		t.Error("the key past its end date is not revoked by its code")
+	}
+	for what, secret := range map[string]string{"the heir": heirSecret, "the heir's session": heirSessSecret} {
+		if _, ok, _ := s.TokenByHash(ctx, HashToken(secret)); ok {
+			t.Errorf("%s lives on after the code of a key past its end date", what)
+		}
+	}
+	later := clock.Add(day)
+	if _, err := s.SetTokenLife(ctx, key.ID, TokenLife{Expires: &later}); !errors.Is(err, ErrNoToken) {
+		t.Errorf("the end of a key its code revoked moved: %v, want ErrNoToken", err)
 	}
 }

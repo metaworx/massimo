@@ -9,6 +9,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"net/url"
+	"reflect"
 	"slices"
 	"strings"
 	"testing"
@@ -247,7 +248,8 @@ func TestRepairPreviewCountsTheQueuesResets(t *testing.T) {
 }
 
 // nothingOf asserts that a repair's preview has nothing to send, why
-// naming want, and that its run is refused with 409.
+// naming want, and that its run is refused with 409, with the preview's
+// code and params.
 func nothingOf(t *testing.T, ts *httptest.Server, path, want string) repairPlan {
 	t.Helper()
 	code, p, body := previewOf(t, ts, path)
@@ -258,8 +260,13 @@ func nothingOf(t *testing.T, ts *httptest.Server, path, want string) repairPlan 
 	if strings.Contains(path, "?") {
 		sep = "&"
 	}
-	if code, out := do(t, ts, "POST", path+sep+"plan=0", ""); code != http.StatusConflict {
-		t.Fatalf("POST %s: %d %v, want 409", path, code, out)
+	code, out := do(t, ts, "POST", path+sep+"plan=0", "")
+	var params any
+	if p.Params != nil {
+		params = p.Params
+	}
+	if code != http.StatusConflict || out["code"] != nil && out["code"] != p.Code || out["code"] == nil && p.Code != "" || !reflect.DeepEqual(out["params"], params) {
+		t.Fatalf("POST %s: %d %v, want 409 with %q %v", path, code, out, p.Code, p.Params)
 	}
 	return p
 }
@@ -311,10 +318,10 @@ func TestRepairRefusedForTheSlots(t *testing.T) {
 	received := cubewatch.Lines(fc)
 	sent := received.Mark()
 	code, p, body := previewOf(t, ts, path)
-	if code != 200 || !strings.Contains(p.Refused, "memory slots") {
+	if code != 200 || !strings.Contains(p.Refused, "memory slots") || p.Code != "repair_memory_slots" || p.Params["free"] != float64(8) || p.Params["min"] != float64(5) {
 		t.Fatalf("preview with 8 slots free: %d %s", code, body)
 	}
-	if code, out := do(t, ts, "POST", path+"?plan="+p.Plan, ""); code != http.StatusConflict {
+	if code, out := do(t, ts, "POST", path+"?plan="+p.Plan, ""); code != http.StatusConflict || out["code"] != "repair_memory_slots" || out["error"] != p.Refused {
 		t.Fatalf("run: %d %v", code, out)
 	}
 	if got := received.Since(sent, cubewatch.Except('l')); len(got) != 0 {

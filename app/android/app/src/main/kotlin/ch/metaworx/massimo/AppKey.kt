@@ -135,12 +135,18 @@ class AppKey(
         internal val holds: Boolean get() = synchronized(this) { key != null }
 
         /**
-         * open opens [kept], the login of the server [id], and calls [then]
+         * open opens [kept], the login of the server [id], and calls [done]
          * with how it went: under the app key from the step's app key, which
          * the first such opening opens behind the prompt titled [title]; a
-         * login kept before with its own key behind that prompt.
+         * login kept before with its own key behind that prompt. A login
+         * kept without its key's revoke code is given it once opened.
          */
-        fun open(title: String, id: String, kept: KeptLogin, then: (Result) -> Unit) {
+        fun open(title: String, id: String, kept: KeptLogin, done: (Result) -> Unit) {
+            // a login kept before contract version 6 takes its key's revoke code at its unseal (D112-A)
+            val then = { r: Result ->
+                if (r is Result.Opened && kept.code.isEmpty()) runCatching { logins.setCode(id, kept, RevokeCode.of(r.secret.key)) }
+                done(r)
+            }
             if (!kept.byApp) {
                 own(title, id, kept, then)
                 return

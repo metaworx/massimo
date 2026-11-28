@@ -36,10 +36,9 @@ import re
 import pytest
 
 from conftest import TOKEN, URL, api_call
-from helpers import (OPERATOR_PASSWORD, boxes, frames, held_timers, named_buttons, open_fold, scroll_width, show_view, toggle_fold, wait_held,
-                     wait_until)
+from helpers import (BUBBLE_STATUS, OPERATOR_PASSWORD, boxes, bubble, frames, held_timers, named_buttons, open_fold, scroll_width, show_view,
+                     toggle_fold, wait_bubble_at, wait_held, wait_until)
 from test_first_owner import OPEN, owner_card, start_page, stub_creation
-from test_copy import COPY_STATUS
 from test_login import sign_in
 from test_password_eye import STATE, eye_of, fresh_page, reopen, say_reveal
 from test_password_rule import REAL_REGISTER, SAME_LINE, STUB_REGISTER, WATCH_LINE, line, words
@@ -773,13 +772,12 @@ def test_the_rule_line_is_one_line_in_every_language(new_context, case, watch, g
 
 def copied_here(page, sel, v, what, clipboard=True):
     """The element sel, clicked or given Enter (what), copied v and said
-    so: "Copied" above it (the class copied, its data-copied) and in the
-    status region #copy-status, the focus on it still; with clipboard,
+    so: "Copied" above it, in the page's bubble, and in the bubble's
+    status region #bubble-status, the focus on it still; with clipboard,
     the browser's clipboard holds v."""
-    assert wait_until(page, COPY_STATUS + " === t('copy.done')", 3), f"{what}: said in the status region"
-    el = page.locator(sel)
-    assert "copied" in (el.get_attribute("class") or "").split() and el.get_attribute("data-copied") == words(page, "copy.done"), \
-        f"{what}: Copied shows on it: {el.get_attribute('class')!r}"
+    where = wait_bubble_at(page, sel, words(page, "copy.done"))
+    assert where in ("above", "below"), f"{what}: Copied shows at it: {where}"
+    assert wait_until(page, BUBBLE_STATUS + " === t('copy.done')", 3), f"{what}: said in the status region"
     assert page.evaluate(FOCUSED, sel), f"{what}: the focus stays on it"
     if clipboard:
         assert wait_until(page, "navigator.clipboard.readText().then((t) => t === %r)" % v, 3), f"{what}: the suggestion copied"
@@ -801,12 +799,12 @@ def test_copy(page, case):
     line, icon = "#me-new-shown .pw-copy", "#me-new-shown .copy-icon"
     name = words(page, "password.copyName")
     assert page.locator(line).get_attribute("aria-label") == name and page.locator(icon).get_attribute("aria-label") == name, "named"
-    # the clipboard, the status region and every element's mark of a copy emptied, so that each copy is seen anew
+    # the clipboard and the status region emptied, the bubble taken away, so that each copy is seen anew
     clear = """() => {
       navigator.clipboard.writeText('');
-      const s = document.getElementById('copy-status');
+      const s = document.getElementById('bubble-status');
       if (s) s.textContent = '';
-      for (const el of document.querySelectorAll('.copied')) el.classList.remove('copied');
+      hideBubble();
     }"""
     # "Copied" held until each look at it is done, not its 1400 ms; and still there as the dice is pressed below
     with held_timers(page, "copied"):
@@ -836,7 +834,7 @@ def test_copy(page, case):
         try:
             page.locator(line).click()
             copied_here(page, line, v, "without the clipboard, a click on the line", clipboard=False)
-            page.evaluate("() => { const s = document.getElementById('copy-status'); if (s) s.textContent = ''; }")
+            page.evaluate("() => { const s = document.getElementById('bubble-status'); if (s) s.textContent = ''; }")
             page.locator(icon).focus()
             page.keyboard.press("Enter")
             copied_here(page, icon, v, "without the clipboard, Enter on the icon", clipboard=False)
@@ -844,15 +842,17 @@ def test_copy(page, case):
             page.evaluate("""() => Object.defineProperty(navigator, "clipboard", { value: window.__clip, configurable: true })""")
         assert page.evaluate("navigator.clipboard.readText()") == v, "the fallback copies"
         assert value(page, "me-new") == v and page.evaluate(STATE, "me-new")["type"] == "text", "the suggestion still shown"
-        # copied, then the dice pressed while Copied still shows: the new suggestion, which nobody copied, is not marked so
+        # copied, then the dice pressed while Copied still shows: the new suggestion, which nobody copied, is not marked so:
+        # the bubble, held, goes with the element it was shown at
         for what, sel in (("the line", line), ("its icon", icon)):
             page.evaluate(clear)
             page.locator(sel).click()
-            assert wait_until(page, f"document.querySelector({sel!r}).classList.contains('copied')", 3), f"{what}: Copied shows on it"
+            where = wait_bubble_at(page, sel, words(page, "copy.done"))
+            assert where in ("above", "below"), f"{what}: Copied shows at it: {where}"
             n = press(page, "me-new", value(page, "me-new"))
-            marked = page.evaluate("() => [...document.querySelectorAll('#me-new-shown .copied')].map((el) => el.className)")
-            assert marked == [] and page.locator(line).text_content() == n, \
-                f"{what} copied, then the dice: the new suggestion not marked Copied: {marked}"
+            shown = bubble(page)
+            assert shown is None and page.locator(line).text_content() == n, \
+                f"{what} copied, then the dice: the new suggestion not marked Copied: {shown}"
     toggle_fold(page, "#me-password")
     show_view(page, "tiles")
 

@@ -226,3 +226,45 @@ func TestRekeyWho(t *testing.T) {
 	rekey("the owner, anna's key", "secret", "anna", id(annaKey.ID), 200, "")
 	rekey("a manager of guests, a guest's key", manager, "gina", id(ginaKey.ID), 200, "")
 }
+
+// After a new secret, POST /api/v1/tokens/revoke with the old secret's
+// code ends nothing: 204, and the key and its heir stay; the new secret's
+// code ends the key, its heir with it (AP KeyLife, Block 5;
+// MobileApp.D112-A).
+func TestRekeyRevokeCode(t *testing.T) {
+	t.Parallel()
+	r := startServer(t, withOptions(storeOptions(t, t.TempDir(), "secret")))
+	ts, st := r.ts, r.s.opts.Store
+	ctx := t.Context()
+	anna, err := st.AddUser(ctx, store.User{Name: "anna", Role: store.RoleOperator}, "", 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	key, oldSecret, _ := st.AddKey(ctx, anna.ID, store.KeyOptions{Label: "phone"})
+	var heir rekeyed
+	code, text := callAPI(t, ts, "POST", "/api/v1/users/anna/tokens", oldSecret, `{"label":"made by the phone's key"}`)
+	if err := json.Unmarshal([]byte(text), &heir); err != nil || code != 201 {
+		t.Fatalf("the heir: %d %s %v", code, text, err)
+	}
+	var m rekeyed
+	code, text = callAPI(t, ts, "POST", "/api/v1/users/anna/tokens/"+strconv.FormatInt(key.ID, 10)+"/rekey", "secret", "")
+	if err := json.Unmarshal([]byte(text), &m); err != nil || code != 200 || m.Token == "" {
+		t.Fatalf("the new secret: %d %s %v", code, text, err)
+	}
+	alive := func(what, token string, want bool) {
+		t.Helper()
+		if code, _ := callAPI(t, ts, "GET", "/api/v1/me", token, ""); (code == 200) != want {
+			t.Errorf("%s: %d, alive want %v", what, code, want)
+		}
+	}
+	if code, text, _ := postCode(t, ts, codeBody(oldSecret), ""); code != 204 || text != "" {
+		t.Fatalf("the old secret's code: %d %q", code, text)
+	}
+	alive("the key after its old secret's code", m.Token, true)
+	alive("the heir after its maker's old secret's code", heir.Token, true)
+	if code, _, _ := postCode(t, ts, codeBody(m.Token), ""); code != 204 {
+		t.Fatalf("the new secret's code: %d", code)
+	}
+	alive("the key after its new secret's code", m.Token, false)
+	alive("the heir after its maker's new secret's code", heir.Token, false)
+}

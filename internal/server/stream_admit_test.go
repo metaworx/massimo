@@ -25,21 +25,20 @@ func openStream(t *testing.T, ts *httptest.Server, token string) *testkit.Watch[
 // integration's X-MassimoHA-On-Behalf-Of (as, onbehalf_test.go).
 func openStreamWith(t *testing.T, ts *httptest.Server, token string, headers map[string]string) *testkit.Watch[testkit.Event] {
 	t.Helper()
-	return openStreamAt(t, ts.URL+"/api/v1/cubes/KEQ0000100/events", token, headers)
+	return openStreamAt(t, ts, "", token, headers)
 }
 
-// openTicketStream opens KEQ0000100's event stream with a ticket
-// (ticketFor, auth_test.go) and no Authorization header, as a browser
-// does.
+// openTicketStream opens the stream with a ticket (ticketFor), without a
+// token or a header, as the page does.
 func openTicketStream(t *testing.T, ts *httptest.Server, ticket string) *testkit.Watch[testkit.Event] {
 	t.Helper()
-	return openStreamAt(t, ts.URL+"/api/v1/cubes/KEQ0000100/events?ticket="+ticket, "", nil)
+	return openStreamAt(t, ts, "?ticket="+ticket, "", nil)
 }
 
-// openStreamAt is openStreamWith of the stream's URL.
-func openStreamAt(t *testing.T, url, token string, headers map[string]string) *testkit.Watch[testkit.Event] {
+// openStreamAt is openStreamWith with the query given, "" for none.
+func openStreamAt(t *testing.T, ts *httptest.Server, query, token string, headers map[string]string) *testkit.Watch[testkit.Event] {
 	t.Helper()
-	req, _ := http.NewRequest("GET", url, nil)
+	req, _ := http.NewRequest("GET", ts.URL+"/api/v1/cubes/KEQ0000100/events"+query, nil)
 	if token != "" {
 		req.Header.Set("Authorization", "Bearer "+token)
 	}
@@ -122,10 +121,11 @@ func TestStreamEndsWhenItsCallerIsNotLetIn(t *testing.T) {
 
 // A stream opened with a key's old secret ends at the key's new secret
 // (AP KeyLife, Block 5), as at a revoke, though the key keeps its id: one
-// opened by the Bearer header, one opened with a ticket taken with the
-// old secret, and one opened after the new secret with such a ticket,
-// which ends at its first keep-alive. A stream of another key goes on,
-// and the new secret opens one.
+// opened by the Bearer header and one opened with a ticket taken with the
+// old secret; a ticket taken with it and redeemed after the new secret
+// opens none, 401 counted toward no lockout, as the redemption asks the
+// caller again (stillAdmitted, AP LinkedRemoval). A stream of another key
+// goes on, and the new secret opens one.
 func TestStreamEndsAtANewSecret(t *testing.T) {
 	t.Parallel()
 	r := startServer(t, withOptions(storeOptions(t, t.TempDir(), "")))
@@ -151,10 +151,11 @@ func TestStreamEndsAtANewSecret(t *testing.T) {
 	}
 	testkit.Eventually(t, "the end of the stream opened by the header with the old secret", byBearer.Ended)
 	testkit.Eventually(t, "the end of the stream opened with a ticket taken with the old secret", byTicket.Ended)
-	late := openTicketStream(t, ts, later)
-	testkit.Eventually(t, "the end of a stream opened after the new secret with a ticket taken with the old one", late.Ended)
-	if n := late.Count(0, isKeepAlive); n != 0 {
-		t.Errorf("the late ticket's stream had %d keep-alives", n)
+	if code, text := callAPI(t, ts, "GET", "/api/v1/cubes/KEQ0000100/events?ticket="+later, "", ""); code != 401 {
+		t.Errorf("a ticket taken with the old secret, redeemed after the new one: %d %s", code, text)
+	}
+	if keys, err := st.Lockout(DefaultAuthFailures, DefaultAuthWindow, DefaultAuthLockout).Keys(t.Context()); err != nil || len(keys) != 0 {
+		t.Errorf("the late ticket counted toward a lockout: %v %v", keys, err)
 	}
 	stays.AwaitN(t, stays.Mark(), "three keep-alives of another key's stream, after the new secret", 3, isKeepAlive)
 	openStream(t, ts, secret).Await(t, 0, "a keep-alive of a stream opened with the new secret", isKeepAlive)

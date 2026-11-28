@@ -707,10 +707,11 @@ or that holds the file's lock while the store works.
   and a test of what the migrations make of an empty file,
   such as the schema (`TestStoreSQL`, `TestSyncColumns`),
   the seeded roles and the node's identity.
-  An additive migration's own test is `additiveMigration(t, prev, v, name, fill)`
+  An additive migration's own test is `additiveMigration(t, prev, v, name, fill, older...)`
   (`internal/store/additive_test.go`, AP KeyLife, Block 3):
   a file at `prev`, migrated to `v` alone and filled there in plain SQL,
-  keeps `min_reader` 24 and opens with a binary for `prev`,
+  keeps `min_reader` 24 and opens with a binary for `prev`
+  and for each version of `older`, such as 26, the 0.17 line's,
   and the migration's down part takes it back to the schema of `prev`,
   every token row kept;
   it returns a copy of the filled file at `v`,

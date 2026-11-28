@@ -306,7 +306,7 @@ func TestSettingsKeyEndDate(t *testing.T) {
 	}
 
 	// Its row holding an end date all the same, past.
-	if err := st.TouchToken(ctx, made.ID, "", clock.Now().Add(-time.Hour)); err != nil {
+	if err := st.TouchToken(ctx, made.ID, "", clock.Now().Add(-time.Hour), ""); err != nil {
 		t.Fatal(err)
 	}
 	check("its row holding an end date that has passed")
