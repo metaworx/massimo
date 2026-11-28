@@ -672,12 +672,13 @@ func (s *Store) NoteLogin(ctx context.Context, id int64) error {
 }
 
 // DeleteUser removes a user: a tombstone that keeps its name, with every
-// token of the user revoked, every preference and every identity a
-// tombstone too, those that act as the user and an integration's user's
-// own, linked or not, so that its integration's next call makes it anew,
-// unlinked. The name is free again, and a user added under it later is a
-// row of its own, with none of the removed one's history. The last owner
-// without an end date is ErrLastOwner.
+// token of the user revoked, and the keys they made, and theirs, of any
+// user (revokeHeirs, AP KeyLife, D5-A), every preference and every
+// identity a tombstone too, those that act as the user and an
+// integration's user's own, linked or not, so that its integration's
+// next call makes it anew, unlinked. The name is free again, and a user
+// added under it later is a row of its own, with none of the removed
+// one's history. The last owner without an end date is ErrLastOwner.
 func (s *Store) DeleteUser(ctx context.Context, name string, by int64) error {
 	if err := s.writable(); err != nil {
 		return err
@@ -705,6 +706,12 @@ func (s *Store) DeleteUser(ctx context.Context, name string, by int64) error {
 	if _, err := tx.ExecContext(ctx, `UPDATE users SET deleted_at = ?, updated_at = ?, updated_by = ?, origin = ?, version = version + 1 WHERE id = ?`, now, now, nullID(by), s.nodeID, u.ID); err != nil {
 		return fmt.Errorf("store: user %s: %w", u.Name, err)
 	}
+	// The keys its tokens made, and theirs, of any user (AP KeyLife, D5-A):
+	// its tokens are revoked, so their heirs go with them.
+	heirs, err := s.revokeHeirs(ctx, tx, `SELECT id FROM tokens WHERE user_id = ? AND deleted_at IS NULL`, []any{u.ID}, now)
+	if err != nil {
+		return fmt.Errorf("store: user %s: %w", u.Name, err)
+	}
 	if _, err := tx.ExecContext(ctx, `UPDATE tokens SET deleted_at = ?, origin = ?, version = version + 1 WHERE user_id = ? AND deleted_at IS NULL`, now, s.nodeID, u.ID); err != nil {
 		return fmt.Errorf("store: user %s: %w", u.Name, err)
 	}
@@ -723,6 +730,9 @@ func (s *Store) DeleteUser(ctx context.Context, name string, by int64) error {
 	}
 	if err := tx.Commit(); err != nil {
 		return fmt.Errorf("store: user %s: %w", u.Name, err)
+	}
+	if len(heirs) > 0 {
+		s.log.Info("keys made by a removed user's keys revoked", "user", u.ID, "heirs", heirs)
 	}
 	return nil
 }

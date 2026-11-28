@@ -13,14 +13,16 @@
  * read is the caller's to drop where its answer comes too late.
  */
 
-import type { Identity, Token } from "../api";
+import type { Identity, Token, TokenHeirs } from "../api";
+import type { OkText } from "./action";
 
 /**
  * Run sends fn's request for the user of the login name name through the
  * caller's runner: it reloads what the caller shows, says ok or that it
- * failed and why, and resolves to whether the request was taken.
+ * failed and why, and resolves to whether the request was taken; ok may
+ * be made once the request is done (OkText).
  */
-export type Run = (name: string, fn: () => Promise<unknown>, ok: string) => Promise<boolean>;
+export type Run = (name: string, fn: () => Promise<unknown>, ok: OkText) => Promise<boolean>;
 
 /** userPath is a user's path in the API, rest after it. */
 export function userPath(name: string, rest = ""): string {
@@ -32,9 +34,17 @@ export async function loadTokens(name: string): Promise<Token[]> {
   return (await api<Token[]>("GET", userPath(name, "/tokens"))) || [];
 }
 
-/** revokeToken revokes one of a user's sessions or keys (DELETE). */
+/**
+ * revokeToken revokes one of a user's sessions or keys (DELETE), a key's
+ * heirs with it, the keys it made and theirs, which its message names
+ * by id (AP KeyLife, D5-A).
+ */
 export function revokeToken(run: Run, name: string, tk: Token): Promise<boolean> {
-  return run(name, () => api("DELETE", userPath(name, "/tokens/" + tk.id)), t("users.revoked", { id: tk.id }));
+  let heirs: TokenHeirs = [];
+  return run(name, async () => {
+    const res = await api<{ heirs?: TokenHeirs }>("DELETE", userPath(name, "/tokens/" + tk.id));
+    heirs = (res && res.heirs) || [];
+  }, () => (heirs.length ? t("users.revokedWithHeirs", { id: tk.id, ids: heirs.join(", ") }) : t("users.revoked", { id: tk.id })));
 }
 
 /**
@@ -51,13 +61,33 @@ export function revokeOwn(name: string, tk: Token): Promise<unknown> {
 /**
  * createKey makes an API key for a user (POST): the key, which the server
  * shows once, goes to shown alone, before the caller reads again; it is
- * kept nowhere else.
+ * kept nowhere else. keep keeps it from the idle limit (idle_exempt, AP
+ * KeyLife, D7-A), sent only where it is true; end, an API time, is its
+ * end date (expires_at, Block 4), sent only where there is one.
  */
-export function createKey(run: Run, name: string, label: string, shown: (key: string) => void): Promise<boolean> {
+export function createKey(run: Run, name: string, label: string, shown: (key: string) => void, keep = false, end: string | null = null): Promise<boolean> {
+  const body: { label: string; idle_exempt?: boolean; expires_at?: string } = { label };
+  if (keep) body.idle_exempt = true;
+  if (end) body.expires_at = end;
   return run(name, async () => {
-    const res = await api<{ token: string }>("POST", userPath(name, "/tokens"), { label });
+    const res = await api<{ token: string }>("POST", userPath(name, "/tokens"), body);
     shown(res.token);
   }, t("users.keyCreated", { label }));
+}
+
+/**
+ * The life of an API key that setTokenLife changes (PUT …/tokens/{id}); a
+ * field left out keeps the key's: idle_exempt (AP KeyLife, Block 3), and
+ * expires_at, its end date, an API time, null for none (Block 4).
+ */
+export interface TokenLife {
+  idle_exempt?: boolean;
+  expires_at?: string | null;
+}
+
+/** setTokenLife changes the life of one of a user's API keys (PUT, AP KeyLife, Blocks 3 and 4): kept from the idle limit or held to it again, its end date set, moved or removed. */
+export function setTokenLife(run: Run, name: string, tk: Token, life: TokenLife): Promise<boolean> {
+  return run(name, () => api("PUT", userPath(name, "/tokens/" + tk.id), life), t("users.keyChanged", { id: tk.id }));
 }
 
 /** loadIdentities reads a user's identities at the sign-in providers. */

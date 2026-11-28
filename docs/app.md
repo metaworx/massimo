@@ -458,6 +458,20 @@ it never enters the page.
 The server turns the key into a session (`POST /api/v1/login/key`,
 docs/api-v1.md), which names the key, so that revoking the key,
 under My profile → Sessions and keys by the phone's name, ends the session.
+Under the server's idle limit (`auth.key_idle_days`, AP KeyLife, Block 3)
+the phone's key stays alive as long as the phone is used:
+each login by fingerprint is a use of the key, and each use of its session
+counts as the key's too, at most an hour late.
+A key left unused past the limit ends, its session with it,
+and the next login by fingerprint is refused (`401`),
+which makes the app forget the kept login, as it does for a revoked key:
+nothing to build in the app.
+So does a key past the end date its user, or who manages the user,
+gave it in a browser (AP KeyLife, Block 4):
+the app never sets one, since its key is made by the page's session without one,
+and the key itself may not move its own end date;
+where the date is moved later before the app's next login,
+that login goes through.
 
 - **Enabling.**
   The sign-in form asks `login.status()` when it is drawn,

@@ -1537,6 +1537,7 @@ func (s *Server) routes() {
 	api("DELETE /api/v1/users/{name}", "users", s.deleteUser)
 	api("GET /api/v1/users/{name}/tokens", "users", s.listTokens)
 	api("POST /api/v1/users/{name}/tokens", "users", s.postToken)
+	api("PUT /api/v1/users/{name}/tokens/{id}", "users", s.putToken)
 	api("DELETE /api/v1/users/{name}/tokens/{id}", "users", s.deleteToken)
 	api("POST /api/v1/users/{name}/register", "users", s.registerOpaque)
 	api("GET /api/v1/users/{name}/identities", "users", s.listIdentities)

@@ -417,7 +417,7 @@ func (s *Store) CollectIntegrationKey(ctx context.Context, uuid, code string) (s
 		if !t.LastUsedAt.IsZero() {
 			return "", Integration{}, ErrRequestGone
 		}
-		if err := s.RevokeToken(ctx, t.ID); err != nil && !errors.Is(err, ErrNoToken) {
+		if _, err := s.RevokeToken(ctx, t.ID); err != nil && !errors.Is(err, ErrNoToken) {
 			return "", Integration{}, err
 		}
 	}
@@ -522,7 +522,7 @@ func (s *Store) RevokeIntegration(ctx context.Context, uuid string, by int64) er
 	}
 	for _, t := range tokens {
 		if t.DeletedAt.IsZero() {
-			if err := s.RevokeToken(ctx, t.ID); err != nil && !errors.Is(err, ErrNoToken) {
+			if _, err := s.RevokeToken(ctx, t.ID); err != nil && !errors.Is(err, ErrNoToken) {
 				return err
 			}
 		}

@@ -1247,7 +1247,9 @@ which asks for the password again since it goes with the name
 `user disable <name>` and `user enable <name>`,
 `user token <name> -label Loxone` prints a new API key once,
 `user tokens <name>` lists the user's sessions and keys with their ids,
-and `user revoke <name> [<token id>]` revokes one token or every one.
+and `user revoke <name> [<token id>]` revokes one token or every one,
+with the keys a revoked key made and theirs, which it names by id
+where they are not among the tokens it names.
 A new password has 8 to 64 characters; 15 or a few words are better.
 It contains no name of the user's or the box's, whatever the case:
 not the login name, the display name or a word of either,

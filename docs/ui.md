@@ -1560,6 +1560,10 @@ as the settings' ⓘ do:
   which signs another browser out without an administrator;
   a session made from a key, as the app's login by fingerprint makes one,
   names the key by its label, and revoking the key ends it;
+  a key made with another key as the bearer says **made by the API key**
+  and that key's label, or its id where the list does not hold it,
+  and revoking the maker revokes it, the message naming the keys that went
+  with it (AP KeyLife, Block 2, D5-A);
   the session or key the page is signed in with says **this device**,
   the key that session was made from **its key**,
   and Revoke on this device signs out, as **Sign out** does;
@@ -1569,6 +1573,29 @@ as the settings' ⓘ do:
   the key that is the settings file's `MASSIMO_API_TOKEN` (`from_settings`)
   says **from the settings file: change or remove it there** in place of Revoke,
   which the server refuses for it (D86-A);
+  under the idle limit (`auth.key_idle_days`, AP KeyLife, Block 3)
+  a key's line says **ends … unless used**, the date and time it ends unused,
+  or **kept while unused** for one kept from it,
+  and a key that ended says **Ended** and **unused since …**, listed to be revoked;
+  for one who manages its own user (with `users`, as an owner,
+  or `guests` where it is a guest itself; D7-A) a key's row has **Change…**,
+  a small form with the switch **Keep while unused**, **Save** and **Cancel**,
+  but not on the settings file's key nor on the key the page is signed in with,
+  and **Create key** has the same switch;
+  one who manages nobody keeps the limit on its keys,
+  and sees the switch nowhere;
+  a key with an end date (AP KeyLife, Block 4) says **ends …** on its line,
+  and one past it **Ended** and **ended …**, listed to be revoked;
+  **Create key** has the field **Ends**, a date and time, empty for no end date,
+  and a key's **Change…** has it too, with **No end**, which empties it:
+  every user moves its own keys' end dates, one who manages nobody too (D4-A),
+  the switch Keep while unused beside it only for one who manages its own user;
+  Save sends what changed, an end emptied as none,
+  and a time that has passed is refused, the message line saying so;
+  a date half typed, which the browser reads as empty, is never taken for none:
+  Save and Create key then send nothing, the message line says that the date is
+  not complete and the focus goes back into the field;
+  never on the settings file's key nor on the key the page is signed in with;
   **Create key** shows the new key once,
   and it copies as the page's other strings do (AP KeyLife, D1-A):
   a tap or a click on it, or Enter or Space, copies the key,
@@ -2187,6 +2214,8 @@ settings forms and have none of it.
   left empty, the password stays as it is, unchecked;
   **Remove**, which asks in place of the panel's actions;
   the user's sessions and API keys, each with its id, and **Revoke**,
+  a key made by another key naming it, and a revoke's message the keys
+  that went with it, as under My profile;
   read when the panel opens and after every change of the users while it is open;
   in one's own panel the session or key the page is signed in with says **this device**,
   the key that session was made from **its key**,
@@ -2197,7 +2226,20 @@ settings forms and have none of it.
   and an administrator looking at that user's panel sees the phone's key rightly;
   the settings file's key says it comes from there in place of Revoke,
   as under My profile;
-  and **Create key**, which shows the new key once: from the read that follows it
+  a key's line says its life under the idle limit and its end date,
+  as under My profile,
+  and for who manages the user (AP KeyLife, D7-A) a key's row has **Change…**,
+  whose switch **Keep while unused** keeps it from the limit or holds it to it again,
+  and whose field **Ends** sets, moves or removes its end date (Block 4, D4-A),
+  with **No end**, the only field on an integration's key's row,
+  which a holder of `users` or `integrations` sees in the integration's user's panel,
+  and in one's own panel for one who manages nobody;
+  with **Save**, off until a field is changed, and **Cancel**,
+  the focus on the form's first field as it opens and back on Change… as it closes,
+  never on the settings file's key or the key the page is signed in with;
+  and **Create key**, with the same switch for who manages the user
+  and the field **Ends**, empty for no end date,
+  which shows the new key once: from the read that follows it
   until the next, in that panel alone, kept nowhere;
   it copies with its copy icon, as under My profile;
   where a sign-in provider is enabled, the user's identities at the providers,
@@ -2227,6 +2269,15 @@ settings forms and have none of it.
   on every device; off, no field has one,
   and this page's fields lose theirs at once, the others' at their next look
   at the server.
+  Under it, **API keys end unused after** so many days (`auth.key_idle_days`,
+  AP KeyLife, Block 3), 0 for never, the default (D2-A),
+  saved as the field is left, the users' line saying so;
+  emptied, it goes back to the value stored,
+  and a value that is no whole number of 0 to 3650 is refused in the field,
+  its limit saying so, and not sent.
+  Its line says that a key unused for longer ends at once, its session with it,
+  that a key kept while unused and the settings file's key never end so,
+  and an integration's key always does.
   On a server without users (FirstOwner D14),
   an integration's beside it or not
   (AP LooseEnds, D42; its list taken back by AP LooseEnds, D46),
@@ -3191,7 +3242,7 @@ for the first owner's toast and the log's `open_setup` line.
 | `Picker` | `menu.tsx` | a menu that chooses one item, its summary the chosen one | `id`, `cls`, `summaryId`, `summaryCls`, `entries` (an item `{ value, label, sub, icon, icons, disabled }`, `{ group }` or `{ separator: true }`), `value`, `onPick(value)`, `shown` (`{ icon, label, title, aria }`) |
 | `Tip` | `tip.tsx` | a button with a short label that shows a text in a small box under itself while open, its first letter a capital (the label's full term: a room tile's IS and SET, the House tile's), named by its label and then the text (`aria-labelledby`, the box's text in the name while hidden too: "IS measured temperature"); a popup (`usePopup`): one open at a time, and one with the menus, Escape closing it alone, the focus staying on the button, a click outside and a sign-out closing it; the box kept in the window (`placePopup`); the button says whether it is open (`aria-expanded`) and names the box as what it controls; no menu, it has no items and takes no focus | `text` (the box's text), `label` (the short label, after the children in the button), `labelCls` (its class), `cls` (the button's classes beside `tip-btn`), the button's content before the label as children (an icon) |
 | `usePopup`, `placePopup`, `closePopups` | `popup.ts` | a box that its button opens beside itself (a `Tip`'s text, a room tile's SET list): one popup open at a time, and one with the menus: the click that opens it closes an open menu or popup, as every click outside one does (`dropdown`), and a menu that opens, by a click, the keyboard or the page's code, closes it, as does a click outside it and, with `leave`, the focus moving to an element outside it; Escape closes it and nothing else, seen first and stopped there (`stopPropagation`, marked as the menus' Escape is), `escaped` told whether the focus was in it; placed again at a resize; `placePopup` keeps its box 16 px inside the window's sides, and with the element that scrolls in it inside its height too, 16 px under what is pinned at the window's top (`pinned`, a sticky header's bottom, which the caller reads): upward where the room below is short and the box fits above, else downward, that element's height capped to the room below, 160 px at least where the window has room for that; `closePopups` closes it at a sign-out (`MassimoParts.signedOut`) | `usePopup(prefix, { within, place, escaped, leave })`, giving `{ id, open, toggle, close }`; `placePopup(box, scroll, pinned)`; `closePopups()` |
-| `actionRunner`, `fader` | `action.ts` | a request, a reload, and its outcome (`Outcome`, `{ text, ok }`) in the region's message line (`showResult`) or in a part's state that a `ResultLine` draws, a success fading where a fade is given; `fader` is that fade alone, for a result set by other means | `where()`, `set(res)`, `fade` (ms), `reload()`, `bound` (an answer after a sign-out reloads and says nothing, `session.ts`); gives `run(fn, ok, fail)`, `say(text, ok)`; `set`, `ms` |
+| `actionRunner`, `fader` | `action.ts` | a request, a reload, and its outcome (`Outcome`, `{ text, ok }`) in the region's message line (`showResult`) or in a part's state that a `ResultLine` draws, a success fading where a fade is given; `fader` is that fade alone, for a result set by other means | `where()`, `set(res)`, `fade` (ms), `reload()`, `bound` (an answer after a sign-out reloads and says nothing, `session.ts`); gives `run(fn, ok, fail)`, `ok` a text or a function that makes it once `fn` is done, from what it learnt, and `say(text, ok)`; `set`, `ms` |
 | `Icon` | `icon.tsx` | a symbol of the page (`iconEl`) | `symbol`, `cls`, `mark` (the symbol is a mark, which blinks where the style makes it), `useId` (its `use` element's id, where the page names it) |
 | `Sign` | `icon.tsx` | a kind of `SIGNS` in a state, its mark blinking; `signEl` of `components.js` draws it so for a plain script, the connect page's "changed here" mark | `kind`, `state` ("", ok, warn, bad, open), `cls`, `blink` (the mark's key), `label` (named for a screen reader, else hidden) |
 | `Mark` | `icon.tsx` | a mark alone (`markEl`) | `state` (warn, bad), `blink` |
@@ -3244,8 +3295,8 @@ for the first owner's toast and the log's `open_setup` line.
 | `showCard`, `wireCards`, `keepInView` | `card.ts` | a section card brought into view, unfolded, the focus on its heading's button, kept there for two seconds where its page has just been opened (`instant`); the cards' folds wired once, each kept in this browser (`massimo.fold.<card id>`), set on the skeleton at once; an element kept in view while the page's content changes size, for `ms` or until the user scrolls, a card at the top, a row in the middle (`block` `"center"`: My profile's marked key), keeping another ending the last | `id`, `instant`; `el`, `ms`, `block` |
 | `Brand`, `BrandName` | `brand.tsx` | Massimo's logo and small mark from the sprite (`brandMarks` of `components.js`, which draws them over the skeleton's `data-brand`), of which the place's style shows one, hidden from screen readers: ☰'s first row; `BrandName`, the big name under the logo, the first owner's form and the sign-in's card | |
 | `page`, `isShown`, `showView`, `onView`, `mayShow`, `setAddress`, `definePages`, `pagesPart` | `pages.ts` | the page of the main area shown, a signal: a drawing that reads `page.value` follows it, `isShown` asks at that moment and follows nothing (a handler, a reader, a timer), so that no request is sent again at a change of page; showing a page puts it into the address, as a new entry of the history or in place of the current one, and brings each page back at the scroll it was left at; `onView` runs at each showing, on the `viewshown` event; `mayShow` says who may open which, reading who is in; a page with an address of its own (the log's, `ui/src/log/index.tsx`) hands it over with `ownAddress`, a card's region what the card's address holds after its `?` with `readCardAddress` (My profile's key to mark), told of every address read, null for another, before the page is shown; the page's chrome hands over the pages at the start (`definePages`, `chrome/pages.ts`), the log puts its choices into the address in place (`setAddress`), and the plain code calls these as `MassimoParts.pages` (`pagesPart`) | `view`, `address`, `card`; `card`, `read(q)` |
-| `userPath`, `Run`, `loadTokens`, `revokeToken`, `revokeOwn`, `createKey`, `loadIdentities`, `addIdentity`, `changeIdentity`, `removeIdentity` | `account.ts` | what a user's sessions, keys and identities read and send (`…/users/{name}/tokens`, `…/identities`), for System settings → Users and My profile alike; a change through the caller's runner (`Run`), which reloads what it shows and says how it went in its own line; Revoke of the token in use signs out | `name`, `rest`; `run`, `name`, and what each sends |
-| `Tokens` | `tokens.tsx` | a user's sessions and keys (a user's panel, My profile): each with its id and Revoke, the settings file's key (`from_settings`) saying so in Revoke's place, "this device" and "its key" by `own`, in the app "this device's key" by the app's status (`app.ts`), Create key and the key just made, shown once by the read that follows and kept in the part's own state alone, a `Copy` of it with its icon, keyed by the key, both named Copy the key, not by the key (AP KeyLife, D1-A); read when its place opens and again at each change of the caller's counter while open, in the app once the last sign-in's revoke is done (`signInRevoked`); an answer after a sign-out dropped; the API key the caller names tinted (`token-marked`), and the caller told of each read drawn with that row (My profile's key of its address) | `u`, `off`, `open`, `reads` (the caller's counter), `run`, `say` (the caller's message line), `labelId` (the new key's field's id), `help` (the group's ⓘ after Create key, My profile's), `marked` (the id of the API key marked), `drawn(row)` (told of each read drawn, with the row marked or null), `listOnly` (the list with Revoke, no new key: an integration's user's) |
+| `userPath`, `Run`, `loadTokens`, `revokeToken`, `revokeOwn`, `createKey`, `loadIdentities`, `addIdentity`, `changeIdentity`, `removeIdentity` | `account.ts` | what a user's sessions, keys and identities read and send (`…/users/{name}/tokens`, `…/identities`), for System settings → Users and My profile alike; a change through the caller's runner (`Run`), which reloads what it shows and says how it went in its own line, a text or one made from the answer once it came (a revoke's, which names the keys that went with it, `heirs`); Revoke of the token in use signs out | `name`, `rest`; `run`, `name`, and what each sends |
+| `Tokens` | `tokens.tsx` | a user's sessions and keys (a user's panel, My profile): each with its id and Revoke, a key made by a key naming its maker (`made_by`) by the list's label, else its id, the settings file's key (`from_settings`) saying so in Revoke's place, "this device" and "its key" by `own`, in the app "this device's key" by the app's status (`app.ts`), Create key and the key just made, shown once by the read that follows and kept in the part's own state alone, a `Copy` of it with its icon, keyed by the key, both named Copy the key, not by the key (AP KeyLife, D1-A); a key's line of its life under the idle limit and of its end date (`KeyLife`: ends …, ends … unless used where that comes first, kept while unused, or the badge Ended and unused since … or ended …) and, where `keeps` or `ends`, a key's Change… (`KeyChange`: where `keeps` the switch Keep while unused, where `ends` the field Ends with No end, each with its draft, Save off until one is changed and sending what changed, Cancel, the focus on the form's first field as it opens and back on Change… as it closes) on any API key but the settings file's and the one the page is signed in with, an integration's key's with the end alone, and Create key's switch Keep while unused and field Ends, the part's own state (AP KeyLife, Blocks 3 and 4); a date half typed in either Ends (`halfTyped`, the input's `badInput`: its value reads as empty) sends nothing, `say` telling why and the focus back in it, Change…'s form checking it itself (`noValidate`) and No end emptying its input whole; read when its place opens and again at each change of the caller's counter while open, in the app once the last sign-in's revoke is done (`signInRevoked`); an answer after a sign-out dropped; the API key the caller names tinted (`token-marked`), and the caller told of each read drawn with that row (My profile's key of its address) | `u`, `off`, `open`, `reads` (the caller's counter), `run`, `say` (the caller's message line), `labelId` (the new key's field's id), `help` (the group's ⓘ after Create key, My profile's), `marked` (the id of the API key marked), `drawn(row)` (told of each read drawn, with the row marked or null), `listOnly` (the list with Revoke, no new key: an integration's user's), `keeps` (the caller may keep the user's keys from the idle limit, who manages the user: AP KeyLife, D7-A), `ends` (the caller may move the user's keys' end dates, the user itself or who manages it: Block 4, D4-A) |
 | `Identities`, `Changes` | `identities.tsx` | a user's identities at the sign-in providers (a user's panel, My profile): each with what the provider said and Remove; with `changes`, Change of one no sign-in used, a settings form kept by its key, the forms of identities gone or made unchangeable forgotten, and all of them where the box goes off; with `assign`, Assign; `after` what follows the list once read (My profile's Link buttons); `quiet` draws nothing while the list is empty and the caller offers nothing after it (`offer`: My profile's Link buttons, none in the app, where the rows are still named from every provider) | `u`, `off`, `open`, `reads`, `providers` (the enabled ones), `run`, `say`, `title`, `none`, `cls`, `changes` (`key(id)`, `under`, `ui(key)`, `forget(key)`, `show(key)`: the caller's forms and how one is brought into sight), `assign`, `after(list)`, `quiet`, `offer` |
 | `FileButton` | `file.tsx` | a button that opens the browser's choice of a file of the types it accepts, the same file again too | `id` (the button's), `cls`, `label`, `accept`, `off`, `inputId` and `inputLabel` (the input's id and its name in the page's language: the Appearance card's Import…), `onFile(file)` |
 | `Adder` | `adder.tsx` | the end of a list that adds an item: the new item's form in its place while shown, the button that shows it hidden meanwhile, the focus in the form's first field when it comes, in the drawing's own turn, and back on the button when it goes (Users, Roles, Sign-in providers) | `id` (the button's), `formId` (the form's place), `label`, `shown`, `set(shown)`, the form as children |

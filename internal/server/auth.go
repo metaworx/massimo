@@ -335,7 +335,7 @@ func (s *Server) SetToken(ctx context.Context, token string) error {
 	if err != nil {
 		return err
 	}
-	s.log.Info("api token applied", "owner_created", res.OwnerCreated, "key_added", res.TokenAdded, "revoked", res.Revoked, "auth", s.AuthMode())
+	s.log.Info("api token applied", "owner_created", res.OwnerCreated, "key_added", res.TokenAdded, "revoked", res.Revoked, "heirs", res.Heirs, "auth", s.AuthMode())
 	if res.OwnerCreated {
 		s.tellOpenSetup(ctx, store.BootstrapUser, store.RoleOwner)
 	}
@@ -794,8 +794,8 @@ const errTooManyTickets = ticketError("too many stream tickets outstanding")
 var errBadToken = errors.New("missing or wrong token")
 
 // errEndedToken is a token the server issued that has ended: revoked,
-// logged out, expired, or a session whose key was revoked
-// (store.TokenEnded). It is refused as errBadToken is, with its words,
+// logged out, expired, or a session whose key was revoked or is past its
+// end (store.TokenEnded). It is refused as errBadToken is, with its words,
 // but is no guess, and does not count toward the lockout (AP MobileApp
 // v1.4, D64-A).
 var errEndedToken = fmt.Errorf("%w: ended", errBadToken)
@@ -832,14 +832,13 @@ func (s *Server) resolve(ctx context.Context, mode authMode, secret, ip string) 
 		return nil, errBadToken
 	}
 	hash := store.HashToken(secret)
+	// A live token alone, its own end and its key's in the rule
+	// (store.TokenByHash, AP KeyLife, Block 2).
 	tok, ok, err := s.opts.Store.TokenByHash(ctx, hash)
 	if err != nil {
 		return nil, err
 	}
 	now := time.Now()
-	if ok && tok.Expired(now) {
-		return nil, errEndedToken
-	}
 	if !ok {
 		return nil, s.unknownToken(ctx, hash, now)
 	}
@@ -915,13 +914,14 @@ func (s *Server) principalFor(ctx context.Context, tok store.Token, now time.Tim
 
 // stillAdmitted reports whether the caller an event stream was opened
 // for would be let in now: an open server still open, the one token of a
-// server without a store unchanged, a user's token neither revoked nor
-// expired, its user and role still allowed and holding read, and for a
-// call through an integration for one of its users the chain and the
-// installation id again (stillActsFor). A store that cannot be read ends
-// the stream, as authorize fails closed. The stream asks at each
-// keep-alive (server.go, events), and authorize when it redeems a
-// stream's ticket.
+// server without a store unchanged, a user's token alive (neither
+// revoked nor past its end, and a session made from a key only while the
+// key is neither: store.TokenAlive), its user and role still allowed and
+// holding read, and for a call through an integration for one of its
+// users the chain and the installation id again (stillActsFor). A store
+// that cannot be read ends the stream, as authorize fails closed. The
+// stream asks at each keep-alive (server.go, events), and authorize when
+// it redeems a stream's ticket.
 func (s *Server) stillAdmitted(ctx context.Context, p *principal) bool {
 	if p == nil {
 		return false
@@ -936,17 +936,11 @@ func (s *Server) stillAdmitted(ctx context.Context, p *principal) bool {
 	if mode != modeUsers {
 		return false
 	}
-	now := time.Now()
-	tok, ok, err := s.opts.Store.Token(ctx, p.token.ID)
-	if err != nil || !ok || !tok.DeletedAt.IsZero() || tok.Expired(now) {
+	tok, ok, err := s.opts.Store.TokenAlive(ctx, p.token.ID)
+	if err != nil || !ok {
 		return false
 	}
-	if tok.ParentID != 0 {
-		// A session made from a key lives while the key does.
-		if key, ok, err := s.opts.Store.Token(ctx, tok.ParentID); err != nil || !ok || !key.DeletedAt.IsZero() {
-			return false
-		}
-	}
+	now := time.Now()
 	np, err := s.principalFor(ctx, tok, now)
 	if err != nil || !np.has("read") {
 		return false
@@ -955,11 +949,15 @@ func (s *Server) stillAdmitted(ctx context.Context, p *principal) bool {
 }
 
 // touch records a token's use at most once an hour, and moves a
-// session's end. A token made before the store kept revoke codes gets
-// the hash of its code, from the secret presented, at its first use,
-// whatever touchEvery says (AP MobileApp v1.6, D112-A); the settings
-// file's key gets none and is touched at most once an hour, as no
-// revoke ends it (settingsKey).
+// session's end; a session made from a key records its key's use too,
+// with the same address, so that a phone in use keeps its key under the
+// idle limit (AP KeyLife, Block 3). A token made before the store kept
+// revoke codes gets the hash of its code, from the secret presented, at
+// its first use, whatever touchEvery says (AP MobileApp v1.6, D112-A);
+// the settings file's key gets none and is touched at most once an hour,
+// as no revoke ends it (settingsKey). A token reaches it only once the
+// rule has let it in, so an ended key's use is never written, nor the
+// hash of its code.
 func (s *Server) touch(ctx context.Context, tok store.Token, secret, ip string, now time.Time) {
 	var revoke string
 	if !tok.RevokeKept && !tokenMatches(s.legacyToken(), secret) {
@@ -974,6 +972,12 @@ func (s *Server) touch(ctx context.Context, tok store.Token, secret, ip string, 
 	}
 	if err := s.opts.Store.TouchToken(ctx, tok.ID, ip, end, revoke); err != nil {
 		s.log.Error("api: token use not recorded", "token", tok.ID, "error", err)
+	}
+	if tok.ParentID != 0 {
+		// The key's use, not its code: the secret presented is the session's.
+		if err := s.opts.Store.TouchToken(ctx, tok.ParentID, ip, time.Time{}, ""); err != nil {
+			s.log.Error("api: key use not recorded", "token", tok.ParentID, "session", tok.ID, "error", err)
+		}
 	}
 }
 

@@ -263,7 +263,7 @@ and the OpenAPI file carries each operation's as `x-capability`:
 | `restore` | plan and run a restore, delete a kept backup | `POST …/restore/plan`, `POST …/restore`, `DELETE …/backups/{id}` |
 | `repair` | the repairs of a Cube's rooms and devices: their communication errors reset, a device's configuration re-sent from its room, a device placed or listed where the Cube and its list disagree, a room's master named, a room re-linked; "unlink all and re-link" needs `structure` as well ("Repairs", below) | `GET`/`POST …/repair/…`; `GET`/`POST …/repair/unlink-relink` with `structure` as well |
 | `guests` | create, invite, change, disable and remove users whose role is `guest`, and give them an end date: regular ones, or for a call through an integration that integration's own, which makes no user ("Users", below) | the users routes, `GET`/`POST`/`PUT`/`DELETE /api/v1/users…`, for those users |
-| `users` | every user: create, role, disable, password, tokens, the identities they sign in with | `GET`/`POST /api/v1/users`, `GET`/`PUT`/`DELETE …/users/{name}`, `GET`/`POST …/users/{name}/tokens`, `DELETE …/users/{name}/tokens/{id}`, `POST …/users/{name}/register`, `GET`/`POST`/`PUT`/`DELETE …/users/{name}/identities…` |
+| `users` | every user: create, role, disable, password, tokens, the identities they sign in with | `GET`/`POST /api/v1/users`, `GET`/`PUT`/`DELETE …/users/{name}`, `GET`/`POST …/users/{name}/tokens`, `PUT`/`DELETE …/users/{name}/tokens/{id}`, `POST …/users/{name}/register`, `GET`/`POST`/`PUT`/`DELETE …/users/{name}/identities…` |
 | `passwords` | set the password of a user (the manager's by default) | `GET /api/v1/users`, `GET …/users/{name}`, `PUT …/users/{name}` with a password, `POST …/users/{name}/register` |
 | `roles` | a role's capabilities and name, create and delete roles | `GET`/`POST /api/v1/roles`, `PUT`/`DELETE /api/v1/roles/{key}` |
 | `roles.disable` | disable and enable a role | `PUT /api/v1/roles/{key}/disabled` |
@@ -350,7 +350,9 @@ a page before its sign-in, or a scanner behind a proxy not in
 `-trusted-proxies`, does not lock the address out.
 Nor does a token the server issued and that has ended:
 a session revoked, logged out or past its end, a revoked key,
-a session whose key was revoked, or the token of a removed user
+a key past its end date or ended unused (`auth.key_idle_days`, Tokens),
+a session whose key was revoked, is past its end or ended unused,
+or the token of a removed user
 is answered `401` with the words of a wrong token, and counts as none,
 since a guessed token never matches one that was issued:
 a client that sends again a session that ended,
@@ -684,7 +686,7 @@ a token nobody holds and one that ended are one code, as their `error` is one:
 |------|--------|--------|-----------------|
 | `server_open_local_only` | 403 | – | the server is open and the client is beyond its local network |
 | `cross_origin_refused` | 403 | – | another site's page sent the write |
-| `token_wrong` | 401 | – | the token is missing, nobody's, or ended: revoked, logged out or expired |
+| `token_wrong` | 401 | – | the token is missing, nobody's, or ended: revoked, logged out or expired; and the bearer key of `POST …/tokens` or `POST /api/v1/login/key` revoked or ended after the request was let in |
 | `address_locked_out` | 429 | – | too many failed token checks or sign-ins from the address; `Retry-After` says for how long |
 | `user_locked_out` | 429 | – | too many failed sign-ins for the name; `Retry-After` says for how long |
 | `user_account_disabled` | 403 | `user` | the token's or the sign-in's user is disabled |
@@ -740,7 +742,7 @@ a wrong name and a wrong password are one code, as their `error` is one:
 | `password_current_wrong` | 403 | – | `current_password` is wrong |
 | `token_label_length` | 400 | `max` | the key's label is empty or longer than `max` bytes |
 | `token_unknown` | 404 | `user`, `token` | the user has no live token of that id |
-| `token_settings_key` | 409 | – | a revoke of the settings file's `MASSIMO_API_TOKEN` |
+| `token_settings_key` | 409 | – | a revoke of the settings file's `MASSIMO_API_TOKEN`, or a change of its life (`PUT …/tokens/{id}`) |
 
 **Roles and capabilities** (see "Roles" and "Capabilities"):
 
@@ -907,7 +909,9 @@ or by itself (below).
 
 `DELETE /api/v1/me/token` revokes the token that makes the call,
 whatever it is: a session, or an API key and the sessions made from it,
-`{"ok": true, "id": 4}` with the token's id (AP MobileApp, D80-B).
+with the keys it made and theirs ("Tokens", below),
+`{"ok": true, "id": 4, "heirs": [7]}` with the token's id and the heirs' ids,
+`[]` for none (AP MobileApp, D80-B; AP KeyLife, D5-A).
 It is one call for any token, without the user's name or the token's id:
 the apps revoke a kept key with the key alone so,
 and an integration may revoke its own key.
@@ -937,8 +941,16 @@ The server keeps it for every token it makes,
 and for a token made before the update from its first use after it;
 a token not used since its update has none, and its code matches nothing.
 The live token of the code is revoked, an API key's sessions with it,
+and its heirs, the keys it made and theirs, with their sessions
+(AP KeyLife, D5-A; "Tokens", below),
 as by `DELETE /api/v1/me/token`;
-the settings file's token is left live, as no revoke ends it.
+the settings file's token is left live, as no revoke ends it:
+its own code ends it no more than a revoke does,
+and the code of a key that made it passes over it and the keys it made.
+A token past its end, an API key past its end date (`expires_at`) among them,
+and an API key ended unused (`auth.key_idle_days`)
+are not revoked, and their codes revoke them all the same,
+their heirs with them (AP KeyLife, D6-A).
 The answer is `204` whether the code matched or not
 (a live token, one that ended, the settings file's, none),
 so that it tells nobody which codes are live.
@@ -951,7 +963,8 @@ one that matches nothing is a code taken already,
 a token that ended by itself, or one the server has not seen since its update.
 A match is audited as `token.revoke_code`, the token its target and its user
 its subject, with a line under Configuration and the log's Info line
-"token revoked" `by=code`;
+"token revoked" `by=code`, both naming the heirs it took (`heirs`, by id) where
+it took any, as a revoke's do;
 a code that matches nothing, the settings file's, a malformed body and a
 locked-out address write no row of their own:
 they are counted per address and minute as refused requests are,
@@ -976,7 +989,9 @@ A server without a store has no token to revoke and answers `204` at once.
 With users, `user`, `role`, `capabilities` (the effective set:
 the role's minus the disabled capabilities, every one for `owner`,
 none for a disabled role, and what those include, `restart` beside
-`update` or `reboot` ("Authentication")) and `token`, the one presented;
+`update` or `reboot` ("Authentication")) and `token`, the one presented,
+as this request leaves it: its use written, so that a key's `idle_ends_at`
+counts from it (Tokens);
 outside users mode `user` and `role` are null and `capabilities` is every one.
 `setup` is true on an open server for a caller on the local network,
 the one that may create the first owner,
@@ -1001,13 +1016,17 @@ The session names its key: `key_id` in the token list and in `GET /api/v1/me`.
 The key's next session ends the earlier one, so a phone holds one live
 session per key,
 and revoking the key (`DELETE /api/v1/users/{name}/tokens/{id}`) ends the
-session at its next request.
+session at its next request, as the key's end does:
+a session counts only while its key is neither revoked nor past its end
+(AP KeyLife, Block 2).
+A key made with that session as the bearer is no heir of the key
+("Tokens", below).
 A password set by someone else ends the sessions and leaves the keys,
 as it does for every key.
 
 A wrong key is `401` and counts toward the address's lockout,
 as every failed token check does;
-a revoked one is `401` and does not,
+a revoked one, or one past its end, is `401` and does not,
 as no token that ended does (Authentication above);
 a session as the bearer is `400`;
 a disabled user, a guest past its end date, a disabled role
@@ -1219,7 +1238,9 @@ From then on the server is in users mode (Authentication).
 `GET /api/v1/users/{name}` is one user.
 `PUT /api/v1/users/{name}` changes any of `display_name`, `role`, `disabled`,
 `expires_at` (`null` clears it) and `password`;
-absent fields stay, an unknown one is `400`.
+absent fields stay, an unknown one is `400`,
+and so is an `expires_at` that reads as the zero time (`0001-01-01T00:00:00Z`),
+here and at `POST`, rather than clearing the end.
 A user changes its own `display_name` and, with `current_password`
 or a `proof` from the sign-in by OPAQUE, its own `password` or `record`;
 a user with keys only (`has_password` false) sets its first one without,
@@ -1264,6 +1285,7 @@ or given an end date (`409`): an owner with one does not count,
 nor does an integration's user, whatever its role.
 
 `DELETE /api/v1/users/{name}` removes a user: its sessions and keys are revoked,
+with the keys its keys made ("Tokens", below),
 its preferences removed,
 an integration's user's link ended,
 and its row stays for the audit with its name,
@@ -1286,16 +1308,24 @@ the key is changed or removed in the settings file first
 ### Tokens: /api/v1/users/{name}/tokens
 
 `GET` and `POST /api/v1/users/{name}/tokens`;
-`DELETE /api/v1/users/{name}/tokens/{id}`.
+`PUT` and `DELETE /api/v1/users/{name}/tokens/{id}`.
 A user's sessions and API keys, as `GET /api/v1/me` shows the one presented;
 the same rules of access as the user.
 
-`GET` lists the live ones, oldest first, without their secrets;
+`GET` lists the live ones, oldest first, without their secrets:
+a key not revoked, ended or not, and a session not revoked, not past its end,
+and, made from a key, only while the key lives;
 the key that is the settings file's `MASSIMO_API_TOKEN` carries `"from_settings": true`,
 found by the hash of the file's token, not by its label
-(AP MobileApp v1.4, D86-A).
-`POST` with `{"label": "Loxone"}` creates an API key, which never expires,
-and answers `201` with the key once;
+(AP MobileApp v1.4, D86-A);
+a key made with another key as the bearer carries that key's id as `made_by`,
+absent for every other token.
+`POST` with `{"label": "Loxone"}` creates an API key and answers `201` with the key once;
+`"expires_at"` beside the label gives it an end date (below),
+an RFC 3339 time in the future, `null` or absent for none,
+one that has passed or is no time `400`, and no key made;
+`"idle_exempt": true` keeps it from the idle limit (below),
+from who manages the user alone (`403` for anyone else);
 an integration's user gets none (`403`, "Acting for an integration's users"):
 
 ```json
@@ -1306,17 +1336,116 @@ The key is kept nowhere but in this answer:
 the command of the request keeps the answer without `token`,
 and a retry with its `Idempotency-Key` answers `201` without it too.
 
-`DELETE …/tokens/{id}` revokes a session or a key by the `id` of the list;
+`DELETE …/tokens/{id}` revokes a session or a key by the `id` of the list,
+`{"ok": true, "id": 4, "heirs": [7, 9]}`;
 a token of another user is `404`.
 The settings file's key is `409`, as `DELETE /api/v1/me/token` answers it:
 it is changed or removed in the settings file,
 since the next start would not add it back, its hash being taken.
 A session made from a key (`POST /api/v1/login/key`) carries the key's id
-as `key_id`; revoking the key revokes that session with it.
+as `key_id`; revoking the key revokes that session with it,
+and the key's end ends it.
+
+A key made by a `POST` whose bearer is an API key is that key's heir
+(AP KeyLife v1.0, Block 2, D5-A), whichever user it is made for:
+`made_by` names the key.
+A key made by a session is no heir,
+a session of a sign-in or one made from a key by `POST /api/v1/login/key`,
+nor is one made by `massimo user token`, by the settings file's bootstrap
+or at an integration's collection of its key;
+a key put into the settings file loses its maker at the next reading of the file.
+A `POST` whose bearer key was revoked or ended after the request was let in
+makes no key and is `401` with `token_wrong`.
+A revoke takes the heirs, and theirs, with their sessions:
+`DELETE …/tokens/{id}`, `DELETE /api/v1/me/token`,
+a revoke by the key's code (`POST /api/v1/tokens/revoke`), a user's removal,
+and the bootstrap's revoke of a key that is no longer the settings file's.
+The answers of the two `DELETE`s name them in `heirs`, by id, `[]` for none,
+and so do their log lines and their change lines (in the `subject`);
+a revoke by code, whose answer is `204`, names them in its log line and its
+change line, and a removal's and the bootstrap's log lines say them too.
+The settings file's key is never an heir, nor are the keys it made:
+the revoke of the key that made it and its maker's user's removal pass over it,
+as its own revoke is `409`.
+A key's end takes none: an heir lives past it, and only a revoke reaches it.
 A token revokes itself the same way, as its own bearer:
 a key with `DELETE …/tokens/{id}` and its own id,
 or any token with `DELETE /api/v1/me/token`, which needs neither the name nor the id;
 a session ends itself with `POST /api/v1/logout`.
+
+An API key unused for the days of the setting `auth.key_idle_days`
+(GET and PUT /api/v1/settings; off by default) ends
+(AP KeyLife v1.0, Block 3), and its session with it:
+the idle clock is the key's last use, a use of its session included,
+or its making where it was never used,
+so a phone that signs in by fingerprint and uses its session keeps its key.
+An ended key and its session are refused as ended tokens,
+which do not count toward the lockout (Authentication);
+nothing is written when a key ends, so it lives again,
+its session with it while the session's own 30 days last,
+where the limit is raised or turned off, the key kept from it,
+or its end date moved later or removed (D6-A);
+its use never brings it back, since it is refused before its use is written,
+nor writes the hash of its revoke code (`POST /api/v1/tokens/revoke`).
+An end is no revoke: a revoke still reaches an ended key,
+by its id or by its code, its heirs with it.
+The list shows each key's life:
+`idle_exempt`, true for a key kept from the limit and always for the settings
+file's key, which the limit passes over (D3-A);
+`idle_ends_at`, when it ends unused, absent where the limit is off or the key is
+kept from it;
+and for a key that has ended `ended`, `idle`, or `expired` past its end date,
+listed to be revoked.
+`PUT …/tokens/{id}` with `{"idle_exempt": true}` keeps a key from the limit,
+`false` holds it to it again,
+for who manages the key's user alone (`users`, or `guests` for a guest it reaches,
+within the rank rule: D7-A), the key's own user not, unless it manages itself;
+it answers the key as the list shows it, and is audited as `token.update`,
+its change line from and to.
+A body without `idle_exempt` or `expires_at`, or with another field, is `400`,
+a session `400`, an integration's key kept from the limit `400`
+(it is always held to it, and its integration registers again once it ended),
+the settings file's key `409`, a token of another user `404`,
+and the bearer that very key `403`: a key changes nothing of its own life,
+and a session made from it is not the key.
+
+An API key may take an end date (AP KeyLife v1.0, Block 4; AP MobileApp, D75),
+at its `POST` or later with `PUT …/tokens/{id}` and
+`{"expires_at": "2026-12-24T18:00:00Z"}`, which sets or moves it,
+or `{"expires_at": null}`, which removes it;
+the list shows it as the key's `expires_at`, absent for none.
+At its end date the key ends, its session with it,
+refused as ended tokens that do not count toward the lockout,
+and is listed with `ended` `expired`, to be revoked;
+an end is no revoke, so the keys it made live on (D5-A).
+Nothing is written when it ends (D6-A):
+moved later or removed, the key lives again,
+its session with it while the session's own 30 days last.
+The end date is the key's user's to move, signed in or with another of its keys,
+or a session made from the key,
+and that of who manages the user (`users`, or `guests` for a guest it reaches,
+within the rank rule);
+an integration's key's that of a holder of `users` or `integrations`,
+on its row in the integration's user's panel;
+the integration registers again once its key ended.
+A time that has passed, or now, is `400` and changes nothing:
+a key ends now by its revoke;
+so is one that reads as the zero time (`0001-01-01T00:00:00Z`),
+which is neither an end date nor none, here as for a user's `expires_at`.
+The settings file's key takes none (`409`, D3-A), in any state of it:
+an ended one would lock the owner out,
+since the bootstrap adds it back only where its hash is unknown.
+A key that becomes the settings file's loses its end date at the bootstrap,
+and the file's key never ends by one, whatever its row holds.
+The bearer that very key is `403` (D4-A):
+a request whose bearer is the key never moves that key's end date.
+That alone does not stop the end date from being moved later:
+a session made from the key is not the key and may move it,
+and so may the key's user, signed in or with another of its keys,
+an end date that who manages the user set included.
+A user or a key with no right to the user is `403`, as for its other fields.
+The change is audited as `token.update`,
+its change line from and to (`null` for none).
 
 ### Identities: /api/v1/users/{name}/identities
 
@@ -2512,6 +2641,12 @@ the days the others are kept (365), 0 for ever and at most 3650,
 and `backups.keep_newest`,
 how many of a Cube's newest backups are kept whatever their age (10, 0 to 1000);
 a change of the last three prunes at once.
+`auth.key_idle_days`, 0 by default for off, 0 to 3650, is how many days an API key
+may stay unused before it ends, its session with it,
+counted from its last use, its session's included, or its making
+(Tokens, above; AP KeyLife, Block 3, D2-A);
+it applies at once, so a key unused for longer ends at its next check,
+and a key kept from it and the settings file's key never end by it.
 `auth.password_login`, true by default, says whether `POST /api/v1/login`
 takes a password, and applies at once:
 off, it answers `403`, the start of a sign-in by OPAQUE says `"v1": false`,

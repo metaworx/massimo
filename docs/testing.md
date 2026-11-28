@@ -557,6 +557,14 @@ a rig with waits of its own builds on the start and keeps its name
 (`startDrift`, `startSlotsCube`, `startMismatchCube`, `startMovingCube`).
 The recorded greeting is read once for every test:
 `recorded(t)` returns a copy of it, the test's to change.
+A test of a route's change line reads it with `changeSummaries(t, r, action, target)`
+(`logchange_test.go`, AP KeyLife, Block 4):
+once the store has written what the server handed it,
+the summaries of the change lines of that action on that target (`token:4`),
+oldest first, from the newest 100 of KEQ0000100's log,
+as the owner's key reads them,
+whose `changes` and `subject` the test then checks (`TestPutToken`,
+`TestKeyEndDate`, `TestKeyHeirs`).
 One test runs the server by hand, since it tests `Run`'s start and end:
 `TestNothingStartsAfterRun`.
 
@@ -672,6 +680,17 @@ and a file already there is opened as it is, as a restart's is.
 `internal/serve`'s `testStore`,
 and the tests of `cmd/massimo` that open a store for a server they build
 open their stores through it.
+`storekit.OpenAt(t, dir, now)` is `Open` with the store's clock `now`,
+a `testkit.Clock`'s `Now`, for a test that moves the store's days on
+where the product counts them from the times it wrote,
+as the idle limit of API keys does (AP KeyLife, Block 3;
+`internal/server`'s `storeOptionsAt`).
+Only the store's times follow it; a server's own checks keep the real time,
+so such a test starts the store's clock days back and lets it catch up
+with the real time rather than run ahead of it
+(`TestKeyIdle` of `internal/server`: an ended token is told from a guess by
+the server's clock).
+
 `storekit.Raw(t, st)` opens a second connection to the file of `st`,
 past the store, as another process holds one,
 waiting for a lock as the store does, and closes it at the test's end:
@@ -697,6 +716,18 @@ or that holds the file's lock while the store works.
   and a test of what the migrations make of an empty file,
   such as the schema (`TestStoreSQL`, `TestSyncColumns`),
   the seeded roles and the node's identity.
+  An additive migration's own test is `additiveMigration(t, prev, v, name, fill, older...)`
+  (`internal/store/additive_test.go`, AP KeyLife, Block 3):
+  a file at `prev`, migrated to `v` alone and filled there in plain SQL,
+  keeps `min_reader` 24 and opens with a binary for `prev`
+  and for each version of `older`, such as 26, the 0.17 line's,
+  and the migration's down part takes it back to the schema of `prev`,
+  every token row kept;
+  it returns a copy of the filled file at `v`,
+  which the test opens with this binary, migrated to the newest version.
+  A test does not read a file at `v` with this binary's reads,
+  which need every later migration's columns:
+  `TestTokenMakerMigration` did, and broke at the next migration.
   A test that needs two distinct node identities,
   such as a test of two nodes' sync,
   opens fresh stores too: copies share `node.id` and `tenant.id`.
