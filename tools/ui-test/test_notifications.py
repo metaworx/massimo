@@ -20,7 +20,7 @@ import urllib.error
 from axe_playwright_python.sync_playwright import Axe
 
 from conftest import api_call
-from helpers import held_timers, own_id, show_view, wait_until
+from helpers import held_timers, own_id, safe_route, show_view, wait_until
 
 # The fake push of a browser: a service worker container whose register
 # and ready give a registration with a pushManager, whose subscription
@@ -362,7 +362,7 @@ def test_server_backup_failed_for_backup_retry_alone(page, case):
     backup.retry (AP ServerBackup, Block 2), and offered to them alone: a
     user with preferences and no backup.retry has every other row."""
     me = dict(GUEST, capabilities=["read", "preferences"])
-    page.route("**/api/v1/me", lambda route: route.fulfill(status=200, content_type="application/json", body=json.dumps(me)))
+    safe_route(page, "**/api/v1/me", lambda route: route.fulfill(status=200, content_type="application/json", body=json.dumps(me)))
     try:
         page.evaluate("loadMe()")
         show_view(page, "notify")

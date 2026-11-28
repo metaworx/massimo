@@ -400,7 +400,7 @@ def test_copy_failed_retried_by_backup_retry_alone(page, case):
     fold.locator(":scope > summary").click()
     show_view(page, "tiles")
     me = dict(VIEWER, capabilities=["read", "preferences", "backup.retry"])
-    page.route("**/api/v1/me", lambda route: route.fulfill(status=200, content_type="application/json", body=json.dumps(me)))
+    safe_route(page, "**/api/v1/me", lambda route: route.fulfill(status=200, content_type="application/json", body=json.dumps(me)))
     try:
         page.evaluate("loadMe()")
         assert wait_until(page, "document.body.classList.contains('no-backup-server') && !document.body.classList.contains('no-backup-retry')", 5), \
