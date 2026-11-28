@@ -1,4 +1,4 @@
-# Testing the web UI (v1.42.0)
+# Testing the web UI (v1.43.0)
 
 An evaluation of a Cypress suite for the web UI, against the alternatives:
 what the Playwright smoke test covers today and what it cannot do well,
@@ -1017,6 +1017,13 @@ the server's and the test's, in order,
   Anything else the handler raises goes to the guard as well, and the request is aborted.
   The guard's problems are printed as they come,
   and a test that fails first carries them in its report.
+- **The host's console lines** (`HOST_NOISE` of `conftest.py`, AP SteadyTests, Block 18):
+  the guard does not count a console error of the host's as the page's.
+  Chromium fails the requests in flight with `net::ERR_NETWORK_CHANGED`
+  whenever an address of the host's network changes,
+  as another session's Docker network comes or goes, loopback requests too,
+  and neither Playwright nor Chromium documents a launch option against it.
+  A test that fails meanwhile carries the lines in its report.
 - **Waits and cleanups:**
   a wait that returns whether it was met is asserted where it is called
   (`assert wait_until(…)`, `assert scroll_settled(…)`, `assert wait_held(…)`),
