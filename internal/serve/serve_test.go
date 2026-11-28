@@ -24,8 +24,10 @@ import (
 	"go.metaworx.ch/massimo/internal/announce"
 	"go.metaworx.ch/massimo/internal/backup"
 	"go.metaworx.ch/massimo/internal/cubelan/fakecube"
+	"go.metaworx.ch/massimo/internal/server"
 	"go.metaworx.ch/massimo/internal/store"
 	"go.metaworx.ch/massimo/internal/testkit"
+	"go.metaworx.ch/massimo/internal/testkit/cubewatch"
 )
 
 // TestMain keeps the look for servers beside each discovery run off the
@@ -304,6 +306,61 @@ func TestOpenIntervals(t *testing.T) {
 		if got := settings[k].FixedBy; got != want {
 			t.Errorf("%s fixed by %q, want %q", k, got, want)
 		}
+	}
+}
+
+// A poll interval given as 0 is never, as watch -poll 0 is, where the
+// server takes 0 for its default: the Cube is asked for no device list
+// over a window in which a poll of the default would have come, and the
+// settings say 0 in effect, fixed by -poll, beside the setting's own
+// value, which keeps its range.
+func TestOpenPollNever(t *testing.T) {
+	t.Parallel()
+	noCubeEnv(t)
+	greeting, err := fakecube.LoadGreeting(greetingFile)
+	if err != nil {
+		t.Fatal(err)
+	}
+	fc := &fakecube.Server{Greeting: greeting}
+	cubeAddr, err := fc.Start("127.0.0.1:0")
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { fc.Close() })
+	lines := cubewatch.Lines(fc)
+	ctx := context.Background()
+	data := t.TempDir()
+	st := testStore(t, data)
+	if _, err := st.AddCube(ctx, store.Cube{Serial: "KEQ0000100", Configured: true, Address: cubeAddr, Source: store.SourceUI}); err != nil {
+		t.Fatal(err)
+	}
+	st.Close()
+	zero := time.Duration(0)
+	inst, err := Open(ctx, Config{Listen: "127.0.0.1:0", DataDir: data, Proxies: []string{"off"},
+		PollInterval: &zero, RefreshInterval: &never, DiscoverInterval: &never, Logger: quietLog()})
+	if err != nil {
+		t.Fatal(err)
+	}
+	stop := runInstance(t, inst)
+	base := "http://" + inst.Addr()
+	waitForCube(t, base)
+	connected := time.Now()
+	var settings map[string]struct {
+		Value    string `json:"value"`
+		InEffect string `json:"in_effect"`
+		FixedBy  string `json:"fixed_by"`
+	}
+	getJSON(t, base+"/api/v1/settings", &settings)
+	if p := settings[store.PollIntervalKey]; p.Value != "10s" || p.InEffect != "0" || p.FixedBy != "-poll" {
+		t.Fatalf("poll_interval %+v, want the value 10s, 0 in effect, fixed by -poll", p)
+	}
+	// The window outlasts a poll of the default from the connect on; a
+	// poll's l: would come within it.
+	window := server.DefaultPollInterval + 2*time.Second
+	lines.Never(t, 0, "an l: line, a poll", cubewatch.Type('l'), func() bool { return time.Since(connected) > window },
+		testkit.For(2*window))
+	if err := stop(); err != nil {
+		t.Fatal(err)
 	}
 }
 

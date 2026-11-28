@@ -16,6 +16,27 @@ import (
 	"go.metaworx.ch/massimo/internal/store"
 )
 
+// changeSummaries returns the summaries of the change lines of action on
+// target ("token:4"), oldest first, as the owner's key ("secret") reads
+// them from the newest 100 of KEQ0000100's log, once the store has
+// written what the server handed it: a test of a route's change line
+// reads its changes or its subject from them.
+func changeSummaries(t *testing.T, r *rig, action, target string) []map[string]any {
+	t.Helper()
+	if err := r.s.opts.Store.FlushEvents(t.Context()); err != nil {
+		t.Fatal(err)
+	}
+	var lines []map[string]any
+	getJSON(t, r.ts, "secret", "/api/v1/cubes/KEQ0000100/log?kind=change&limit=100", &lines)
+	var out []map[string]any
+	for _, l := range lines {
+		if sum, _ := l["summary"].(map[string]any); sum["action"] == action && sum["target"] == target {
+			out = append(out, sum)
+		}
+	}
+	return out
+}
+
 // Every audited action says which line it writes, and the table names
 // no action the routes do not have.
 func TestEveryActionHasALine(t *testing.T) {

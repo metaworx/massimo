@@ -94,12 +94,11 @@ func (s *Server) putUpdateAnswer(w http.ResponseWriter, r *http.Request) error {
 	}
 	ctx := r.Context()
 	v, _ := s.updateRelease(ctx, false)
-	if !v.Available || req.Version != v.Latest {
-		offered := v.Latest
-		if !v.Available {
-			offered = "none"
-		}
-		return fail(http.StatusConflict, "%q is not the version offered (%s)", req.Version, offered)
+	switch {
+	case !v.Available:
+		return refuse(http.StatusConflict, codeUpdateNoneOffered, req.Version)
+	case req.Version != v.Latest:
+		return refuse(http.StatusConflict, codeUpdateNotOffered, req.Version, v.Latest)
 	}
 	if req.Answer == answerNow {
 		v, err := s.beginUpdate(ctx, userIDOf(r), false)
@@ -110,7 +109,7 @@ func (s *Server) putUpdateAnswer(w http.ResponseWriter, r *http.Request) error {
 		return nil
 	}
 	if !s.nightAt(ctx, time.Now()).on {
-		return fail(http.StatusConflict, "automatic updates are off (the setting %s): there is no night to install it in or to skip", store.UpdateAutoKey)
+		return refuse(http.StatusConflict, codeUpdateAutoOff, store.UpdateAutoKey)
 	}
 	a := updateAnswer{Version: req.Version, Answer: req.Answer, At: time.Now().UTC()}
 	if id := userIDOf(r); id != 0 {

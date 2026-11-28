@@ -16,6 +16,7 @@ import (
 	"go.metaworx.ch/massimo/internal/protocol/cube"
 	"go.metaworx.ch/massimo/internal/store"
 	"go.metaworx.ch/massimo/internal/testkit/cubewatch"
+	"go.metaworx.ch/massimo/internal/testkit/storekit"
 )
 
 // roleSets are the default roles' capabilities as docs/store.md section
@@ -33,7 +34,15 @@ var roleSets = map[string][]string{
 // stays quick.
 func storeOptions(t *testing.T, dir, token string) Options {
 	t.Helper()
-	st := testStore(t, dir)
+	return storeOptionsAt(t, dir, token, nil)
+}
+
+// storeOptionsAt is storeOptions with the store's clock now (nil for the
+// real one; storekit.OpenAt), for a test that moves the store's days on:
+// an API key's idle limit (AP KeyLife, Block 3).
+func storeOptionsAt(t *testing.T, dir, token string, now func() time.Time) Options {
+	t.Helper()
+	st := storekit.OpenAt(t, dir, now)
 	// The fake Cube has a row, as a served Cube has in production, so
 	// that the audit can name it; the runtime itself comes from Cubes.
 	if _, ok, _ := st.Cube(t.Context(), "KEQ0000100"); !ok {
@@ -57,6 +66,16 @@ func userToken(t *testing.T, st *store.Store, name, role string) string {
 		t.Fatal(err)
 	}
 	return secret
+}
+
+// endToken puts a token's end a second into the past, as a key's end
+// date does once it has passed (AP KeyLife, Block 2): TouchToken moves a
+// token's end to the one it is given, with a use at the same moment.
+func endToken(t *testing.T, st *store.Store, id int64) {
+	t.Helper()
+	if err := st.TouchToken(t.Context(), id, "", time.Now().Add(-time.Second), ""); err != nil {
+		t.Fatal(err)
+	}
 }
 
 // callAPI sends a request with a token and a body and returns the status
@@ -230,7 +249,7 @@ func TestRolesAgainstRoutes(t *testing.T) {
 			if !want && !refused {
 				t.Errorf("%s: %s %s answered %d %s, want 403 for %q", role, r.method, r.path, code, text, r.capability)
 			}
-			if !want && errorOf(text) != `capability "`+r.capability+`" required` {
+			if !want && (errorOf(text) != `capability "`+r.capability+`" required` || answerCode(text) != "capability_required") {
 				t.Errorf("%s: %s %s: message %q", role, r.method, r.path, text)
 			}
 		}
@@ -261,7 +280,7 @@ func TestMoveNeedsStructure(t *testing.T) {
 		{"namer", namer, `{"name":"x","room_id":6}`, "structure"},
 	} {
 		code, text := callAPI(t, ts, "PUT", path, c.token, c.body)
-		if c.want == "" && code == 403 || c.want != "" && (code != 403 || errorOf(text) != `capability "`+c.want+`" required`) {
+		if c.want == "" && code == 403 || c.want != "" && !isRefusal(code, text, 403, "capability_required", `{"capability":"`+c.want+`"}`, `capability "`+c.want+`" required`) {
 			t.Errorf("%s with %s: %d %s, want refused for %q", c.who, c.body, code, text, c.want)
 		}
 	}
@@ -282,7 +301,7 @@ func TestCopyNeedsConfigure(t *testing.T) {
 	st.AddRole(t.Context(), store.Role{Key: "mover", Capabilities: []string{"read", "structure"}}, 0)
 	mover := userToken(t, st, "mover", "mover")
 	path := "/api/v1/cubes/KEQ0000100/devices/0a010d"
-	if code, text := callAPI(t, ts, "PUT", path, mover, `{"room_id":1}`); code != 403 || errorOf(text) != `capability "configure" required` {
+	if code, text := callAPI(t, ts, "PUT", path, mover, `{"room_id":1}`); !isRefusal(code, text, 403, "capability_required", `{"capability":"configure"}`, `capability "configure" required`) {
 		t.Fatalf("a move with the copy and without configure: %d %s", code, text)
 	}
 	if got := cubewatch.Lines(fc).Since(0, cubewatch.Except('l')); len(got) != 0 {

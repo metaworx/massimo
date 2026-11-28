@@ -22,7 +22,7 @@ export const LOG_KINDS = ["connected", "disconnected", "hello", "metadata", "con
   "device_forgotten", "cube_found", "restore_step", "restore_done", "disagree", "drift",
   "cube_gone", "address_changed", "server_started", "server_stopping", "settings_read", "restart", "reboot", "reboot_cancelled",
   "update", "update_result", "update_postponed", "backup", "backup_deleted", "backups_pruned", "log_pruned", "log_rotated", "restore_started", "open_setup",
-  "server_backup", "change", "command", "hold", "structure", "unconfirmed", "battery", "error_reset", "error_watch", "slots", "mismatch", "login", "login_failed", "locked_out", "audit_pruned",
+  "server_backup", "change", "command", "hold", "structure", "unconfirmed", "battery", "wall_reset", "error_reset", "error_watch", "slots", "mismatch", "login", "login_failed", "locked_out", "audit_pruned",
   "proxy_connected", "proxy_disconnected", "proxy_refused", "proxy_discarded", "proxy_deleted", "proxy_delete_refused", "proxy_pairing", "proxy_warning"];
 
 /**
@@ -50,8 +50,8 @@ export const LOG_SOURCES = ["system", "config", "cube", "device", "queue", "serv
 
 /** LOG_KIND_SOURCE groups the kinds by the source they come from, for the kind choice; a kind of more than one (config) goes with the devices. */
 export const LOG_KIND_SOURCE: Record<string, string> = {
-  state: "device", config: "device", paired: "device", device_forgotten: "device", battery: "device", error_reset: "device", error_watch: "device",
-  unconfirmed: "device",
+  state: "device", config: "device", paired: "device", device_forgotten: "device", battery: "device", wall_reset: "device",
+  error_reset: "device", error_watch: "device", unconfirmed: "device",
   connected: "cube", disconnected: "cube", hello: "cube", metadata: "cube", pairing_started: "cube", pairing_ended: "cube",
   cube_found: "cube", cube_gone: "cube", address_changed: "cube",
   disagree: "cube", drift: "device",

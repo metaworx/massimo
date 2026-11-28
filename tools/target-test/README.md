@@ -34,11 +34,11 @@ so that two runs side by side do not collide:
   so that a signature for another region is refused.
 
 `run.sh` names the project `massimo-target-<pid>`,
-waits until each server answers on its own loopback
-(Docker's port on the host accepts a connection before either does),
-makes the buckets with MinIO's `mc`, `massimo-test`
-and `massimo-test-lock`, the second with object lock and a default retention
-(`GOVERNANCE`, a day), as a bucket that keeps the backups from a stolen key,
+waits until each server answers on its own loopback (Docker's port on the host
+accepts a connection before either does), makes the buckets with MinIO's `mc`,
+`massimo-test` and `massimo-test-lock`,
+the second with object lock and a default retention (`GOVERNANCE`, a day),
+as a bucket that keeps the backups from a stolen key,
 and runs the live tests with their variables set:
 
 ```sh
@@ -72,11 +72,12 @@ and so does a run in which no live test passed.
   the share's root, and the user written `WORKGROUP\user`;
   a wrong password, a share not there and a closed port refused,
   each saying what refused, never with the password.
-- **TestS3Live**, Block 9's, tests the S3 target against MinIO,
-  and, in its subtest `object_lock`, puts a backup and the check's probe
-  into the bucket with object lock, which takes no PUT without its
-  `Content-MD5`; the subtest skips without `_S3_LOCK_BUCKET`, which fails
-  the run here as any skip.
+- **TestS3Live**, Block 9's, tests the S3 target against MinIO, and,
+  in its subtest `object_lock`,
+  puts a backup and the check's probe into the bucket with object lock,
+  which takes no PUT without its `Content-MD5`;
+  the subtest skips without `_S3_LOCK_BUCKET`,
+  which fails the run here as any skip.
 
 The servers are taken down whatever happened,
 their logs printed first where the run failed.

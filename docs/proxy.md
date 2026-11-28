@@ -89,9 +89,9 @@ On connect, the greeting a real Cube sends: `H` with a fresh connection id,
 the current duty cycle, free memory slots and clock, then `M`,
 the `C` line of every device and `L`.
 After that a client gets only the replies to its own lines, in order:
-the original software takes the next line it reads for the reply to the
-command it sent, so a line it did not ask for makes every later reply one
-line late ("S: expected", "ACK expected").
+the original software takes the next line it reads for the reply to the command it sent,
+so a line it did not ask for makes every later reply one line late ("S:
+expected", "ACK expected").
 A change of the Cube's state therefore shows at the client's next `l:`,
 which the original software sends every 10 s.
 Several clients may be connected at the same time.
@@ -116,15 +116,15 @@ A client's radio write (`s:`) that the Cube took is followed up as the server's
 own writes are (README, "Server"): after a configuration write (week programme,
 preset temperatures, valve settings,
 room group) the server reads the device's `C` line again for about six minutes
-until it shows what was written (docs/api-v1.md, "Writes confirmed by the
-devices"), or for a write that does not decode, a room group's, until it changes,
+until it shows what was written (docs/api-v1.md,
+"Writes confirmed by the devices"), or for a write that does not decode,
+a room group's, until it changes,
 for every thermostat of the room when the write was addressed to the room;
 after any radio write it reconnects once for the budget if radiograms were pending.
-A setpoint, a key lock and a display mode are confirmed by the devices' states
-instead, as the API's own are
-(docs/api-v1.md, "Writes confirmed by the devices"):
-a room-flagged one by every visible thermostat of the room
-(the wall thermostats alone for the display), a direct one by its device;
+A setpoint, a key lock and a display mode are confirmed by the devices' states instead,
+as the API's own are (docs/api-v1.md, "Writes confirmed by the devices"):
+a room-flagged one by every visible thermostat of the room (the wall thermostats
+alone for the display), a direct one by its device;
 one whose radiogram does not decode is not.
 Its `unconfirmed` line in the log has the `source` `proxy`.
 A link re-reads nothing.
@@ -164,12 +164,13 @@ so that the original software's deletions show at once.
 ## Virtual wall thermostats
 
 With the Cube's option `proxy_virtual` on (the Cube's settings in the web UI,
-or `PUT /api/v1/cubes/{sn}`), the proxy shows its clients the API's view `virtual`:
-every room has one wall thermostat, its virtual one
-(docs/api-v1.md, "The virtual wall thermostat"),
-and the real wall thermostats are left out, as hidden devices are.
-The original software allows one wall thermostat per room and shows a room
-by it, so it shows the room's temperature as Massimo's other clients do.
+or `PUT /api/v1/cubes/{sn}`),
+the proxy shows its clients the API's view `virtual`:
+every room has one wall thermostat, its virtual one (docs/api-v1.md,
+"The virtual wall thermostat"), and the real wall thermostats are left out,
+as hidden devices are.
+The original software allows one wall thermostat per room and shows a room by it,
+so it shows the room's temperature as Massimo's other clients do.
 A client sees the change at its next connection.
 
 Nothing of a virtual wall thermostat reaches the Cube:
@@ -181,25 +182,27 @@ Nothing of a virtual wall thermostat reaches the Cube:
   and its entry in the L line has its state; `c:` and `l:` answer the same.
 - A metadata write is stripped of the virtual wall thermostats,
   and the real wall thermostats are put back.
-  One the proxy cannot read, such as a part after the first of a multi-part write,
+  One the proxy cannot read,
+  such as a part after the first of a multi-part write,
   is not sent while the option is on; the client gets `A:`,
   and the log a `proxy_warning`.
 - A set-temperature or week programme command to a virtual wall thermostat
   goes to its room, as a real wall thermostat's reaches its room.
-  Settings, display, key lock, links and group go to the room's real wall
-  thermostat; where there is none, the proxy answers with `S:` and sends nothing.
+  Settings, display, key lock,
+  links and group go to the room's real wall thermostat; where there is none,
+  the proxy answers with `S:` and sends nothing.
   A link with a virtual wall thermostat is a link with the room's real one,
   or answered the same way.
 - A `t:` that deletes a virtual wall thermostat is answered and leaves it.
-- The original software offers to move and delete a virtual wall thermostat
-  as any device; a moved one is stripped from the metadata write as above,
+- The original software offers to move and delete a virtual wall thermostat as any device;
+  a moved one is stripped from the metadata write as above,
   so it is back in its own room at the next connect.
 
 Pairing a real wall thermostat through the original software is refused by it,
 since every room shows one: pair it through Massimo's web UI,
 or with the option off.
-The option is off until the test with the original software has passed
-(AP RoomApi, Block 8).
+The option is off until the test with the original software has passed (AP RoomApi,
+Block 8).
 
 ## Pairing
 
@@ -276,8 +279,8 @@ and takes no Cube for gone (`discovery run cut short` in the log).
 Its network settings dialogue works the same way,
 but for a search of the server's that comes in between;
 an answer that comes to the server instead, other than to a search,
-is logged at Warn, once a minute
-(`a Cube answered another program on this host`),
+is logged at Warn,
+once a minute (`a Cube answered another program on this host`),
 and stopping the server for that work avoids it.
 The server also answers a search from its own host by the subnet's broadcast,
 which every socket on the port receives,
@@ -302,9 +305,8 @@ a new address) is no loss, and the answers go on.
 A client already connected keeps its connection,
 and one given the address still connects and reads the last state.
 The server itself is found whatever its Cube does:
-it announces itself by mDNS as `_massimo._tcp`,
-which the apps, `massimo discover` and Home Assistant browse
-(README.md, "Server");
+it announces itself by mDNS as `_massimo._tcp`, which the apps,
+`massimo discover` and Home Assistant browse (README.md, "Server");
 the Cube's discovery has no answer for a server,
 since the original software would take one for another Cube.
 

@@ -1,0 +1,54 @@
+# The plain routes of the UI suite's test files, a page's or a
+# context's .route( called, not helpers.py's safe_route
+# (idioms_test.go; AP SteadyTests, Block 4): a test file and its count a
+# line. A plain handler races the page that closes with a request on its
+# way; a test routes with safe_route, or tells the page's own reads
+# through Reads (docs/ui-testing.md, section 1). A count may fall and may
+# not rise: a new route fails `go test`, and so does a route taken out
+# until its line here is lowered in the same commit, or taken out at 0.
+test_admin_updates.py 2
+test_brand.py 1
+test_connect.py 1
+test_cube_page.py 1
+test_cube_updates.py 1
+test_cubes.py 2
+test_discover.py 3
+test_error_texts.py 1
+test_first_owner.py 11
+test_header.py 3
+test_home.py 1
+test_keep_open.py 2
+test_log.py 12
+test_log_alerts.py 1
+test_login.py 10
+test_main_menu.py 2
+test_maint_updates.py 12
+test_new_batteries.py 1
+test_notifications.py 1
+test_oidc.py 3
+test_open_banner.py 1
+test_page_switch.py 1
+test_parts_guard.py 2
+test_password_eye.py 3
+test_password_rule.py 2
+test_password_suggest.py 7
+test_reboot.py 2
+test_refresh_now.py 1
+test_restart.py 10
+test_room_marks.py 1
+test_room_updates.py 1
+test_rooms.py 1
+test_send.py 1
+test_server_sign.py 3
+test_settings.py 2
+test_settings_copy.py 1
+test_sign_in_resend.py 4
+test_sign_in_updates.py 4
+test_sign_out_late.py 5
+test_system_info.py 6
+test_tls.py 3
+test_unsaved.py 12
+test_update.py 20
+test_users.py 2
+test_ways.py 11
+test_week_program.py 1

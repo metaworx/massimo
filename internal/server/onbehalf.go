@@ -148,8 +148,9 @@ func withinIntegration(caps map[string]bool, integ store.Integration) map[string
 
 // integrationPrincipal is the principal of a request with an
 // integration's key: the integration itself, or with the header the user
-// it acts for, with the capabilities the chain leaves. A key that is no
-// integration's comes back unchanged, unless the request names a user.
+// it acts for, with the capabilities the chain leaves and the
+// installation id the call came from. A key that is no integration's
+// comes back unchanged, unless the request names a user.
 func (s *Server) integrationPrincipal(ctx context.Context, r *http.Request, p *principal) (*principal, *onBehalfRefusal) {
 	h := r.Header.Get(OnBehalfHeader)
 	st := s.opts.Store
@@ -195,7 +196,12 @@ func (s *Server) integrationPrincipal(ctx context.Context, r *http.Request, p *p
 	if err != nil {
 		return nil, &onBehalfRefusal{http.StatusInternalServerError, nil, err.Error()}
 	}
-	return s.actingFor(ctx, p, caps, &integ, &id, ob.level, time.Now())
+	q, refused := s.actingFor(ctx, p, caps, &integ, &id, ob.level, time.Now())
+	if refused != nil {
+		return nil, refused
+	}
+	q.instance = ob.instance
+	return q, nil
 }
 
 // actingFor is the principal of a call through integration integ for its
@@ -257,16 +263,22 @@ func (s *Server) actingFor(ctx context.Context, p *principal, caps map[string]bo
 // stillActsFor reports whether a call through an integration that p, its
 // principal, was let in with would be let in now, read again without a
 // write: np is the principal of its key now (principalFor). Its
-// integration is still the key's and active, its identity still acts for
+// integration is still the key's and active, the installation id the
+// call came from still the accepted one, its identity still acts for
 // someone (store.IntegrationIdentityByID), as the same user and of the
 // same own user, and the chain at the call's level still holds read, so
 // that the removal, a disabling or the end of either user, a role
 // disabled, an unlink or a link end the stream (AP LinkedRemoval,
-// Block 1).
+// Block 1), and so does another installation id accepted (D4-A).
 func (s *Server) stillActsFor(ctx context.Context, p, np *principal, now time.Time) bool {
 	st := s.opts.Store
 	integ, ok, err := st.IntegrationOfUser(ctx, np.user.ID)
 	if err != nil || !ok || integ.State != store.IntegrationActive || p.integration == nil || integ.ID != p.integration.ID {
+		return false
+	}
+	if p.instance != integ.InstanceID {
+		// As integrationPrincipal refuses a request of that installation,
+		// without recording it pending: a keep-alive writes nothing.
 		return false
 	}
 	id, ok, err := st.IntegrationIdentityByID(ctx, p.actsFor.ID)

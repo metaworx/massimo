@@ -1,5 +1,4 @@
-# Massimo — CI Conventions (v1.76.0)
-
+# Massimo — CI Conventions (v1.78.0)
 What CI does in this project, for whoever has to change it.
 `/AGENTS.md` names this file as the canonical owner of CI conventions,
 so a rule that lives only in a workflow YAML — a version pin,
@@ -26,7 +25,7 @@ this document is the source of truth for *why*.
 
 | Platform | Files |
 |----------|-------|
-| GitHub Actions | `.github/workflows/ci.yml` (a push to `main`, to a maintenance branch `maint/<x.y>` or of a version tag, a pull request), `.github/workflows/build.yml` (the release's build, called by ci.yml beside its tests and by nightly.yml), `.github/workflows/release.yml` (signing and publishing, called by ci.yml once its tests have passed and the build is done, and by nightly.yml), `.github/workflows/nightly.yml` (the nightly build, daily at 02:30 UTC and by hand on `main`), `.github/workflows/platforms.yml` (the Windows service and macOS LaunchDaemon jobs, called by ci.yml beside its tests and by nightly.yml before its build), `.github/workflows/retry.yml` (a macOS or Windows job no runner took, run again in a tag's run of ci.yml and in a nightly run, once that run has ended), `.github/workflows/publish.yml` (called by release.yml, or run by hand for a tag), `.github/workflows/caches.yml` (CodeQL's overlay databases of older commits deleted from the Actions caches, every hour) |
+| GitHub Actions | `.github/workflows/ci.yml` (a push to `main`, to a maintenance branch `maint/<x.y>` or of a version tag, a pull request), `.github/workflows/build.yml` (the release's build, called by ci.yml beside its tests and by nightly.yml), `.github/workflows/release.yml` (signing and publishing, called by ci.yml once its tests have passed and the build is done, and by nightly.yml), `.github/workflows/nightly.yml` (the nightly build, daily at 02:30 UTC and by hand on `main`), `.github/workflows/platforms.yml` (the Windows service and macOS LaunchDaemon jobs, called by ci.yml beside its tests and by nightly.yml before its build), `.github/workflows/retry.yml` (a macOS or Windows job no runner took, run again in a tag's run of ci.yml and in a nightly run, once that run has ended), `.github/workflows/publish.yml` (called by release.yml, or run by hand for a tag), `.github/workflows/caches.yml` (CodeQL's overlay databases of older commits deleted from the Actions caches, every hour), `.github/workflows/ui-soak.yml` (the UI suite, each test three times in a shuffled order, daily at 00:20 UTC, by hand and on a pull request that changes the soak; it gates nothing) |
 
 There is no other platform.
 
@@ -40,6 +39,7 @@ flowchart TD
     start{{"What started the run"}}
     start -->|"a pull request, a push to main or maint/x.y,<br/>a version tag: ci.yml"| relcommit
     start -->|"02:30 UTC or by hand: nightly.yml"| pick
+    start -->|"00:20 UTC, by hand or the soak's change: ui-soak.yml"| soak["UI soak: each test three times, shuffled,<br/>in the four cases; red where one failed,<br/>gating nothing"]
     start -->|"a push to a release branch"| idle["Nothing runs"]
 
     subgraph gate ["ci.yml, What to test: the answers every job reads"]
@@ -125,6 +125,7 @@ flowchart TD
 | push to a release branch (`release/alpha`, later `release/beta` and `release/stable`) | nothing: ci.yml listens to `main`, the maintenance branches and the tags; the release moved the branch to a commit ci.yml had tested |
 | a version tag | every job above, as for a push to `main`, Build included, a macOS or Windows job no runner took failing it, which Retry runs again; then release.yml: sign the manifest and `SHA256SUMS` with the release key, verify the signatures against the public key compiled into `massimo`, publish the GitHub release; with the app's keys set, sign the Android app, add it to the release and its lines to `SHA256SUMS`, sign that again and attest the signed files (section 6); then, with the deploy key set, the Homebrew formula of the release's channel rendered and pushed to the tap (publish.yml, section 6), and, with the apt key set, the apt repository rebuilt from the releases and deployed to GitHub Pages |
 | daily at 02:30 UTC, or by hand (`gh workflow run nightly.yml --ref main`) | nightly.yml: What to ship (`packaging/nightly-pick.sh`) picks the newest commit of `main` whose suite passed and that is newer than the one the nightly build carries, and Platforms runs the macOS or Windows job first, on `main`'s head, where the Tested records say the job did not run for its code, the night skipped where that commit is not `main`'s head; once Platforms passed or was not needed (Platforms passed), build.yml, then release.yml: the nightly build, `release/nightly`; nothing where there is no such commit, and nothing, the site included, where Platforms did not pass (section 6). By hand, `dry_run` ships nothing and `platforms` runs both jobs on `main`'s head |
+| daily at 00:20 UTC, by hand (`gh workflow run ui-soak.yml --ref main`, `-f repeat=<n>`, `-f seed=<n>`), or a pull request that changes `ui-soak.yml` or `tools/ui-test/soak_summary.py` | ui-soak.yml: the web UI's suite in its four cases, "UI soak (1100-en)", "UI soak (1100-de)", "UI soak (390-en)" and "UI soak (390-de)", each test three times (`UI_TEST_REPEAT`) in the order of a seed (`UI_TEST_SHUFFLE`), the run's id unless one is given; each job's summary lists the tests that failed in a repeat, with their case and how many of their runs failed; red where a test failed once, and no other workflow or check waits for it (below) |
 | a tag's run of ci.yml or a nightly run that ended failed | retry.yml: where a macOS or Windows job no runner took is all that failed, the run's failed jobs and those after them run again, about 20 minutes later, at most twice (`packaging/ci-retry.sh`; below) |
 | by hand (`gh workflow run publish.yml -f tag=<tag>`) | publish.yml: the formula of a release already out, such as the one published before the tap existed |
 | every hour at :23, or by hand (`gh workflow run caches.yml`, `-f dry_run=true` to delete nothing) | caches.yml: CodeQL's overlay databases of all but the three newest commits of `main` deleted from the Actions caches, for each language (`packaging/cache-prune.sh`; section 3) |
@@ -323,8 +324,8 @@ Otherwise the walk goes on.
 Where the walk reaches a commit with other code, 100 commits
 or the end of the history first, no run tested this code, which is red.
 On a push, What to test asks that first (owner, 2026-11-15, D81-A):
-`CODE_CHECK=1 packaging/code-result.sh` waits for nothing and answers
-whether a verdict, of either colour, is known or a run is still going.
+`CODE_CHECK=1 packaging/code-result.sh` waits for nothing and answers whether a verdict,
+of either colour, is known or a run is still going.
 Where none is, as after a merge whose run was replaced while it waited and
 whose pull request was tested on another base,
 it answers `code=true`, and the run tests the code;
@@ -335,9 +336,8 @@ which keeps the nightly build and Deploy site away,
 until a change to the code passes or the failed run is re-run green;
 on a pull request it is a warning and fails nothing,
 since the pull request adds no code of its own (D73-A).
-What to test writes its answers into the run's summary as a table
-(owner, 2026-11-15),
-each with what it means for the run, below the reasons it gave,
+What to test writes its answers into the run's summary as a table (owner,
+2026-11-15), each with what it means for the run, below the reasons it gave,
 such as the documents alone since a commit or the record it found.
 Only an answer of `false` skips a job:
 a gate that fails leaves its answers empty, so every job runs,
@@ -371,24 +371,25 @@ GitHub's macOS runners are few,
 and a job that waited for one ended cancelled with no runner and no step
 on pull request #225 twice and again on 2026-11-17,
 holding a pull request whose code it had nothing to say about.
-A push to `main` counts it as not run too (owner, 2026-11-18, D16-A, the owner's split):
+A push to `main` counts it as not run too (owner, 2026-11-18, D16-A,
+the owner's split):
 of six runs on 2026-11-17 and 2026-11-18 whose macOS job no runner took,
-four were pushes to `main`,
-where it failed All tests passed, and so the devel and nightly builds,
-until the job was re-run.
+four were pushes to `main`, where it failed All tests passed,
+and so the devel and nightly builds, until the job was re-run.
 GitHub gave up on each after about a quarter of an hour in the queue.
 The two jobs run in a workflow of their own, platforms.yml (D15-B),
 which ci.yml's job Platforms calls,
 so the API names them "Platforms / Windows service" and "Platforms / macOS LaunchDaemon",
-and the `needs` know only Platforms, with the two jobs' results together.
-ci.yml gives those two names with their caller's id
-(`UNRUN_JOBS`, in the workflow's `env`);
+and the `needs` know only Platforms,
+with the two jobs' results together. ci.yml gives those two names with their
+caller's id (`UNRUN_JOBS`, in the workflow's `env`);
 one of them that the API gives as "cancelled before a runner took it",
 its conclusion `cancelled` with no runner and no step,
 is named in the summary as "not run, as no runner took it",
 with a warning and in the pull request's report where there is one,
 and its caller's id is the step's output `unrun`,
-where every job of `UNRUN_JOBS` with that id passed, was skipped or was not taken either,
+where every job of `UNRUN_JOBS` with that id passed,
+was skipped or was not taken either,
 and the id's result among the `needs` is `abandoned`, `cancelled` or `failure`.
 From the second attempt on, the job's runs in the earlier attempts count too:
 where its last run that a runner took failed, it fails,
@@ -399,11 +400,12 @@ in runs 44125840544, 44148743439, 44150911350, 44151208458 and 44335801523;
 what GitHub gives a called workflow's caller for it is not known,
 and a caller's result is that of its jobs together,
 so the three are let through where the API shows nothing else in the call.
-The verdict counts an abandoned, cancelled or failed caller named there as passed,
+The verdict counts an abandoned,
+cancelled or failed caller named there as passed,
 on a pull request and a push to `main` alone;
-the Tested record then says `mac=false` or `win=false`, as the job did not pass
-(`packaging/tested-record.sh`, from Platforms' outputs `macos` and `windows`,
-each true where its job passed).
+the Tested record then says `mac=false` or `win=false`,
+as the job did not pass (`packaging/tested-record.sh`,
+from Platforms' outputs `macos` and `windows`, each true where its job passed).
 On a pull request the push of the merged tree, reading the record, runs the job,
 and a failure there shows on `main`,
 where GitHub's failure email reaches whoever pushed;
@@ -414,24 +416,26 @@ and so does every such caller where the step did not run or read no jobs,
 since only its output lets one through.
 The pull request's next run with the same code runs the job again,
 where its paths ask for it, as the record does not say it passed.
-Code result takes such a job for no verdict on the code
-(`packaging/code-result.sh`, from the same `UNRUN_JOBS`),
+Code result takes such a job for no verdict on the code (`packaging/code-result.sh`,
+from the same `UNRUN_JOBS`),
 so that a change to documents after such a push is not red for it;
 it reads every attempt's jobs,
 and a failure in an earlier attempt that no runner's later run passed is red.
 A tag is not spared: its release needs both jobs,
-and a job no runner took fails All tests passed there, in its first attempt as before.
-Retry (`retry.yml`, `packaging/ci-retry.sh`; D16-A) follows a tag's run of ci.yml
-and a nightly run to their end (`workflow_run`),
+and a job no runner took fails All tests passed there,
+in its first attempt as before.
+Retry (`retry.yml`, `packaging/ci-retry.sh`;
+D16-A) follows a tag's run of ci.yml and a nightly run to their end (`workflow_run`),
 as a run cannot re-run itself while it runs:
 where every job of the run's first attempt passed or was skipped,
 but for jobs of "Platforms / …" that no runner took and the verdict job,
 All tests passed or nightly.yml's Platforms passed, which failed for them,
-it waits 20 minutes and asks GitHub to re-run the run's failed jobs
-(`rerun-failed-jobs`, `actions: write`, its only permission beside reading the script),
-which runs them and every job after them, the release among them, in a new attempt;
-it then waits for the jobs it re-ran to end,
-and where one was again not taken, for the attempt to end, and does it once more.
+it waits 20 minutes and asks GitHub to re-run the run's failed jobs (`rerun-failed-jobs`,
+`actions: write`, its only permission beside reading the script),
+which runs them and every job after them, the release among them,
+in a new attempt; it then waits for the jobs it re-ran to end,
+and where one was again not taken, for the attempt to end,
+and does it once more.
 It acts on a run's first attempt alone and makes both re-runs from that one job,
 so whatever GitHub does with the attempts it starts there are two re-runs at most;
 after them, without a runner, it fails with an error, and so does the run:
@@ -507,24 +511,21 @@ about three times its longest run among the 57 runs before 2026-11-18,
 ten minutes at least, and above the Go tests' own `-timeout`,
 so that Go's timeout fails a hung test with its goroutines in the log
 before the job is cut off.
-In minutes, the limit and the longest run:
-What to test, actionlint, UI types, Guidelines, Site and All tests passed:
-10, under 1;
-LAN against avahi 15, 4.8; govulncheck 15, 3.5;
-Backup targets 15, its local runs under 1, the image built,
-until it has runs of its own;
-Fuzz 20, 4.5; the Debian packages 20, 5.6; Windows service 20, 3.4;
-Vet and test 30, 7.6, its `go test` with Go's ten minutes a package;
-macOS LaunchDaemon 30, 8.1;
+In minutes, the limit and the longest run: What to test, actionlint, UI types,
+Guidelines, Site and All tests passed: 10, under 1; LAN against avahi 15, 4.8;
+govulncheck 15, 3.5; Backup targets 15, its local runs under 1, the image built,
+until it has runs of its own; Fuzz 20, 4.5; the Debian packages 20, 5.6;
+Windows service 20, 3.4; Vet and test 30, 7.6,
+its `go test` with Go's ten minutes a package; macOS LaunchDaemon 30, 8.1;
 Race 40, 9.6, and Test (armv6, QEMU) 40, 10.3, both above their `-timeout 30m`;
 the UI test jobs a case's 30 and the screenshot set's 15,
-estimated from the two-case jobs' 15.4 before AP TestSpeed's Block 5
-until they have runs of their own;
+estimated from the two-case jobs' 15.4 before AP TestSpeed's Block 5 until they
+have runs of their own; the UI soak's jobs 90, three times a case's 30,
+for each test three times, until they have runs of their own;
 the Android app keeps its 45, 7.0, and Code result its 70,
-which waits up to an hour for a run still going;
-the Android emulator 45, about three times the 15 or so it is estimated
-to take, until it has runs of its own,
-its suite's step 32 of them (below).
+which waits up to an hour for a run still going; the Android emulator 45,
+about three times the 15 or so it is estimated to take,
+until it has runs of its own, its suite's step 32 of them (below).
 
 The armhf package ships the armv6 binary, which `make cross-check` only builds:
 Test (armv6, QEMU) runs every package's tests on it,
@@ -553,11 +554,9 @@ the runner's fonts give other pixels,
 so the artifact is for looking at,
 and nothing compares it with the committed set.
 
-The UI suite's 1504 runs (376 tests on 2026-11-19,
-each at 1100 and 390 px, in English and German)
-run in four jobs, one per case
-(`UI_TEST_CASES`, `tools/ui-test/README.md`;
-owner, 2026-11-18, AP TestSpeed, D7-A),
+The UI suite's 1504 runs (376 tests on 2026-11-19, each at 1100 and 390 px,
+in English and German) run in four jobs, one per case (`UI_TEST_CASES`,
+`tools/ui-test/README.md`; owner, 2026-11-18, AP TestSpeed, D7-A),
 each in four pytest-xdist workers, one per CPU of the runner,
 each worker against a server set of its own.
 The four cases took 11 minutes of a 13-minute run in one job (AP UiMatrix),
@@ -578,26 +577,24 @@ and no video,
 which took a quarter of a second of every test's set-up and tear-down,
 13 % of a case (D8-A);
 the failed tests run once more with both.
-The parts guard runs in two of the four cases (`docs/ui-testing.md`, section 8),
+The parts guard runs in two of the four cases (`docs/ui-testing.md`, section 2),
 and in the other two its tests are deselected at collection
 rather than each loading a page to be skipped (D9-A),
 so that the 1100-de and 390-en jobs report only the suite's real skips.
 A pull request runs the jobs only when it changes `internal/server/ui/`,
 `tools/ui-test/`, `tools/workdir/`, `tools/uibundle/`, `third_party/preact/`,
-the server's own Go files (`internal/server/*.go`)
-but for its tests (`internal/server/*_test.go`),
+the server's own Go files (`internal/server/*.go`) but for its tests
+(`internal/server/*_test.go`),
 `docs/api-v1-openapi.yaml` or `.github/workflows/ci.yml`:
 the paths the contract asks `make ui-test` for,
-the suites' work-directory helper, which the suite's `run.sh` sources
-(AP EmulatorRuns, D3-B),
+the suites' work-directory helper,
+which the suite's `run.sh` sources (AP EmulatorRuns, D3-B),
 the page's bundler and Preact,
 the server the page talks to and the API it reads,
 whose change showed on `main` alone before (AP TestInfrastructure, Block 9),
-and the jobs' own definition;
-a server test is not in the binary under test,
-and Vet and test and Race run it (D9-A;
-`TestCIUIGateLeavesOutServerTests`, `packaging/ci_scripts_test.go`);
-the OpenAPI file counts beside code only,
+and the jobs' own definition; a server test is not in the binary under test,
+and Vet and test and Race run it (D9-A; `TestCIUIGateLeavesOutServerTests`,
+`packaging/ci_scripts_test.go`); the OpenAPI file counts beside code only,
 since alone it is a site document (section 2, `site=true`).
 The jobs then run all four cases,
 so that a case it would have left out does not fail first on `main`.
@@ -612,6 +609,48 @@ so a What to test job that fails runs them rather than letting the pull request
 through untested.
 A push to `main` runs the job whatever it changes,
 so a change elsewhere that breaks the page shows on the merge commit's run.
+
+The UI soak (`ui-soak.yml`; AP SteadyTests, Block 8) runs the suite
+so that a flaky test shows on `main` overnight,
+not in the pull request of a feature that happens to run beside it.
+Its four jobs run the four cases as the UI test jobs do,
+in the same image with the same pins (section 3),
+but every test three times (`UI_TEST_REPEAT=3`),
+each repeat a test of its own,
+in the order of a seed (`UI_TEST_SHUFFLE`),
+the run's id unless one is given by hand, the same in all four,
+which the log's header and the summary name:
+the files by a hash of the seed and their names,
+each file's tests together by one of the seed and their ids,
+and the workers handed the files in that order rather than the largest first
+(`tools/ui-test/README.md`).
+A test that leans on the one before it, on a file that ran before on its worker,
+or on a window a loaded runner overruns,
+then fails in some of its repeats.
+Each job's summary lists the tests that failed in at least one repeat,
+each with its case, how many of its runs failed,
+each failed run's worker and what the retry did with it, on which worker,
+and the first failure's message,
+and the line that runs the case again in the same order (`tools/ui-test/soak_summary.py`,
+from the first pass's JUnit report, `UI_TEST_JUNIT`, and the retry's beside it,
+`ui-soak-junit.retry.xml`);
+a test that fails on one worker alone met what an earlier file left on its server,
+and a retry that passed may only have landed on another (AP SteadyTests,
+Block 11); a job is red where a test failed once,
+whatever its run once more with the trace did, whose screenshots, videos,
+traces and the servers' logs it uploads as `ui-soak-results-<case>`,
+kept two weeks.
+It gates nothing (AP SteadyTests):
+no other workflow waits for it, no check requires it,
+the Tested record and All tests passed do not read it,
+and Retry follows CI and Nightly alone;
+it is read as a report, each test it names fixed at its cause.
+It runs at 00:20 UTC, so that it ends before nightly.yml's 02:30;
+a case's job took 7 to 11 minutes in ci.yml in November 2026,
+so the soak's should take about 20 to 35.
+A pull request that changes the soak's own files runs it too,
+since GitHub starts a workflow by hand only once it is on the default branch;
+its check is red where a test failed, and required by nothing.
 
 The LAN job runs `make lan-test` (`tools/lan-test/README.md`):
 five hosts in Docker on a bridge network of their own,
@@ -641,11 +680,11 @@ A pull request runs the job only when it changes the announcement's paths (below
 `cmd/massimo/discover.go`, `tools/lan-test/` or `.github/workflows/ci.yml`,
 as the job What to test answers, and a push to `main` always,
 as the UI test jobs do,
-but for the merge of a pull request that found it not needed for the same code
-(section 2, `lan=unneeded`; D78-C).
+but for the merge of a pull request that found it not needed for the same code (section 2,
+`lan=unneeded`; D78-C).
 The announcement and discovery share their UDP ports through `internal/sharedport/`,
-and the Go module pins `golang.org/x/net`, whose multicast the announcement uses (owner,
-2026-11-15, D79-A);
+and the Go module pins `golang.org/x/net`,
+whose multicast the announcement uses (owner, 2026-11-15, D79-A);
 a change the list misses never runs the job,
 since nothing runs it on `main` then.
 The server's own files are among them because discovery's runs are decided there
@@ -746,16 +785,18 @@ A change the lists miss runs neither job until a later run takes it whole:
 a push to `main` without such a record, or a tag.
 A tag's run reads no record (it has no run before it) and filters no path,
 so it runs both jobs, as every job, before any release on a channel.
-The nightly build takes the newest commit of `main` whose run had All tests passed succeed,
+The nightly build takes the newest commit of `main` whose run had All tests
+passed succeed,
 so the commit it ships had the two jobs run where its change asked for them,
 and where its pull request found them not needed, at the last change that did,
 or no runner took one, which its record says;
 nightly.yml then runs that job first, on `main`'s head,
 and skips the night where the commit is older (section 6, D15-B).
 
-The Android app job (AP MobileApp, Block 4) builds `app/android` with the
-image's JDK 17 and Android SDK (platform 37.0, build-tools 36.0.0),
-Gradle through the committed wrapper, its downloads from the job's cache (section 3).
+The Android app job (AP MobileApp,
+Block 4) builds `app/android` with the image's JDK 17 and Android SDK (platform 37.0,
+build-tools 36.0.0), Gradle through the committed wrapper,
+its downloads from the job's cache (section 3).
 It checks `app/version.json` against its tag (`packaging/app-version.sh check`),
 runs `:app:assembleFossDebug :app:testFossDebugUnitTest :app:lintFossDebug`
 and `:app:lintNightlyDebug`,
@@ -768,19 +809,17 @@ and signs the three with a key made for the run (`packaging/app-sign.sh`),
 which must match its certificate and must be refused against another one,
 so that the release's signing path is proven before a tag needs it.
 A pull request runs it only when it changes `app/`,
-a file of `internal/server/ui/` the app bundles
-(all but `index.html`, `partials/`, `src/`, `parts.js` and `vendor/`,
+a file of `internal/server/ui/` the app bundles (all but `index.html`,
+`partials/`, `src/`, `parts.js` and `vendor/`,
 which `BundleUi` in `app/android/app/build.gradle.kts` leaves out),
 `packaging/app-*.sh`, the emulator suite's `tools/app-emulator/`,
 the suites' work-directory helper `tools/workdir/`, which its `run.sh` sources,
-`ci.yml`, `build.yml` or `release.yml`;
-a push to `main` always,
+`ci.yml`, `build.yml` or `release.yml`; a push to `main` always,
 but for the merge of a pull request that found it not needed (`app=unneeded`),
 as LAN (owner, 2026-11-17, D17-A).
-Block 1 adds `make ui` and `make app-core-android` (Go, the NDK, gomobile)
-before Gradle, here and in build.yml's job,
-and `app/core/`, `internal/serve/` with what it imports,
-`go.mod` and `go.sum` to the filter;
+Block 1 adds `make ui` and `make app-core-android` (Go, the NDK,
+gomobile) before Gradle, here and in build.yml's job, and `app/core/`,
+`internal/serve/` with what it imports, `go.mod` and `go.sum` to the filter;
 the comparison then covers the `.aar` too.
 
 The Android emulator job (AP MobileApp, Block 18, D71-A) runs
@@ -789,8 +828,9 @@ the app's instrumented tests on an emulator,
 against two servers on the runner built from the tree with the fake Cube,
 reached at `127.0.0.1` through `adb reverse`, as the phone rig reaches one,
 the fingerprint simulated through the emulator's console.
-GitHub's Linux runners have KVM, and a udev rule gives the runner's user
-`/dev/kvm`, which the emulator needs for an x86_64 image.
+GitHub's Linux runners have KVM,
+and a udev rule gives the runner's user `/dev/kvm`,
+which the emulator needs for an x86_64 image.
 The emulator and its system image are pinned in `tools/app-emulator/pins.sh`,
 Android 14 with Google's APIs:
 `tools/app-emulator/sdk.sh fetch` fetches the two archives into a directory
@@ -881,16 +921,17 @@ Where CI differs, and why:
   The make targets a job runs after it build the bundle again,
   which leaves it as it is.
   The macOS job's Homebrew formula is built from `git archive`,
-  which holds no bundle: the formula builds it itself
-  (packaging/README.md, "Homebrew").
+  which holds no bundle: the formula builds it itself (packaging/README.md,
+  "Homebrew").
 - UI types runs `make ui-check`, the type check and then the hooks lint,
   with the runner's Node.js and npm; no action installs them.
   TypeScript and Biome go into the job's checkout's `GUIDELINES/temp/ui-check/`,
   where a host keeps them for all its checkouts (`tools/ui-check/README.md`),
   so they are installed at every run, as before.
-- `make race` is the contract's recommended `-race`, in a Race job of its own
-  beside Vet and test, so that neither waits for the other:
-  about 7 minutes in CI, up to 9.6 in November 2026, before Block 4 of AP TestSpeed,
+- `make race` is the contract's recommended `-race`,
+  in a Race job of its own beside Vet and test,
+  so that neither waits for the other: about 7 minutes in CI,
+  up to 9.6 in November 2026, before Block 4 of AP TestSpeed,
   the server's and the store's packages taking the longest.
   It runs with `-count=1`, so that a pass in the cache is not taken for one,
   and `-timeout 30m`: under load `internal/server` took up to 988 s,
@@ -994,28 +1035,29 @@ Where CI differs, and why:
   and GitHub keeps a cache seven days after its last use:
   two weeks hold about 1.6 GB of the repository's 10 GB,
   and each new Go or `go.sum`, a new key for all three jobs, about 0.8 GB more.
-- Android app and Android emulator keep a cache each of Gradle's downloads
-  (AP SteadyTests, Block 9), through `packaging/app-gradle-cache.sh` and `actions/cache`:
+- Android app and Android emulator keep a cache each of Gradle's downloads (AP
+  SteadyTests, Block 9),
+  through `packaging/app-gradle-cache.sh` and `actions/cache`:
   the artifacts Gradle fetched (`~/.gradle/caches/modules-2`),
-  the journal of when it last used each (`caches/journal-1`)
-  and the wrapper's distribution (`wrapper/dists`).
+  the journal of when it last used each (`caches/journal-1`) and the wrapper's
+  distribution (`wrapper/dists`).
   Without it every run fetched all of them,
-  and on `main` after #456 (run 45681849967) Maven Central answered
-  the emulator's with 429 Too Many Requests, bouncycastle's BOM and asm among them.
-  A job's key is its name (the two run other tasks, which fetch other artifacts),
-  the runner's system and CPU, the hash of the build's Gradle files
-  (the wrapper's properties, the build scripts, the version catalogue),
-  and the ISO week: a new cache each week, and with each change to those files.
+  and on `main` after #456 (run 45681849967) Maven Central answered the
+  emulator's with 429 Too Many Requests, bouncycastle's BOM and asm among them.
+  A job's key is its name (the two run other tasks,
+  which fetch other artifacts), the runner's system and CPU,
+  the hash of the build's Gradle files (the wrapper's properties,
+  the build scripts, the version catalogue), and the ISO week:
+  a new cache each week, and with each change to those files.
   It is saved as the Go caches are, by a push to `main` alone,
   once every step passed and where it did not find its key;
   every run restores the newest with the same files, or else the job's newest.
-  Gradle prunes it itself at the end of a build
-  (with `--no-daemon`, in the foreground):
-  an artifact unused for 30 days, by the journal,
+  Gradle prunes it itself at the end of a build (with `--no-daemon`,
+  in the foreground): an artifact unused for 30 days, by the journal,
   and the distribution of a Gradle version no longer run;
   so what `main` saves is what the job used in its last 30 days,
-  an update's old versions leave it a month later,
-  and, saved each week, nothing a run restores and uses is that old.
+  an update's old versions leave it a month later, and, saved each week,
+  nothing a run restores and uses is that old.
   Gradle's build cache is not in it:
   the release APK built at two paths keeps its `--no-build-cache`,
   and build.yml's Android app job, which builds the release, restores no cache.
@@ -1108,7 +1150,8 @@ Where CI differs, and why:
   The job pins `playwright==<version>` in its pip install,
   on top of `tools/ui-test/requirements.txt`, which keeps its minimum versions,
   because the browsers in the image fit that Playwright version only:
-  the image's tag and the pin move together.
+  the image's tag and the pin move together,
+  in `ui-soak.yml` as in `ci.yml`, with `GO_VERSION`.
   The jobs set `UI_TEST_REQUIRED=1`,
   so that a missing Playwright, pytest, pytest-playwright or pytest-xdist
   fails the job instead of skipping the tests or running them in one process,
@@ -1225,9 +1268,9 @@ and the signed tag at it with the section as its message,
 so that the tag holds its own dump, which `sign` checks before it signs.
 The branch and the tag are pushed atomically;
 the tag's push runs ci.yml, whose last job calls release.yml.
-Once the release is published, `sign` pushes the tag's commit to
-`release/<flavour>` (`release/alpha`) with the deploy key
-`RELEASE_BRANCH_DEPLOY_KEY`:
+Once the release is published,
+`sign` pushes the tag's commit to `release/<flavour>` (`release/alpha`) with the
+deploy key `RELEASE_BRANCH_DEPLOY_KEY`:
 GitHub refuses `GITHUB_TOKEN` a branch update that changes `.github/workflows/`,
 which a release's commits often do.
 The ruleset on `release/*` lets only a fast-forward through and no deletion;
@@ -1249,8 +1292,7 @@ and `DRY=1` prints the push instead.
 Completions and fixes for `x.y` then go to `maint/<x.y>`,
 and every `x.y` release is cut there:
 `make release` counts the version tags of `x.y` and the lines before it alone,
-and refuses a next tag of another line
-(`BUMP=minor` starts a line that has no tag yet);
+and refuses a next tag of another line (`BUMP=minor` starts a line that has no tag yet);
 on `main` it refuses a version whose line has a maintenance branch.
 The session that merged into `maint/<x.y>`, or cut a release there,
 merges it upward into `main` with a `merge:` commit straight away (D1-A).
@@ -1313,9 +1355,9 @@ Only the signatures are not attested,
 since `sign` and `rolling` make them.
 It runs in `build`, not beside the keys, which run nothing but openssl and gh.
 `sign` and `rolling` sign `SHA256SUMS` as they sign the manifest,
-as `SHA256SUMS.sig`, with the release key or the rolling key
-(AP MobileApp, D15-D):
-the manifest is what boxes install from, `SHA256SUMS` what people check a download with.
+as `SHA256SUMS.sig`, with the release key or the rolling key (AP MobileApp,
+D15-D): the manifest is what boxes install from,
+`SHA256SUMS` what people check a download with.
 
 The Android app (AP MobileApp, Block 4) is built by build.yml's job of its own,
 "Android app", for a version tag and for the nightly build, unsigned,
@@ -1346,8 +1388,9 @@ checks the published `SHA256SUMS.sig` against the release key,
 adds the app's lines, signs the file again,
 and uploads `massimo-android.apk` and `massimo-android-play.aab`,
 then `SHA256SUMS` and its signature (D14-A, D20-A).
-Both are in `signing` and start beside `sign`, so the one approval lets them run;
-`app-publish` runs only sha256sum, openssl and gh.
+Both are in `signing` and start beside `sign`,
+so the one approval lets them run; `app-publish` runs only sha256sum,
+openssl and gh.
 The nightly build's `massimo-android-nightly.apk` is signed inside `rolling`,
 with `MASSIMO_APP_ROLLING_KEYSTORE`, before its one publish,
 and joins the build's files with its line in `SHA256SUMS` (D18-A, D19-A);
@@ -1356,16 +1399,16 @@ a fault there warns, and the build goes out without it.
 with the `SHA256SUMS` that names them,
 for which ci.yml's and nightly.yml's Release grant `attestations`.
 The signed manifest names no app file: boxes do not install the app.
-Without a key's secrets or its certificate a step warns and the release
-carries no app; the owner makes the keys (`app/README.md`).
+Without a key's secrets or its certificate a step warns and the release carries no app;
+the owner makes the keys (`app/README.md`).
 
 A push to `main` whose suite passed becomes the `devel` build:
-the same `make build-release`, as the version `git describe` calls the commit
-(`v0.12.0-alpha.1-37-gabc1234`), with the flavour `devel`,
-signed by `rolling` in the `signing-rolling` environment with
-`MASSIMO_ROLLING_KEY`, whose public half boxes accept for `devel` and
-`nightly` alone, so that a key `main` can reach signs nothing an `alpha`
-box takes.
+the same `make build-release`,
+as the version `git describe` calls the commit (`v0.12.0-alpha.1-37-gabc1234`),
+with the flavour `devel`,
+signed by `rolling` in the `signing-rolling` environment with `MASSIMO_ROLLING_KEY`,
+whose public half boxes accept for `devel` and `nightly` alone,
+so that a key `main` can reach signs nothing an `alpha` box takes.
 It is one GitHub release, `release/devel`, a pre-release replaced in place:
 the binaries, packages and sums uploaded over the old ones,
 then the manifest and its signature,
@@ -1406,12 +1449,11 @@ whose What to release reads no runs.
 Before the build, the macOS and Windows jobs run on `main`'s head (owner,
 2026-11-18, AP TestSpeed, D15-B), through platforms.yml as in ci.yml,
 each only where the records say it did not run for the code of the commit to ship:
-a push to `main` that no runner took the job on says `false`
-(section 2, D16-A),
+a push to `main` that no runner took the job on says `false` (section 2, D16-A),
 and What to ship reads the commit's record and its first parents' newest first:
-`true`, or a record from before `mac=` and `win=` (every run ran both then), passed;
-`false` runs the job;
-`unneeded` goes on to the parent, whose code the job's is;
+`true`, or a record from before `mac=` and `win=` (every run ran both then),
+passed; `false` runs the job; `unneeded` goes on to the parent,
+whose code the job's is;
 a commit without a record goes on where its code is its parent's (documents alone),
 passed where it is a release commit whose tag's run passed,
 and runs the job otherwise, as the walk's end does;
@@ -1447,8 +1489,8 @@ so every `git describe` asks for the version tags alone
 (`--match 'v[0-9]*.[0-9]*.[0-9]*'`):
 the Makefile's `VERSION` and `FLAVOUR`, `make release`'s check,
 and `meta`'s.
-Without it, on 2026-11-10 every commit after the first `release/devel`
-described as `release/devel-1-g…`, which `make packages` could not name a package by.
+Without it, on 2026-11-10 every commit after the first `release/devel` described
+as `release/devel-1-g…`, which `make packages` could not name a package by.
 A version tag has the full shape, `vX.Y.Z` or `vX.Y.Z-<label>.N`,
 and is matched by it, never by `v*` (D43-A, 2026-11-12),
 so that a tag such as `verification-test` or `v1.2` is never a release:
@@ -1516,10 +1558,10 @@ GitHub makes it allowing the default branch only,
 and a release's deploy runs for its tag;
 a box following a suite takes the release through `apt upgrade`.
 `apt-build` also attaches the signed index to the release,
-`massimo-apt-index.tar.gz` with `pool.tsv`
-(packaging/README.md, "The apt repository"),
-so that a deploy of the site from `main` can serve the repository
-without the apt key, which stays with the tags:
+`massimo-apt-index.tar.gz` with `pool.tsv` (packaging/README.md,
+"The apt repository"),
+so that a deploy of the site from `main` can serve the repository without the apt key,
+which stays with the tags:
 a run that releases nothing takes the newest release's index,
 downloads the pool by `pool.tsv` and checks every package by its sum,
 and deploys nothing where no release carries one yet,
@@ -1546,11 +1588,13 @@ since a site without `apt/` would take the repository offline.
   and the answer is 409.
 - The macOS job runs the LaunchDaemons as root on the runner;
   `launchctl` needs the system domain there, not a user's.
-- GitHub's macOS runners are few: a job can wait for one
-  and end cancelled with no runner and no step, after about a quarter of an hour,
+- GitHub's macOS runners are few:
+  a job can wait for one and end cancelled with no runner and no step,
+  after about a quarter of an hour,
   so the job runs on a pull request only where its paths changed,
   a pull request or a push to `main` it never ran on is not held by it,
-  and a tag's run and the nightly run have Retry run it again (section 2, D5-A, D16-A).
+  and a tag's run and the nightly run have Retry run it again (section 2, D5-A,
+  D16-A).
 - The macOS job's update from the API installs the newest alpha release,
   which knows no `-tls` until a release with it is cut:
   that server serves plain HTTP, the helper's `https://` health check fails,
@@ -1571,10 +1615,10 @@ since a site without `apt/` would take the repository offline.
 - On the macOS runner, macOS's local network privacy refuses the runner's own
   processes every multicast send ("no route to host"),
   and spares launchd daemons:
-  the macOS step runs its second `serve` as a launchd daemon in the system
-  domain, as `massimo install` runs the service,
-  asks `dns-sd`, which talks to mDNSResponder alone,
-  and does not ask `massimo discover`, a process of the runner's.
+  the macOS step runs its second `serve` as a launchd daemon in the system domain,
+  as `massimo install` runs the service, asks `dns-sd`,
+  which talks to mDNSResponder alone, and does not ask `massimo discover`,
+  a process of the runner's.
   `dns-sd` is read through a pseudo-terminal of Python's:
   under `script`, what it printed was lost.
 - The Debian package job's `deb-test` container has no systemd:
@@ -1661,8 +1705,9 @@ esbuild is pinned in a module of its own for the same reason,
 and its Dependabot entry, for `/tools/uibundle`,
 allows `github.com/evanw/esbuild` by name, its own dependencies following it.
 The type check's TypeScript and the hooks lint's Biome are the npm entry's,
-for `/tools/ui-check`, whose `package.json` names `typescript` and `@biomejs/biome` alone
-and whose `package-lock.json` locks them (`make ui-check`).
+for `/tools/ui-check`,
+whose `package.json` names `typescript` and `@biomejs/biome` alone and whose
+`package-lock.json` locks them (`make ui-check`).
 Both pull requests change `tools/**` alone, and need no `CHANGELOG.md` bullet.
 By hand: `go get github.com/evanw/esbuild@vX.Y.Z` and `go mod tidy` in `tools/uibundle`,
 `npm install --save-exact --save-dev --ignore-scripts typescript@X.Y.Z`

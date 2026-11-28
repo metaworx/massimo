@@ -325,9 +325,9 @@ func (s *Server) beginCommand(w http.ResponseWriter, r *http.Request, a *auditIn
 		json.Unmarshal(row.Request, &had)
 		switch {
 		case !store.Final(row.State):
-			writeError(w, http.StatusConflict, "a request with this Idempotency-Key is still running")
+			writeRefusal(w, refuse(http.StatusConflict, codeIdempotencyRunning))
 		case had.Hash != fp:
-			writeError(w, http.StatusUnprocessableEntity, "Idempotency-Key reused for another request")
+			writeRefusal(w, refuse(http.StatusUnprocessableEntity, codeIdempotencyReused))
 		default:
 			// A row that got no answer, dropped at a start of the server
 			// while its request ran, replays as 503 with why.
@@ -504,7 +504,7 @@ func (s *Server) getCommand(w http.ResponseWriter, r *http.Request) error {
 	}
 	p := principalOf(r)
 	if !ok || c.ParentID != 0 || p.named() && !p.has("audit") && c.UserID != p.user.ID {
-		return fail(http.StatusNotFound, "no command %q", id)
+		return refuse(http.StatusNotFound, codeCommandUnknown, id)
 	}
 	v := commandView{ID: c.UUID, Action: c.Action, Target: c.Target, State: c.State, Status: c.Status, Request: c.Request, Result: c.Result,
 		CreatedAt: c.CreatedAt, UpdatedAt: c.UpdatedAt, FinishedAt: optTime(c.FinishedAt), Steps: []stepView{}}

@@ -66,6 +66,8 @@ def settle():
     api("DELETE", CUBE + "/pairing")
     if api("GET", CUBE + "/devices/" + DEV)[0] == 200:
         assert api("DELETE", CUBE + "/devices/" + DEV)[0] == 200, "the paired device removed"
+        # what the server read of it, its room among it, goes with the Cube read again (serve -poll 0)
+        assert api("POST", CUBE + "/refresh", {})[0] == 200, "the Cube read again"
 
 
 @pytest.fixture
@@ -255,7 +257,10 @@ def takes_the_rooms_setpoint(page, room, before):
     """A room setpoint reaches the device put into the room, which the
     Cube's room command reaches once the set group radiogram (0x22) named
     the room in its C line, as the fake Cube takes it (AP FakeGroup,
-    Block 3). The room's state, its other thermostat's, is put back."""
+    Block 3). The room's state, its other thermostat's, is put back. The
+    UI run's server has no poll (serve -poll 0), so after each write the
+    test asks for the read that shows it (POST …/refresh, docs/ui-
+    testing.md, section 1)."""
     other = page.evaluate("(state.rooms.find((r) => r.id === %d).devices.find((d) => d.rf_address !== '%s' && d.state) || {}).rf_address"
                           % (room, DEV))
     assert other, "another thermostat in the room, whose state is put back"
@@ -264,13 +269,16 @@ def takes_the_rooms_setpoint(page, room, before):
     try:
         status, answer = api("PUT", CUBE + "/rooms/%d/setpoint" % room, {"mode": "manual", "temp": temp})
         assert status == 200, f"the room's setpoint: {status} {answer}"
-        shows = "(() => { const s = %s; return !!s && s.mode === 'manual' && s.setpoint === %s; })()" % (SHOWS % (room, json.dumps(DEV)), temp)
+        # without its poll (serve -poll 0) the server reads a device's state at a connect alone: the test asks for it
+        assert api("POST", CUBE + "/refresh", {})[0] == 200, "the Cube read again"
+        shows ="(() => { const s = %s; return !!s && s.mode === 'manual' && s.setpoint === %s; })()" % (SHOWS % (room, json.dumps(DEV)), temp)
         assert wait_until(page, shows, 30), \
             f"the room's manual {temp} °C reached the device: {page.evaluate(SHOWS % (room, json.dumps(DEV)))}{reconnected(len(before))}"
     finally:
         back = {"mode": was["mode"] if was.get("mode") in ("auto", "manual") else "auto", "temp": was["setpoint"]}
         status, answer = api("PUT", CUBE + "/rooms/%d/setpoint" % room, back)
         assert status == 200, f"the room's state put back: {status} {answer}"
+        assert api("POST", CUBE + "/refresh", {})[0] == 200, "the Cube read again"
     shows = "(() => { const s = %s; return !!s && s.mode === %s && s.setpoint === %s; })()" % (SHOWS % (room, json.dumps(other)), json.dumps(back["mode"]), back["temp"])
     assert wait_until(page, shows, 30), f"the room's state back at {back}: {page.evaluate(SHOWS % (room, json.dumps(other)))}"
 

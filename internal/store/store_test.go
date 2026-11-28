@@ -87,10 +87,16 @@ func TestOpenMigratesAnEmptyFile(t *testing.T) {
 	if s2.Created() || logged.Count(m, nil) != 0 {
 		t.Fatalf("second open: created %v, log %v", s2.Created(), logged.Since(m, nil))
 	}
+	// One row per migration: the numbers come in blocks of 100 (docs/store.md,
+	// "Two lines of releases"), so there are fewer than the last one's.
 	var rows int
 	s2.db.QueryRow(`SELECT count(*) FROM schema_version`).Scan(&rows)
-	if ms, _ := loadMigrations(embeddedMigrations()); rows != len(ms) {
-		t.Fatalf("%d schema_version rows", rows)
+	all, err := loadMigrations(embeddedMigrations())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if rows != len(all) {
+		t.Fatalf("%d schema_version rows, %d migrations", rows, len(all))
 	}
 }
 
@@ -145,7 +151,7 @@ func TestSyncColumns(t *testing.T) {
 // The six default roles and their sets, as docs/store.md section 6
 // lists them (preferences seeded by migration 0003; integrations for
 // manager and the role integration fixed at the ceiling by 0021; repair
-// for both by 0022; backup.retry for manager by 0100, backup.server for
+// for both by 0022; backup.retry for manager by 0103, backup.server for
 // none); owner has every capability by code and no rows.
 func TestSeededRoles(t *testing.T) {
 	t.Parallel()

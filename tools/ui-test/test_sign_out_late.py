@@ -31,7 +31,7 @@ from datetime import datetime, timedelta, timezone
 import pytest
 
 from conftest import TOKEN, URL
-from helpers import OPERATOR_PASSWORD, choose_cube, frames, hold, owner_page, reads_of, show_view, sign_out, wait_held, wait_until
+from helpers import OPERATOR_PASSWORD, choose_cube, frames, hold, owner_page, reads_of, show_view, sign_out, taken, wait_held, wait_until
 from test_login import sign_in
 from test_unsaved import at, cfg_room, cfg_tab, expire
 
@@ -56,10 +56,9 @@ def end_session(page, way):
 
 def let_go(page, held, method, end, body):
     """The held request answered with body, waited for until the page has
-    taken it: its response finished and two frames drawn."""
-    with page.expect_response(lambda r: r.request.method == method and r.url.split("?")[0].endswith(end)) as answered:
+    taken it (taken) and two frames drawn."""
+    with taken(page, lambda r: r.request.method == method and r.url.split("?")[0].endswith(end)):
         held[0].fulfill(status=200, content_type="application/json", body=json.dumps(body))
-    answered.value.finished()
     frames(page)
     nothing_waits(page)
 
@@ -329,9 +328,8 @@ def test_the_device_put_during_its_reload(new_context, case, watch, guard, way):
     assert wait_held(page, held), "the put's reload is on its way"
     end_session(page, way)
     lines = page.evaluate(LINES)
-    with page.expect_response(lambda r: r.request is held[0].request) as read:
+    with taken(page, lambda r: r.request is held[0].request):
         held[0].continue_()
-    read.value.finished()
     frames(page)
     assert page.evaluate(LINES) == lines, "nothing said of the put"
 

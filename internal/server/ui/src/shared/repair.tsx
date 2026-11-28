@@ -194,7 +194,7 @@ async function loadRepair(box: Box, r: Repair, item: Item): Promise<void> {
       item.room = Number(d.room);
       item.state = "name";
     } else if (p.nothing) {
-      item.error = p.nothing;
+      item.error = whyText(box, p.nothing, p);
       item.state = "none";
     } else if (listing(r, p) && item.devName === undefined) {
       item.devName = defaultDeviceName(String(d.room_name || ""), typeName(String(d.type || "")), box.names(Number(d.to)));
@@ -209,6 +209,16 @@ async function loadRepair(box: Box, r: Repair, item: Item): Promise<void> {
     item.error = (e as Error).message;
     item.state = "none";
   }
+}
+
+/**
+ * whyText is why a preview has nothing to send or would be refused now,
+ * text its nothing or refused, in the page's language by the preview's
+ * code and params, a room and a device of the box's Cube by their names
+ * (refusalText); its English text where the page has none.
+ */
+function whyText(box: Box, text: string, p: RepairPlan): string {
+  return refusalText({ error: text, code: p.code, params: p.params }, box.scope.split("|")[0]);
 }
 
 /** repairCost says what a preview costs: its radiograms, their duty cycle and memory slots, or that it costs no radio time. */
@@ -389,7 +399,7 @@ function Preview({ box, r, item, p, runRef, cancel }: {
           <pre class="mono small">{lines.join("\n")}</pre>
         </Fold>
       )}
-      {p.refused ? <p class="repair-refused bad">{t("repair.refusedNow", { reason: p.refused })}</p> : actions}
+      {p.refused ? <p class="repair-refused bad">{t("repair.refusedNow", { reason: whyText(box, p.refused, p) })}</p> : actions}
     </>
   );
 }

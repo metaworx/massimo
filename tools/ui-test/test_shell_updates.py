@@ -16,7 +16,7 @@ from collections import Counter
 
 import pytest
 
-from conftest import URL, api_call
+from conftest import URL, api_call, server_holds_settings
 from helpers import OPERATOR_PASSWORD, frames, held_poll, hold, open_personal_page, scroll_settled, show_view, wait_held, wait_until
 from test_login import sign_in
 from test_preferences import clear_user, operator_key
@@ -180,6 +180,9 @@ def test_no_read_of_my_profile_while_signing_out(new_context, case, watch, guard
         page.goto(URL)
         sign_in(page, "operator", OPERATOR_PASSWORD)
         page.evaluate("setSetting('lang', 'fr')")
+        # the reload takes the settings the server holds: the operator's French, not the defaults the sign-in pushed,
+        # whichever of the reload's read and the push of the change, sent as the page is left, comes first
+        server_holds_settings(True, token=op, lang="fr")
         page.reload()  # the operator's French alone loaded, German not
         page.wait_for_selector(".room", timeout=10000)
         assert wait_until(page, "i18n.lang === 'fr' && !I18N.de", 5), "the page in French, German not loaded"
@@ -283,6 +286,9 @@ def test_a_sign_out_forgets_before_the_language(new_context, case, watch, guard)
         page.goto(URL)
         sign_in(page, "operator", OPERATOR_PASSWORD)
         page.evaluate("setSetting('lang', 'fr')")
+        # the reload takes the settings the server holds: the operator's French, not the defaults the sign-in pushed,
+        # whichever of the reload's read and the push of the change, sent as the page is left, comes first
+        server_holds_settings(True, token=op, lang="fr")
         page.reload()  # the operator's French alone loaded, German not
         page.wait_for_selector(".room", timeout=10000)
         assert wait_until(page, "i18n.lang === 'fr' && !I18N.de && state.eventsOpen", 5), "the page in French, German not loaded, the stream open"
