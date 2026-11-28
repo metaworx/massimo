@@ -55,7 +55,7 @@ class ListTest : EmulatorTest() {
         assertTrue("Exit logged out: ${h.since(mark)}", h.since(mark).none { it.action == "logout" })
         // started again: the first server added opens at start (D43-A) and takes its codes
         relaunch()
-        revokedByCode(h, mark, session)
+        h.revokedByCode(mark, session)
         assertEquals("the session Exit dropped still valid at the server", 401, h.status(token))
     }
 
@@ -182,27 +182,7 @@ class ListTest : EmulatorTest() {
     }
 
     // noTasks waits until the app has no task in the recent apps.
-    private fun noTasks(): Boolean {
-        val until = SystemClock.elapsedRealtime() + TASKS_MS
-        while (SystemClock.elapsedRealtime() < until) {
-            if (Rig.app.getSystemService(ActivityManager::class.java).appTasks.isEmpty()) return true
-            SystemClock.sleep(POLL_MS)
-        }
-        return false
-    }
-
-    // revokedByCode waits until the audit has the token [tokenId] revoked by
-    // its code after [mark], a row of nobody's, as CodesTest reads it.
-    private fun revokedByCode(h: Host, mark: Long, tokenId: Long) {
-        val until = SystemClock.elapsedRealtime() + CODE_MS
-        var rows: List<Host.Row> = emptyList()
-        while (SystemClock.elapsedRealtime() < until) {
-            rows = h.since(mark, anyone = true)
-            if (rows.any { it.action == "token.revoke_code" && it.target == "token:$tokenId" && it.result == "ok" }) return
-            SystemClock.sleep(POLL_MS)
-        }
-        fail("the token $tokenId not revoked by its code: $rows")
-    }
+    private fun noTasks(): Boolean = Wait.within { Rig.app.getSystemService(ActivityManager::class.java).appTasks.isEmpty() }
 
     private companion object {
         const val CLOSED = "https://127.0.0.1:9/"
@@ -210,8 +190,5 @@ class ListTest : EmulatorTest() {
         const val DIALOG_MS = 20_000L
         const val NO_TOAST_MS = 2000L
         const val SWIPE_STEPS = 40
-        const val TASKS_MS = 10_000L
-        const val CODE_MS = 20_000L
-        const val POLL_MS = 500L
     }
 }

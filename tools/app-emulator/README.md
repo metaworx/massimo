@@ -305,7 +305,7 @@ In the suite's own run `EnrollTest` passes at once.
 | `SessionsTest.turnOffWithASessionRevokesTheKeyWithItAndSignsItOut` | Turn off with a session: no prompt, the key revoked with the session, which is signed out after (the audit) | 16 |
 | `SessionsTest.turnOffWithoutASessionRevokesTheKeyWithItselfAfterThePrompt` | Turn off without a session: the prompt, the key revoking itself (the audit) | 16 |
 | `SessionsTest.removeSignsTheSessionOutFirst` | Remove of a server without a kept login signs its session out, which the server then refuses | 16 |
-| `ConnectPageTest` (two tests) | the connect page and the bridge at contract version 5, a server's call refused | 3 |
+| `ConnectPageTest` (two tests) | the connect page and the bridge at contract version 7, a server's call refused | 3 |
 | `EnrollTest.aFingerIsEnrolled` | the finger enrolled through Settings, run alone before the others | 18 |
 
 A step on the list or a server's page is a script in the WebView (`Page`),
@@ -313,6 +313,45 @@ as a tap would reach the page; the prompt is the system's, found by its title,
 the app's text.
 What the server did is read from its audit (`GET /api/v1/audit?user=tester`,
 with the owner's key) and from `GET /api/v1/me`.
+
+## How a test waits
+
+A test waits for the thing it checks, never for a fixed time,
+as `docs/testing.md` says ("A steady test").
+It waits through the suite's kit, never with a loop or a latch of its own:
+
+| Call | What it does |
+|---|---|
+| `page.waitFor(js, what)` | evaluates `js` in the page every 250 ms until it is true, and returns its value; each try waits 5 s for the page's answer, and a try not answered in time is asked again, not failed; fails after 30 s: "never true within 30 s: *what*", with the page's address |
+| `page.run(body, what)` | runs `body`, the body of an async function, in the page and waits for its promise as `waitFor` does: what it resolves, as JSON, or the failure of `what` with the error it rejects with |
+| `page.eval(js, what)` | one script and its answer within 15 s: a step, not a wait |
+| `Wait.until(what) { cond }` | checks `cond` every 250 ms until it holds; fails after 30 s, naming `what`: a thing outside the page, such as the activity made anew |
+| `Wait.within { cond }` | the same, failing nothing, and says whether it held, for a caller whose failure says what it saw: the app's tasks gone, the audit's revoke by code (`Host.revokedByCode`) |
+| `Rig.device.wait(Until…, ms)` | UiAutomator's own, for the system's window: the prompt (`Prompt`), a dialog |
+
+`page` is `Page(sc)`, over the test's `ActivityScenario`:
+`EmulatorTest` makes it at each launch,
+and a test that launches its own activity makes it too,
+as `ConnectPageTest` does.
+`what` names the step as the failure reads,
+never the script, which may hold the password.
+A page navigating meanwhile may never answer a try,
+and the main thread held up answers it late:
+the WebView's first start held it 4 s once,
+and `ConnectPageTest`'s own copies of the waits,
+a 5 s latch that failed at once, failed it there (AP SteadyTests, Block 16).
+
+Still written by hand:
+
+- **A sleep before "nothing came"**,
+  where nothing ends the time the thing would take:
+  `ListTest`'s 2 s for a toast that must not show,
+  `HeldTest`'s 65 s for the audit's row of refused requests,
+  written once its minute is over;
+  and `Prompt.none`'s 4 s for a prompt that must not come.
+- **The prompt's 700 ms before its first touch**,
+  since the sensor listens only once the prompt has come up,
+  and **the enrollment's 1.5 s** between Settings' steps.
 
 ## What it does not cover
 
