@@ -234,19 +234,29 @@ func (s *Server) startRestart(w http.ResponseWriter, r *http.Request) error {
 	case !s.restartGate.asked.CompareAndSwap(false, true):
 		return refuse(http.StatusConflict, codeRestartUnderWay)
 	}
+	if err := s.restartNow(r, v); err != nil {
+		return fail(http.StatusInternalServerError, "starting the restart: %v", err)
+	}
+	writeJSON(w, http.StatusAccepted, map[string]any{"ok": true, "by": v.By})
+	return nil
+}
+
+// restartNow starts the restart v allows, the gate taken: its line in
+// the log, then the stop, which waits for this request, its answer and
+// its audit row (cmd/massimo, serveHTTP), so that the restart may begin
+// before the answer is written. Where it cannot start, the gate is
+// given back and the failure logged. A restore of a server backup
+// restarts the server too (serverrestore.go).
+func (s *Server) restartNow(r *http.Request, v restartView) error {
 	s.noteStop("restart")
 	s.logServer(systemEvent("restart", userIDOf(r), map[string]any{"by": v.By}))
-	// The stop waits for this request, its answer and its audit row
-	// (cmd/massimo, serveHTTP), so the restart may begin before the
-	// answer is written.
 	if err := s.opts.Restart.Restart(); err != nil {
 		s.restartGate.asked.Store(false)
 		s.noteStop("")
 		failed := systemEvent("restart", userIDOf(r), map[string]any{"by": v.By})
 		failed.Level, failed.Error = "error", err.Error()
 		s.logServer(failed)
-		return fail(http.StatusInternalServerError, "starting the restart: %v", err)
+		return err
 	}
-	writeJSON(w, http.StatusAccepted, map[string]any{"ok": true, "by": v.By})
 	return nil
 }

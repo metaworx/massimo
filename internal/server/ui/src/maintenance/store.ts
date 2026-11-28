@@ -13,7 +13,7 @@
  * /api/v1/cubes/{sn}/refresh, one after the other) and the computer's
  * reboot (GET, POST and DELETE /api/v1/reboot), the restart and the
  * reboot each followed by /healthz every two seconds until the server
- * reports a new start. While Maintenance is shown, an event of the
+ * reports a new start (shared/restart.ts). While Maintenance is shown, an event of the
  * stream that says one of these changed reads it again
  * (serverEvent). The state is what the section shows, live, so that the part draws it in place; an answer after a
  * sign-out is dropped (shared/session.ts), and a sign-out ends what
@@ -29,13 +29,10 @@ import { session, stillSession } from "../shared/session";
 import { isShown } from "../shared/pages";
 import { can } from "../shared/me";
 import { cubePath } from "../shared/path";
+import { followStart, RESTART_POLL_MS, RESTART_WAIT_MS, serverBack, startedAt } from "../shared/restart";
 
 /** A text said in the page's language at its drawing. */
 export type Say = () => string;
-
-/** RESTART_POLL_MS is how often the page asks /healthz while the server restarts, RESTART_WAIT_MS how long it waits for it to come back. */
-const RESTART_POLL_MS = 2000;
-const RESTART_WAIT_MS = 2 * 60 * 1000;
 
 /** REBOOT_WAIT_MS is how long the page waits for the computer to come back, from the reboot's time; REBOOT_DELAY_MAX the longest delay. */
 const REBOOT_WAIT_MS = 5 * 60 * 1000;
@@ -119,8 +116,8 @@ export const INTERVALS: Interval[] = [
   { key: "duty_wait", id: "interval-duty", title: "maint.dutyWait", hint: "maint.dutyWaitHint", steps: [60, 300, 600, 900, 1800, 3600] },
 ];
 
-/** The timers following the server: the restart's step, the reboot's wait or step. */
-const timers = { restart: 0 as ReturnType<typeof setTimeout> | 0, reboot: 0 as ReturnType<typeof setTimeout> | 0 };
+/** The timer following the server through a reboot, its wait or its step, and the end of the restart's following (followStart), null for none. */
+const timers = { reboot: 0 as ReturnType<typeof setTimeout> | 0, restart: null as (() => void) | null };
 
 /** rebootBefore is the start the page waits to see change through a reboot. */
 let rebootBefore = "";
@@ -206,16 +203,6 @@ export function intervalWaits(v: Setting | null | undefined): boolean {
 /** waiting counts what waits for the next start: the settings file's settings and the card's own (the card's badge). */
 export function waiting(): number {
   return restart.pending.length + (announceWaits(settings.announce) ? 1 : 0) + INTERVALS.filter((iv) => intervalWaits(settings.intervals[iv.key])).length;
-}
-
-/** startedAt is the server's start from /healthz, "" when it does not answer; /healthz is always open, so it needs no sign-in. */
-async function startedAt(): Promise<string> {
-  try {
-    const h = await apiRequest<{ started_at?: string }>("GET", "healthz", undefined, { auth: false });
-    return (h && h.started_at) || "";
-  } catch {
-    return "";
-  }
 }
 
 /** backAt is the start the server reports, as the page says it. */
@@ -381,39 +368,25 @@ export async function runRefreshNow(): Promise<void> {
   }
 }
 
-/** serverBack reads the data again and opens the stream again, the server back with a new start. */
-function serverBack(): void {
-  checkVersion(); // header.js: the start in the settings, and a reload for a new version
-  refresh().then((fresh) => {
-    if (fresh) connectEvents(); // false: answered after the session ended
-  });
-}
-
 /**
- * followRestart asks /healthz every RESTART_POLL_MS until the server
- * answers with another start than before, then reads the data and opens
- * the stream again; after until it gives up and says so. A sign-out ends
- * it.
+ * followRestart follows the server until it reports another start than
+ * before (followStart), then says since when it is back, the data read
+ * and the stream opened again; after RESTART_WAIT_MS it gives up and says
+ * so. A sign-out ends it.
  */
-function followRestart(n: number, before: string, until: number): void {
-  timers.restart = setTimeout(async () => {
-    const now = await startedAt();
-    if (!stillSession(n)) return;
-    if (now && now !== before) {
-      restart.following = false;
-      restart.off = false;
-      restart.text = backAt("restart.back", now);
-      serverBack();
-      return;
-    }
-    if (Date.now() > until) {
-      restart.following = false;
-      restart.off = false;
-      restart.text = () => t("restart.notBack");
-      return;
-    }
-    followRestart(n, before, until);
-  }, RESTART_POLL_MS);
+function followRestart(before: string): void {
+  timers.restart?.();
+  timers.restart = followStart(before, Date.now() + RESTART_WAIT_MS, (now) => {
+    timers.restart = null;
+    restart.following = false;
+    restart.off = false;
+    restart.text = backAt("restart.back", now);
+  }, () => {
+    timers.restart = null;
+    restart.following = false;
+    restart.off = false;
+    restart.text = () => t("restart.notBack");
+  });
 }
 
 /** runRestart asks the server to restart and follows it until /healthz reports a new start. */
@@ -434,7 +407,7 @@ export async function runRestart(): Promise<void> {
   if (!stillSession(n)) return;
   restart.text = () => t("restart.restarting");
   restart.following = true;
-  followRestart(n, before, Date.now() + RESTART_WAIT_MS);
+  followRestart(before);
 }
 
 // --- the reboot of the computer (with reboot) ----------------------------
@@ -675,9 +648,9 @@ export function quiet(): void {
  * and the settings' rows are read again for the next user.
  */
 export function forgetMaintenance(): void {
-  if (timers.restart) clearTimeout(timers.restart);
+  timers.restart?.();
   if (timers.reboot) clearTimeout(timers.reboot);
-  timers.restart = 0;
+  timers.restart = null;
   timers.reboot = 0;
   rebootBefore = "";
   waitAt = NaN;

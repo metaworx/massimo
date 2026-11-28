@@ -20,7 +20,7 @@ import urllib.error
 from axe_playwright_python.sync_playwright import Axe
 
 from conftest import api_call
-from helpers import held_timers, own_id, show_view, wait_until
+from helpers import held_timers, own_id, safe_route, show_view, wait_until
 
 # The fake push of a browser: a service worker container whose register
 # and ready give a registration with a pushManager, whose subscription
@@ -167,7 +167,7 @@ def test_rules_kept_on_the_server(page, case):
     field holds a value inside, and the page reads them back."""
     show_view(page, "notify")
     rows = page.locator("#notify-rules .notify-row")
-    assert rows.count() == 12, "a row per kind, a server backup that failed among them"
+    assert rows.count() == 12, "a row per kind, a server backup that failed among them: the owner holds backup.retry"
     assert rule_row(page, "battery_weak").locator("input[type=checkbox]").is_checked(), \
         "a weak battery is on by default (AP LegacyLogs v1.0, D152-A)"
     win = rule_row(page, "window_open")
@@ -355,6 +355,23 @@ def test_guest_has_none(page, case):
     assert none.inner_text() == t(page, "notify.noCapability")
     assert page.locator("#notify-body").is_hidden()
     assert_axe(page, "a guest's page")
+
+
+def test_server_backup_failed_for_backup_retry_alone(page, case):
+    """A server backup that failed is told only to a holder of
+    backup.retry (AP ServerBackup, Block 2), and offered to them alone: a
+    user with preferences and no backup.retry has every other row."""
+    me = dict(GUEST, capabilities=["read", "preferences"])
+    safe_route(page, "**/api/v1/me", lambda route: route.fulfill(status=200, content_type="application/json", body=json.dumps(me)))
+    try:
+        page.evaluate("loadMe()")
+        show_view(page, "notify")
+        assert wait_until(page, "document.querySelectorAll('#notify-rules .notify-row').length === 11", 5), "every kind but one"
+        assert rule_row(page, "server_backup_failed").count() == 0, "not offered without backup.retry"
+    finally:
+        page.unroute("**/api/v1/me")
+        page.evaluate("loadMe()")
+    assert wait_until(page, "!!document.querySelector('#notify-rules .notify-row[data-kind=server_backup_failed]')", 5), "the owner's again"
 
 
 def test_browser_without_push(page, case):

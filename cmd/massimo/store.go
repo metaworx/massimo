@@ -25,8 +25,9 @@ import (
 // commands that open serve's store directly (docs/store.md section 7),
 // and keygen|inspect|decrypt, the server backups' keys and files
 // (docs/store.md, "Server backups"), which open no store; backup without
-// a file, backups, push and pull, the server's backups, go through a
-// running serve where one answers (serverbackups.go). They take
+// a file, backups, push, pull and restore, the server's backups, go
+// through a running serve where one answers (serverbackups.go,
+// serverrestore.go). They take
 // -data like serve and run as the service user, beside a running server,
 // but for downgrade, which needs the store alone. Each checks its
 // arguments before it opens the store, which migrate creates, so that
@@ -45,11 +46,18 @@ func runStore(args []string) error {
   pull <id> <target>
                  fetch a server backup's copy on a target to the local target, where
                  it stays until it is deleted
-                 (backup, backups, push and pull go through this box's running serve,
-                 with MASSIMO_API_TOKEN, at the address it publishes in the data
-                 directory, serve.api, else MASSIMO_LISTEN's, and only where it serves
-                 this store; otherwise they act on the store, one job at a time with
-                 serve's)
+  restore <file|id> -scope <list> -key <file> [-identity] [-env] [-tls] [-plan]
+                 restore scopes of a server backup, each replaced whole, a pinned
+                 backup taken first: settings, users, integrations, cubes or
+                 cube:<serial>, history, all; -identity takes its node.key, -env its
+                 env file, -tls its TLS files, each file replaced kept beside as
+                 <name>.before-restore; -plan prints what it would do and changes
+                 nothing; the key is read into memory and written nowhere
+                 (backup, backups, push, pull and restore go through this box's
+                 running serve, with MASSIMO_API_TOKEN, at the address it publishes
+                 in the data directory, serve.api, else MASSIMO_LISTEN's, and only
+                 where it serves this store; otherwise they act on the store, one
+                 job at a time with serve's; a restore through serve restarts it)
   migrate        create massimo.db or apply its pending migrations, without starting serve;
                  a new one only where -data or MASSIMO_DATA names the directory
   info           the file's schema version, node and row counts
@@ -109,6 +117,32 @@ func runStore(args []string) error {
 			return fmt.Errorf("store %s: %w", args[0], errBackupArgs)
 		}
 		return newBackupCLI(ctx, os.Stdout).copy(ctx, rest[0], rest[1], args[0] == "pull")
+	case "restore":
+		set := flag.NewFlagSet("store restore", flag.ContinueOnError)
+		set.Usage = usage
+		scope := set.String("scope", "", "the scopes, separated by commas: settings, users, integrations, cubes, cube:<serial>, history, all")
+		key := set.String("key", "", "the key file that opens the backup")
+		identity := set.Bool("identity", false, "take the backup's node.key and node id")
+		envFile := set.Bool("env", false, "put the backup's env file where serve reads its own")
+		tlsFiles := set.Bool("tls", false, "put the backup's TLS files where serve keeps its own")
+		plan := set.Bool("plan", false, "print what the restore would do, and change nothing")
+		rest, err := parseMixed(set, args[1:])
+		if err != nil {
+			return err
+		}
+		if len(rest) != 1 || *key == "" {
+			usage()
+			return errors.New("store restore: give the backup, a file or its id as massimo store backups lists it, and -key <file>")
+		}
+		if *scope == "" && !*identity && !*envFile && !*tlsFiles && !*plan {
+			usage()
+			return errors.New("store restore: name what to restore: -scope <list>, -identity, -env or -tls; -plan to see what a restore would do")
+		}
+		var scopes []string
+		if *scope != "" {
+			scopes = []string{*scope}
+		}
+		return newBackupCLI(ctx, os.Stdout).restore(ctx, rest[0], restoreArgs{scopes: scopes, keyFile: *key, identity: *identity, env: *envFile, tls: *tlsFiles, plan: *plan})
 	case "backup":
 		set := flag.NewFlagSet("store backup", flag.ContinueOnError)
 		set.Usage = usage

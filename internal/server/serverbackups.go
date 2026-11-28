@@ -399,6 +399,9 @@ func (s *Server) serverBackupRoutes(api func(pattern, capability string, h func(
 	api("POST /api/v1/server-backup-keys", "owner", s.addServerBackupKey)
 	api("POST /api/v1/server-backup-keys/{uuid}/confirm", "owner", s.confirmServerBackupKey)
 	api("DELETE /api/v1/server-backup-keys/{uuid}", "owner", s.deleteServerBackupKey)
+	api("POST /api/v1/server-backups/{id}/restore/plan", "owner", s.planServerRestore)
+	api("POST /api/v1/server-backups/{id}/restore", "owner", s.restoreServerBackup)
+	api("POST /api/v1/server-backups/{id}/check-key", "owner", s.checkServerBackupKey)
 }
 
 // sbFail maps an error of the catalogue to a status: a copy the target

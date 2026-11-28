@@ -44,12 +44,14 @@ var uiFiles embed.FS
 // uiPartials are the frames of the page's skeleton in ui/partials/, a
 // file per feature, by the marker of index.html they replace
 // (<!-- partials: system -->), in their order there: the header, My
-// settings' notes, the section cards of System settings (in three
-// markers: before, in and after the cards that flow in two columns), the
-// cards of Maintenance, System info's card, the Cube page, the devices
-// without a room and the toast, each named for what it holds and saying
-// which script or part uses it. A frame that would be one element, the
-// place a part draws into, is in index.html itself.
+// settings' notes, the section cards of System settings (in two markers:
+// before and in the cards that flow in two columns), the cards of
+// Maintenance (the server's own first, then its backups beside the
+// Cubes' backups), System info's card, the Cube page, the devices
+// without a room and the toast,
+// each named for what it holds and saying which script or part uses it.
+// A frame that would be one element, the place a part draws into, is in
+// index.html itself.
 var uiPartials = []struct {
 	marker string
 	files  []string
@@ -58,8 +60,7 @@ var uiPartials = []struct {
 	{"prefs", []string{"page.html"}},
 	{"system", []string{"cubes.html"}},
 	{"system-flow", []string{"users.html", "providers.html", "integrations.html", "roles.html", "capabilities.html"}},
-	{"system-end", []string{"backup.html"}},
-	{"maint", []string{"software.html", "maintenance.html"}},
+	{"maint", []string{"software.html", "maintenance.html", "server-backups.html", "backup.html"}},
 	{"info", []string{"system-info.html"}},
 	{"cube-page", []string{"cube-page.html"}},
 	{"unlisted", []string{"unlisted.html"}},

@@ -825,7 +825,7 @@ body.scrolled .nav .top-btn { display: inline-flex; }
 .cube-page .panel.cube-panel > summary::before { display: none; }
 /* its Backup and restore under the panel (backup.js renderCubeBackup) */
 .cube-page > .section-card { margin-top: 16px; }
-/* System settings → Backup and restore: a fold per Cube, its head as a
+/* Maintenance → Cube backups: a fold per Cube, its head as a
    Cube's in the Cubes card, its sign before its name */
 .backups-cubes { display: grid; gap: 8px; }
 .backup-fold > summary > .conn-sign, .backup-fold > summary > .cube-icon { width: 18px; height: 18px; flex: none; }
@@ -846,8 +846,9 @@ body.scrolled .nav .top-btn { display: inline-flex; }
 .cube-differs { border-left: 3px solid var(--warn); padding: 2px 0 2px 10px; margin: 0 0 10px; }
 .cube-differs p { margin: 0 0 6px; overflow-wrap: anywhere; }
 .cube-form input[type="text"] { min-width: 0; max-width: 100%; }
-/* System settings → Backup and restore (backup.js): the stored backups, each
-   a row with its actions, and a restore's plan */
+/* a Cube's box, on Maintenance → Cube backups and on Cube settings
+   (ui/src/backups/): the stored backups, each a row with its actions,
+   and a restore's plan */
 .backup-bar { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; margin-bottom: 6px; }
 .settings .backup-bar .field { margin: 0; }
 .backups-list { margin: 8px 0 14px; }
@@ -865,6 +866,69 @@ body.scrolled .nav .top-btn { display: inline-flex; }
 }
 .backup-diff ul, .restore-steps, .restore-notes { margin: 4px 0; padding-left: 1.4em; overflow-wrap: anywhere; }
 .backup-diff p { margin: 4px 0 0; }
+/* Maintenance → Server backups (ui/src/serverbackups/): its top with
+   Back up now, then the backups, the targets and the keys, each under a
+   grey heading; a fold per backup and per target, a row per copy and per
+   key, a long key wrapped anywhere */
+.sb-status { padding-top: 0; border-top: none; }
+.sb-status .notice { margin: 0; }
+.sb-group-title { margin: 0; padding: 12px 0 6px; border-top: 1px solid var(--line); color: var(--muted); font-size: 1rem; font-weight: 600; }
+.sb-group > p { margin: 0 0 8px; overflow-wrap: anywhere; }
+.sb-backup-list, .sb-target-list { display: grid; gap: 8px; margin-bottom: 8px; }
+.sb-backup, .sb-target { padding: 8px 12px; }
+.sb-backup > summary > .sb-size, .sb-target > summary > .muted { white-space: nowrap; }
+.sb-fact, .sb-backup-error, .sb-target-facts { margin: 0 0 6px; overflow-wrap: anywhere; }
+.sb-backup-error, .sb-copy-error { color: var(--bad); }
+.sb-copies, .sb-key-list, .sb-target-states { list-style: none; margin: 0 0 6px; padding: 0; }
+.sb-copy, .sb-key, .sb-target-state { border-top: 1px solid var(--line); padding: 6px 0; overflow-wrap: anywhere; }
+.sb-row-head { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 10px; }
+.settings .sb-row-head > .actions { margin: 0 0 0 auto; gap: 6px; }
+.sb-copy-error, .sb-key-fp, .sb-key-pending { margin: 2px 0 0; overflow-wrap: anywhere; }
+.settings .sb-backup-actions, .settings .sb-key-actions { justify-content: flex-start; gap: 6px; margin: 6px 0 0; flex-wrap: wrap; }
+.sb-backup-actions > .confirm-box { flex-basis: 100%; }
+.sb-identity { display: block; overflow-wrap: anywhere; word-break: break-all; }
+.sb-made, .sb-key-confirm { margin-top: 8px; }
+.sb-made .notice { margin-bottom: 8px; }
+.sb-keeps { border: none; padding: 0; margin: 0 0 6px; min-width: 0; }
+.sb-keeps legend { padding: 0; margin-bottom: 4px; }
+.sb-keeps-row { display: flex; flex-wrap: wrap; gap: 0 16px; }
+.settings .sb-keeps-row .field { margin-bottom: 6px; }
+.sb-target-form, .sb-key-form { display: flex; flex-direction: column; gap: 6px; }
+/* a field's note while its value matches the kind's warn (plain http),
+   and the line over a target's fields kept while its kind is unknown */
+.sb-field-warn, .sb-kind-unknown { margin: 0 0 6px; overflow-wrap: anywhere; }
+.sb-field-warn > .mark-sign, .sb-kind-unknown > .mark-sign { width: 1em; height: 1em; vertical-align: -0.12em; stroke-width: 2.3; }
+/* a server backup's restore and its check with the key (Restore.tsx), a
+   modal dialog as wide as a phone allows: the key's box, a switch per
+   scope and Cube with its line under it, the files with why one is off,
+   a refusal with the rows it lists, each long text wrapped anywhere */
+dialog.sb-restore-dialog { width: min(92vw, 560px); }
+.sb-restore-dialog h3 { margin: 0 0 8px; overflow-wrap: anywhere; }
+.sb-restore-dialog p, .sb-restore-dialog .notice { margin: 0 0 8px; overflow-wrap: anywhere; }
+.sb-restore-dialog .field > label:not(.switch), .sb-restore-dialog label.switch { margin-bottom: 0; }
+.sb-restore-dialog textarea { resize: vertical; min-height: 5.5em; word-break: break-all; }
+.sb-restore-h { margin: 4px 0 8px; font-size: 1rem; }
+.sb-restore-h.ok { color: var(--ok); }
+.sb-restore-h.bad, .sb-restore-dialog p.bad { color: var(--bad); }
+.sb-restore-keyfile { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 10px; }
+.sb-restore-dialog .sb-restore-keyfile-actions { justify-content: flex-start; margin: 0 0 8px; }
+.sb-restore-group { border: none; padding: 0; margin: 0 0 8px; min-width: 0; }
+.sb-restore-group > legend { padding: 0; margin-bottom: 4px; font-weight: 600; }
+.sb-restore-scope { margin-bottom: 6px; }
+.sb-restore-dialog .switch:has(> input:disabled) { opacity: 0.5; cursor: default; }
+.sb-restore-dialog .sb-restore-line { margin: 0 0 0 48px; }
+.sb-restore-missing, .sb-restore-what, .sb-restore-cubes ul { margin: 0 0 8px; padding-left: 1.4em; overflow-wrap: anywhere; }
+/* an SFTP target's key line for the host's authorized_keys, wrapped
+   anywhere; the host's key its test stopped at, amber where it is to be
+   trusted, red beside the one trusted where it changed */
+.sb-public-key, .sb-host-key { margin: 0 0 8px; overflow-wrap: anywhere; }
+.sb-public-key > .action-title, .sb-public-key-hint, .sb-host-key > p { margin: 0 0 4px; }
+.sb-public-key > .copy-pair { display: flex; align-items: flex-start; }
+.sb-public-key-line { word-break: break-all; }
+.sb-host-key { margin-top: 8px; }
+.sb-host-key-bad { color: var(--bad); }
+.sb-host-key .mark-sign { width: 1em; height: 1em; vertical-align: -0.12em; stroke-width: 2.3; }
+.settings .sb-host-key-actions { justify-content: flex-start; margin: 6px 0 0; }
 .restore-plan { margin-top: 10px; padding: 8px 12px; }
 .restore-title { font-weight: 600; margin: 0 0 4px; overflow-wrap: anywhere; }
 .restore-steps li { margin: 2px 0; }
@@ -1708,7 +1772,7 @@ body.expert .device-vals .cell.aged .age-text { grid-column: 1; contain: none; }
 .flag.fill-info { background: var(--fill-info); color: var(--fill-fg); border-color: var(--fill-info); }
 .flag.fill-open { background: var(--accent); color: var(--accent-fg); border-color: var(--accent); } /* a window open briefly */
 
-button, select, input {
+button, select, input, textarea {
   font: inherit;
   color: var(--fg);
   background: var(--card);
@@ -2142,10 +2206,12 @@ massimo-week-program { display: contents; }
    markup marks what each one hides with needs-<capability>, with
    needs-cubes-or-pair what either of the two shows (System settings →
    Cubes), with needs-maintenance what restart, settings or reboot shows
-   (Maintenance), and with needs-system what one of System settings' does */
+   (Maintenance), and with needs-system what one of System settings' does;
+   the dot of a capability's name is a dash (backup.retry, needs-backup-retry) */
 .no-read .needs-read, .no-setpoint .needs-setpoint, .no-lock .needs-lock, .no-configure .needs-configure,
 .no-rename .needs-rename, .no-structure .needs-structure, .no-pair .needs-pair, .no-discover .needs-discover,
-.no-backup .needs-backup, .no-restore .needs-restore, .no-repair .needs-repair, .no-users-admin .needs-users-admin, .no-roles .needs-roles,
+.no-backup .needs-backup, .no-backup-server .needs-backup-server, .no-backup-retry .needs-backup-retry,
+.no-restore .needs-restore, .no-repair .needs-repair, .no-users-admin .needs-users-admin, .no-roles .needs-roles,
 .no-roles-disable .needs-roles-disable, .no-capabilities .needs-capabilities, .no-cubes .needs-cubes, .no-cubes-reboot .needs-cubes-reboot,
 .no-settings .needs-settings, .no-auth .needs-auth, .no-integrations .needs-integrations, .no-update .needs-update, .no-restart .needs-restart, .no-reboot .needs-reboot, .no-sync .needs-sync,
 .no-system .needs-system, .no-maint .needs-maint,

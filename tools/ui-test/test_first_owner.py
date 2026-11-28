@@ -859,10 +859,14 @@ def test_the_owner_is_told_what_was_set_up(new_context, case, watch, guard, what
         assert wait_until(page, "MassimoParts.pages.shown() === 'system'", 5), "System settings shown"
         assert wait_until(page, "!!document.activeElement && !!document.activeElement.closest('#sys-integrations')", 5), \
             "the Integrations card's heading in focus"
-        # in view: its top in the window's upper third, its heading inside the window, once the scroll has settled
+        # in view: its top in the window's upper third, or as high as the
+        # page's end lets it (since AP ServerBackup's Block 3 no card
+        # follows the flow's two columns), its heading inside the window,
+        # once the scroll has settled
         assert wait_until(page, """(() => { const c = document.getElementById('sys-integrations').getBoundingClientRect();
           const h = document.activeElement.getBoundingClientRect();
-          return c.top >= 0 && c.top <= innerHeight / 3 && h.top >= 0 && h.bottom <= innerHeight; })()""", 5), \
+          const end = Math.ceil(scrollY + innerHeight) >= document.documentElement.scrollHeight - 1;
+          return c.top >= 0 && (c.top <= innerHeight / 3 || end) && h.top >= 0 && h.bottom <= innerHeight; })()""", 5), \
             f"the Integrations card in view: {page.evaluate(RECT, '#sys-integrations')}"
     else:
         assert wait_until(page, "MassimoParts.pages.shown() === 'log'", 5), "the log shown"

@@ -278,10 +278,17 @@ const API_WAIT_MS = 20000;
 // which a request may first wait for while another holds it, so twice
 // that (update_api.go); the look for integrations on the LAN 30 s; the end
 // of a sign-in through a provider up to 10 s for each of its calls there
-// (oidc.go). The stream's ticket asks no Cube.
+// (oidc.go); a job of the server's backups, which has no limit of its own
+// and waits for the one that runs, a backup made, copied, checked or
+// retried, a copy deleted or a target added and read, a quarter of an
+// hour, and a target's test, a minute there (serverbackups.go). The
+// stream's ticket asks no Cube.
 function waitOf(method, path) {
   const route = path.split("?")[0];
   if (route === "api/v1/cubes/discover") return 90000;
+  if (method === "POST" && /^api\/v1\/server-backup-targets\/[^/]+\/test$/.test(route)) return 75000;
+  if (method !== "GET" && /^api\/v1\/server-backups(\/|$)/.test(route) && !/\/pin$/.test(route)) return 900000;
+  if (method === "POST" && route === "api/v1/server-backup-targets") return 900000;
   if (method !== "GET" && /^api\/v1\/cubes\/[^/]+\/events\/ticket$/.test(route)) return API_WAIT_MS;
   if (method !== "GET" && /^api\/v1\/cubes\/[^/]+\/(.+\/)?repair\//.test(route)) return 630000;
   if (method !== "GET" && (route === "api/v1/cubes" || /^api\/v1\/cubes\/[^/]+\/./.test(route))) return 330000;

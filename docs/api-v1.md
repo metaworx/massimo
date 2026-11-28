@@ -343,9 +343,10 @@ and a capability disabled for every role but `owner`,
 through the routes of `/api/v1/roles` and `/api/v1/capabilities`.
 A user's own user and the routes of `/api/v1/users/{name}` with the user's
 own name are open to it for its display name and its password.
-The keys of the server's backups are the owner's alone, a user of the role
-`owner` and never a call through an integration: no capability gives them
-(`x-capability: owner` in the OpenAPI file; "Server backups", below).
+The keys of the server's backups and their restore are the owner's alone,
+a user of the role `owner` and never a call through an integration:
+no capability gives them (`x-capability: owner` in the OpenAPI file;
+"Server backups", below).
 
 Ten failed token checks from one address within a minute lock that
 address out for five minutes: every `/api` request from it is then
@@ -4245,7 +4246,7 @@ also while discovery does not hear it and `GET /api/v1/cubes` does not list it:
 Their backups are listed, downloaded, compared and deleted through
 `GET …/backups` and its routes (above).
 The served Cubes are not in it, and a server without a store lists none (`[]`).
-Web UI: System settings → Backup and restore draws a fold for each.
+Web UI: Maintenance → Cube backups draws a fold for each.
 Capability `backup`.
 
 ### POST /api/v1/cubes/{sn}/restore/plan
@@ -5783,6 +5784,79 @@ A box's keys are all post-quantum or all classic, as age requires:
 another kind is `409` with `"code": "mixed_kinds"`.
 `DELETE …/server-backup-keys/{uuid}` removes one;
 backups made before stay encrypted for it.
+
+The restore, the owner's alone, as the keys are (docs/store.md,
+"Restore by scope"): each route takes the key in its body,
+held in memory for the request alone, never written, and kept by no audit row,
+
+```json
+{"key_file": "# created: …\nAGE-SECRET-KEY-…", "scopes": ["users", "cube:KEQ0000000"],
+ "take_identity": false, "env": false, "tls": false}
+```
+
+`key_file` an age identity or an OpenSSH `ssh-ed25519` key without a passphrase;
+`scopes` of `settings`, `users`, `integrations`,
+`cubes` (every Cube of the backup), `cube:<serial>`, `history` and `all`;
+`take_identity` the backup's `node.key` and node id,
+this box keeping its own without;
+`env` the backup's env file where this server reads its own,
+`tls` its TLS files where this server keeps its own,
+each file replaced kept beside as `<name>.before-restore`.
+A key that does not open the backup is `422`,
+and so is a backup whose store is newer than this server's: update first.
+
+- `POST …/server-backups/{id}/restore/plan` answers what a restore would do
+  and changes nothing, every scope where none is named: the backup (`uuid`,
+  `time`, `trigger`, `label`, `version`, `schema`), its `identity` (`this_box`,
+  `fingerprint`, its `node` id,
+  and for another box's whether that box still `answers` on the network,
+  `null` where not looked for),
+  whether its store was `migrated` from an older schema,
+  the `cubes` it holds (`serial`, `name`, `live` where this server has it),
+  whether it holds an `env` file and how many `tls` files,
+  and for each why this server could not put it in place,
+  asked for or not (`env_refused`, `tls_refused`, empty where it could),
+  the `files` the options would put in place (`role`, `to`),
+  whether this server can `restart` itself (`available`, `by`, `blocked`),
+  the `report` and, where the restore would be refused, why (`refused`):
+  what is missing,
+  a place this server cannot write (the systemd unit keeps `/etc/massimo`
+  read-only to it),
+  or users and sign-in or the identity on a server that cannot restart itself.
+- `POST …/server-backups/{id}/restore` writes the files beside their places,
+  takes a pinned local backup, replaces the scopes whole in one transaction,
+  renames the files into place,
+  and restarts the server as `POST /api/v1/restart` does,
+  also where a file failed after the commit: then `500`,
+  with the answer and its `error`.
+  What the server wrote between the backup taken first and the commit is in neither:
+  the answer names both times, `before_backup_time` and `restored_at`.
+  Users and sign-in, or the identity,
+  are `409` on a server that cannot restart itself.
+  The answer says so first,
+  `{"restart": {"started": true, "by": "systemd"}, …}`, or why not (`blocked`):
+  the server is then to be restarted by hand,
+  since it keeps `opaque.key` and its node in memory.
+  It names the backup taken first (`before_backup`), the `report`, the `files`,
+  and the `cubes` restored,
+  each with the Cube backup the Cube restore could write onto it (`backup`;
+  `POST /api/v1/cubes/{sn}/restore`, with its radio cost).
+  `409` with `"code": "missing"` where rows of other scopes the backup's rows name
+  are missing here, `"no_owner"` where users and sign-in would leave no owner,
+  each with the `report`.
+- `POST …/server-backups/{id}/check-key` opens the backup into a temporary
+  directory and checks its store, `PRAGMA integrity_check`, changing nothing:
+  `{"ok": true, "integrity": ["ok"], "this_box": true, "files": [{"name": "massimo.db", "role": "store"}, …], "backup": {…}}`.
+
+The `report` gives, per scope and table, the rows `restored` from the backup,
+of them those that `replaced` a live row,
+the live rows the backup lacks (`removed`),
+of them those `kept_removed` since a row outside the scopes names them;
+the rows `missing`, each with its `table`, `uuid`,
+`name` and the table that names it (`by`);
+the references `cleared` and the rows `removed` with a row the restore removed;
+and the sealed secrets that did not open (`secrets_lost`),
+each to be entered again.
 
 ## The LAN proxy
 

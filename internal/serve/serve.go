@@ -344,8 +344,9 @@ func open(ctx context.Context, cfg Config, root *slog.Logger, src certs.Source, 
 	srv := server.New(server.Options{Cubes: su.cubes, Token: cfg.Token, PollInterval: poll, CubeHold: cfg.CubeHold, RefreshInterval: refresh, DiscoverInterval: discover, DiscoveryTargets: cfg.DiscoveryTargets, DiscoveryAddr: cfg.DiscoveryListen, DiscoveryWait: cfg.discoveryWait, Logger: root, Version: cfg.Version, Proxy: su.listeners, ShowHidden: cfg.ShowHidden,
 		Store: st, Queue: queue, FileCubes: su.fileCubes, SettingsFile: cfg.SettingsFile, SettingsNotes: cfg.SettingsNotes, StaleAfter: staleAfter, StaleAfterWall: staleAfterWall, SettingsFixedBy: fixedBy, ProxyFixed: len(cfg.Proxies) > 0, Update: cfg.Update, TLS: src, HSTSDays: cfg.HSTSDays, TrustedProxies: cfg.TrustedProxies,
 		Restart: cfg.Restart, Reboot: cfg.Reboot, Install: cfg.Install, Deliverers: cfg.Deliverers, FindIntegrations: find, BrowseServers: browseServers,
-		BackupTLSFiles: func() []serverbackup.TLSFile { return BackupTLSFiles(cfg.TLS, cfg.DataDir) },
-		Announce:       server.AnnounceState{On: cfg.Announce.On && st != nil, FixedBy: cfg.Announce.FixedBy, Loopback: LoopbackListen(cfg.Listen)}})
+		BackupTLSFiles:  func() []serverbackup.TLSFile { return BackupTLSFiles(cfg.TLS, cfg.DataDir) },
+		RestoreTLSPlace: func() serverbackup.TLSPlace { return RestoreTLSPlace(cfg.TLS, cfg.DataDir) },
+		Announce:        server.AnnounceState{On: cfg.Announce.On && st != nil, FixedBy: cfg.Announce.FixedBy, Loopback: LoopbackListen(cfg.Listen)}})
 	// An error of the box's state, such as a port taken, names its
 	// setting as the start's checks name theirs (cmd/massimo).
 	ln, err := net.Listen("tcp", cfg.Listen)

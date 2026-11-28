@@ -2208,7 +2208,8 @@ handle the keys and the files of the server's backups,
 and open no store ("Server backups", below).
 `store backup` without a file makes a server backup now (`-target <name>`,
 `-label <text>`), `store backups` lists them,
-`store push <id> <target>` and `store pull <id> <target>` copy one:
+`store push <id> <target>` and `store pull <id> <target>` copy one,
+`store restore <file|id> -scope <list> -key <file>` restores one by scope:
 these go through this box's running `serve`, its API with `MASSIMO_API_TOKEN`,
 so that the job is the server's, and open the store otherwise.
 `serve` publishes its API's address in the data directory, `serve.api`,
@@ -2662,6 +2663,116 @@ all with Go's standard library:
   and against a bucket with object lock and a default retention too,
   `_LOCK_BUCKET`.
 
+#### Restore by scope
+
+The owner restores chosen scopes of a backup (D6-A, D7-A;
+`internal/serverbackup`, `Catalogue.Restore`; docs/api-v1.md, "Server backups").
+Each table of the store belongs to scopes by its rows,
+in one list beside the store's queries (`internal/store/restore.go`,
+`scopeTables`), and a test fails on a table that is in none:
+a table added later is placed there, or a restore would leave it out.
+
+| Scope | Rows | File |
+|-------|------|------|
+| `settings` | the settings but `node.id` and `tenant.id`, the targets of the server's backups with their sealed secrets, their keys | – |
+| `users` | the users that are not an integration's, `roles`, `role_capabilities`, `capabilities_disabled`, `auth_providers`, the providers' identities, the users' API keys, preferences and push subscriptions on a key | `opaque.key` |
+| `integrations` | the integrations, their users, identities, keys and preferences | – |
+| `cubes`, `cube:<serial>` | each Cube by its serial, with its rooms, Cube backups and their files, and its commands | – |
+| `history` | `audit`, `log`, the commands of no Cube | – |
+| the identity, ticked | `node.id`, `tenant.id` | `node.key` |
+| never | the sessions and the push subscriptions on one, `auth_failures`, `backup_pending`, `schema_version`, `server_backups` and `server_backup_copies`, the live catalogue | – |
+
+The env file and the TLS files are restored only where ticked, each on its own,
+since a new box's paths can differ:
+the env file goes where this server reads its own,
+the TLS files where it keeps its own (files mode's,
+else the self-signed pair's place, and the ACME directory).
+Each file replaced stays beside as `<name>.before-restore`.
+A place this server cannot write refuses the restore, and the plan says so,
+of the env file and of the TLS files whether they are asked for or not:
+under the systemd unit's protection (`ProtectSystem=strict`) only the data
+directory and the log's are writable to `serve`, so `/etc/massimo/env` and
+`/etc/massimo/cert.pem` are put in place by hand, from `massimo store decrypt`.
+
+A restore, in this order:
+
+1. The backup is opened with the owner's key,
+   which the request carries and nothing writes,
+   into a temporary directory in the data directory (`.serverbackup-restore-*`,
+   removed at its end, or by the next backup after a crash).
+   A backup whose store is of a newer schema than this one's is refused first:
+   update first.
+   One of an older schema is migrated there, on its copy alone.
+2. It is planned: run in a transaction and rolled back.
+   A refusal takes no backup.
+   Users and sign-in, or the identity,
+   are refused where the server cannot restart itself,
+   since it keeps their keys in memory.
+3. Every file is written beside its place, with a copy of the file it replaces,
+   so that nothing but renames is left once the store is restored;
+   one that cannot be written refuses the restore here.
+4. A local backup is taken, pinned for 30 days (`before-restore`).
+   What the server writes from then until the store's commit, a few seconds,
+   is in neither: the answer names both times (`before_backup_time`,
+   `restored_at`).
+5. The scopes are replaced whole, in one transaction:
+   - A row of the backup takes the id of the live row of its uuid,
+     or of its natural key (a role's key, a Cube's serial, a target's name,
+     a key's fingerprint), or a new one;
+     its references follow through a map of the backup's ids to this store's,
+     read from the schema (`PRAGMA foreign_key_list`),
+     so that a later table's are followed without new code.
+     A reference to a row of another scope maps to the live row of its uuid.
+   - A reference to a row of another scope that this store lacks refuses the restore
+     with the list of what is missing (a user by name, a Cube by serial, …).
+     One the schema lets go (`ON DELETE SET NULL`) is cleared,
+     and so is one to a session, which never comes back.
+   - A live row the backup lacks is removed.
+     Where a row outside the scopes still names it and its table keeps removed
+     rows (`deleted_at`), it stays, marked removed:
+     a user who left since the backup stays in the audit's rows.
+     What the schema removes with it (`ON DELETE CASCADE`) goes,
+     the sessions of a user removed among them.
+     A target that holds a copy of a pinned backup stays whatever the backup says,
+     so that the backup taken first keeps its copy and undoes the restore by its id.
+   - The audit's and the log's rows take ids above those this store gave,
+     as new rows would, so that the newest line a user saw (`log.seen`)
+     hides nothing that comes after.
+   - Users and sign-in that would leave no owner, where there was one,
+     is refused.
+   - The sealed secrets of the rows taken are opened with the backup's
+     `opaque.key` and sealed with this store's.
+     With users and sign-in, `opaque.key` travels too, since a password of
+     version 2 opens with it alone: every sealed secret, the live ones too,
+     is then sealed with the backup's (D7-A).
+6. The files are renamed into place: `opaque.key` with users and sign-in,
+   `node.key` with the identity, the env file and the TLS files where ticked.
+7. The server restarts, as `POST /api/v1/restart` does:
+   it keeps `opaque.key` and its node in memory.
+   It restarts also where a file failed after the store's commit,
+   which the answer then names.
+
+This box keeps its `node.key` unless "take the backup's identity" is ticked;
+the plan says whether the box that made the backup still answers on the network,
+since two boxes of one identity clash.
+A Cube restored is the store's rows alone:
+writing its configuration onto the Cube stays the Cube restore
+(`POST /api/v1/cubes/{sn}/restore`), with its radio cost,
+which the restore's answer offers for each Cube with the newest of its Cube backups.
+"Check with the key" opens a backup into a temporary directory the same way
+and runs `PRAGMA integrity_check` on its store, changing nothing:
+a backup nobody has opened is a hope, not a backup.
+
+On the command line, `massimo store restore <file|id> -scope <list> -key <file>`,
+with `-identity`, `-env`, `-tls` and `-plan`,
+goes through a running `serve` (its API with `MASSIMO_API_TOKEN`,
+a file uploaded first), so that the restore is that server's,
+and acts on the store otherwise: under the jobs' lock,
+with the store held alone,
+which a `serve` that has it open refuses (`store.ErrInUse`);
+`-plan` prints what it would do and changes nothing,
+a file uploaded for it removed again where the server did not hold it.
+
 ## 8. Migration of an installed box
 
 The Pi runs `massimo serve` as a systemd service with `/etc/massimo/env`,
@@ -2975,7 +3086,8 @@ Implemented on 2026-11-07 (AP StoreBackups v1.0).
   and `GET /api/v1/backups/unserved` lists the rows not served that keep backups,
   with the count and the newest's time,
   both from one grouped query by serial (`KeptBackups`).
-- UI: Settings → Backup and restore: the download as YAML or JSON,
+- UI: Maintenance → Cube backups, and Cube settings → Backup and restore
+  for the chosen Cube: the download as YAML or JSON,
   a backup by hand, the list with download, the comparison with the one before,
   restore and delete, a restore from a file; a restore shows its plan first,
   then each step as the Cube took it.

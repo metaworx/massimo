@@ -14,9 +14,11 @@
  * back to where it was, and a form opened from it takes it from there.
  * However it is closed, by a button, by Escape or because it is no
  * longer shown, its close event says what follows: what the button does,
- * else a Stay.
+ * else a Stay. Beside it, a modal <dialog> whose content is its caller's
+ * (Modal): a server backup's restore and its check with the key.
  */
 
+import type { ComponentChildren, RefObject } from "preact";
 import { useId, useLayoutEffect, useRef } from "preact/hooks";
 import { Sign } from "./icon";
 import type { Item } from "./problems";
@@ -87,6 +89,54 @@ export function FormsDialog({ shown, title, text, forms, stay, onStay, go }: {
         <button ref={stayRef} type="button" class={go ? "dialog-stay" : "dialog-stay primary"} onClick={() => end(onStay)}>{stay}</button>
         {go && <button type="button" class="dialog-go" onClick={() => end(go.onGo)}>{go.label}</button>}
       </div>
+    </dialog>
+  );
+}
+
+/**
+ * Modal is a modal <dialog> of the page, its content the caller's, open
+ * while shown: opened in the drawing that shows it, the focus on
+ * focusRef's element where given, else where the browser puts it;
+ * closed as shown says, the browser then giving the focus back to where
+ * it was. Closed by the browser, by Escape among it, it runs onClose;
+ * while held (a request under way that is not to be left) Escape leaves
+ * it open, and a close the browser makes all the same (a second Escape)
+ * opens it again. title is its heading, which names it; cls its class.
+ */
+export function Modal({ shown, title, cls, held, focusRef, onClose, children }: {
+  shown: boolean;
+  title: string;
+  cls?: string;
+  held?: boolean;
+  focusRef?: RefObject<HTMLElement>;
+  onClose: () => void;
+  children?: ComponentChildren;
+}) {
+  const ref = useRef<HTMLDialogElement>(null);
+  const titleId = useId();
+  // opened and closed as shown says, the focus given in the drawing that opens it
+  // biome-ignore lint/correctness/useExhaustiveDependencies: focusRef is a ref, read as the dialog opens
+  useLayoutEffect(() => {
+    const el = ref.current;
+    if (!el) return;
+    if (shown && !el.open) {
+      el.showModal();
+      focusRef?.current?.focus();
+    } else if (!shown && el.open) {
+      el.close();
+    }
+  }, [shown]);
+  return (
+    <dialog ref={ref} class={cls} aria-labelledby={titleId} onCancel={(ev) => {
+      if (held) ev.preventDefault();
+    }} onClose={(ev) => {
+      // a close of its own, shown no longer, says nothing; held, it is opened again
+      if (!shown) return;
+      if (held) ev.currentTarget.showModal();
+      else onClose();
+    }}>
+      <h3 id={titleId}>{title}</h3>
+      {children}
     </dialog>
   );
 }

@@ -523,8 +523,9 @@ def test_a_backup_box_keeps_its_question(page, case):
     list read again, as Cube settings shown again reads it, keeps the
     question, the row's buttons and the choice the elements they were
     (backup.js drew the list again and dropped the question). A restore's
-    plan asked for there shows in System settings' fold of the same Cube
-    as well, as backup.js had it too, and Cancel takes it away in both.
+    plan asked for there shows in Maintenance's fold of the same Cube
+    (Cube backups) as well, as backup.js had it too, and Cancel takes it
+    away in both.
     Nothing is deleted or restored."""
     bid = take_backup()
     try:
@@ -545,7 +546,7 @@ def test_a_backup_box_keeps_its_question(page, case):
         assert row.locator(".confirm-box").count() == 0, "No takes the question back"
         row.locator(".backup-actions button").nth(1).click()
         page.locator(CUBE_BOX + " .restore-plan").wait_for(timeout=10000)
-        show_view(page, "system")
+        show_view(page, "maint")
         fold = page.locator(f"#backups-cubes > .backup-fold[data-serial='{SERIAL}']")
         if not fold.evaluate("(d) => d.open"):
             fold.locator("> summary").click()
@@ -1174,11 +1175,11 @@ def test_a_running_restore_stays_in_sight(page, case):
         frames(page)
         assert page.locator(CUBE_BOX + " .restore-file").is_disabled(), "Restore from file… off"
         assert first_row(page, CUBE_BOX).locator(".backup-actions button").nth(1).is_disabled(), "Restore… off"
-        show_view(page, "system")
+        show_view(page, "maint")
         fold = page.locator(f"#backups-cubes > .backup-fold[data-serial='{SERIAL}']")
         if not fold.evaluate("(d) => d.open"):
             fold.locator("> summary").click()
-        assert fold.locator(".restore-file").is_disabled(), "off in System settings too"
+        assert fold.locator(".restore-file").is_disabled(), "off in Cube backups too"
         page.evaluate("(s) => MassimoParts.backups.restoreEvent({kind: 'restore_done', cube: s, restore: {id: 'rw-run', ok: true, state: 'done', sent: 1}})", SERIAL)
         assert wait_until(page, f"!document.querySelector(\"#backups-cubes > .backup-fold[data-serial='{SERIAL}'] .restore-file\").disabled", 5), "on again"
         fold.locator(".restore-actions button").first.click()

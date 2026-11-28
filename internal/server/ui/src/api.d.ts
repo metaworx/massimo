@@ -2505,6 +2505,171 @@ export interface ServerBackupKind {
   })[];
 }
 
+export interface ServerRestoreRequest {
+  /**
+   * The key file's text: an age identity, or an OpenSSH ssh-ed25519 key without
+   * a passphrase
+   */
+  key_file: string;
+  /**
+   * settings, users, integrations, cubes (every Cube of the backup),
+   * cube:<serial>, history, or all; each item may list several, separated by
+   * commas
+   */
+  scopes?: string[];
+  /** Take the backup's node.key and node id; this box keeps its own without */
+  take_identity?: boolean;
+  /** Put the backup's env file where this server reads its own */
+  env?: boolean;
+  /** Put the backup's TLS files where this server keeps its own */
+  tls?: boolean;
+}
+
+export interface ServerRestoreReport {
+  tables?: {
+    scope?: string;
+    table?: string;
+    /** Rows taken from the backup */
+    restored?: number;
+    /** Of them, those that took a live row's place */
+    replaced?: number;
+    /** Live rows the backup lacks */
+    removed?: number;
+    /**
+     * Of them, those kept, marked removed, since a row outside the scopes names
+     * them
+     */
+    kept_removed?: number;
+  }[];
+  /** Rows of other scopes the backup's rows name and this server lacks */
+  missing?: {
+    table?: string;
+    uuid?: string;
+    name?: string;
+    /** The table that names it */
+    by?: string;
+  }[];
+  cleared?: ServerRestoreCount[];
+  /** Live rows outside the scopes that went with a row the restore removed */
+  removed?: ServerRestoreCount[];
+  /** Sealed secrets that did not open, each to be entered again */
+  secrets_lost?: number;
+  cubes?: ServerRestoreCube[];
+}
+
+export interface ServerRestoreCount {
+  table?: string;
+  column?: string;
+  rows?: number;
+}
+
+export interface ServerRestoreCube {
+  serial?: string;
+  name?: string;
+  /** This server held it before */
+  live?: boolean;
+  /**
+   * Its newest Cube backup, the configuration the Cube restore could write onto
+   * it
+   */
+  backup?: string;
+}
+
+export interface ServerRestoreFile {
+  role?: string;
+  /** Its name in the backup */
+  name?: string;
+  /** Where it goes on this box */
+  to?: string;
+  /** Where the file it replaced stays */
+  before?: string;
+}
+
+export interface ServerRestorePlan {
+  backup?: {
+    uuid?: string;
+    /** @format date-time */
+    time?: string;
+    trigger?: string;
+    label?: string;
+    version?: string;
+    schema?: number;
+  };
+  identity?: {
+    this_box?: boolean;
+    fingerprint?: string;
+    /** The backup's node id */
+    node?: string;
+    /** The box of another backup still answers on the network */
+    answers?: boolean | null;
+  };
+  /** A backup of an older schema, brought to this server's */
+  migrated?: boolean;
+  scopes?: string[];
+  serials?: string[];
+  cubes?: {
+    serial?: string;
+    name?: string;
+    live?: boolean;
+  }[];
+  /** The backup holds an env file */
+  env?: boolean;
+  /** The TLS files it holds */
+  tls?: number;
+  /**
+   * Why the env file could not be put in place on this server, asked for or
+   * not; empty where it could or the backup holds none
+   */
+  env_refused?: string;
+  /**
+   * Why the TLS files could not be put in place on this server, asked for or
+   * not; empty where they could or the backup holds none
+   */
+  tls_refused?: string;
+  files?: ServerRestoreFile[];
+  restart?: {
+    /** This server can restart itself */
+    available?: boolean;
+    by?: string;
+    blocked?: string;
+  };
+  report?: ServerRestoreReport;
+  /**
+   * Why the restore would be refused: rows missing, a place this server cannot
+   * write, or no restart for users or the identity; empty for not
+   */
+  refused?: string;
+}
+
+export interface ServerRestoreResult {
+  restart?: {
+    started?: boolean;
+    by?: string;
+    /** Why the server did not restart; restart it by hand */
+    blocked?: string;
+  };
+  /**
+   * A failure after the store's commit, a file not put in place; the server
+   * restarts all the same
+   */
+  error?: string;
+  /** The pinned local backup taken first */
+  before_backup?: string;
+  /**
+   * When it was made: what the server wrote from then until restored_at is in
+   * neither
+   * @format date-time
+   */
+  before_backup_time?: string;
+  /** @format date-time */
+  restored_at?: string;
+  scopes?: string[];
+  serials?: string[];
+  report?: ServerRestoreReport;
+  files?: ServerRestoreFile[];
+  cubes?: ServerRestoreCube[];
+}
+
 export interface ServerBackupKey {
   uuid?: string;
   label?: string;

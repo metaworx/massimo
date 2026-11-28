@@ -11,8 +11,9 @@ import pytest
 from playwright.sync_api import TimeoutError as PlaywrightTimeoutError
 
 from conftest import TOKEN, URL, api_call
-from helpers import (OPERATOR_PASSWORD, ApiReads, assert_login_card_centred, assert_login_row, frames, named_buttons,
-                     open_personal_page, pause_clock, scroll_settled, show_view, sign_out, taken, wait_held, wait_until)
+from helpers import (OPERATOR_PASSWORD, ApiReads, assert_login_card_centred, assert_login_row, css_hidden, frames, named_buttons,
+                     open_main_menu, open_personal_page, pause_clock, scroll_settled, show_view, sign_out, taken, wait_held,
+                     wait_until)
 from test_connect import server_page
 
 
@@ -20,8 +21,9 @@ def test_sign_in_and_out(new_context, case, watch, guard):
     """The sign-in dialog opens without a token, in the middle of the
     window, its title centred, and refuses a wrong
     password, and two submits send one sign-in; the operator signs in,
-    sees the tiles and no System settings →
-    Users, Roles or Cubes; the 👤 menu names the operator, and Sign out
+    sees the tiles and no System settings, its backup being Maintenance's
+    Cube backups, which it has, without the restart (AP ServerBackup,
+    Block 3); the 👤 menu names the operator, and Sign out
     forgets the token and the Cube's data and brings the dialog back,
     with nothing of the page but the name and the version; signed in
     again, the page is back."""
@@ -64,12 +66,13 @@ def test_sign_in_and_out(new_context, case, watch, guard):
         "the missing capabilities are on the body"
     assert page.locator(".room .tile-cog").first.is_visible() and not page.locator(".room .menu-delete").first.is_visible(), \
         "an operator configures but does not delete rooms"
-    show_view(page, "system")
-    assert not page.locator(".users-settings").is_visible(), "no System settings → Users for an operator"
-    assert not page.locator(".roles-settings").is_visible(), "no System settings → Roles for an operator"
-    assert not page.locator(".cubes-settings.needs-cubes").is_visible(), "no System settings → Cubes for an operator"
+    open_main_menu(page)
+    assert css_hidden(page, "#menu-system"), "no System settings for an operator"
+    page.keyboard.press("Escape")
+    show_view(page, "maint")
+    assert page.locator("#maint-page .backup-settings").is_visible(), "Maintenance → Cube backups for an operator"
     assert not page.locator(".restart.needs-restart").is_visible(), "no restart for an operator"
-    named_buttons(page, "the settings as an operator")
+    named_buttons(page, "Maintenance as an operator")
     open_personal_page(page)
     assert "operator" in page.locator("#me-line").inner_text(), "the personal page says who is signed in"
     assert page.locator("#logout-btn").inner_text() == SIGN_OUT[case.lang], "a session is signed out"

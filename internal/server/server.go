@@ -362,6 +362,10 @@ type Options struct {
 	// read at each backup: what serve was started with (internal/serve,
 	// BackupTLSFiles); nil for none (serverbackups.go).
 	BackupTLSFiles func() []serverbackup.TLSFile
+	// RestoreTLSPlace is where a restore of a server backup puts its TLS
+	// files on this box (internal/serve, RestoreTLSPlace); nil restores
+	// none (serverrestore.go).
+	RestoreTLSPlace func() serverbackup.TLSPlace
 	// serverBackupClock and serverBackupZone are the schedule's clock
 	// and the box's time zone, for the tests; nil for the real time and
 	// time.Local.

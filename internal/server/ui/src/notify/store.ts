@@ -5,8 +5,8 @@
  * @file internal/server/ui/src/notify/store.ts
  *
  * What the notifications' card is drawn from, as notify.js kept it: the
- * kinds in the page's order with their defaults (the server's), the
- * user's rules once read, its subscriptions, this browser's endpoint,
+ * kinds in the page's order with their defaults (the server's), those
+ * offered to a holder of a capability alone, the user's rules once read, its subscriptions, this browser's endpoint,
  * the name of this device typed, and the line under the lists with whose
  * outcome it shows. A rule changed waits a second for the next before it
  * is sent (save.ts).
@@ -41,6 +41,9 @@ export const KINDS: [string, Rule][] = [
   ["update", { on: false }],
   ["server_backup_failed", { on: true }],
 ];
+
+/** NEEDS are the kinds told only to a holder of a capability, and offered to them alone (notifyNeeds of internal/server/serverbackups.go). */
+export const NEEDS: Record<string, string> = { server_backup_failed: "backup.retry" };
 
 /** The bounds of a delay and of the threshold, the server's. */
 export const AFTER: [number, number] = [1, 1440];

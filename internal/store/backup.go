@@ -69,10 +69,7 @@ func (s *Store) Snapshot(ctx context.Context, dst string) (Snapshot, error) {
 // countSnapshot counts the rows of the copy at path, opened read-only
 // and immutable: nothing writes it, so no lock and no WAL is needed.
 func countSnapshot(ctx context.Context, path string, c *SnapshotCounts) error {
-	q := url.Values{}
-	q.Set("mode", "ro")
-	q.Set("immutable", "1")
-	db, err := sql.Open("sqlite", "file:"+filepath.ToSlash(path)+"?"+q.Encode())
+	db, err := openImmutable(path)
 	if err != nil {
 		return err
 	}
@@ -83,6 +80,15 @@ func countSnapshot(ctx context.Context, path string, c *SnapshotCounts) error {
 		}
 	}
 	return nil
+}
+
+// openImmutable opens the store file at path read-only and immutable, a
+// copy nothing writes.
+func openImmutable(path string) (*sql.DB, error) {
+	q := url.Values{}
+	q.Set("mode", "ro")
+	q.Set("immutable", "1")
+	return sql.Open("sqlite", "file:"+filepath.ToSlash(path)+"?"+q.Encode())
 }
 
 // Info is what massimo store info prints.

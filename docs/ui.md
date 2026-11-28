@@ -653,7 +653,7 @@ The compacted header has **↑**, back to the top, first of the page buttons:
   each for the roles that may open it and with the icon of its page: **Log**;
   **Cube settings**, the chosen Cube's, for a role with `cubes` or with `pair`,
   **System settings**, for a role with one of its capabilities, **Maintenance**,
-  for those and a role with `update`, `restart` or `reboot`,
+  for those and a role with `backup`, `update`, `restart` or `reboot`,
   and **System info**, for every role with `read`; **Personal settings**,
   its tooltip naming whose they are, by display name and login;
   a rule, then in the app **App settings** and **This server's settings**,
@@ -1838,7 +1838,7 @@ also while no page is open.
   and, off by default, a device that sends no news, a device paired,
   a new Cube on the network and a new version of Massimo;
   and, on by default, a backup of the server that fails, which only a user
-  who sees the server's backups (`backup.retry`) is told.
+  who sees the server's backups (`backup.retry`) is told and offered.
   A change is saved a second after the last one,
   at once where you sign out within that second;
   a delay is 1 to 1440 minutes, the threshold −10 to 20 °C,
@@ -1946,7 +1946,7 @@ and puts the focus into them.
 A panel is drawn in one place at a time:
 while Cube settings is shown, System settings' list does not hold it.
 Under the panel the Cube's **Backup and restore** (with `backup`),
-as System settings → Backup and restore shows it for each Cube.
+as Maintenance → Cube backups shows it for each Cube.
 
 ## System info
 
@@ -2071,11 +2071,15 @@ as after a restart, the readings start anew, their count at none.
 
 ☰ → **System settings** holds what is the server's,
 each part for a role with its capability;
-a role with none of them (the viewer's, a guest's) has no such entry in ☰.
+a role with none of them has no such entry in ☰:
+the viewer's, a guest's, the operator's.
+The Cubes' backups are on Maintenance (**Cube backups**),
+so a role with `backup` and none of these, the operator's, has Maintenance
+and no System settings.
 
 The page is a card per part, as wide as the page:
 Cubes first, then Users, Roles,
-**Capabilities for every role**, and Backup and restore last;
+and **Capabilities for every role** last;
 from 900 px Users, Roles and Capabilities flow in two columns,
 none split, the break where their heights put it.
 The page's row stays under the header while the page scrolls,
@@ -2537,73 +2541,16 @@ settings forms and have none of it.
   a switch per capability, which switches it off for every role but the owner,
   saved at once and off while its request runs;
   refused, it shows the capability as stored again and the roles' line says why.
-- **Backup and restore** (with `backup`):
-  a fold per Cube, the cube, its name and serial, its sign,
-  and how many backups the server keeps of it in its head, a single Cube's open;
-  the card's head counts them all.
-  In each, and on Cube settings for the chosen Cube,
-  **Download backup** saves the Cube as it is now, as YAML or JSON (**Format**).
-  The server keeps the Cube's backups in its store,
-  listed newest first with why each was taken (after a change, by hand,
-  before a restore, or the file a restore was sent), its size and who asked:
-  one follows by itself an hour after the Cube's configuration last changed,
-  at the latest two hours after the first change (the settings `backups.*`,
-  docs/api-v1.md, "Backups"), also across a restart of the server,
-  which takes a pending one as it stops,
-  and a line says when while one is pending;
-  while none is, a line under a list of backups says that nothing changed
-  since the newest one, and that the server takes one after a change.
-  Each list is read when its page is shown,
-  and after a load onto the page once the page knows its Cubes.
-  **Take a backup now** keeps one by hand.
-  Each row has **Download**, **Compare with the one before**,
-  which lists what changed as the restore would send it,
-  and, with `restore`, **Restore…** and **Delete**, which asks first.
-  **Restore from file…** (with `restore`) takes a backup file instead.
-  A restore first shows its plan, the steps with the radio ones marked,
-  the notes and what the radio commands cost of the hourly budget,
-  and sends nothing until **Send N commands**;
-  then each step is marked as the Cube took it, and the end is said.
-  A Cube's boxes on both pages show the same restore, and a fold open,
-  a deletion asking,
-  the format chosen and a restore shown stay while the lists are read again;
-  while a restore runs,
-  its Cube's **Restore…** and **Restore from file…** are off in both places,
-  so that it stays in sight,
-  and a stored backup's plan closes once the list no longer has the backup;
-  where the page's connection to the server was cut so long that the server
-  answers a resync,
-  a restore still running is shown as one whose end the page did not see,
-  the log saying how it ended, and the buttons are back.
-  A Cube that is not in the server's store (a run with `-addr`) has no list;
-  its download and the restore from a file work as before.
-  After the served Cubes' folds,
-  each Cube the server keeps backups of and does not serve,
-  one taken out of the configuration or only found on the network,
-  also one no longer on the network,
-  has a fold of its own (`GET /api/v1/backups/unserved`,
-  read when the page is shown and after a delete),
-  closed at first, with its name where it has one, marked **not served**,
-  with its count kept;
-  the card's head counts its backups too.
-  Its box has the format,
-  its backups with **Download**, **Compare with the one before** and,
-  with `restore`, **Delete**,
-  and a note that a backup of it goes onto another Cube by downloading it
-  and that Cube's **Restore from file…**;
-  it has no **Download backup**, **Take a backup now**,
-  **Restore…** or **Restore from file…**.
-  A Cube without backups has no such fold,
-  and the last backup deleted takes it away.
-
 ## Maintenance
 
 ☰ → **Maintenance** keeps the server itself going,
-in two cards as wide as the page, **Software update** and **Maintenance**,
+in four cards as wide as the page, **Software update**, **Maintenance**,
+**Server backups** and **Cube backups**, the two backup cards together,
 under the page's row with **Sections** at its right end, as System settings has.
 It is for every role that has System settings,
-Software update being for all of them, and for one with `update`,
-`restart` or `reboot` alone; a viewer has no such entry in ☰.
+Software update being for all of them, and for one with `backup`, `update`,
+`restart`, `reboot`, `settings`, `backup.server` or `backup.retry` alone;
+a viewer has no such entry in ☰.
 The server's sign, when it says an update is out, opens it at Software update.
 
 - **Software update**:
@@ -2865,6 +2812,243 @@ The server's sign, when it says an update is out, opens it at Software update.
   An event's read of the settings or of the reboot waits
   while this page's own request of them is under way and is made once when it has ended,
   and its answer shows nothing where one was made meanwhile.
+- **Server backups** (with `backup.retry`, which `backup.server` includes;
+  `docs/api-v1.md`, "Server backups"):
+  the server's own store and the files beside it, encrypted for the keys set,
+  made each night and copied to the targets.
+  At its top, while no key is set,
+  a note that server backups are off until one is, the server making none,
+  and to the owner that one is added under Keys; once one is,
+  when the server backs itself up, at `serverbackup.time` on its own clock.
+  With `backup.server` beside it **Upload a backup…**, a file made elsewhere,
+  taken to the local target and kept until it is deleted,
+  and **Back up now**, off while no key is set, which makes one for every target
+  that takes it and says when, and on which target a copy failed and why.
+  The card's head says **off** while no key is set,
+  counts the backups and the failures, a backup or a copy,
+  and says **behind** where a target is.
+  - **Backups**:
+    a fold per backup, newest first, its head when it was made, why (scheduled,
+    by hand, before an update, before a restore, uploaded), its size,
+    and its marks: failed, a copy failed, pinned or pinned until a date,
+    made by another box.
+    Inside, who asked, the version that made it, its label,
+    a failed one's error and next try, and a row per target with its copy:
+    there, not there, missing, or failed with the error and the next try,
+    and pulled where it was; with `backup.server`,
+    **Push** on a target without it, **Pull** to this box from another target,
+    and **Delete**, which asks in the row,
+    saying so where no other copy of the backup is there,
+    and the backup goes from the list with its last copy;
+    under them **Download**,
+    **Check** (each copy read back for its size and hash, without the key),
+    **Pin** or **Unpin**,
+    for the owner alone **Restore…** and **Check with the key…** (below),
+    with `backup.retry` **Retry** where something of it failed,
+    and with `backup.server` **Delete** where no target holds a copy of it (it failed,
+    or its copies are missing), which asks in its place first,
+    and the backup goes from the list, the focus going to the next backup,
+    else the one before, else to **Back up now** or **Upload a backup…**.
+    A holder of `backup.retry` alone sees the backups,
+    their copies and the targets' state, with **Retry**, and nothing more.
+    Each action says how it went under its backup.
+  - **Restore…** (the owner's; AP ServerBackup, D6-A,
+    D7-A) opens a dialog over the page, named by the backup's time.
+    First the key, the secret key of one of the keys the backup was made for:
+    pasted, or read from its file in the browser (**Read a key file…**,
+    its text not shown, **Forget the file**).
+    The page holds it while the dialog is open,
+    sends it in each request's body and stores it nowhere: closing the dialog,
+    another page shown and a sign-out clear it.
+    **Open the backup** asks the server's plan of every scope
+    (`POST …/server-backups/{id}/restore/plan`); a key that does not open it
+    is refused with why.
+    Then what the backup holds: when and by which version it was made,
+    that another box made it, that its store is brought to this version's;
+    a switch per scope, System settings, Users and sign-in,
+    Integrations and History,
+    each with its rows from the backup and this server's that go,
+    and a switch per Cube by its name and serial,
+    saying whether this server has it, nothing ticked;
+    for a backup of another box **Take the backup's identity** with its warning,
+    and that the other box still answers on the network;
+    **The env file** and **The TLS files**,
+    each off with the server's reason where it cannot put them in place (`env_refused`,
+    `tls_refused`); where the server cannot restart itself, a note,
+    and users and sign-in and the identity off.
+    What every scope together would refuse is said, with the rows missing.
+    **Restore…** asks the plan of what is ticked,
+    the switches and **Back** off meanwhile,
+    and stays there with its refusal and the rows missing,
+    or goes on to a confirmation that names what it replaces,
+    that a backup is taken first and kept pinned for 30 days,
+    and whether the server then restarts; **Back** returns to the choice.
+    **Restore** sends it (`POST …/{id}/restore`);
+    the dialog stays open meanwhile,
+    but for another page shown (the browser's Back),
+    which takes it away until Maintenance is shown again.
+    A refusal (`409`, rows missing or no owner left) goes back to the choice
+    with its list.
+    Done, the dialog lists what it restored, an error after the store changed,
+    the secrets to enter again,
+    and that what the server wrote between the backup taken first and the
+    restore is in neither;
+    the server's restart is followed as Maintenance's Restart the server is
+    (`/healthz` every 2 s), saying when it is back, or why it did not restart;
+    then each Cube whose configuration the Cube restore could write is a link to it:
+    Cube settings, that Cube chosen, at its Backup and restore.
+    The key goes from the page once the restore is done or the check has given
+    its verdict.
+    A restore that ends while another page is shown closes the dialog,
+    and the card's top says how it went at the next showing of Maintenance.
+    While the dialog is closed, the card's top says how the restart goes,
+    until Maintenance is shown again, or the showing after where it ended
+    while another page was shown.
+  - **Check with the key…** (the owner's) takes the key as Restore… does,
+    then **Check** (`POST …/{id}/check-key`) gives the verdict:
+    whether the key opens the backup and its store is whole,
+    which box made it, and the files it holds.
+  - **Targets**:
+    with `backup.server` a panel per target, its name,
+    its kind and its marks (off, behind: no copy for two of its periods,
+    its secret lost), then what it takes, what it keeps and its last copy;
+    its form is drawn from what the server says of the target's kind
+    (`GET /api/v1/server-backup-targets/kinds`): a text,
+    a path of this box (under the data directory where relative), a number,
+    a switch or a choice,
+    and a secret as a password field that never shows what is stored,
+    saying whether one is kept, written only,
+    sent where one is typed and only for a kind that has one,
+    another kind chosen forgetting it,
+    and required again as soon as the kind's other fields differ from those stored,
+    with a note under it in place of whether one is kept, amber with its mark,
+    saying why: they say where the secret goes (a WebDAV server's URL,
+    an SMB host), and the server takes a change to them only with it;
+    a switch and a choice show the field's default where nothing is set;
+    while a field's value matches the `warn` the server gives it (plain `http:`
+    to a WebDAV target),
+    its note `serverbackup.warn.<kind>.<key>` stands under it,
+    a general one where a kind has none, amber with its mark,
+    describing the control, and Save stays on.
+    While the page does not know a target's kind (its kinds not read,
+    or a kind of a server newer than the page), its fields are shown off,
+    with why, and Save leaves them as they are; then **Takes** (every backup,
+    or the first of each day, week or month), **Keeps** (the last so many,
+    and so many daily, weekly, monthly and yearly, 7 days,
+    4 weeks and 6 months for a new one), and whether copies go to it.
+    A local target says that a backup on the same disk does not survive the disk.
+    The form keeps its changes as a settings form does,
+    with its disk in the card's pill and ☰'s, **Test**,
+    which has the server reach the target and write to it, **Remove**,
+    which asks, the files staying, Reset and Save.
+    **Add a target** chooses the kind first,
+    with the kind's note under it where it has one (`serverbackup.kindNote.<kind>`:
+    SFTP's, that the server makes its key);
+    added, the target is read for the backups it holds,
+    and the line says how many it found.
+    An SFTP target shows the public line of the key the server made for it,
+    which copies itself, to put into the host's `authorized_keys` for its user
+    (AP ServerBackup, D8-A).
+    The host's key that **Test** or the add's read stopped at stands under the form
+    until Maintenance is shown again, the target is saved,
+    or it names another host or port than the one reached, whose key it is not:
+    one not trusted yet with its fingerprint and **Trust this host key**,
+    which saves it as the target's Host key,
+    its other fields as stored, not as the form holds them,
+    puts it into the form's changes not saved, so that their Save keeps it,
+    and gives the focus to **Test**;
+    one other than the key trusted, in red beside that one, with no button,
+    since only the host tells a host set up anew from someone standing between:
+    a key changed on purpose goes into Host key by hand.
+    A kind's name and its fields' names are the texts `serverbackup.kind.<kind>`
+    and `serverbackup.field.<kind>.<key>`;
+    a kind added later needs no form of its own.
+    A holder of `backup.retry` alone sees each target's name, kind,
+    marks and line.
+  - **Keys** (with `backup.server`, which reads them;
+    the owner alone changes them): a row per key, its label,
+    its kind (post-quantum, classic or SSH),
+    its fingerprint and a copy of its public key, long for a post-quantum one,
+    and the owner's **Remove**, which asks.
+    The owner's **Add a key** takes a label and asks how:
+    **Make a post-quantum key**, which lasts against a quantum computer,
+    its public key about 2000 characters, or **Make a classic key**, short,
+    beside an `ssh-ed25519` key (AP ServerBackup, D17-C),
+    the kind of the keys set offered first;
+    or **Paste a public key of my own**, `age1pq1…`, `age1…` or `ssh-ed25519`.
+    A key made is shown once, as text with its copy and with **Save as a file**,
+    until it is confirmed, its hour is over, another page is shown,
+    the card is folded or the user signs out; its row says until when it waits,
+    an hour, encrypting nothing meanwhile, and asks for its last six characters,
+    or the whole key pasted, which **Confirm** sends;
+    a confirmation after its hour reads the keys again, and the row goes.
+    A key of the other kind than those set is refused with why:
+    age puts no two kinds of key into one file.
+    The card is read each time Maintenance is shown (the list; the targets,
+    the keys and, once,
+    the kinds with `backup.server`) and after each of its actions;
+    while Maintenance is shown,
+    a `server_backup` event of the server's jobs reads the list and the targets again,
+    not while an action of this page runs, and a `resync` reads it all.
+  A fold, a panel, a question and what is typed stay through a read.
+- **Cube backups** (with `backup`):
+  a fold per Cube, the cube, its name and serial, its sign,
+  and how many backups the server keeps of it in its head, a single Cube's open;
+  the card's head counts them all.
+  In each, and on Cube settings for the chosen Cube,
+  **Download backup** saves the Cube as it is now, as YAML or JSON (**Format**).
+  The server keeps the Cube's backups in its store,
+  listed newest first with why each was taken (after a change, by hand,
+  before a restore, or the file a restore was sent), its size and who asked:
+  one follows by itself an hour after the Cube's configuration last changed,
+  at the latest two hours after the first change (the settings `backups.*`,
+  docs/api-v1.md, "Backups"), also across a restart of the server,
+  which takes a pending one as it stops,
+  and a line says when while one is pending;
+  while none is, a line under a list of backups says that nothing changed
+  since the newest one, and that the server takes one after a change.
+  Each list is read when its page is shown,
+  and after a load onto the page once the page knows its Cubes.
+  **Take a backup now** keeps one by hand.
+  Each row has **Download**, **Compare with the one before**,
+  which lists what changed as the restore would send it,
+  and, with `restore`, **Restore…** and **Delete**, which asks first.
+  **Restore from file…** (with `restore`) takes a backup file instead.
+  A restore first shows its plan, the steps with the radio ones marked,
+  the notes and what the radio commands cost of the hourly budget,
+  and sends nothing until **Send N commands**;
+  then each step is marked as the Cube took it, and the end is said.
+  A Cube's boxes on both pages show the same restore, and a fold open,
+  a deletion asking,
+  the format chosen and a restore shown stay while the lists are read again;
+  while a restore runs,
+  its Cube's **Restore…** and **Restore from file…** are off in both places,
+  so that it stays in sight,
+  and a stored backup's plan closes once the list no longer has the backup;
+  where the page's connection to the server was cut so long that the server
+  answers a resync,
+  a restore still running is shown as one whose end the page did not see,
+  the log saying how it ended, and the buttons are back.
+  A Cube that is not in the server's store (a run with `-addr`) has no list;
+  its download and the restore from a file work as before.
+  After the served Cubes' folds,
+  each Cube the server keeps backups of and does not serve,
+  one taken out of the configuration or only found on the network,
+  also one no longer on the network,
+  has a fold of its own (`GET /api/v1/backups/unserved`,
+  read when the page is shown and after a delete),
+  closed at first, with its name where it has one, marked **not served**,
+  with its count kept;
+  the card's head counts its backups too.
+  Its box has the format,
+  its backups with **Download**, **Compare with the one before** and,
+  with `restore`, **Delete**,
+  and a note that a backup of it goes onto another Cube by downloading it
+  and that Cube's **Restore from file…**;
+  it has no **Download backup**, **Take a backup now**,
+  **Restore…** or **Restore from file…**.
+  A Cube without backups has no such fold,
+  and the last backup deleted takes it away.
 
 ## In the apps
 
@@ -2971,8 +3155,9 @@ At start the server replaces each marker, such as `<!-- partials: system -->`,
 with its frames from `ui/partials/`,
 in the order `uiPartials` in `internal/server/ui.go` lists them,
 and serves the result at `/`: the header, My settings' notes,
-System settings' section cards (in three markers, before,
-in and after the cards that flow in two columns), Maintenance's two cards,
+System settings' section cards (in two markers,
+before and in the cards that flow in two columns), Maintenance's cards,
+the server's own first, then Server backups and Cube backups,
 System info's card, the Cube page, the devices without a room and the toast.
 A frame that would be one element, the place a part draws into,
 is in `index.html` itself.
@@ -3027,10 +3212,11 @@ A region's root is drawn once into its place in the skeleton (`mounter` of
 | the Cubes | `cubes/` | `#cubes-list`, `#cube-page-body` | `cubes.render`, `cubes.polled`, `cubes.openFound`, `cubes.pairingEvent`, `cubes.pairingJoined` (app.js, home.js) |
 | the users, roles and providers | `admin/` | `#sys-users-body`, `#sys-roles-body`, `#sys-caps-body`, `#sys-providers-body` | `users.load` (My profile) |
 | the integrations | `integrations/` | `#sys-integrations-body` | — |
-| Backup and restore | `backups/` | `#backups-cubes`, `#cube-backup-body` | `backups.cubeChanged`, `backups.restoreEvent`, `backups.resynced` (app.js) |
+| the Cubes' backups: Cube backups, and Cube settings' Backup and restore | `backups/` | `#backups-cubes`, `#cube-backup-body` | `backups.cubeChanged`, `backups.restoreEvent`, `backups.resynced` (app.js) |
 | the log | `log/` | `#logview` | `log.mount`, `log.event`, `log.render`, `log.load`, `log.poll`, `log.prune`, `log.cubesPolled`, `log.cubeChanged`, `log.selects`, `log.choicesChanged`, `log.loadAlerts`, `log.sign`, `log.kinds` (app.js); `log.focusHead` (the sign-in's first owner's toast); `log.state`, `log.alerts`, `log.matches`, `log.ofChoices`, `log.rangeStart`, `log.upperFirst` (the UI tests) |
 | Software update | `software/` | `#sys-software-body` | `software.load` (header.js) |
 | Maintenance | `maintenance/` | `#sys-maint-body` | — |
+| Server backups | `serverbackups/` | `#sys-server-backups-body` | — |
 | System info | `sysinfo/` | `#sys-info-body` | — |
 | My settings | `prefs/` | `#prefs-rows`, `#appearance` | — |
 | Notifications | `notify/` | `#notify-sec` | `notify.render`, `notify.save`, `notify.takeSave`, `notify.sendNow` (app.js, login.js) |
@@ -3081,7 +3267,7 @@ each of them:
 
 | Field | Written by | A part reads it as |
 |---|---|---|
-| `state.cubes`, `state.found` | `loadCubes`, `addFound` (home.js, the stream's `cube_found`), `clearCubeData` | a signal: the header, the Cubes, Backup and restore, the log's choices, the House tile's name |
+| `state.cubes`, `state.found` | `loadCubes`, `addFound` (home.js, the stream's `cube_found`), `clearCubeData` | a signal: the header, the Cubes, Cube backups' folds, the log's choices, the House tile's name |
 | `state.serial`, `state.tz`, `state.serverDown`, `state.newVersion` | `state.serial` by `init` (the Cube stored), `loadCubes` and `selectCube`; `state.tz` by `loadTimeZone`; `state.serverDown` by `serverReached`, `state.newVersion` by `checkVersion` (header.js) | a signal |
 | `state.rooms` | `loadRooms`, `clearCubeData`; a room's `devices`, `vwt`, `ready`, `stale` by `updateDevice` (rooms.js) | the list a signal, each room a `live` item, so that a state event draws its tile alone; a reader across all rooms (the House tile, a room's copy, the log's names, `rfLabel`) reads the devices `untracked` and follows the list; the House tile's lowest and highest read each room's `vwt`, in a part of their own |
 | `state.unlisted`, `state.roomsOf` | `loadRooms`, `clearCubeData`; `state.unlisted` also by `updateDevice` (rooms.js) | a signal |
@@ -3105,9 +3291,11 @@ raised once a minute by `minuteTick` (`MassimoParts.minute`,
 the UI tests' handle),
 which `Age` reads and at which the log drops the lines its time range no longer holds.
 Who is in is `shared/me.ts`' (`me`, and the rules `can`, `isMe`,
-`canManageUsersOf`, `systemOf`, `settingsPageOf`, line for line with login.js'
-`hasCap` and its like, which the plain scripts keep): a part's drawing that asks
-follows who is in, a handler asks at that moment (UiParts D214).
+`canManageUsersOf`, `systemOf`, `settingsPageOf`,
+line for line with login.js' `hasCap` and its like,
+which the plain scripts keep, and `ownerOf`, the routes of the owner's alone):
+a part's drawing that asks follows who is in,
+a handler asks at that moment (UiParts D214).
 The language is `lang` of `shared/lang.ts`,
 empty until the page's language has loaded,
 and the icons chosen `useIcons` of `shared/look.ts`;
@@ -3288,10 +3476,16 @@ a setpoint up to two; the search for Cubes a minute and a half;
 the look for an update, also as an update is started, 75 seconds,
 the server's look taking up to 30 under a lock another look may hold as long;
 the look for integrations on the LAN and the end of a sign-in through a provider
-45 seconds; the stream's ticket the 20 seconds of every other request.
+45 seconds; a job of the server's backups,
+which has no limit of its own and waits for the one that runs (a backup made,
+copied, checked or retried, a copy deleted, a target added and read),
+a quarter of an hour, and a target's test 75 seconds,
+the server's taking up to one minute;
+the stream's ticket the 20 seconds of every other request.
 The event stream and what the page sends as it is left (`keepalive`) have none,
 and neither has what goes as a file (`apiRaw`):
-a backup's download, and a restore's plan and its run.
+a backup's download, a server backup's download and upload,
+and a restore's plan and its run.
 A refusal of the server is said in the page's language (AP ErrorCodes):
 the error `apiRequest` and `apiRaw` throw (`refusalError`)
 has as its message the text of the answer's `code` in the page's tables (`err.<code>`),
@@ -3417,9 +3611,9 @@ for the first owner's toast and the log's `open_setup` line.
 | `useHelp` | `help.tsx` | a setting's or a group's help as a pair, the button and its explanation of an id of their own (`help-<key>-…`), which a field's row, a switch and a group of My profile draw where each belongs | `help` (the key), `label` (the name the button is named after); gives `button`, `text` |
 | `HelpButton`, `HelpText` | `help.tsx` | a setting's help (`helpParts`): the question mark that shows and hides its explanation, `help.<key>` of the texts, shown by its key wherever it is drawn again, in the page's one set of keys shown (`helpOpen` of `app.js`), the parts drawn again by a signal of their own, so a key is drawn by one side only; `Field` and `Switch` draw both from their `help` | `help` (the key), `id` (the explanation's, which the button controls), `label` (the setting's name); `help`, `id` |
 | `Field` | `field.tsx` | a label and its control, `.field` or `.field.wide` (`fieldRow`); with `limit`, what the field takes, said in amber just before the control while a value is refused, the box outlined in red and the limit its description (`TextField` and `NumberField` mark their input for it; a control of the caller's inside a `Field` with a limit has no marking of its own yet) | `label`, `id`, `wide`, `unit`, `hint`, `hintId` (the hint's id, which a `Select` names as its description), `help` (the key of the setting's help: its button after the label, its explanation under the control), `cls` (classes the row adds, a capability's `needs-…`), `labelCls` (the label's class, `action-title` for a row's title in bold: Maintenance's settings; `Select` passes it on), `limit` (`{ text, over, cls }`: the text, whether the value is refused, the line's class beside `field-limit`; in the unit's line where there is one, else on a line of its own above the box), `draft`, `show`, the control as children |
-| `TextField` | `field.tsx` | a row with a text input that shows a stored text, from its draft, or a free text (a name offered) by `value` and `set`, or, with neither, a field not controlled that its caller reads through `inputRef` (the sign-in card's, UiParts D210); with `row={false}` the input alone, standing in a tile's head (the log's search), as plain as written: `aria` its name for a screen reader, no name, `autocomplete` or `spellcheck` of its own | `label`, `id`, `name`, `draft` and `show`, or `value` and `set`, or `inputRef` alone; `wide` (on by default), `unit`, `hint`, `help`, `cls`, `limit`, `placeholder`, `type` (`password` too, by `value` and `set` or not controlled, never a draft; `search`), `autocomplete`, `inputCls` (the input's class, `mono` for a key), `maxLength`, `pattern`, `required`, `disabled`, `inputRef`, `row`, `aria` |
-| `NumberField`, `numberNorm` | `field.tsx` | a number input that shows a stored number (`numberInput`), its draft the input's text, "" for none, or a free number (a time) by `value` and `set`; with `row={false}` the input alone, in a row of the caller's, which draws its notice (`Meanwhile`); how such a draft compares, as a number | `label`, `id`, `name`, `min`, `max`, `step`, `draft` and `show`, or `value` and `set`; `aria` (its name where no label names it), `disabled`, `inputMode` (the keyboard a phone offers: `numeric` for the reboot's delay), `inputRef`, `onChange` (told of the value as the field is left changed: My settings' poll, saved then), `row`, and a row's `wide`, `unit`, `hint`, `help`, `cls`, `limit`; `v` |
-| `Select` | `field.tsx` | a row with a select, its options (`SelectOption`) each kept while it is the same; with `row={false}` the select alone, in a row of the caller's, which draws its notice, or standing in a tile's head (the log's choices) | `label`, `id`, `name`, `options` (`[value, label, disabled]` or `{ group, options }`), `value` and `onChange`, or `draft` and `show`; `row`, `wide`, `unit`, `hint`, `hintId` (the hint's id, which the select names as its description: the update channel's note, which changes with the choice), `help`, `cls`, `disabled`, `before` (between the label with its help and the select: a drawing's preview), `after` (after the select in its row: the language's note of a machine translation); without a row `aria` (its name for a screen reader) and `selectCls` (its own class, `hidden` for a choice left out) |
+| `TextField` | `field.tsx` | a row with a text input that shows a stored text, from its draft, or a free text (a name offered) by `value` and `set`, or, with neither, a field not controlled that its caller reads through `inputRef` (the sign-in card's, UiParts D210); with `row={false}` the input alone, standing in a tile's head (the log's search), as plain as written: `aria` its name for a screen reader, no name, `autocomplete` or `spellcheck` of its own | `label`, `id`, `name`, `draft` and `show`, or `value` and `set`, or `inputRef` alone; `wide` (on by default), `unit`, `hint`, `help`, `cls`, `limit`, `placeholder`, `type` (`password` too, by `value` and `set` or not controlled, never a draft; `search`), `autocomplete`, `inputCls` (the input's class, `mono` for a key), `maxLength`, `pattern`, `required`, `disabled`, `inputRef`, `row`, `aria`, `describedBy` (the ids of a note the caller draws under the row that describes the input: a target's field warned of) |
+| `NumberField`, `numberNorm` | `field.tsx` | a number input that shows a stored number (`numberInput`), its draft the input's text, "" for none, or a free number (a time) by `value` and `set`; with `row={false}` the input alone, in a row of the caller's, which draws its notice (`Meanwhile`); how such a draft compares, as a number | `label`, `id`, `name`, `min`, `max`, `step`, `draft` and `show`, or `value` and `set`; `aria` (its name where no label names it), `disabled`, `inputMode` (the keyboard a phone offers: `numeric` for the reboot's delay), `inputRef`, `onChange` (told of the value as the field is left changed: My settings' poll, saved then), `row`, and a row's `wide`, `unit`, `hint`, `help`, `cls`, `limit`, `describedBy` (as `TextField`'s); `v` |
+| `Select` | `field.tsx` | a row with a select, its options (`SelectOption`) each kept while it is the same; with `row={false}` the select alone, in a row of the caller's, which draws its notice, or standing in a tile's head (the log's choices) | `label`, `id`, `name`, `options` (`[value, label, disabled]` or `{ group, options }`), `value` and `onChange`, or `draft` and `show`; `row`, `wide`, `unit`, `hint`, `hintId` (the hint's id, which the select names as its description: the update channel's note, which changes with the choice), `help`, `cls`, `disabled`, `before` (between the label with its help and the select: a drawing's preview), `after` (after the select in its row: the language's note of a machine translation); without a row `aria` (its name for a screen reader) and `selectCls` (its own class, `hidden` for a choice left out); `describedBy` (as `TextField`'s, beside the hint) |
 | `DateTime` | `field.tsx` | a date and time field (`datetime-local`), its value as the input takes it; with a limit, the limit's line before it and the field marked while the value is refused, as a number field's | `value`, `set`, `id`, `cls`, `step`, `required`, `disabled`, `inputRef`, `limit` (needs `id`) |
 | `localOf`, `isoOf` | `time.ts` | a `DateTime`'s value and the API's time as each other, for a field that shows a stored end and sends it (a user's end); the draft compares the field's minute, all it holds | `iso`; `local` |
 | `fmtWhen` | `time.ts` | an API time as date and time in the page's language, the hour of 24 (a backup's time, a device's in Notifications) | `iso` |
@@ -3442,21 +3636,26 @@ for the first owner's toast and the log's `open_setup` line.
 | `useBusy`, `busyProps` | `question.tsx` | a button's request under way: busy, off, `aria-busy` (`whileBusy`, `setBusy`); with an epoch, a request belongs to the epoch it ran in, the button ready again in a later one (the sign-in card's opening) | `useBusy(epoch)`, `run(fn)`; `busyProps(cls, busy, off)` |
 | `useSetAtOnce` | `question.tsx` | a setting saved at once, a switch without a Save: the user's choice shown while its request runs, the control on so that the focus stays on it, a change meanwhile sending nothing and drawn back, then what is stored, the old value where it was refused (the password sign-in, a capability for every role, whether integrations may ask, an integration's Enabled) | `stored`; gives `value`, `busy`, `set(v, fn)` |
 | `BusyButton` | `question.tsx` | a button that sends a request and turns until its answer (`useBusy`, `busyProps`), a click meanwhile sending nothing | `id`, `cls`, `label`, `run`, `aria` (its name where the text is not enough), `off` (kept off: a request that may not be sent now), `data` (its `data-` attributes: a Link button's provider), `epoch` (`useBusy`'s: the sign-in card's opening) |
+| `Modal` | `dialog.tsx` | a modal `<dialog>` whose content is its caller's, open while `shown`, the focus on `focusRef`'s element as it opens, else where the browser puts it, given back where it was when it closes; a close of the browser's, Escape among it, runs `onClose`, and while `held` (a request under way) Escape leaves it open and a close all the same opens it again (a server backup's restore) | `shown`, `title` (its heading, which names it), `cls`, `held`, `focusRef`, `onClose` |
+| `startedAt`, `followStart`, `serverBack` | `restart.ts` | the page following the server through a restart (Maintenance's Restart the server, a server backup's restore): the server's start from `/healthz`, which needs no sign-in, read before the request; then read every 2 s until it is another, when `back` runs and the data are read and the stream opened again (`serverBack`), or after `until` `lost`; a sign-out ends it, and so does the function it returns | –; `before`, `until`, `back(now)`, `lost`; – |
 | `burstReader` | `burst.ts` | one read for a burst of the stream's events: a read in flight and at most one more after it, which reads what the events meanwhile asked for, none asked for in the session before (the parts that follow the server while shown) | `read(what)`, the reads by name; gives `ask(...what)` |
 | `session`, `stillSession`, `newSession` | `session.ts` | the session's number, raised by `MassimoParts.signedOut` before anything is forgotten: a store takes it before an await and drops the answer, its message and its next timer where it changed; `actionRunner`'s `bound` does so for a runner, and a plain load takes it as `MassimoParts.session()` | –; `n`; – |
 | `me`, `own` | `me.ts` | who the page is signed in as, `state.me` underneath (`shared/data.ts`), which `applyCaps` of `login.js` writes at every read of it, null from a sign-out on; the token it is signed in with, by which a user's sessions say "this device" and "its key" | — |
 | `can`, `isMe`, `canManageUsersOf`, `systemOf`, `settingsPageOf`, `profileOf` | `me.ts` | what who is in may do, the rules of `login.js` (`hasCap`, `isSelf`, `canManageUsers`, `hasSystem`, `hasSettingsPage`) line for line, and whether My profile is there for them (a user alone), nobody known answering as `hasCap` does: a drawing that asks follows who is in, a handler asks at that moment | `c` or `name`, and `m` (who is in by default) |
+| `ownerOf` | `me.ts` | whether who is in passes a route of the owner's alone (`capOwner` of `auth.go`): everyone outside users mode, else a user of the role owner not through an integration's key; the server backups' keys | `m` (who is in by default) |
 | `keptOpen`, `askOwner`, `takeAsker` | `owner.ts` | the ways to the first owner: whether the server is kept open, from who is in, for every place that asks; askOwner opens the sign-in card with the first owner's form and keeps the control that asked, which the card gives the focus back to (the banner, ☰, Users) | `m`, `from` |
 | `firstOwnerOf` | `me.ts` | whether the first owner can be created from here: an open server, which has a store, where who is in says `setup`; the sign-in card asks for the owner by it where the server is not kept open | `m` |
 | `whoOf`, `Who` | `me.ts` | who is in in the page's words, for the personal page's row, ☰'s Sign out and Personal settings' tooltip and the question before a sign-out alike: the row's line, Sign out or Forget key (none on an open server) with its icon, the name for the tooltip, and whether My profile is there | `me` |
 | `cardBadges`, `badgesOf`, `BadgeSpec` | `card.ts` | what a section card's head shows at a glance, also while it is folded: a region gives a card's badges by its id from its drawing's effect, `[]` for none, and the page's chrome draws them (`ui/src/chrome/Cards.tsx`) | `id`, `list` of `{ text, kind }` |
 | `showCard`, `wireCards`, `keepInView` | `card.ts` | a section card brought into view, unfolded, the focus on its heading's button, kept there for two seconds where its page has just been opened (`instant`); the cards' folds wired once, each kept in this browser (`massimo.fold.<card id>`), set on the skeleton at once; an element kept in view while the page's content changes size, for `ms` or until the user scrolls, a card at the top, a row in the middle (`block` `"center"`: My profile's marked key), keeping another ending the last | `id`, `instant`; `el`, `ms`, `block` |
+| `onFold` | `card.ts` | something a region has run each time its card is folded, by its button or as the page loads it folded: a key made's secret part taken away (Server backups) | `id`, `fn` |
 | `Brand`, `BrandName` | `brand.tsx` | Massimo's logo and small mark from the sprite (`brandMarks` of `components.js`, which draws them over the skeleton's `data-brand`), of which the place's style shows one, hidden from screen readers: ☰'s first row; `BrandName`, the big name under the logo, the first owner's form and the sign-in's card | |
 | `page`, `isShown`, `showView`, `onView`, `mayShow`, `setAddress`, `definePages`, `pagesPart` | `pages.ts` | the page of the main area shown, a signal: a drawing that reads `page.value` follows it, `isShown` asks at that moment and follows nothing (a handler, a reader, a timer), so that no request is sent again at a change of page; showing a page puts it into the address, as a new entry of the history or in place of the current one, and brings each page back at the scroll it was left at; `onView` runs at each showing, on the `viewshown` event; `mayShow` says who may open which, reading who is in; a page with an address of its own (the log's, `ui/src/log/index.tsx`) hands it over with `ownAddress`, a card's region what the card's address holds after its `?` with `readCardAddress` (My profile's key to mark), told of every address read, null for another, before the page is shown; the page's chrome hands over the pages at the start (`definePages`, `chrome/pages.ts`), the log puts its choices into the address in place (`setAddress`), and the plain code calls these as `MassimoParts.pages` (`pagesPart`) | `view`, `address`, `card`; `card`, `read(q)` |
 | `userPath`, `Run`, `loadTokens`, `revokeToken`, `revokeOwn`, `createKey`, `setTokenLife`, `rekeyToken`, `loadIdentities`, `addIdentity`, `changeIdentity`, `removeIdentity` | `account.ts` | what a user's sessions, keys and identities read and send (`…/users/{name}/tokens`, `…/identities`), for System settings → Users and My profile alike; a change through the caller's runner (`Run`), which reloads what it shows and says how it went in its own line, a text or one made from the answer once it came (a revoke's, which names the keys that went with it, `heirs`); a key made, or a key's new secret (`rekeyToken`, AP KeyLife, Block 5), handed to the caller alone before it reads again; Revoke of the token in use signs out | `name`, `rest`; `run`, `name`, and what each sends |
 | `Tokens` | `tokens.tsx` | a user's sessions and keys (a user's panel, My profile): each with its id and Revoke, a key made by a key naming its maker (`made_by`) by the list's label, else its id, the settings file's key (`from_settings`) saying so in Revoke's place, "this device" and "its key" by `own`, in the app "this device's key" by the app's status (`app.ts`), Create key and the key just made, shown once by the read that follows and kept in the part's own state alone, a `Copy` of it with its icon, keyed by the key, both named Copy the key, not by the key (AP KeyLife, D1-A); a key's line of its life under the idle limit and of its end date (`KeyLife`: ends …, ends … unless used where that comes first, kept while unused, or the badge Ended and unused since … or ended …) and, where `keeps` or `ends`, a key's Change… (`KeyChange`: where `keeps` the switch Keep while unused, where `ends` the field Ends with No end, each with its draft, Save off until one is changed and sending what changed, Cancel, the focus on the form's first field as it opens and back on Change… as it closes) on any API key but the settings file's and the one the page is signed in with, an integration's key's with the end alone, and Create key's switch Keep while unused and field Ends, the part's own state (AP KeyLife, Blocks 3 and 4); a date half typed in either Ends (`halfTyped`, the input's `badInput`: its value reads as empty) sends nothing, `say` telling why and the focus back in it, Change…'s form checking it itself (`noValidate`) and No end emptying its input whole; where `ends` and not `listOnly`, a live API key's New secret, asked first (`Question`, `useAsk`) in place of the row's buttons, the question saying that the keys made with it stay, by number where the list holds some (`made_by`), the focus back on it as the question goes, on none of a key that ended, the settings file's, the one the page is signed in with, the one its session was made from or, in the app, the phone's key; the new secret shown in the box of the key just made, under The new secret of key … (AP KeyLife, Block 5); read when its place opens and again at each change of the caller's counter while open, in the app once the last sign-in's revoke is done (`signInRevoked`); an answer after a sign-out dropped; the API key the caller names tinted (`token-marked`), and the caller told of each read drawn with that row (My profile's key of its address) | `u`, `off`, `open`, `reads` (the caller's counter), `run`, `say` (the caller's message line), `labelId` (the new key's field's id), `help` (the group's ⓘ after Create key, My profile's), `marked` (the id of the API key marked), `drawn(row)` (told of each read drawn, with the row marked or null), `listOnly` (the list with Revoke, no new key: an integration's user's), `keeps` (the caller may keep the user's keys from the idle limit, who manages the user: AP KeyLife, D7-A), `ends` (the caller may move the user's keys' end dates, the user itself or who manages it: Block 4, D4-A) |
 | `Identities`, `Changes` | `identities.tsx` | a user's identities at the sign-in providers (a user's panel, My profile): each with what the provider said and Remove; with `changes`, Change of one no sign-in used, a settings form kept by its key, the forms of identities gone or made unchangeable forgotten, and all of them where the box goes off; with `assign`, Assign; `after` what follows the list once read (My profile's Link buttons); `quiet` draws nothing while the list is empty and the caller offers nothing after it (`offer`: My profile's Link buttons, none in the app, where the rows are still named from every provider) | `u`, `off`, `open`, `reads`, `providers` (the enabled ones), `run`, `say`, `title`, `none`, `cls`, `changes` (`key(id)`, `under`, `ui(key)`, `forget(key)`, `show(key)`: the caller's forms and how one is brought into sight), `assign`, `after(list)`, `quiet`, `offer` |
 | `FileButton` | `file.tsx` | a button that opens the browser's choice of a file of the types it accepts, the same file again too | `id` (the button's), `cls`, `label`, `accept`, `off`, `inputId` and `inputLabel` (the input's id and its name in the page's language: the Appearance card's Import…), `onFile(file)` |
+| `saveResponse`, `saveText` | `save.ts` | a file the browser saves: an answer of `apiRaw` under the name its `Content-Disposition` gives (a Cube's backup, the server's), and a text the page holds (a key made for the server's backups), through `downloadBlob` of `components.js` | `resp`, `fallback`, `still` (whether the file is still wanted once it has come: the session it was asked in); `name`, `text` |
 | `Adder` | `adder.tsx` | the end of a list that adds an item: the new item's form in its place while shown, the button that shows it hidden meanwhile, the focus in the form's first field when it comes, in the drawing's own turn, and back on the button when it goes (Users, Roles, Sign-in providers) | `id` (the button's), `formId` (the form's place), `label`, `shown`, `set(shown)`, the form as children |
 | `UserNameField`, `useNameCheck`, `wordNameError` | `username.tsx` | a new user's login name (Add a user, the first owner's form): checked 2 s after the last keystroke and when left, the store's rule and the names in use; a fixed name clears the line at once; the server's refusal worded alike (a 409, the code `user_name_bad`) | `label`, `id`, `msgId` (the line under it, which describes it), `value` and `set` (Add a user's), or neither, the field not controlled and read through `inputRef` (the first owner's, UiParts D210), `nc` (`useNameCheck(taken)`: `problem`, `say`, `check(v)`, `typed(v)`), `name` (the input's, Add a user's alone), `autocomplete`, `placeholder`, `inputRef`, `typed` (told of each keystroke and change event: the first owner's password line, whose rule takes the name) |
 | `PasswordInput`, `PasswordField`, `reveal` | `password.tsx` | a password's input with its eye, every password field's (AP MobileApp, D84-A): the button at the field's right end, inside its box, labelled Show password and Hide password, `aria-pressed`, that turns the type between `password` and `text`, the value, the caret and the `autocomplete` kept, the click keeping the focus in the field; hidden again at each change of `reset` (the card's openings, a fold's open state) and at the form's submit, in the capture before the form's handler, and when switched off, the type never turned inside a closed fold, but as it opens; no eye while `reveal`, the setting `auth.password_reveal` as `/healthz` says it (`MassimoParts.chrome.reveal`), is not `true`; the field in its row | `id`, `name`, `autocomplete`, `value` and `set`, or `inputRef`, `required`, `disabled`, `placeholder`, `reset`, `describedBy` (the line that describes it), `typed` (told of each keystroke and change event), `invalid`, `shown` (the state whether the password shows, held by the caller, so that two fields turn together), `eye` (false: no eye of its own), `controls` (the other fields its eye turns); the row's `label`, `hint`, `cls`, `rule` (the rule's context words: given, its line under the field, following the value, or the keystrokes, change events and the value at each refusal of a field not controlled, empty again at each change of `reset`), `refused` (the caller's count of the submits the rule refused: the line says so until the next key, the field marked invalid, while its value is still refused), `suggest` (with `rule`, the dice before the eye, labelled by what its next press gives, Suggest five words or Suggest twenty characters: a press fills the field with a suggestion, `shared/suggest.ts`, five words at the first press and at each new start, then twenty characters and five words by turns, each press turning it whatever it fills and a key leaving it, drawn again where the rule refuses it, a controlled field by `set`, one not controlled by its element and an input event, shows it as text while the field holds it, not after an edit, a change by the form, a submit or a new start, and whole in a line right under the field (`<id>-shown`, `translate="no"`), a `Copy` of it with its icon, `quiet`, keyed by the suggestion, both named Copy the password, and writes the rule's line anew; the shown line's place, two lines tall, comes with the first press, empty while the suggestion is not shown, the line emptied as the dialog the field is in closes; a suggestion drawn while another press, a key, a submit, a change from outside (Reset, a save), a new start or a sign-out came, or after either field changed, fills nothing; the line's place, once there, stays through keys; the list not had says so, any other failure that no suggestion could be made), `also` (the form's other field: `set` filled with the suggestion, `get` what it holds), `problem` (what is wrong with the value now, "" for nothing: a red line under the field, `<id>-problem`, its description, the field marked invalid while it says something), `room` (the longest text that line may say, whose place it keeps while empty) |
@@ -3981,10 +4180,10 @@ an integration's name and its maximum each a `useForm` of the key
 `integrations:<uuid>:name` and `:max`,
 Acts as a `Select` with its draft beside Link,
 Refuse and Revoke a `useAsk` with a `Question`.
-Backup and restore (`ui/src/backups/`) draws System settings' folds into
-`#backups-cubes` and Cube settings' box into `#cube-backup-body`,
-a box per Cube and place, and registers `cubeChanged`,
-`restoreEvent` and `resynced`,
+The Cubes' backups (`ui/src/backups/`) draw Maintenance's folds, Cube backups,
+into `#backups-cubes`, when Maintenance is shown, and Cube settings' box,
+Backup and restore, into `#cube-backup-body`, a box per Cube and place,
+and registers `cubeChanged`, `restoreEvent` and `resynced`,
 which `app.js` calls at a change of the Cube chosen,
 at the stream's restore events and at its resync;
 `store.ts` keeps what a Cube has by its serial, live,

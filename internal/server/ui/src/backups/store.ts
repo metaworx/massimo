@@ -4,9 +4,9 @@
 /**
  * @file internal/server/ui/src/backups/store.ts
  *
- * What a Cube's box of Backup and restore is drawn from, read and sent,
- * line for line as backup.js did: kept by the Cube's serial, so that its
- * boxes on Cube settings and in System settings show the same. A Cube's
+ * What a Cube's box of its backups is drawn from, read and sent, line
+ * for line as backup.js did: kept by the Cube's serial, so that its
+ * boxes on Cube settings and in Maintenance's Cube backups show the same. A Cube's
  * backups the server keeps (GET …/backups), whether it keeps them at all
  * (a 503 says it does not), when its configuration changed against the
  * newest one and when the automatic one follows, the comparisons asked
@@ -18,7 +18,7 @@
  * answer after a sign-out is dropped (shared/session.ts). The Cubes the
  * server keeps backups of and does not serve (unserved) are its list of
  * them (GET /api/v1/backups/unserved, AP BackupWatch v1.0, D4-B and
- * D6-A), read when System settings is shown and after a delete, also
+ * D6-A), read when Maintenance is shown and after a delete, also
  * those discovery does not hear.
  */
 
@@ -26,6 +26,7 @@ import type { BackupList, RestorePlan, StoredBackup, UnservedCube } from "../api
 import type { Outcome } from "../shared/action";
 import { live, liveMap } from "../shared/live";
 import { cubePath } from "../shared/path";
+import { saveResponse } from "../shared/save";
 import { session, stillSession } from "../shared/session";
 import { fmtWhen } from "../shared/time";
 import { can } from "../shared/me";
@@ -70,7 +71,7 @@ export const cubeData = liveMap(() => ({
 /** Per place ("cube" or "sys") and serial, a box's message line and the format of its downloads. */
 export const boxUI = liveMap(() => ({ said: null as Outcome | null, format: "yaml" }));
 
-/** Per serial, its fold in System settings open; a single Cube's is open at first. */
+/** Per serial, its fold in Cube backups open; a single Cube's is open at first. */
 export const foldUI = liveMap(() => ({ open: null as boolean | null }));
 
 /** The serials whose data the region holds, for the restore events and a sign-out. */
@@ -173,17 +174,11 @@ export function refreshBackups(serial: string): Promise<void> {
 /**
  * readUnloaded reads a Cube's list where it has not loaded and no read of
  * it is under way: a box drawn before its page knew its Cubes (a load
- * onto System settings, or onto Cube settings without a Cube stored),
+ * onto Maintenance, or onto Cube settings without a Cube stored),
  * whose page's showing read no list for it.
  */
 export function readUnloaded(serial: string): void {
   if (serial && !of(serial).loaded && !reading.has(serial)) void refreshBackups(serial);
-}
-
-/** saveResponse saves an answer as a file, named as the server says. */
-async function saveResponse(resp: Response, fallback: string): Promise<void> {
-  const m = /filename=([^;]+)/.exec(resp.headers.get("Content-Disposition") || "");
-  downloadBlob(m ? m[1].trim() : fallback, await resp.blob());
 }
 
 /** downloadNow saves the Cube as it is now, in the box's format. */

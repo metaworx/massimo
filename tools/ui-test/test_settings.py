@@ -13,8 +13,9 @@ from helpers import (KEY_COPY, PANEL_TEXTS, VIEWER, assert_busy, copies, css_hid
 
 def test_settings_open(page, case):
     """My settings holds the page's settings, System settings the
-    server's, Maintenance Software update and the server's upkeep; each
-    opens on its own page, named and without a horizontal scroll."""
+    server's, Maintenance Software update, the server's upkeep and the
+    Cubes' backups; each opens on its own page, named and without a
+    horizontal scroll."""
     show_view(page, "prefs")
     assert page.locator("#prefs #poll-input").is_visible() and page.locator("#prefs .appearance").is_visible(), \
         "My settings: the poll and the appearance"
@@ -23,13 +24,13 @@ def test_settings_open(page, case):
     assert scroll_width(page) <= case.width, "no horizontal scroll on My settings"
     show_view(page, "system")
     page.wait_for_timeout(500)
-    for part in (".cubes-settings", ".backup-settings", ".users-settings", ".roles-settings"):
+    for part in (".cubes-settings", ".users-settings", ".roles-settings"):
         assert page.locator("#system " + part).is_visible(), f"System settings: {part}"
     assert page.locator("#prefs").is_hidden(), "System settings alone"
     named_buttons(page, "System settings")
     assert scroll_width(page) <= case.width, "no horizontal scroll on System settings"
     show_view(page, "maint")
-    for part in (".update", ".maint-settings"):
+    for part in (".update", ".maint-settings", ".backup-settings"):
         assert page.locator("#maint-page " + part).is_visible(), f"Maintenance: {part}"
     named_buttons(page, "Maintenance")
     assert scroll_width(page) <= case.width, "no horizontal scroll on Maintenance"

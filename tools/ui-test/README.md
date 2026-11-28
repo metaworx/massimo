@@ -448,9 +448,10 @@ hence `failed_checks_forgotten`.
   a plan goes with its backup, a plan that answers late shows nothing,
   and the backups are forgotten for another user after a 401;
   a backup's Delete asking and the format chosen stay,
-  and a restore shown on Cube settings shows in System settings' fold;
-  after a sign-out, and for another user signed in after an expired session,
-  nothing typed, no list, no key made and no restore shown is left.
+  and a restore shown on Cube settings shows in Maintenance's fold,
+  Cube backups'; after a sign-out,
+  and for another user signed in after an expired session, nothing typed,
+  no list, no key made and no restore shown is left.
   The users, roles, providers, integrations and backups it makes it removes.
   The server takes ten registration requests of integrations per address in ten minutes:
   each case makes two real ones,
@@ -628,11 +629,14 @@ hence `failed_checks_forgotten`.
   and Create key and Revoke work there;
   a viewer (`/me` stubbed) has no ⚙, and System settings open as it signs in
   gives way to Rooms.
-- `test_backup.py`, System settings → Backup and restore against the fake Cube's store:
+- `test_backup.py`, Cube settings → Backup and restore and Maintenance → Cube backups
+  against the fake Cube's store:
   the Cube's backup downloads as YAML,
   one taken by hand shows in the list as "by hand" and downloads,
   its plan says the Cube holds it already,
-  it compares with the one before when there is one, and it is deleted again.
+  it compares with the one before when there is one, and it is deleted again;
+  a role with `backup` alone (`/me` stubbed) has Maintenance with Cube backups
+  and no System settings.
 - `test_users.py`, System settings → Users and Roles as the owner:
   the owner and the operator the runner creates (`massimo user add operator`,
   password `op-password`) are listed with the operator's tokens,
@@ -651,7 +655,7 @@ hence `failed_checks_forgotten`.
 - `test_login.py`, in a fresh browser context without the stored token:
   the sign-in dialog opens in the middle of the window, its title centred,
   refuses a wrong password, signs in as the operator,
-  who sees the tiles but neither Users, Roles nor Cubes,
+  who sees the tiles and Maintenance's Cube backups but no System settings,
   and is named in the 👤 menu,
   whose Sign out brings the dialog back and forgets the token;
   a sign-in at the page's start, and again after Sign out, starts the page once:
