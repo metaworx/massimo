@@ -158,6 +158,7 @@ dependencies {
     implementation(libs.androidx.biometric)
     implementation(libs.androidx.core)
     implementation(libs.androidx.fragment)
+    implementation(libs.androidx.swiperefreshlayout)
     implementation(libs.androidx.webkit)
 
     testImplementation(libs.junit)

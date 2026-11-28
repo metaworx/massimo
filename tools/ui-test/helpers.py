@@ -31,7 +31,8 @@ after another has answered among them. boxes reads several elements'
 boxes at one moment, for a check that compares where they are.
 grant_clipboard and copies check what a shared Copy puts into the
 clipboard and how it is named; icon_after_last_line where its icon
-sits.
+sits. bubble, bubble_at and wait_bubble_at look at the page's bubble
+(showBubble of components.js), where it shows against its control.
 
 Every wait of this kit, and the page fixture's, lasts its seconds times
 UI_TEST_SCALE (scaled), a positive number, 1 where it is not set: a
@@ -434,8 +435,9 @@ def held_poll(page):
 
 # The page's timers that held_timers holds, by kind, each with what the
 # page shows or sends while it runs:
-# - copied: "Copied" on a copy control, the class copied, taken back
-#   1400 ms after the copy (copied() of components.js, el.copiedTimer);
+# - copied: the page's bubble, "Copied" at a copy control or any other,
+#   taken away 1400 ms after it shows (showBubble of components.js, which
+#   copied() calls, bubbleState.timer);
 # - toast: the page's toast, hidden 8 to 30 s after it is shown
 #   (showToast of components.js, toastState.timer);
 # - push: the settings' push to the server, sent 1 s after a change or
@@ -443,19 +445,22 @@ def held_poll(page):
 #   prefsSync.timer).
 TIMED = ("copied", "toast", "push")
 
-# The hold, in the page: an observer of the classes clears the timer of
-# each control that shows "Copied" and of the toast shown, once the page
-# has set it; the push's timer is cleared as the page sets it, the push
-# noted as due. The page's own code is not changed: a later copy, a toast
-# closed by its ×, a push taken by a sign-in all go as they do.
+# The hold, in the page: an observer of the classes and of the children
+# clears the timer of the bubble shown and of the toast shown, once the
+# page has set it (a bubble shown anew writes its text, though its class
+# may not change); the push's timer is cleared as the page sets it, the
+# push noted as due. The page's own code is not changed: a later copy, a
+# toast closed by its ×, a push taken by a sign-in all go as they do, and
+# a bubble still goes at a scroll that moves its control or once the
+# control has left the page.
 HOLD_TIMED = """(kinds) => {
   const k = window.__uiTest || (window.__uiTest = {});
   if (k.timed) throw new Error("held_timers: a hold is on already");
   const h = k.timed = { kinds, observer: null, due: false };
   const sweep = () => {
-    if (kinds.includes("copied")) for (const el of document.querySelectorAll(".copied")) {
-      clearTimeout(el.copiedTimer);
-      el.copiedTimer = 0;
+    if (kinds.includes("copied") && bubbleState.el && !bubbleState.el.classList.contains("hidden") && bubbleState.timer) {
+      clearTimeout(bubbleState.timer);
+      bubbleState.timer = 0;
     }
     const toast = document.getElementById("toast");
     if (kinds.includes("toast") && toast && !toast.classList.contains("hidden") && toastState.timer) {
@@ -466,7 +471,7 @@ HOLD_TIMED = """(kinds) => {
   sweep();
   if (kinds.includes("copied") || kinds.includes("toast")) {
     h.observer = new MutationObserver(sweep);
-    h.observer.observe(document.documentElement, { subtree: true, attributes: true, attributeFilter: ["class"] });
+    h.observer.observe(document.documentElement, { subtree: true, childList: true, attributes: true, attributeFilter: ["class"] });
   }
   if (kinds.includes("push")) {
     if (prefsSync.timer) {
@@ -483,14 +488,14 @@ HOLD_TIMED = """(kinds) => {
 }"""
 
 # The hold's end: what it held goes at once, as its timer would have by
-# then: "Copied" taken back, the toast hidden, a push that came due sent.
+# then: the bubble taken away, the toast hidden, a push that came due sent.
 END_TIMED = """() => {
   const k = window.__uiTest || {};
   const h = k.timed;
   if (!h) return false;
   k.timed = null;
   if (h.observer) h.observer.disconnect();
-  if (h.kinds.includes("copied")) for (const el of document.querySelectorAll(".copied")) el.classList.remove("copied");
+  if (h.kinds.includes("copied")) hideBubble();
   const toast = document.getElementById("toast");
   if (h.kinds.includes("toast") && toast && !toast.classList.contains("hidden")) hideToast();
   if (h.kinds.includes("push")) {
@@ -504,9 +509,9 @@ END_TIMED = """() => {
 @contextlib.contextmanager
 def held_timers(page, *kinds):
     """The page's timed states of kinds (TIMED) held for the with block:
-    "Copied" on a copy control (copied), the toast (toast) and the
-    settings' push (push) stay or wait until the block ends, not until a
-    product timer that a slow runner, or the retry's trace, outlasts:
+    the bubble, "Copied" at a copy control (copied), the toast (toast)
+    and the settings' push (push) stay or wait until the block ends, not
+    until a product timer that a slow runner, or the retry's trace, outlasts:
     "Copied" fades after 1400 ms, which a copy, a page shown again and its
     reads did not fit in (test_maint_updates.py, AP SteadyTests, Block
     13). The page's code is not changed and nothing else of it stops: a
@@ -1502,6 +1507,72 @@ def focus_in_turn(page, click, focused):
 def frames(page):
     """Two frames and a task: a part drawn again after a change has been drawn."""
     page.evaluate("() => new Promise((done) => requestAnimationFrame(() => requestAnimationFrame(() => setTimeout(done, 0))))")
+
+
+# --- the bubble -------------------------------------------------------------
+
+# The page's bubble (components.js showBubble) while it shows: its text,
+# its box, the window's size, its aria-hidden and its z-index; null while
+# it does not show. #bubble is made at the page's first bubble.
+BUBBLE = """() => {
+  const b = document.getElementById('bubble');
+  if (!b || !b.getClientRects().length) return null;
+  const r = b.getBoundingClientRect();
+  return { text: b.textContent, left: r.left, right: r.right, top: r.top, bottom: r.bottom,
+           width: document.documentElement.clientWidth, height: document.documentElement.clientHeight,
+           hidden: b.getAttribute('aria-hidden'), z: Number(getComputedStyle(b).zIndex) };
+}"""
+
+# What the page's live region of bubbles says, "" while it is not there:
+# showBubble makes #bubble-status at the page's first bubble, which may
+# come once the clipboard has answered, so a wait that reads it before
+# then must not throw (wait_until does not retry an expression that
+# throws).
+BUBBLE_STATUS = "(document.getElementById('bubble-status') || {textContent: ''}).textContent"
+
+# Where the bubble saying text shows against the element of sel: "above"
+# or "below" it, at most 8 px from it, centred on it or, where the window
+# has no room for that, at the window's edge on its side, and inside the
+# window; else what is wrong.
+BUBBLE_AT = """([sel, text]) => {
+  const b = document.getElementById('bubble');
+  const el = document.querySelector(sel);
+  if (!el) return 'no element ' + sel;
+  if (!b || !b.getClientRects().length) return 'no bubble';
+  if (b.textContent !== text) return 'it says ' + JSON.stringify(b.textContent);
+  const r = b.getBoundingClientRect(), c = el.getBoundingClientRect();
+  const w = document.documentElement.clientWidth, h = document.documentElement.clientHeight;
+  if (r.left < -0.5 || r.right > w + 0.5 || r.top < -0.5 || r.bottom > h + 0.5) return 'outside the window: ' + JSON.stringify(r);
+  const off = (r.left + r.right) / 2 - (c.left + c.right) / 2;
+  if (Math.abs(off) > 1 && !(off > 0 ? r.left <= 8.5 : r.right >= w - 8.5)) return 'not centred on it: ' + off.toFixed(1) + ' px';
+  if (r.bottom <= c.top + 0.5 && c.top - r.bottom <= 8) return 'above';
+  if (r.top >= c.bottom - 0.5 && r.top - c.bottom <= 8) return 'below';
+  return 'far from it: ' + JSON.stringify({ bubble: r, it: c });
+}"""
+
+
+def bubble(page):
+    """The page's bubble while it shows (BUBBLE), None while it does not."""
+    return page.evaluate(BUBBLE)
+
+
+def bubble_at(page, sel, text):
+    """Where the bubble saying text shows against the element of sel:
+    "above" or "below" it, else what is wrong (BUBBLE_AT)."""
+    return page.evaluate(BUBBLE_AT, [sel, text])
+
+
+def wait_bubble_at(page, sel, text, seconds=3):
+    """Waits, for seconds (scaled), until the bubble says text above or
+    below the element of sel, and returns where, or what was wrong at the
+    last look. The bubble shows for 1.4 s, so a test looks right after
+    what shows it."""
+    end = time.time() + scaled(seconds)
+    while True:
+        where = bubble_at(page, sel, text)
+        if where in ("above", "below") or time.time() >= end:
+            return where
+        page.wait_for_timeout(50)
 
 
 # --- one moment ------------------------------------------------------------

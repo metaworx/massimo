@@ -82,7 +82,8 @@ func TestUpdateAnswerTonight(t *testing.T) {
 	if code, text := b.answer(t, b.viewer, "v0.1.0-alpha.10", "tonight"); code != 403 {
 		t.Fatalf("a viewer: %d %s", code, text)
 	}
-	if code, text := b.answer(t, b.anna, "v0.1.0-alpha.9", "tonight"); code != 409 {
+	if code, text := b.answer(t, b.anna, "v0.1.0-alpha.9", "tonight"); code != 409 ||
+		!refusalHas(t, text, "update_not_offered", `{"offered":"v0.1.0-alpha.10","version":"v0.1.0-alpha.9"}`) {
 		t.Fatalf("another version: %d %s", code, text)
 	}
 	if code, text := b.answer(t, b.anna, "v0.1.0-alpha.10", "later"); code != 400 {
@@ -168,7 +169,7 @@ func TestUpdateAnswerOff(t *testing.T) {
 		t.Fatalf("off: %+v", a)
 	}
 	for _, answer := range []string{"tonight", "skip"} {
-		if code, text := b.answer(t, b.anna, "v0.1.0-alpha.10", answer); code != 409 {
+		if code, text := b.answer(t, b.anna, "v0.1.0-alpha.10", answer); code != 409 || !refusalHas(t, text, "update_auto_off", `{"setting":"update.auto"}`) {
 			t.Fatalf("%s while off: %d %s", answer, code, text)
 		}
 	}

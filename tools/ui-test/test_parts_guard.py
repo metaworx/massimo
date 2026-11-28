@@ -1087,7 +1087,7 @@ GUARD_JS = r"""() => {
     date: ["2031-02-03", "2031-03-04"], time: ["12:30", "13:00"], "datetime-local": ["2031-02-03T12:30", "2031-03-04T13:00"],
     month: ["2031-02", "2031-03"], week: ["2031-W05", "2031-W06"],
   };
-  const STATE_CLASSES = new Set(["hidden", "busy", "active", "open", "selected", "copied", "changed", "invalid", "pending"]);
+  const STATE_CLASSES = new Set(["hidden", "busy", "active", "open", "selected", "changed", "invalid", "pending"]);
   const ATTRS = ["data-id", "data-name", "data-key", "data-serial", "data-rf", "data-tab", "data-target", "name", "type", "value"];
   const frames = () => new Promise((done) => requestAnimationFrame(() => requestAnimationFrame(() => setTimeout(done, 150))));
   // shown: rendered, and not in a closed details, whose content keeps

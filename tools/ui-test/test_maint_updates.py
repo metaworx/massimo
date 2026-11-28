@@ -16,7 +16,7 @@ import time
 import pytest
 
 from conftest import TOKEN, URL, api_call
-from helpers import answered, frames, held_timers, hold, mark, owner_page, replaced, safe_route, scaled, show_view, update_json, wait_held, wait_until
+from helpers import answered, bubble_at, frames, held_timers, hold, mark, owner_page, replaced, safe_route, scaled, show_view, update_json, wait_bubble_at, wait_held, wait_until
 from test_admin_updates import across
 from test_unsaved import expire
 from test_reboot import RebootStub, iso, reboot_text
@@ -1129,7 +1129,7 @@ def test_system_info_keeps_its_folds_a_copy_and_a_selection(page, case):
     """System info with its folds open and
     the host's name selected: the certificate read again (every 2 s while
     it is being read) keeps the name selected; a proxy's serial copied,
-    the page shown again keeps it "copied" until it fades; the copy
+    the page shown again keeps "Copied" at its icon until it fades; the copy
     icons, the link, the folds and their lists are the elements they
     were, and the folds are open."""
     reads = []
@@ -1157,11 +1157,14 @@ def test_system_info_keeps_its_folds_a_copy_and_a_selection(page, case):
         with held_timers(page, "copied"):  # "Copied" stays while the page is shown again and read, longer than its 1400 ms
             icon.focus()
             page.keyboard.press("Enter")
-            assert wait_until(page, "document.querySelector('#info-proxies .copy-icon').classList.contains('copied')", 1), "copied"
+            done = page.evaluate("t('copy.done')")
+            where = wait_bubble_at(page, "#info-proxies .copy-icon", done, 1)
+            assert where in ("above", "below"), f"Copied at the icon: {where}"
             n = len(reads)
             show_view(page, "info")
             assert wait_reads(page, reads, n + 1), "the page read again"
-            assert icon.evaluate("(b) => b.classList.contains('copied')"), "still copied: the page shown again does not take it back"
+            where = bubble_at(page, "#info-proxies .copy-icon", done)
+            assert where in ("above", "below"), f"still Copied at the icon: the page shown again does not take it away: {where}"
         assert replaced(page, sels) == [], f"the same elements after the reads: {replaced(page, sels)}"
         assert page.evaluate("document.getElementById('store-info').open && document.getElementById('config-info').open"), "the folds open"
     finally:

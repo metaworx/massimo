@@ -16,7 +16,7 @@ import json
 import pytest
 
 from conftest import URL
-from helpers import LOGIN_BOX, ApiReads, assert_login_card_placed, frames, same_box, scroll_width, show_view, wait_held, wait_until
+from helpers import LOGIN_BOX, ApiReads, assert_login_card_placed, frames, same_box, scroll_width, show_view, wait_bubble_at, wait_held, wait_until
 from test_first_owner import APP, DIALOG_OPEN, IN_FIELD, OPEN, dice_pressed, each_language, owner_card, sent, start_page, turned, wrapped
 
 KEPT = dict(OPEN, kept_open=True)
@@ -399,7 +399,8 @@ def test_keep_open_measures(new_context, case, watch, guard, app):
     else:
         page.context.grant_permissions(["clipboard-read", "clipboard-write"])
     page.locator("#keep-open-origin").click()
-    assert wait_until(page, "document.getElementById('keep-open-origin').dataset.copied === t('copy.done')", 3), "it says it copied"
+    where = wait_bubble_at(page, "#keep-open-origin", page.evaluate("t('copy.done')"))
+    assert where in ("above", "below"), f"it says it copied, at the address: {where}"
     copied = page.evaluate("window.__copied") if app else page.evaluate("navigator.clipboard.readText()")
     assert copied == page.evaluate("location.origin"), f"this page's address copied: {copied!r}"
     assert page.evaluate("getComputedStyle(document.getElementById('keep-open-origin')).userSelect") != "none", "a text to select"

@@ -89,8 +89,14 @@ func TestOpenMigratesAnEmptyFile(t *testing.T) {
 	}
 	var rows int
 	s2.db.QueryRow(`SELECT count(*) FROM schema_version`).Scan(&rows)
-	if rows != SchemaVersion() {
-		t.Fatalf("%d schema_version rows", rows)
+	all, err := loadMigrations(embeddedMigrations())
+	if err != nil {
+		t.Fatal(err)
+	}
+	// a row per migration: since the numbers come in blocks of 100, not
+	// the schema's version
+	if rows != len(all) {
+		t.Fatalf("%d schema_version rows, %d migrations", rows, len(all))
 	}
 }
 

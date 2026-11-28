@@ -170,7 +170,7 @@ func (s *Server) backupMinute() time.Duration {
 
 // errNoHistory answers a backup request for a Cube without a row in the
 // store, whose backups have nowhere to go.
-var errNoHistory = fail(http.StatusServiceUnavailable, "this Cube has no row in the store, so no backup history")
+var errNoHistory = refuse(http.StatusServiceUnavailable, codeBackupNoHistory)
 
 // backupLoop looks at the Cube's configuration once a minute and takes
 // its automatic backup when it is due.
@@ -432,7 +432,7 @@ func (s *Server) takeBackup(ctx context.Context, rt *runtime, reason string, use
 		return store.Backup{}, nil, errNoHistory
 	}
 	if !rt.client.Connected() {
-		return store.Backup{}, nil, fail(http.StatusServiceUnavailable, "cube not connected")
+		return store.Backup{}, nil, refuseSaying(http.StatusServiceUnavailable, "cube not connected", codeCubeNotConnected)
 	}
 	// Within a deadline, as at a stop, the NTP servers take half the time
 	// left at most, so that the backup is stored within the rest.
