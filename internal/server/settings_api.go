@@ -232,7 +232,8 @@ func (s *Server) settingsView(r *http.Request) (map[string]settingView, error) {
 	}
 	flavour := s.opts.Update.Flavour
 	out[store.UpdateChannelKey] = settingView{Value: cmp.Or(ch, flavour), Default: flavour, Set: ch != "", InEffect: s.updateChannel(r.Context()), Applies: "now"}
-	for _, d := range []struct{ key, def string }{{store.UpdateAutoKey, store.UpdateAutoOff}, {store.UpdateWindowKey, store.DefaultUpdateWindow}} {
+	for _, d := range []struct{ key, def string }{{store.UpdateAutoKey, store.UpdateAutoOff}, {store.UpdateWindowKey, store.DefaultUpdateWindow},
+		{store.ServerBackupTimeKey, store.DefaultServerBackupTime}} {
 		v, err := st.SettingString(r.Context(), d.key)
 		if err != nil {
 			return nil, fail(http.StatusInternalServerError, "%v", err)
@@ -325,6 +326,24 @@ func (s *Server) putSettings(w http.ResponseWriter, r *http.Request) error {
 				return refuseSaying(http.StatusBadRequest, fmt.Sprintf("%s: want one of %s, or null for the build's flavour", k, choices), codeSettingChoiceBad, k, choices)
 			}
 			writes = append(writes, write{key: k, name: &name})
+			continue
+		}
+		if k == store.ServerBackupTimeKey {
+			// the daily time of the server's backups, HH:MM in the box's
+			// time (serverbackups.go); it applies at once
+			if isNull {
+				writes = append(writes, write{key: k, clear: true})
+				continue
+			}
+			var v string
+			if json.Unmarshal(raw, &v) != nil {
+				return fail(http.StatusBadRequest, "%s: want a time HH:MM as a string, or null for %s", k, store.DefaultServerBackupTime)
+			}
+			if _, _, err := parseClock(v); err != nil {
+				return fail(http.StatusBadRequest, "%s: %v", k, err)
+			}
+			v = strings.TrimSpace(v)
+			writes = append(writes, write{key: k, name: &v})
 			continue
 		}
 		if k == store.UpdateAutoKey || k == store.UpdateWindowKey {
@@ -486,6 +505,9 @@ func (s *Server) putSettings(w http.ResponseWriter, r *http.Request) error {
 		}
 		if wr.key == store.WindowWarnKey || wr.key == store.WindowAlertKey {
 			s.loadWindowLimits(r.Context())
+		}
+		if wr.key == store.ServerBackupTimeKey {
+			s.wakeServerBackups()
 		}
 		value := "default"
 		switch {

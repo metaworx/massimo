@@ -198,8 +198,10 @@ a support bundle with secrets redacted;
 `/metrics` for Prometheus and `/healthz`.
 Versioned JSON/YAML export and import with a schema version, dry run,
 selective scope; device backup of the Cube's full configuration (exists today);
-scheduled database snapshots to local, SMB, WebDAV or S3,
-encrypted when they contain secrets.
+scheduled snapshots of the whole store and the files beside it (built:
+docs/store.md, "Server backups"), encrypted always, for the owner's keys,
+made once a night and copied to targets, local first,
+each with its own retention, retries and alerts.
 Security: argon2id, secrets encrypted at rest, TLS, CSRF protection,
 rate limiting, signed releases.
 

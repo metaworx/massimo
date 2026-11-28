@@ -643,6 +643,64 @@ CREATE TABLE user_identities (                  -- migration 0016, made again by
 );
 -- unique (provider_id, subject) where bound, (provider_id, email) where not,
 -- (integration_id, subject) for an integration's, each among the identities not removed
+
+CREATE TABLE server_backup_keys (               -- migration 0103: the server's backups
+    id           INTEGER PRIMARY KEY,
+    uuid         TEXT    NOT NULL UNIQUE,
+    label        TEXT    NOT NULL DEFAULT '',   -- in plain in every manifest
+    recipient    TEXT    NOT NULL,              -- age1pq1…, age1… or ssh-ed25519 …
+    fingerprint  TEXT    NOT NULL UNIQUE,
+    kind         TEXT    NOT NULL,              -- pq, x25519 or ssh-ed25519
+    confirm_hash TEXT    NOT NULL DEFAULT '',   -- a key made, unconfirmed: hash of its last six characters
+    created_at   TEXT    NOT NULL,
+    created_by   INTEGER REFERENCES users (id)
+);
+
+CREATE TABLE server_backup_targets (            -- migration 0103
+    id         INTEGER PRIMARY KEY,
+    uuid       TEXT    NOT NULL UNIQUE,
+    name       TEXT    NOT NULL,                -- unique without regard to case
+    kind       TEXT    NOT NULL,                -- local, webdav, sftp, smb, s3
+    config     TEXT    NOT NULL DEFAULT '{}',   -- the kind's fields as JSON, its secret aside
+    secret     TEXT    NOT NULL DEFAULT '',     -- sealed, the uuid the additional data
+    takes      TEXT    NOT NULL DEFAULT 'every',-- every, daily, weekly or monthly
+    retention  TEXT    NOT NULL DEFAULT '{}',   -- JSON: last, daily, weekly, monthly, yearly
+    enabled    INTEGER NOT NULL DEFAULT 1,
+    created_at TEXT    NOT NULL,
+    updated_at TEXT    NOT NULL,
+    updated_by INTEGER REFERENCES users (id)
+);
+
+CREATE TABLE server_backups (                   -- migration 0103
+    id           INTEGER PRIMARY KEY,
+    uuid         TEXT    NOT NULL UNIQUE,       -- the manifest's
+    time         TEXT    NOT NULL,              -- the manifest's created; a failed one's last try
+    trigger      TEXT    NOT NULL,              -- scheduled, manual, before-update, before-restore, uploaded
+    user_id      INTEGER REFERENCES users (id), -- who asked; NULL: the schedule, a scan
+    state        TEXT    NOT NULL DEFAULT 'made', -- made or failed
+    size         INTEGER NOT NULL DEFAULT 0,
+    sha256       TEXT    NOT NULL DEFAULT '',   -- the file's
+    manifest     TEXT    NOT NULL DEFAULT '',   -- manifest.json as signed
+    signature    TEXT    NOT NULL DEFAULT '',   -- manifest.sig
+    pinned_until TEXT,
+    error        TEXT    NOT NULL DEFAULT '',   -- a failed one's
+    tries        INTEGER NOT NULL DEFAULT 0,
+    next_try     TEXT
+);
+
+CREATE TABLE server_backup_copies (             -- migration 0103
+    backup_id  INTEGER NOT NULL REFERENCES server_backups (id) ON DELETE CASCADE,
+    target_id  INTEGER NOT NULL REFERENCES server_backup_targets (id) ON DELETE CASCADE,
+    path       TEXT    NOT NULL DEFAULT '',     -- the file's name there
+    state      TEXT    NOT NULL,                -- there, failed or missing
+    pulled     INTEGER NOT NULL DEFAULT 0,      -- pulled by hand: kept until deleted
+    pushed_at  TEXT,
+    checked_at TEXT,
+    error      TEXT    NOT NULL DEFAULT '',
+    tries      INTEGER NOT NULL DEFAULT 0,
+    next_try   TEXT,
+    PRIMARY KEY (backup_id, target_id)
+);
 ```
 
 Notes on the tables:
@@ -810,6 +868,16 @@ Notes on the tables:
   A row has no `uuid`, `version`, `deleted_at` or `origin`:
   the watch is this server's, is not replicated,
   and is deleted rather than marked.
+- `server_backup_keys`, `server_backup_targets`, `server_backups` and
+  `server_backup_copies` (migration 0103) are the catalogue of the server's own
+  backups ("Server backups", section 7).
+  They are this server's: not replicated, without `version`,
+  `deleted_at` or `origin`, deleted rather than marked,
+  and never replaced by a restore.
+  A target's `secret` is sealed as a provider's client secret is (section 6,
+  "Sign-in through OpenID Connect"), its `uuid` the additional data.
+  A key made by the server is kept pending with a hash of its identity's last six
+  characters, never the identity, and goes after an hour unconfirmed.
 - `auth_failures` is the `authLimiter` of #7 keyed by address,
   plus a key per user name so that password guessing from many addresses behind
   a reverse proxy locks the name rather than the proxy.
@@ -1133,6 +1201,16 @@ columns of 0001 that every binary reads as this one does,
 and moves `revoke_hash` (0100) with them,
 so a binary for 24 to 102 lets the new secret in
 and refuses the old one as a revoked token, and `min_reader` stays 24.
+`0103_server_backups.sql`, the fourth of `main`'s block,
+after 0102 (AP ServerBackup v1.0, Block 2),
+adds the four tables of the server's backups and seeds `backup.retry` for `manager`,
+additively, keeping `min_reader` 24:
+a binary for 24 to 102 leaves the tables alone and ignores the capability.
+Its down part, `0103_server_backups.down.sql`, drops the tables
+and removes `backup.server` and `backup.retry` from every role,
+taking the file back to 102;
+it loses the catalogue, and only that: the files stay on their targets,
+and a target added again is scanned for them.
 On a store of 500 000 log rows (149 MB,
 a tenth with a user) a desktop took 2.0 s for the raise,
 its copy `massimo.db.before-24` included, and 2.2 s for the down part,
@@ -1330,12 +1408,15 @@ The capabilities, what each allows and the routes it guards
 are the table of docs/api-v1.md ("Authentication"),
 held to the routes the server registers by a test
 (`TestCapabilityTableCoversRoutes` in `internal/server/openapi_test.go`).
-`integrations` came with migration 0021, `repair` with 0022.
+`integrations` came with migration 0021, `repair` with 0022,
+`backup.server` and `backup.retry` with 0103.
 
 <!-- BEGIN GENERATED PARTIAL docs/fragments/_capability-rules.md - do not edit; run "GUIDELINES/shared/tools/sync-docs.sh" -->
 `update` and `reboot` each include `restart`, since each restarts the server:
 their holder passes every check of `restart` as a holder of `restart` does,
 and `GET /api/v1/me` lists `restart` beside them.
+`backup.server` includes `backup.retry` alike: who makes,
+pushes and pulls the server's backups sees their state and retries one.
 The include is taken at the check, on the set the bounds leave
 (the role's set less the capabilities disabled for every role,
 an integration's ceiling and maximum, a call's level):
@@ -1385,14 +1466,20 @@ The default roles, as seeded.
 | `passwords` | ✓ | | | | |
 | `restart` | ✓ | | | | ✓ |
 | `integrations` | ✓ | | | | |
+| `backup.retry` | ✓ | | | | |
 | `cubes`, `cubes.reboot`, `settings`, `update`, `reboot`, `audit` | | | | | ✓ |
-| `users`, `roles`, `roles.disable`, `capabilities`, `auth` | | | | | |
+| `users`, `roles`, `roles.disable`, `capabilities`, `auth`, `backup.server` | | | | | |
 
 So `manager` is `operator` plus guests, pairing, names, structure, restore,
 the server's restart (migration 0006, 2026-11-07),
 the passwords of other users (migration 0008,
 2026-11-08) and the repairs (migration 0022, 2026-11-15, AP RadioHealth,
-D166-A), which the role integration gains with its ceiling;
+D166-A), which the role integration gains with its ceiling,
+and the state of the server's backups with the retry of a failed one (`backup.retry`,
+migration 0103, 2026-11-27, AP ServerBackup, D13-A), which it does not (D15-A);
+`backup.server`, which makes, pushes and pulls the server's backups,
+is seeded for no role, as `auth` is: a server backup holds the people,
+the sign-in and the integrations, and the owner gives it;
 `reboot` is seeded for no role (2026-11-08):
 restarting the server is not rebooting a computer that may run other services too;
 nor is `cubes.reboot` (2026-11-14):
@@ -1407,7 +1494,8 @@ and the ceiling of every call through an integration ("Integrations", below).
 It holds every capability but those that manage people,
 sign-in and the integrations themselves (`users`, `passwords`, `roles`,
 `roles.disable`, `capabilities`, `auth`, `integrations`),
-so that an integration can never widen its own users;
+and the server's backups, which hold all that (`backup.server`, `backup.retry`;
+AP ServerBackup, D15-A), so that an integration can never widen its own users;
 each integration's maximum narrows it further.
 It cannot be changed, disabled or given to a regular user.
 Its users before 0021, API keys made by hand for an integration,
@@ -2115,12 +2203,254 @@ The exceptions are `user` (section 6) and `store` (stage (a):
 `store info` for the version and the counts,
 `store downgrade -to <N>` to take it back for an older binary, section 5,
 "Migrations"), which open the store directly.
+`store keygen`, `store inspect` and `store decrypt`
+handle the keys and the files of the server's backups,
+and open no store ("Server backups", below).
+`store backup` without a file makes a server backup now (`-target <name>`,
+`-label <text>`), `store backups` lists them,
+`store push <id> <target>` and `store pull <id> <target>` copy one:
+these go through this box's running `serve`, its API with `MASSIMO_API_TOKEN`,
+so that the job is the server's, and open the store otherwise.
+`serve` publishes its API's address in the data directory, `serve.api`,
+however `-listen` was given (a flag, the settings file, a systemd drop-in,
+the Windows service's arguments), and removes it at its stop;
+without one the commands ask the address of `MASSIMO_LISTEN` on this box
+(`https` where `MASSIMO_TLS` is on).
+The key goes only to a server whose `/healthz` names the node of the store
+in the data directory; another that answers there gets none.
+On the store, a command takes the jobs' lock `.serverbackup.lock`,
+which serve's jobs take as well, and waits up to 30 seconds for another job.
+They are the command line's first use of the API;
+the `-server <url>` mode below would widen it.
 
 A later mode `massimo -server <url> status` lets the commands use the server's
 API with a key instead of the Cube protocol,
 which gives them the server's names and hidden lists, the audit,
 and the no-direct-fallback behaviour the handover asks for.
 It is not part of the store stages.
+
+### Server backups
+
+A server backup holds the whole store and the files beside it,
+encrypted for the owner's keys (`internal/serverbackup`).
+It is one zip, stored without compression, of three files in this order:
+
+| File | What it is |
+|------|------------|
+| `manifest.json` | plain: what the backup is, without a name of a Cube, a room or a user |
+| `payload.age` | an [age](https://age-encryption.org/v1) file for the owner's recipients (`filippo.io/age`), of a deflated zip: `files.json`, `massimo.db`, `opaque.key`, `node.key`, `env` (the env file `serve` reads, where it has one) and `tls/<name>` (the TLS files) |
+| `manifest.sig` | the Ed25519 signature of `manifest.json`'s bytes by `node.key`, in base64 |
+
+The manifest is found through the zip's central directory,
+so a target lists its backups by ranged reads, without fetching a whole file,
+and the payload's size and hash are checked without the key.
+
+A backup is made in steps, and nothing of it is held whole in memory:
+the snapshot (`VACUUM INTO`, as `store backup <file>` writes it)
+goes to a temporary directory in the data directory;
+the payload is encrypted into a temporary `payload.age` and hashed as it is written;
+the snapshot is removed, the manifest signed,
+and the archive written whole (`internal/safefile`), mode 0600.
+When the backup ends, failing or not, its temporary files are gone,
+and so is the file's name where it failed.
+A crash leaves them:
+the temporary directory, `.serverbackup-*` in the data directory,
+holds the snapshot in plain until the next backup removes it,
+once it is older than six hours;
+the file's name, empty, and safefile's temporary file beside it
+hold nothing of the store in plain.
+It needs about twice the store free in the data directory
+and the store's size where the file goes;
+with less, it is refused with the numbers before anything is written.
+
+The manifest's fields, format 1:
+
+| Field | What it holds |
+|-------|---------------|
+| `format` | 1; a newer one is refused with "update first" |
+| `kind` | `store-snapshot`, a snapshot of the whole store; a later export would be a kind of its own |
+| `uuid` | the backup's, a UUIDv7, the same wherever a copy of it is |
+| `created` | when it was made, UTC |
+| `trigger` | `scheduled`, `manual`, `before-update` or `before-restore`; `uploaded` is a file that came in by upload, which keeps the trigger it was made with |
+| `label` | the owner's text, at most 100 characters, without control characters; left out where empty |
+| `version` | Massimo's version of the server that made it |
+| `schema` | the snapshot's `version` and `min_reader` |
+| `node` | the box that made it: `public_key`, `node.key`'s public part in base64, and its `fingerprint` |
+| `counts` | rows not removed: `users` (not an integration's), `integrations`, `cubes`, `rooms`, `audit`, `log` |
+| `files` | what the payload holds beside the store and its keys: `env`, whether the env file, and `tls`, how many TLS files |
+| `recipients` | for each recipient its `label`, `kind` (`pq`, `x25519` or `ssh-ed25519`) and `fingerprint` |
+| `payload` | `size` and `sha256` (hex) of `payload.age`, the encrypted file |
+
+A manifest whose text is not one Massimo writes is refused as no backup,
+signed or not:
+a label or a recipient's label with a control character,
+another trigger, a uuid that is not one, a version that is not printable,
+a fingerprint or a hash that is not one.
+
+`files.json`, first in the payload, names each other file of it once,
+with its `role` and its `source`, where it was on the box that made it,
+so that a restore puts each back:
+
+| Role | File |
+|------|------|
+| `store` | `massimo.db`, the snapshot |
+| `opaque-key`, `node-key` | `opaque.key`, `node.key` |
+| `env` | `env`, the env file `serve` reads |
+| `tls-cert`, `tls-key` | `tls/<name>`, the files `MASSIMO_TLS_CERT` and `MASSIMO_TLS_KEY` name |
+| `acme-account`, `acme-cert`, `acme-key`, `acme-…` | `tls/<name>`, the files of `tls/acme/` |
+
+Two TLS files of one name are `tls/<name>` and `tls/2-<name>`.
+A name the payload holds is one of these,
+checked for every system it may be opened on:
+nothing outside the directory,
+no Windows device name such as `CON` or `nul.txt`,
+no trailing dot or space.
+
+The signature says who made a backup:
+this box, another box with its fingerprint, or bad.
+It is checked with the public key the manifest names,
+so it proves that nothing was changed since that box made it,
+not that a box is to be trusted.
+A bad signature, or a payload whose size or hash differs from the manifest's,
+is refused before the payload is opened.
+Opening reads the payload from the file once:
+it is copied into the directory it is opened into while it is hashed,
+and decrypted from that copy, so that what is opened is what was hashed,
+whatever a target answers a second time.
+Each file is written no longer than its size,
+and sizes the free space cannot take are refused first.
+A fingerprint is `SHA256:` and the unpadded base64 of a SHA-256:
+of the node's 32-byte public key;
+of an `ssh-ed25519` key's wire form, as `ssh-keygen -l` shows it;
+of an age recipient's line.
+
+The keys are of two kinds, which do not go into one file,
+since a classic recipient beside a post-quantum one would open what that one keeps closed;
+age itself refuses the mix, and a box's recipients are all of one kind:
+
+- **Post-quantum**, `age1pq1…`, ML-KEM-768 with X25519, about 2000 characters:
+  a copy taken today stays closed to a quantum computer later.
+- **Classic**, X25519, `age1…`, 62 characters,
+  and the owner's own `ssh-ed25519` line, which goes beside it.
+
+The server keeps the recipients alone; the secret key stays with the owner,
+and only it opens a backup.
+On the command line:
+
+- `massimo store keygen -kind pq|classic [-out <file>]` makes a key;
+  the kind has no default.
+  The secret key goes to the file, mode 0600, never over one that exists,
+  or to standard output with a warning;
+  the public key, the line the server takes, is printed.
+  The file is as `age-keygen` writes it.
+- `massimo store inspect <file>` prints the manifest,
+  who signed it (this box being the one whose `node.key` is in the data directory),
+  and whether the payload is the one the manifest names; it needs no key.
+  Of a manifest whose signature does not verify it prints nothing.
+- `massimo store decrypt <file> -key <file> -out <dir>` checks the signature and the hash,
+  then writes the payload's files, `files.json` among them,
+  into an empty or new directory, mode 0600.
+  It prints who signed the backup, and warns where that was another box.
+  The key is an age key file or an OpenSSH `ssh-ed25519` private key without a passphrase.
+
+A backup opens without Massimo too, with `unzip` and age:
+
+```sh
+unzip -p backup.zip payload.age | age -d -i key.txt > payload.zip
+unzip payload.zip -d restored
+```
+
+`age -d -i ~/.ssh/id_ed25519` opens one made for an `ssh-ed25519` line,
+and asks for the key's passphrase where it has one.
+
+#### The catalogue
+
+The store keeps what is known of the backups (migration 0103, section 5;
+`internal/store/serverbackups.go`), and `internal/serverbackup`'s `Catalogue`
+runs the jobs on it, for `serve` and for `massimo store` alike:
+
+- **The keys** a backup is encrypted for, each with its label,
+  in plain in every manifest.
+  Only the owner adds and removes one (docs/api-v1.md, "Server backups").
+  A key the server made is pending until the owner types back the last six
+  characters of its identity, which it showed once;
+  the store keeps the recipient and a hash of those six, never the identity,
+  and drops a pending key after an hour.
+  Pending keys encrypt nothing.
+- **The targets** the copies go to, each of a kind (`serverbackup.Kind`:
+  its fields, the card's form, and how to make one; `local` first, WebDAV, SFTP,
+  SMB and S3 after), with its fields as JSON and its one secret field sealed
+  with its `uuid` as the additional data, what it takes and its retention.
+  A target added is scanned: the backups it holds are added by their manifests,
+  read with ranged reads and without the key,
+  so that a new box sees them at once; a copy no longer there is `missing`.
+  Where a backup finds no target at all, the local one is made:
+  `backups/` in the data directory, every backup, the default retention.
+  A local target holds a copy on the same disk as the store,
+  which does not survive that disk.
+- **The backups**, one row each, its `uuid` the manifest's,
+  with the file's size and hash, the manifest as signed and its signature,
+  and **their copies**, one per target that holds the file, under the same name
+  (`massimo-<UTC time>-<uuid>.zip`).
+  A copy is put by a temporary name and renamed, so that one broken off leaves
+  nothing under the name.
+
+#### The schedule
+
+- One schedule makes each backup once (D11-A), daily at `serverbackup.time`,
+  `03:30` by default, in the box's local time:
+  after a change to summer time the night is 23 hours, after the change back 25,
+  and a time the change skips is the hour after it.
+- A run missed while the server was down is made five minutes after its start.
+- Nothing is made while no key is set.
+- Each target takes every backup, or the first of each day, week (Monday to
+  Sunday) or month of which it holds none, in the box's time.
+  A backup that no target takes, one made by hand on a daily target's day,
+  goes to the local targets.
+
+#### Retention
+
+Each target keeps its copies by restic's forget policy (D12-A),
+`{"last": N, "daily": D, "weekly": W, "monthly": M, "yearly": Y}`:
+the N newest, and the newest of each of the last D days, W weeks, M months and
+Y years that hold a copy; a copy any of them keeps is kept,
+and the others are deleted, the files with their rows.
+Beyond restic, a pinned backup is kept while it is pinned (one before an update
+or a restore for 30 days, one pinned by hand until it is unpinned),
+a copy pulled to local stays until it is deleted,
+a target's newest copy is never pruned, and a policy of zeros keeps everything,
+as restic refuses an empty one.
+A new target keeps 7 days, 4 weeks and 6 months.
+The prune runs after each copy to the target; a backup left without a copy goes
+from the catalogue.
+
+#### Retries and alerts
+
+A backup is a `failed` row until its first copy is there, its error saying so,
+so that a stop or a crash in the middle of its copies leaves a backup to retry,
+never one made without a file;
+the catalogue's writes after the backup is made outlive a request gone or a stop.
+A scheduled backup that fails, before its file or with no copy there,
+is kept as `failed`, and so is a copy of one that fails;
+each is tried again after 5 minutes, 30 minutes and 2 hours,
+the backup in its own row, with its `uuid` and its tries counted on,
+a copy as the same file put again from a copy that is there.
+After the third retry the failure is a warning in the log, `server_backup`,
+an alert of the log until a later success on its target,
+and, once, the notification `server_backup_failed`, on by default,
+for the users who hold `backup.retry`; then it waits for a retry by hand.
+A backup made by hand, by a command, before an update or a restore,
+is not retried by itself: its failure is its request's answer and a warning,
+it is not kept where no copy of it is there,
+and its failed copies wait for a retry by hand.
+The next scheduled run replaces a scheduled backup that failed.
+A run the schedule missed counts as missed while no scheduled backup since it
+has a copy there.
+One job runs at a time on a data directory, serve's and a command's alike:
+each takes the lock `.serverbackup.lock` in it (flock, LockFileEx).
+A holder of `backup.retry` retries at once what failed: as the schedule made it,
+pruning no more than the schedule would, and revealing nothing,
+the file being encrypted (D13-A).
 
 ## 8. Migration of an installed box
 

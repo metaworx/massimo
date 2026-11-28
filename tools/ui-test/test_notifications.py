@@ -167,7 +167,7 @@ def test_rules_kept_on_the_server(page, case):
     field holds a value inside, and the page reads them back."""
     show_view(page, "notify")
     rows = page.locator("#notify-rules .notify-row")
-    assert rows.count() == 11, "a row per kind"
+    assert rows.count() == 12, "a row per kind, a server backup that failed among them"
     assert rule_row(page, "battery_weak").locator("input[type=checkbox]").is_checked(), \
         "a weak battery is on by default (AP LegacyLogs v1.0, D152-A)"
     win = rule_row(page, "window_open")

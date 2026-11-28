@@ -438,6 +438,9 @@ func TestHelpCreatesNoStore(t *testing.T) {
 	dir := t.TempDir()
 	t.Chdir(dir)
 	t.Setenv(env.DataVar, "")
+	// store backup without a file asks the serve of MASSIMO_LISTEN first:
+	// one that answers nowhere
+	t.Setenv("MASSIMO_LISTEN", "127.0.0.1:1")
 	run := map[string]func([]string) error{
 		"user":  func(args []string) error { _, err := runUserWith(t, "", args...); return err },
 		"store": runStore,
@@ -452,13 +455,18 @@ func TestHelpCreatesNoStore(t *testing.T) {
 		{true, "user token -h"}, {true, "user tokens -h"}, {true, "user revoke -h"}, {true, "user rename -h"},
 		{true, "store -h"}, {true, "store help"}, {true, "store backup -h"},
 		{true, "store migrate -h"}, {true, "store info -h"},
+		{true, "store keygen -h"}, {true, "store inspect -h"}, {true, "store decrypt -h"},
+		{false, "store keygen"}, {false, "store keygen -kind rsa"}, {false, "store keygen -kind pq extra"},
+		{false, "store inspect"}, {false, "store inspect backup.zip"},
+		{false, "store decrypt backup.zip"}, {false, "store decrypt backup.zip -key key.txt"},
 		{false, "user"}, {false, "user bogus"}, {false, "user add"},
 		{false, "user add -x anna"}, {false, "user add anna -no-password -expires tomorrow"},
 		{false, "user list extra"}, {false, "user passwd"}, {false, "user disable"},
 		{false, "user enable anna bob"}, {false, "user token anna"}, {false, "user tokens"},
 		{false, "user revoke"}, {false, "user revoke anna x"}, {false, "user rename anna"},
 		{false, "user rename anna bob -no-password -password-stdin"},
-		{false, "store"}, {false, "store bogus"}, {false, "store backup"},
+		{false, "store"}, {false, "store bogus"}, {false, "store backup"}, {false, "store backup -target nas"}, {false, "store backup x.db -target nas"},
+		{true, "store backups -h"}, {true, "store push -h"}, {false, "store backups"}, {false, "store push x"}, {false, "store pull x nas"},
 		{false, "store migrate extra"}, {false, "store info extra"},
 	} {
 		f := strings.Fields(c.args)

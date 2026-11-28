@@ -1836,7 +1836,9 @@ also while no page is open.
   a device's communication error or link error,
   the Cube out of reach (after 10 min) and back,
   and, off by default, a device that sends no news, a device paired,
-  a new Cube on the network and a new version of Massimo.
+  a new Cube on the network and a new version of Massimo;
+  and, on by default, a backup of the server that fails, which only a user
+  who sees the server's backups (`backup.retry`) is told.
   A change is saved a second after the last one,
   at once where you sign out within that second;
   a delay is 1 to 1440 minutes, the threshold −10 to 20 °C,

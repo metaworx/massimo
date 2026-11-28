@@ -1231,6 +1231,33 @@ it undoes the newer migrations by their down parts,
 and leaves the file as it was as `massimo.db.before-downgrade-<version>` (docs/store.md,
 "Migrations").
 `update`'s rollback does it by itself.
+`store keygen -kind pq` or `-kind classic` makes a key for the server's backups,
+encrypted zips of the store and the files beside it.
+The kind has no default, and the two are not mixed:
+`pq` is post-quantum, `age1pq1…` and about 2000 characters long;
+`classic` is X25519, `age1…`, and goes beside an `ssh-ed25519` key.
+With `-out key.txt` the secret key goes to that file, mode 0600, never over one,
+and the public key the server takes is printed;
+without, the secret key goes to standard output.
+`store inspect <file>` prints a backup's manifest, which box signed it
+and whether its payload is intact, without the key;
+`store decrypt <file> -key key.txt -out <dir>` opens it into an empty directory,
+as `age -d -i key.txt` does with its `payload.age`,
+and says which box made it.
+`serve` makes such a backup each night at 03:30 (the setting `serverbackup.time`)
+once the owner has given a key, copies it to its targets
+(`backups/` in the data directory at first) and keeps each target's retention.
+`store backup` without a file makes one now,
+`-target <name>` to that target alone and `-label <text>` in plain in its manifest;
+`store backups` lists them with their copies,
+`store push <id> <target>` copies one to a target and `store pull <id> <target>`
+fetches a target's copy to the local target, where it stays until it is deleted.
+These four go through this box's running `serve`, with `MASSIMO_API_TOKEN`,
+found by the address it publishes in the data directory (`serve.api`)
+and proved by its node, and act on the store otherwise,
+one job at a time with serve's.
+The details are in docs/store.md, "Server backups",
+and the API's in docs/api-v1.md, "Server backups".
 
 `massimo user` manages the users of the store from the box (docs/api-v1.md,
 "Authentication"):

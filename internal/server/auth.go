@@ -71,13 +71,14 @@ const (
 var capabilities = []string{
 	"read", "preferences", "setpoint", "lock", "configure", "rename", "structure", "pair", "discover", "backup", "restore", "repair",
 	"guests", "users", "passwords", "roles", "roles.disable", "capabilities", "cubes", "cubes.reboot", "settings", "update", "restart", "reboot", "audit",
-	"auth", "integrations",
+	"auth", "integrations", "backup.server", "backup.retry",
 }
 
 // integrationCeiling is the fixed role integration's set (migration 0021,
 // repair by 0022): every capability but those that manage people,
-// sign-in and the integrations themselves, so that an integration can
-// never widen its own users. It bounds every call through an
+// sign-in and the integrations themselves, and the server's backups,
+// which hold all that (AP ServerBackup, D15-A), so that an integration
+// can never widen its own users. It bounds every call through an
 // integration (docs/api-v1.md, "Integrations"); guests is an
 // integration's for its own users stored as guest (users_api.go,
 // guestOf).
@@ -86,13 +87,19 @@ var integrationCeiling = []string{
 	"guests", "cubes", "cubes.reboot", "settings", "update", "restart", "reboot", "audit",
 }
 
-// Two more values a route may be registered with, which no role holds:
-// capNone, no authentication (the login), and capAny, any authenticated
-// principal (logout, me).
+// Three more values a route may be registered with, which no role holds:
+// capNone, no authentication (the login), capAny, any authenticated
+// principal (logout, me), and capOwner, a user of the role owner alone,
+// never through an integration (the keys of the server's backups, AP
+// ServerBackup, D4-A): what no capability may be given for.
 const (
-	capNone = "none"
-	capAny  = "any"
+	capNone  = "none"
+	capAny   = "any"
+	capOwner = "owner"
 )
+
+// ownerOnly is the error of a route of capOwner refused.
+const ownerOnly = "the owner's alone"
 
 func validCapability(c string) bool {
 	for _, k := range capabilities {
@@ -114,6 +121,9 @@ func validCapability(c string) bool {
 var includes = map[string][]string{
 	"update": {"restart"},
 	"reboot": {"restart"},
+	// who makes, pushes and pulls the server's backups sees their state
+	// and retries a failed one (AP ServerBackup, D13-A)
+	"backup.server": {"backup.retry"},
 }
 
 // included reports whether set holds a capability that includes c
@@ -991,6 +1001,9 @@ func (s *Server) touch(ctx context.Context, tok store.Token, secret, ip string, 
 // device route a structure holder; the handlers narrow what those may
 // do (users_api.go, access).
 func (s *Server) allowed(p *principal, capability string, r *http.Request) bool {
+	if capability == capOwner {
+		return p.mode != modeUsers || p.user.Role == store.RoleOwner && p.user.IntegrationID == 0 && p.integration == nil
+	}
 	if capability == capAny || p.has(capability) {
 		return true
 	}
@@ -1118,6 +1131,10 @@ func (s *Server) authorize(w http.ResponseWriter, r *http.Request, capability st
 	}
 	p = q
 	if !s.allowed(p, capability, r) {
+		if capability == capOwner {
+			writeError(w, http.StatusForbidden, ownerOnly)
+			return p, false
+		}
 		if p.integration != nil {
 			writeJSON(w, http.StatusForbidden, map[string]any{"error": capabilityRequired(capability), "code": codeForbidden.name})
 			return p, false

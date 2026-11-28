@@ -27,6 +27,7 @@ import (
 	"sync"
 	"time"
 
+	"go.metaworx.ch/massimo/internal/serverbackup"
 	"go.metaworx.ch/massimo/internal/store"
 	"go.metaworx.ch/massimo/internal/view"
 )
@@ -130,7 +131,28 @@ var actions = map[string]string{
 	"DELETE /api/v1/me/preferences/{key}":                        "preference.delete",
 	"POST /api/v1/me/push":                                       "push.subscribe",
 	"DELETE /api/v1/me/push/{id}":                                "push.unsubscribe",
+	"POST /api/v1/server-backups":                                "serverbackup.make",
+	"POST /api/v1/server-backups/upload":                         "serverbackup.upload",
+	"PUT /api/v1/server-backups/{id}/pin":                        "serverbackup.pin",
+	"POST /api/v1/server-backups/{id}/check":                     "serverbackup.check",
+	"POST /api/v1/server-backups/{id}/retry":                     "serverbackup.retry",
+	"PUT /api/v1/server-backups/{id}/copies/{target}":            "serverbackup.push",
+	"DELETE /api/v1/server-backups/{id}/copies/{target}":         "serverbackup.copy_delete",
+	"DELETE /api/v1/server-backups/{id}":                         "serverbackup.delete",
+	"POST /api/v1/server-backups/{id}/copies/{target}/pull":      "serverbackup.pull",
+	"POST /api/v1/server-backup-targets":                         "serverbackup.target_add",
+	"PUT /api/v1/server-backup-targets/{uuid}":                   "serverbackup.target_update",
+	"DELETE /api/v1/server-backup-targets/{uuid}":                "serverbackup.target_remove",
+	"POST /api/v1/server-backup-targets/{uuid}/test":             "serverbackup.target_test",
+	"POST /api/v1/server-backup-keys":                            "serverbackup.key_add",
+	"POST /api/v1/server-backup-keys/{uuid}/confirm":             "serverbackup.key_confirm",
+	"DELETE /api/v1/server-backup-keys/{uuid}":                   "serverbackup.key_remove",
 }
+
+// streamedBodies are the routes whose body the audit does not read
+// ahead: a server backup uploaded, of up to gigabytes, which the handler
+// streams to a file; its row keeps the body's absence.
+var streamedBodies = map[string]bool{"POST /api/v1/server-backups/upload": true}
 
 // changeLines says which line of the log each audited action writes once
 // it succeeded (AP Logging v1.1, Block 6): "change", a line under
@@ -154,6 +176,12 @@ var changeLines = map[string]string{
 	"integration.request": "change", "integration.approve": "change", "integration.refuse": "change", "integration.accept_instance": "change",
 	"integration.update": "change", "integration.revoke": "change", "integration.link": "change",
 	"role.add": "change", "role.update": "change", "role.remove": "change", "role.disable": "change", "capability.disable": "change",
+	// the server's backups: a job writes its own server_backup lines
+	// (serverbackups.go), a test of a target none
+	"serverbackup.make": "system", "serverbackup.upload": "system", "serverbackup.check": "system", "serverbackup.retry": "system",
+	"serverbackup.push": "system", "serverbackup.pull": "system", "serverbackup.target_test": "",
+	"serverbackup.pin": "change", "serverbackup.copy_delete": "change", "serverbackup.delete": "change", "serverbackup.target_add": "change", "serverbackup.target_update": "change",
+	"serverbackup.target_remove": "change", "serverbackup.key_add": "change", "serverbackup.key_confirm": "change", "serverbackup.key_remove": "change",
 }
 
 // noCommand are the actions that are audited but are no command: they
@@ -162,10 +190,14 @@ var changeLines = map[string]string{
 // is the same 204.
 var noCommand = map[string]bool{"login": true, "login.start": true, "login.key": true, "logout": true, "integration.request": true, "preference.set": true, "preference.delete": true,
 	"push.subscribe": true, "push.unsubscribe": true, "server.reload": true, "identity.link.start": true,
-	"identity.link.cancel": true, "token.revoke_code": true}
+	"identity.link.cancel": true, "serverbackup.upload": true, "serverbackup.target_test": true, "token.revoke_code": true}
 
-// secretFields are the body fields an audit row never keeps.
-var secretFields = []string{"password", "current_password", "token", "record", "proof", "login", "ke1", "ke3", "client_secret", "code"}
+// secretFields are the body fields an audit row never keeps, and the
+// answer's a command row never keeps: a server backup target's secret, a
+// key made, shown once, and its last six characters typed back; a
+// recipient pasted, which may be a secret key pasted by mistake.
+var secretFields = []string{"password", "current_password", "token", "record", "proof", "login", "ke1", "ke3", "client_secret", "code",
+	"secret", "identity", "key_file", "last_six", "recipient"}
 
 // auditInfo is one audited request on its way through the wrapper.
 type auditInfo struct {
@@ -280,6 +312,12 @@ func pathTarget(r *http.Request, pattern string) string {
 	switch {
 	case r.PathValue("rf") != "":
 		return "device:" + strings.ToLower(r.PathValue("rf"))
+	case strings.Contains(pattern, "/server-backups/{id}"):
+		return "serverbackup:" + r.PathValue("id")
+	case strings.Contains(pattern, "/server-backup-targets/{uuid}"):
+		return "serverbackup-target:" + r.PathValue("uuid")
+	case strings.Contains(pattern, "/server-backup-keys/{uuid}"):
+		return "serverbackup-key:" + r.PathValue("uuid")
 	case r.PathValue("uuid") != "" && strings.Contains(pattern, "/integrations/"):
 		return "integration:" + r.PathValue("uuid")
 	case r.PathValue("id") != "" && strings.Contains(pattern, "/tokens/"):
@@ -311,7 +349,7 @@ func (s *Server) beginAudit(w *statusWriter, r *http.Request, pattern, action st
 		// A device by its serial number, whichever form the path held.
 		a.target = s.deviceTarget(r.PathValue("sn"), rf)
 	}
-	if r.Body != nil && authorized {
+	if r.Body != nil && authorized && !streamedBodies[pattern] {
 		b, err := io.ReadAll(io.LimitReader(r.Body, maxRequestBody))
 		r.Body.Close()
 		if err != nil {
@@ -347,22 +385,61 @@ func resultOf(status int) string {
 }
 
 // redacted is the body as the row keeps it: the JSON with the secret
-// fields replaced, when it is JSON and short; nothing otherwise.
+// fields replaced wherever they sit, in an object within the body as at
+// its top, a refused body's as an accepted one's (secretKeys), when it is
+// JSON and short; nothing otherwise.
 func redacted(body []byte) json.RawMessage {
 	if len(body) == 0 || len(body) > maxAuditBody || !json.Valid(body) {
 		return nil
 	}
-	var m map[string]any
-	if json.Unmarshal(body, &m) != nil {
-		return json.RawMessage(body) // an array or a scalar
+	dec := json.NewDecoder(bytes.NewReader(body))
+	dec.UseNumber()
+	var v any
+	if dec.Decode(&v) != nil {
+		return nil
 	}
+	out, err := json.Marshal(redactValue(v, secretKeys()))
+	if err != nil {
+		return nil
+	}
+	return out
+}
+
+// secretKeys are the keys a row's body never keeps the value of:
+// secretFields, and the secret field of every kind of target of the
+// server's backups (serverbackup.Kind), which a body may send inside a
+// target's config, where the route refuses it.
+func secretKeys() map[string]bool {
+	keys := map[string]bool{}
 	for _, k := range secretFields {
-		if _, ok := m[k]; ok {
-			m[k] = "…"
+		keys[k] = true
+	}
+	for _, k := range serverbackup.Kinds() {
+		if f, ok := k.Secret(); ok {
+			keys[f.Key] = true
 		}
 	}
-	out, _ := json.Marshal(m)
-	return out
+	return keys
+}
+
+// redactValue replaces the value of every key of keys in v, at any
+// depth, with "…".
+func redactValue(v any, keys map[string]bool) any {
+	switch t := v.(type) {
+	case map[string]any:
+		for k, e := range t {
+			if keys[k] {
+				t[k] = "…"
+			} else {
+				t[k] = redactValue(e, keys)
+			}
+		}
+	case []any:
+		for i := range t {
+			t[i] = redactValue(t[i], keys)
+		}
+	}
+	return v
 }
 
 // endAudit writes the row once the answer is out.

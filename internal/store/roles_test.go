@@ -11,7 +11,7 @@ import (
 	"testing"
 )
 
-var allCaps = []string{"read", "preferences", "setpoint", "lock", "configure", "rename", "structure", "pair", "discover", "backup", "restore", "repair", "guests", "users", "passwords", "roles", "roles.disable", "capabilities", "cubes", "settings", "update", "restart", "audit"}
+var allCaps = []string{"read", "preferences", "setpoint", "lock", "configure", "rename", "structure", "pair", "discover", "backup", "restore", "repair", "guests", "users", "passwords", "roles", "roles.disable", "capabilities", "cubes", "settings", "update", "restart", "audit", "backup.server", "backup.retry"}
 
 // Roles are listed with their sets, created, renamed, given another
 // set, disabled and removed under the rules of docs/store.md section 6.
@@ -107,14 +107,14 @@ func TestEffective(t *testing.T) {
 	if d, _ := s.DisabledCapabilities(ctx); strings.Join(d, ",") != "pair" {
 		t.Fatalf("disabled %v", d)
 	}
-	if caps, disabled, _, _ := s.Effective(ctx, RoleManager, allCaps); slices.Contains(caps, "pair") || len(caps) != 15 || strings.Join(disabled, ",") != "pair" {
+	if caps, disabled, _, _ := s.Effective(ctx, RoleManager, allCaps); slices.Contains(caps, "pair") || len(caps) != 16 || strings.Join(disabled, ",") != "pair" {
 		t.Fatalf("manager without pair %v, disabled %v", caps, disabled)
 	}
 	if caps, disabled, _, _ := s.Effective(ctx, RoleOwner, allCaps); len(caps) != len(allCaps) || disabled != nil {
 		t.Fatal("a disabled capability touched owner")
 	}
 	s.SetCapabilityDisabled(ctx, "pair", false, 0)
-	if caps, _, _, _ := s.Effective(ctx, RoleManager, allCaps); len(caps) != 16 {
+	if caps, _, _, _ := s.Effective(ctx, RoleManager, allCaps); len(caps) != 17 {
 		t.Fatalf("manager %v", caps)
 	}
 	s.SetRoleDisabled(ctx, RoleManager, true, 0)

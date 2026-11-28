@@ -84,9 +84,10 @@ var oidcClient = &http.Client{Timeout: 10 * time.Second}
 
 // adminCapabilities are the capabilities a role that a provider gives
 // the users it creates may not hold (AP Oidc v1.0, D4-A: never above
-// operator), owner aside.
+// operator), owner aside; and the server's backups, which hold the
+// people, the sign-in and the integrations (AP ServerBackup, D15-A).
 var adminCapabilities = []string{"guests", "users", "passwords", "roles", "roles.disable", "capabilities", "cubes", "cubes.reboot", "settings",
-	"update", "restart", "reboot", "audit", "auth"}
+	"update", "restart", "reboot", "audit", "auth", "backup.server", "backup.retry"}
 
 // oidcDiscovery is the part of a provider's discovery document the flow
 // uses.

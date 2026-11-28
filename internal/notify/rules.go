@@ -90,6 +90,10 @@ func (e *engine) event(ev Event) {
 		if p.on(KindCubeFound) {
 			e.send(Notification{Kind: KindCubeFound, Cube: ev.Cube, Values: ev.Values})
 		}
+	case KindServerBackupFailed:
+		if p.on(KindServerBackupFailed) {
+			e.send(Notification{Kind: KindServerBackupFailed, Values: ev.Values})
+		}
 	case "update":
 		v, _ := ev.Values["version"].(string)
 		if v != "" && v != e.version {

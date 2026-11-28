@@ -279,11 +279,15 @@ and the OpenAPI file carries each operation's as `x-capability`:
 | `audit` | read the audit | `GET /api/v1/audit` |
 | `auth` | the OpenID Connect providers users sign in through; seeded for no role | `GET`/`POST /api/v1/providers`, `PUT`/`DELETE /api/v1/providers/{key}` |
 | `integrations` | the registered integrations: requests, approval, their maximum, their users and links ("Integrations", below); an integration's users but those stored as `owner`: their name, state, end date, keys and removal, and a role within their integration's maximum ("Users", below) | `GET /api/v1/integrations`, `GET …/integrations/found`, `GET`/`PUT`/`DELETE …/integrations/{uuid}`, `POST …/integrations/{uuid}/approve`, `POST …/integrations/{uuid}/refuse`, `POST …/integrations/{uuid}/accept-instance`, `PUT …/integrations/{uuid}/users/{id}`; the users routes for an integration's users |
+| `backup.server` | the server's own backups: make one now, pin, check, download and upload one, push and pull a copy, delete one, and the targets with what each takes and its retention; the keys' list; includes `backup.retry`; seeded for no role, never an integration's ("Server backups", below) | `POST /api/v1/server-backups`, `POST …/server-backups/upload`, `PUT …/server-backups/{id}/pin`, `POST …/server-backups/{id}/check`, `GET …/server-backups/{id}/file`, `PUT`/`DELETE …/server-backups/{id}/copies/{target}`, `POST …/copies/{target}/pull`, `DELETE …/server-backups/{id}`, `GET`/`POST /api/v1/server-backup-targets`, `GET …/server-backup-targets/kinds`, `PUT`/`DELETE …/server-backup-targets/{uuid}`, `POST …/server-backup-targets/{uuid}/test`, `GET /api/v1/server-backup-keys` |
+| `backup.retry` | see the state of the server's backups and retry a failed backup or copy, nothing more (the manager's by default) | `GET /api/v1/server-backups`, `POST …/server-backups/{id}/retry` |
 
 <!-- BEGIN GENERATED PARTIAL docs/fragments/_capability-rules.md - do not edit; run "GUIDELINES/shared/tools/sync-docs.sh" -->
 `update` and `reboot` each include `restart`, since each restarts the server:
 their holder passes every check of `restart` as a holder of `restart` does,
 and `GET /api/v1/me` lists `restart` beside them.
+`backup.server` includes `backup.retry` alike: who makes,
+pushes and pulls the server's backups sees their state and retries one.
 The include is taken at the check, on the set the bounds leave
 (the role's set less the capabilities disabled for every role,
 an integration's ceiling and maximum, a call's level):
@@ -327,7 +331,7 @@ and set no password of it ("Users", below).
 The default roles and their sets are those of docs/store.md section 6:
 `owner` has every capability and cannot be changed,
 `manager` is `operator` plus guests, pairing, names, structure,
-restore, the repairs and the restart,
+restore, the repairs, the restart and the retry of the server's backups,
 `operator` runs the heating, locks, configures, discovers and takes backups,
 `guest` is `operator` without the lock, backups, discovery and preferences,
 `viewer` reads, and `integration`, fixed like `owner`, is the role of the
@@ -339,6 +343,9 @@ and a capability disabled for every role but `owner`,
 through the routes of `/api/v1/roles` and `/api/v1/capabilities`.
 A user's own user and the routes of `/api/v1/users/{name}` with the user's
 own name are open to it for its display name and its password.
+The keys of the server's backups are the owner's alone, a user of the role
+`owner` and never a call through an integration: no capability gives them
+(`x-capability: owner` in the OpenAPI file; "Server backups", below).
 
 Ten failed token checks from one address within a minute lock that
 address out for five minutes: every `/api` request from it is then
@@ -1986,7 +1993,8 @@ keep the default:
 ```json
 {"cube_offline": {"on": true, "after_min": 10}, "window_open": {"on": true, "after_min": 30},
  "frost": {"on": true, "below_c": 8}, "battery_low": {"on": true}, "battery_weak": {"on": true}, "device_error": {"on": true},
- "device_stale": {"on": false}, "paired": {"on": false}, "cube_found": {"on": false}, "update": {"on": false}}
+ "device_stale": {"on": false}, "paired": {"on": false}, "cube_found": {"on": false}, "update": {"on": false},
+ "server_backup_failed": {"on": true}}
 ```
 
 | Kind | Told when | Default |
@@ -2002,6 +2010,7 @@ keep the default:
 | `paired` | a device joined by pairing | off |
 | `cube_found` | discovery found a Cube that is not configured | off |
 | `update` | the server's own check, after its start and every six hours, or `GET /api/v1/update` saw a newer release; once per release | off |
+| `server_backup_failed` | a backup of the server, or its copy to a target, still failed after its three retries ("Server backups"); told only to a user who holds `backup.retry` | on |
 
 `after_min` is 1 to 1440, `below_c` −10 to 20.
 A `PUT` of a document the rules cannot read (an unknown kind,
@@ -2027,7 +2036,8 @@ for `cube_offline`, `cube_online` and `window_open`; `values` are the kind's:
 `minutes` (the delay), `down_minutes` (`cube_online`),
 `error` and `link_error` (`device_error`), `actual_c` and `below_c` (`frost`),
 `type` (`paired`), `address` (`cube_found`, whose `cube` is the one found),
-`version` (`update`).
+`version` (`update`), `step`, `target` and `backup` (`server_backup_failed`:
+`make` or `copy`, the target's name, the backup's uuid).
 A `device_error` names the flags set then:
 `error` the communication error, with `failed_radiogram`,
 the type of the radiogram that failed, where the device gives it
@@ -2653,6 +2663,7 @@ The server's settings in the store:
   "update.channel":    {"value": "alpha", "default": "alpha", "set": false, "in_effect": "alpha", "applies": "now"},
   "update.auto":       {"value": "off", "default": "off", "set": false, "in_effect": "off", "applies": "now"},
   "update.auto_window": {"value": "03:00-05:00", "default": "03:00-05:00", "set": false, "in_effect": "03:00-05:00", "applies": "now"},
+  "serverbackup.time": {"value": "03:30", "default": "03:30", "set": false, "in_effect": "03:30", "applies": "now"},
   "node.id":           {"value": "01a1ae5a-6bee-7ed4-bb4e-3baa2c43fe55", "set": true, "read_only": true},
   "tenant.id":         {"value": "01a1ae5a-6bee-7edb-b3d5-390730e9e1c5", "set": true, "read_only": true}
 }
@@ -2760,6 +2771,8 @@ the build's flavour by default, and applies at once;
 inside the window `update.auto_window`, `HH:MM-HH:MM` in the server's time,
 `03:00-05:00` by default, at least 30 minutes, its end past midnight allowed
 (`23:30-01:30`); both apply at once (see `GET /api/v1/update`, `auto`).
+`serverbackup.time` is the daily time of the server's own backups, `HH:MM`
+in the server's time, `03:30` by default; it applies at once ("Server backups").
 `PUT` takes an object of keys and durations,
 `{"stale_after": "36h", "refresh_interval": null}`,
 with `null` for the default and `"0"` to switch the refresh or the periodic discovery off.
@@ -2767,7 +2780,8 @@ A number setting takes a JSON number, or the number as a string,
 `auth.password_login`, `integrations.requests`, `auth.keep_open`
 and `auth.password_reveal` `true` or `false`,
 `announce` `auto`, `on` or `off`, `update.channel` a name,
-`update.auto` `off` or `night`, and `update.auto_window` a window as above.
+`update.auto` `off` or `night`, `update.auto_window` a window as above,
+and `serverbackup.time` a time `HH:MM`.
 The ranges: `stale_after` and `stale_after_wall` 1h to 720h,
 `poll_interval` 10s to 1h, `refresh_interval` 10m to 168h,
 `discover_interval` 1m to 24h, `duty_wait` 1m to 1h,
@@ -5591,6 +5605,156 @@ and `"secret": true` with no `value`,
 since it may hold a secret under a name the rule misses,
 such as `MASSIMO_API_TOKEN_OLD`.
 `503` when the server has no store, or does not show its settings.
+
+### Server backups
+
+The server's own backups (docs/store.md, "Server backups"):
+the whole store and the files beside it, encrypted for the owner's keys,
+made once each night at `serverbackup.time` (`03:30` by default, the box's time;
+`GET`/`PUT /api/v1/settings`) and copied to the targets that take them,
+each target keeping them by its retention.
+A backup is one file, the same on every target,
+its copies the targets that hold it.
+Nothing is made while no key is set.
+`backup.server` makes, pushes and pulls; `backup.retry` sees the state and
+retries what failed, and `backup.server` includes it.
+The keys are the owner's alone.
+Neither capability is an integration's, nor may a provider's role hold one.
+
+`GET /api/v1/server-backups` (`backup.retry`) lists the backups, newest first,
+each with its copies, and each target's state:
+
+```json
+{"backups": [{"uuid": "0193…", "time": "2026-11-27T02:30:00Z", "trigger": "scheduled",
+  "state": "made", "size": 26717, "sha256": "8468…", "label": "", "version": "v0.18.0",
+  "node": "SHA256:…", "this_box": true, "manifest": {"format": 1, …}, "pinned_until": null,
+  "tries": 0, "next_try": null,
+  "copies": [{"target": "0193…", "target_name": "local", "path": "massimo-20261127-023000-0193….zip",
+    "state": "there", "pulled": false, "pushed_at": "…", "checked_at": null, "tries": 0, "next_try": null}]}],
+ "targets": [{"uuid": "0193…", "name": "local", "kind": "local", "takes": "every", "enabled": true,
+   "last_success": "…", "behind": false}],
+ "keys": 1, "time": "03:30", "next_run": "2026-11-28T02:30:00Z"}
+```
+
+- A backup's `trigger` is `scheduled`, `manual`, `before-update`,
+  `before-restore`, or `uploaded` for a file uploaded,
+  whose manifest keeps the trigger it was made with.
+  A backup that `failed` is a row too, with its `error`, `tries` and `next_try`.
+- A copy is `there`, `failed` (a copy that did not go through, or that a check
+  found changed) or `missing` (gone from the target at its scan).
+  `pulled` is a copy put on the local target by hand, kept until it is deleted.
+- A target is `behind` where its newest copy, or without one its creation,
+  is older than two of its periods:
+  a day where it takes `every` or `daily` backup, a week for `weekly`,
+  a month for `monthly`.
+
+`POST /api/v1/server-backups` makes one now, `{"label": "…", "target": "…"}`,
+the label at most 100 characters in plain in the manifest,
+the target a uuid or a name; without one it goes to every target that takes it,
+or where none does to the local ones; `409` without a key.
+Each answer of a job is
+`{"backup": {…}, "steps": [{"step": "copy", "target": "local", "ok": true}, …]}`:
+what it made, copied, pruned, scanned or checked.
+A copy that failed is in the backup's copies, and the answer is still `201`.
+
+The schedule:
+
+- A run missed while the server was down is made five minutes after its start.
+- Each target takes every backup, or the first of each day,
+  week (Monday to Sunday) or month of which it holds none, in the box's time.
+- After each copy, the target keeps what its retention keeps,
+  restic's forget policy:
+  `{"last": N, "daily": D, "weekly": W, "monthly": M, "yearly": Y}`,
+  the newest of each of the last D days that hold a copy, and so on;
+  a pinned backup,
+  a pulled copy and the target's newest are kept whatever it says,
+  and a policy of zeros keeps everything.
+  A new target keeps 7 days, 4 weeks and 6 months.
+- A scheduled backup, or a copy of one,
+  that fails is tried again after 5 minutes, 30 minutes and 2 hours,
+  the backup in its row, a copy as the same file again.
+  After the third retry it is a warning in the log,
+  an alert there (`GET /api/v1/log/alerts`) until a later success on its target,
+  and, once,
+  a notification `server_backup_failed` to every user who holds `backup.retry`;
+  then it waits for a retry by hand.
+  A backup made by hand is not retried by itself: its failure is the answer,
+  and a warning in the log.
+  `POST …/server-backups/{id}/retry` (`backup.retry`) tries again at once
+  what of a backup failed, as the schedule made it, and prunes no more than the
+  schedule would; `409` where nothing of the backup failed,
+  or for a backup made by hand that failed, which is made again by hand.
+- A backup is a failed row until its first copy is there,
+  so that a stop of the server in the middle of its copies leaves a backup to retry;
+  `DELETE …/server-backups/{id}` removes one of which no target holds a copy.
+
+The other routes of a backup, `backup.server`'s:
+
+- `PUT …/server-backups/{id}/pin`, `{"pinned": true}`, keeps it from every
+  retention until `{"pinned": false}`, or until `until`.
+- `POST …/server-backups/{id}/check` reads each copy back whole,
+  without the key: its size,
+  the file's hash and the payload's against the signed manifest;
+  `{"target": "…"}` checks one.
+- `GET …/server-backups/{id}/file` downloads it from a target that holds it,
+  the local ones first, a `Range` answered.
+- `POST /api/v1/server-backups/upload`, the file as the body (at most 8 GiB),
+  takes a backup made elsewhere to the local target, pulled;
+  `400` for a file that is no backup,
+  `422` for one of a newer format or changed since it was made.
+- `PUT …/server-backups/{id}/copies/{target}` pushes it to the target,
+  a uuid or a name, from a copy that is there;
+  `DELETE` removes the copy, the file included,
+  and the backup goes from the catalogue with its last copy.
+- `POST …/server-backups/{id}/copies/{target}/pull` fetches the target's copy
+  to the local target, where it stays until it is deleted.
+
+The targets, `backup.server`'s:
+`GET /api/v1/server-backup-targets/kinds` names the kinds this server knows,
+with the fields of each one's form,
+the web UI's texts `serverbackup.field.<kind>.<key>`:
+
+```json
+[{"name": "local", "fields": [{"key": "path", "type": "path", "required": false, "default": "backups"}]}]
+```
+
+A field's `type` is `text`, `number`, `path` (a directory of this box,
+relative to the data directory), `secret`, `bool` or `choice` (with `choices`);
+`secret` names the kind's secret field, given apart and kept sealed.
+`POST /api/v1/server-backup-targets` adds one,
+`{"name": "NAS", "kind": "local", "config": {"path": "/mnt/nas/massimo"},
+"secret": "…", "takes": "daily", "retention": {"daily": 7, "weekly": 4},
+"enabled": true}`,
+a name unique without regard to case (`409`), and scans it at once:
+`{"target": {…}, "found": 2, "skipped": ["notes.zip"]}`, the backups it holds
+added to the catalogue by their manifests, read without the key.
+`PUT …/server-backup-targets/{uuid}` changes what it is given,
+`secret` replaced, `""` removing it, left out kept;
+`DELETE` removes the target and its copies from the catalogue,
+the files staying; `POST …/{uuid}/test` reaches and writes to it,
+`{"ok": false, "error": "…"}` where not.
+A target's list (`GET /api/v1/server-backup-targets`) shows its fields,
+never its secret, but whether it has one (`has_secret`)
+and whether that does not open (`secret_lost`), to be entered again.
+Where no target exists, the first backup makes `local`,
+`backups/` in the data directory.
+
+The keys: `GET /api/v1/server-backup-keys` (`backup.server`) lists their public parts.
+`POST /api/v1/server-backup-keys` (the owner's alone) takes
+`{"label": "laptop", "recipient": "age1…"}`, a post-quantum `age1pq1…`,
+a classic `age1…` or an `ssh-ed25519` line,
+or `{"label": "safe", "make": "pq"}` (or `"classic"`), which makes a key and
+answers it once, `{"key": {…, "pending": true, "expires_at": "…"},
+"identity": "AGE-SECRET-KEY-…", "key_file": "# created: …"}`.
+A key made encrypts nothing until `POST …/server-backup-keys/{uuid}/confirm`,
+`{"last_six": "…"}`, gets the identity's last six characters,
+without regard to case (`422` for others), within an hour, after which it goes.
+The server keeps the public part and a hash of those six, never the identity,
+and no audit row or command keeps either.
+A box's keys are all post-quantum or all classic, as age requires:
+another kind is `409` with `"code": "mixed_kinds"`.
+`DELETE …/server-backup-keys/{uuid}` removes one;
+backups made before stay encrypted for it.
 
 ## The LAN proxy
 
