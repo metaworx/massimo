@@ -2971,7 +2971,12 @@ and wires with `addEventListener`; no script uses `innerHTML`.
 ### The stream
 
 `app.js` opens the event stream with a ticket, none while a card the user opened
-holds a running page still (`connectEvents`, AP FirstOwner D35), and hands each kind on:
+holds a running page still (`connectEvents`, AP FirstOwner D35);
+a ticket opens the stream of the Cube it was asked for alone:
+where another Cube is shown once it comes, chosen meanwhile
+or the one asked for gone from the list,
+the page drops it and asks for the shown Cube's (AP SteadyTests v1.2, Block 20).
+It hands each kind on:
 `state` to `updateDevice` and the log;
 `battery` to `updateBattery` (rooms.js, the device's level alone),
 the log and `MassimoParts.serverEvent`; `hello`, `disconnected` and `slots` to
