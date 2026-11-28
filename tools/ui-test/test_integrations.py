@@ -14,7 +14,7 @@ import urllib.request
 
 from conftest import TOKEN, URL, api_call
 from helpers import (OPERATOR_PASSWORD, ApiReads, cleanup, focus_in_turn, frames, hold, named_buttons, own_id, owner_page, reads_of, safe_route,
-                     scroll_width, show_view, undo, wait_held, wait_until)
+                     scroll_width, show_view, taken, undo, wait_held, wait_until)
 from test_admin_updates import out, stub_integrations
 from test_login import sign_in
 
@@ -414,10 +414,9 @@ def test_the_newest_read_of_a_panel_wins(page, case, reads):
         show_view(page, "system")
         newer = panel.locator(f".integration-user[data-id='{IG_USER['id']}']")
         newer.wait_for()
-        with page.expect_response(f"**/api/v1/integrations/{GUARD_IG}") as late:
+        with taken(page, f"**/api/v1/integrations/{GUARD_IG}"):
             held[0].fulfill(status=200, content_type="application/json", body=json.dumps(dict(IG_STUB, users=[old_user])))
             answered.append(1)
-        late.value.finished()
         frames(page)
         assert panel.locator(f".integration-user[data-id='{old_user['id']}']").count() == 0, "the older read's user not drawn"
         assert newer.count() == 1, "the newer read's user stays"
@@ -566,7 +565,7 @@ def test_an_older_users_answer_writes_nothing(page, case):
         held[1].fallback()
         assert wait_until(page, f"({USERS_COUNTED})({before + 2})", 5), "the newer read counted"
         extra["n"] = 1
-        with page.expect_response(lambda r: r.request.method == "GET" and r.url.endswith("/api/v1/users")):
+        with taken(page, lambda r: r.request.method == "GET" and r.url.endswith("/api/v1/users")):
             held[0].fallback()  # the older read answered
         frames(page)
         assert page.evaluate(f"({USERS_COUNTED})({before + 2})"), \

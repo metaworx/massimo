@@ -16,7 +16,8 @@ import time
 import pytest
 
 from conftest import TOKEN, URL, api_call
-from helpers import answered, bubble_at, frames, held_timers, hold, mark, owner_page, replaced, safe_route, scaled, show_view, update_json, wait_bubble_at, wait_held, wait_until
+from helpers import (answered, bubble_at, frames, held_timers, hold, mark, owner_page, replaced, safe_route, scaled, show_view, taken, update_json,
+                     wait_bubble_at, wait_held, wait_until)
 from test_admin_updates import across
 from test_unsaved import expire
 from test_reboot import RebootStub, iso, reboot_text
@@ -166,7 +167,7 @@ def test_a_second_channel_during_the_first_ones_check(page, case):
         assert wait_until(page, "document.getElementById('update-text').textContent.includes('stable')", 5), "stable's check shown"
         assert wait_until(page, "document.getElementById('update-channel').value === 'stable'", 5), "stable chosen"
         late = json.loads(update_json("up-to-date", "v0.0.1-test", False, None, "beta"))
-        with page.expect_response(lambda r: "refresh=1" in r.url):
+        with taken(page, lambda r: "refresh=1" in r.url):
             checks[0].fulfill(status=200, content_type="application/json", body=json.dumps(late))
         frames(page)
         assert "stable" in page.locator("#update-text").inner_text() and sel.input_value() == "stable", \
@@ -254,7 +255,7 @@ def test_the_session_end_ends_the_helpers_reading(new_context, case, watch, guar
     assert wait_held(page, reads, 8), "the next reading asked for"
     across(page, how)
     assert not software_busy(page), "the reading ended with the session"
-    with page.expect_response(lambda r: "/api/v1/update" in r.url):
+    with taken(page, lambda r: "/api/v1/update" in r.url):
         for r in reads:
             r.fallback()
     frames(page)
@@ -748,7 +749,7 @@ def test_the_session_end_ends_the_restarts_following(new_context, case, watch, g
     assert wait_held(page, checks, 8), "the next /healthz asked for"
     across(page, how)
     assert page.locator("#restart-text").inner_text() != restarting, "the following ended with the session"
-    with page.expect_response(lambda r: r.url.endswith("/healthz")):
+    with taken(page, lambda r: r.url.endswith("/healthz")):
         for r in checks:
             r.fulfill(status=200, content_type="application/json", body=later)
     frames(page)
@@ -1188,7 +1189,7 @@ def test_the_session_end_forgets_system_info(new_context, case, watch, guard, ho
     hold(page, "**/api/v1/system", "GET", held, [])
     assert wait_held(page, held, 8), "the certificate read again"
     across(page, how)
-    with page.expect_response(lambda r: r.url.endswith("/api/v1/system")):
+    with taken(page, lambda r: r.url.endswith("/api/v1/system")):
         for r in held:
             r.fallback()
     frames(page)

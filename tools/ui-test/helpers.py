@@ -411,6 +411,52 @@ def sent_requests(page, method, pattern):
     return sent
 
 
+# TAKEN_KIT notes in window.__uiTaken, from its first run in a document on,
+# each answer whose body the page has read, its URL and status, in turn:
+# Response's body methods are wrapped, and each notes its answer once the
+# body is read, before the page's code that awaited it goes on in the same
+# turn. It returns how many were noted before, where taken counts from.
+TAKEN_KIT = """() => {
+  if (!window.__uiTaken) {
+    const taken = (window.__uiTaken = []);
+    for (const m of ["text", "json", "arrayBuffer", "blob", "formData"]) {
+      const read = Response.prototype[m];
+      if (typeof read !== "function") continue;
+      Response.prototype[m] = function () {
+        const r = this;
+        return read.call(r).then((v) => {
+          taken.push({ url: r.url, status: r.status });
+          return v;
+        });
+      };
+    }
+  }
+  return window.__uiTaken.length;
+}"""
+
+
+@contextlib.contextmanager
+def taken(page, predicate, seconds=5, **kw):
+    """page.expect_response(predicate, **kw) for a block, whose answer it
+    gives as .value, and at the block's end a wait, for seconds (scaled), until
+    the page has read that answer's body as well (TAKEN_KIT): the answer
+    reaches Playwright when its head comes, and the page reads its body
+    and goes on with it later, its parts drawing what it brings in that
+    turn (app.js apiRequest), so a test's next step that the answer must
+    come before overtook it, a told event that the answer then took back
+    among them (test_pairing_updates.py). For a block whose answer a check
+    of what the page drew, or of what it did not draw, comes after
+    (docs/ui-testing.md, section 9, "The answer taken"). An answer of the
+    same URL whose body the page reads after the block began counts too.
+    Within one document."""
+    start = page.evaluate(TAKEN_KIT)
+    with page.expect_response(predicate, **kw) as info:
+        yield info
+    answer = info.value
+    assert wait_until(page, "(window.__uiTaken || []).slice(%d).some((a) => a.url === %s)" % (start, json.dumps(answer.url)), seconds), \
+        f"the page read the answer of {answer.request.method} {answer.url} within {scaled(seconds):g} s"
+
+
 @contextlib.contextmanager
 def held_poll(page):
     """The page's poll held for the with block: its timer cleared, and

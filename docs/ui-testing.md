@@ -1,4 +1,4 @@
-# Testing the web UI (v1.39.0)
+# Testing the web UI (v1.41.0)
 
 An evaluation of a Cypress suite for the web UI, against the alternatives:
 what the Playwright smoke test covers today and what it cannot do well,
@@ -782,6 +782,12 @@ The suite's helpers for it are in `tools/ui-test/helpers.py`
   `reads.change(pattern, fn)` changes any read; `reads.clear(pattern)` ends it.
   The test then shows it by a read of the page's own (`loadCubes()`),
   and the page's poll keeps it.
+  An event a test gives the page whose data a server's read would hold
+  is told to `reads` as well, so that the page's next read keeps it:
+  a device that joined by `pairingJoined` is in the pairing's read from then on
+  (`test_pairing_updates.py`, `joined`), where a read after the event took it back:
+  with a pairing read right after the event, the device told to the page alone
+  was gone in three runs of three, and told to `reads` too stayed in three.
   A test does not set `state.cubes`, `state.found` or `state.version` in the page:
   the next poll takes them back,
   and a version other than the server's makes the page reload.
@@ -1063,6 +1069,40 @@ the server's and the test's, in order,
   the page's requests as it sends them, for one that no route of the test's notes.
   A list a route fills is read after the wait, not after Playwright's
   `request` event of it, which comes before the route runs.
+- **The answer taken** (`taken(page, predicate)`, AP SteadyTests v1.1, Block 13):
+  a check of what an answer drew, or that it drew nothing,
+  and a step the answer must come before,
+  wait until the page has read the answer's body, not for the answer alone:
+  Playwright's `expect_response` returns once the answer's head has come,
+  and `.finished()` once its body has, on Playwright's side;
+  the page reads the body later and goes on with it in that turn
+  (`app.js`, `apiRequest`), its parts drawing what it brings.
+  So a test's next step overtook it:
+  `test_pairing_updates.py` told the page a device that joined
+  right after the answer of a pairing read,
+  the page then took that answer, which listed the devices without it,
+  and the device was gone before Playwright looked
+  (1100-de on CI, 2026-11-28; it passed in the retry).
+  With the page reading that answer's body 150 ms after its head
+  and the test looking 300 ms after the join,
+  the old wait failed three runs of three and `taken` passed three (1100-de, 2026-11-28).
+  `taken` is `expect_response` for a block, with its answer as `.value`,
+  and at the block's end a wait until the page has read that answer's body:
+  `TAKEN_KIT`, run at the block's start, wraps `Response`'s body methods
+  in the document, each noting its answer's URL once the body is read,
+  before the page's code that awaited it goes on in the same turn,
+  so that what the answer draws is drawn by the test's next call
+  (a part's effect after it by `frames`).
+  An answer of the same URL whose body the page reads after the block began counts too.
+  It holds within one document.
+  Every test that waited for an answer as the page having it takes it,
+  `.finished()` and `frames` ("its body read by the page too") among them:
+  `test_admin_updates.py`, `test_integrations.py`, `test_log_updates.py`,
+  `test_login.py`, `test_maint_updates.py`, `test_pairing_updates.py`,
+  `test_personal_updates.py`, `test_sign_out_late.py` and `test_system_info.py`.
+  A test that waits for what the answer drew (`wait_until`, a locator's `wait_for`)
+  or for the page's reads (`answered`) needs none,
+  nor one that reads the answer itself (`.value.json()`).
 - **Nothing came, against an end:**
   a check that an action brought nothing has an end of its own,
   not a fixed wait that a slow runner outlasts:

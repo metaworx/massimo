@@ -289,7 +289,9 @@ fixed wait of 1.6 s), `safe_route` (the one route handler that lets go
 a request the page no longer waits for, and reports to the guard any
 other error and a request it had to abort), `undo` (a cleanup's step
 that says what it could not undo), `own_id` (an id of the test's own,
-new at each call, for what it makes that no API removes) and `cleanup`
+new at each call, for what it makes that no API removes), `taken`
+(Playwright's `expect_response` for a block, and a wait at its end until
+the page has read that answer's body too, with `TAKEN_KIT`) and `cleanup`
 (every step of a cleanup runs, the first error raised at the end).
 What several test files did alike is there too:
 `load_cubes` (a load of the Cubes' list, its reads answered),
@@ -382,7 +384,8 @@ hence `failed_checks_forgotten`.
   clocks and just after midnight on the day of the autumn one,
   the page in `Europe/Zurich` under Playwright's clock.
 - `test_pairing_updates.py`, a Cube's pairing as a part (AP UiParts, Block 9),
-  `GET …/pairing` answered as running with a device that joined:
+  `GET …/pairing` answered as running with a device that joined,
+  and with the second from its paired event on:
   the joined device's form, its name and room, the countdown and Stop
   stay the elements they were, with what is typed and the focus,
   through the countdown, a pairing event, another device that joins
@@ -1061,6 +1064,9 @@ Node is not needed.
 - Data a test puts into the page goes through the fixture `reads`,
   not into `state`: the page's poll and the reads that events start
   take `state` back.
+  An event a test gives the page whose data a server's read would hold,
+  a device that joined by `pairingJoined`, is told to `reads` too,
+  so that the page's next read keeps it (`test_pairing_updates.py`).
   A route handler of the test's is routed with `safe_route`,
   never wrapped in `try`/`except Exception`.
 - A test of the log that sends events opens the log, calls
@@ -1092,6 +1098,13 @@ Node is not needed.
 - A check of what a request carried waits for the request itself
   (`wait_held` on the route's list, or on `sent_requests` for the page's own),
   not for what the page draws before it sends it.
+- A check of what an answer drew, or that it drew nothing,
+  and a step that answer must come before,
+  wait until the page has read the answer's body
+  (`with taken(page, predicate):` of `helpers.py`),
+  not for Playwright's `expect_response` alone, nor its `.finished()` with frames:
+  the page goes on with an answer after Playwright has it
+  (`docs/ui-testing.md`, section 9, "The answer taken").
 - A state the page takes back on a timer of its own, "Copied" or the toast,
   is held while a test checks it after more than one look
   (`with held_timers(page, "copied"):`), not raced.
