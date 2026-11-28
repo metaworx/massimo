@@ -187,7 +187,7 @@ func TestRekeyWho(t *testing.T) {
 	var me meView
 	getJSON(t, ts, "secret", "/api/v1/me", &me)
 	file := me.Token.ID
-	rekey := func(what, bearer, user, id string, want int, says string) {
+	rekey := func(what, bearer, user, id string, want int, says string) string {
 		t.Helper()
 		code, text := callAPI(t, ts, "POST", "/api/v1/users/"+user+"/tokens/"+id+"/rekey", bearer, "")
 		if code != want || (says != "" && !strings.Contains(errorOf(text), says)) {
@@ -197,17 +197,23 @@ func TestRekeyWho(t *testing.T) {
 		if json.Unmarshal([]byte(text), &m); want == 200 && (m.Token == "" || id != strconv.FormatInt(m.ID, 10)) {
 			t.Errorf("%s: no new secret in %s", what, text)
 		}
+		return text
 	}
 	id := func(n int64) string { return strconv.FormatInt(n, 10) }
 
 	rekey("the bearer that very key", annaSecret, "anna", id(annaKey.ID), 403, "its own life")
-	rekey("the settings file's key", "secret", store.BootstrapUser, id(file), 409, "settings file")
+	if text := rekey("the settings file's key", "secret", store.BootstrapUser, id(file), 409, "settings file"); answerCode(text) != "token_settings_key" {
+		t.Errorf("the settings file's key: %s, want token_settings_key", text)
+	}
 	rekey("an integration's key", "secret", i.UUID+":", id(integ[0].ID), 403, "integration's")
 	rekey("an integration's key, by a holder of integrations", manager, i.UUID+":", id(integ[0].ID), 403, "integration's")
 	rekey("a key that has ended", "secret", "anna", id(ended.ID), 409, "has ended")
 	rekey("a session", "secret", "anna", id(annaSession.ID), 400, "is a session")
-	rekey("a revoked key", "secret", "anna", id(revoked.ID), 404, "")
-	rekey("another user's token", "secret", "gina", id(annaKey.ID), 404, "")
+	for what, c := range map[string]struct{ user, id string }{"a revoked key": {"anna", id(revoked.ID)}, "another user's token": {"gina", id(annaKey.ID)}} {
+		if text := rekey(what, "secret", c.user, c.id, 404, "has no token"); answerCode(text) != "token_unknown" {
+			t.Errorf("%s: %s, want token_unknown", what, text)
+		}
+	}
 	rekey("no token id", "secret", "anna", "x", 400, "bad token id")
 	rekey("anna, gina's key", annaSecret, "gina", id(ginaKey.ID), 403, "")
 	rekey("a manager of guests, an operator's key", manager, "anna", id(annaKey.ID), 403, "")

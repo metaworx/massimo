@@ -206,12 +206,13 @@ func TestKeyEndWho(t *testing.T) {
 	soon := func(h int) string {
 		return `{"expires_at":"` + time.Now().Add(time.Duration(h)*time.Hour).UTC().Format(time.RFC3339) + `"}`
 	}
-	put := func(what, bearer, user string, id int64, body string, want int, says string) {
+	put := func(what, bearer, user string, id int64, body string, want int, says string) string {
 		t.Helper()
 		code, text := callAPI(t, ts, "PUT", "/api/v1/users/"+user+"/tokens/"+strconv.FormatInt(id, 10), bearer, body)
 		if code != want || (says != "" && !strings.Contains(errorOf(text), says)) {
 			t.Errorf("%s: %d %s, want %d %q", what, code, text, want, says)
 		}
+		return text
 	}
 
 	put("the owner, anna's key", "secret", "anna", annaKey.ID, soon(24), 200, "")
@@ -221,13 +222,18 @@ func TestKeyEndWho(t *testing.T) {
 	put("the bearer that very key", annaSecret, "anna", annaKey.ID, soon(24), 403, "its own life")
 	put("the bearer that very key, removing its end", annaSecret, "anna", annaKey.ID, `{"expires_at":null}`, 403, "its own life")
 	put("the owner's key, its own end", ownSecret, store.BootstrapUser, ownKey.ID, soon(24), 403, "its own life")
-	put("the settings file's key", "secret", store.BootstrapUser, file, soon(24), 409, "settings file")
-	put("the settings file's key, null", "secret", store.BootstrapUser, file, `{"expires_at":null}`, 409, "settings file")
+	for what, body := range map[string]string{"the settings file's key": soon(24), "the settings file's key, null": `{"expires_at":null}`} {
+		if text := put(what, "secret", store.BootstrapUser, file, body, 409, "settings file"); answerCode(text) != "token_settings_key" {
+			t.Errorf("%s: %s, want token_settings_key", what, text)
+		}
+	}
 	put("a session", "secret", "anna", annaSession.ID, soon(24), 400, "is a session")
 	put("anna, gina's key", annaSecret, "gina", ginaKey.ID, soon(24), 403, "")
 	put("a manager of guests, a guest's key", manager, "gina", ginaKey.ID, soon(24), 200, "")
 	put("a manager of guests, an operator's key", manager, "anna", annaKey.ID, soon(24), 403, "")
-	put("another user's token", "secret", "gina", annaKey.ID, soon(24), 404, "")
+	if text := put("another user's token", "secret", "gina", annaKey.ID, soon(24), 404, "has no token"); answerCode(text) != "token_unknown" {
+		t.Errorf("another user's token: %s, want token_unknown", text)
+	}
 	put("the owner, an integration's key", "secret", i.UUID+":", integ[0].ID, soon(24), 200, "")
 	put("a holder of integrations, an integration's key", manager, i.UUID+":", integ[0].ID, soon(48), 200, "")
 	put("an operator, an integration's key", annaSecret, i.UUID+":", integ[0].ID, soon(24), 403, "")
@@ -292,12 +298,12 @@ func TestSettingsKeyEndDate(t *testing.T) {
 			t.Errorf("%s: listed %+v, want from the settings file and living", what, k)
 		}
 		for _, body := range []string{`{"expires_at":null}`, `{"expires_at":"` + clock.Now().Add(day).Format(time.RFC3339) + `"}`, `{"idle_exempt":true}`} {
-			if code, text := callAPI(t, ts, "PUT", key, other, body); code != 409 || !strings.Contains(errorOf(text), "settings file") {
-				t.Errorf("%s: PUT %s: %d %s, want 409", what, body, code, text)
+			if code, text := callAPI(t, ts, "PUT", key, other, body); code != 409 || !strings.Contains(errorOf(text), "settings file") || answerCode(text) != "token_settings_key" {
+				t.Errorf("%s: PUT %s: %d %s, want 409 token_settings_key", what, body, code, text)
 			}
 		}
-		if code, text := callAPI(t, ts, "DELETE", key, other, ""); code != 409 {
-			t.Errorf("%s: DELETE: %d %s, want 409", what, code, text)
+		if code, text := callAPI(t, ts, "DELETE", key, other, ""); code != 409 || answerCode(text) != "token_settings_key" {
+			t.Errorf("%s: DELETE: %d %s, want 409 token_settings_key", what, code, text)
 		}
 	}
 	check("past the end date it was made with")

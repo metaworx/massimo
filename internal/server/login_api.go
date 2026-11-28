@@ -242,9 +242,9 @@ type loginRequest struct {
 func (s *Server) loginMode(ctx context.Context) error {
 	switch s.authMode(ctx) {
 	case modeLegacy:
-		return fail(http.StatusConflict, "this server has no store: use the API token")
+		return refuse(http.StatusConflict, codeLoginNoStore)
 	case modeOpen:
-		return fail(http.StatusConflict, "no users yet: create the first owner with POST /api/v1/users, or massimo user add")
+		return refuse(http.StatusConflict, codeLoginNoUsers)
 	}
 	return nil
 }
@@ -268,7 +268,7 @@ func (s *Server) login(w http.ResponseWriter, r *http.Request) error {
 	ip := s.clientIP(r)
 	auditTarget(r, "user:"+name)
 	if !st.PasswordLogin(ctx) {
-		return fail(http.StatusForbidden, "the password sign-in is off on this server; sign in from the web UI, or with an API key")
+		return refuse(http.StatusForbidden, codeLoginPasswordOff)
 	}
 	addrKey, userKey := store.LockoutAddr(ip), store.LockoutUser(name)
 	var started *pendingLogin
@@ -292,7 +292,7 @@ func (s *Server) login(w http.ResponseWriter, r *http.Request) error {
 		case full:
 			return passwordBusy(store.ErrBusy)
 		case !ok:
-			return &httpError{status: http.StatusTooManyRequests, msg: "a sign-in from this address is already running; try again when it is done", retryAfter: 1}
+			return withRetryAfter(refuse(http.StatusTooManyRequests, codeLoginRunning), 1)
 		}
 	}
 	defer s.signIns.release(addrKey)
@@ -311,7 +311,7 @@ func (s *Server) login(w http.ResponseWriter, r *http.Request) error {
 		}
 		auditAction(r, "login.failed")
 		s.logSignIn("login_failed", name, 0, ip)
-		return fail(http.StatusUnauthorized, "wrong user or password")
+		return refuse(http.StatusUnauthorized, codeLoginWrong)
 	}
 	u, ok, err := st.User(ctx, name)
 	if err != nil || !ok {
@@ -355,9 +355,9 @@ func (s *Server) openSessionFrom(w http.ResponseWriter, r *http.Request, u store
 	case u.IntegrationID != 0:
 		return noWayIn(u)
 	case u.Disabled:
-		return fail(http.StatusForbidden, "user %s is disabled", u.Name)
+		return refuse(http.StatusForbidden, codeUserAccountDisabled, u.Name)
 	case u.Expired(now):
-		return fail(http.StatusForbidden, "user %s has expired", u.Name)
+		return refuse(http.StatusForbidden, codeUserAccountExpired, u.Name)
 	}
 	label = strings.TrimSpace(label)
 	if label == "" {
@@ -375,7 +375,7 @@ func (s *Server) openSessionFrom(w http.ResponseWriter, r *http.Request, u store
 		tok, secret, err = st.AddToken(ctx, u.ID, store.TokenSession, label, now.Add(SessionLifetime))
 	}
 	if errors.Is(err, store.ErrNoToken) {
-		return fail(http.StatusUnauthorized, "%s", errBadToken.Error()) // the key was revoked, or given a new secret, meanwhile
+		return refuse(http.StatusUnauthorized, codeTokenWrong) // the key was revoked, or given a new secret, meanwhile: errBadToken's words
 	}
 	if err != nil {
 		return fail(http.StatusInternalServerError, "%v", err)
@@ -424,14 +424,14 @@ func (s *Server) loginKey(w http.ResponseWriter, r *http.Request) error {
 	}
 	p := principalOf(r)
 	if !p.named() {
-		return fail(http.StatusConflict, "no users yet: create the first owner with POST /api/v1/users, or massimo user add")
+		return refuse(http.StatusConflict, codeLoginNoUsers)
 	}
 	auditTarget(r, "user:"+p.user.Name)
 	if p.token.Kind != store.TokenAPI {
 		return fail(http.StatusBadRequest, "the bearer is a session, not an API key: a session is made from a key")
 	}
 	if p.integration != nil {
-		return fail(http.StatusForbidden, "a registered integration's key makes no session")
+		return refuse(http.StatusForbidden, codeLoginIntegrationKey)
 	}
 	var req loginKeyRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil && !errors.Is(err, io.EOF) {
@@ -459,13 +459,6 @@ func (s *Server) logout(w http.ResponseWriter, r *http.Request) error {
 	writeJSON(w, http.StatusOK, map[string]any{"ok": true})
 	return nil
 }
-
-// settingsKeyKept is the refusal of a revoke of the settings file's key.
-const settingsKeyKept = "the token is the settings file's MASSIMO_API_TOKEN: change or remove it in the settings file"
-
-// settingsKeyHeld is the refusal of the removal of the user that holds
-// the settings file's key, a format with the user's name.
-const settingsKeyHeld = "user %s holds the settings file's MASSIMO_API_TOKEN: change or remove it in the settings file first"
 
 // settingsKey is the API key that is the settings file's
 // MASSIMO_API_TOKEN, not revoked, whatever else of its life, with its
@@ -507,7 +500,7 @@ func (s *Server) deleteMyToken(w http.ResponseWriter, r *http.Request) error {
 		return fail(http.StatusBadRequest, "a call on a user's behalf revokes nothing: revoke the integration's key without the %s header", OnBehalfHeader)
 	}
 	if file := s.legacyToken(); file != "" && tokenMatches(file, strings.TrimPrefix(r.Header.Get("Authorization"), "Bearer ")) {
-		return fail(http.StatusConflict, settingsKeyKept)
+		return refuse(http.StatusConflict, codeTokenSettingsKey)
 	}
 	auditTarget(r, "token:"+strconv.FormatInt(p.token.ID, 10))
 	auditSubject(r, tokenSubject(p.token, p.user))
