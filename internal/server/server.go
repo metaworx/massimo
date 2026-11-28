@@ -1651,7 +1651,7 @@ func (s *Server) crossOriginRefused(w http.ResponseWriter, r *http.Request) {
 			}
 		}
 	}
-	writeError(w, http.StatusForbidden, "cross-origin request refused")
+	writeRefusal(w, refuse(http.StatusForbidden, codeCrossOriginRefused))
 }
 
 type httpError struct {
