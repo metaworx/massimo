@@ -124,8 +124,8 @@ there is nothing else to install.
 Every [release](https://github.com/metaworx/massimo/releases) carries the binaries below,
 `SHA256SUMS`, the signed manifest that `massimo update` verifies,
 and the build record, `massimo-build.txt`.
-Every release so far is a pre-release of the flavour `alpha` (see
-[Versions](#versions)), which `releases/latest` skips,
+Every release so far is a pre-release of the flavour `alpha` (see [Versions](#versions)),
+which `releases/latest` skips,
 so take the newest release from the page and put its tag in place of `<tag>` below.
 
 | Asset | For |
@@ -284,9 +284,8 @@ and removes it where an earlier install put it,
 With several Cubes each needs its own `MASSIMO_CUBE_<SERIAL>_PROXY` address on the box,
 see [Install by hand](packaging/README.md#install-by-hand).
 Afterwards the settings are in `/etc/massimo/env` (readable by `massimo` only),
-the state in `/var/lib/massimo`,
-the log in `/var/log/massimo/serve.log`
-(JSON, rotated by `serve` itself, readable by the group `adm`) and in the journal:
+the state in `/var/lib/massimo`, the log in `/var/log/massimo/serve.log` (JSON,
+rotated by `serve` itself, readable by the group `adm`) and in the journal:
 
 ```bash
 sudo systemctl start massimo
@@ -506,12 +505,12 @@ Details: [macOS](packaging/README.md#macos).
 
 **With Homebrew.**
 `brew install metaworx/massimo/massimo-alpha` builds the release from source
-(nothing needs notarization), `brew services start massimo-alpha` runs it as you
-(`sudo` for a daemon at boot),
+(nothing needs notarization),
+`brew services start massimo-alpha` runs it as you (`sudo` for a daemon at boot),
 and the settings are in `$(brew --prefix)/etc/massimo/env`;
 brew then owns the binary and `brew upgrade` updates it,
-which the web UI's Update runs as you under `brew services`
-(by hand, `brew services restart massimo-alpha` then runs the new one),
+which the web UI's Update runs as you under `brew services` (by hand,
+`brew services restart massimo-alpha` then runs the new one),
 while `massimo update` says when a release is out.
 The rolling channels' formulae are in a tap of their own,
 `brew install metaworx/massimo-rolling/massimo-devel` or `massimo-nightly`.
@@ -564,15 +563,15 @@ a build of anything but a release tag is `devel`,
 and follows the `devel` builds.
 <!-- END GENERATED PARTIAL docs/fragments/_build.md -->
 
-The other targets:
-`make linux`, `make linux-armv7` and `make darwin` (both Mac architectures)
-build one more release binary each;
-`make build-release` adds the build record, `SHA256SUMS` and the release manifest;
-`make vet`, `make test` and `make clean` do what they say;
+The other targets: `make linux`,
+`make linux-armv7` and `make darwin` (both Mac architectures) build one more
+release binary each; `make build-release` adds the build record,
+`SHA256SUMS` and the release manifest; `make vet`,
+`make test` and `make clean` do what they say;
 `make clean-tests` removes what the test suites leave in the checkout,
 their results and caches,
-and `make distclean` both and what make installed into it,
-never `.env`, a store or a cache that every checkout shares;
+and `make distclean` both and what make installed into it, never `.env`,
+a store or a cache that every checkout shares;
 `make race` runs the race detector on the packages whose goroutines meet,
 and `make fuzz` each fuzz target for `FUZZTIME` (10 s).
 A build from `main`, or any other branch, is of the flavour `devel`
@@ -788,8 +787,8 @@ since every command stops on it at its start;
 the warning names the bad line by its number and never quotes it.
 A missing one changes nothing either, as an editor may be replacing it.
 A line the read sets aside (see "Cube variables") is a warning too,
-on the process's log and in the log after "the settings file: ",
-but no refusal: `GET /api/v1/restart` and the web UI's **Restart** do not name it.
+on the process's log and in the log after "the settings file: ", but no refusal:
+`GET /api/v1/restart` and the web UI's **Restart** do not name it.
 A start that finds one says it in the log after its start,
 so that the warning stays until a read finds the file fixed.
 `GET /api/v1/restart` and `POST /api/v1/reload` name what the next start refuses
@@ -883,15 +882,14 @@ the SRV record its API's port on the host `massimo-<node>.local`,
 and the TXT record its node (`node`), version (`v`),
 whether it serves TLS (`tls`) and the certificate's SHA-256 (`fp`),
 which an app compares before it trusts a self-signed certificate;
-for the integrations, where the API is reached (`url`:
-`MASSIMO_PUBLIC_URL`, else the address a trusted reverse proxy serves
-the server at, as the last signed-in request through it said,
-else the server's own),
+for the integrations, where the API is reached (`url`: `MASSIMO_PUBLIC_URL`,
+else the address a trusted reverse proxy serves the server at,
+as the last signed-in request through it said, else the server's own),
 the installation's name (`loc`),
-whether integrations may ask to be registered (`reg`),
-and `api=1`, `GET /healthz` listing the features.
-A server that announces itself also looks for Home Assistant on the LAN
-(`docs/api-v1.md`, "Integrations").
+whether integrations may ask to be registered (`reg`), and `api=1`,
+`GET /healthz` listing the features.
+A server that announces itself also looks for Home Assistant on the LAN (`docs/api-v1.md`,
+"Integrations").
 It is on by default where `-listen` is reachable from the LAN,
 and off on a loopback address;
 the setting `announce` (System settings → Maintenance,
@@ -987,9 +985,10 @@ budget two minutes after a write, and the H line says the greeting's own.
 
 The fake carries out the radio commands it acknowledges, as the devices do:
 a setpoint or mode (to every thermostat of the room for a room command),
-a boost, which ends by itself after the device's boost time (`-boost-for` to
-shorten it), a day's programme, the preset temperatures, the valve settings,
-the key lock, a wall thermostat's display and the device's group:
+a boost,
+which ends by itself after the device's boost time (`-boost-for` to shorten it),
+a day's programme, the preset temperatures, the valve settings, the key lock,
+a wall thermostat's display and the device's group:
 set group (0x22) names its room in the device's C line,
 and remove group (0x23) clears it where it names the room the C line names,
 while a device refuses one naming another room and is flagged with it,
@@ -1070,8 +1069,8 @@ when the read gets no answer, sends zeros for the addresses,
 which loses the stored fallback (192.168.0.222/16 from the factory) without restoring it;
 a Cube that moved networks may need a power cycle.
 `-reboot` restarts the Cube with `R`,
-as **Reboot the Cube** in System settings → Cubes does
-(`POST /api/v1/cubes/{sn}/reboot`, docs/api-v1.md):
+as **Reboot the Cube** in System settings → Cubes does (`POST /api/v1/cubes/{sn}/reboot`,
+docs/api-v1.md):
 a Cube that still holds the old connection of a server whose network went down
 refuses every other client until it lets go, after up to about 40 minutes,
 and the restart frees it at once.
@@ -1091,12 +1090,13 @@ massimo credits preact
 a line each with its name,
 version (Go's and each Go module's the one the binary was built with),
 licence and where it comes from,
-a module that only another platform's build links with `-`
-and "Go module, in another platform's build",
+a module that only another platform's build links with `-` and "Go module,
+in another platform's build",
 "and others" where its files are under other licences too,
 then what an entry includes and the crates those are built with,
-whose licence texts, collected for Massimo, are among its files
-(the Rust crates in the web UI's OPAQUE client, `opaque.LICENSE-3RD-PARTY`),
+whose licence texts, collected for Massimo,
+are among its files (the Rust crates in the web UI's OPAQUE client,
+`opaque.LICENSE-3RD-PARTY`),
 as System info's **Credits and licences** does from the same embedded list;
 `credits <name>`, the name as the list prints it, prints that entry's licence,
 the text of each of its files with the licence it is known by.
@@ -1126,12 +1126,11 @@ and UTF-16 text, as PowerShell 5.1's `>` or `>>` writes it, is refused:
 save it as UTF-8.
 A line without a name is ignored, and so is a `MASSIMO_ENV_FILE` line:
 name the file with `-env`.
-Every command but `version` and `help` warns of a line set aside
-on stderr at its start, by its number and never its value
+Every command but `version` and `help` warns of a line set aside on stderr at its start,
+by its number and never its value
 (`warning: /etc/massimo/env: MASSIMO_HSTS is given on lines 3 and 4; the first wins`),
 `massimo config` lists them after the settings,
-`serve` says them in its log too,
-and `install` among its warnings,
+`serve` says them in its log too, and `install` among its warnings,
 on Linux and macOS those of the settings file it installs,
 on Windows those of the one it keeps, unless the command's start read it.
 `install -settings` refuses a path that is not there, with the system's error,
@@ -1184,13 +1183,13 @@ and under System settings → Cubes in the web UI, which offers the file's value
 That page, and `POST /api/v1/cubes`, `PUT` and `DELETE /api/v1/cubes/{serial}`,
 add a Cube, change its name, address, proxy and hidden devices,
 and remove it while `serve` runs.
-A removed Cube keeps its settings and history in the store:
-found again, it is added as new, or restored with them
-(**Restore** in the web UI, `"restore": "<uuid>"` in the API).
+A removed Cube keeps its settings and history in the store: found again,
+it is added as new, or restored with them (**Restore** in the web UI,
+`"restore": "<uuid>"` in the API).
 `massimo config` prints, per Cube,
 which value is the store's and which line of the file differs.
-`MASSIMO_API_TOKEN`, `MASSIMO_LISTEN`,
-`MASSIMO_LOG`, `MASSIMO_LOG_LEVEL`, `MASSIMO_LOG_FORMAT` and the other `MASSIMO_LOG_…`,
+`MASSIMO_API_TOKEN`, `MASSIMO_LISTEN`, `MASSIMO_LOG`, `MASSIMO_LOG_LEVEL`,
+`MASSIMO_LOG_FORMAT` and the other `MASSIMO_LOG_…`,
 the TLS and update variables and `MASSIMO_CUBE_SN` stay in the file only,
 and every command other than `serve` keeps reading all of its lines as before.
 `-addr` and `-sn` still pick a Cube for one run and write nothing for it;
@@ -1201,10 +1200,10 @@ also while `serve` runs (copying `massimo.db` alone can miss the last writes,
 which are in `massimo.db-wal` until a checkpoint,
 at the latest at a clean stop),
 `store migrate` creates or migrates it without starting `serve`,
-and `store info` prints its schema version, node and row counts
-(also in the web UI, System settings → Maintenance → Store, as
-`massimo config`'s settings are under Settings in effect, secrets and the
-values of unknown names left out).
+and `store info` prints its schema version,
+node and row counts (also in the web UI, System settings → Maintenance → Store,
+as `massimo config`'s settings are under Settings in effect,
+secrets and the values of unknown names left out).
 The copy holds the database alone:
 `opaque.key` and `node.key` beside it are kept with it,
 since without `opaque.key` no password of `auth_version` 2 signs in
@@ -1217,8 +1216,8 @@ schema version opens (its `store info` says "this binary: N"),
 for going back to an older release after a migration it cannot read:
 run with the newer binary and the service stopped,
 it undoes the newer migrations by their down parts,
-and leaves the file as it was as `massimo.db.before-downgrade-<version>`
-(docs/store.md, "Migrations").
+and leaves the file as it was as `massimo.db.before-downgrade-<version>` (docs/store.md,
+"Migrations").
 `update`'s rollback does it by itself.
 `store keygen -kind pq` or `-kind classic` makes a key for the server's backups,
 encrypted zips of the store and the files beside it.
@@ -1236,33 +1235,30 @@ and says which box made it.
 `serve` makes such a backup each night at 03:30 (the setting `serverbackup.time`)
 once the owner has given a key, copies it to its targets
 (`backups/` in the data directory at first) and keeps each target's retention.
-`store backup` without a file makes one now, `-target <name>` to that target alone
-and `-label <text>` in plain in its manifest;
+`store backup` without a file makes one now,
+`-target <name>` to that target alone and `-label <text>` in plain in its manifest;
 `store backups` lists them with their copies,
-`store push <id> <target>` copies one to a target
-and `store pull <id> <target>` fetches a target's copy to the local target,
-where it stays until it is deleted.
+`store push <id> <target>` copies one to a target and `store pull <id> <target>`
+fetches a target's copy to the local target, where it stays until it is deleted.
 These four go through this box's running `serve`, with `MASSIMO_API_TOKEN`,
 found by the address it publishes in the data directory (`serve.api`)
 and proved by its node, and act on the store otherwise,
 one job at a time with serve's.
-The details are in docs/store.md, "Server backups", and the API's in
-docs/api-v1.md, "Server backups".
+The details are in docs/store.md, "Server backups",
+and the API's in docs/api-v1.md, "Server backups".
 
 `massimo user` manages the users of the store from the box (docs/api-v1.md,
 "Authentication"):
 `user add <name> -role operator` asks for the password twice (`-no-password` for
 a user with keys only,
 `-password-stdin` to read it from standard input for scripts,
-`-expires <RFC 3339>` for a guest's end),
-`user list`, which shows each user as the page does (SHOWN AS: an
-integration's user by the chain "<the integration's name> › <its display
-name>", with ", as <login name>" where it is linked),
-`user passwd <name>`,
+`-expires <RFC 3339>` for a guest's end), `user list`,
+which shows each user as the page does (SHOWN AS:
+an integration's user by the chain "<the integration's name> › <its display name>",
+with ", as <login name>" where it is linked), `user passwd <name>`,
 `user rename <name> <new name>`,
-which asks for the password again since it goes with the name
-(`-no-password` to leave the user with its keys),
-`user disable <name>` and `user enable <name>`,
+which asks for the password again since it goes with the name (`-no-password` to
+leave the user with its keys), `user disable <name>` and `user enable <name>`,
 `user token <name> -label Loxone` prints a new API key once,
 `user tokens <name>` lists the user's sessions and keys with their ids,
 and `user revoke <name> [<token id>]` revokes one token or every one.
@@ -1297,13 +1293,11 @@ With `MASSIMO_API_TOKEN` set, the first start of `serve` creates the user
 without it, the first owner is created with `user add <name> -role owner`
 or with the form the web UI offers on the local network while there are no users.
 The first regular user, made either way, whatever role `user add` gives it,
-or from the token, closes the open server and is told what was set up before it
-and still works, where anything was:
-`user add` prints it on a second line, a part for each list
-(`still in effect from before this user: 1 integration (Kitchen); roles added or changed: viewer; check them in System settings`),
-the web UI in its toast,
-and the log keeps it as a warning until it is marked seen
-(docs/api-v1.md, "Authentication").
+or from the token,
+closes the open server and is told what was set up before it and still works,
+where anything was: `user add` prints it on a second line,
+a part for each list
+(`still in effect from before this user: 1 integration (Kitchen); roles added or changed: viewer; check them in System settings`), the web UI in its toast, and the log keeps it as a warning until it is marked seen (docs/api-v1.md, "Authentication").
 
 Users may also sign in through an OpenID Connect provider beside their password,
 such as Nextcloud, Google or Microsoft:
@@ -1312,7 +1306,8 @@ and assigns users their e-mail in System settings → Users;
 what to register at the provider is in docs/oidc.md.
 
 Every variable has a per-Cube form with the serial in it,
-`MASSIMO_CUBE_<SERIAL>_ADDRESS` for `MASSIMO_CUBE_ADDRESS`, which wins for that Cube;
+`MASSIMO_CUBE_<SERIAL>_ADDRESS` for `MASSIMO_CUBE_ADDRESS`,
+which wins for that Cube;
 the plain form applies to any Cube unless the table says otherwise.
 
 | Variable (per-Cube form) | Meaning |
@@ -1376,14 +1371,15 @@ lists Cubes it finds that are not configured in the API (`GET /api/v1/cubes`
 with `"configured": false`),
 keeps them in the store so that they are still listed after a restart,
 and logs a configured Cube that answers from another address than configured,
-once until that changes, and gives it as the Cube's `found_elsewhere` in the API.
+once until that changes,
+and gives it as the Cube's `found_elsewhere` in the API.
 A lost Cube is searched for at once and every minute until it is back,
 one with a fixed address only where the interval is not `0`,
 and followed to its new address where it follows discovery.
 `-poll`, `-refresh` and `-discover-interval` win for one run over the store's
 settings `poll_interval`, `refresh_interval` and `discover_interval`,
-and `-stale-after` over `stale_after` and `stale_after_wall`
-(`duty_wait`, how long radio commands wait at a used-up duty cycle, has no flag),
+and `-stale-after` over `stale_after` and `stale_after_wall` (`duty_wait`,
+how long radio commands wait at a used-up duty cycle, has no flag),
 also below the hour the API allows, so that a test sees a thermostat go stale;
 the settings then name the flag (`fixed_by`),
 and System settings → Maintenance shows those intervals read-only.
