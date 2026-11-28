@@ -7,7 +7,7 @@ where there is room, and a Cube's panel in two columns."""
 from helpers import ApiReads, boxes, named_buttons, scroll_settled, scroll_width, show_view, wait_until
 
 CARDS = ["sys-cubes", "sys-users", "sys-providers", "sys-integrations", "sys-roles", "sys-caps", "sys-backup"]
-MAINT_CARDS = ["sys-software", "sys-maint"]  # Maintenance's page (AP GlobalMenu, Block 4)
+MAINT_CARDS = ["sys-software", "sys-maint", "sys-limits"]  # Maintenance's page (AP GlobalMenu, Block 4; Limits, AP ServerLimits)
 
 
 def card_ids(page):
@@ -49,12 +49,12 @@ def test_cards_and_contents(page, case):
 
 
 def test_maintenance_page_cards(page, case):
-    """Maintenance's page holds Software update and Maintenance, as wide as
-    the page, each with an item in its sections menu; System settings has
-    neither."""
+    """Maintenance's page holds Software update, Maintenance and Limits, as
+    wide as the page, each with an item in its sections menu; System
+    settings has none of them."""
     show_view(page, "maint")
     got = page.evaluate("[...document.querySelectorAll('#maint-page .section-card')].map((c) => c.id)")
-    assert got == MAINT_CARDS, f"Software update, then Maintenance: {got}"
+    assert got == MAINT_CARDS, f"Software update, Maintenance, then Limits: {got}"
     menu = page.locator("#maint-page .sec-menu")
     menu.locator("summary").click()
     toc = menu.locator(".toc-link")
@@ -63,7 +63,7 @@ def test_maintenance_page_cards(page, case):
     page_box, *cards = boxes(page, "#maint-page", *("#" + card for card in MAINT_CARDS))
     for card, b in zip(MAINT_CARDS, cards):
         assert b["width"] >= page_box["width"] - 2, f"{card} as wide as the page: {b['width']} of {page_box['width']}"
-    assert page.locator("#system #sys-software, #system #sys-maint").count() == 0, "neither in System settings"
+    assert page.locator("#system #sys-software, #system #sys-maint, #system #sys-limits").count() == 0, "none in System settings"
     assert scroll_width(page) <= case.width, "no horizontal scroll on Maintenance"
 
 

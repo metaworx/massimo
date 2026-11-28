@@ -6,7 +6,8 @@
  *
  * What Maintenance → Maintenance is drawn from, read and sent, line for
  * line as maintenance.js did: the announcement on the LAN and the Cube
- * intervals (GET and PUT /api/v1/settings, each saved at once), the
+ * intervals (GET and PUT /api/v1/settings, each saved at once), and the
+ * Limits card's window limits read with them (AP ServerLimits), the
  * settings file read again (POST /api/v1/reload), the server's restart
  * (GET and POST /api/v1/restart) with what waits for the next start and
  * what that start refuses, every Cube read again at once (POST
@@ -15,7 +16,9 @@
  * reboot each followed by /healthz every two seconds until the server
  * reports a new start. While Maintenance is shown, an event of the
  * stream that says one of these changed reads it again
- * (serverEvent). The state is what the section shows, live, so that the part draws it in place; an answer after a
+ * (serverEvent); a window limit set, from any page, reads the rooms
+ * again whatever page is shown, so that the tiles' signs follow at once
+ * (AP ServerLimits, D5-A). The state is what the section shows, live, so that the part draws it in place; an answer after a
  * sign-out is dropped (shared/session.ts), and a sign-out ends what
  * follows the server while it is away.
  */
@@ -85,14 +88,21 @@ export const reboot = live({
 /** The reboot's question in place of its button, and the delay it names. */
 export const rebootAsk = live({ asking: false, delay: 0 });
 
-/** The settings of the card, for a holder of settings, as GET /api/v1/settings answered them. */
+/** How a row's last change went, or, with read, that the settings' last read failed, which a read that succeeds takes back. */
+type Said = Outcome & { read?: boolean };
+
+/** The settings of the cards, Maintenance's and Limits', for a holder of settings, as GET /api/v1/settings answered them. */
 export const settings = live({
   announce: null as Setting | null,
   intervals: {} as Record<string, Setting | null>,
+  /** The Limits card's settings, by their keys (AP ServerLimits). */
+  limits: {} as Record<string, Setting | null>,
   /** How the announcement's last change went, or why the settings could not be read. */
-  announceSaid: null as Outcome | null,
+  announceSaid: null as Said | null,
   /** How each interval's last change went, by its setting. */
   intervalSaid: {} as Record<string, Outcome | null>,
+  /** How each limit's last change went, or why the settings could not be read, by its setting. */
+  limitSaid: {} as Record<string, Said | null>,
 });
 
 /** One of the Cube intervals of the card (AP CubePoll v1.0, D119-B). */
@@ -118,6 +128,56 @@ export const INTERVALS: Interval[] = [
   // budget is read again (AP LegacyLogs v1.0, D143-A).
   { key: "duty_wait", id: "interval-duty", title: "maint.dutyWait", hint: "maint.dutyWaitHint", steps: [60, 300, 600, 900, 1800, 3600] },
 ];
+
+/**
+ * One of the Limits card's rows (AP ServerLimits): a duration the server
+ * applies at once, chosen from steps, its default a choice of its own,
+ * which is sent as null. notAbove and notUnder name the setting whose
+ * value in effect it may not be above or under, equal allowed, as the
+ * server refuses it (D4-A); rooms says that the server gives the rooms'
+ * devices their times by it, so that a change reads the rooms again (D5-A).
+ */
+export interface LimitSetting {
+  /** The setting. */
+  key: string;
+  /** Its select's id. */
+  id: string;
+  /** Its title's text key. */
+  title: string;
+  /** The text key of what it does. */
+  hint: string;
+  /** The steps offered in seconds, within the API's range. */
+  steps: number[];
+  /** The setting whose value in effect it may not be above. */
+  notAbove?: string;
+  /** The setting whose value in effect it may not be under. */
+  notUnder?: string;
+  /** The rooms' devices take their times by it. */
+  rooms?: boolean;
+}
+
+/** WINDOW_STEPS are the window limits' steps in seconds: 1, 2, 3, 5, 10, 15, 20, 30 and 45 min, 1, 2, 4, 8, 12 and 24 h, the API's 1 min to 24 h. */
+const WINDOW_STEPS = [60, 120, 180, 300, 600, 900, 1200, 1800, 2700, 3600, 7200, 14400, 28800, 43200, 86400];
+
+/** LIMITS are the Limits card's rows, in its order: how long a window may stay open before its sign warns, and before it alerts, never before the warning (D2-A, D4-A). */
+export const LIMITS: LimitSetting[] = [
+  { key: "window_warn_after", id: "limit-window-warn", title: "limits.windowWarn", hint: "limits.windowWarnHint", steps: WINDOW_STEPS, notAbove: "window_alert_after", rooms: true },
+  { key: "window_alert_after", id: "limit-window-alert", title: "limits.windowAlert", hint: "limits.windowAlertHint", steps: WINDOW_STEPS, notUnder: "window_warn_after", rooms: true },
+];
+
+/** LIMIT_DEFAULT is the value of a limit's first choice, the server's default, sent as null (D3-A). */
+export const LIMIT_DEFAULT = "default";
+
+/**
+ * limitRefused reports whether the server would refuse sec for the
+ * limit: above the value in effect of the setting it may not be above,
+ * or under that of the one it may not be under; equal is allowed. Nothing
+ * is refused while the other is not read (D4-A).
+ */
+export function limitRefused(lim: LimitSetting, sec: number): boolean {
+  const inEffect = (key?: string) => (key ? parseGoDuration(settings.limits[key]?.in_effect) : NaN);
+  return sec > inEffect(lim.notAbove) || sec < inEffect(lim.notUnder); // false against NaN
+}
 
 /** The timers following the server: the restart's step, the reboot's wait or step. */
 const timers = { restart: 0 as ReturnType<typeof setTimeout> | 0, reboot: 0 as ReturnType<typeof setTimeout> | 0 };
@@ -225,7 +285,13 @@ function backAt(key: string, now: string): Say {
 
 // --- the settings of the card (with settings) ----------------------------
 
-/** loadSettings reads the announcement and the Cube intervals, for a holder of settings. */
+/**
+ * loadSettings reads the announcement, the Cube intervals and the limits,
+ * in one read, for a holder of settings. A read that fails says so under
+ * the announcement, and on the Limits card's rows, each that does not
+ * say already that its own change failed; a read that succeeds takes
+ * back what a failed one said there, and leaves a change's outcome.
+ */
 export async function loadSettings(mine: () => boolean = () => true): Promise<void> {
   if (!can("settings")) return;
   const n = session();
@@ -236,8 +302,25 @@ export async function loadSettings(mine: () => boolean = () => true): Promise<vo
     const iv: Record<string, Setting | null> = {};
     for (const x of INTERVALS) iv[x.key] = all[x.key] || null;
     settings.intervals = iv;
+    const lim: Record<string, Setting | null> = {};
+    for (const x of LIMITS) lim[x.key] = all[x.key] || null;
+    settings.limits = lim;
+    if (settings.announceSaid?.read) settings.announceSaid = null;
+    if (LIMITS.some((x) => settings.limitSaid[x.key]?.read)) {
+      const rows = { ...settings.limitSaid };
+      for (const x of LIMITS) if (rows[x.key]?.read) rows[x.key] = null;
+      settings.limitSaid = rows;
+    }
   } catch (e) {
-    if (stillSession(n) && mine()) settings.announceSaid = { text: t("maint.cannotAsk", { error: (e as Error).message }), ok: false };
+    if (!stillSession(n) || !mine()) return;
+    const said: Said = { text: t("maint.cannotAsk", { error: (e as Error).message }), ok: false, read: true };
+    settings.announceSaid = said;
+    const rows = { ...settings.limitSaid };
+    for (const x of LIMITS) {
+      const was = rows[x.key];
+      if (!was || was.ok || was.read) rows[x.key] = said; // a change that failed keeps its own line
+    }
+    settings.limitSaid = rows;
   }
 }
 
@@ -280,6 +363,36 @@ async function putInterval(iv: Interval, sec: number): Promise<void> {
     said = { text: t("maint.intervalFailed", { error: (e as Error).message }), ok: false };
   }
   settings.intervalSaid = { ...settings.intervalSaid, [iv.key]: said };
+}
+
+/**
+ * saveLimit stores a limit's choice: its default sent as null, a step in
+ * seconds as a duration; it says how it went. A change that failed reads
+ * the settings again once it has ended: the server refuses a step by the
+ * other limit's value in effect, which may have changed since the page
+ * read it (D4-A); a change made meanwhile drops that read's answer.
+ */
+export async function saveLimit(lim: LimitSetting, choice: string): Promise<void> {
+  if (!(await own(owns.settings, () => putLimit(lim, choice)))) loadSettings(eventMine(owns.settings));
+}
+
+/** putLimit is saveLimit's request, false where it failed for the session that sent it: the answer gives every limit again, the other's value in effect among them, which the steps refused follow. */
+async function putLimit(lim: LimitSetting, choice: string): Promise<boolean> {
+  const n = session();
+  let said: Outcome;
+  try {
+    const all = (await api<Record<string, Setting>>("PUT", "api/v1/settings", { [lim.key]: choice === LIMIT_DEFAULT ? null : apiDuration(Number(choice)) })) || {};
+    if (!stillSession(n)) return true;
+    const next = { ...settings.limits };
+    for (const x of LIMITS) next[x.key] = all[x.key] || next[x.key] || null;
+    settings.limits = next;
+    said = { text: t("limits.saved"), ok: true };
+  } catch (e) {
+    if (!stillSession(n)) return true;
+    said = { text: t("limits.failed", { error: (e as Error).message }), ok: false }; // a refusal in the page's language (AP ErrorCodes)
+  }
+  settings.limitSaid = { ...settings.limitSaid, [lim.key]: said };
+  return said.ok;
 }
 
 // --- the settings file and the restart (with restart) --------------------
@@ -606,8 +719,11 @@ function followReboot(at: number): void {
   timers.reboot = setTimeout(step, RESTART_POLL_MS);
 }
 
-/** SHOWN_SETTINGS are the settings the card shows: a change event that sets one reads them again. */
-const SHOWN_SETTINGS = ["announce", ...INTERVALS.map((iv) => iv.key)];
+/** SHOWN_SETTINGS are the settings the cards show: a change event that sets one reads them again. */
+const SHOWN_SETTINGS = ["announce", ...INTERVALS.map((iv) => iv.key), ...LIMITS.map((l) => l.key)];
+
+/** ROOM_SETTINGS are the limits the rooms' devices take their times by: a change event that sets one reads the rooms again (D5-A). */
+const ROOM_SETTINGS = LIMITS.filter((l) => l.rooms).map((l) => l.key);
 
 /**
  * The card's reads for the stream's events, one at a time while
@@ -637,11 +753,16 @@ function pendingOf(ev: ServerEvent): void {
 }
 
 /**
- * serverEvent reads again, while Maintenance is shown, what an event of
- * the stream says has changed: everything the card shows at a resync of
- * the stream, which is how the page learns of a restart (the server's
- * start is written before any stream opens); the announcement or an
- * interval set (change); a reboot asked for, begun, failed or taken back
+ * serverEvent reads the rooms again, whatever page is shown, where a
+ * change event says a window limit was set, here or elsewhere: the
+ * server gives each open window its times by the limits, and sends no
+ * state event for a change of them, so the tiles' signs follow at once
+ * (app.js loadRooms; AP ServerLimits, D5-A). While Maintenance is
+ * shown it reads again what an event of the stream says has changed:
+ * everything the cards show at a resync of the stream, which is how the
+ * page learns of a restart (the server's start is written before any
+ * stream opens); the announcement, an interval or a limit set (change);
+ * a reboot asked for, begun, failed or taken back
  * (reboot, reboot_cancelled); a settings_read event at info says itself
  * what waits for the next start, and that the start refuses nothing; one
  * at warn or above, a read that found the next start refuses something
@@ -652,8 +773,10 @@ function pendingOf(ev: ServerEvent): void {
  * timer.
  */
 export function serverEvent(ev: ServerEvent): void {
+  const set = settingsChanged(ev);
+  if (set.some((k) => ROOM_SETTINGS.includes(k))) loadRooms().catch(() => {}); // a failure is the next poll's or event's
   if (!isShown("maint")) return;
-  if (settingsChanged(ev).some((k) => SHOWN_SETTINGS.includes(k))) reader("settings");
+  if (set.some((k) => SHOWN_SETTINGS.includes(k))) reader("settings");
   if (ev.kind === "resync") reader("settings", "restart", "reboot");
   else if (ev.kind === "settings_read" && ev.level && ev.level !== "info") reader("restart");
   else if (ev.kind === "settings_read") pendingOf(ev);
@@ -664,6 +787,7 @@ export function serverEvent(ev: ServerEvent): void {
 export function quiet(): void {
   settings.announceSaid = null;
   settings.intervalSaid = {};
+  settings.limitSaid = {};
   if (!refreshNow.running) refreshNow.said = {}; // a run under way keeps saying how it goes
 }
 
@@ -672,7 +796,7 @@ export function quiet(): void {
  * signed in (MassimoParts.signedOut): the following of a restart or a
  * reboot ends with its timers, the questions go, the delay typed is 60
  * again, the Cubes' reads say nothing, and the restart's, the reboot's
- * and the settings' rows are read again for the next user.
+ * and the settings' rows, the limits' among them, are read again for the next user.
  */
 export function forgetMaintenance(): void {
   if (timers.restart) clearTimeout(timers.restart);
@@ -688,5 +812,5 @@ export function forgetMaintenance(): void {
   restartAsk.asking = false;
   rebootAsk.asking = false;
   Object.assign(refreshNow, { running: false, said: {} });
-  Object.assign(settings, { announce: null, intervals: {}, announceSaid: null, intervalSaid: {} });
+  Object.assign(settings, { announce: null, intervals: {}, limits: {}, announceSaid: null, intervalSaid: {}, limitSaid: {} });
 }

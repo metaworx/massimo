@@ -1008,9 +1008,11 @@ REGIONS = (
         View("Maintenance", maint),
         View("Update asking, the channel's choice above it", software_question, "#update-channel"),
     ), sources=("MassimoParts.software.load(false)", "the page shown again: maint", "the stream's events: resync change")),
-    Region("maintenance", ("#sys-maint-body",), (
+    # Maintenance's card and the Limits card beside it, one region (AP ServerLimits, Block 1)
+    Region("maintenance", ("#sys-maint-body", "#sys-limits-body"), (
         View("Maintenance", maint),
         View("the restart asking, a delay typed for the reboot", maint_question),
+        View("a window limit's choice in focus", maint, "#limit-window-warn"),
     ), sources=("the page shown again: maint", "the stream's events: resync change reboot reboot_cancelled settings_read")),
     Region("system-info", ("#sys-info-body",), (View("System info, its folds open, a licence among them", info),), sources=("the page shown again: info", "the stream's events: resync settings_read change.cube")),
     # the settings applied again, as when the user's arrive from the server at a sign-in, are one of SOURCES
@@ -1200,7 +1202,8 @@ GUARD_JS = r"""() => {
     }
     if (source.startsWith("the stream's events: ")) {
       // what the server sends when what the region shows changed; a change sets every setting the regions show
-      const set = { "update.channel": null, announce: null, poll_interval: null, refresh_interval: null, discover_interval: null, duty_wait: null };
+      const set = { "update.channel": null, announce: null, poll_interval: null, refresh_interval: null, discover_interval: null, duty_wait: null,
+        window_warn_after: null, window_alert_after: null };
       // change.cube is a change of a Cube, whose proxy System info lists
       const summary = { change: { action: "settings.update", set }, "change.cube": { action: "cube.update", target: "cube:KEQ0000100" },
         settings_read: { why: "SIGHUP", changed: [], at_next_start: [] } };

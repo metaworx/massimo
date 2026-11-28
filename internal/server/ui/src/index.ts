@@ -91,7 +91,8 @@ export interface MassimoParts {
   /**
    * A server's event of the stream (app.js connectEvents): Software update, Maintenance and System info read
    * again what it says has changed while their page is shown, and a
-   * Cube's log shown loads again at a resync (log/).
+   * Cube's log shown loads again at a resync (log/); a window limit set
+   * reads the rooms again on every page (maintenance/, AP ServerLimits).
    */
   serverEvent(ev: ServerEvent): void;
   /** The rule a new password is held to (shared/password.tsx): "too_short", "too_long" or "" for one it takes, as Go's internal/password answers its testdata/cases.json; the UI test gives it every case. */
