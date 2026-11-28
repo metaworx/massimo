@@ -31,9 +31,13 @@ resolve as the server's page resolves its own (`ui/style.css`,
 The page carries its Content-Security-Policy in a `<meta>` element as well,
 since the shell's copy is served without the server's header.
 
-What the page shows:
+What the page shows, the cards at the page's full width,
+up to the 1100 px of a server's page (AP MobileApp, D92-A):
 
-- **the servers**, in the order saved,
+- **the servers**, sorted by the name shown (the server's name, else its
+  address) in the collation of the page's language, case and accents
+  ignored and numbers by their value, "server 9" before "server 10",
+  the order saved left as it is (D95-A),
   each with its name, its address where it is not the name,
   what the probe found
   (on the LAN, remote, not reachable, or a changed certificate),
@@ -44,12 +48,22 @@ What the page shows:
   a server with a kept login has the sign-in icon on its row,
   the mirror of the sign-out icon, labelled "Sign in with password or key",
   which opens its sign-in card at once, without the prompt;
-- **the list's ☰**: **Add server…**; **Sign out of all**, where there is a
+- **the list's ☰**, in the header at the logo's right, where a server's
+  page has its ☰ (D90-A): first the app's version (`about`, version 7),
+  Massimo's mark and the build's version with its copy icon,
+  a tap on either copying it whole and closing ☰;
+  after a rule **Add server…**; **Sign out of all**, where there is a
   server; **Forget all stored credentials**, where a server has a kept login,
   which asks first, in the card under the list, and turns every kept login
   off as **Turn off** does, its toast naming the servers that keep a key,
   left to revoke at the next sign-in or listed at the server alone;
-  **App settings…**;
+  after a rule **App settings**, without "…" since it only opens a card
+  (D96-A); and **Exit** (`exit`, version 7, Android), which ends the app as a
+  swipe from the recent apps does: the sessions held in memory dropped, each
+  one recorded as held ended by its revoke code at the next start's contact,
+  nothing sent to a server, the app out of the recent apps (D91-A).
+  The Servers card keeps ↻ alone; pulling the list down in the app,
+  at its top, does what ↻ does (the event `refresh`, version 7);
 - **add a server**, a card shown while the list is empty,
   or from the ☰ with × at its top right until a server is added:
   the servers discovery finds as they arrive, its search started as the card
@@ -65,36 +79,92 @@ What the page shows:
   An address typed that is not one is said under the field,
   and a server's open settings keep their own line;
 - **a server's settings**, which take the focus themselves, not the name's
-  field, for the keyboard's sake: the name, the LAN and the remote address,
-  **Open at start** (`start`: the app opens this server at its start, in
-  place of the list; one server at most, the first added until the user
-  chooses),
-  "Ask for the fingerprint" (`ask`: each time the app comes back, when the
-  app starts, or only after a logout),
-  the session the app holds there with its user and **Sign out** (`session`),
-  the certificate of an HTTPS address in use, its subject's name and its end,
-  with **Certificate…**, a dialog with its subject, issuer, names, validity,
-  SHA-256 fingerprint and since when it is trusted (`trusted_at`),
-  the login by fingerprint with the user's name and **Turn off** where one
-  is kept (`login`),
-  a line for each key of the phone's still valid there, its id and user,
-  with **Show in My profile**, which opens the server's page at My profile
-  with the key marked (`unrevoked`), off while the probe finds the server
-  at neither address, its title saying why (AP MobileApp, F33),
-  "Notify me on this phone" (`push`, where the app has push),
-  Cancel and Save, and under them, after a rule, **Remove server** on a
-  line of its own (F34), with a line saying what it does:
-  the server leaves the list, and where it answers the phone is signed out
-  there first, a kept login turned off first as **Turn off** does;
-  its question says so and warns of a key left,
-  its toast naming the keys still valid there;
+  field, for the keyboard's sake: a head with the server's name and a
+  labelled ✕, which closes them as Back does, and three sections switched by
+  a row of tabs in the look of the server's settings pages, their names
+  alone, with the roles of a tab list (AP MobileApp, D111-A),
+  all built as the settings open and hidden but the one shown,
+  so that what is typed outlives a switch; Connection first:
+  - **Connection**, the form: the name, the LAN and the remote address,
+    **Open at start** (`start`: the app opens this server at its start, in
+    place of the list; one server at most, the first added until the user
+    chooses), "Notify me on this phone" (`push`, where the app has push),
+    "Ask for the fingerprint" (`ask`: each time the app comes back, when the
+    app starts, or only after a logout);
+    Cancel and Save, off while the form holds what is kept, compared field
+    by field at each input, Cancel giving the fields what is kept again
+    (D94-A), its tab carrying the "changed here" disk while it differs;
+    a field still holding what the settings opened with takes what is kept
+    where it changed meanwhile (a name discovery heard, a LAN address found
+    again), no change of the user's;
+    and under them, after a rule, **Remove server** on a
+    line of its own (F34), with a line saying what it does:
+    the server leaves the list, and where it answers the phone is signed out
+    there first, a kept login turned off first as **Turn off** does;
+    its question says so and warns of a key left,
+    its toast naming the keys still valid there;
+  - **Login**, no form, each line acting at once:
+    the session the app holds there with its user and **Sign out** (`session`),
+    the login by fingerprint with the user's name and **Turn off** where one
+    is kept (`login`), or **Store login** where the app holds a session there
+    and keeps no login (`keep`, version 7): the key made with that session at
+    the address the probe found and the fingerprint asked once, as a sign-in
+    that keeps the login makes it, off while the server does not answer,
+    where the phone has no strong biometric enrolled (`about`'s `can`) and
+    at an address of plain HTTP outside the private ranges, its title saying
+    why, its toast saying the login is kept;
+    a line for each key of the phone's still valid there, its id and user,
+    with **Show in My profile**, which probes the server first, waiting for
+    a newer probe that replaces its own, and opens
+    the server's page at My profile with the key marked (`unrevoked`) only
+    where it answers now, else says in the toast that it does not answer
+    (D108-A), off while the probe finds the server
+    at neither address, its title saying why (AP MobileApp, F33),
+    and for each session left (`unended`); a line where there is none of
+    these; its tab carries a dot, named for a screen reader, while a key or
+    a session is left there;
+  - **Certificate**, no form: the certificate of an HTTPS address in use,
+    in place (`tpl-cert`), its address, subject, issuer or "self-signed",
+    names, validity, SHA-256 fingerprint and since when it is trusted
+    (`trusted_at`); until a probe has answered, that the certificate shows
+    once the server answers; where the certificate changed, the one trusted
+    and the new one; where the server does not answer, the fingerprint pinned
+    and since when, or where none is, that the certificate shows once the
+    server answers; over plain HTTP, that there is none.
+
+  Back or ✕ while Connection differs from what is kept shows Connection and
+  asks there once (D93-A, below); the other ways the settings close
+  (another server's cog, a tap on a row) close them without asking;
 - **App settings**, from the ☰, with ×: **Appearance**, as the phone, light
   or dark, for the list and for every server's page whose own appearance is
   "as the system" (`settings`);
+- **Back** (Android): a menu or a panel that opens (☰, a server's settings,
+  the Add card from the ☰, App settings) pushes a history entry of the
+  page's own, the address unchanged, from half a second after the page's
+  load on, once the adapter has forgotten the pages before the list,
+  which it does at the list's own load alone (`onPageFinished` after an
+  `onPageStarted`), and once the user has touched the page
+  (`navigator.userActivation`): an entry a page adds before that is one the
+  WebView's Back passes over, as Chromium's history intervention marks it,
+  so that a panel opened at the start by the app's handover has its entry
+  at the first touch;
+  the adapter's Back (`web.goBack()`, on while the WebView can go back)
+  reaches the page as a `popstate`, which closes the open menu first, then
+  the panel opened last, the fingerprint sheet before them, as its Cancel
+  does; a server's settings whose Connection differs from
+  what is kept show Connection and ask once, in place of its Cancel and Save,
+  the focus on the question:
+  **Discard**, or **Stay**, which pushes the entry again (D93-A);
+  a menu or a panel closed by other means takes its entry back,
+  so that with nothing open there is none, and Back leaves the app;
 - **what a server's ☰ asked for**: the page loaded with `#settings=<id>`
   opens that server's settings at its start and takes the fragment from the
   address, an id not in the list opening nothing; with `#app-settings`,
   App settings (version 5, `openServerSettings` and `openAppSettings`);
+  with `#unreachable=<id>`, where that server's page failed to load
+  (version 7), the page probes that server at its start and says in the
+  toast that it does not answer, with the probe's reason, as a tap's failed
+  probe does, the toast tied to the server;
   the adapter loads it so at the bridge's handover alone: a page's own link
   or script to the page loads it without its fragment (Android
   `shouldOverrideUrlLoading`, `Origins.byPage`), a form posted there, which
@@ -123,7 +193,7 @@ the page sees only what follows.
   and neither platform's channel answers synchronously.
   A failed call rejects with an `Error` whose message the page shows as it is.
 - **Values are JSON**: objects, arrays, strings, numbers, booleans and `null`.
-- **`massimo.version`** is the contract's version, the number `6`.
+- **`massimo.version`** is the contract's version, the number `7`.
   A later version adds calls and fields; the page tests for what it uses
   (`massimo.login`, `massimo.session`, `massimo.settings`, `massimo.core`,
   `massimo.push`) rather than for a version.
@@ -160,6 +230,14 @@ the page sees only what follows.
   the answers of `signOut`, `forget`, `forgetAll` and `remove` saying what
   waits for its code (`pending`); `session` posting the server's codes
   before its check; and a fingerprint tap's session checked at once.
+  Version 7 (AP MobileApp v1.6, Block 19) adds on the connect page
+  `about()`, the app's version, `exit()`, the list's Exit,
+  `keep(id, url)`, Store login, the event `refresh`, the list pulled
+  down, and the handover `#unreachable=<id>`: a server's page whose main
+  frame fails to load gives way to the list (Android `onReceivedError` for
+  the opened server's origin, the opening dropped; AP MobileApp, D108-A),
+  so that no way into a server's page ends on the WebView's own error page;
+  a certificate refused keeps its own dialog.
 - **Where the bridge exists, and with what:**
   - on the connect page, the shell's own origin: every call below
     but `token` and `setToken`;
@@ -191,6 +269,9 @@ the page sees only what follows.
 | `signOutAll()` | `null` | the same for every server the app holds a session for, at the address that answers with its node, the LAN one first; each forgotten at once |
 | `settings()` | the app's settings | reads them (below) |
 | `saveSettings(s)` | the app's settings as saved | keeps what `s` gives, the rest as it was, and applies it; an appearance that is none is refused |
+| `about()` | `{version, can}` | the app's version, the build's `versionName` (Android), which the list's ☰ shows first, and `can`, whether the phone has a strong biometric enrolled, as `login.status()`'s, which Store login needs; asked again as a server's settings open (version 7) |
+| `exit()` | `null` | ends the app as a swipe from the recent apps does (version 7; AP MobileApp, D91-A): drops the sessions held in memory, each one recorded as held moving into its server's `unended` with its revoke code at once (`MassimoApp.exit`), sends nothing to a server from then on, a check the page asked for just before among it, answers the page no more, and ends the task (`finishAndRemoveTask`); the codes go at the next start's contact. Android only |
+| `keep(id, url)` | `true`, or `false` | Store login (version 7): keeps the login by fingerprint for the session the app holds for the server at `url`, one of its addresses without a fragment, the one the probe found, as `login.keep` does for a server's page: the user from `GET /api/v1/me`, a key of the user's made with the session (`POST /api/v1/users/{name}/tokens`, labelled with the phone), the fingerprint asked once and the key sealed under the app key with its revoke code beside its id; `false`, nothing kept and the key revoked again, where the prompt was not passed; never over plain HTTP outside the private ranges; refused without a session held there |
 | `core.start()`, `core.stop()`, `core.status()` | the core's status | the server on the phone (Block 7); absent where it is not built in |
 | `push` | | push to this phone (Block 8); absent where the app has none |
 
@@ -284,6 +365,7 @@ on the page the event is for, `detail.type` naming it:
 |---|---|---|
 | `found` | `service`: `name`, `host` (an address, IPv6 without brackets, or a name), `port`, `node`, `version`, `tls` (a boolean), `fp` | discovery resolved a server: `host` and `port` from its SRV and address records, the rest from its TXT record (`name`, else the instance's name; `node`; `v`; `tls=1`; `fp`, with TLS) |
 | `network` | | the phone's network changed (Android `ConnectivityManager`, iOS `NWPathMonitor`); the page probes again |
+| `refresh` | | the list pulled down at its top (version 7; Android, the WebView in a `SwipeRefreshLayout`, on while the connect page is shown, its spinner stopping as the event is sent); the page probes every server again as ↻ does, ↻ turning meanwhile |
 | `core` | `status`, as `core.status()` | the server on the phone started or stopped (Block 7) |
 | `notification` | | Block 11 |
 
@@ -340,8 +422,8 @@ An unknown `type` is ignored by the page.
   **Sign out** calls `signOut(id, url)` with the address the probe chose,
   and **Sign out of all** `signOutAll()`.
 - **The certificate.**
-  The probe's result at the address in use gives a server's settings the
-  certificate's line and dialog; "trusted since" is `trusted_at` where the
+  The probe's result at the address in use gives a server's settings their
+  Certificate section; "trusted since" is `trusted_at` where the
   certificate is the one pinned, and the phone's certificate authorities
   where none is pinned.
 - **The login by fingerprint** is the next section's:
@@ -351,7 +433,11 @@ An unknown `type` is ignored by the page.
   the row's sign-in icon with `open(id, url, {signIn: true})`;
   an opening that rejects reads the list again, a kept key refused being gone;
   **Turn off** calls `forget(id, url)` with the address the probe chose,
-  and "Forget all stored credentials" `forgetAll()`.
+  and "Forget all stored credentials" `forgetAll()`;
+  a Turn off or a Sign out the server did not answer, and a Remove that
+  failed, probe the server again, so that what needs it turns off at once;
+  a tap opens where the last probe found the server, its page coming back
+  to the list where it fails to load (D109-A).
 - **The keys left.**
   A server's settings show each of its `unrevoked` keys,
   and **Show in My profile** opens `<address>#profile?key=<id>` at the
@@ -507,8 +593,8 @@ under My profile → Sessions and keys by the phone's name, ends the session.
   moves into `unended`, a swipe from the recent apps and Android ending a
   hidden app alike, and the next session there for that user ends it;
   a sealed session is still held, and stays.
-  `MassimoApp.exit` moves them so at once, for the list's Exit,
-  which AP MobileApp's Block 19 adds.
+  `MassimoApp.exit` moves them so at once, for the list's Exit
+  (`exit`, version 7).
   A fingerprint tap's session is checked at once, as `setToken` checks a
   page's, one more `GET /api/v1/me`, so that its id is known before
   anything can forget it; a check's failure goes to the phone's log,
@@ -641,6 +727,10 @@ its version 5 keeps a server's `unended`: a session it forgets without
 reaching the server is left by the id the test's `sessionIds` gives,
 `remove` signs out first and answers `sessions`,
 and a session found revokes the sessions left there for its user too.
+Its version 7 answers `about` with the test's `appVersion` and `canStrong`,
+records `exit`, and keeps a login at `keep` as the test's `storeLogin`
+answers, a server without a session refusing it;
+its `contract` 6 leaves those three out, an app before version 7.
 Its `open` answers a tap at a server with a kept login with the test's
 `openLogin`, as a prompt, and `{signIn: true}` at once;
 a server's page has `openServerSettings` and `openAppSettings`, whether the

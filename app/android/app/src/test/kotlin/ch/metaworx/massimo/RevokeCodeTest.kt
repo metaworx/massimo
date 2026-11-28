@@ -19,6 +19,7 @@ import java.net.InetSocketAddress
 import java.security.cert.CertificateException
 import java.time.Duration
 import java.time.Instant
+import java.util.concurrent.atomic.AtomicBoolean
 
 /**
  * The revoke codes (AP MobileApp, D112-A, D116-A): a token's code as the
@@ -113,6 +114,40 @@ class RevokeCodeTest {
         posted.clear()
         assertFalse(codes.post(servers.get(s.id)!!, base))
         assertEquals(later, servers.get(s.id)!!.unended[1].code)
+    }
+
+    @Test
+    fun nothingIsPostedOnceTheListsExitStopped() {
+        // AP MobileApp, Block 19 (D91-A): from Exit on the codes wait for the next start
+        val servers = ServerStore(File(tmp.root, "servers.json"))
+        val gone = GoneStore(File(tmp.root, "gone.json"))
+        val probe = { urls: List<String>, _: String? -> urls.map { u -> ProbeResult(u, ok = u == base, node = "node-a") } }
+        val exited = AtomicBoolean(false)
+        val codes = Codes(servers, gone, api, probe, logged::add, exited::get)
+        val s = servers.save(JSONObject().put("name", "Home").put("node", "node-a").put("lan", base))
+        val first = RevokeCode.of("first")
+        val second = RevokeCode.of("second")
+        servers.leave(s.id, "anna", 42, first)
+        servers.leave(s.id, "anna", 43, second)
+        exited.set(true)
+        assertFalse(codes.post(s, base))
+        assertTrue("nothing posted once stopped", posted.isEmpty())
+        assertEquals(listOf(first, second), servers.get(s.id)!!.codes())
+        gone.add(servers.get(s.id)!!, listOf(GoneCode(first, session = false)))
+        codes.postGone()
+        assertTrue("nor a removed server's", posted.isEmpty())
+        // a stop between two codes: the first posted, the second waits
+        exited.set(false)
+        server.removeContext("/massimo/api/v1/tokens/revoke")
+        server.createContext("/massimo/api/v1/tokens/revoke") { ex ->
+            synchronized(posted) { posted.add(JSONObject(ex.requestBody.readBytes().toString(Charsets.UTF_8)).optString("code")) }
+            exited.set(true)
+            ex.sendResponseHeaders(204, -1)
+            ex.close()
+        }
+        assertTrue(codes.post(servers.get(s.id)!!, base))
+        assertEquals(listOf(first), posted)
+        assertEquals("the second waits for the next start", listOf(second), servers.get(s.id)!!.codes())
     }
 
     @Test

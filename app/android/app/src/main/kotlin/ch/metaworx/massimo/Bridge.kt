@@ -11,14 +11,16 @@ import org.json.JSONObject
 import java.io.IOException
 import java.util.concurrent.Executor
 import java.util.concurrent.RejectedExecutionException
+import java.util.concurrent.atomic.AtomicBoolean
 import java.util.concurrent.atomic.AtomicReference
 
 /**
  * Bridge is the native side of `window.massimo` (docs/app.md, contract
- * version 6): it takes the messages of the page's script (res/raw/bridge.js),
+ * version 7): it takes the messages of the page's script (res/raw/bridge.js),
  * checks who sent each by its origin, and answers it. The connect page gets
- * the calls of the server list, the sessions the app holds and the app's
- * settings; a server's page only its own session, its login by fingerprint
+ * the calls of the server list, the sessions the app holds, the app's
+ * settings and version, Store login and Exit; a server's page only its own
+ * session, its login by fingerprint
  * and the ways back to the list, to its settings there and to the app's.
  * The login's key never reaches a page: the
  * bridge makes and holds it and hands a page the session alone, each login
@@ -26,7 +28,9 @@ import java.util.concurrent.atomic.AtomicReference
  * step. Turn off, Remove and Forget all are the [Revoker]'s, and the keys
  * and sessions they leave valid are [left]'s; their revoke codes are posted
  * at each contact by [codes] (contract version 6, D112-A), a removed
- * server's kept in [gone].
+ * server's kept in [gone]. [exited] is set by the list's Exit, which
+ * [sessions] and [codes] are given too, so that nothing more of this
+ * activity's goes to a server.
  */
 class Bridge(
     private val host: Host,
@@ -46,6 +50,8 @@ class Bridge(
     private val texts: Texts,
     private val log: Logger,
     private val keyLabel: String,
+    private val version: String,
+    private val exited: AtomicBoolean,
     private val io: Executor,
     private val main: Handler,
 ) {
@@ -62,6 +68,15 @@ class Bridge(
 
         /** appearance gives the app the appearance saved, one of Settings.APPEARANCES. */
         fun appearance(appearance: String)
+
+        /**
+         * exit ends the app as a swipe from the recent apps does (AP
+         * MobileApp, D91-A): the sessions held in memory dropped, each one
+         * recorded as held moving into its server's `unended` with its revoke
+         * code (MassimoApp.exit), nothing sent to a server, and the task out of
+         * the recent apps.
+         */
+        fun exit()
     }
 
     /** Reply posts a message back to the frame that sent one. */
@@ -157,6 +172,18 @@ class Bridge(
         if (next !== o) current.compareAndSet(o, next)
     }
 
+    /**
+     * failed takes a main frame of [origin] that failed to load (MainActivity's
+     * onReceivedError; AP MobileApp, D108-A): where it is the opened
+     * server's, the opening is dropped and its server's id returned, for the
+     * list's handover `#unreachable=<id>`; null for any other origin.
+     */
+    fun failed(origin: String?): String? {
+        val o = opened ?: return null
+        if (origin == null || origin != o.origin || !current.compareAndSet(o, null)) return null
+        return o.id
+    }
+
     /** covers reports whether the page of [origin] is guarded and signed in, with a session the cover keeps from others; not one at its card, the session withheld. */
     fun covers(origin: String?): Boolean = guarded(origin) && opened?.let { !it.withheld && keeper.inMemory(it.id) } == true
 
@@ -166,16 +193,15 @@ class Bridge(
     /** postCodes posts the revoke codes waiting for the server [id] at [url], the address it was opened at, in the background (D112-A): Open at start's. */
     fun postCodes(id: String, url: String) {
         val s = servers.get(id) ?: return
-        onIo { runCatching { codes.post(s, url) } }
+        onIo { if (!exited.get()) runCatching { codes.post(s, url) } }
     }
 
     /** postGone posts a removed server's revoke codes where the probe finds it at its node, in the background: the app's start and the list shown. */
-    fun postGone() = onIo { runCatching { codes.postGone() } }
-
-
+    fun postGone() = onIo { if (!exited.get()) runCatching { codes.postGone() } }
 
     /** onMessage handles one message of the page's script, on the main thread. */
     fun onMessage(data: String, origin: String, isMainFrame: Boolean, reply: Reply) {
+        if (exited.get()) return // the app is ending: the page is answered no more
         val msg = try {
             JSONObject(data)
         } catch (e: JSONException) {
@@ -217,6 +243,7 @@ class Bridge(
                 val url = string(args, 1)
                 // the server's revoke codes first, so that the check finds what they ended (D112-A)
                 background(answer) {
+                    if (exited.get()) return@background null
                     runCatching { codes.post(s, url) }
                     sessions.check(s, url)
                 }
@@ -336,7 +363,10 @@ class Bridge(
                         .put("server", JSONObject().put("name", s.name).put("url", o.url).put("node", s.node).put("fp", s.fp))
                 }
             }
-            "login.keep" -> keep(now ?: throw bad(), answer)
+            "login.keep" -> {
+                val o = now ?: throw bad()
+                keep(servers.get(o.id) ?: throw BridgeException(R.string.err_no_server), o.url, answer)
+            }
             "login.fingerprint" -> {
                 val o = now ?: throw bad()
                 val s = servers.get(o.id) ?: throw BridgeException(R.string.err_no_server)
@@ -359,6 +389,24 @@ class Bridge(
             "openAppSettings" -> {
                 answer.ok(null)
                 host.connectPage(Origins.APP_SETTINGS)
+            }
+            // the list's ☰ (contract version 7; AP MobileApp, Block 19): the build's version, whether the phone has a strong
+            // biometric enrolled, which Store login needs, and Exit: from then on nothing of this activity's goes to a server, not
+            // even a check the page asked for just before (sessions and codes look at exited), so that the codes Exit leaves go
+            // at the next start
+            "about" -> answer.ok(JSONObject().put("version", version).put("can", biometric.canStrong()))
+            "exit" -> {
+                exited.set(true)
+                answer.ok(null)
+                host.exit()
+            }
+            // Store login in a server's settings (contract version 7): the session held there kept as a login, at the
+            // address the probe found, one of the server's own, without a fragment
+            "keep" -> {
+                val s = servers.get(string(args, 0)) ?: throw BridgeException(R.string.err_no_server)
+                val url = string(args, 1)
+                if (s.opening(url) != url) throw BridgeException(R.string.err_open_url)
+                keep(s, url, answer)
             }
             else -> throw bad()
         }
@@ -406,7 +454,7 @@ class Bridge(
             opened = Opened(s.id, origin, base, withheld)
             host.open(url)
             // the revoke codes at the address opened, in the background (D112-A)
-            onIo { runCatching { codes.post(s, base) } }
+            onIo { if (!exited.get()) runCatching { codes.post(s, base) } }
         }
         when {
             opts?.opt("signIn") == true -> go(true)
@@ -505,22 +553,23 @@ class Bridge(
         }
     }
 
-    // keep keeps the login by fingerprint for the page just signed in: the
-    // user's name from its session, a key of the user's made with it, then
-    // the prompt, which opens the app key, or makes it the first time, to
-    // seal the key under; a prompt not passed revokes the key again and
-    // resolves false.
-    private fun keep(now: Opened, answer: Answer) {
-        val s = servers.get(now.id) ?: throw BridgeException(R.string.err_no_server)
-        if (Origins.plainOutside(now.url)) throw BridgeException(R.string.err_plain)
+    // keep keeps the login by fingerprint for the session held at [s], at
+    // [url], the address the page was opened at (login.keep, the page just
+    // signed in) or the one the connect page's probe found (keep, Store
+    // login): the user's name from the session, a key of the user's made
+    // with it, then the prompt, which opens the app key, or makes it the
+    // first time, to seal the key under, its revoke code beside its id
+    // (D112-A); a prompt not passed revokes the key again and resolves false.
+    private fun keep(s: Server, url: String, answer: Answer) {
+        if (Origins.plainOutside(url)) throw BridgeException(R.string.err_plain)
         if (!biometric.canStrong()) throw BridgeException(R.string.err_no_biometric)
         val session = sessions.held(s) ?: throw BridgeException(R.string.err_no_session)
         io.execute {
             val user: String
             val key: ServerApi.Key
             try {
-                user = api.me(now.url, s.fp, session)
-                key = api.createKey(now.url, s.fp, session, user, takeBytes(keyLabel, MAX_LABEL))
+                user = api.me(url, s.fp, session)
+                key = api.createKey(url, s.fp, session, user, takeBytes(keyLabel, MAX_LABEL))
             } catch (e: ServerApi.Refused) {
                 answer.fail(BridgeException(R.string.err_no_session))
                 return@execute
@@ -528,7 +577,7 @@ class Bridge(
                 answer.fail(BridgeException(R.string.err_server, reason(e)))
                 return@execute
             }
-            val undo = { revokeQuietly(now.url, s.fp, session, user, key.id) }
+            val undo = { revokeQuietly(url, s.fp, session, user, key.id) }
             val step = appKey.step()
             try {
                 step.keep(texts.get(R.string.login_keep_title, s.name), s.id, s.node, s.fp, user, LoginSecret(key.token, key.id)) { r ->

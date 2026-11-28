@@ -206,6 +206,33 @@ function signOf(kind) {
   return ICON_CHOICES[kind] ? iconChoice(kind).sign : SIGNS[kind];
 }
 
+// signEl is the icon of a kind of SIGNS in a state, as the parts' Sign
+// (ui/src/shared/icon.tsx) draws it, for a plain script (the connect
+// page's "changed here" mark, AP MobileApp, Block 19): "" or "ok" plain,
+// "warn" with a triangle, "bad" with a cross, coloured by the state
+// (tone-…); the mark a part of its own (use.mark), which is what blinks.
+// cls adds classes, key names the mark across redraws (keepBlink), and
+// label, where given, names the sign for a screen reader, which is else
+// hidden from one.
+function signEl(kind, state, { cls, key, label } = {}) {
+  const s = signOf(kind);
+  const mark = s[state];
+  const svg = iconEl(mark ? s.base : s.icon, "ni sign" + (state ? " tone-" + state : "") + (cls ? " " + cls : ""));
+  if (label) {
+    svg.removeAttribute("aria-hidden");
+    svg.setAttribute("role", "img");
+    svg.setAttribute("aria-label", label);
+  }
+  if (mark) {
+    const use = document.createElementNS("http://www.w3.org/2000/svg", "use");
+    use.setAttribute("href", "#" + mark);
+    use.setAttribute("class", state === "bad" ? "mark x" : "mark");
+    svg.appendChild(use);
+    keepBlink(use, key);
+  }
+  return svg;
+}
+
 // markEl is a mark alone, the triangle of a warning or the cross of a
 // failure, for a badge or a list; key as for keepBlink.
 function markEl(state, key) {
@@ -559,12 +586,14 @@ function confirmBox(text, { yes, no }, onYes, onNo) {
 // confirmInPlace asks in place of a row of actions, as a panel's Remove
 // does: the question takes the row's place, Yes runs onYes (which
 // returns the removal's promise, see confirmBox), and No and Escape put
-// the row back with the focus on the element of focusSelector in it.
-function confirmInPlace(actions, text, labels, onYes, focusSelector) {
+// the row back with the focus on the element of focusSelector in it,
+// then tell onNo, where given.
+function confirmInPlace(actions, text, labels, onYes, focusSelector, onNo) {
   const box = confirmBox(text, labels, onYes, () => {
     box.replaceWith(actions);
     const el = focusSelector && actions.querySelector(focusSelector);
     if (el) el.focus();
+    if (onNo) onNo();
   });
   actions.replaceWith(box);
   box.focusFirst();

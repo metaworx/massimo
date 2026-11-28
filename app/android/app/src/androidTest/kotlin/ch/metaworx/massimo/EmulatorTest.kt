@@ -136,6 +136,16 @@ abstract class EmulatorTest {
         page.waitFor("!!document.querySelector(${q(row(id) + " .server-panel")})", "the server's settings")
     }
 
+    /**
+     * section shows the section [key] (connection, login or certificate) of
+     * the server [id]'s open settings by its tab, as a user does (AP
+     * MobileApp, D111-A).
+     */
+    protected fun section(id: String, key: String) {
+        page.click(row(id) + " .server-tab[data-tab=\"$key\"]")
+        page.waitFor("!!document.querySelector(${q(row(id) + " .server-section[data-section=\"$key\"]:not(.hidden)")})", "the $key section")
+    }
+
     /** card waits for the sign-in card on the page of [t]. */
     protected fun card(t: Target) {
         page.waitFor(

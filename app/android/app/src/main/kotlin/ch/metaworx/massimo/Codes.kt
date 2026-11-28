@@ -12,7 +12,8 @@ package ch.metaworx.massimo
  * code taken (`204`) marks its entry taken; a server that takes no codes
  * drops it, the entry staying as before codes; a malformed one goes,
  * logged; a broken connection, 429 and 5xx keep it, the rest of the
- * server's codes waiting with it. [log] never gets a code.
+ * server's codes waiting with it. [log] never gets a code. Once
+ * [stopped] (the list's Exit, AP MobileApp D91-A), nothing more is posted.
  */
 class Codes(
     private val servers: ServerStore,
@@ -20,6 +21,7 @@ class Codes(
     private val api: ServerApi,
     private val probe: (List<String>, String?) -> List<ProbeResult>,
     private val log: Logger,
+    private val stopped: () -> Boolean = { false },
 ) {
     /**
      * post posts the codes waiting for [s] at [url], an address of the
@@ -32,6 +34,7 @@ class Codes(
         val now = servers.get(s.id) ?: return false
         var changed = false
         for (code in now.codes()) {
+            if (stopped()) return changed // the list's Exit meanwhile: nothing more posted
             when (api.revokeCode(url, now.fp, code)) {
                 ServerApi.Taken.TAKEN -> changed = servers.took(s.id, code) || changed
                 ServerApi.Taken.NONE -> changed = servers.dropCode(s.id, code) || changed
@@ -100,6 +103,7 @@ class Codes(
                 val urls = listOf(s.lan, s.remote).filter { it.isNotEmpty() }
                 val url = Addresses.answering(s, runCatching { probe(urls, s.fp.ifEmpty { null }) }.getOrDefault(emptyList())) ?: continue
                 for (c in g.codes) {
+                    if (stopped()) return // the list's Exit meanwhile: nothing more posted
                     when (api.revokeCode(url, s.fp, c.code)) {
                         ServerApi.Taken.TAKEN, ServerApi.Taken.NONE -> gone.drop(g.id, c.code)
                         ServerApi.Taken.MALFORMED -> {

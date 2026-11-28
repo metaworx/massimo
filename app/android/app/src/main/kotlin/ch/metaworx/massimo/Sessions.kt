@@ -64,6 +64,8 @@ class Checks {
  * itself, made from the key a new one was made from (D31-A) or from a key
  * revoked, is forgotten without a logout and goes into no `unended`
  * (D100-A). What was checked is [checks]', which outlive the activity.
+ * Once [stopped] (the list's Exit, AP MobileApp D91-A), a check asks and
+ * writes nothing more, not even one asked for just before.
  */
 class Sessions(
     private val keeper: SessionKeeper,
@@ -73,6 +75,7 @@ class Sessions(
     private val left: KeysLeft? = null,
     private val log: Logger,
     checks: Checks = Checks(),
+    private val stopped: () -> Boolean = { false },
 ) {
     // By server id: what the last check found of the session held, and the
     // key a session put from a key was made from, till a check finds it.
@@ -194,8 +197,11 @@ class Sessions(
     fun look(s: Server, url: String): Look {
         val token = held(s) ?: return Look(null)
         if (!s.has(url)) return Look(user(s))
+        if (stopped()) return Look(null)
         return try {
             val me = api.whoami(url, s.fp, token)
+            // the list's Exit meanwhile (stopped): nothing written or revoked after it
+            if (stopped()) return Look(null)
             // a session handed in meanwhile is not the one asked about; its
             // record as held written in the same step, so that a put or a
             // forget meanwhile leaves none of the one before

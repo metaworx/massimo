@@ -2697,8 +2697,11 @@ The server's sign, when it says an update is out, opens it at Software update.
 ## In the apps
 
 The apps for Android and iOS (docs/app.md) open on a page of their own,
-`ui/connect.html`, or on the server marked **Open at start**:
-the servers the app keeps, each with what it found
+`ui/connect.html`, or on the server marked **Open at start**,
+its cards at the page's full width, up to 1100 px:
+the servers the app keeps, sorted by the name shown,
+case and accents ignored and numbers by their value,
+each with what it found
 when it last looked (on the LAN, remote, not reachable, a changed certificate)
 and, as a green badge, the user the app is signed in as there,
 checked at each look, grey while the server answers at neither address
@@ -2708,12 +2711,17 @@ keeps a login (docs/app.md, "Opening from the list"),
 a cancel opening the server's sign-in card,
 the sign-in icon, where a login is kept, that card without the prompt,
 ⚙ or a long press its settings;
-the Servers card's ☰, with **Add server…**, **Sign out of all**,
+the list's ☰ in the header at the logo's right, where a server's page has its ☰:
+the app's version first, Massimo's mark and the version with its copy icon,
+a tap copying it whole and closing ☰,
+then **Add server…**, **Sign out of all**,
 **Forget all stored credentials** where a login is kept,
 asked first, under the list,
 which revokes each login's key at its server and signs out there,
 as **Turn off** does, its message naming the servers that keep a key,
-and **App settings…**;
+**App settings** and **Exit**, which ends the app as a swipe from the recent
+apps does, the sessions it held ended by their codes at the next start;
+the Servers card keeps ↻, and pulling the list down in the app does what it does;
 the card that adds a server, shown while the list is empty or from the ☰,
 with × and closed once a server is added:
 the servers on the network, searched for as it opens, and an address typed;
@@ -2721,16 +2729,26 @@ and the fingerprint of a self-signed certificate, compared with the
 server's log or `massimo tls show` before it is trusted.
 A server's settings take the focus themselves, not a field,
 so that a phone's keyboard stays closed:
-the name and the addresses, **Open at start** (one server at most),
-when the fingerprint is asked, the session with **Sign out**,
+a head with the server's name and ✕, and three sections switched by tabs,
+as the settings pages are, their names alone, Connection first.
+**Connection** holds the name and the addresses, **Open at start** (one server at most),
+notifications, and when the fingerprint is asked,
+Cancel and Save, off while nothing differs from what is kept,
+its tab marked with the disk of unsaved changes while something does,
+and under them, after a rule, **Remove server** on a line of its own,
+with a line saying what it does, which turns a kept login off first, or signs out first,
+its question and its message naming a key or a session left.
+**Login**, each line acting at once, holds the session with **Sign out**,
 whose line says, while the server does not answer, that Sign out ends the
 session there the next time the app reaches the server,
-the certificate's subject and end with **Certificate…**,
-a dialog with its issuer, names, validity, fingerprint and since when it
-is trusted, the login by fingerprint with **Turn off**,
+the login by fingerprint with **Turn off**,
 which revokes its key and signs out,
+or **Store login** where the app holds a session there and keeps no login,
+which keeps one made with that session after one prompt,
+off while the server does not answer, its title saying why,
 a line for each key of the phone's still valid there with **Show in My profile**,
-which opens the server's page at My profile with the key marked,
+which checks the server first and opens its page at My profile with the key marked,
+or says it does not answer,
 off while the server does not answer, its title saying why,
 a line for each session of the phone's still valid there,
 which the app forgot without the server ending it,
@@ -2738,12 +2756,19 @@ the server not answering, and ends at the next sign-in there as its user,
 a key or a session whose revoke code waits saying instead that it ends the
 next time the app reaches the server (docs/app.md, "The revoke codes"),
 its line gone once the server took the code;
-the toasts of Sign out, Turn off and Remove that left a code say so,
-and under Cancel and Save, after a rule, **Remove server** on a line of its own,
-with a line saying what it does, which turns a kept login off first, or signs out first,
-its question and its message naming a key or a session left.
+its tab has a dot while a key or a session is left there;
+the toasts of Sign out, Turn off and Remove that left a code say so.
+**Certificate** shows the certificate in place: its address, subject, issuer,
+names, validity, fingerprint and since when it is trusted,
+the fingerprint pinned while the server does not answer,
+and over plain HTTP that there is none.
 **App settings** hold the **Appearance**, as the phone, light or dark,
 for that page and for every server's page set to "as the system".
+A server's page that fails to load gives way to the list,
+which says that the server does not answer and why.
+Back closes the open menu first, then the panel opened last,
+a server's settings with changes asking once, Discard or Stay,
+and leaves the app from the bare list.
 A browser that opens that page sees a line saying it is the app's.
 A server's page in the app is this page,
 except that the app keeps its session in place of the browser,
@@ -2995,7 +3020,8 @@ and reads once (`burstReader` of `shared/burst.ts`).
 A state is a sign, a colour and a mark, so that it reads without its colour:
 nothing for a state that is fine, a triangle for a warning (amber),
 a cross for a failure (red).
-`Sign` of `shared/icon.tsx` draws a kind of thing in a state (`signOf` of
+`Sign` of `shared/icon.tsx`, and `signEl` of `components.js` for a plain script,
+draw a kind of thing in a state (`signOf` of
 `components.js`: the radio and the window as the person chooses, `ICON_CHOICES`,
 the Wi-Fi fan or the tower, the opening sash with the mark inside its frame
 or the paned window with it at the bottom right, as the original MAX! software has it;
@@ -3139,7 +3165,7 @@ for the first owner's toast and the log's `open_setup` line.
 | `usePopup`, `placePopup`, `closePopups` | `popup.ts` | a box that its button opens beside itself (a `Tip`'s text, a room tile's SET list): one popup open at a time, and one with the menus: the click that opens it closes an open menu or popup, as every click outside one does (`dropdown`), and a menu that opens, by a click, the keyboard or the page's code, closes it, as does a click outside it and, with `leave`, the focus moving to an element outside it; Escape closes it and nothing else, seen first and stopped there (`stopPropagation`, marked as the menus' Escape is), `escaped` told whether the focus was in it; placed again at a resize; `placePopup` keeps its box 16 px inside the window's sides, and with the element that scrolls in it inside its height too, 16 px under what is pinned at the window's top (`pinned`, a sticky header's bottom, which the caller reads): upward where the room below is short and the box fits above, else downward, that element's height capped to the room below, 160 px at least where the window has room for that; `closePopups` closes it at a sign-out (`MassimoParts.signedOut`) | `usePopup(prefix, { within, place, escaped, leave })`, giving `{ id, open, toggle, close }`; `placePopup(box, scroll, pinned)`; `closePopups()` |
 | `actionRunner`, `fader` | `action.ts` | a request, a reload, and its outcome (`Outcome`, `{ text, ok }`) in the region's message line (`showResult`) or in a part's state that a `ResultLine` draws, a success fading where a fade is given; `fader` is that fade alone, for a result set by other means | `where()`, `set(res)`, `fade` (ms), `reload()`, `bound` (an answer after a sign-out reloads and says nothing, `session.ts`); gives `run(fn, ok, fail)`, `say(text, ok)`; `set`, `ms` |
 | `Icon` | `icon.tsx` | a symbol of the page (`iconEl`) | `symbol`, `cls`, `mark` (the symbol is a mark, which blinks where the style makes it), `useId` (its `use` element's id, where the page names it) |
-| `Sign` | `icon.tsx` | a kind of `SIGNS` in a state, its mark blinking | `kind`, `state` ("", ok, warn, bad, open), `cls`, `blink` (the mark's key), `label` (named for a screen reader, else hidden) |
+| `Sign` | `icon.tsx` | a kind of `SIGNS` in a state, its mark blinking; `signEl` of `components.js` draws it so for a plain script, the connect page's "changed here" mark | `kind`, `state` ("", ok, warn, bad, open), `cls`, `blink` (the mark's key), `label` (named for a screen reader, else hidden) |
 | `Mark` | `icon.tsx` | a mark alone (`markEl`) | `state` (warn, bad), `blink` |
 | `CountIcon` | `icon.tsx` | an icon with a number in its corner | `symbol`, `n`, `cls` |
 | `IconButton` | `icon.tsx` | a button that is an icon alone, named for a screen reader (`iconButton`): a tile's info and cog, the copy icon, help's question mark | `symbol`, `label` (its name, and its tooltip without `title`), `title`, `cls`, `iconCls` (the icon's class, `ni` by default, `hi` for help's line drawing), `mark`, and the button's own attributes (`id`, `aria-expanded`, `aria-controls`, `data-…`, the handlers) |

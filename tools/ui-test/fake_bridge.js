@@ -71,8 +71,17 @@
 //            waits, forgetAll names those servers, and session(id, url)
 //            takes the server's pending entries first, as a server that
 //            takes codes does, its entries gone from the list
+//   contract for kind "connect", the contract's version, 7 by default; 6
+//            leaves out version 7's about, exit and keep
+//   appVersion the app's version about() gives, "0.18.0-test" by default
+//   canStrong false for a phone without a strong biometric enrolled, as
+//            about()'s can says (true by default)
+//   storeLogin keep(id, url)'s answers in turn (Store login, contract
+//            version 7): true (the default), the server's session's user
+//            then its login, its key's id from keys; false; or
+//            "error:<message>"; a server without a session refuses it
 //
-// The connect page's bridge is version 6: save keeps start at one server
+// The connect page's bridge is version 7: save keeps start at one server
 // at most and turns it on for the first one added, as the adapters do,
 // and a server's unrevoked as it was; trust notes trusted_at; open takes
 // a server's lan or remote, alone or with #profile?key=<id>, and refuses
@@ -245,8 +254,9 @@
     return at < 0 || /^profile\?key=[1-9][0-9]{0,14}$/.test(url.slice(at + 1));
   };
   let seq = 0;
+  const stores = copy(cfg.storeLogin || [true]);
   window.massimo = {
-    version: 6,
+    version: cfg.contract || 7,
     servers() {
       call("servers");
       return later(rec.servers);
@@ -375,6 +385,31 @@
       return later(rec.settings, 20);
     },
   };
+  if (!(cfg.contract < 7)) {
+    // version 7: the app's version, Exit and Store login (AP MobileApp, Block 19)
+    Object.assign(window.massimo, {
+      about() {
+        call("about");
+        return later({ version: cfg.appVersion || "0.18.0-test", can: cfg.canStrong !== false });
+      },
+      exit() {
+        call("exit");
+        return later(null);
+      },
+      keep(id, url) {
+        call("keep", id, url);
+        const s = server(id);
+        if (!s || !s.session) return answerOf("error:Not signed in: sign in with your password first.", 20);
+        if (url !== s.lan && url !== s.remote) return answerOf("error:That address is not one of the server's.", 20);
+        const a = stores.length > 1 ? stores.shift() : stores[0];
+        if (a === true) {
+          s.login = s.session;
+          s.login_key = ((cfg.keys || {})[id] || {}).id || 0;
+        }
+        return answerOf(a, 30);
+      },
+    });
+  }
   if (cfg.push) window.massimo.push = {};
   if (cfg.core) {
     const st = copy(cfg.core);
