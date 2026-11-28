@@ -28,8 +28,8 @@ is said in the server's words and goes from its field too;
 too many attempts, a server error or a server out of reach are said in the
 server's or the browser's words, the key kept for the retry.
 A refused key is not kept, neither by the page nor in the app,
-and on a running page the session signed in goes on
-while the address is not locked out: a wrong key counts against the lockout,
+and on a running page the session signed in goes on while the address is not locked out:
+a wrong key counts against the lockout,
 which refuses the session's own requests too until it ends (AP LooseEnds, D43).
 At the start's card the key's try is one read of who is in more,
 the start's own read that waited for the card following it;
@@ -49,42 +49,42 @@ and another request's refusal does not turn the card (AP AccessEnds, D1).
 The password form holds the one password field, its fields named,
 so that a password manager such as KeePassXC fills it.
 Every password field of the page, the sign-in's, the first owner's two,
-My profile's and System settings → Users', has an eye at its right end
-(AP MobileApp, D84-A): a closed eye while the password is hidden,
-an open one while it shows in clear text, labelled **Show password** and
-**Hide password**, a button the keyboard reaches after its field;
-it keeps what is typed, the caret and the field's focus,
-and the password is hidden again at the submit and at each opening of the
-sign-in card.
-Once the card has closed on a sign-in or a new owner
-and the page's first reads after it, of who is in and of the user's settings,
-have settled,
+My profile's and System settings → Users',
+has an eye at its right end (AP MobileApp, D84-A):
+a closed eye while the password is hidden,
+an open one while it shows in clear text,
+labelled **Show password** and **Hide password**,
+a button the keyboard reaches after its field; it keeps what is typed,
+the caret and the field's focus,
+and the password is hidden again at the submit and at each opening of the sign-in card.
+Once the card has closed on a sign-in or a new owner and the page's first reads after it,
+of who is in and of the user's settings, have settled,
 its password fields and the API key's are emptied (AP LooseEnds, D13, D41-A):
-not at the close itself, since a password manager takes a sign-in for done
-at the first request that completes after the form is hidden;
+not at the close itself,
+since a password manager takes a sign-in for done at the first request that
+completes after the form is hidden;
 a refused password keeps what was typed for the retry,
 where a refused API key goes from its field (below).
-A password shown is hidden again when its fold opens again
-(My profile's Change password, a user's panel),
-and when the eye is switched off, staying hidden when it comes back;
+A password shown is hidden again when its fold opens again (My profile's Change password,
+a user's panel), and when the eye is switched off,
+staying hidden when it comes back;
 its field's type never turns inside a closed fold,
 where Chrome would draw nothing of the field once the fold opens.
 The browser's own eye (Edge's) is hidden on every field of the page,
 so that a field has one at most.
-The server's setting `auth.password_reveal` turns the eye off
-(System settings → Users, below);
-the page learns it from `/healthz` before anyone signs in,
+The server's setting `auth.password_reveal` turns the eye off (System settings → Users,
+below); the page learns it from `/healthz` before anyone signs in,
 so that the card shows the eye or not from its first drawing,
 and none shows until it has answered.
 An API key's field, and a provider's client secret, have no eye.
-A new password, in the five forms that set one
-(the first owner's, My profile's **Change password** and **Set a password**,
+A new password, in the five forms that set one (the first owner's,
+My profile's **Change password** and **Set a password**,
 and in System settings → Users adding a user and a user's panel),
 has 8 to 64 characters, counted as typed, one per code point,
 as `massimo user` and the users' API hold it (AP PasswordRules, D4-A, D7-A):
 a line under the field, its description and a status region,
-says while it is typed what the rule finds:
-the hint "Min. 8 characters; better 15 or a few words." with an i while it is empty,
+says while it is typed what the rule finds: the hint "Min. 8 characters;
+better 15 or a few words." with an i while it is empty,
 then **Too short** or **Too long** with a warning's sign,
 or **Contains the user's or the server's name**, with the same sign,
 or that the password can be set, with a tick (D6-A).
@@ -108,29 +108,29 @@ which the server never checks:
 a page opened by an IP address takes a password with the host's name,
 which `massimo user` on that box refuses;
 it is written again only when what it says changes,
-and its place is as tall as its longest text, one line at 390 px in each language,
-so that the rows under it do not move.
+and its place is as tall as its longest text,
+one line at 390 px in each language, so that the rows under it do not move.
 A submit the rule refuses, also by Enter in the field, sends nothing:
-the line says that it was refused, the field is outlined as refused and has the focus,
-until the next key, which brings the line back to what the password is,
+the line says that it was refused,
+the field is outlined as refused and has the focus, until the next key,
+which brings the line back to what the password is,
 and only while the field holds a password the rule refuses (Reset empties it);
 the form's own message line says nothing of it,
 so that nothing says "too short" once the line says the password can be set.
 The rule's refusal comes before the mismatch of the two fields.
 The first new password of each of the five forms has a dice beside its eye,
-before it, or at the field's end where there is no eye
-(AP PasswordRules, D14-A to D19-A):
-a press fills the form with a suggestion, both fields where it has two,
-and shows it in the field as text, also where the eye is switched off,
-while the field holds it: edited, emptied or changed by its form (**Reset**, a
-save), submitted, or its fold or the card closed, it is a password's field
-again, the eye as it was.
-The presses give five words and twenty characters by turns
-(AP AccessEnds, D44-A, D50-A, D51-A):
-five words at the first press, and again after a new start
-(**Reset**, a save, the fold closed, the card's next opening),
-then the other kind at each press, whatever the last one filled;
-a key leaves the turn as it is.
+before it, or at the field's end where there is no eye (AP PasswordRules,
+D14-A to D19-A): a press fills the form with a suggestion,
+both fields where it has two, and shows it in the field as text,
+also where the eye is switched off, while the field holds it: edited,
+emptied or changed by its form (**Reset**, a save), submitted,
+or its fold or the card closed, it is a password's field again,
+the eye as it was.
+The presses give five words and twenty characters by turns (AP AccessEnds,
+D44-A, D50-A, D51-A): five words at the first press,
+and again after a new start (**Reset**, a save, the fold closed,
+the card's next opening), then the other kind at each press,
+whatever the last one filled; a key leaves the turn as it is.
 The dice is labelled by what its next press gives,
 **Suggest five words** or **Suggest twenty characters**,
 for a screen reader and as its tooltip.
@@ -140,9 +140,9 @@ A suggestion is five words of EFF's long list (`/ui/words-en.txt`,
 `third_party/eff-wordlist/`), lower case and joined by "-",
 or twenty characters of letters and digits without `0 O o 1 l I`;
 each word and character is picked without bias,
-by `crypto.getRandomValues` with the numbers above the last whole multiple
-drawn again, and a suggestion the rule refuses, one holding the user's name,
-is drawn again, at most 20 times,
+by `crypto.getRandomValues` with the numbers above the last whole multiple drawn again,
+and a suggestion the rule refuses, one holding the user's name, is drawn again,
+at most 20 times,
 after which the line says that no suggestion could be made and the field keeps
 what it had.
 The rule's line says that a password was suggested, never which,
@@ -150,22 +150,22 @@ written anew at each suggestion, so that a screen reader hears each.
 While the field holds the suggestion, a line right under the field, before
 the rule's line, shows it whole (AP PasswordRules, D58-A):
 the field shows about three and a half of five words at 390 px.
-It is in the page's font at 16 px, to be read and copied by hand, broken after a "-",
+It is in the page's font at 16 px, to be read and copied by hand,
+broken after a "-",
 and it copies itself as the page's other strings do (AP AccessEnds, D44-A):
 a tap or a click on it, or Enter or Space, copies the suggestion,
 **Copied** showing above it and said in the page's status region,
 over plain HTTP by the browser's copy command, as every copy of the page;
-its copy icon does the same,
-right after the words while they take one line,
+its copy icon does the same, right after the words while they take one line,
 and at the line's right end, between its lines, once they wrap.
 Twenty characters take one line, and five words one or two;
 the icon and its gap take 30 px of the line's width.
 With the test machine's fonts (CI's differ),
-five words take a third line in a draw of about one in 16 million
-in Add a user at 390 px, one in 70 million in a user's panel at 390 px,
-less than one in 10^10 in the first owner's card at 390 px
-and less than one in 10^13 in My profile at 390 px and wider forms
-(the list's widest word five times, which the UI test draws);
+five words take a third line in a draw of about one in 16 million in Add a user at 390 px,
+one in 70 million in a user's panel at 390 px,
+less than one in 10^10 in the first owner's card at 390 px and less than one in
+10^13 in My profile at 390 px and wider forms (the list's widest word five times,
+which the UI test draws);
 twenty characters take a second line in each form at 390 px,
 in a draw of less than one in 10^13 (the widest letter twenty times).
 A screen reader does not hear the password (D52-A):
@@ -177,15 +177,16 @@ and words read out inside the live regions of My profile and Users would
 speak the password as they appear;
 the line itself is not hidden, which a control inside it cannot be.
 A page's translation leaves the line alone (`translate="no"`).
-At a press a screen reader hears the rule's line, written anew
-("Suggested; this password can be set."), and the dice keeps the focus,
+At a press a screen reader hears the rule's line, written anew ("Suggested;
+this password can be set."), and the dice keeps the focus,
 named now for the press after.
 The shown line keeps its place from the first press on, two lines tall,
 empty while the suggestion is not shown;
 there is no row under the field (D49-A).
-The line is not there before, so that a form keeps its height until the dice
-is used, and once there a key never takes it away, so that nothing under the
-field moves between presses or while one types,
+The line is not there before,
+so that a form keeps its height until the dice is used,
+and once there a key never takes it away,
+so that nothing under the field moves between presses or while one types,
 but after one of those rarest draws, whose third line the first key gives back;
 it goes with **Reset**, a save, the fold closed or the card's next opening,
 and the card's close empties it, its fields keeping what they hold.
@@ -199,8 +200,8 @@ and one that still fits stays in the middle and moves up by half of it,
 in the app in English, Italian and Polish, and in a browser in every language.
 The list is fetched at the first press that needs it, once,
 and taken only as 7,776 lines, each a word of `a-z` with `-` inside, none twice;
-a fetch that fails, or a file of another form, says so in the line
-("No word list: press again for characters."),
+a fetch that fails, or a file of another form,
+says so in the line ("No word list: press again for characters."),
 and the next press suggests twenty characters, which need no list.
 The sign-in takes any password a user has, of any length,
 and so does the upgrade of a user of version 1 at its sign-in (below).
@@ -215,54 +216,57 @@ then sets the language and the appearance (light, dark, as the system)
 before anyone signs in, the same settings as My settings,
 kept in this browser.
 On a touch screen the card puts no field in focus by itself,
-at its opening or when the way is switched: the keyboard comes when a field is tapped;
+at its opening or when the way is switched:
+the keyboard comes when a field is tapped;
 on a desktop the chosen way's first field takes the focus.
 The two ways' forms take one height, so that the card stays where it is
 when the way is switched (UiParts D224).
 Above the form, a button per enabled OpenID Connect provider,
-**Sign in with Nextcloud** for example
-(docs/api-v1.md, "Sign-in through OpenID Connect"),
-goes to the provider and back signed in,
+**Sign in with Nextcloud** for example (docs/api-v1.md,
+"Sign-in through OpenID Connect"), goes to the provider and back signed in,
 the provider's answer taken from the address at once;
 an account the server does not know, or a refusal, comes back to the card,
-which says why under the providers' buttons:
-the account not known, no e-mail sent, the e-mail not verified,
+which says why under the providers' buttons: the account not known,
+no e-mail sent, the e-mail not verified,
 or the account in none of the groups the provider admits.
 The app shows no such button yet:
 the providers refuse a sign-in inside an app's page.
-In the app the card names the server it signs in to, on a line of its own
-under its title, in place of the address bar the app has not
-(`login.status()`'s `server`, docs/app.md):
-the server's name as the app's list has it and the full address the page
-was opened at (`https://host:port`), the name once where it is the address,
-and ⓘ, "About this server", which shows the server's instance id (its `node`)
-and the certificate's fingerprint the app pinned, each copied with a tap,
-one the app does not have left out;
-the line shows on the sign-in, the first owner's form and the confirmation
-that keeps the server open alike, the ⓘ closed again at each opening;
-a browser shows none, its address bar naming the server.
-In the app the card has the login by fingerprint instead of the providers
-(docs/app.md, "The login by fingerprint"):
-**Enable login by fingerprint**, a switch under the password, its label to
-its right, where the phone has a fingerprint and keeps no login for the
-server, which after the sign-in asks for the fingerprint and keeps an API key
-of the user's own behind it,
-or says that nothing was kept, with **Try again** and **Sign in without it**;
+In the app the card names the server it signs in to,
+on a line of its own under its title,
+in place of the address bar the app has not (`login.status()`'s `server`,
+docs/app.md):
+the server's name as the app's list has it and the full address the page was
+opened at (`https://host:port`), the name once where it is the address, and ⓘ,
+"About this server",
+which shows the server's instance id (its `node`) and the certificate's
+fingerprint the app pinned, each copied with a tap,
+one the app does not have left out; the line shows on the sign-in,
+the first owner's form and the confirmation that keeps the server open alike,
+the ⓘ closed again at each opening; a browser shows none,
+its address bar naming the server.
+In the app the card has the login by fingerprint instead of the providers (docs/app.md,
+"The login by fingerprint"): **Enable login by fingerprint**,
+a switch under the password, its label to its right,
+where the phone has a fingerprint and keeps no login for the server,
+which after the sign-in asks for the fingerprint and keeps an API key of the
+user's own behind it, or says that nothing was kept,
+with **Try again** and **Sign in without it**;
 the same switch on the card's form that creates the first owner;
 the fingerprint first in the row where a login is kept,
-named with the user's name, which signs in at once with a new session from
-the key, the password staying the form chosen,
-its spinner in the icon's place while it runs,
-the other ways' **Sign in**, Cancel and **Select server…** off meanwhile,
+named with the user's name,
+which signs in at once with a new session from the key,
+the password staying the form chosen,
+its spinner in the icon's place while it runs, the other ways' **Sign in**,
+Cancel and **Select server…** off meanwhile,
 as while the first owner is created (AP AccessEnds, D1):
 the app ends the session it held as it keeps the fingerprint's,
 so that no other way's session is made beside it,
 and it does not start while the password's or the key's sign-in runs;
-a line instead of both where the page is open over plain HTTP outside the
-home network, where the app sends no key;
-**Select server…**, back to the app's servers, last in the card's ☰;
-and **Cancel** left of each **Sign in**, the password's and the key's,
-and of the first owner's **Create the owner**, which goes back there too:
+a line instead of both where the page is open over plain HTTP outside the home network,
+where the app sends no key; **Select server…**, back to the app's servers,
+last in the card's ☰; and **Cancel** left of each **Sign in**,
+the password's and the key's, and of the first owner's **Create the owner**,
+which goes back there too:
 with **Open at start** the card is the app's first page,
 where the back gesture closes the app.
 A browser has no Cancel.
@@ -292,27 +296,27 @@ the card is titled that there are no users yet,
 and has the form that creates the first owner instead of the ways to sign in:
 its name, its password typed twice and, in the app, the switch and Cancel;
 its ☰ as at a sign-in, no provider.
-Its fields are emptied at each opening, and its two passwords once the
-owner is made, the card has closed and the page's first reads after it have settled
-(AP LooseEnds, D13), never at a refusal, Skip for now, Back or Escape;
+Its fields are emptied at each opening,
+and its two passwords once the owner is made,
+the card has closed and the page's first reads after it have settled (AP LooseEnds, D13),
+never at a refusal, Skip for now, Back or Escape;
 what Create the owner finds wrong is said alone,
 the focus on the field to change: the name, Password where the rule refuses it,
-which its line under Password says (above), or Again where the two passwords differ;
+which its line under Password says (above),
+or Again where the two passwords differ;
 a missing password the browser refuses itself, its focus on Password;
 under the form, **Skip for now**, which shows the page as it is for this load,
-and the next load asks again,
-and **Keep it open…**, where the server is not kept open already.
+and the next load asks again, and **Keep it open…**,
+where the server is not kept open already.
 Keep it open… shows a confirmation in the form's place, of the same height:
 the warning "Not recommended - ONLY use it on a local network you trust!" first,
 what keeping it open means, this page's address, which a tap copies,
 and a field to enter it into;
-**Keep it open** is off until the address entered is this page's own
-as the browser reads it:
-the same origin, scheme, host and port,
-with no path but "/" or the page's own base under a prefix,
-and no user, query or fragment;
-spaces around it, the letters' case
-and other spellings of the same address do not matter,
+**Keep it open** is off until the address entered is this page's own as the
+browser reads it: the same origin, scheme, host and port,
+with no path but "/" or the page's own base under a prefix, and no user,
+query or fragment; spaces around it,
+the letters' case and other spellings of the same address do not matter,
 and a line under the field says when it is not (FirstOwner D13, D28).
 It is a confirmation, not a lock:
 anybody on the local network may write the setting through the API.
@@ -333,17 +337,16 @@ signed in and the card closed, Skip for now and Cancel off meanwhile,
 then a toast says so,
 and in the app that the login by fingerprint was not kept where it was not.
 Where the server's answer lists what was set up before the owner and still works,
-as a rule while the server was open
-(`open_setup`: an integration with its key, or one whose key may still be collected,
-a sign-in provider, a role added or changed, a capability turned off),
-the toast says that too, "Still in effect from before you: …", by name,
-in the warn tone, for 30 seconds,
+as a rule while the server was open (`open_setup`: an integration with its key,
+or one whose key may still be collected, a sign-in provider,
+a role added or changed, a capability turned off), the toast says that too,
+"Still in effect from before you: …", by name, in the warn tone, for 30 seconds,
 its **Show** under the text at phone width and beside it from 760 px,
 never taller than the window;
-Show opens System settings → Integrations with the card in view
-and its heading in focus where an integration is listed,
-else the log with its title in focus,
-whose line of it stays a warning until it is marked seen (AP AccessEnds, D11, D13).
+Show opens System settings → Integrations with the card in view and its heading
+in focus where an integration is listed, else the log with its title in focus,
+whose line of it stays a warning until it is marked seen (AP AccessEnds, D11,
+D13).
 A sign-out takes the toast away, as any toast of the user who left.
 Where the server has users after all,
 another device having made the owner meanwhile,
@@ -395,13 +398,11 @@ an update or a restart being followed),
 a read of it refused while the owner is being made waiting for the sign-in;
 **Back to the page**, in Skip for now's place, closes the card,
 starts both again and gives the focus back to what opened it,
-marking nothing as skipped (FirstOwner D36);
-Escape does the same, on the form and on the confirmation that keeps the
-server open, but not while a request of the card runs,
-and where the card's ☰ is open the first Escape closes the ☰ alone
-(AP LooseEnds, D3);
-the card at the page's start and a sign-in the server asks for
-are not left by Escape;
+marking nothing as skipped (FirstOwner D36); Escape does the same,
+on the form and on the confirmation that keeps the server open,
+but not while a request of the card runs,
+and where the card's ☰ is open the first Escape closes the ☰ alone (AP LooseEnds, D3);
+the card at the page's start and a sign-in the server asks for are not left by Escape;
 after Create the owner the page it was opened on is shown again,
 read anew as the owner (FirstOwner D37).
 A request refused while the owner is being made waits for the sign-in it ends in,
@@ -416,10 +417,10 @@ What the signed-in role may not do is not shown (docs/api-v1.md,
 "Authentication").
 The live updates come over a stream that opens with a single-use ticket,
 so the session never appears in a URL.
-After an interruption the page opens a new stream that resumes after the
-last event it read, so what happened meanwhile still arrives;
-where the server no longer holds it, the page reloads the rooms
-(docs/api-v1.md, "GET …/events").
+After an interruption the page opens a new stream that resumes after the last
+event it read, so what happened meanwhile still arrives;
+where the server no longer holds it, the page reloads the rooms (docs/api-v1.md,
+"GET …/events").
 A room's tile whose configuration has the focus is not drawn again under a click
 or the user's typing, for a state event or a reload of the rooms alike;
 it is drawn once the focus has left the configuration.
@@ -428,14 +429,15 @@ Settings typed and not saved (Cube settings, a room's virtual thermostat)
 stay while the page is loaded, across its pages and the Cube chosen;
 moving to another page or choosing another Cube asks nothing,
 since the disks of the problem lists say where they are.
-Closing the tab, reloading it or going to another site
-while such settings have changes, also those still being typed or being saved,
+Closing the tab, reloading it or going to another site while such settings have changes,
+also those still being typed or being saved,
 the browser asks with its own prompt, which says nothing of the page:
 leaving drops the changes; staying, every changed form is unsaved now,
-with its sign and its disk, and a second later the page shows **Settings not saved**,
+with its sign and its disk,
+and a second later the page shows **Settings not saved**,
 a dialog that lists them, red where a save failed,
-each a button that closes it and opens its settings
-with the focus in them, from any page, and **Close**;
+each a button that closes it and opens its settings with the focus in them,
+from any page, and **Close**;
 the second keeps the dialog off a page that is leaving while the next one comes.
 A browser asks only once the page has had a click or a key.
 **Sign out** (or **Forget key**), which drops them too,
@@ -453,8 +455,8 @@ the same user signed in again finds the changes,
 another user does not.
 What the page was reading when the session ended it reads again after the sign-in;
 what the user did, a setpoint, a save, a deletion, any request but a read,
-is never sent again, whoever signs in and however much later:
-it fails at once, red where its result shows, as not sent since the user was signed out.
+is never sent again, whoever signs in and however much later: it fails at once,
+red where its result shows, as not sent since the user was signed out.
 A settings change so refused goes back at once to the value that held,
 which its field then shows:
 the page sends it neither with a later push nor with the settings a sign-in
@@ -464,35 +466,41 @@ A colour scheme saved, imported or deleted so goes back the same way
 to the schemes that held, the choice and the page's colours with it
 (AP SteadyTests v1.2, Block 19).
 A setpoint stepped and still waiting for its two seconds is dropped as the sign-in opens,
-and its tile says so; a settings change waiting for its second waits for the sign-in.
-For the same user a form's draft stays, so that it is one click on **Save** again,
+and its tile says so;
+a settings change waiting for its second waits for the sign-in.
+For the same user a form's draft stays,
+so that it is one click on **Save** again,
 and where the page's message line said that a write was not sent,
-the line says it again after the page's reload, unless the reload put something there.
+the line says it again after the page's reload,
+unless the reload put something there.
 Another user's sign-in forgets on the page what a sign-out forgets:
-the first user's settings in this browser, which the page would otherwise hand
-to the second user's account, the drafts, the settings changes still waiting,
-every line that said a write was not sent, and the Cubes' data, which loads again.
-The stream's ticket alone, which the page asks for by itself and which changes nothing,
+the first user's settings in this browser,
+which the page would otherwise hand to the second user's account, the drafts,
+the settings changes still waiting, every line that said a write was not sent,
+and the Cubes' data, which loads again.
+The stream's ticket alone,
+which the page asks for by itself and which changes nothing,
 waits for the sign-in as a read does.
 A request sent before a sign-in, with another token or none,
-whose 401 comes once the sign-in is done, as a read the card's slow link held back,
-opens no sign-in again (AP MobileApp, D68-A):
-a read is sent again with the new session,
+whose 401 comes once the sign-in is done,
+as a read the card's slow link held back, opens no sign-in again (AP MobileApp,
+D68-A): a read is sent again with the new session,
 a write so answered fails as not sent, as any other, and is not sent again.
 A sign-in that replaces the session the page holds,
-the card opened on a running page, ends that session at the server
-(`POST /api/v1/logout`), in the app through the app, which holds it (docs/app.md);
+the card opened on a running page,
+ends that session at the server (`POST /api/v1/logout`),
+in the app through the app, which holds it (docs/app.md);
 a key replaced is not ended: a key is revoked under My profile.
 The page that reloads by itself when the server has a newer version
 waits while there are any.
 
 ## Header
 
-The header's row has Massimo's logo at the left, the M as tall as the page buttons;
-at the right, the pile, a pill that starts with the server's sign and shows
-every Cube's problems;
-the Cube choice, the cube in the colour of the server's link to it
-and the chosen Cube's name;
+The header's row has Massimo's logo at the left,
+the M as tall as the page buttons; at the right, the pile,
+a pill that starts with the server's sign and shows every Cube's problems;
+the Cube choice,
+the cube in the colour of the server's link to it and the chosen Cube's name;
 then the house, **Rooms**, and **☰**, the menu of every other page,
 the Cube choice as near to them as they are to each other.
 They all end on one line, the logo's baseline and the buttons' lower edge.
@@ -502,40 +510,45 @@ then the Cube choice becomes a button with the cube alone,
 whose tooltip names the chosen Cube and which opens the same list;
 then the pile goes to a row of its own under them, at the left.
 The M stays at every width.
-The row is measured as if ↑ were there, so that scrolling never changes how it folds.
+The row is measured as if ↑ were there,
+so that scrolling never changes how it folds.
 What sticks out of the row while it is measured is cut off,
 so that the page never becomes wider than the screen for that moment.
 
 The logo lies over the word "Massimo", which a screen reader reads:
 the word shows until the drawing has come (`ui/brand/brand.svg`,
-made by `make ui-brand`, `tools/brand/README.md`), and stays where it never does.
+made by `make ui-brand`, `tools/brand/README.md`),
+and stays where it never does.
 The drawing has no margin: its bottom edge is the letters' baseline,
 which the pile and the buttons end on.
 Its colours follow the light or dark mode chosen, its letters the page's text.
 The sign-in card, with the form that creates the first owner in it,
-and the apps' connect page show the logo too, the card's larger, above its title.
+and the apps' connect page show the logo too, the card's larger,
+above its title.
 
 The header stays at the top while the page scrolls.
 Scrolled, it keeps its rows as they are, the logo too,
-and the lines under them go until the page is back
-at its top, expert mode's line of the Cube's radio budget apart.
-The compacted header has **↑**, back to the top, first of the page buttons: ↑ ⌂ ☰.
+and the lines under them go until the page is back at its top,
+expert mode's line of the Cube's radio budget apart.
+The compacted header has **↑**, back to the top, first of the page buttons:
+↑ ⌂ ☰.
 
 - **Cube**:
   a menu that chooses the Cube when the server has several.
   Closed it shows the cube in the colour of how the server stands with the Cube,
   then the chosen Cube's name (its serial where it has none):
-  green while connected, amber while its lost connection is held open
-  or it reboots, red while it holds the server's old connection,
-  another client has it, or it is gone;
-  its tooltip adds the serial, the address and the link in words,
-  and the pile shows the link's sign with its mark where it is not connected
-  (see Signs, under How the page is built).
+  green while connected,
+  amber while its lost connection is held open or it reboots,
+  red while it holds the server's old connection, another client has it,
+  or it is gone; its tooltip adds the serial, the address and the link in words,
+  and the pile shows the link's sign with its mark where it is not connected (see Signs,
+  under How the page is built).
   Open, each Cube has the cube, its name, its sign after it, always,
   then an icon for each kind of problem it has (the radio, a battery,
-  a window open too long, a device's link and, for one who may change the settings,
-  the cog, and the disk while the Cube's settings or the settings of one of its
-  rooms' virtual wall thermostats are unsaved or a save of them failed),
+  a window open too long, a device's link and,
+  for one who may change the settings, the cog,
+  and the disk while the Cube's settings or the settings of one of its rooms'
+  virtual wall thermostats are unsaved or a save of them failed),
   each in its worst colour, and under it its serial and address,
   the list as wide as they need; the arrow keys move between them.
   Wherever a Cube is named with its sign, the cube is before its name,
@@ -550,10 +563,9 @@ The compacted header has **↑**, back to the top, first of the page buttons: �
   the server also looks every 30 minutes by itself),
   and reads **Searching…** meanwhile.
   What it found shows in a toast at the page's foot for eight seconds,
-  as a notification does:
-  the number of Cubes found and not set up, with **Show**, for a role that may add Cubes,
-  which opens them in System settings;
-  or that none was found;
+  as a notification does: the number of Cubes found and not set up,
+  with **Show**, for a role that may add Cubes,
+  which opens them in System settings; or that none was found;
   a failed search in red, with the server's reason, for 15 seconds.
   Cubes it finds but does not serve are listed in the choice under "Found,
   not configured",
@@ -566,17 +578,18 @@ The compacted header has **↑**, back to the top, first of the page buttons: �
   A Cube the server finds by itself appears without reloading the page,
   and in the log.
 - **The pile**, before the Cube choice:
-  a pill that starts with the server's sign (below), then
-  a green check where nothing is wrong on any Cube; where something is,
-  an icon per kind (a Cube's link, the radio, a battery, a window
-  open too long, the settings).
+  a pill that starts with the server's sign (below),
+  then a green check where nothing is wrong on any Cube; where something is,
+  an icon per kind (a Cube's link, the radio, a battery, a window open too long,
+  the settings).
   The pill opens a list, whatever is wrong or not.
-  Its first item is **Refresh now**, which asks the server for the current state now,
-  turns while it asks and leaves the list open;
-  under it, a row each, a label and its time, the times right-aligned:
-  **Cube read**, how long ago the chosen Cube was read
-  (the last message the server took from it, measured on the server's clock),
-  **Server replied**, how long ago the server last answered the page,
+  Its first item is **Refresh now**,
+  which asks the server for the current state now,
+  turns while it asks and leaves the list open; under it, a row each,
+  a label and its time, the times right-aligned: **Cube read**,
+  how long ago the chosen Cube was read (the last message the server took from it,
+  measured on the server's clock), **Server replied**,
+  how long ago the server last answered the page,
   each "14 sec ago" in the page's language with its time of day as its tooltip,
   and **Current time** in the browser's time zone; they move on each second.
   While the server's sign offers something to do,
@@ -585,29 +598,30 @@ The compacted header has **↑**, back to the top, first of the page buttons: �
   Then the list says that nothing is wrong,
   or it lists every Cube with a problem as a heading,
   the cube before its name and its sign after it, its link's badge,
-  and under it its devices with a problem
-  as "Room › Device" with their badges;
+  and under it its devices with a problem as "Room › Device" with their badges;
   for one who may change the settings, **Settings**:
   a Cube proxy that does not listen, a settings file that differs,
   a Cube that discovery finds at another address than its fixed one.
   What discovery found and the server does not serve has the pill's last icon,
   a cube in the accent's blue with their number in a corner badge,
-  as information rather than a problem,
-  and its list's last group, **Found on the network**:
-  "not set up", for a role that may add Cubes with a link to System settings → Cubes,
+  as information rather than a problem, and its list's last group,
+  **Found on the network**: "not set up",
+  for a role that may add Cubes with a link to System settings → Cubes,
   and under it each Cube and Massimo proxy with its address,
   for a proxy the Cube it serves, and the Massimo server serving it,
   its name a link to the address its announcement on the network gives.
   A window open briefly is not listed: it is a state, not a problem.
-  Its list is as wide as its entries need, up to the page's width,
-  and, as every menu of the page, has a border a little stronger than a
-  card's and a shadow, in dark mode a faint light glow, and opens inside the window,
-  no higher than the room below it, and scrolls in itself, not the page;
-  open, it stays inside the window as its pill moves,
+  Its list is as wide as its entries need, up to the page's width, and,
+  as every menu of the page,
+  has a border a little stronger than a card's and a shadow,
+  in dark mode a faint light glow, and opens inside the window,
+  no higher than the room below it, and scrolls in itself, not the page; open,
+  it stays inside the window as its pill moves,
   when the pill grows with the problems that come or the row folds.
   An open list stays open when data comes in, and follows it:
   a problem that comes is listed, one that goes leaves the list,
-  until nothing is left to list and the list says so, the green check in the pill.
+  until nothing is left to list and the list says so,
+  the green check in the pill.
 - **The version** is ☰'s first row, short and small, after Massimo's icon,
   a rule under it; its tooltip is the whole version,
   "(server version)", and a click copies it.
@@ -619,22 +633,22 @@ The compacted header has **↑**, back to the top, first of the page buttons: �
   a clock that was off by 90 s or more says by how much ("3 min ahead").
 - **The house** shows **Rooms**, the header's one page button.
 - **☰** holds every other page, at every width,
-  each for the roles that may open it and with the icon of its page:
-  **Log**;
+  each for the roles that may open it and with the icon of its page: **Log**;
   **Cube settings**, the chosen Cube's, for a role with `cubes` or with `pair`,
-  **System settings**, for a role with one of its capabilities,
-  **Maintenance**, for those and a role with `update`, `restart` or `reboot`,
-  and **System info**, for every role with `read`;
-  **Personal settings**, its tooltip naming whose they are, by display name and login,
+  **System settings**, for a role with one of its capabilities, **Maintenance**,
+  for those and a role with `update`, `restart` or `reboot`,
+  and **System info**, for every role with `read`; **Personal settings**,
+  its tooltip naming whose they are, by display name and login,
   in the app **Select server…**, back to the app's servers,
   then **This server's settings…** and **App settings…**,
   which show the app's own page with that server's settings open,
   or its App settings (docs/app.md; AP MobileApp, D73-A):
   the server's page neither reads nor saves them,
   each shown where the app has its call;
-  and **Sign out** (Forget key for an API key or the token, none on an open server),
-  or on a server without users where the owner can be created from here
-  **Create the owner…**, which opens the sign-in card with its form (FirstOwner D9),
+  and **Sign out** (Forget key for an API key or the token,
+  none on an open server),
+  or on a server without users where the owner can be created from here **Create
+  the owner…**, which opens the sign-in card with its form (FirstOwner D9),
   in the accent and bold, as the personal page's button.
   It is highlighted while one of its pages is shown, as a page button is,
   that page's entry marked current.
@@ -644,24 +658,26 @@ The compacted header has **↑**, back to the top, first of the page buttons: �
   and the sheet of its Log entry turns amber or red, both named with the count.
   Open, it stays open when data comes in and when who is in is read again,
   the focus where it was.
-- The settings pages, Cube settings, System settings, Maintenance and System info,
-  each have a row kept under the header, and in it, in the title's place,
-  a button for each of them the role may open, with its icon and its name,
-  always in this order, so that each keeps its place;
-  the page shown is filled, and a click on it opens nothing.
+- The settings pages, Cube settings, System settings,
+  Maintenance and System info, each have a row kept under the header, and in it,
+  in the title's place, a button for each of them the role may open,
+  with its icon and its name, always in this order,
+  so that each keeps its place; the page shown is filled,
+  and a click on it opens nothing.
   Below 900 px the buttons show their icon alone but for the page shown,
-  which is as wide on every page, so that the buttons after it keep their places too:
-  the longest of the names, as far as the row leaves room
-  beside the sections menu's place, kept on every page;
-  a longer name ends in "…".
+  which is as wide on every page,
+  so that the buttons after it keep their places too: the longest of the names,
+  as far as the row leaves room beside the sections menu's place,
+  kept on every page; a longer name ends in "…".
   A role that may open one of them alone sees its title there, and no button.
-- The page shown is in the address, Rooms without one:
-  `#log`, `#me` (Personal settings, or at a card `#profile`, `#prefs` and
-  `#notify`; `#profile?key=<id>` marks a key, see My profile),
-  `#cube` (Cube settings), `#system` (System settings),
+- The page shown is in the address, Rooms without one: `#log`,
+  `#me` (Personal settings, or at a card `#profile`, `#prefs` and `#notify`;
+  `#profile?key=<id>` marks a key, see My profile), `#cube` (Cube settings),
+  `#system` (System settings),
   `#maintenance` (Maintenance) and `#info` (System info),
-  so that a reload opens it again, the browser's back and forward move between
-  the pages, and an address can be kept as a bookmark.
+  so that a reload opens it again,
+  the browser's back and forward move between the pages,
+  and an address can be kept as a bookmark.
   The log's range, kind and device follow its page,
   as in `#log?range=today&kind=state&device=MEQ0000101` (see Log).
   A page the role may not open shows Rooms instead.
@@ -711,18 +727,17 @@ The compacted header has **↑**, back to the top, first of the page buttons: �
 ## Rooms
 
 When the Cube chosen is not connected, a notice above the rooms says so,
-naming it by its name and giving its serial:
-first why, where the server knows (its connection held open,
+naming it by its name and giving its serial: first why,
+where the server knows (its connection held open,
 or the Cube refusing the server, as in System settings → Cubes),
-the address the server tries, when the Cube last sent data
-(or last answered discovery),
-and what to check, a Cube serving one client at a time,
-or, for a Cube whose address lies outside this machine's networks
-(`other_network` of `docs/api-v1.md`), that the server reaches it only through a
-router, that a Cube without a DHCP lease uses 192.168.0.222,
+the address the server tries,
+when the Cube last sent data (or last answered discovery), and what to check,
+a Cube serving one client at a time, or,
+for a Cube whose address lies outside this machine's networks (`other_network`
+of `docs/api-v1.md`), that the server reaches it only through a router,
+that a Cube without a DHCP lease uses 192.168.0.222,
 and the `massimo netconfig` line with its serial that gives it a fixed address,
-which copies;
-the rooms the server still has stay under it.
+which copies; the rooms the server still has stay under it.
 Without a Cube, it says that none is configured.
 For a role with `cubes` its button opens System settings → Cubes.
 
@@ -750,9 +765,10 @@ Every room has a tile:
   A tap outside the tip closes it too, the focus going where the tap went.
   One tip is open at a time, and one with the page's menus:
   opening a tip closes an open menu, and a menu that opens closes the tip.
-- **IS** is the room's temperature, its virtual wall thermostat's
-  (docs/api-v1.md, "The virtual wall thermostat"), which every client shows:
-  the wall thermostat's, else the median of the radiator thermostats',
+- **IS** is the room's temperature,
+  its virtual wall thermostat's (docs/api-v1.md, "The virtual wall thermostat"),
+  which every client shows: the wall thermostat's,
+  else the median of the radiator thermostats',
   or their mean where the room's setting says so.
   Under it is how long ago the server received it ("12 min", "5 h", "3 days");
   the tooltip has the exact time.
@@ -807,7 +823,8 @@ Every room has a tile:
 - **One line under the tile's head** while the room's commands are refused:
   "Room commands are discarded until every device has reported",
   as that is why a change does nothing;
-  **Show** opens the list of the tile's icons, which names the devices that have not.
+  **Show** opens the list of the tile's icons,
+  which names the devices that have not.
   The tile's other notices are in that list alone.
 - **Values may be old**:
   a thermostat of the room has not been heard from for more than 24 hours,
@@ -818,16 +835,14 @@ Every room has a tile:
 - **Where the Cube and its room list differ** (`mismatches` of `docs/api-v1.md`,
   "The Cube's lines against its room list"), a badge each in the device's entry,
   with since when, "in Office for the Cube since 16.11., 00:41",
-  its tooltip the whole sentence naming the device and both rooms:
-  "Radiator: in Office by its configuration on the Cube, in Living room in the
-  room list"; a device the room list does not have whose configuration puts it
-  in the room, which can block the room's commands;
-  a device the room list has and the Cube does not;
-  another type on each side;
+  its tooltip the whole sentence naming the device and both rooms: "Radiator:
+  in Office by its configuration on the Cube, in Living room in the room list";
+  a device the room list does not have whose configuration puts it in the room,
+  which can block the room's commands;
+  a device the room list has and the Cube does not; another type on each side;
   the room's master in the room list that is no device of the Cube,
   in another room, or no thermostat;
-  and a thermostat whose week programme or temperatures differ from the rest
-  of the room.
+  and a thermostat whose week programme or temperatures differ from the rest of the room.
   The device's row in the device list has a badge for each,
   "in Office for the Cube", "own week programme",
   the whole sentence its tooltip;
@@ -839,19 +854,22 @@ Every room has a tile:
   else the one the room's entry names (`thermostat`) (RoomMajority.D19-A):
   what most of its thermostats show, else the newest change,
   else the first of its one order, its master, its wall thermostat,
-  its radiator thermostats; during a boost the same over those that do not boost;
-  from a server before them, its wall thermostat, else its first radiator thermostat.
-  4.5 °C reads **OFF**, as the devices' displays show it (there is no ON for 30.5 °C),
-  here and wherever a setpoint is written:
-  the device list, More's Eco and Comfort, the tile's and the House tile's result,
-  what a device not confirming a write shows, the week programme's bar
-  and the members' line below;
+  its radiator thermostats;
+  during a boost the same over those that do not boost;
+  from a server before them, its wall thermostat,
+  else its first radiator thermostat. 4.5 °C reads **OFF**,
+  as the devices' displays show it (there is no ON for 30.5 °C),
+  here and wherever a setpoint is written: the device list,
+  More's Eco and Comfort, the tile's and the House tile's result,
+  what a device not confirming a write shows,
+  the week programme's bar and the members' line below;
   the log adds the temperature, "OFF (4.5 °C)".
-  The fields that take a temperature keep 4.5:
-  the holiday form, the House tile's, the programme's switch points, the configuration.
+  The fields that take a temperature keep 4.5: the holiday form,
+  the House tile's, the programme's switch points, the configuration.
   Right after the value, a small superscript in the accent colour of SET's icon,
   a mark says where it is one of the room's presets, as a display does:
-  a crescent moon at its eco temperature, a sun with rays at its comfort temperature,
+  a crescent moon at its eco temperature,
+  a sun with rays at its comfort temperature,
   the two side by side where comfort and eco are the same;
   its tooltip names it in the configuration's words ("Eco temperature"),
   and so does a screen reader.
@@ -920,22 +938,23 @@ Every room has a tile:
   One list is open at a time, and one with the page's menus and tips;
   what is typed stays while it is open, whatever data comes in.
 - **While the room's thermostats show different setpoints**,
-  a line under SET names each with its setpoint and its own mark, " · " between them:
-  "Thermostats differ: Radiator 21.0 °C · Wall thermostat OFF",
+  a line under SET names each with its setpoint and its own mark,
+  " · " between them: "Thermostats differ:
+  Radiator 21.0 °C · Wall thermostat OFF",
   the sun after the radiator's where 21 °C is its comfort temperature.
   It stays away while they may differ for a while for a reason of their own,
   as a room command reaches the devices one by one:
   while a write of the tile to the room's setpoint runs;
-  from the answer of the tile's or the House tile's write the Cube took
-  until every thermostat shows it, five minutes at most, the server's confirmation's time
-  (a write without a temperature, such as AUTO, until they show its mode
-  and agreeing setpoints taken since the write, which another report,
-  a valve's or a window contact's, does not end);
-  while a thermostat shows a write of its mode or setpoint not confirmed yet
-  (pending), another client's or one from before the page was loaded too;
-  and while a window of the room is open, its radiator thermostats then at their
-  window-open temperature, an out-of-date contact by its last report,
-  as the room checks count it.
+  from the answer of the tile's or the House tile's write the Cube took until
+  every thermostat shows it, five minutes at most,
+  the server's confirmation's time (a write without a temperature, such as AUTO,
+  until they show its mode and agreeing setpoints taken since the write,
+  which another report, a valve's or a window contact's, does not end);
+  while a thermostat shows a write of its mode or setpoint not confirmed yet (pending),
+  another client's or one from before the page was loaded too;
+  and while a window of the room is open,
+  its radiator thermostats then at their window-open temperature,
+  an out-of-date contact by its last report, as the room checks count it.
   A boost waits for nothing, and a write that failed or that the Cube discarded
   leaves an earlier wait as it was.
   The line goes once they agree,
@@ -967,17 +986,18 @@ Every room has a tile:
   deletes a room that has no devices,
   and with **Repair…** opens the room's repairs under the tile (Repairs, below).
 - The room name or the **i** button opens the device list:
-  every device with its type's icon before its name (a radiator, a wall
-  thermostat, a window, a leaf for the eco button), its values (valve and
-  offset on the left, set and measured temperature on the right,
-  ending at the row's right edge), its problems as icons that list them,
-  the set temperature OFF at 4.5 °C, without a unit, and with the moon, the sun
-  or both in the place of its gauge where it is the device's own eco or comfort
-  temperature, so that the values stay where they are,
-  as in the tile's head, a write not confirmed among them,
-  and badges for lock, window and mode.
-  A device whose battery is weak or low and whose battery flag is off
-  offers **New batteries**, first among its actions, for a role with `configure`:
+  every device with its type's icon before its name (a radiator,
+  a wall thermostat, a window, a leaf for the eco button),
+  its values (valve and offset on the left,
+  set and measured temperature on the right, ending at the row's right edge),
+  its problems as icons that list them, the set temperature OFF at 4.5 °C,
+  without a unit, and with the moon,
+  the sun or both in the place of its gauge where it is the device's own eco
+  or comfort temperature, so that the values stay where they are,
+  as in the tile's head, a write not confirmed among them, and badges for lock,
+  window and mode.
+  A device whose battery is weak or low and whose battery flag is off offers
+  **New batteries**, first among its actions, for a role with `configure`:
   it tells the server that the device has new batteries,
   and its level is ok at once (`POST …/devices/{rf}/battery`, `docs/api-v1.md`).
   The line under the row's actions says that they are noted,
@@ -986,14 +1006,13 @@ Every room has a tile:
   or with the next device list, not with the answer.
   The log's line of the level says so, and who marked them:
   "Batteries ok (new batteries, before: low), by Anna".
-  A device the Cube has not heard for some minutes keeps the values of its
-  last report, greyed, with the badge "out of date" and its age in place of
-  "not reported".
+  A device the Cube has not heard for some minutes keeps the values of its last report,
+  greyed, with the badge "out of date" and its age in place of "not reported".
   Expert mode adds each device's type, serial number and radio address,
   as "S/N MEQ0000103 · RF 0a0103": the serial is printed on the device,
   the radio address is not.
-  A device without a name is shown by its serial number, here and on every
-  page, and the page asks the server for a device by its serial.
+  A device without a name is shown by its serial number, here and on every page,
+  and the page asks the server for a device by its serial.
   Valve, measured temperature, window and a low battery show how old they are,
   a value's age on the line under its name;
   in expert mode also the exact time, under the value on the same line,
@@ -1005,38 +1024,40 @@ Every room has a tile:
   Expert mode lists the room's virtual wall thermostat after the devices,
   a house with a thermometer its icon,
   with the devices its temperature comes from, by serial, and its two settings:
-  how a room without a wall thermostat takes its temperature
-  (**Median** or **Mean** of its radiator thermostats)
-  and its radio address, which matters only to clients of the LAN proxy
-  whose device numbers collide; **Save** writes them.
+  how a room without a wall thermostat takes its temperature (**Median**
+  or **Mean** of its radiator thermostats) and its radio address,
+  which matters only to clients of the LAN proxy whose device numbers collide;
+  **Save** writes them.
   What is typed there stays until it is saved or reset:
   when the device list closes and opens, when the rooms load again,
   when a device reports and when another Cube is chosen, each with its Cube.
   It is forgotten at a sign-out, when its Cube is no longer served,
-  and when a load of the rooms from the Cube, connected, no longer gives the room
-  or its virtual wall thermostat: deleted, or hidden in Cube settings;
-  a Cube not connected forgets nothing.
+  and when a load of the rooms from the Cube, connected,
+  no longer gives the room or its virtual wall thermostat: deleted,
+  or hidden in Cube settings; a Cube not connected forgets nothing.
   Opened again, the settings show what was typed at once;
   opened for the first time, they are off until they have come from the server,
   or say in their result line that they could not be read.
   After a save the settings show what the server has,
   or what was sent where they cannot be read again.
   **Save** and **Reset** say how they stand, as in Cube settings:
-  off and plain while nothing is changed, in the accent colour once something is,
+  off and plain while nothing is changed,
+  in the accent colour once something is,
   with the warning mark once the focus has left them,
   the list was closed or a minute has passed,
-  with the cross after a save that failed, and the check after one that went through.
+  with the cross after a save that failed,
+  and the check after one that went through.
   While they are unsaved, or a save failed,
   the virtual wall thermostat's problem list in its row,
-  the tile's problem list in its head
-  and the Cube's problem lists,
+  the tile's problem list in its head and the Cube's problem lists,
   in the header's list of every Cube and in its panel's head,
-  show the disk with the corner mark,
-  "Living room, virtual thermostat: not saved", amber, red after a failed save,
-  outside expert mode too, where the virtual wall thermostat's row then shows
-  as long as its settings have changes, and goes again once they are saved or reset.
+  show the disk with the corner mark, "Living room, virtual thermostat:
+  not saved", amber, red after a failed save, outside expert mode too,
+  where the virtual wall thermostat's row then shows as long as its settings have changes,
+  and goes again once they are saved or reset.
   A click on it, from any page, chooses the Cube where another is chosen,
-  shows the rooms, opens the room's device list and puts the focus into the settings.
+  shows the rooms,
+  opens the room's device list and puts the focus into the settings.
   A device that has not been heard from for more than 24 hours has a "Not seen
   for …" badge.
 - The cog button opens the room's configuration:
@@ -1069,7 +1090,8 @@ Every room has a tile:
     a warning where the Cube still holds memory slots for it
     or a device of the room was left with a communication error or a link error.
   - **Week programme**:
-    one bar per day, a segment at 4.5 °C reading OFF, its switch point's field 4.5.
+    one bar per day, a segment at 4.5 °C reading OFF,
+    its switch point's field 4.5.
     - A click on a day selects it together with every day that has the same programme.
     - With **Only {day}** on, changes apply to that day alone.
       Off, they apply to all selected days.
@@ -1097,23 +1119,26 @@ Every room has a tile:
     While one of the configuration's writes runs, its **Send** turns
     and every other **Send** of the configuration is off.
   - A field that shows what is stored keeps what is typed,
-    where the stored value changed meanwhile, as another client renames the room,
-    it says so under the field, with **Take theirs**.
+    where the stored value changed meanwhile,
+    as another client renames the room, it says so under the field,
+    with **Take theirs**.
   - Room, Temperatures and Week programme are settings forms, each of its own,
     and on the Devices tab the radiator settings and each device:
     what is typed stays until it is sent, reset or cancelled,
-    from one tab to another and when the configuration closes;
-    opened again, the configuration shows the tab it was on, with what was typed,
+    from one tab to another and when the configuration closes; opened again,
+    the configuration shows the tab it was on, with what was typed,
     and the week programme's edits, its days marked changed.
     It is forgotten as the virtual thermostat's settings are,
     a device's form also when the device has left the room.
     **Send** and **Reset** say how a form stands, as in Cube settings:
-    off and plain while nothing is changed, in the accent colour once something is,
+    off and plain while nothing is changed,
+    in the accent colour once something is,
     with the warning mark once the focus has left the form,
     its tab or the configuration was closed or a minute has passed since the last change,
     a key typed or a change of the week programme making it changed again,
-    with the cross after a write that failed, the Cube discarded or a device did not take,
-    the form then still changed, and the check after one that went through;
+    with the cross after a write that failed,
+    the Cube discarded or a device did not take, the form then still changed,
+    and the check after one that went through;
     **Cancel** resets the form and closes the configuration.
     The week programme keeps its own **Reset day** and **Reset all**.
     While a form is unsaved, or its write failed,
@@ -1124,8 +1149,9 @@ Every room has a tile:
     a click on it, from any page, chooses the Cube where another is chosen,
     shows the rooms, opens the configuration on the form's tab
     and puts the focus into the form.
-- Each setting has a **?** button that explains it, with the factory values
-  from the eQ-3 manuals; an explanation shown stays shown when its tab is drawn again.
+- Each setting has a **?** button that explains it,
+  with the factory values from the eQ-3 manuals;
+  an explanation shown stays shown when its tab is drawn again.
 
 The **House** tile, named after the chosen Cube with the cube before its name
 ("All rooms of …" its tooltip), sets several rooms at once in one form,
@@ -1233,35 +1259,31 @@ At a sign-out, and when another user signs in after an expired session,
 every box is closed and forgotten with what it held.
 
 - In a room: **Reset the communication errors** of its devices, free;
-  **Name the room's master**, where the Cube's list names no thermostat of
-  the room, the wall thermostat, else the first radiator thermostat,
-  one the Cube has no state for passed over, in the list only;
-  **Re-link the room**, each device's links and room sent again,
-  adding only;
+  **Name the room's master**,
+  where the Cube's list names no thermostat of the room, the wall thermostat,
+  else the first radiator thermostat, one the Cube has no state for passed over,
+  in the list only; **Re-link the room**,
+  each device's links and room sent again, adding only;
   **Unlink all and re-link**, with `structure` as well,
-  every link of the room removed and then built again:
-  its **Run…** first warns, naming the cost,
-  that it has not yet run on real hardware,
+  every link of the room removed and then built again: its **Run…** first warns,
+  naming the cost, that it has not yet run on real hardware,
   and that a run that stops halfway leaves the room's devices without their
-  partners until it is run again;
-  **Continue** asks once more, and only that question's
-  **Unlink all and re-link now** sends it.
+  partners until it is run again; **Continue** asks once more,
+  and only that question's **Unlink all and re-link now** sends it.
 - At a device: **Re-send the configuration**, for a thermostat,
   the room's temperatures and each day of its week programme,
-  where its own differ:
-  what most of the room's thermostats share, its own included,
-  as the room's differences name them,
-  else its master's, its wall thermostat's or its first radiator thermostat's,
+  where its own differ: what most of the room's thermostats share,
+  its own included, as the room's differences name them, else its master's,
+  its wall thermostat's or its first radiator thermostat's,
   one the Cube has no state for passed over (RoomMajority.D9);
-  **Place in its listed room**, by radio, where the Cube has it in another
-  room or none;
-  **List where the Cube has it**, in the list only,
-  asking first for the name of a room the list does not have;
-  a device the list does not have is listed under the name its field
-  offers, which can be changed before Run…:
-  the room's name, the device's type in the page's language,
-  and the lowest number from 1 that no device of the room takes
-  in a name of that form ("Bath radiator thermostat 2") (D185).
+  **Place in its listed room**, by radio,
+  where the Cube has it in another room or none; **List where the Cube has it**,
+  in the list only, asking first for the name of a room the list does not have;
+  a device the list does not have is listed under the name its field offers,
+  which can be changed before Run…: the room's name,
+  the device's type in the page's language,
+  and the lowest number from 1 that no device of the room takes in a name of
+  that form ("Bath radiator thermostat 2") (D185).
   One longer than the 32 bytes the Cube keeps
   ("Wohnzimmer Heizkörperthermostat 1" is 34) stays in its field as it is,
   outlined in red with the limit in amber above it, as it is typed too,
@@ -1271,98 +1293,102 @@ every box is closed and forgotten with what it held.
 
 ## Log
 
-Shows the Cube's last 20 events, newest first, and new ones on top as they
-arrive: device states,
+Shows the Cube's last 20 events, newest first,
+and new ones on top as they arrive: device states,
 configuration and name changes, connections to the Cube, pairing,
 restores and errors.
 A lost connection is one line, however often the server tries again
 until the Cube is back.
 A connection to the Cube is one line, "connected: 12 devices in 5 rooms,
-firmware 1.1.3, duty cycle 3 %, 180 slots free", after a loss with how long the
-Cube was lost; what changed meanwhile, while disconnected or while the server
-was down, follows it, a line each ("Room “Bath” renamed “Bathroom” (while
-disconnected)").
+firmware 1.1.3, duty cycle 3 %, 180 slots free",
+after a loss with how long the Cube was lost; what changed meanwhile,
+while disconnected or while the server was down, follows it,
+a line each ("Room “Bath” renamed “Bathroom” (while disconnected)").
 A list or configuration line says what changed: "MEQ0000101 “Window” moved
 from Bath to Kitchen", "comfort 21.0 → 21.5", "Monday's program changed".
-The server's own lines are there too: its start with its version, its stop
-and why, the settings file read again with the names of what changed
-(a warning, in the start's own words,
-where the next start would refuse a setting, or the file,
-one that does not parse or is there but cannot be read,
+The server's own lines are there too: its start with its version,
+its stop and why,
+the settings file read again with the names of what changed (a warning,
+in the start's own words, where the next start would refuse a setting,
+or the file, one that does not parse or is there but cannot be read,
 and a warning of the lines it set aside, after "the settings file: ",
 which the start's own line says after its start too:
 "settings file read at the start: the settings file:
-MASSIMO_HSTS is given on lines 3 and 4; the first wins"),
-a restart, a reboot or an update asked for and its outcome,
-an automatic update asked for at night ("update v… → v… asked for automatically")
-or postponed because the radio stayed busy,
+MASSIMO_HSTS is given on lines 3 and 4; the first wins"), a restart,
+a reboot or an update asked for and its outcome,
+an automatic update asked for at night ("update v… → v… asked for
+automatically") or postponed because the radio stayed busy,
 or the next start refused the settings file, until its window closed,
-the backups, their prune and the log's, a restore started,
-and, at the server's first regular user, what was set up before it
-and still works, a warning until a person marks it seen ("First owner anna;
+the backups, their prune and the log's, a restore started, and,
+at the server's first regular user, what was set up before it and still works,
+a warning until a person marks it seen ("First owner anna;
 still in effect from before this user: 1 integration: Kitchen;
-roles added or changed: Viewer", "First user bob, Viewer, by the command line; …"
-where `massimo user add` made the user);
+roles added or changed: Viewer", "First user bob, Viewer, by the command line;
+…" where `massimo user add` made the user);
 and a Cube's new address or its leaving the LAN.
 A line someone asked for says by whom ("backup 12 taken (by hand), by Anna").
-Every change made through the web UI, the API or `massimo user` is a line
-of its own, with who made it: "Cube changed KEQ0000000: name – → Upstairs, by
-Anna", "setpoint Window: mode manual, temperature 21.5, by Anna",
-"user added Zed, by the command line"; a change of a device shows under the
-device too, and the Cube's answer follows as its own line.
-A command's steps on the radio are lines of the queue
-("command acknowledged by the Cube; duty cycle 3 %, 49 free memory slots"),
-queued and sent at debug, a discard, a retry and a failure as warnings,
+Every change made through the web UI,
+the API or `massimo user` is a line of its own, with who made it:
+"Cube changed KEQ0000000: name – → Upstairs, by Anna", "setpoint Window:
+mode manual, temperature 21.5, by Anna", "user added Zed, by the command line";
+a change of a device shows under the device too,
+and the Cube's answer follows as its own line.
+A command's steps on the radio are lines of the queue ("command acknowledged by the Cube;
+duty cycle 3 %, 49 free memory slots"), queued and sent at debug, a discard,
+a retry and a failure as warnings,
 and so are the queue's holds for the duty cycle and the memory slots.
 The room checks (`docs/api-v1.md`, "The room checks") have lines of their own:
-**room disagrees**, a room whose thermostats differ for ten minutes, each named
-with its setting ("Bedroom: its thermostats differ in setpoint for 11 min:
-Window: manual set 21.0, Door: manual set 18.0"), then the room's state sent
-again to them and from where ("as Massimo last set it", "as most of its
-thermostats have it", "as the thermostat changed last has it",
+**room disagrees**, a room whose thermostats differ for ten minutes,
+each named with its setting ("Bedroom:
+its thermostats differ in setpoint for 11 min: Window: manual set 21.0, Door:
+manual set 18.0"),
+then the room's state sent again to them and from where ("as Massimo last set it",
+"as most of its thermostats have it", "as the thermostat changed last has it",
 "as its master has it", "as its wall thermostat has it",
 "as its first radiator thermostat with a state has it"),
 or that it is the room's state from before a device was put into it,
-with what took it then ("what most of its thermostats showed"),
-or why not, and their agreeing again;
-**programme drift**, a thermostat that does not follow its week programme while
-the room's others follow theirs ("does not follow its week programme: 12.0
-instead of 21.0 since the switch point at 18:20, …; its clock or its programme is
-suspect"), with "it shows the programme an hour off" where it does and the
-radiogram that failed, and its following again.
+with what took it then ("what most of its thermostats showed"), or why not,
+and their agreeing again; **programme drift**,
+a thermostat that does not follow its week programme while the room's others
+follow theirs ("does not follow its week programme:
+12.0 instead of 21.0 since the switch point at 18:20, …;
+its clock or its programme is suspect"),
+with "it shows the programme an hour off" where it does and the radiogram that failed,
+and its following again.
 A write its devices do not show by its deadline is a **not confirmed** line,
-a warning that names the write, the room and each device with what it shows
-("setpoint to Bedroom: not confirmed after 5 min: Window (mode auto, setpoint
-20.0)"); a device that shows it later has a line of its own ("setpoint:
+a warning that names the write,
+the room and each device with what it shows ("setpoint to Bedroom:
+not confirmed after 5 min: Window (mode auto, setpoint 20.0)");
+a device that shows it later has a line of its own ("setpoint:
 confirmed after 70 s").
-A room's setpoint is sent once more then (`docs/api-v1.md`, "A room setpoint
-sent once more"), with lines of the same kind: "setpoint to Bedroom: sent once
-more to its thermostats", or why not ("not sent once more: once a day at most,
-and it was today"), then "sent once more, confirmed by every thermostat after
-25 s", which settles the warning, or a warning "sent once more, still not
-confirmed after 5 min: Window (mode auto, setpoint 20.0)".
+A room's setpoint is sent once more then (`docs/api-v1.md`,
+"A room setpoint sent once more"), with lines of the same kind:
+"setpoint to Bedroom: sent once more to its thermostats",
+or why not ("not sent once more: once a day at most, and it was today"),
+then "sent once more, confirmed by every thermostat after 25 s",
+which settles the warning, or a warning "sent once more,
+still not confirmed after 5 min: Window (mode auto, setpoint 20.0)".
 Any other write's warning is settled by a mark alone.
 The LAN proxy's clients have lines of their own: a client connected or gone,
 turned away, its deletes, a pairing for it and the proxy's warnings;
 a line a client passes on to the Cube is a command like the web UI's.
-The sign-ins, failed ones and lockouts are lines for those who may see the
-audit alone.
-A line of a command has a button, **command 42**, which opens the command
-under the line: what was asked and its state, by whom, its steps with what
-the Cube made of them, and for those who may see the audit its audit row;
+The sign-ins, failed ones and lockouts are lines for those who may see the audit alone.
+A line of a command has a button, **command 42**,
+which opens the command under the line: what was asked and its state, by whom,
+its steps with what the Cube made of them,
+and for those who may see the audit its audit row;
 the button says whether it is open and closes it again.
 A device's state line that follows a command sent to it names that command too.
-The level choice "debug and above" also shows the debug lines, such as the
-greeting's hello, room and device list and configurations, each with its
-summary, which the log leaves out at "info and above", the default;
-"warnings" keeps the lost connections and the failures.
+The level choice "debug and above" also shows the debug lines,
+such as the greeting's hello, room and device list and configurations,
+each with its summary, which the log leaves out at "info and above",
+the default; "warnings" keeps the lost connections and the failures.
 A line names its device by its room and name ("Kitchen › Window"),
 one without a name by its room and type ("Kitchen › Radiator thermostat");
-until the rooms are loaded, by the name a state line kept, else its type
-or serial number.
-The serial number is the name's tooltip and, with the radio address after
-it, shows in expert mode only;
-the Cube's own configuration reads "Cube KEQ0000000".
+until the rooms are loaded, by the name a state line kept,
+else its type or serial number.
+The serial number is the name's tooltip and, with the radio address after it,
+shows in expert mode only; the Cube's own configuration reads "Cube KEQ0000000".
 A removed device reads "Removed radiator thermostat MEQ0000101 (Window)",
 with its name as it was.
 A device's state line says what changed ("window opened", "set 18.0 → 21.0",
@@ -1372,8 +1398,8 @@ A setpoint of 4.5 °C reads as the devices show it, with its temperature,
 "set 18.0 → OFF (4.5 °C)", in every line that writes a setpoint.
 A view scrolled down keeps its place when a new line comes in on top.
 A new line, the lines drawn again (the rooms came, another language),
-the log loaded again and its problems read again leave what the user holds
-where it was: a command's detail open, the focus on a line's button,
+the log loaded again and its problems read again leave what the user holds where it was:
+a command's detail open, the focus on a line's button,
 a selection of text in a line, an open choice and what is typed in the search;
 a line that came live keeps its place on the page when a load brings the same event.
 A view scrolled down also stays where it is when the lines are drawn again,
@@ -1388,8 +1414,8 @@ the last 20 keep the newest 20 as events come in,
 and a time range drops a line once it falls out, checked each minute.
 A line of another day shows its date.
 For a time range and for all events,
-**Older events** under the lines loads the 200 before the oldest shown, within the range,
-the view staying where it was,
+**Older events** under the lines loads the 200 before the oldest shown,
+within the range, the view staying where it was,
 until the server has nothing older ("No older events").
 Older first asks the server for what follows the newest line shown,
 by its id (`after=`, `docs/api-v1.md`, "GET /api/v1/cubes/{sn}/log");
@@ -1415,19 +1441,20 @@ the who choice is also asked again where another user comes in without a sign-ou
 by a key pasted or as the first owner made on an open server;
 an answer still on its way lands nowhere,
 and the same user signed in again finds the log as it was.
-A Cube's log shown reads on from its newest line when the stream starts over
-(a `resync`: after the server's restart, or a gap the server no longer holds),
-as every Cube's poll does, so that the lines the stream missed come in on top
-without a reload, the lines, the place and what is open kept;
-where it holds no line of the server's log, as after a load that failed
-while the server was down, or one that found none, it loads again;
-a resync that comes while a page or Older of the user's is on its way
-waits for it to end, and where the server's log ends before the newest line,
-or past ten pages, the log loads again.
+A Cube's log shown reads on from its newest line when the stream starts over (a `resync`:
+after the server's restart, or a gap the server no longer holds),
+as every Cube's poll does,
+so that the lines the stream missed come in on top without a reload, the lines,
+the place and what is open kept; where it holds no line of the server's log,
+as after a load that failed while the server was down, or one that found none,
+it loads again;
+a resync that comes while a page or Older of the user's is on its way waits for it to end,
+and where the server's log ends before the newest line, or past ten pages,
+the log loads again.
 
 A warning or an error of any Cube's log, or of the server's,
-stays a problem until a later line settles it
-or the person marks it seen (`docs/api-v1.md`, "GET /api/v1/log/alerts"):
+stays a problem until a later line settles it or the person marks it seen
+(`docs/api-v1.md`, "GET /api/v1/log/alerts"):
 a lost connection until the next one,
 a failed command until the same one is acknowledged,
 a failed backup until the next, a hold until it ends,
@@ -1437,8 +1464,9 @@ the newest read's line standing for the ones before it,
 a room whose thermostats disagree until they agree again,
 a thermostat off its week programme until it follows it again,
 a room's setpoint not confirmed until every thermostat shows its re-send;
-a device's communication error, link error and battery warning
-while the device has them, at the line that set them;
+a device's communication error,
+link error and battery warning while the device has them,
+at the line that set them;
 a communication error's line names the radiogram that failed,
 "communication error: TimeInformation (0x03)", as the badge's tooltip does.
 Its line is highlighted, a bar and its mark in amber or red,
@@ -1469,8 +1497,8 @@ for the days `log.keep_days` says (30 by default; docs/api-v1.md,
 "GET and PUT /api/v1/settings").
 With more than one Cube, a **Cubes** choice comes first in the head:
 **this Cube**, the header's, with the server's own lines (the default),
-or **all Cubes**, every Cube's lines with the server's own once
-(`GET /api/v1/log`).
+or **all Cubes**,
+every Cube's lines with the server's own once (`GET /api/v1/log`).
 Under all Cubes a line names its Cube first ("Upstairs › Kitchen › Window"),
 a Cube's own line, such as its connection, the Cube alone,
 and the server's own lines no Cube;
@@ -1488,12 +1516,11 @@ and where the server's log ends before that line (as Older finds it, above),
 the log loads again.
 Another Cube in the header leaves the log as it is.
 The choices in the head show one kind of event (all kinds by default,
-grouped by their source), one source or one device (all by default:
-System, Configuration, the Cube, Devices, the queue, the server, the proxy,
+grouped by their source), one source or one device (all by default: System,
+Configuration, the Cube, Devices, the queue, the server, the proxy,
 then each device by name and serial number),
-the level and above (info by default) and, for those who
-may see the users, who made a change (everyone by default);
-the server answers what matches,
+the level and above (info by default) and, for those who may see the users,
+who made a change (everyone by default); the server answers what matches,
 and the new lines follow the choices too.
 The filter matches any part of a line (time, kind, the device's room, name,
 serial number and radio address, text).
@@ -1517,14 +1544,15 @@ The filter's text is not in the address.
 
 ## Personal settings
 
-☰ → **Personal settings** opens the personal settings, a page built as System settings is:
+☰ → **Personal settings** opens the personal settings,
+a page built as System settings is:
 its title stays under the header while the page scrolls,
 with who is signed in under it (with the role, or the API key and whose it is),
 **Sign out** at its right end, which ends the session,
 and **Sections** (a bulleted list) beside it,
 which lists the page's cards with their icons and brings the one chosen into view.
-An API key or the server's token is only forgotten in this browser
-(**Forget key**, with a key),
+An API key or the server's token is only forgotten in this browser (**Forget key**,
+with a key),
 and an open server says that it is open to everyone and has nothing to sign out of.
 The page has three cards, **My profile**, **My settings** and **Notifications**,
 each with its icon in its head, that fold as System settings' do;
@@ -1553,13 +1581,15 @@ as the settings' ⓘ do:
   has **Set a password** instead, without a current one, and a line saying
   that it lets the user sign in by name in any browser.
   The new password has the rule's line under it;
-  a Save the rule refuses says so there, puts the focus in it, and sends nothing.
-  **Reset** empties the fields; a new password typed is marked as the display name is,
+  a Save the rule refuses says so there, puts the focus in it,
+  and sends nothing.
+  **Reset** empties the fields;
+  a new password typed is marked as the display name is,
   but kept nowhere but in its field, and gone at a sign-out;
   the current one alone, as a password manager fills it in, is no change.
-- **Sessions and keys**: the own sessions and API keys,
-  each with its id (AP MobileApp, D66-A), where and when it was last used
-  and **Revoke**,
+- **Sessions and keys**:
+  the own sessions and API keys, each with its id (AP MobileApp, D66-A),
+  where and when it was last used and **Revoke**,
   which signs another browser out without an administrator;
   a session made from a key, as the app's login by fingerprint makes one,
   names the key by its label, and revoking the key ends it;
@@ -1567,10 +1597,11 @@ as the settings' ⓘ do:
   the key that session was made from **its key**,
   and Revoke on this device signs out, as **Sign out** does;
   in the app the key the phone keeps for the server says **this device's key**,
-  in place of its key where both hold, however the session was made
-  (the app's status, `key_id`, read again each time the page is shown; D65-A);
-  the key that is the settings file's `MASSIMO_API_TOKEN` (`from_settings`)
-  says **from the settings file: change or remove it there** in place of Revoke,
+  in place of its key where both hold,
+  however the session was made (the app's status, `key_id`,
+  read again each time the page is shown; D65-A);
+  the key that is the settings file's `MASSIMO_API_TOKEN` (`from_settings`) says
+  **from the settings file: change or remove it there** in place of Revoke,
   which the server refuses for it (D86-A);
   **Create key** shows the new key once.
   In the app the list is read once the app has revoked what the last sign-in
@@ -1587,17 +1618,16 @@ as the settings' ⓘ do:
   an id that is no number, or no API key of the user's, marks nothing.
 - **Linked accounts**, where a sign-in provider is enabled or an account is linked:
   the own accounts at the providers, each with its e-mail or user ID,
-  what the provider said of it at the last sign-in (name, user name, groups)
-  and when, and **Remove**,
-  which is refused for the last way the user signs in
-  (no password and no other linked account);
-  **Link Nextcloud** per enabled provider goes there to sign in
-  and back to My profile, which shows the account before it is linked:
-  its e-mail, name, user name, user ID and groups,
+  what the provider said of it at the last sign-in (name, user name,
+  groups) and when, and **Remove**,
+  which is refused for the last way the user signs in (no password and no other
+  linked account);
+  **Link Nextcloud** per enabled provider goes there to sign in and back to My profile,
+  which shows the account before it is linked: its e-mail, name, user name,
+  user ID and groups,
   and "This replaces your link to …" where the user has one there,
-  with **Link** and **Cancel**;
-  an account another user has, or one in none of the provider's groups,
-  comes back refused, saying so.
+  with **Link** and **Cancel**; an account another user has,
+  or one in none of the provider's groups, comes back refused, saying so.
   The app shows no **Link** buttons, as no provider buttons on its sign-in.
 
 ### My settings
@@ -1618,7 +1648,8 @@ Beside each of **Poll every**, **Expert mode**, **Cube clock shown in**,
 **Language**, **Mode**, **Colour scheme**, **Blinking signs**,
 **Window icon** and **Radio icon**,
 in a column of its own at the right headed **only on this device**,
-a switch keeps that setting's value in this browser instead (its tooltip names the setting),
+a switch keeps that setting's value in this browser instead (its tooltip names
+the setting),
 for a phone that polls less often or a wall tablet that stays dark;
 switched off, your value applies again.
 My settings and My profile are at most 640 px wide.
@@ -1763,8 +1794,8 @@ so that a phone's browser offers to add it to the Home Screen,
 where it opens without the browser's bar.
 Its icons are Massimo's mark, from `ui/brand/` (`make ui-brand`,
 `tools/brand/README.md`): the mark in white on a blue rounded square,
-and for the launchers that cut an icon to a shape of their own (Android's
-maskable icons, the Home Screen of iOS) the same blue as a full square,
+and for the launchers that cut an icon to a shape of their own (Android's maskable icons,
+the Home Screen of iOS) the same blue as a full square,
 the mark within the circle they keep.
 The browser's tab shows the small mark: `favicon.svg`,
 in the colours of the browser's own light or dark,
@@ -1784,13 +1815,14 @@ The page's row, **Cube settings** filled among the settings pages,
 stays under the header as the page scrolls, as every page's does,
 with **Sections** at its right end: the Cube and Backup and restore.
 Under it the panel is open and stays open: its head, the Cube's sign, name,
-serial, radio budget and pill, is its first row, and a click on it folds
-nothing.
+serial, radio budget and pill, is its first row,
+and a click on it folds nothing.
 The page follows the Cube choice and every poll, as the card does,
 and what it saves shows in System settings.
 The panel is built once and follows every poll in place:
-its problem list stays open and follows the data, a focused button keeps the focus,
-and what is typed stays, each field with the "changed meanwhile" of System settings;
+its problem list stays open and follows the data,
+a focused button keeps the focus, and what is typed stays,
+each field with the "changed meanwhile" of System settings;
 Reboot's question names the radiograms pending as the Cube says now,
 and a line of the settings file that comes to differ while the panel is shown
 gets its notice with **Take the file's value**.
@@ -1812,16 +1844,18 @@ it is forgotten at a sign-out and when the Cube is no longer served.
 in the accent colour once something is,
 with the warning mark before its text once the focus has left the form,
 the form was closed or left, or a minute has passed since the last change,
-turning while it saves,
-with the cross after a save that failed, the server not reached or the value refused
-(the message line says why, no field is outlined), until a save goes through or Reset,
+turning while it saves, with the cross after a save that failed,
+the server not reached or the value refused (the message line says why,
+no field is outlined), until a save goes through or Reset,
 and with the check for five seconds after a save.
-**Reset**, beside it and off while nothing is changed, takes the values stored back.
-While the settings are unsaved, or a save failed,
-the Cube's problem list, in its panel's head and in the header's list of every Cube,
+**Reset**, beside it and off while nothing is changed,
+takes the values stored back.
+While the settings are unsaved, or a save failed, the Cube's problem list,
+in its panel's head and in the header's list of every Cube,
 shows the disk with the corner mark, amber, red after a failed save,
-"Cube settings: not saved", as it shows a disk for each of its rooms' unsaved settings
-(Rooms, the device list); a click on it opens the settings,
+"Cube settings: not saved",
+as it shows a disk for each of its rooms' unsaved settings (Rooms,
+the device list); a click on it opens the settings,
 the Cube's panel in System settings, else Cube settings with the Cube chosen,
 and puts the focus into them.
 A panel is drawn in one place at a time:
@@ -1834,57 +1868,57 @@ as System settings → Backup and restore shows it for each Cube.
 ☰ → **System info** is for every role with `read`, a viewer's too:
 its row stays under the header while the page scrolls,
 with the viewer's title in it, the one settings page that role has.
-The facts are the server's, a Cube's in its panel under System settings → **Cubes**.
+The facts are the server's,
+a Cube's in its panel under System settings → **Cubes**.
 The page is a table of the server's version and what it was built with,
 when it started, as the server's clock read it, to the second in its zone,
-then how long ago,
-the server's time in its own zone, ticking,
+then how long ago, the server's time in its own zone, ticking,
 with a note where it differs from this browser's clock by more than 5 s,
 both times in this browser's zone when the pointer rests on them,
-the certificate the browser sees,
-how it was installed (the Debian package, Homebrew, the Windows service,
-a systemd or launchd service, or other: by hand, a container or another supervisor),
-the system it runs on with its processor,
+the certificate the browser sees, how it was installed (the Debian package,
+Homebrew, the Windows service, a systemd or launchd service, or other: by hand,
+a container or another supervisor), the system it runs on with its processor,
 the host's full name, the host bold and the domain as it is,
-the interfaces the server listens on,
-a line each with the name, the MAC and the addresses,
-an asterisk marking the web interface's,
+the interfaces the server listens on, a line each with the name,
+the MAC and the addresses, an asterisk marking the web interface's,
 the Cube proxies' listeners, a line each with the Cube's serial,
-the address and "listening",
-or a notice for one that does not listen: the error, since when,
-and the next try when the pointer rests on it,
+the address and "listening", or a notice for one that does not listen:
+the error, since when, and the next try when the pointer rests on it,
 counted in a badge in the page's row while it fails (docs/proxy.md),
-and the address the server sees this browser at
-(`docs/api-v1.md`, "GET /api/v1/system").
-The certificate is the server's own (its source, names and expiry; none on plain HTTP),
-or, where a trusted proxy serves the page, the proxy's, "(proxied)":
-its names, expiry and issuer as the server read it, "not trusted" where it is not valid,
-with the address the proxy serves, a link to it in a new window and its copy icon;
+and the address the server sees this browser at (`docs/api-v1.md`,
+"GET /api/v1/system").
+The certificate is the server's own (its source, names and expiry;
+none on plain HTTP), or, where a trusted proxy serves the page, the proxy's,
+"(proxied)": its names, expiry and issuer as the server read it,
+"not trusted" where it is not valid, with the address the proxy serves,
+a link to it in a new window and its copy icon;
 "being read…" while the server reads it,
 which it does within seconds of the first request:
 the page asks again every 2 s while it is shown,
 and says "could not be read" when 30 s have not brought it;
-where the proxy names no scheme (no `X-Forwarded-Proto`), the page's own scheme
-and address, and that with that header the server reads the proxy's certificate;
+where the proxy names no scheme (no `X-Forwarded-Proto`),
+the page's own scheme and address,
+and that with that header the server reads the proxy's certificate;
 a page on HTTPS from a server without TLS says "(proxied)" too,
 and that `-trusted-proxies` would show more.
-The server's version copies on a click, or by its copy icon, whole, with
-what it was built with (the header's does too, without the icon);
+The server's version copies on a click, or by its copy icon, whole,
+with what it was built with (the header's does too, without the icon);
 so do each Cube proxy's serial, the serial it answers discovery with ("as …",
-where it answers discovery) and its address, which the original software connects to.
+where it answers discovery) and its address,
+which the original software connects to.
 A copy says "Copied"; on a page served over plain HTTP the browser gives no
 clipboard to the page, and the copy goes through its copy command instead,
 the focus given back to where it was.
 At its end, for a holder of `settings`,
-**Store** opens to what `massimo store info` shows:
-the file, the schema version, the node and tenant and the rows per table,
+**Store** opens to what `massimo store info` shows: the file,
+the schema version, the node and tenant and the rows per table,
 its head the file, the schema and the rows in all;
-**Settings in effect** to what `massimo config` shows: the version, the
-settings file, the data directory, the listen address, TLS, the log level
-and every `MASSIMO_*` variable with where it came from, a key, an IV, a
-token or a password as "set, not shown", as is a name Massimo does not
-know, beside "unknown name"
-(`docs/api-v1.md`, "GET /api/v1/store, GET /api/v1/config").
+**Settings in effect** to what `massimo config` shows: the version,
+the settings file, the data directory, the listen address, TLS,
+the log level and every `MASSIMO_*` variable with where it came from, a key,
+an IV, a token or a password as "set, not shown",
+as is a name Massimo does not know, beside "unknown name" (`docs/api-v1.md`,
+"GET /api/v1/store, GET /api/v1/config").
 Last, for every role, **Credits and licences** lists everything the server includes:
 Massimo itself, Go's runtime and standard library, the Go modules it links,
 and what the repository vendors (Preact and its signals, Tabler's icons,
@@ -1907,19 +1941,20 @@ the OPAQUE client's are its own `opaque.LICENSE`, MIT,
 and `opaque.LICENSE-3RD-PARTY`, the texts of its crates,
 which no one licence names,
 so that its head says "MIT, other licences among its files".
-The list is `/ui/credits.json`, the file `make credits` writes into `internal/credits/`
-and the server embeds,
+The list is `/ui/credits.json`,
+the file `make credits` writes into `internal/credits/` and the server embeds,
 with the versions of Go and of each module the binary was built with,
 which the file leaves out (`tools/credits/README.md`),
-served as the page's other files are,
-revalidated, with an ETag that holds the list's digest;
-the data hold names and identifiers, every sentence around them is the page's;
-the page fetches the list as the fold is first opened, and not again while it holds it;
-a fetch that fails says why in the fold, with **Try again**;
-once the list comes its first entry takes the focus,
+served as the page's other files are, revalidated,
+with an ETag that holds the list's digest; the data hold names and identifiers,
+every sentence around them is the page's;
+the page fetches the list as the fold is first opened,
+and not again while it holds it; a fetch that fails says why in the fold,
+with **Try again**; once the list comes its first entry takes the focus,
 and a try that fails again gives it back to **Try again**;
 an answer that comes after a sign-out, or after the page has left System info,
-changes nothing, and a fold left open fetches the list when the page is shown again.
+changes nothing,
+and a fold left open fetches the list when the page is shown again.
 `massimo credits` prints the same list (`README.md`, "Command line").
 The page is drawn in place as its facts are read again,
 while a certificate is being read and each time the page is shown,
@@ -1931,14 +1966,15 @@ and ends the readings of a certificate;
 the next user who opens the page reads them again.
 While it is shown, the page follows the server's events:
 a `resync` of the stream, after the server's restart, reads the facts,
-the store and the settings in effect;
-`settings_read`, the settings file read again, the store and the settings in effect;
-a `change` that adds, changes or takes away a Cube
-(`cube.add`, `cube.update`, `cube.remove`) the facts,
+the store and the settings in effect; `settings_read`,
+the settings file read again, the store and the settings in effect;
+a `change` that adds, changes or takes away a Cube (`cube.add`, `cube.update`,
+`cube.remove`) the facts,
 since the proxies' listeners and the interfaces listened on change with it.
 No other event changes a fact it shows:
 the proxies' events are about their clients, not their listeners,
-and the store's rows, which every event adds to, are read when the page is shown.
+and the store's rows, which every event adds to,
+are read when the page is shown.
 The certificate's readings keep their count and their pace through an event's read;
 where an event's read finds the certificate being read and nothing reading it,
 as after a restart, the readings start anew, their count at none.
@@ -1962,13 +1998,13 @@ A card folds with the button in its heading,
 which also says what it holds at a glance (**up to date**, **1 served**,
 **2 users**, **all on**, **3 kept**), also while it is folded;
 the browser keeps which cards are folded.
-A settings form of Users, Roles, Sign-in providers and Integrations
-(a user's, a role's, an identity's, a provider's, an integration's name
-and its maximum) keeps what is typed in it until it is saved or reset:
-through a change saved in another panel, the list read again,
+A settings form of Users, Roles, Sign-in providers and Integrations (a user's,
+a role's, an identity's, a provider's,
+an integration's name and its maximum) keeps what is typed in it until it is
+saved or reset: through a change saved in another panel, the list read again,
 the panel closed and opened again and another page shown;
-its **Save** says its state, with **Reset** beside it, as Cube settings' does
-(AP UnsavedMarks).
+its **Save** says its state, with **Reset** beside it,
+as Cube settings' does (AP UnsavedMarks).
 While one is unsaved, the card's head shows a pill with the disk, amber,
 or red after a save that failed, each of its items naming the form,
 which opens it, its panel opened and the focus in it, from any page;
@@ -1992,11 +2028,11 @@ settings forms and have none of it.
   for a triangle), the proxies that do not listen,
   the Cubes found at another address and those found and not served.
   Each is in a panel whose head shows the cube, the Cube's name,
-  the serial and the address without the port,
-  the duty cycle, the free slots and the radiograms pending,
-  a pill with every problem of the Cube (its proxy, its settings file
-  and its devices with theirs, as the header's), top-right whatever wraps,
-  led by the Cube's network sign,
+  the serial and the address without the port, the duty cycle,
+  the free slots and the radiograms pending,
+  a pill with every problem of the Cube (its proxy,
+  its settings file and its devices with theirs, as the header's),
+  top-right whatever wraps, led by the Cube's network sign,
   which stands for the green check where nothing else is wrong;
   a click on it opens its list and not the panel,
   the Cube's link in words its first row, "connected" too,
@@ -2006,40 +2042,39 @@ settings forms and have none of it.
   its own badges as its top line (its link where it is not connected,
   a proxy that does not listen, a settings file that differs,
   a Cube found elsewhere than its fixed address, the source),
-  a table of its facts for everyone who sees the panel
-  (serial, address, port, firmware, radio address, the Cube's clock,
-  duty cycle, free slots, pending and queued, following every poll;
-  the serial, the address and the radio address copy with a click on them
-  or their copy icon),
-  and above the facts a notice with since when where the server knows why it
-  is not connected (`link` of `docs/api-v1.md`, "GET /api/v1/cubes"):
-  its lost connection held open until a time, so that it carries on when the
-  network is back, the Cube still holding the server's old connection
-  (it lets go after up to about 40 minutes, or a reboot frees it),
-  or the Cube busy with another client;
+  a table of its facts for everyone who sees the panel (serial, address, port,
+  firmware, radio address, the Cube's clock, duty cycle, free slots,
+  pending and queued, following every poll; the serial,
+  the address and the radio address copy with a click on them or their copy icon),
+  and above the facts a notice with since when where the server knows why it is
+  not connected (`link` of `docs/api-v1.md`, "GET /api/v1/cubes"):
+  its lost connection held open until a time,
+  so that it carries on when the network is back,
+  the Cube still holding the server's old connection (it lets go after up to
+  about 40 minutes, or a reboot frees it), or the Cube busy with another client;
   for a Cube not connected whose address lies outside this machine's networks
   (`other_network`), a notice as on Rooms, with the `netconfig` line;
   and where discovery finds a Cube with a fixed address at another one
   (`found_elsewhere`), a notice with both addresses and since when,
-  and **Use the found address** and **Follow discovery**, which save either
-  at once (a Cube of `-addr` or `-sn` has the notice alone);
+  and **Use the found address** and **Follow discovery**,
+  which save either at once (a Cube of `-addr` or `-sn` has the notice alone);
   the card's badge counts such Cubes;
   where few of the Cube's memory slots stayed free for an hour with nothing of
-  the server's on its way (`slots_low`), a badge, amber **few memory slots
-  free** below 5, red **memory slots full** below 2, and a notice with the
-  free slots and since when, that they hold radiograms for devices that do not
-  answer and that radio commands wait for free slots, pointing to
-  **Reboot the Cube** below, the owner's, which drops them;
-  the log has its **memory slots** line, a warning below 5, an error below 2,
-  until the slots are free;
+  the server's on its way (`slots_low`), a badge,
+  amber **few memory slots free** below 5, red **memory slots full** below 2,
+  and a notice with the free slots and since when,
+  that they hold radiograms for devices that do not answer and that radio
+  commands wait for free slots, pointing to **Reboot the Cube** below,
+  the owner's, which drops them; the log has its **memory slots** line,
+  a warning below 5, an error below 2, until the slots are free;
   where its settings came from (the settings file, changed here,
   or for this run only), and the fields **Name**, **Address** (empty:
   the address the Cube answers discovery from, shown in grey),
   **Follow the address the Cube answers discovery from**,
   **Proxy address** (the address of this server other programs connect to for this Cube;
-  empty: :62910 when it is the only Cube), **Serial in discovery replies**
-  and **Show proxy clients the virtual wall thermostat of every room**
-  (docs/proxy.md, "Virtual wall thermostats").
+  empty: :62910 when it is the only Cube),
+  **Serial in discovery replies** and **Show proxy clients the virtual wall
+  thermostat of every room** (docs/proxy.md, "Virtual wall thermostats").
   Under the proxy address the panel says where the proxy listens,
   and for a listener that does not, a notice with the error and since when,
   the next try when the pointer rests on it:
@@ -2072,7 +2107,8 @@ settings forms and have none of it.
   which frees one that still holds the server's old connection at once:
   in place of the button it asks first, naming the Cube's serial,
   that it is gone for about a minute and its rooms refuse commands for a while,
-  the radiograms pending as the Cube last said and when, which the restart drops,
+  the radiograms pending as the Cube last said and when,
+  which the restart drops,
   and for a Cube busy with another client that the client may take it back;
   the head's badge then says rebooting until the Cube greets the server.
   When a line of the server's settings file says something else than the panel,
@@ -2080,23 +2116,25 @@ settings forms and have none of it.
   **Remove** stops serving the Cube;
   its settings and history stay in the store with its removed row,
   and it is listed as found while discovery hears it.
-  Under the panels, what discovery found and the server does not serve
-  is one fold, **Found on the network, not set up**, closed at first:
-  its head the found Cubes' sign and how many Cubes and Massimo proxies;
-  open, each Cube with its address, DHCP flag and firmware,
+  Under the panels, what discovery found and the server does not serve is one fold,
+  **Found on the network, not set up**, closed at first:
+  its head the found Cubes' sign and how many Cubes and Massimo proxies; open,
+  each Cube with its address, DHCP flag and firmware,
   "via proxy at …" where a massimo proxy answers for it,
   in expert mode its radio and MAC address and the gateway it uses, and **Add**,
-  which serves a found Cube at once;
-  a Cube that was removed has **Add as new**, a row of its own without the
-  old history, and a **Restore** with the date for each removed row of its serial,
+  which serves a found Cube at once; a Cube that was removed has **Add as new**,
+  a row of its own without the old history,
+  and a **Restore** with the date for each removed row of its serial,
   newest first, its name in the label and the tooltip,
-  which serves that row again with its settings and history (`removed`, `restore`);
-  under a Cube whose address lies outside this machine's networks
-  (`other_network`), a notice as on Rooms, with the `netconfig` line;
-  each Massimo proxy with its address, the Cube it serves
-  and the Massimo server serving it, its name a link to the address
-  its announcement gives (`host` of `docs/api-v1.md`), without **Add**:
-  it is another server's, listed so that its Cube is not added twice;
+  which serves that row again with its settings and history (`removed`,
+  `restore`);
+  under a Cube whose address lies outside this machine's networks (`other_network`),
+  a notice as on Rooms, with the `netconfig` line;
+  each Massimo proxy with its address,
+  the Cube it serves and the Massimo server serving it,
+  its name a link to the address its announcement gives (`host` of `docs/api-v1.md`),
+  without **Add**: it is another server's,
+  listed so that its Cube is not added twice;
   a Cube a proxy of another server serves names that server too.
   Under them, **Lines for the settings file**, a fold of its own
   with one copy icon for all of them, serve the Cubes too
@@ -2109,14 +2147,14 @@ settings forms and have none of it.
   "Cube variables").
   A Cube served for this run only (`serve -addr` or `-sn`) cannot be changed here.
 
-  A Cube's panel has three groups: its facts, its settings with **Hidden devices**
-  and **Save**, and its actions in one row under both,
-  **Pair a device**, **Refresh the Cube**, **Reboot the Cube** and **Remove**,
+  A Cube's panel has three groups: its facts,
+  its settings with **Hidden devices** and **Save**,
+  and its actions in one row under both, **Pair a device**,
+  **Refresh the Cube**, **Reboot the Cube** and **Remove**,
   each question and the pairing's progress in a line under them;
   from 760 px the facts and the settings are side by side.
-  **Pair a device**
-  shows the pairing time (60 seconds, at most 255, the longest a Cube keeps)
-  and **Start**,
+  **Pair a device** shows the pairing time (60 seconds, at most 255,
+  the longest a Cube keeps) and **Start**,
   which puts the Cube into pairing mode;
   then the device's pairing button is pressed, as its manual says.
   A time out of range outlines the field in red as it is typed,
@@ -2160,29 +2198,27 @@ settings forms and have none of it.
 - **Users** (with `users`, `passwords`, `guests` for the regular guests alone,
   or `integrations` for an integration's users, AP AccessEnds, D46-A):
   a user changes only users whose role has no capability its own lacks,
-  and a holder of `integrations` also changes an integration's user
-  whatever its role but one stored as owner,
-  giving it only a role it outranks (D47-A),
+  and a holder of `integrations` also changes an integration's user whatever its
+  role but one stored as owner, giving it only a role it outranks (D47-A),
   so nobody but an owner changes an owner, whose panel says so,
   and with `passwords` alone (a manager's) a panel offers the password alone;
-  a user's role choice offers the roles the server says may be given to it
-  (`may.roles`, AP AccessEnds, D3), so no owner but to an owner,
+  a user's role choice offers the roles the server says may be given to it (`may.roles`,
+  AP AccessEnds, D3), so no owner but to an owner,
   and a new user's no `integration`, which no new user is given.
-  Every user in a panel whose head shows the display name, the login apart
-  from it and, at the right edge, the badges: **you** first, the role,
-  the state and **keys only**;
-  in the panel the display name, role, whether it is disabled,
-  a guest's end, and a new password, which ends the user's sessions and,
-  as every password the page sets,
-  is registered by OPAQUE in the browser and never sent;
-  **Save**, off while nothing differs from the user, and **Reset**;
-  a new password typed stays in its field alone, in no draft, and goes
-  with a Save, a Reset or a sign-out;
+  Every user in a panel whose head shows the display name,
+  the login apart from it and, at the right edge, the badges: **you** first,
+  the role, the state and **keys only**; in the panel the display name, role,
+  whether it is disabled, a guest's end, and a new password,
+  which ends the user's sessions and, as every password the page sets,
+  is registered by OPAQUE in the browser and never sent; **Save**,
+  off while nothing differs from the user, and **Reset**;
+  a new password typed stays in its field alone, in no draft,
+  and goes with a Save, a Reset or a sign-out;
   it is typed once (AP PasswordRules, D51-A), the rule's line under it,
   and a Save the rule refuses sends nothing and puts the focus in it;
-  left empty, the password stays as it is, unchecked;
-  **Remove**, which asks in place of the panel's actions;
-  the user's sessions and API keys, each with its id, and **Revoke**,
+  left empty, the password stays as it is, unchecked; **Remove**,
+  which asks in place of the panel's actions; the user's sessions and API keys,
+  each with its id, and **Revoke**,
   read when the panel opens and after every change of the users while it is open;
   in one's own panel the session or key the page is signed in with says **this device**,
   the key that session was made from **its key**,
@@ -2192,16 +2228,16 @@ settings forms and have none of it.
   the phone may keep a login of another user than the one signed in,
   and an administrator looking at that user's panel sees the phone's key rightly;
   the settings file's key says it comes from there in place of Revoke,
-  as under My profile;
-  and **Create key**, which shows the new key once: from the read that follows it
-  until the next, in that panel alone, kept nowhere;
-  where a sign-in provider is enabled, the user's identities at the providers,
-  each with its e-mail, or its user ID there,
-  and whether it is bound or waits for its first sign-in,
-  what the provider said of it at the last sign-in (name, user name, groups) and when,
+  as under My profile; and **Create key**, which shows the new key once:
+  from the read that follows it until the next, in that panel alone,
+  kept nowhere; where a sign-in provider is enabled,
+  the user's identities at the providers, each with its e-mail,
+  or its user ID there, and whether it is bound or waits for its first sign-in,
+  what the provider said of it at the last sign-in (name, user name,
+  groups) and when,
   **Change** of the e-mail or user ID while no sign-in used it,
-  a settings form of its own, with **Cancel**,
-  **Remove**, and **Assign** to the user, at a provider,
+  a settings form of its own, with **Cancel**, **Remove**,
+  and **Assign** to the user, at a provider,
   by an e-mail or by the user ID there.
   **Add a user**, for a holder of `users` or `guests`, opens the form for one;
   its name is checked 2 seconds after the last keystroke and when the field is left:
@@ -2223,62 +2259,60 @@ settings forms and have none of it.
   and this page's fields lose theirs at once, the others' at their next look
   at the server.
   On a server without users (FirstOwner D14),
-  an integration's beside it or not
-  (AP LooseEnds, D42; its list taken back by AP LooseEnds, D46),
-  the head says **No owner yet** in place of the count (AP AccessEnds, D8)
-  and the section says so instead, once its users are read or their read failed,
-  with **Create the owner…**, which opens the sign-in card with its form,
-  and no password sign-in, no panels and no Add a user;
-  an integration's users are listed there,
+  an integration's beside it or not (AP LooseEnds, D42;
+  its list taken back by AP LooseEnds, D46),
+  the head says **No owner yet** in place of the count (AP AccessEnds,
+  D8) and the section says so instead,
+  once its users are read or their read failed, with **Create the owner…**,
+  which opens the sign-in card with its form, and no password sign-in,
+  no panels and no Add a user; an integration's users are listed there,
   each a row with the name it is shown by and its badges,
   nothing to open or press,
   since anyone on the local network may change them (D7);
   the line above them says that they act through their integration alone,
   and **Open Integrations** under them shows the card that manages them (D9);
   while the server is kept open (Keep it open… of the sign-in card),
-  **Keep this server open without an owner** follows, on:
-  turned off, it is saved at once and stays in sight, off, for that showing,
+  **Keep this server open without an owner** follows, on: turned off,
+  it is saved at once and stays in sight, off, for that showing,
   with the line that the page asks for the owner again at its next load;
   who is in is read again then, by the one read that asks for nobody,
   so nothing more happens at once (FirstOwner D31, D44).
   It is shown only while the server is kept open:
   keeping it open is the card's confirmation alone (FirstOwner D32).
 - **Sign-in providers** (with `auth`, the owner's alone by default),
-  explained by the ⓘ in its head:
-  the redirect URI to register at a provider,
+  explained by the ⓘ in its head: the redirect URI to register at a provider,
   the page's address and `api/v1/login/oidc/callback`, with its copy icon;
   every OpenID Connect provider in a panel, its name and key,
-  **disabled** and **creates users** as badges,
-  with its name on the button, issuer, client ID, client secret (written only:
-  the line under it says whether one is set,
-  or that it no longer opens, `opaque.key` lost, and is to be entered again),
-  scopes, **Allowed groups** (comma-separated, any where empty)
-  and the **Groups claim** they are read from (`groups` where empty), **Enabled**,
-  and **Create users who sign in** with their role,
-  which holds no administrative capability, and their e-mail domains;
-  **Save**, which for an enabled provider first reads its discovery document
-  and says what is wrong where the issuer is not reached or named otherwise,
-  **Reset**, **Remove**, which asks in place of the actions;
+  **disabled** and **creates users** as badges, with its name on the button,
+  issuer, client ID, client secret (written only:
+  the line under it says whether one is set, or that it no longer opens,
+  `opaque.key` lost, and is to be entered again), scopes,
+  **Allowed groups** (comma-separated,
+  any where empty) and the **Groups claim** they are read from (`groups` where empty),
+  **Enabled**, and **Create users who sign in** with their role,
+  which holds no administrative capability, and their e-mail domains; **Save**,
+  which for an enabled provider first reads its discovery document and says what
+  is wrong where the issuer is not reached or named otherwise, **Reset**,
+  **Remove**, which asks in place of the actions;
   a client secret typed stays in its field alone, in no draft;
   **Add a provider** opens the form for one, with its key.
-- **Integrations** (with `integrations`, the owner's and the manager's by
-  default; docs/api-v1.md, "Integrations"), explained by the ⓘ in its head:
-  with `settings`, **Integrations may ask to be registered**;
-  each request waiting in a panel whose head shows its code, to compare
-  with the one the integration shows,
-  and **seen on the LAN** or **not seen on the LAN**;
-  in it where it came from, its installation id, address, version and
-  until when it waits, a switch per capability of the role `integration`,
-  all on, for its maximum, `restart` on and off with why
-  where `update` or `reboot` is on, as in a role's set,
-  **Registered before as**, where an integration of its kind is
-  registered, the same installation chosen,
+- **Integrations** (with `integrations`,
+  the owner's and the manager's by default; docs/api-v1.md, "Integrations"),
+  explained by the ⓘ in its head: with `settings`,
+  **Integrations may ask to be registered**;
+  each request waiting in a panel whose head shows its code,
+  to compare with the one the integration shows,
+  and **seen on the LAN** or **not seen on the LAN**; in it where it came from,
+  its installation id, address, version and until when it waits,
+  a switch per capability of the role `integration`, all on, for its maximum,
+  `restart` on and off with why where `update` or `reboot` is on,
+  as in a role's set, **Registered before as**,
+  where an integration of its kind is registered, the same installation chosen,
   **Refuse**, which asks first, and **Approve**.
-  Approved, the integration's panel says until when Home Assistant may
-  collect its key, and the page reads that integration again, every 3 s
-  in the first minute, then every 15 s, until it has: then it says so;
-  once that time has passed, **approval expired** as a badge, why, and
-  **Register**.
+  Approved, the integration's panel says until when Home Assistant may collect its key,
+  and the page reads that integration again, every 3 s in the first minute,
+  then every 15 s, until it has: then it says so; once that time has passed,
+  **approval expired** as a badge, why, and **Register**.
   After every change here Users is read again where it may be managed,
   so that it lists an integration's users as approved, named and linked,
   with the roles its maximum leaves them, without System settings shown again
@@ -2288,40 +2322,43 @@ settings forms and have none of it.
   and of reads that overlap, the newest asked for is the one shown.
   Every integration in a panel, its name, **disabled**,
   **new installation** and **approval expired** as badges:
-  its **Name** with **Save the name**, off while the name is as stored, and **Reset**,
-  the name its users are shown under (the integration's own user's
-  display name);
-  its **Name in Home Assistant** where Home Assistant reports another,
-  its id, installation id, address, version, when its key was issued and
-  whether the LAN saw it;
+  its **Name** with **Save the name**, off while the name is as stored,
+  and **Reset**,
+  the name its users are shown under (the integration's own user's display name);
+  its **Name in Home Assistant** where Home Assistant reports another, its id,
+  installation id, address, version,
+  when its key was issued and whether the LAN saw it;
   for a call from another installation, **Accept the new installation**;
   **Enabled**, saved at once, its maximum, `restart` held as in a request's,
   with **Save the maximum** and **Reset**,
   its users (read when the panel opens), the system user first,
-  each with its id's first eight characters, its level and when it acted
-  last, and **Acts as**: its own user or a Massimo user, the one of the
-  same name proposed, with **Link**, the choice following what is stored
-  until it is changed, without the marks of a settings form (UnsavedMarks D25):
-  Link also takes a proposal the select already shows, so it cannot be off
-  while nothing is changed, and it is a command;
-  for a holder of `users`, `guests` or `passwords`, which reads the users to link to:
-  a holder of `integrations` alone sees who each acts as, without Link
-  (AP AccessEnds, D46-A, Users alone); and **Revoke**, which asks first.
+  each with its id's first eight characters, its level and when it acted last,
+  and **Acts as**: its own user or a Massimo user,
+  the one of the same name proposed, with **Link**,
+  the choice following what is stored until it is changed,
+  without the marks of a settings form (UnsavedMarks D25):
+  Link also takes a proposal the select already shows,
+  so it cannot be off while nothing is changed, and it is a command;
+  for a holder of `users`, `guests` or `passwords`,
+  which reads the users to link to:
+  a holder of `integrations` alone sees who each acts as,
+  without Link (AP AccessEnds, D46-A, Users alone); and **Revoke**,
+  which asks first.
   A request's maximum and what it was registered as before stay as chosen
   while the integrations are read again, until it is approved or refused.
   Under them the Home Assistant installations the server saw on the LAN,
   each with its address as a link, or as text where it announced none,
   either with a copy icon, and **registered** or **not registered**;
-  one not registered has **Register**, which opens Home Assistant's page
-  that adds the Massimo integration
-  (`<address>/_my_redirect/config_flow_start?domain=massimo`), and where
-  Home Assistant announced no address first asks for it, filled in with
-  `http://<its IP address>:8123`; with **Look again**;
-  where the server does not look, why, naming Announce on the LAN and
-  what to change: Off, Automatic on the loopback, a change waiting for
-  the restart, or `-announce` or `MASSIMO_ANNOUNCE`, which decides;
-  with `settings`, **Open Maintenance**, but where the flag or the
-  variable decides;
+  one not registered has **Register**,
+  which opens Home Assistant's page that adds the Massimo integration
+  (`<address>/_my_redirect/config_flow_start?domain=massimo`),
+  and where Home Assistant announced no address first asks for it,
+  filled in with `http://<its IP address>:8123`; with **Look again**;
+  where the server does not look, why,
+  naming Announce on the LAN and what to change: Off, Automatic on the loopback,
+  a change waiting for the restart, or `-announce` or `MASSIMO_ANNOUNCE`,
+  which decides; with `settings`, **Open Maintenance**,
+  but where the flag or the variable decides;
   nothing of the LAN until the server's answer of what it saw has come.
   Where System settings is shown again before its reads have answered,
   or a panel's integration is read again,
@@ -2329,30 +2366,33 @@ settings forms and have none of it.
   show the answers of the newest reads asked for, in whatever order they come;
   a newer read that fails leaves them as they were until the next.
   In **Users**, an integration's user is shown by its chain,
-  "<the integration's name> › <its display name>", with
-  ", as <login name>" where it is linked (AP StoreRaise v1.2), without
-  its login name, and carries **integration user** (the integration's own,
-  shown by the integration's name, **integration**); a linked one
-  **acts as** the user; a user that integration users act as counts them
-  as a badge and names them, by their chains, at the top of its panel.
+  "<the integration's name> › <its display name>", with ",
+  as <login name>" where it is linked (AP StoreRaise v1.2),
+  without its login name,
+  and carries **integration user** (the integration's own,
+  shown by the integration's name, **integration**);
+  a linked one **acts as** the user;
+  a user that integration users act as counts them as a badge and names them,
+  by their chains, at the top of its panel.
   An integration's user acts through its integration alone (AP LooseEnds, D1):
-  its panel has no password field, no new key and no identity to assign or change,
+  its panel has no password field,
+  no new key and no identity to assign or change,
   a line saying it has no sign-in of its own in their place,
-  and **Remove the password** where it holds one from before;
-  its role, disabled, its display name and Remove stay,
+  and **Remove the password** where it holds one from before; its role,
+  disabled, its display name and Remove stay,
   and a key it holds from before is listed with Revoke;
   the integration's own user and its system user offer no Remove:
   removing the integration in Integrations keeps them.
   Its role choice offers, of the roles the caller outranks,
-  those within its integration's maximum,
-  and **integration**, which it is given back by a caller that outranks it
-  (AP AccessEnds, D3, D5, D47-A);
-  a role stored beyond the maximum stays chosen and offered,
+  those within its integration's maximum, and **integration**,
+  which it is given back by a caller that outranks it (AP AccessEnds, D3, D5,
+  D47-A); a role stored beyond the maximum stays chosen and offered,
   with the line under it that the user acts within that maximum all the same,
-  as the server says (`may.beyond`), never under a role within it the caller
-  does not outrank,
-  until another is saved, and so does a role chosen and not yet saved
-  where the list read again no longer offers it (D4).
+  as the server says (`may.beyond`),
+  never under a role within it the caller does not outrank,
+  until another is saved,
+  and so does a role chosen and not yet saved where the list read again no
+  longer offers it (D4).
   A holder of `integrations` without `users` or `passwords`
   sees Users with every integration's user but one stored as owner, and itself,
   each in its panel as above, its controls as the server says (`may`):
@@ -2360,8 +2400,9 @@ settings forms and have none of it.
   the end, Remove, and Revoke and Remove of what it holds from before;
   not Remove the password, which needs `users` or `passwords`,
   and no Add a user (AP AccessEnds, D46-A, D47-A).
-  My profile of one, in with such a key, says the same line in place of the
-  password, and offers no new key and no Link.
+  My profile of one, in with such a key,
+  says the same line in place of the password,
+  and offers no new key and no Link.
   The log's lines, a command's detail and its audit row name who
   started them the same way ("…, by Home › Anna, as anna"), and the
   log's user filter lists the users so.
@@ -2405,15 +2446,17 @@ settings forms and have none of it.
   the notes and what the radio commands cost of the hourly budget,
   and sends nothing until **Send N commands**;
   then each step is marked as the Cube took it, and the end is said.
-  A Cube's boxes on both pages show the same restore,
-  and a fold open, a deletion asking, the format chosen and a restore shown
-  stay while the lists are read again;
-  while a restore runs, its Cube's **Restore…** and **Restore from file…** are off
-  in both places, so that it stays in sight, and a stored backup's plan closes
-  once the list no longer has the backup;
+  A Cube's boxes on both pages show the same restore, and a fold open,
+  a deletion asking,
+  the format chosen and a restore shown stay while the lists are read again;
+  while a restore runs,
+  its Cube's **Restore…** and **Restore from file…** are off in both places,
+  so that it stays in sight,
+  and a stored backup's plan closes once the list no longer has the backup;
   where the page's connection to the server was cut so long that the server
-  answers a resync, a restore still running is shown as one whose end the page
-  did not see, the log saying how it ended, and the buttons are back.
+  answers a resync,
+  a restore still running is shown as one whose end the page did not see,
+  the log saying how it ended, and the buttons are back.
   A Cube that is not in the server's store (a run with `-addr`) has no list;
   its download and the restore from a file work as before.
   After the served Cubes' folds,
@@ -2440,9 +2483,9 @@ settings forms and have none of it.
 ☰ → **Maintenance** keeps the server itself going,
 in two cards as wide as the page, **Software update** and **Maintenance**,
 under the page's row with **Sections** at its right end, as System settings has.
-It is for every role that has System settings, Software update being for all of them,
-and for one with `update`, `restart` or `reboot` alone;
-a viewer has no such entry in ☰.
+It is for every role that has System settings,
+Software update being for all of them, and for one with `update`,
+`restart` or `reboot` alone; a viewer has no such entry in ☰.
 The server's sign, when it says an update is out, opens it at Software update.
 
 - **Software update**:
@@ -2495,12 +2538,12 @@ The server's sign, when it says an update is out, opens it at Software update.
   a failed read asks as before.
   On a box the Debian package installed it says "Installed by apt",
   the channel is the suite of the apt source,
-  and **Update** has the package's helper run apt;
-  nothing is put back there, and the last update says how to go back
-  (packaging/README.md, "Debian package").
+  and **Update** has the package's helper run apt; nothing is put back there,
+  and the last update says how to go back (packaging/README.md,
+  "Debian package").
   Under Homebrew's service it says "Installed by brew",
-  and **Update** runs `brew upgrade` as the service's user
-  (packaging/README.md, "Homebrew").
+  and **Update** runs `brew upgrade` as the service's user (packaging/README.md,
+  "Homebrew").
   There a release is offered once apt's index or brew's tap has it:
   one out on GitHub that the source has not yet, without **Update**,
   reads "v0.16.0-alpha.2 is out; apt has it not yet",
@@ -2526,9 +2569,10 @@ The server's sign, when it says an update is out, opens it at Software update.
   one it rolled back says "failed and rolled back" after the version reached
   (`docs/api-v1.md`, "GET /api/v1/update?refresh=1").
   The section is drawn in place as a check comes in,
-  the header's every half hour, Check for updates, the reading while the helper works
-  and Maintenance shown again:
-  a line selected stays selected, the channel's choice and Update's question stay;
+  the header's every half hour, Check for updates,
+  the reading while the helper works and Maintenance shown again:
+  a line selected stays selected,
+  the channel's choice and Update's question stay;
   the question goes where a check finds another release than the one it named,
   the focus back on Update,
   so that it never names a release the page knows to be gone,
@@ -2541,8 +2585,9 @@ The server's sign, when it says an update is out, opens it at Software update.
   and a later choice's check supersedes an earlier one's.
   A sign-out ends the reading while the helper works and takes the question back;
   the next user who opens Maintenance reads it again.
-  While Maintenance is shown, the section follows the server's events
-  (`docs/api-v1.md`, "Events"), each read drawn in place:
+  While Maintenance is shown,
+  the section follows the server's events (`docs/api-v1.md`, "Events"),
+  each read drawn in place:
 
   | Event | When the server sends it | What Software update reads |
   |---|---|---|
@@ -2558,7 +2603,8 @@ The server's sign, when it says an update is out, opens it at Software update.
   An event's read of the channel waits while this page's own change of it is under way
   and is made once when it has ended,
   and its answer shows nothing where a choice was made meanwhile.
-  Whoever started an update, a read that finds the helper at work greys the buttons out,
+  Whoever started an update,
+  a read that finds the helper at work greys the buttons out,
   and a refused request of this page leaves them so while the reading goes on.
   One `resync` reads the settings twice,
   once for the channel and once for Maintenance's card,
@@ -2566,16 +2612,16 @@ The server's sign, when it says an update is out, opens it at Software update.
   A page not shown reads nothing; showing it reads everything, as before.
   Events that come together make one read, and one more after it for those
   that came while it ran.
-- **Maintenance** (with `restart`, which `update` and `reboot` include
-  (docs/api-v1.md, "Authentication"), `reboot` for its reboot,
-  or `settings` for its announcement, its Cube intervals and its last two parts),
-  in this order: **Announce on the LAN**, the Cube intervals
-  with **Refresh the Cubes** after the refresh's,
+- **Maintenance** (with `restart`,
+  which `update` and `reboot` include (docs/api-v1.md, "Authentication"),
+  `reboot` for its reboot, or `settings` for its announcement,
+  its Cube intervals and its last two parts), in this order:
+  **Announce on the LAN**,
+  the Cube intervals with **Refresh the Cubes** after the refresh's,
   **Settings file**, **Restart** and **Reboot the computer**,
   each under a bold title:
-  **Restart the server**
-  asks in the section and restarts the server through its service manager
-  (`docs/api-v1.md`, "POST /api/v1/restart");
+  **Restart the server** asks in the section and restarts the server through its
+  service manager (`docs/api-v1.md`, "POST /api/v1/restart");
   the page then asks `/healthz` every two seconds until the server reports a new start,
   reads the data again and says when it started,
   or says after two minutes that it has not come back.
@@ -2612,31 +2658,36 @@ The server's sign, when it says an update is out, opens it at Software update.
   The notice blocks nothing, and the restart is offered all the same;
   a read that finds nothing refused, Reload now's among them,
   takes it away, with the badge and the sentence.
-  **Announce on the LAN** (with `settings`) chooses **Automatic**, **On**
-  or **Off** for the setting `announce`: the announcement by mDNS for
-  `massimo discover`, the apps and Home Assistant, Automatic on unless the
-  server listens on the loopback, as behind a reverse proxy.
-  The line under it says whether the server announces itself now, or that
-  a change waits for the next restart; where `-announce` or
-  `MASSIMO_ANNOUNCE` decides, the choice is read-only and names it
-  (`docs/api-v1.md`, "GET and PUT /api/v1/settings").
-  **Poll the Cubes every**, **Refresh the Cubes every** and **Look for
-  Cubes every** (with `settings`) choose the intervals `poll_interval`
-  (10 s to 1 h, 10 s by default), `refresh_interval` (Off, 30 min to
-  7 days, 6 h by default) and `discover_interval` (Off, 1 min to 1 day,
-  30 min by default) from a list of steps, and **Re-read the radio
-  budget after a hold every** the duty cycle's hold `duty_wait` (1 min to
-  1 h, 10 min by default); a value set through the API
-  that is none of them is listed as well, and the default is stored as
-  none.
+  **Announce on the LAN** (with `settings`) chooses **Automatic**,
+  **On** or **Off** for the setting `announce`:
+  the announcement by mDNS for `massimo discover`, the apps and Home Assistant,
+  Automatic on unless the server listens on the loopback,
+  as behind a reverse proxy.
+  The line under it says whether the server announces itself now,
+  or that a change waits for the next restart;
+  where `-announce` or `MASSIMO_ANNOUNCE` decides,
+  the choice is read-only and names it (`docs/api-v1.md`,
+  "GET and PUT /api/v1/settings").
+  **Poll the Cubes every**,
+  **Refresh the Cubes every** and **Look for Cubes every** (with `settings`)
+  choose the intervals `poll_interval` (10 s to 1 h, 10 s by default),
+  `refresh_interval` (Off, 30 min to 7 days,
+  6 h by default) and `discover_interval` (Off, 1 min to 1 day,
+  30 min by default) from a list of steps,
+  and **Re-read the radio budget after a hold every** the duty cycle's hold
+  `duty_wait` (1 min to 1 h, 10 min by default);
+  a value set through the API that is none of them is listed as well,
+  and the default is stored as none.
   The line under each says what it does: the device list asked for,
-  which costs the Cube no radio time; a new connection that reads
-  everything the Cube holds; the search for Cubes on the LAN; how long
-  radio commands wait at a used-up duty cycle before the Cube's budget is
-  read again.
-  It then gives this run's value, or says that a change waits for the
-  next restart; where `-poll`, `-refresh` or `-discover-interval`
-  decides, the choice is read-only and names the flag.
+  which costs the Cube no radio time;
+  a new connection that reads everything the Cube holds;
+  the search for Cubes on the LAN;
+  how long radio commands wait at a used-up duty cycle before the Cube's budget
+  is read again.
+  It then gives this run's value,
+  or says that a change waits for the next restart; where `-poll`,
+  `-refresh` or `-discover-interval` decides,
+  the choice is read-only and names the flag.
   **Refresh the Cubes** (with `restart`,
   so that a manager has it without the intervals)
   reads every Cube the server serves again at once, one after the other,
@@ -2651,8 +2702,8 @@ The server's sign, when it says an update is out, opens it at Software update.
   Showing Maintenance again takes the lines back, but not while a run goes on,
   and a sign-out ends the run with nothing shown.
   **Settings file** names the file and when the server last read it;
-  **Reload now** reads it again at once, as SIGHUP does
-  (`docs/api-v1.md`, "POST /api/v1/reload"), and says what changed.
+  **Reload now** reads it again at once, as SIGHUP does (`docs/api-v1.md`,
+  "POST /api/v1/reload"), and says what changed.
   **Reboot the computer** (with `reboot`, the owner's) has a delay in seconds,
   60 to begin with, 0 to 3600, and asks in the section,
   naming the delay, before it asks the server (`docs/api-v1.md`,
@@ -2671,7 +2722,8 @@ The server's sign, when it says an update is out, opens it at Software update.
   the delay typed, a question and the focus stay.
   The announcement and the intervals are saved as they are chosen,
   each staying on with the choice in it while its request, the PUT alone, runs,
-  so that the focus stays on it, and showing what is stored once it has answered.
+  so that the focus stays on it,
+  and showing what is stored once it has answered.
   The restart's question goes where the restart is no longer offered,
   the reboot's where the reboot is not, or a reboot waits, asked for elsewhere.
   A sign-out ends the following of a restart or a reboot,
@@ -2700,52 +2752,51 @@ The server's sign, when it says an update is out, opens it at Software update.
 
 The apps for Android and iOS (docs/app.md) open on a page of their own,
 `ui/connect.html`, or on the server marked **Open at start**:
-the servers the app keeps, each with what it found
-when it last looked (on the LAN, remote, not reachable, a changed certificate)
-and, as a green badge, the user the app is signed in as there,
-checked at each look,
-a tap opening the server, the app asking for the fingerprint first where it
-keeps a login (docs/app.md, "Opening from the list"),
-a cancel opening the server's sign-in card,
+the servers the app keeps,
+each with what it found when it last looked (on the LAN, remote, not reachable,
+a changed certificate) and, as a green badge,
+the user the app is signed in as there, checked at each look,
+a tap opening the server,
+the app asking for the fingerprint first where it keeps a login (docs/app.md,
+"Opening from the list"), a cancel opening the server's sign-in card,
 the sign-in icon, where a login is kept, that card without the prompt,
-⚙ or a long press its settings;
-the Servers card's ☰, with **Add server…**, **Sign out of all**,
-**Forget all stored credentials** where a login is kept,
+⚙ or a long press its settings; the Servers card's ☰, with **Add server…**,
+**Sign out of all**, **Forget all stored credentials** where a login is kept,
 asked first, under the list,
 which revokes each login's key at its server and signs out there,
 as **Turn off** does, its message naming the servers that keep a key,
-and **App settings…**;
-the card that adds a server, shown while the list is empty or from the ☰,
-with × and closed once a server is added:
-the servers on the network, searched for as it opens, and an address typed;
-and the fingerprint of a self-signed certificate, compared with the
-server's log or `massimo tls show` before it is trusted.
+and **App settings…**; the card that adds a server,
+shown while the list is empty or from the ☰,
+with × and closed once a server is added: the servers on the network,
+searched for as it opens, and an address typed;
+and the fingerprint of a self-signed certificate,
+compared with the server's log or `massimo tls show` before it is trusted.
 A server's settings take the focus themselves, not a field,
-so that a phone's keyboard stays closed:
-the name and the addresses, **Open at start** (one server at most),
-when the fingerprint is asked, the session with **Sign out**,
+so that a phone's keyboard stays closed: the name and the addresses,
+**Open at start** (one server at most), when the fingerprint is asked,
+the session with **Sign out**,
 the certificate's subject and end with **Certificate…**,
-a dialog with its issuer, names, validity, fingerprint and since when it
-is trusted, the login by fingerprint with **Turn off**,
-which revokes its key and signs out,
+a dialog with its issuer, names, validity,
+fingerprint and since when it is trusted,
+the login by fingerprint with **Turn off**, which revokes its key and signs out,
 a line for each key of the phone's still valid there with **Show in My profile**,
 which opens the server's page at My profile with the key marked,
 off while the server does not answer, its title saying why,
 a line for each session of the phone's still valid there,
-which the app forgot without the server ending it,
-the server not answering, and ends at the next sign-in there as its user,
-and under Cancel and Save, after a rule, **Remove server** on a line of its own,
-with a line saying what it does, which turns a kept login off first, or signs out first,
-its question and its message naming a key or a session left.
+which the app forgot without the server ending it, the server not answering,
+and ends at the next sign-in there as its user, and under Cancel and Save,
+after a rule, **Remove server** on a line of its own,
+with a line saying what it does, which turns a kept login off first,
+or signs out first, its question and its message naming a key or a session left.
 **App settings** hold the **Appearance**, as the phone, light or dark,
 for that page and for every server's page set to "as the system".
 A browser that opens that page sees a line saying it is the app's.
 A server's page in the app is this page,
 except that the app keeps its session in place of the browser,
 behind the phone's fingerprint or PIN where the server's settings in the app ask for it,
-the sign-in card names the server under its title,
-and ☰ has **Select server…**, **This server's settings…** and **App settings…**,
-which show the app's page, the last two with that server's settings or App settings open.
+the sign-in card names the server under its title, and ☰ has **Select server…**,
+**This server's settings…** and **App settings…**, which show the app's page,
+the last two with that server's settings or App settings open.
 
 ## How the page is built
 
@@ -2764,30 +2815,35 @@ so that a reverse proxy may serve the UI under a path prefix it strips
 `index.html` is the skeleton: the head, the icons, the sections of the page,
 the places the parts draw into and the scripts, with marker comments.
 At start the server replaces each marker, such as `<!-- partials: system -->`,
-with its frames from `ui/partials/`, in the order `uiPartials` in
-`internal/server/ui.go` lists them, and serves the result at `/`:
-the header, My settings' notes, System settings' section cards
-(in three markers, before, in and after the cards that flow in two columns),
-Maintenance's two cards, System info's card, the Cube page,
-the devices without a room and the toast.
+with its frames from `ui/partials/`,
+in the order `uiPartials` in `internal/server/ui.go` lists them,
+and serves the result at `/`: the header, My settings' notes,
+System settings' section cards (in three markers, before,
+in and after the cards that flow in two columns), Maintenance's two cards,
+System info's card, the Cube page, the devices without a room and the toast.
 A frame that would be one element, the place a part draws into,
 is in `index.html` itself.
 A long page is a grid of section cards (`section.section-card`,
 its heading's `button.section-fold` folding it):
 the parts fold them and keep the fold in the browser,
-and draw what a card holds in its head (`ui/src/shared/card.ts`, `ui/src/chrome/`).
+and draw what a card holds in its head (`ui/src/shared/card.ts`,
+`ui/src/chrome/`).
 The skeleton's static texts take `data-i18n` and `data-i18n-attr`,
 which `applyI18n` of `i18n.js` fills at the start and at a change of language,
-and nothing else does: no script writes one (`TestUINoHTMLInjection`), a part calls `t()`.
-A `data-help` slot of a card's head gets its help button from `app.js`
-(`initHelpSlots`), again at a change of language.
-`go test ./internal/server` holds every id a plain script looks up to the skeleton's
-(`TestUIPage`), and refuses a plain script's `document.querySelector` and
-`document.querySelectorAll` but of what every element of a kind shares, a part's too:
-the menus (`details.menu[open]`: one open at a time, closed by Escape,
-which marks an Escape that closed one so that a part that leaves its place
-by Escape leaves it at the next, and by a click outside, `components.js`)
-and the help slots of the cards' heads (`[data-help]`, `initHelpSlots` of `app.js`).
+and nothing else does: no script writes one (`TestUINoHTMLInjection`),
+a part calls `t()`.
+A `data-help` slot of a card's head gets its help button from `app.js` (`initHelpSlots`),
+again at a change of language.
+`go test ./internal/server` holds every id a plain script looks up to the
+skeleton's (`TestUIPage`),
+and refuses a plain script's `document.querySelector`
+and `document.querySelectorAll` but of what every element of a kind shares,
+a part's too: the menus (`details.menu[open]`: one open at a time,
+closed by Escape,
+which marks an Escape that closed one so that a part that leaves its place by
+Escape leaves it at the next, and by a click outside,
+`components.js`) and the help slots of the cards' heads (`[data-help]`,
+`initHelpSlots` of `app.js`).
 Through a `root` the document is by default, two more look over the whole page,
 which the test does not see: `applyI18n` (`[data-i18n]` and the templates'),
 which finds none in a part, and `brandMarks` (`[data-brand]`),
@@ -2800,12 +2856,15 @@ or reaches through `window.MassimoParts`.
 
 A region of the page is a part: Preact with its signals,
 written in TSX under `ui/src/<region>/`, built once and updated in place.
-`make ui` bundles them with esbuild (as a Go tool, `tools/uibundle`) into `ui/parts.js`,
-which is not committed; `make ui-check` type-checks them and checks their hooks.
-`ui/src/index.ts` is the entry point: it imports `shared/data.ts` first
-and registers `window.MassimoParts`, by region the functions the plain code calls,
+`make ui` bundles them with esbuild (as a Go tool,
+`tools/uibundle`) into `ui/parts.js`, which is not committed;
+`make ui-check` type-checks them and checks their hooks.
+`ui/src/index.ts` is the entry point:
+it imports `shared/data.ts` first and registers `window.MassimoParts`,
+by region the functions the plain code calls,
 which are also the UI tests' one handle (UiParts D220).
-A region's root is drawn once into its place in the skeleton (`mounter` of `shared/region.ts`):
+A region's root is drawn once into its place in the skeleton (`mounter` of
+`shared/region.ts`):
 
 | Region | Directory | Where it draws | What the plain code calls (`MassimoParts.…`) |
 |---|---|---|---|
@@ -2827,22 +2886,25 @@ A region's root is drawn once into its place in the skeleton (`mounter` of `shar
 | leaving the page | `leaving/` | `#leaving` | `leaving.changes`, `leaving.signOut` (header.js, login.js) |
 
 Beside them, `MassimoParts` carries what every part shares:
-`language` and `icons` (the page's language and the icons chosen, raised by
-`applyLanguage` and `redrawSigns`), `signedOut` (a sign-out, or another user's
-sign-in after a 401: every region forgets what it kept of the user who was,
+`language` and `icons` (the page's language and the icons chosen,
+raised by `applyLanguage` and `redrawSigns`), `signedOut` (a sign-out,
+or another user's sign-in after a 401:
+every region forgets what it kept of the user who was,
 the session's number first), `serverEvent` (a server's event of the stream,
 for the parts that follow the server while their page is shown),
 `pages` (the pages' store of `shared/pages.ts`: `showView`, `isShown`,
 `mayShow`, `showAddress`, `shown`),
-`session` and `stillSession` (the session's number, which a plain load takes
-before its request, UiParts D212)
-and `minute` (the page's minute at once, which the ages and the log's time range
-follow, the UI tests' handle of the clock).
+`session` and `stillSession` (the session's number,
+which a plain load takes before its request,
+UiParts D212) and `minute` (the page's minute at once,
+which the ages and the log's time range follow,
+the UI tests' handle of the clock).
 An entry only the UI tests call is named so in `index.ts` and in the table;
 it carries no property of a part made for a test.
 
-What the parts share is under `ui/src/shared/` (the table below); read it before
-writing a part. A region uses these and writes no copy of their markup.
+What the parts share is under `ui/src/shared/` (the table below);
+read it before writing a part.
+A region uses these and writes no copy of their markup.
 A shared part knows no region:
 its data come as properties or signals, its texts as text or as its own keys.
 Two regions never import from each other (`TestRegionsKnowNoOtherRegion`:
@@ -2861,7 +2923,8 @@ makes their fields signals underneath as `parts.js` loads, before `init` runs:
 a plain write is an assignment, as before,
 and a part that reads a field in its drawing is drawn again when it is written.
 A field is written whole, never in place (`TestStateWrittenWhole`,
-which reads the written name alone), by the places the table names, each of them:
+which reads the written name alone), by the places the table names,
+each of them:
 
 | Field | Written by | A part reads it as |
 |---|---|---|
@@ -2874,26 +2937,31 @@ which reads the written name alone), by the places the table names, each of them
 | `state.me` | `loadMe` and a sign-out's `forgetSession` (login.js) | the signal `me` of `shared/me.ts` itself |
 | `themeState.custom`, `.draft`, `.base` | `themeState.custom` by theme.js (the schemes taken, saved, imported, forgotten, taken back at a refused push) and the scheme editor's Delete; `.draft` and `.base` by the scheme editor (`prefs/scheme.ts`) | signals |
 
-What stays plain, and why: `state.details` (a cache of a device's detail, no part draws
-from it), `state.repliedAt` and `state.lastPoll` (written at every request and poll;
+What stays plain, and why: `state.details` (a cache of a device's detail,
+no part draws from it),
+`state.repliedAt` and `state.lastPoll` (written at every request and poll;
 the header's clock reads them at its tick and at `MassimoParts.header.render`),
-`state.version`
-(null until `/healthz` answers; `MassimoParts.chrome.version` writes the signal
-`version` of `shared/server.tsx`), the token, the stream and the poll's timer.
-An open window's state changes by the clock alone: `windowNow` of `shared/data.ts`
-is raised at the next warning or alert time, and `windowState` reads it.
+`state.version` (null until `/healthz` answers;
+`MassimoParts.chrome.version` writes the signal `version` of `shared/server.tsx`),
+the token, the stream and the poll's timer.
+An open window's state changes by the clock alone:
+`windowNow` of `shared/data.ts` is raised at the next warning or alert time,
+and `windowState` reads it.
 A value's age moves on with the page's minute: `minuteNow` of `shared/data.ts`,
-raised once a minute by `minuteTick` (`MassimoParts.minute`, the UI tests' handle),
+raised once a minute by `minuteTick` (`MassimoParts.minute`,
+the UI tests' handle),
 which `Age` reads and at which the log drops the lines its time range no longer holds.
 Who is in is `shared/me.ts`' (`me`, and the rules `can`, `isMe`,
 `canManageUsersOf`, `systemOf`, `settingsPageOf`, line for line with login.js'
 `hasCap` and its like, which the plain scripts keep): a part's drawing that asks
 follows who is in, a handler asks at that moment (UiParts D214).
-The language is `lang` of `shared/lang.ts`, empty until the page's language has loaded,
+The language is `lang` of `shared/lang.ts`,
+empty until the page's language has loaded,
 and the icons chosen `useIcons` of `shared/look.ts`;
 a part reads both with `useLook()`, beside its data (rule 2 of AP UiParts).
 A region's own data are its store's `live` objects and signals (`<region>/store.ts`),
-written whole after each load; a `liveMap`'s `forget` and `clear` tell the parts too.
+written whole after each load;
+a `liveMap`'s `forget` and `clear` tell the parts too.
 Whatever a store keeps of a user, a question or a typed value is forgotten in
 `MassimoParts.signedOut()`, and every write, message and timer that follows an
 `await` takes the session's number first (`shared/session.ts`: `session`,
@@ -2910,49 +2978,58 @@ in the order the page loads them:
 
 - `i18n.js`, the texts, `t()` and `tn()`, and `applyI18n` for the skeleton;
   the connect page loads it too;
-- `components.js`, the builders the connect page, `login.js`, `config.js`' kit and
-  `app.js`' help build with, and what the parts call of the page's
-  (the menus' placing, a copy, a toast, a sign's blinking, a result line);
+- `components.js`, the builders the connect page, `login.js`,
+  `config.js`' kit and `app.js`' help build with,
+  and what the parts call of the page's (the menus' placing, a copy, a toast,
+  a sign's blinking, a result line);
 - `app.js`, the core: the state, the storage and the settings with their scopes,
-  the API with the token and the 401, the helpers the plain scripts and the parts
-  share (a temperature, help, the Cube clock), and a setpoint as the devices show it,
-  OFF for 4.5 °C, for the plain scripts (`fmtSetpoint`, the week programme's kit;
-  the parts' is `shared/setpoint.tsx`'),
-  the loads, the poll, the event stream's connection and its kinds,
-  each handed to its part, the language and `init`;
-- `header.js`, what stays plain of the header: the chosen Cube's radio budget line,
-  the server's clock and its last answer, a Cube's link's sign and word,
-  the version check, the certificate's text, the server's state;
-  `home.js`, the home notice's place shown or hidden, the Cubes a `cube_found` event adds
-  and the way to them, and what a Cube's address outside the networks needs;
-- `rooms.js` and `tiles.js`, the rooms' actions (the stepper's setpoint and its timer,
-  a setpoint chosen from SET's list,
-  a tile's writes, a room's setpoint waiting for its thermostats (`awaitMembers`),
-  the presets, the locks, the holiday form, Escape)
-  and the room's facts they use (UiParts D218;
+  the API with the token and the 401,
+  the helpers the plain scripts and the parts share (a temperature, help,
+  the Cube clock), and a setpoint as the devices show it, OFF for 4.5 °C,
+  for the plain scripts (`fmtSetpoint`, the week programme's kit;
+  the parts' is `shared/setpoint.tsx`'), the loads, the poll,
+  the event stream's connection and its kinds, each handed to its part,
+  the language and `init`;
+- `header.js`, what stays plain of the header:
+  the chosen Cube's radio budget line, the server's clock and its last answer,
+  a Cube's link's sign and word, the version check, the certificate's text,
+  the server's state; `home.js`, the home notice's place shown or hidden,
+  the Cubes a `cube_found` event adds and the way to them,
+  and what a Cube's address outside the networks needs;
+- `rooms.js` and `tiles.js`,
+  the rooms' actions (the stepper's setpoint and its timer,
+  a setpoint chosen from SET's list, a tile's writes,
+  a room's setpoint waiting for its thermostats (`awaitMembers`), the presets,
+  the locks, the holiday form,
+  Escape) and the room's facts they use (UiParts D218;
   the others are `ui/src/model/room.ts`'),
-  among them the room thermostat
-  (`roomThermostat`, whose state is the room's, as its virtual wall thermostat names it)
-  and the room's presets (`roomPresets`, the room's entry's);
+  among them the room thermostat (`roomThermostat`, whose state is the room's,
+  as its virtual wall thermostat names it) and the room's presets (`roomPresets`,
+  the room's entry's);
 - `week-program.js`, the week programme editor, an element of its own,
-  `<massimo-week-program>`, so that a Home Assistant card can use the same editor:
+  `<massimo-week-program>`,
+  so that a Home Assistant card can use the same editor:
   it holds the editor's behaviour, works on a model the page keeps,
   builds its controls with a kit the page gives it (`components.js`, `t()`,
-  `weekKit` of `config.js`), and tells the page of every edit with a `change` event;
-  the programme tab, a part (`ui/src/rooms/Config.tsx`), makes it once in an element
-  it leaves to it and puts its two resets beside Cancel and Send;
+  `weekKit` of `config.js`),
+  and tells the page of every edit with a `change` event; the programme tab,
+  a part (`ui/src/rooms/Config.tsx`),
+  makes it once in an element it leaves to it and puts its two resets beside
+  Cancel and Send;
 - `login.js`, the session: who is in, `askLogin` and what follows a sign-in,
   the sign-in by OPAQUE and through a provider, the pushes,
-  the settings that follow the user, the first owner asked for at a read of who is in
-  (`askLogin("owner")`) and a running page held still behind the card the user opened
-  (its poll stopped, its stream closed, both started again where the card is left);
-  its card, the first owner's form in it and the open server's banner are parts
-  (`ui/src/signin/`);
-  `providers.js`, the enabled sign-in providers, which the sign-in and two parts read;
+  the settings that follow the user,
+  the first owner asked for at a read of who is in (`askLogin("owner")`) and a
+  running page held still behind the card the user opened (its poll stopped,
+  its stream closed, both started again where the card is left); its card,
+  the first owner's form in it and the open server's banner are parts (`ui/src/signin/`);
+  `providers.js`, the enabled sign-in providers,
+  which the sign-in and two parts read;
 - `theme.js`, the mode and the colour schemes, applied as the script loads,
   the appearance applied (`applyAppearance`) and the system's changes it follows;
-- `notifytext.js`, a notification's text; `notify.js`, the service worker's language
-  and the toast of a notification, from the stream or the service worker;
+- `notifytext.js`, a notification's text; `notify.js`,
+  the service worker's language and the toast of a notification,
+  from the stream or the service worker;
 - `parts.js`, the bundle.
 
 A script's top-level code runs as it loads, and the `DOMContentLoaded`
@@ -2971,22 +3048,25 @@ and wires with `addEventListener`; no script uses `innerHTML`.
 
 ### The stream
 
-`app.js` opens the event stream with a ticket, none while a card the user opened
-holds a running page still (`connectEvents`, AP FirstOwner D35);
+`app.js` opens the event stream with a ticket,
+none while a card the user opened holds a running page still (`connectEvents`,
+AP FirstOwner D35);
 a ticket opens the stream of the Cube it was asked for alone:
 where another Cube is shown once it comes, chosen meanwhile
 or the one asked for gone from the list,
 the page drops it and asks for the shown Cube's (AP SteadyTests v1.2, Block 20).
 It hands each kind on:
-`state` to `updateDevice` and the log;
-`battery` to `updateBattery` (rooms.js, the device's level alone),
-the log and `MassimoParts.serverEvent`; `hello`, `disconnected` and `slots` to
-`loadCubes`, `metadata`, `device_forgotten`, `unconfirmed` and `mismatch` to
-`loadRooms`, `connected` and `resync` to `refresh` (with `resync` to
+`state` to `updateDevice` and the log; `battery` to `updateBattery` (rooms.js,
+the device's level alone), the log and `MassimoParts.serverEvent`; `hello`,
+`disconnected` and `slots` to `loadCubes`, `metadata`, `device_forgotten`,
+`unconfirmed` and `mismatch` to `loadRooms`,
+`connected` and `resync` to `refresh` (with `resync` to
 `MassimoParts.backups.resynced` and `MassimoParts.serverEvent`);
-the pairing's kinds to `MassimoParts.cubes`, a restore's to `MassimoParts.backups`,
-`cube_found` to `addFound`, `notification` to `notifyToast`, and every other kind
-the log knows (`MassimoParts.log.kinds`) to the log and to `MassimoParts.serverEvent`.
+the pairing's kinds to `MassimoParts.cubes`,
+a restore's to `MassimoParts.backups`, `cube_found` to `addFound`,
+`notification` to `notifyToast`,
+and every other kind the log knows (`MassimoParts.log.kinds`) to the log and to
+`MassimoParts.serverEvent`.
 An event's read of a thing waits for the page's own request for it to end,
 and reads once (`burstReader` of `shared/burst.ts`).
 
@@ -2995,44 +3075,47 @@ and reads once (`burstReader` of `shared/burst.ts`).
 A state is a sign, a colour and a mark, so that it reads without its colour:
 nothing for a state that is fine, a triangle for a warning (amber),
 a cross for a failure (red).
-`Sign` of `shared/icon.tsx` draws a kind of thing in a state (`signOf` of
-`components.js`: the radio and the window as the person chooses, `ICON_CHOICES`,
-the Wi-Fi fan or the tower, the opening sash with the mark inside its frame
-or the paned window with it at the bottom right, as the original MAX! software has it;
-`SIGNS`: the network of a Cube's link with it on top, the cog for the settings,
-the disk for a form's unsaved changes),
-the drawing and the mark two parts, so that the mark alone blinks;
-`Badge` leads a warning's or a failure's badge with its mark (`Mark`)
-and sets it in bold, while a badge that names a state, such as a mode, stays regular;
-`keepBlink` keeps a mark's blinking where it was across the drawings that make a new
-element of it.
-The icons draw in the token `warn-mark`, a brighter amber than the text's `warn`,
-at a contrast of 3 on a tile, the text at 4.5 (`TestUIDefaultSchemeMatchesCSS`);
-the filled amber, `fill-warn`, is the Manual mode's alone.
-The list of what is wrong in a place is the shared part `Problems`, wherever it is put,
-its entries one format at every level:
+`Sign` of `shared/icon.tsx` draws a kind of thing in a state (`signOf` of `components.js`:
+the radio and the window as the person chooses, `ICON_CHOICES`,
+the Wi-Fi fan or the tower,
+the opening sash with the mark inside its frame or the paned window with it at
+the bottom right, as the original MAX! software has it; `SIGNS`:
+the network of a Cube's link with it on top, the cog for the settings,
+the disk for a form's unsaved changes), the drawing and the mark two parts,
+so that the mark alone blinks;
+`Badge` leads a warning's or a failure's badge with its mark (`Mark`) and sets it in bold,
+while a badge that names a state, such as a mode, stays regular;
+`keepBlink` keeps a mark's blinking where it was across the drawings that make a
+new element of it.
+The icons draw in the token `warn-mark`,
+a brighter amber than the text's `warn`, at a contrast of 3 on a tile,
+the text at 4.5 (`TestUIDefaultSchemeMatchesCSS`); the filled amber,
+`fill-warn`, is the Manual mode's alone.
+The list of what is wrong in a place is the shared part `Problems`,
+wherever it is put, its entries one format at every level:
 the icon in a column of its own, the name and a grey detail beside it,
-the badges under the name, and the entries under it (`subs`) indented to the name,
+the badges under the name,
+and the entries under it (`subs`) indented to the name,
 a line down from its icon.
-A button that sends a request is busy from its click until the answer:
-off, with a turning ring after its text, and `aria-busy` (`BusyButton`, `useBusy`),
+A button that sends a request is busy from its click until the answer: off,
+with a turning ring after its text, and `aria-busy` (`BusyButton`, `useBusy`),
 so that a second click or Enter sends nothing.
 A request waits about 20 seconds for its answer (`apiRequest` of `app.js`,
-AP MobileApp, D82-A), so that a link that stalls leaves no button turning for good:
+AP MobileApp, D82-A),
+so that a link that stalls leaves no button turning for good:
 then it fails as "no answer from the server",
 a write adding that it may have been done all the same;
 the routes that wait longer by design have limits of their own (`waitOf`),
 each a little longer than the server's own:
 a repair's run ten and a half minutes, the server's being ten;
 every other write to a Cube, its rooms or its devices, and a Cube added,
-five and a half minutes, a device's settings, its removal and the configurations
-and week programs taking up to five, a setpoint up to two;
-the search for Cubes a minute and a half;
+five and a half minutes, a device's settings,
+its removal and the configurations and week programs taking up to five,
+a setpoint up to two; the search for Cubes a minute and a half;
 the look for an update, also as an update is started, 75 seconds,
 the server's look taking up to 30 under a lock another look may hold as long;
 the look for integrations on the LAN and the end of a sign-in through a provider
-45 seconds;
-the stream's ticket the 20 seconds of every other request.
+45 seconds; the stream's ticket the 20 seconds of every other request.
 The event stream and what the page sends as it is left (`keepalive`) have none,
 and neither has what goes as a file (`apiRaw`):
 a backup's download, and a restore's plan and its run.
@@ -3050,15 +3133,17 @@ and the error keeps the answer's `status`, `data`, `code` and `params`.
 `refusalText` of `app.js` gives the same text for a refusal kept with a result,
 which is no thrown error;
 it is text, set as text, never markup.
-A refusal shows where the user acted, on its tile's or its card's line, as before:
-a code makes no toast of it (D5-A).
-A part gives the focus in the handler of the user's action, or in a layout effect,
-in the drawing that shows the thing, never in an effect, which runs a frame later,
-when a user may be typing elsewhere;
-a handler that must let a listener of the page run first sets a timer for it
-(a tile's problem list opened from its line, after the click outside that closes
-an open menu: `NotReadyLine` of `rooms/Tile.tsx`);
-a card's badges are set from a layout effect, or from an effect of the data they count.
+A refusal shows where the user acted, on its tile's or its card's line,
+as before: a code makes no toast of it (D5-A).
+A part gives the focus in the handler of the user's action,
+or in a layout effect, in the drawing that shows the thing, never in an effect,
+which runs a frame later, when a user may be typing elsewhere;
+a handler that must let a listener of the page run first sets a timer for it (a
+tile's problem list opened from its line,
+after the click outside that closes an open menu:
+`NotReadyLine` of `rooms/Tile.tsx`);
+a card's badges are set from a layout effect,
+or from an effect of the data they count.
 The texts are in `ui/i18n/<lang>.json`, one flat table per language,
 English the base; a new text is a key in all six files,
 which `go test ./internal/server` checks against the skeleton and the parts.
@@ -3068,17 +3153,18 @@ a new frame is a partial, listed in `uiPartials`.
 
 ### The model
 
-What several regions read of the API's data beside its fields is under `ui/src/model/`
-(`capLabel` of `cap.ts`, what a capability allows,
-and `includedHint`, why a switch of one that another includes is held on
-(`CAP_INCLUDES`, the server's includes),
-for the roles and the integrations, and `event.ts`, a server's event of the stream
-(`ServerEvent`) and the settings a change event set (`settingsChanged`),
-for the parts that follow the server, among it):
-it knows the API's data and no region, holds no state and no part with hooks of its own,
+What several regions read of the API's data beside its fields is under
+`ui/src/model/` (`capLabel` of `cap.ts`, what a capability allows,
+and `includedHint`,
+why a switch of one that another includes is held on (`CAP_INCLUDES`,
+the server's includes), for the roles and the integrations, and `event.ts`,
+a server's event of the stream (`ServerEvent`) and the settings a change event
+set (`settingsChanged`), for the parts that follow the server, among it):
+it knows the API's data and no region,
+holds no state and no part with hooks of its own,
 and may put shared parts together into a small piece of that data;
-it imports from itself, the shared parts, Preact and the API's types alone
-(`TestModelKnowsNoRegion`).
+it imports from itself, the shared parts,
+Preact and the API's types alone (`TestModelKnowsNoRegion`).
 What one region alone reads stays in the region, anything with state too,
 and what is not about the API's data is a shared part.
 A part with state that two regions draw is a shared part too (UiParts D193),
@@ -3093,24 +3179,24 @@ it imports none, its texts are keys of its own (`put.…`, `repair.…`, `name.�
 and it reads no id or class of a region's markup it does not draw itself.
 `cube.tsx` holds the Cube chosen in the header (`chosenCube`),
 a Cube's address split into host and port (`hostPort`),
-the cube before its name (`CubeIcon`),
-its network sign (`CubeSign`), its link's row in its own pill's list (`CubeLink`)
-and its problems as an entry of `Problems` (`cubeEntry`, `cubeSettingItems`)
-with the label naming their kinds and the Cubes found (`problemsLabelOf`),
+the cube before its name (`CubeIcon`), its network sign (`CubeSign`),
+its link's row in its own pill's list (`CubeLink`) and its problems as an entry
+of `Problems` (`cubeEntry`,
+`cubeSettingItems`) with the label naming their kinds and the Cubes found
+(`problemsLabelOf`),
 and the keys its settings' forms are kept by (`cubeFormKey`, `roomFormKey`);
 `found.tsx` what a Cube or a Massimo proxy found is and who serves it (`foundWhat`);
 `device.ts` a device by its radio address as the page names it (`rfLabel`),
 a room by its name, else its number (`roomName`),
-a failed radiogram's name (`radiogramName`) and a finding's words
-(`mismatchArgs`, `mismatchText`),
-a device's type as its icon (`deviceIcon`), an open window's state
-by the page's clock (`windowState`, `WINDOW_TONE`) and what is wrong with a device
-as items of `Problems` (`deviceProblems`),
+a failed radiogram's name (`radiogramName`) and a finding's words (`mismatchArgs`,
+`mismatchText`), a device's type as its icon (`deviceIcon`),
+an open window's state by the page's clock (`windowState`,
+`WINDOW_TONE`) and what is wrong with a device as items of `Problems` (`deviceProblems`),
 and a device as an entry of `Problems` (`deviceEntry`),
 which the rooms list in a tile and a device's row,
 and a Cube's entry under the Cube;
-`room.ts` the device whose temperature stands for the room
-(`roomActualDevice`, `roomActual`), a stale device's warning (`staleText`),
+`room.ts` the device whose temperature stands for the room (`roomActualDevice`,
+`roomActual`), a stale device's warning (`staleText`),
 a holiday's end as the API takes it (`apiUntil`) and what a device has not shown
 of the writes to it (`confirmItem`, `confirmFieldsText`, `confirmFieldName`);
 a value's age it takes from `received` of `rooms.js`, as the rooms do;
@@ -3217,25 +3303,26 @@ for the first owner's toast and the log's `open_setup` line.
 
 What the table cannot say:
 
-- An entry of `Problems` is `{ icon, sign, node, title, sub, items, subs, info, summary }`:
-  its icon, or `sign` (`{ kind, state }`) where its own state shows,
-  or `node`, a part of its own with the class `problem-icon`;
-  its name, a grey detail (a text, monospaced, or parts that are not),
-  its items, the entries under it, `info` to list it and those under it
-  without an item, and `summary`, shown in the list's summary after the icons.
+- An entry of `Problems` is
+  `{ icon, sign, node, title, sub, items, subs, info, summary }`: its icon,
+  or `sign` (`{ kind, state }`) where its own state shows, or `node`,
+  a part of its own with the class `problem-icon`; its name,
+  a grey detail (a text, monospaced, or parts that are not), its items,
+  the entries under it, `info` to list it and those under it without an item,
+  and `summary`, shown in the list's summary after the icons.
   An item is `{ kind, icon, sign, tone, mark, text, title, at, stale, since, action }`,
-  one badge:
-  `kind` groups the summary's icons (`sign` draws it as a sign), an item
-  without one adds no icon; `tone` is the badge's kind, `mark` how its icon is
-  coloured where that differs; `title` its tooltip, `at` and `stale` its age,
-  `since` from when its state holds, said after its text;
-  `action`, where given, makes the badge a button that runs it
-  (an unsaved form's item, which opens the form).
+  one badge: `kind` groups the summary's icons (`sign` draws it as a sign),
+  an item without one adds no icon; `tone` is the badge's kind,
+  `mark` how its icon is coloured where that differs; `title` its tooltip,
+  `at` and `stale` its age, `since` from when its state holds,
+  said after its text; `action`, where given,
+  makes the badge a button that runs it (an unsaved form's item,
+  which opens the form).
 - `Field` draws the row and the label for `id`; its control comes as children
   and carries that id and, without a unit, the class `field-control`.
   `TextField` makes the input itself.
-- `Switch` draws its own `.field` row; with `row={false}` it is the switch alone,
-  inside a row of the caller's.
+- `Switch` draws its own `.field` row;
+  with `row={false}` it is the switch alone, inside a row of the caller's.
 - `useDraft` and `useBusy` are the component's state and go with it;
   what must outlive the component (a request a tile keeps across its being
   drawn again) is live state (`live`), and a settings form's drafts are kept
@@ -3251,8 +3338,8 @@ What the table cannot say:
   its ring after the text; failed, the cross, until a save goes through, Reset,
   or nothing is left to send; saved, the check, plain and off, for as long as
   a result line's success stays (`RESULT_FADE_MS`, by `fader`), then clean.
-  A key in an unsaved form makes it changed
-  again; a failed one stays red. The minute is one constant of `forms.ts`,
+  A key in an unsaved form makes it changed again; a failed one stays red.
+  The minute is one constant of `forms.ts`,
   which the UI suite moves on with Playwright's clock (the marker `clock`).
   A form without `look` keeps Save's one look, primary.
   One `useForm` per form element; a form of tabs takes a key per tab
@@ -3267,36 +3354,39 @@ What the table cannot say:
 A part that counts what a card holds gives it by the card's id (`cardBadges`)
 from a layout effect, in its drawing's own turn,
 so that the card's head and body agree whenever either is read.
-Known gaps, for the blocks that meet them:
-a device's type and identifiers, drawn twice:
-in a device row's line of expert mode (`rooms/Devices.tsx`, `.device-sub`,
-grey, with when it was last seen and a virtual thermostat's sources)
-and in a joined device's head (`cubes/Pairing.tsx`,
-the type bold, the serial always),
-each `typeName` and the shared `DeviceIds`, so what is left to make one piece
-is the two spans' markup, which differs in its classes and what follows;
+Known gaps, for the blocks that meet them: a device's type and identifiers,
+drawn twice: in a device row's line of expert mode (`rooms/Devices.tsx`,
+`.device-sub`, grey,
+with when it was last seen and a virtual thermostat's sources) and in a joined
+device's head (`cubes/Pairing.tsx`, the type bold, the serial always),
+each `typeName` and the shared `DeviceIds`,
+so what is left to make one piece is the two spans' markup,
+which differs in its classes and what follows;
 a Cube's rooms read by a part of their own beside the page's,
-the pairing's `cubeRooms` (`cubes/flow.ts`), the log's `logState.cubeRooms` and
-`fetchRooms` of `app.js`, which could be one store of them beside `state.rooms`;
-the stepped setpoint's end, `apiUntil` of `rooms.js`, which stays with its users
-beside `time.ts`;
-a room's write's outcome in words, built in three places
-(`House.tsx` `houseRequests`, `rooms.js` `resultText`, `configuration.ts` `sendCopy`);
+the pairing's `cubeRooms` (`cubes/flow.ts`),
+the log's `logState.cubeRooms` and `fetchRooms` of `app.js`,
+which could be one store of them beside `state.rooms`;
+the stepped setpoint's end, `apiUntil` of `rooms.js`,
+which stays with its users beside `time.ts`; a room's write's outcome in words,
+built in three places (`House.tsx` `houseRequests`, `rooms.js` `resultText`,
+`configuration.ts` `sendCopy`);
 a failed save's error with its unsaved form's item (its tooltip),
 which `actionRunner`'s `run` does not hand back:
 it says only whether the request was taken,
-and the error is in the message line;
-the page's modal dialog: `FormsDialog` is the list of forms with a title,
-and a later modal takes its shell out of it
-(its opening by a property, the focus, its closing);
+and the error is in the message line; the page's modal dialog:
+`FormsDialog` is the list of forms with a title,
+and a later modal takes its shell out of it (its opening by a property,
+the focus, its closing);
 a sign-in through a provider after a 401 leaves the page while drafts are kept,
-so the browser's prompt asks there too, and staying shows the dialog above the sign-in,
+so the browser's prompt asks there too,
+and staying shows the dialog above the sign-in,
 whose forms cannot be shown while signed out.
 The block that first needs one writes it under `ui/src/shared/`,
-knowing no region, and adds its row to the table above; no region writes its own.
+knowing no region, and adds its row to the table above;
+no region writes its own.
 A section card's badges are the page's chrome's (`ui/src/chrome/Cards.tsx`):
-a region gives them by the card's id, a part with `cardBadges` from a layout effect,
-the Cubes' list too.
+a region gives them by the card's id,
+a part with `cardBadges` from a layout effect, the Cubes' list too.
 
 A region's parts call these, in this order:
 
@@ -3307,10 +3397,13 @@ A region's parts call these, in this order:
   and `mounter` for each root, drawn into the container the page has for it;
 - `liveMap` for what it keeps per item and place (a panel open, by its key);
 - `Fold` for a panel or a fold, `Island` for a plain piece it keeps inside;
-- `actionRunner` for its requests and their message line, `useBusy` for the button;
-- `useDraft` with `TextField`, `Switch` or `Field` for a field that shows stored data,
-  `FormFooter` for its Save, `useForm` for a settings form that keeps its changes
-  and marks them unsaved, `useAsk` and `Question` for an action that asks first.
+- `actionRunner` for its requests and their message line,
+  `useBusy` for the button;
+- `useDraft` with `TextField`,
+  `Switch` or `Field` for a field that shows stored data,
+  `FormFooter` for its Save,
+  `useForm` for a settings form that keeps its changes and marks them unsaved,
+  `useAsk` and `Question` for an action that asks first.
 
 The Cubes (`ui/src/cubes/`) are the first such region:
 `index.tsx` mounts System settings' list in `#cubes-list` and Cube settings' panel
@@ -3352,50 +3445,54 @@ The header (`ui/src/header/`) is the second:
 `index.tsx` draws the pile in `#header-pile` (`Pile.tsx`: every Cube's problems,
 `CubeProblems.tsx`, led by the server's sign, `ServerSign.tsx`,
 with Refresh now and the reads' times, `Times.tsx`),
-the Cube choice in `#header-cube`, the reads' times of expert mode's line
-in `#header-times`, the certificate's line in `#tls-slot`
-and the home notice inside `#home-notice`, and registers `render` and `tls`,
-which the plain code calls where a plain field the header shows changed
-(`app.js`' loads, `header.js`' `renderHeader`, `renderServerSign` and `renderTLS`,
-`home.js`' `renderHomeNotice` and `addFound`, a change of language or of the icons);
-`store.ts` holds the search under way and the certificate,
-`send.ts` the search,
+the Cube choice in `#header-cube`,
+the reads' times of expert mode's line in `#header-times`,
+the certificate's line in `#tls-slot` and the home notice inside `#home-notice`,
+and registers `render` and `tls`,
+which the plain code calls where a plain field the header shows changed (`app.js`' loads,
+`header.js`' `renderHeader`, `renderServerSign` and `renderTLS`,
+`home.js`' `renderHomeNotice` and `addFound`,
+a change of language or of the icons);
+`store.ts` holds the search under way and the certificate, `send.ts` the search,
 and `clock.ts` the header's one clock, a signal that moves on each second,
-which every time the header shows reads,
-and `fmtAgo`, how long ago in the page's language;
+which every time the header shows reads, and `fmtAgo`,
+how long ago in the page's language;
 `fold.ts` measures the row and folds it where it is short (`data-fold` on `.top-line`),
-and after each measure places an open list of the row in the window again (`placeMenus` of `components.js`).
-The choice is a `Picker`, the problems a `Problems` with `lead`, `always` and `head`,
+and after each measure places an open list of the row in the window again
+(`placeMenus` of `components.js`).
+The choice is a `Picker`, the problems a `Problems` with `lead`,
+`always` and `head`,
 Refresh now a `MenuItem` with `keepOpen` and its times as `sub`,
 the certificate's line a `Notice`.
 The logo and the sign-in card's version stay plain,
-around the parts' places and not in them;
-☰ with its version, and ↑, are the page's chrome's (`ui/src/chrome/`),
-and the home notice's place is shown and hidden by the plain code (and by the pages' store, `ui/src/shared/pages.ts`),
-the part drawing inside it.
+around the parts' places and not in them; ☰ with its version, and ↑,
+are the page's chrome's (`ui/src/chrome/`),
+and the home notice's place is shown and hidden by the plain code (and by the
+pages' store, `ui/src/shared/pages.ts`), the part drawing inside it.
 The rooms (`ui/src/rooms/`) are the third:
 `index.tsx` draws the House tile's modes and panel in `#house-slot`,
 a tile per room of the chosen Cube in `#rooms`,
-kept by the Cube and the room's id, and the devices without a room in `#unlisted-devices`,
-and registers `render`, `result`, `ui`, `loaded`,
-`houseOpen` and `closeHouse`,
+kept by the Cube and the room's id,
+and the devices without a room in `#unlisted-devices`, and registers `render`,
+`result`, `ui`, `loaded`, `houseOpen` and `closeHouse`,
 which `rooms.js` calls in `renderRooms`, `showTileResult` and `roomUI`,
-`app.js` after a load of the rooms, `header.js` and `login.js` for the House tile;
-the rooms are `state.rooms`, a signal of `live` rooms (UiParts D216),
+`app.js` after a load of the rooms,
+`header.js` and `login.js` for the House tile; the rooms are `state.rooms`,
+a signal of `live` rooms (UiParts D216),
 so that a state event of a device draws its room's tile alone;
 `store.ts` holds what a tile keeps (`newUI`,
-the live object `roomUI` gives the plain actions, which set it as before)
-and what the House tile's panel keeps (`house`: the mode, the duration,
-the temperature and the end, whether the user changed either,
-the rooms unticked, the last result),
-across its close too,
-and the timer of an open window's next state by the clock;
-`facts.ts` what the rooms alone read of a room and its devices
-(a mode's badge, the problems of a tile's head and of a device's row with their label,
-the room's notices among them, a device's badges in words);
-`Tile.tsx` the tile, `SetValue.tsx` its SET with the chevron and its list,
+the live object `roomUI` gives the plain actions,
+which set it as before) and what the House tile's panel keeps (`house`:
+the mode, the duration, the temperature and the end,
+whether the user changed either, the rooms unticked, the last result),
+across its close too, and the timer of an open window's next state by the clock;
+`facts.ts` what the rooms alone read of a room and its devices (a mode's badge,
+the problems of a tile's head and of a device's row with their label,
+the room's notices among them, a device's badges in words); `Tile.tsx` the tile,
+`SetValue.tsx` its SET with the chevron and its list,
 `Devices.tsx` a device's row and a tile's device list,
-`Config.tsx` a tile's configuration with its tabs, `ConfigDevices.tsx` its Devices tab,
+`Config.tsx` a tile's configuration with its tabs,
+`ConfigDevices.tsx` its Devices tab,
 `configuration.ts` what the configuration keeps and sends,
 `House.tsx` the House tile, its temperature a `Stepper`, its end a `DateTime`,
 its mode and its duration a choice of radio buttons side by side of its own (`Segments`),
@@ -3404,70 +3501,78 @@ its lowest and highest a part of their own (`Range`),
 which reads each room's virtual wall thermostat,
 so that a state event draws them alone, IS and SET each a `Tip`,
 its rooms a `Choices` of checkboxes with All,
-its Send and Cancel a `FormFooter`;
-`Unlisted.tsx` the devices without a room, each row a device's row with
-Put into a room… and Remove from the Cube;
+its Send and Cancel a `FormFooter`; `Unlisted.tsx` the devices without a room,
+each row a device's row with Put into a room… and Remove from the Cube;
 the section of the devices without a room is shown and hidden by `rooms.js`,
-its message line, `#unlisted-msg` of the partial, an `actionRunner`'s, a success fading,
-and the House tile's section is shown and hidden by `rooms.js` too, its title the part's.
+its message line, `#unlisted-msg` of the partial, an `actionRunner`'s,
+a success fading,
+and the House tile's section is shown and hidden by `rooms.js` too,
+its title the part's.
 The tile's actions stay plain (`rooms.js`, `tiles.js`) and set `roomUI`,
-which the tile follows: a write running turns its button and keeps the others off,
+which the tile follows:
+a write running turns its button and keeps the others off,
 a stepper value waiting to be sent shows with Save and Cancel.
-The configuration (AP UiParts Block 8) is a part of the tile, open while `roomUI`'s
-`config` says so: `configuration.ts` keeps per room of its Cube, live,
-the tab shown and the Copy tab's choice, kept across a close, the configuration
-and the week programme as loaded with the programme's tag, which a Send of the programme
-makes the one it sent, the result line and the write under way,
-and sends what each tab sends, as `config.js` sent it;
-its tabs are `Tabs`, its fields `TextField`s, `NumberField`s, `Select`s and `Switch`es
-with their drafts and their help, the Copy tab's rooms and settings `Choices`,
-a move and a removal `Question`s, each footer a `FormFooter`,
-the result line a `ResultLine`,
+The configuration (AP UiParts Block 8) is a part of the tile,
+open while `roomUI`'s `config` says so:
+`configuration.ts` keeps per room of its Cube, live,
+the tab shown and the Copy tab's choice, kept across a close,
+the configuration and the week programme as loaded with the programme's tag,
+which a Send of the programme makes the one it sent,
+the result line and the write under way, and sends what each tab sends,
+as `config.js` sent it; its tabs are `Tabs`, its fields `TextField`s,
+`NumberField`s, `Select`s and `Switch`es with their drafts and their help,
+the Copy tab's rooms and settings `Choices`, a move and a removal `Question`s,
+each footer a `FormFooter`, the result line a `ResultLine`,
 followed by Load the current programme where the programme changed elsewhere;
-the week programme editor stays the element it is (`week-program.js`), made once
-in an `Island`, its two resets in another.
-Each tab but Copy, a command, is a `useForm` (`useConfigForm` of `configuration.ts`)
-of the key `cfgFormKey(serial, id, form)` of `store.ts`,
+the week programme editor stays the element it is (`week-program.js`),
+made once in an `Island`, its two resets in another.
+Each tab but Copy, a command,
+is a `useForm` (`useConfigForm` of `configuration.ts`) of the key
+`cfgFormKey(serial, id, form)` of `store.ts`,
 `<room>:cfg:<form>` under the room's `roomFormKey` beside the virtual thermostat's `:vwt`,
 the form `room`, `temps` or `program`,
 and on the Devices tab `valves` and `device:<radio address>`;
 a write the Cube discarded or a device did not take leaves the stored values as they were,
 so the form stays changed and failed;
-its Cancel resets the form and closes (`cancelOf`), and the programme's draft is the
-programme kept in its form's place, a later load taking its place only where
-nothing of it differs or the user loaded it again.
+its Cancel resets the form and closes (`cancelOf`),
+and the programme's draft is the programme kept in its form's place,
+a later load taking its place only where nothing of it differs or the user
+loaded it again.
 The room's own entry in the tile's problem list lists their `unsavedItems`
-(`cfgFormKey(serial, id)`, `facts.ts`), so the virtual thermostat's are listed
-once, under its own entry;
+(`cfgFormKey(serial, id)`, `facts.ts`),
+so the virtual thermostat's are listed once, under its own entry;
 a click opens the tab from anywhere (`openForm`), by `openRoom` of `store.ts`,
 which `openSettings` uses too and which keeps the request until the Cube's rooms
-have loaded; `loaded` forgets a device's form when the room no longer has the device.
+have loaded;
+`loaded` forgets a device's form when the room no longer has the device.
 A room's repairs and a device's Repair… are the shared `RepairButton` and `RepairBox`,
 the room's opened from ⋯ by `toggleRepair`, a device's box under its row,
 its listing offering the name its room's devices leave free;
 the form that puts a device without a room into one is the shared `PutForm`,
 over the chosen Cube's rooms, what it holds kept while it is open.
 The menus are `Dropdown`s, their items `MenuItem`s, the problems a `Problems`,
-the info and the cog `IconButton`s, the holiday form's temperature a `Stepper`
-and its end a `DateTime`,
+the info and the cog `IconButton`s,
+the holiday form's temperature a `Stepper` and its end a `DateTime`,
 the deletion's question a `Question`, the line of a refused room a `Notice`,
-the result lines `ResultLine`s,
-a device's badges `Badge`s with their `Age`, its identifiers a `DeviceIds`,
-the virtual thermostat's two settings a `Select` and a `TextField` with their drafts (`useDraft`),
+the result lines `ResultLine`s, a device's badges `Badge`s with their `Age`,
+its identifiers a `DeviceIds`,
+the virtual thermostat's two settings a `Select` and a `TextField` with their
+drafts (`useDraft`),
 a `FormFooter` and a `ResultLine` that its `actionRunner` sets,
-a `useForm` of the key `vwtFormKey(id)` (`store.ts`), under the room's
-`roomFormKey(serial, id)` of `model/cube.tsx`, which the room's configuration's
-tabs take keys under too: `facts.ts` lists its `unsavedItems` in the row's
-and the tile's problem list (`vwtItems`), `cubeEntry` those of every room of the Cube
-(`unsavedItems(roomFormKey(serial))`), the row shows outside expert mode while
-`hasChanges` says so, and `openSettings` (`store.ts`) chooses the Cube, shows the rooms
-and keeps the request until that Cube's rooms have loaded;
-`index.tsx` registers `loaded`, which `loadRooms` of `app.js` calls
-after a load that went through and before the rooms are drawn:
-it forgets a room's forms when the load, from a Cube connected with its greeting,
-no longer gives the room or its virtual thermostat
-(a Cube the server has not greeted answers no rooms at all),
-and opens the settings asked for;
+a `useForm` of the key `vwtFormKey(id)` (`store.ts`),
+under the room's `roomFormKey(serial, id)` of `model/cube.tsx`,
+which the room's configuration's tabs take keys under too:
+`facts.ts` lists its `unsavedItems` in the row's and the tile's problem list (`vwtItems`),
+`cubeEntry` those of every room of the Cube (`unsavedItems(roomFormKey(serial))`),
+the row shows outside expert mode while `hasChanges` says so,
+and `openSettings` (`store.ts`) chooses the Cube,
+shows the rooms and keeps the request until that Cube's rooms have loaded;
+`index.tsx` registers `loaded`,
+which `loadRooms` of `app.js` calls after a load that went through and before
+the rooms are drawn: it forgets a room's forms when the load,
+from a Cube connected with its greeting,
+no longer gives the room or its virtual thermostat (a Cube the server has
+not greeted answers no rooms at all), and opens the settings asked for;
 the Cubes' `index.tsx` forgets `roomFormKey(serial)` with the Cube;
 the tile's result line is a `ResultLine` too, its success fading by `fader`.
 System settings' lists of users, roles and sign-in providers (`ui/src/admin/`,
@@ -3476,251 +3581,272 @@ Users, Roles, Capabilities for every role and Sign-in providers,
 since they read each other's data and no region imports another:
 the role choice reads the roles, a user's identities the enabled providers,
 a provider's role the roles.
-`index.tsx` draws each into its card's body, `#sys-users-body`, `#sys-roles-body`,
-`#sys-caps-body` and `#sys-providers-body`, reads it each time System settings is shown,
-and registers `users` (`load`),
+`index.tsx` draws each into its card's body, `#sys-users-body`,
+`#sys-roles-body`, `#sys-caps-body` and `#sys-providers-body`,
+reads it each time System settings is shown, and registers `users` (`load`),
 of which My profile calls `users.load` after a change made there,
 and Integrations after each of its changes (AP AccessEnds, D10);
-`store.ts` holds the lists as the last load that went through gave
-them, each panel's `open` by its item's key, each new item's form shown, the message
-lines' outcomes and `reads`, the users' change counter, at which an open user's panel
-reads its sessions, keys and identities again, as every redraw of the plain list did;
-`sendUsers.ts`, `sendRoles.ts` and `sendProviders.ts` what each reads and sends,
+`store.ts` holds the lists as the last load that went through gave them,
+each panel's `open` by its item's key, each new item's form shown,
+the message lines' outcomes and `reads`, the users' change counter,
+at which an open user's panel reads its sessions, keys and identities again,
+as every redraw of the plain list did; `sendUsers.ts`,
+`sendRoles.ts` and `sendProviders.ts` what each reads and sends,
 line for line as the plain scripts did, through an `actionRunner` per list;
 `Users.tsx`, `Roles.tsx` and `Providers.tsx` the parts,
-on a server without users the Users card a section of its own (`OpenServer` of `Users.tsx`):
-the line, an integration's users as rows with nothing to press (`OpenUsers`),
+on a server without users the Users card a section of its own (`OpenServer` of
+`Users.tsx`): the line,
+an integration's users as rows with nothing to press (`OpenUsers`),
 with Open Integrations (`showCard`),
 Create the owner… (`askOwner` of `shared/owner.ts`, the focus given back to it),
 and while the server is kept open its switch,
-saved at once (`keepOpenOff` of `sendUsers.ts`),
-which stays in sight, off, for that showing (`keptOff` of `store.ts`),
-a user's sessions and keys and its identities the shared `Tokens` and `Identities`
-(`shared/tokens.tsx`, `shared/identities.tsx`, AP UiParts Block 13), drawn with this
-list's runner, `reads` and its forms of an identity's change:
-a panel a `Fold` with its `FoldHead`, its settings form a `useForm` of the key
-`users:<name>` (an identity's change `users:<name>:identity:<id>` under it),
-`roles:<key>` or `providers:<key>`, its footer a `FormFooter` with Reset,
-its Remove a `useAsk` with a `Question`, the new item's form under an `Adder`,
+saved at once (`keepOpenOff` of `sendUsers.ts`), which stays in sight, off,
+for that showing (`keptOff` of `store.ts`),
+a user's sessions and keys and its identities the shared `Tokens`
+and `Identities` (`shared/tokens.tsx`, `shared/identities.tsx`,
+AP UiParts Block 13), drawn with this list's runner,
+`reads` and its forms of an identity's change:
+a panel a `Fold` with its `FoldHead`,
+its settings form a `useForm` of the key `users:<name>` (an identity's change
+`users:<name>:identity:<id>` under it), `roles:<key>` or `providers:<key>`,
+its footer a `FormFooter` with Reset, its Remove a `useAsk` with a `Question`,
+the new item's form under an `Adder`,
 a role's set and the capabilities a `Choices` of the class `cap-grid`.
-A user's new password, one's current one, a provider's client secret and a key just
-made are a part's own state, never a draft of the forms' store;
-a load that went through forgets the forms of the users, roles and providers it no
-longer gives;
-at a sign-out, and for another user after a 401 (`MassimoParts.signedOut`),
-every list, panel, new item's form and message is forgotten.
+A user's new password, one's current one,
+a provider's client secret and a key just made are a part's own state,
+never a draft of the forms' store;
+a load that went through forgets the forms of the users,
+roles and providers it no longer gives; at a sign-out,
+and for another user after a 401 (`MassimoParts.signedOut`), every list, panel,
+new item's form and message is forgotten.
 The log (`ui/src/log/`, AP UiParts Block 11) is drawn once into its section,
-`section#logview`, the skeleton's alone, at the page's start
-(`log.mount`, from `init`), and updated in place;
+`section#logview`, the skeleton's alone, at the page's start (`log.mount`,
+from `init`), and updated in place;
 `index.tsx` hands the pages' store the log's address of its own (`ownAddress`:
-`address.ts`' `logHash` and `readLogHash`, the address unchanged to the character)
-and registers `log`, which `app.js` and `header.js` call
-(the loads, the poll, the stream, the Cubes' changes) and the UI tests read;
-`state.ts` holds `logState`, a `live` object, the lines the API's events as plain objects;
-`lines.ts` a line made of an event (`logLine`), its type `LogEvent` the file's own,
+`address.ts`' `logHash` and `readLogHash`,
+the address unchanged to the character) and registers `log`,
+which `app.js` and `header.js` call (the loads, the poll, the stream,
+the Cubes' changes) and the UI tests read; `state.ts` holds `logState`,
+a `live` object, the lines the API's events as plain objects;
+`lines.ts` a line made of an event (`logLine`),
+its type `LogEvent` the file's own,
 since the API file has no schema of a log line (only `LogCursorBeyond`),
 a summary's fields read by name as each kind has them;
-`text.ts` the line's words;
-`store.ts` the reads (the first page, the poll under All Cubes with `after=` and its 409,
-Older with its question, a command's detail, the users, every Cube's rooms),
-the stream's live lines, the matching, the choices' changes,
-`view` (the lines drawn, newest first, followed in place: a new line on top,
-the oldest out, worked out again only at a change of the choices or a load)
-and the scroll of the lines' box: the first line in view, among those that stay,
+`text.ts` the line's words; `store.ts` the reads (the first page,
+the poll under All Cubes with `after=` and its 409, Older with its question,
+a command's detail, the users, every Cube's rooms), the stream's live lines,
+the matching, the choices' changes, `view` (the lines drawn, newest first,
+followed in place: a new line on top, the oldest out,
+worked out again only at a change of the choices or a load) and the scroll of
+the lines' box: the first line in view, among those that stay,
 put back where it stood as lines come in on top, the scroll kept at a full draw;
 `choices.ts` the choices' options and the device chosen put right against the devices;
 `alerts.ts` the unseen problems, `logAlerts`, and ☰'s sign;
-`blocks.ts` the lines in blocks of about 200, cut over the lines' own order
-(not over what the filter shows) and kept by the lines' keys,
-so that a new line draws its block alone, not every line,
+`blocks.ts` the lines in blocks of about 200,
+cut over the lines' own order (not over what the filter shows) and kept by the
+lines' keys, so that a new line draws its block alone, not every line,
 and a line keeps its block, and so its element, through any filter or load;
-`index.tsx`' `signedOut`, which `MassimoParts.signedOut` calls, forgets the log
-of whoever was in but its choices (UiParts D209),
+`index.tsx`' `signedOut`, which `MassimoParts.signedOut` calls,
+forgets the log of whoever was in but its choices (UiParts D209),
 and its `serverEvent`, which `MassimoParts.serverEvent` calls,
 has a Cube's log shown read on from its newest line at the stream's `resync`,
 once the page's own load or Older has ended (UiParts D208);
-`Log.tsx` and `Line.tsx` the parts, with the markup, classes and ids of the partial
-and the template they replace, a line's alert and its command's detail read by the line
-itself. A line keeps its key while it is the same event:
-its id with its Cube's serial, a live line its count,
-which a page loaded afterwards takes on for the same event, by its time, kind and device,
-as the load decides which live lines it holds already.
-The page's chrome says where they are unsaved (`ui/src/chrome/`, AP UnsavedMarks
-Block 5), a region of its own drawn once as `parts.js` loads:
+`Log.tsx` and `Line.tsx` the parts, with the markup,
+classes and ids of the partial and the template they replace,
+a line's alert and its command's detail read by the line itself.
+A line keeps its key while it is the same event: its id with its Cube's serial,
+a live line its count,
+which a page loaded afterwards takes on for the same event, by its time,
+kind and device, as the load decides which live lines it holds already.
+The page's chrome says where they are unsaved (`ui/src/chrome/`,
+AP UnsavedMarks Block 5), a region of its own drawn once as `parts.js` loads:
 a section's pill in its `span.section-pill` beside the badges (`Cards.tsx`),
-the forms it shows the beginnings of their keys in `data-forms`, its entry's name
-the text key in `data-title`;
-a ☰ entry's disk after its name (`Menu.tsx`, the forms of each page in `chrome/pages.ts`:
+the forms it shows the beginnings of their keys in `data-forms`,
+its entry's name the text key in `data-title`;
+a ☰ entry's disk after its name (`Menu.tsx`,
+the forms of each page in `chrome/pages.ts`:
 System settings' `users roles providers integrations`; Cube settings' `cube`;
-Personal settings' `profile scheme`);
-☰'s mark at its corner, the worse of the log's, which the log's part
-(`ui/src/log/alerts.ts`) hands it as `MassimoParts.chrome.log(count, tone)`,
-and the forms' of every entry (`unsavedTone`), with ☰'s name and tooltip.
-☰ and the header's page buttons are the chrome's too (AP UiParts Block 14,
-`ui/src/chrome/Menu.tsx`), drawn into the header's `nav#nav`:
-↑, Rooms and ☰, its first row Massimo's mark (the shared `Brand`) and the server's
-version, which `header.js` hands it as `MassimoParts.chrome.version(v)`,
+Personal settings' `profile scheme`); ☰'s mark at its corner,
+the worse of the log's,
+which the log's part (`ui/src/log/alerts.ts`) hands it as
+`MassimoParts.chrome.log(count, tone)`,
+and the forms' of every entry (`unsavedTone`),
+with ☰'s name and tooltip. ☰ and the header's page buttons are the chrome's too
+(AP UiParts Block 14, `ui/src/chrome/Menu.tsx`),
+drawn into the header's `nav#nav`: ↑, Rooms and ☰,
+its first row Massimo's mark (the shared `Brand`) and the server's version,
+which `header.js` hands it as `MassimoParts.chrome.version(v)`,
 and its entries from the pages' store (`ui/src/shared/pages.ts`) and who is in
 (`ui/src/shared/me.ts`), worded by its `whoOf`,
-as the personal page's row words it:
-Sign out or Forget key, and whose Personal settings they are;
-in the app Select server, by `appConnect` of `login.js`,
-This server's settings… and App settings…,
-by its `appServerSettings` and `appAppSettings`,
-and Sign out by its `logout`.
-My settings (`ui/src/prefs/`, AP UiParts Block 13) draws their rows into
-`#prefs-rows` as `parts.js` loads, before `init` applies the settings;
-the rows read `state.settings`, a `live` object of `shared/data.ts`,
-and `state.device`, the settings kept for this device alone,
-which `setSetting` and `storeDeviceOverrides` write as before, so that a
-row follows its setting alone; no plain script calls it;
-`rows.tsx` a row with its switch that keeps the setting on this device alone
-(`DevRow`), `Settings.tsx` the rows: each saved as it is changed, the poll as it
-is left, a poll being typed kept as a draft through the settings applied again
-(without the "changed meanwhile" notice, which the plain field had not: leaving
-the field for Take theirs would save it).
+as the personal page's row words it: Sign out or Forget key,
+and whose Personal settings they are; in the app Select server,
+by `appConnect` of `login.js`, This server's settings… and App settings…,
+by its `appServerSettings` and `appAppSettings`, and Sign out by its `logout`.
+My settings (`ui/src/prefs/`,
+AP UiParts Block 13) draws their rows into `#prefs-rows` as `parts.js` loads,
+before `init` applies the settings; the rows read `state.settings`,
+a `live` object of `shared/data.ts`, and `state.device`,
+the settings kept for this device alone,
+which `setSetting` and `storeDeviceOverrides` write as before,
+so that a row follows its setting alone; no plain script calls it;
+`rows.tsx` a row with its switch that keeps the setting on this device alone (`DevRow`),
+`Settings.tsx` the rows: each saved as it is changed, the poll as it is left,
+a poll being typed kept as a draft through the settings applied again (without
+the "changed meanwhile" notice, which the plain field had not:
+leaving the field for Take theirs would save it).
 The Appearance card is drawn into `#appearance` the same way,
 `theme.js` keeping `applyAppearance`, which `app.js` calls,
 and the system's changes it follows: `Appearance.tsx` its rows, its buttons,
-their line and the editor while it is open, and beside the window's and the
-radio's choice their drawing as the page shows it (`Icon`, `Sign`), drawn again
-by the icons' signal; `theme.js` applies the choices to the page and writes into
-none of it;
+their line and the editor while it is open,
+and beside the window's and the radio's choice their drawing as the page shows it (`Icon`,
+`Sign`), drawn again by the icons' signal;
+`theme.js` applies the choices to the page and writes into none of it;
 `scheme.ts` the editor's state beside `theme.js`' `themeState.draft` and `base`,
 signals of `shared/data.ts`, which the page applies as the draft changes,
-and what Save as, Delete, Export and Import do;
-`Editor.tsx` the editor, a `useForm` of the key `scheme`, its changes the
-draft's colours and the name typed against the scheme it started from, Save as a
-`SaveButton` beside the name, off while the editor holds no change, Enter in the
-name saving only where it would (UiParts D204), Reset putting both back,
-a hex field's text typed
-or refused kept by the field; closing the editor drops the draft and forgets its
-form, and so does a sign-out.
-Notifications (`ui/src/notify/`, AP UiParts Block 13) is a part alone, drawn
-into `#notify-sec` as `parts.js` loads and read each time the personal page is
-shown, the line emptied first, as `notify.js` read it; it registers `notify`
-(`render`, `save`, `takeSave`, `sendNow`), which `app.js` calls at a change of
-language, `login.js`' `holdPushes` and `resumePushes` around a sign-in, holding a save
-that waits and sending it again, and its `logout` before the session ends;
-`store.ts` holds the kinds with their defaults, the rules once read, the
-devices, this browser's endpoint, the name of this device typed and the line
-with whose outcome it shows;
-`send.ts` what it reads and sends, line for line as `notify.js` did, a read that
-finds a change of the rules waiting keeping the rules shown, which that change
-sends;
-`Notify.tsx` the card: a rule's switch, saved a second after the last change,
+and what Save as, Delete, Export and Import do; `Editor.tsx` the editor,
+a `useForm` of the key `scheme`,
+its changes the draft's colours and the name typed against the scheme it started from,
+Save as a `SaveButton` beside the name, off while the editor holds no change,
+Enter in the name saving only where it would (UiParts D204),
+Reset putting both back, a hex field's text typed or refused kept by the field;
+closing the editor drops the draft and forgets its form, and so does a sign-out.
+Notifications (`ui/src/notify/`, AP UiParts Block 13) is a part alone,
+drawn into `#notify-sec` as `parts.js` loads and read each time the personal
+page is shown, the line emptied first, as `notify.js` read it;
+it registers `notify` (`render`, `save`, `takeSave`, `sendNow`),
+which `app.js` calls at a change of language,
+`login.js`' `holdPushes` and `resumePushes` around a sign-in,
+holding a save that waits and sending it again,
+and its `logout` before the session ends;
+`store.ts` holds the kinds with their defaults, the rules once read,
+the devices, this browser's endpoint,
+the name of this device typed and the line with whose outcome it shows;
+`send.ts` what it reads and sends, line for line as `notify.js` did,
+a read that finds a change of the rules waiting keeping the rules shown,
+which that change sends; `Notify.tsx` the card: a rule's switch,
+saved a second after the last change,
 its delay or threshold a draft of the rule shown with its limit,
-taken as the field is left;
-a rule has no Save, so the card has no marks (UnsavedMarks D6-A).
+taken as the field is left; a rule has no Save,
+so the card has no marks (UnsavedMarks D6-A).
 The rules are off until this session's first read has answered, so that a
 change does not send the defaults over the rules the user has.
-Sign out sends a change still waiting at once, under the user's own token, as it
-sends the waiting settings (`sendNow`, UiParts D205); for another user
-after a 401 `holdPushes` takes it and drops it, for the same user sends it again.
+Sign out sends a change still waiting at once, under the user's own token,
+as it sends the waiting settings (`sendNow`, UiParts D205);
+for another user after a 401 `holdPushes` takes it and drops it,
+for the same user sends it again.
 At a sign-out, and for another user after a 401, the rules, the devices, the
 name typed and the line are forgotten; an answer after it is dropped.
 The toast and the service worker's language stay plain in `notify.js`.
-My profile (`ui/src/profile/`, AP UiParts Block 13) is a part alone, drawn into
-`#profile-sec` as `parts.js` loads, for the user who is in names
-(`me` of `shared/me.ts`, `state.me` underneath, which `applyCaps` of `login.js`
-writes at every read of who is in),
-and read each time the personal page is shown, as `profile.js` read it: the
-user (`GET …/users/{name}`), the enabled providers where none are known yet,
-then its sessions and keys and its identities, and after every change made there
-the users again where the signed-in user may read them, then My profile;
-`store.ts` holds the user as that read gave it, the providers, `reads`, the link
-come back shown to confirm, Change password open, the two message lines'
-outcomes and the API key marked, `marked`:
-the pages' store hands `index.tsx` what the card's address holds after its
-`?` as it reads an address, before the page is shown, null for another address
-(`readCardAddress` of `shared/pages.ts`), which sets the key
-`#profile?key=<id>` names, or none (`markKey`); the first drawing of the keys
-after it brings its row into the middle of the window and keeps it there for two
-seconds (`keysDrawn` of `Profile.tsx`, `keepInView` of `shared/card.ts`), and
-the next page shown after that, My profile again among them, takes it away
-(`viewshown`); in the app, a key marked among those the last sign-in's
-`setToken` answered as revoked (`signInRevoked` of `shared/app.ts`) is marked no
-more as the page is shown, a toast naming it, and the app's status is read
-again then (`readApp`), for the key of this device;
-`send.ts` what it reads and sends through its runner, the requests of
-`profile.js`, `linked.js` and `login.js`' `changeOwnPassword`, in the order: the
-user, the providers where none are known yet, then the sessions and keys and the
-identities together;
-`Profile.tsx` the parts: the display name a `useForm` of the key `profile:name`
-and the own password one of `profile:password`, each with Reset and Save by its
-state, the password's three fields its part's own state, never a draft and kept
-by no key, the form's marks knowing only that a new password is typed, the
-current one alone, as a password manager fills it in, being none (UnsavedMarks
-D28);
-the shared `Tokens` and `Identities`, the latter `quiet` and with the Link
-buttons after it, and the link come back above it, its title taking the focus as
-it comes.
-Another user signed in draws all of it from nothing:
-at a sign-out, and for another user after a 401, `MassimoParts.signedOut` sets
-who is in to null, which takes the parts and what is typed in them away, and
-forgets the user read, the link shown and the messages; an answer after it is
-dropped (`session.ts`); the key marked stays, the page's address having named it.
+My profile (`ui/src/profile/`, AP UiParts Block 13) is a part alone,
+drawn into `#profile-sec` as `parts.js` loads,
+for the user who is in names (`me` of `shared/me.ts`, `state.me` underneath,
+which `applyCaps` of `login.js` writes at every read of who is in),
+and read each time the personal page is shown, as `profile.js` read it:
+the user (`GET …/users/{name}`), the enabled providers where none are known yet,
+then its sessions and keys and its identities,
+and after every change made there the users again where the signed-in user may read them,
+then My profile; `store.ts` holds the user as that read gave it, the providers,
+`reads`, the link come back shown to confirm, Change password open,
+the two message lines' outcomes and the API key marked, `marked`:
+the pages' store hands `index.tsx` what the card's address holds after its `?`
+as it reads an address, before the page is shown,
+null for another address (`readCardAddress` of `shared/pages.ts`),
+which sets the key `#profile?key=<id>` names, or none (`markKey`);
+the first drawing of the keys after it brings its row into the middle of the
+window and keeps it there for two seconds (`keysDrawn` of `Profile.tsx`,
+`keepInView` of `shared/card.ts`), and the next page shown after that,
+My profile again among them, takes it away (`viewshown`); in the app,
+a key marked among those the last sign-in's `setToken` answered as revoked
+(`signInRevoked` of `shared/app.ts`) is marked no more as the page is shown,
+a toast naming it, and the app's status is read again then (`readApp`),
+for the key of this device;
+`send.ts` what it reads and sends through its runner,
+the requests of `profile.js`, `linked.js` and `login.js`' `changeOwnPassword`,
+in the order: the user, the providers where none are known yet,
+then the sessions and keys and the identities together; `Profile.tsx` the parts:
+the display name a `useForm` of the key `profile:name` and the own password one
+of `profile:password`, each with Reset and Save by its state,
+the password's three fields its part's own state,
+never a draft and kept by no key,
+the form's marks knowing only that a new password is typed,
+the current one alone, as a password manager fills it in,
+being none (UnsavedMarks D28); the shared `Tokens` and `Identities`,
+the latter `quiet` and with the Link buttons after it,
+and the link come back above it, its title taking the focus as it comes.
+Another user signed in draws all of it from nothing: at a sign-out,
+and for another user after a 401,
+`MassimoParts.signedOut` sets who is in to null,
+which takes the parts and what is typed in them away, and forgets the user read,
+the link shown and the messages; an answer after it is dropped (`session.ts`);
+the key marked stays, the page's address having named it.
 No plain script calls it.
-Integrations (`ui/src/integrations/`) is a part alone, drawn into `#sys-integrations-body`
-and read each time System settings is shown; no plain script calls it:
+Integrations (`ui/src/integrations/`) is a part alone,
+drawn into `#sys-integrations-body` and read each time System settings is shown;
+no plain script calls it:
 `store.ts` holds what it shows as the last loads gave it,
-the newest read of each kind, a number per kind, and per integration for its panel,
+the newest read of each kind, a number per kind,
+and per integration for its panel,
 beside the session's dropping the answer of a read that a later one of its kind
-was asked after,
-whether the LAN's answer has come (`seen`),
-each panel open, each request closed, the message line and the readings of an approval
-again, every 3 s in its first minute and every 15 s after, stopped while the list is not
-visible (another page, the card folded) and at a sign-out, and started again by every load
-of the list that went through, which says a key collected meanwhile, and what it sends;
-`Integrations.tsx` its parts, the facts a `KvList`, a request's maximum and an
-integration's a `Choices` under a legend, of the class `integration-caps`,
+was asked after, whether the LAN's answer has come (`seen`), each panel open,
+each request closed, the message line and the readings of an approval again,
+every 3 s in its first minute and every 15 s after,
+stopped while the list is not visible (another page,
+the card folded) and at a sign-out,
+and started again by every load of the list that went through,
+which says a key collected meanwhile, and what it sends;
+`Integrations.tsx` its parts, the facts a `KvList`,
+a request's maximum and an integration's a `Choices` under a legend,
+of the class `integration-caps`,
 an integration's name and its maximum each a `useForm` of the key
-`integrations:<uuid>:name` and `:max`, Acts as a `Select` with its draft beside Link,
+`integrations:<uuid>:name` and `:max`,
+Acts as a `Select` with its draft beside Link,
 Refuse and Revoke a `useAsk` with a `Question`.
-Backup and restore (`ui/src/backups/`) draws System settings' folds into `#backups-cubes`
-and Cube settings' box into `#cube-backup-body`, a box per Cube and place,
-and registers `cubeChanged`, `restoreEvent` and `resynced`, which `app.js` calls
-at a change of the Cube chosen, at the stream's restore events and at its resync;
-`store.ts` keeps what a Cube has by its serial, live, so that its boxes on both pages
-show the same: its list, whether the server keeps it, the comparisons, the restore
-shown and the one sent, a running one shown as unseen at a resync
-(`app.js`'s resync handler calls `resynced`);
-each box's message line and format by its place and serial;
-each fold open, a single Cube's at first;
-the Cubes not served that keep backups,
+Backup and restore (`ui/src/backups/`) draws System settings' folds into
+`#backups-cubes` and Cube settings' box into `#cube-backup-body`,
+a box per Cube and place, and registers `cubeChanged`,
+`restoreEvent` and `resynced`,
+which `app.js` calls at a change of the Cube chosen,
+at the stream's restore events and at its resync;
+`store.ts` keeps what a Cube has by its serial, live,
+so that its boxes on both pages show the same: its list,
+whether the server keeps it, the comparisons,
+the restore shown and the one sent,
+a running one shown as unseen at a resync (`app.js`'s resync handler calls `resynced`);
+each box's message line and format by its place and serial; each fold open,
+a single Cube's at first; the Cubes not served that keep backups,
 as `GET /api/v1/backups/unserved` last listed them (`unserved`,
 read at the page's showing and after a delete, not `state.found`);
-and what it reads and sends;
-`Backups.tsx` the box, a fold a `Fold` whose `FoldHead` has the Cube's sign
-`after` its serial, a deletion a `useAsk` with a `Question` in its row;
+and what it reads and sends; `Backups.tsx` the box,
+a fold a `Fold` whose `FoldHead` has the Cube's sign `after` its serial,
+a deletion a `useAsk` with a `Question` in its row;
 a Cube not served has a fold whose head has a `Badge` in place of the sign,
 and a box drawn with `served` false.
 Leaving the page (`ui/src/leaving/`) is a region of its own,
 a dialog without a place in any page's region:
 it is no part of the page's chrome, and no region imports another,
 so it knows the forms only through `forms.ts`.
-`index.tsx` draws a `FormsDialog` into `#leaving` at the end of the page
-as soon as `parts.js` loads, and adds its `beforeunload` and `pagehide` listeners
-only while `changedItems` has any, removed once none has,
+`index.tsx` draws a `FormsDialog` into `#leaving` at the end of the page as soon
+as `parts.js` loads,
+and adds its `beforeunload` and `pagehide` listeners only while `changedItems` has any,
+removed once none has,
 since a page with a `beforeunload` listener can lose the browser's back and forward cache:
-at the prompt it counts the forms left (`leaveForms`), and the dialog with Close
-comes `STAY_AFTER_MS` (a second) later where the page is still there:
-a browser does not tell the page the user's answer,
+at the prompt it counts the forms left (`leaveForms`),
+and the dialog with Close comes `STAY_AFTER_MS` (a second) later where the page
+is still there: a browser does not tell the page the user's answer,
 and a page that is left runs on until the next one comes (a Pi 1 is slow to send it),
 so the dialog shown at once would come on a page that is leaving;
 `pagehide` takes back the dialog of a stay, and one that waits to come,
 so that a page kept for the back button comes back without it;
-once the last form is saved, reset or forgotten, the dialog closes
-and a sign-out's question is answered as a sign-out;
+once the last form is saved, reset or forgotten,
+the dialog closes and a sign-out's question is answered as a sign-out;
 it registers `signOut(label)`, which `logout` of `login.js` awaits first,
 the dialog with Stay and the label of the page's own button,
-resolving true at once where no form has changes,
-and `changes()`, which `somethingOpen` of `header.js` asks,
+resolving true at once where no form has changes, and `changes()`,
+which `somethingOpen` of `header.js` asks,
 so that a newer server's reload waits.
 After a 401, the sign-in of `askLogin` forgets every form (`settleSignIn` of `login.js`,
 which calls `forgetSession`, the page's part of `logout`,
-and with it `MassimoParts.signedOut`)
-where the user who signs in is not the one who was,
+and with it `MassimoParts.signedOut`) where the user who signs in is not the one who was,
 by `/me`'s user or mode, before the reads that waited for it are sent again.
 Moving inside the page (the pages' store, the Cube choice) unloads nothing,
 so nothing asks there.
@@ -3728,13 +3854,13 @@ The sign-in is a region of its own (`ui/src/signin/`, AP UiParts' Block 14),
 drawn once as `parts.js` loads and from then on by its signals:
 its card into the skeleton's `<dialog id="login-dialog">`,
 which `askLogin` of `login.js` shows, not modal, and closes;
-`askLogin` hands the card the way to open on, a provider's refusal
-and the sign-in it answers
-(`MassimoParts.signIn.open`), the card empties its fields, chooses the way
-and gives the focus in the drawing that follows,
-and each way, the password, a key or the fingerprint, sets the token
-and goes on to `finishSignIn`, which settles the sign-in, closes the dialog
-and starts the page as the plain handlers did.
+`askLogin` hands the card the way to open on,
+a provider's refusal and the sign-in it answers (`MassimoParts.signIn.open`),
+the card empties its fields,
+chooses the way and gives the focus in the drawing that follows, and each way,
+the password, a key or the fingerprint,
+sets the token and goes on to `finishSignIn`, which settles the sign-in,
+closes the dialog and starts the page as the plain handlers did.
 Each way, and a provider's button,
 takes the card's opening and the session's number as it is used
 (`opening` of `signin/store.ts`),
@@ -3759,22 +3885,24 @@ from its press until the card has closed,
 and starts only while no other way's request of the opening runs:
 the app ends the session it held as it keeps the fingerprint's,
 so that a session another way made meanwhile would be ended under the page.
-Its fields are not controlled (UiParts D210):
-no draw sets what a name, a password or a key field holds,
-so that a password manager's fill stays; they are read at the submit
-and emptied at each opening;
+Its fields are not controlled (UiParts D210): no draw sets what a name,
+a password or a key field holds, so that a password manager's fill stays;
+they are read at the submit and emptied at each opening;
 once the card has closed on a sign-in or a new owner (`done(true)` of `askLogin`,
 `MassimoParts.signIn.closed(ok)`) and the page's first reads after it have settled,
-answered or failed (`afterLogin`, `loadMeAndPreferences`, `MassimoParts.signIn.settled`,
-`card.succeeded`), the password, Again and the API key are emptied too,
-and an eye that shows a password is hidden again; the name stays until the next opening
-(AP LooseEnds, D13, D41-A, which changes UiParts D210 and FirstOwner D43).
-A refusal, Skip for now, Back to the page, Escape, Keep it open and the app's Cancel
-empty nothing; a card opened again before the reads settle has emptied its fields
-at the opening, and nothing empties what is typed in it then.
-The app's status of the login by fingerprint is read at each opening
-and after a fingerprint refused
-(`app.ts`), and with it the server the line under the title names (`Server.tsx`,
+answered or failed (`afterLogin`, `loadMeAndPreferences`,
+`MassimoParts.signIn.settled`, `card.succeeded`), the password,
+Again and the API key are emptied too,
+and an eye that shows a password is hidden again;
+the name stays until the next opening (AP LooseEnds, D13, D41-A,
+which changes UiParts D210 and FirstOwner D43).
+A refusal, Skip for now, Back to the page, Escape,
+Keep it open and the app's Cancel empty nothing;
+a card opened again before the reads settle has emptied its fields at the opening,
+and nothing empties what is typed in it then.
+The app's status of the login by fingerprint is read at each opening and after a
+fingerprint refused (`app.ts`),
+and with it the server the line under the title names (`Server.tsx`,
 `serverOf` of `signin/app.ts`), its ⓘ closed at each opening;
 the fingerprint's button and Sign in turn until the sign-in has settled,
 and the button stays the same element while the system's prompt is open;
@@ -3784,37 +3912,43 @@ The providers' list comes from `renderLoginProviders`,
 the self-signed certificate's line from `renderTLS` of `header.js`;
 a change of language draws the card's texts again and reads the providers no more.
 A sign-out, and another user's sign-in after a 401 (`forgetSession` of `login.js`),
-clears who is in for the plain code and for the parts in one turn
-(`state.me`, then `MassimoParts.signedOut`, which raises the session's number first),
+clears who is in for the plain code and for the parts in one turn (`state.me`,
+then `MassimoParts.signedOut`, which raises the session's number first),
 then forgets the settings that followed the user,
-the lines saying a write was not sent,
-the House's panel, the stream and the Cubes' data, shows the tiles,
+the lines saying a write was not sent, the House's panel,
+the stream and the Cubes' data, shows the tiles,
 and only then awaits the signed-out language's table (UiParts D211):
 nothing of the user who left is drawn, shown, read or answered while it loads.
 Every region drops an answer that comes after a sign-out:
-it takes the session's number (`shared/session.ts`) before its request
-and writes, says, reloads and sends nothing after it where the number has changed,
-also no second request of its own after the first one's answer (a device's settings and its name,
-a copy's programme after its settings, a setpoint after the read of a preset),
+it takes the session's number (`shared/session.ts`) before its request and writes, says,
+reloads and sends nothing after it where the number has changed,
+also no second request of its own after the first one's answer (a device's
+settings and its name, a copy's programme after its settings,
+a setpoint after the read of a preset),
 as Blocks 10 to 13 built it and as the regions moved before them do since (UiParts D212):
 the Cubes' pairing and rooms, a Cube's devices and the Cubes' actions,
 a room's configuration, a device's detail and the virtual thermostat's settings,
-the devices without a room, the House panel's writes (which stop at the next room),
-the repairs, the form that puts a device into a room and the header's search for Cubes.
-The plain loads hold the rule too: the Cubes (`loadCubes`, `loadTimeZone`), the rooms
-(`loadRooms`, `refresh`), a device's detail (`deviceDetail`), a tile's writes
-(`setpointRequest`, `setLock`, `deleteRoom`), who is in (`loadMe`) and the settings
-(`loadPreferences`, `pushPreferences`) take the number as `MassimoParts.session()`
-and ask `MassimoParts.stillSession(n)` after the answer and after its error;
-a late answer writes, draws and says nothing and still settles,
-the Cubes', the rooms' and `refresh` to `false`, which a plain chain tests
-before it goes on, so that every awaiter's `finally` runs and nothing of the next
-session waits on the one before; a part's awaiter asks its own session.
-Two requests of the sign-in card take no number: Create the owner (`Owner.tsx`)
-and Keep it open (`KeepOpen.tsx`) are bound to the card's ask instead,
-which is ended once and does nothing for an ask closed already (`done`, `finishSignIn`),
-and they run on an open server, where no sign-out ends a session
-and another user signs in only through this card, which they themselves end in.
+the devices without a room,
+the House panel's writes (which stop at the next room), the repairs,
+the form that puts a device into a room and the header's search for Cubes.
+The plain loads hold the rule too: the Cubes (`loadCubes`, `loadTimeZone`),
+the rooms (`loadRooms`, `refresh`), a device's detail (`deviceDetail`),
+a tile's writes (`setpointRequest`, `setLock`, `deleteRoom`),
+who is in (`loadMe`) and the settings (`loadPreferences`,
+`pushPreferences`) take the number as `MassimoParts.session()` and ask
+`MassimoParts.stillSession(n)` after the answer and after its error;
+a late answer writes, draws and says nothing and still settles, the Cubes',
+the rooms' and `refresh` to `false`,
+which a plain chain tests before it goes on,
+so that every awaiter's `finally` runs and nothing of the next session waits on
+the one before; a part's awaiter asks its own session.
+Two requests of the sign-in card take no number:
+Create the owner (`Owner.tsx`) and Keep it open (`KeepOpen.tsx`) are bound to
+the card's ask instead,
+which is ended once and does nothing for an ask closed already (`done`,
+`finishSignIn`), and they run on an open server,
+where no sign-out ends a session and another user signs in only through this card,
+which they themselves end in.
 Create the owner needs no check of its opening either (AP AccessEnds, D1):
 while it turns, `card.working` keeps every way out of the card off,
 and `card.creating` keeps another request's 401 from turning the card,
@@ -3830,7 +3964,8 @@ its Create the owner turns until the card has closed,
 through the app's keeping of the login and the read of who is in after it,
 so that a second tap creates nothing (UiParts D213).
 Keep it open… shows the card's other step in the form's place (`KeepOpen.tsx`,
-the store's `card.ownerStep`): the confirmation with the page's address to enter,
+the store's `card.ownerStep`):
+the confirmation with the page's address to enter,
 whose Keep it open writes `auth.keep_open`, reads who is in and closes the card,
 the card's `card.working` keeping Back and Select server off meanwhile;
 `keepAsk` and `keepBack` of `signin/store.ts` go there and back,
@@ -3854,7 +3989,8 @@ the bundler takes them from there and refuses any other import.
 `make ui-check` type-checks `ui/src/` with `tsc --noEmit` (its `tsconfig.json`:
 strict, the vendored types by `paths`),
 then checks its hooks with Biome's two rules (`tools/ui-check/biome.jsonc`):
-a hook at the top of a part's drawing, never after an early return or in a branch,
+a hook at the top of a part's drawing,
+never after an early return or in a branch,
 and an effect that lists what it reads,
 or says why not in a `biome-ignore` comment with its reason;
 with the TypeScript and the Biome `tools/ui-check/` locks (its `README.md`),

@@ -1,10 +1,9 @@
 # Work directories
 
 `workdir.sh` makes, sweeps and keeps the work directories of the test suites
-that make one at each run:
-the UI suite's (`tools/ui-test/run.sh`, `massimo-ui-test.XXXXXX`)
-and the emulator suite's (`tools/app-emulator/run.sh`, `massimo-app-emulator.XXXXXX`),
-which both source it (AP EmulatorRuns, D3-B).
+that make one at each run: the UI suite's (`tools/ui-test/run.sh`,
+`massimo-ui-test.XXXXXX`) and the emulator suite's (`tools/app-emulator/run.sh`,
+`massimo-app-emulator.XXXXXX`), which both source it (AP EmulatorRuns, D3-B).
 A run's work directory holds what it makes and needs no longer at its end:
 the binaries, the servers' stores and logs,
 and in the emulator suite the AVD.
@@ -21,11 +20,9 @@ since `workdir_make` and the sweep test each step that can fail themselves;
 ## The functions
 
 - `work=$(workdir_make <name>)`:
-  sweeps (below), then makes `<name>.XXXXXX` under `TMPDIR`
-  (`/tmp` where it is not set),
-  writes the caller's PID into its file `pid`
-  (inside `$(…)`, `$$` is still the caller's),
-  and under `KEEP=1` an empty file `kept`,
+  sweeps (below), then makes `<name>.XXXXXX` under `TMPDIR` (`/tmp` where it is not set),
+  writes the caller's PID into its file `pid` (inside `$(…)`,
+  `$$` is still the caller's), and under `KEEP=1` an empty file `kept`,
   from the start, so that a run killed before its cleanup keeps it;
   it prints the directory's path, and fails where it cannot make it.
 - `workdir_pid <dir> <pid>`:
@@ -33,7 +30,8 @@ since `workdir_make` and the sweep test each step that can fail themselves;
   for a process that may outlive the run:
   the emulator suite adds the emulator's,
   so that an emulator left running by a killed run keeps its AVD.
-- `workdir_sweep <name>`: removes the directories of the runs that are gone (below).
+- `workdir_sweep <name>`:
+  removes the directories of the runs that are gone (below).
 - `workdir_done <dir> <who>`, in the run's cleanup:
   removes the directory,
   or under `KEEP=1` keeps it and says so on standard error,
@@ -47,8 +45,7 @@ so that a sweep's pattern matches its suite's directories alone.
 
 A run that was killed, whose cleanup could not run,
 leaves its work directory behind.
-A later run of the same suite removes each `<name>.*` under `TMPDIR`
-that is all of these:
+A later run of the same suite removes each `<name>.*` under `TMPDIR` that is all of these:
 
 - a directory, and the user's own;
 - without `kept`;
