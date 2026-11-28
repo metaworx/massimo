@@ -305,7 +305,13 @@ type One = { value: string; set: (v: string) => void; inputRef?: Ref<HTMLInputEl
  * Suggest twenty characters (AP AccessEnds, D44-A); while its shown is
  * true the password shows as text, eye or none (a suggestion, D19-A), and
  * the eye, pressed then, hides it (its hide) and the eye's own state is
- * as it was.
+ * as it was. shown, given, is the state whether the password shows,
+ * held by the caller in place of the field's own, so that two fields
+ * show and hide together (a new password and its repetition, NewPassword:
+ * AP MobileApp, Block 20); with eye false the field draws no eye of its
+ * own and shows as shown says, hidden as every field is at the submit,
+ * at a fold's closing and with the setting off; controls are the ids of
+ * the other fields the eye shows and hides.
  */
 export function PasswordInput(props: One & {
   id: string;
@@ -321,11 +327,16 @@ export function PasswordInput(props: One & {
   invalid?: boolean;
   typed?: (v: string) => void;
   suggest?: { shown: boolean; press: () => void; hide: () => void; next: SuggestKind };
+  shown?: [boolean, (v: boolean) => void];
+  eye?: boolean;
+  controls?: string;
 }) {
   useLang();
-  const { id, name, autocomplete, required, disabled, placeholder, inputCls, cls, reset, inputRef, describedBy, invalid, typed, suggest } = props;
-  const on = reveal.value === true;
-  const [shown, setShown] = useState(false);
+  const { id, name, autocomplete, required, disabled, placeholder, inputCls, cls, reset, inputRef, describedBy, invalid, typed, suggest, controls } = props;
+  const reveals = reveal.value === true;
+  const on = reveals && props.eye !== false;
+  const ownShown = useState(false);
+  const [shown, setShown] = props.shown || ownShown;
   const own = useRef<HTMLInputElement | null>(null);
   const caret = useRef<[number, number, "forward" | "backward" | "none"] | null>(null);
   // the keyboard asked for no correction once the password shows as text: an attribute, not the property Chrome and
@@ -346,7 +357,7 @@ export function PasswordInput(props: One & {
       return;
     }
     setShown(false);
-  }, []);
+  }, [setShown]);
   // hidden again at each new start the caller counts
   // biome-ignore lint/correctness/useExhaustiveDependencies: reset is the caller's count of its starts, read for nothing else; the effect is for each, so it is listed.
   useLayoutEffect(() => {
@@ -354,8 +365,8 @@ export function PasswordInput(props: One & {
   }, [reset, hide]);
   // switched off, a password shown before is hidden, and stays so when the eye comes back
   useLayoutEffect(() => {
-    if (!on) hide();
-  }, [on, hide]);
+    if (!reveals) hide();
+  }, [reveals, hide]);
   // hidden again whenever a fold the field is in is closed and opened, in the very task that opens it: an observer of
   // the folds' open attribute is called in that task's microtasks, before a paint or a read can come, where the toggle
   // event comes in a task of its own, later on a loaded page, and once for a close and an opening pressed before it.
@@ -379,7 +390,7 @@ export function PasswordInput(props: One & {
     });
     for (const d of folds) watch.observe(d, { attributes: true, attributeFilter: ["open"], attributeOldValue: true });
     return () => watch.disconnect();
-  }, []);
+  }, [setShown]); // a state's setter, the field's own or the pair's (NewPassword), which stays the same
   // the caret where it was once the type has turned, the field still in focus
   // biome-ignore lint/correctness/useExhaustiveDependencies: shown is what turned the type; the effect follows each turn, so it is listed.
   useLayoutEffect(() => {
@@ -398,9 +409,9 @@ export function PasswordInput(props: One & {
     };
     form.addEventListener("submit", hide, true);
     return () => form.removeEventListener("submit", hide, true);
-  }, []);
+  }, [setShown]);
   const forced = !!suggest?.shown;
-  const visible = forced || (on && shown);
+  const visible = forced || (reveals && shown);
   // the type as it is while the field is in a closed fold, turned as it opens (the folds' observer)
   const held = own.current?.closest("details:not([open])") ? own.current.type : "";
   const type = held === "text" || held === "password" ? held : visible ? "text" : "password";
@@ -431,7 +442,7 @@ export function PasswordInput(props: One & {
         </button>
       )}
       {on && (
-        <button type="button" class="pw-eye" aria-label={label} title={label} aria-pressed={visible ? "true" : "false"} aria-controls={id}
+        <button type="button" class="pw-eye" aria-label={label} title={label} aria-pressed={visible ? "true" : "false"} aria-controls={controls ? id + " " + controls : id}
           disabled={disabled} onMouseDown={(ev) => ev.preventDefault()} onClick={toggle}>
           <Icon symbol={visible ? "icon-eye" : "icon-eye-off"} cls="ni" />
         </button>
@@ -500,6 +511,15 @@ export function PasswordInput(props: One & {
  * came, or after either field changed, fills nothing. The word
  * list not had says so in the line ("nolist"); any other failure, that
  * no suggestion could be made.
+ *
+ * problem, given, is what is wrong with the value now (the repetition of
+ * a new password that differs from it, NewPassword), "" for nothing:
+ * said in red on a line under the field, which describes the field and
+ * marks it invalid while it says something; room is the longest text the
+ * line may say, whose place the line keeps while it says nothing, so
+ * that nothing under the field moves as the problem comes and goes (as
+ * the rule's line keeps its place); shown, eye and controls are
+ * PasswordInput's.
  */
 export function PasswordField(props: One & {
   label: string;
@@ -515,8 +535,13 @@ export function PasswordField(props: One & {
   refused?: number;
   suggest?: boolean;
   also?: { set: (v: string) => void; get: () => string };
+  problem?: string;
+  room?: string;
+  shown?: [boolean, (v: boolean) => void];
+  eye?: boolean;
+  controls?: string;
 }) {
-  const { label, id, hint, cls, rule, refused = 0, suggest, also, ...input } = props;
+  const { label, id, hint, cls, rule, refused = 0, suggest, also, problem, room, ...input } = props;
   const [typed, setTyped] = useState("");
   // the suggestion: the shown line's place offered from the first press, the value filled (a suggestion while the field
   // still holds it), what the line says of one, and the count of the line's fills. turn rises at every press, every
@@ -665,8 +690,8 @@ export function PasswordField(props: One & {
   const dice = suggest && rule ? { shown: suggested, press, hide: () => setFilled(""), next } : undefined;
   return (
     <Field label={label} id={id} wide hint={hint} cls={cls}>
-      <PasswordInput {...input} inputRef={bind} id={id} cls="field-control" describedBy={rule ? id + "-rule" : undefined} invalid={said}
-        typed={rule ? key : undefined} suggest={dice} />
+      <PasswordInput {...input} inputRef={bind} id={id} cls="field-control" describedBy={rule ? id + "-rule" : problem ? id + "-problem" : undefined}
+        invalid={said || !!problem} typed={rule ? key : undefined} suggest={dice} />
       {dice && offered && (
         // the suggestion whole while the field holds it, a text that copies itself with its icon, its words quiet, its
         // place there from the first press; a Copy of each suggestion its own (its key), so that Copied, said of the last
@@ -677,6 +702,13 @@ export function PasswordField(props: One & {
         </p>
       )}
       {rule && <PasswordRule id={id + "-rule"} value={value} context={rule} refused={said} note={note || (suggested ? "suggested" : "")} fresh={fills} />}
+      {(problem || room) && (
+        // the line and, hidden in the same cell, the longest text it may say, so that its place stays while it is empty
+        <p class="small pw-problem">
+          {room && <span class="pw-problem-room" aria-hidden="true">{room}</span>}
+          <span id={id + "-problem"} class="pw-problem-now">{problem || ""}</span>
+        </p>
+      )}
     </Field>
   );
 }
@@ -687,7 +719,7 @@ type Pair =
   | { value?: undefined; set?: undefined; again?: undefined; setAgain?: undefined; inputRefs: [Ref<HTMLInputElement>, Ref<HTMLInputElement>]; inputRef?: undefined };
 
 /**
- * NewPassword is the new password's two fields, each with its eye: ids
+ * NewPassword is the new password's two fields, one eye for both: ids
  * their inputs' ids, label the first's (Again the second's); value and
  * again are what the caller keeps of each, set and setAgain told of every
  * keystroke, with inputRef the first's ref, for its focus, or instead
@@ -701,7 +733,16 @@ type Pair =
  * submits the rule refused; suggest gives the first field its dice
  * (PasswordField's suggest), whose suggestion fills the second too: by
  * setAgain, or the field not controlled, by its element and an input
- * event; it shows whole under the first alone.
+ * event; it shows whole under the first alone. One eye, the first
+ * field's, shows and hides both, the second drawing none (AP MobileApp,
+ * Block 20), and the setting auth.password_reveal turns it off as every
+ * other. The second is outlined in red while it is not empty and differs
+ * from the first, "The two passwords differ." under it (setup.mismatch,
+ * D98-A), both gone as they match, the line's place kept, so that nothing
+ * under the pair moves as it comes and goes: of the caller's values, or, the
+ * fields not controlled, of what their keystrokes, fills and change
+ * events leave, read again at each submit and empty again at each new
+ * start (reset), at which the caller empties them.
  */
 export function NewPassword(props: Pair & {
   ids: [string, string];
@@ -721,9 +762,47 @@ export function NewPassword(props: Pair & {
     againEl.current = v;
     setRef(againRef, v);
   }, [againRef]);
+  // the first field's element where it is not controlled, for the pair's comparison; the caller's ref told too
+  const firstEl = useRef<HTMLInputElement | null>(null);
+  const firstRef = props.inputRefs?.[0];
+  const bindFirst = useCallback((v: HTMLInputElement | null) => {
+    firstEl.current = v;
+    setRef(firstRef, v);
+  }, [firstRef]);
   const [first, second]: [One, One] = props.inputRefs
-    ? [{ inputRef: props.inputRefs[0] }, { inputRef: bindAgain }]
+    ? [{ inputRef: bindFirst }, { inputRef: bindAgain }]
     : [{ value: props.value, set: props.set, inputRef: props.inputRef }, { value: props.again, set: props.setAgain, inputRef: bindAgain }];
+  // one eye for both: the state whether the two show, the first field's eye its button
+  const pair = useState(false);
+  // the two values where the fields are not controlled, as their keystrokes, fills and change events leave them
+  const controlled = !props.inputRefs;
+  const [typed, setTyped] = useState<[string, string]>(["", ""]);
+  useEffect(() => {
+    const a = firstEl.current;
+    const b = againEl.current;
+    if (controlled || !a || !b) return;
+    const read = () => setTyped([a.value, b.value]);
+    for (const el of [a, b]) {
+      el.addEventListener("input", read);
+      el.addEventListener("change", read);
+    }
+    const form = a.form;
+    form?.addEventListener("submit", read, true);
+    return () => {
+      for (const el of [a, b]) {
+        el.removeEventListener("input", read);
+        el.removeEventListener("change", read);
+      }
+      form?.removeEventListener("submit", read, true);
+    };
+  }, [controlled]);
+  // a new start: the caller empties fields not controlled
+  // biome-ignore lint/correctness/useExhaustiveDependencies: reset is the caller's mark of a new start, read for nothing else; the effect is for each change, so it is listed.
+  useLayoutEffect(() => {
+    setTyped(["", ""]);
+  }, [reset]);
+  const [p1, p2] = controlled ? [props.value ?? "", props.again ?? ""] : typed;
+  const differ = p2 !== "" && p2 !== p1;
   const setAgain = props.setAgain;
   const also = {
     set: (v: string) => {
@@ -738,8 +817,9 @@ export function NewPassword(props: Pair & {
   return (
     <>
       <PasswordField label={label} id={ids[0]} name={names?.[0]} autocomplete="new-password" required={required} reset={reset} rule={context} refused={refused}
-        suggest={suggest} also={also} {...first} />
-      <PasswordField label={t("setup.again")} id={ids[1]} name={names?.[1]} autocomplete="new-password" required={required} reset={reset} {...second} />
+        suggest={suggest} also={also} shown={pair} controls={ids[1]} {...first} />
+      <PasswordField label={t("setup.again")} id={ids[1]} name={names?.[1]} autocomplete="new-password" required={required} reset={reset} shown={pair} eye={false}
+        problem={differ ? t("setup.mismatch") : ""} room={t("setup.mismatch")} {...second} />
     </>
   );
 }

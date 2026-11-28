@@ -1,4 +1,4 @@
-# Testing the web UI (v1.45.1)
+# Testing the web UI (v1.46.0)
 
 The kit of the web UI's tests comes first:
 what a test does about the page's own reads and its stream,
@@ -98,9 +98,10 @@ Block 7):
   The hold is within one document:
   a block whose page was loaded anew fails at its end.
 - **Whether the server holds the user's settings**
-  (`server_holds_settings(holds, token=None, **values)` of `conftest.py`,
-  AP SteadyTests v1.1, D14-A):
-  a sign-in and a page's load take the settings the server holds for the user,
+  (`server_holds_settings(holds, token=None, schemes=(), **values)` of `conftest.py`,
+  AP SteadyTests v1.1, D14-A, and v1.2, Block 19):
+  a sign-in and a page's load take the settings and the list of colour schemes
+  the server holds for the user,
   and hand a server that holds none the browser's a second later
   (`loadPreferences` of `login.js`),
   so what the page shows after either, and what it pushes, can depend on which.
@@ -112,13 +113,16 @@ Block 7):
   at the moment that decides:
   with `holds` the preference `ui`,
   `values` over the page's defaults (`SETTINGS_DEFAULTS`),
-  without it none; another user's with that user's `token`.
+  and the preference `schemes`, the list of the `schemes` given
+  (`massimo-scheme/1` documents), empty by default;
+  without it neither; another user's with that user's `token`.
   That moment is one where no push of the page's own changes it after:
   while the page is signed out, before the sign-in a 401 opened,
   or right before a reload, where the push sent as the page is left carries
   the values the test expects.
   Where the outcome must hold in both, the test is parametrised over `holds`,
-  as a settings change that met a 401 is, which the page sends in neither;
+  as a settings change and a colour scheme that met a 401 are,
+  which the page sends in neither;
   a choice kept in the browser across a reload is read with none on the server
   (`test_icon_choice.py`),
   the operator's language with it (`test_shell_updates.py`),

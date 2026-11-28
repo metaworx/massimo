@@ -13,7 +13,8 @@ import json
 import pytest
 
 from conftest import TOKEN, URL
-from helpers import NAME_BAD, OPERATOR_PASSWORD, ApiReads, assert_login_card_centred, assert_login_card_placed, frames, pause_clock, scroll_width, wait_held, wait_until
+from helpers import NAME_BAD, OPERATOR_PASSWORD, ApiReads, assert_login_card_centred, assert_login_card_placed, frames, held_timers, pause_clock, scroll_width, \
+    wait_bubble_at, wait_held, wait_until
 from test_connect import FAKE_BRIDGE
 
 OPEN = {"mode": "open", "user": None, "role": None, "capabilities": [], "setup": True}
@@ -432,6 +433,52 @@ def test_the_owner_card_measures(new_context, case, watch, guard, app):
     placed("the first owner's card after a press of the dice")
     if case.width == 390:
         each_language(page, case, "setup.title", lambda lang: placed(f"the first owner's card after a press in {lang}"))
+
+
+# The first owner's command as it stands: its text, its tops (one line or
+# more), whether its box and its icon fit the card, and its font.
+COMMAND = """() => {
+  const c = document.querySelector('#setup-command .setup-command-text');
+  const icon = document.querySelector('#setup-command .copy-icon');
+  const card = document.getElementById('login-dialog').getBoundingClientRect();
+  const r = document.createRange();
+  r.selectNodeContents(c);
+  const tops = new Set([...r.getClientRects()].map((x) => Math.round(x.top)));
+  const text = document.querySelector('#setup-form > p.muted').getBoundingClientRect();
+  const line = document.getElementById('setup-command').getBoundingClientRect();
+  const ir = icon.getBoundingClientRect();
+  return {text: c.textContent, lines: tops.size, inside: line.left >= card.left && ir.right <= card.right + 0.5,
+          under: line.top >= text.bottom - 0.5, mono: getComputedStyle(c).fontFamily.includes('mono'),
+          label: c.getAttribute('aria-label'), iconLabel: icon.getAttribute('aria-label'),
+          inText: document.querySelector('#setup-form > p.muted').textContent.includes('massimo user add')};
+}"""
+
+
+def test_the_owner_command_on_a_line_of_its_own(new_context, case, watch, guard):
+    """The first owner's text leaves the command out; `massimo user add`
+    follows on a line of its own, under it, in monospace, never wrapped,
+    inside the card at 390 px in the six languages, and copied by a tap
+    and by its icon, each saying so in the bubble above it (AP MobileApp,
+    Block 20)."""
+    page = start_page(new_context, guard, watch, OPEN)
+    owner_card(page)
+    page.context.grant_permissions(["clipboard-read", "clipboard-write"], origin=page.evaluate("location.origin"))
+    c = page.evaluate(COMMAND)
+    assert c["text"] == "massimo user add" and not c["inText"], f"the command apart from the text: {c}"
+    assert c["lines"] == 1 and c["inside"] and c["under"] and c["mono"], f"on a line of its own under the text, in monospace: {c}"
+    assert c["label"] == c["iconLabel"] and "massimo user add" in c["label"], f"named by what it copies: {c}"
+    if case.width == 390:
+        def fits(lang):
+            got = page.evaluate(COMMAND)
+            assert got["lines"] == 1 and got["inside"], f"one line inside the card in {lang}: {got}"
+        each_language(page, case, "setup.title", fits)
+    with held_timers(page, "copied"):
+        for sel in ("#setup-command .setup-command-text", "#setup-command .copy-icon"):
+            page.evaluate("navigator.clipboard.writeText('')")
+            page.locator(sel).click()
+            assert wait_until(page, "navigator.clipboard.readText().then((t) => t === 'massimo user add')", 3), f"{sel} copies the command"
+            where = wait_bubble_at(page, sel, page.evaluate("t('copy.done')"))
+            assert where == "above", f"{sel}: Copied above it: {where}"
 
 
 def test_a_touch_screen_gets_no_focus_in_the_owner_card(new_context, case, watch, guard):
