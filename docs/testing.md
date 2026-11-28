@@ -172,6 +172,7 @@ a write on its way, a session, a warning, an integration, a setting.
 | Go | `cubewatch.Except('l')` | what the fake Cube received since a mark, without the polls | "The watcher" |
 | Go | `storekit.Open(t, dir)` | a store of the test's own, a copy of the template | "The store's template" |
 | Go | `serialTests`, `testkit.Swapping(t)`, `testkit.ParallelOrListed` | a test that changes what the whole process shares | "Parallel tests" |
+| Go | the drift rig's `r.check()`, `r.checkWhile(room, why)`, through `scanRooms` | a room check the server's own work would leave a room out of: a structure change, a command to the room queued, a write to it open | "The kit" |
 | UI | `serve -poll 0`; `POST …/cubes/<serial>/refresh` | the server sends its fake Cube nothing between a test's steps; a test that needs a read asks for it | "The server sets"; "A test that needs a read asks for it" |
 | UI | `known_cube`, which resets the fake Cube (`Reset`, through its control's `POST /reset`), and `writes_shown` | each test file from the recorded Cube, with no write on its way | "A test file starts from the recorded Cube" |
 | UI | `server_as_found`, `server_left`, `LEFT_FOR_GOOD` | each test file leaves the server as it found it, or fails naming what it left | "A test file leaves the server as it found it" |
@@ -212,8 +213,11 @@ a port another program takes, the tests running beside it.
 | Go | `testkit.BindOrSkip(t, err)` | a listen that failed: a skip only where the platform lacks the address | "Ports" |
 | Go | `make race`, with its scale and `RACEGCFLAGS` | a `-race` run, by hand too | "The scale"; "The race detector" |
 | Go | `awayWait` | a wait for the Cube client to see a fake that closed, on a busy machine | "Parallel tests" |
+| Go | `movedTo3` of the moving Cube's rig, its client's backoff 50 ms (`cubeOptions`) | a wait for a Cube at its new address: the connections since the move, a refused dial tried again soon | `internal/server/discovery_test.go`, `movingCube` |
 | UI | `UI_TEST_SCALE`; `run.sh`'s retry, at four times the scale, with the trace | a slow or loaded runner; the retry's trace slows the page too | "The scale" |
 | UI | the run's ports (`UI_TEST_API_PORT`, `UI_TEST_CUBE_PORT`, `UI_TEST_DISCOVERY_PORT`, `UI_TEST_CONTROL_PORT`) | a run beside another, each on ports of its own | `tools/ui-test/README.md` |
+| UI | `HOST_NOISE` of `conftest.py` | a console line of the host's, not the page's: Chromium's `net::ERR_NETWORK_CHANGED` when the host's network changes | "The host's console lines" |
+| App | `Page(sc)`'s `waitFor` and `run`; `Wait.until`, `Wait.within` | an answer the app's main thread gives late, held up as at the WebView's first start: each try asked again within 30 s, never a loop or a latch of the test's own | [tools/app-emulator/README.md](../tools/app-emulator/README.md), "How a test waits" |
 
 ### The guards and the soak
 
@@ -286,6 +290,13 @@ as `kitClock` is the server's `notify.Clock`.
 The room checks' clock of the drift tests (`checkClock`) is another:
 the real time plus an offset the test moves on,
 so that the Cube's time, read at the greeting, moves on by itself too.
+The drift rig's `r.check()` runs the checks only once they would check every room:
+it waits until none of the reasons `scanRooms` (`drift.go`) gives the checks holds -
+a structure change sent or read back, a command to the room in the queue,
+a write to it open, a window open -
+since a check that left a room out starts its ten minutes later than the test counts.
+A test that leaves a room out on purpose says why:
+`r.checkWhile(2, leftOutConfirming)`.
 
 ## The scale
 

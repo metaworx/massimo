@@ -131,7 +131,7 @@ func TestUnconfirmedRoomCommandResent(t *testing.T) {
 	// The room checks leave the room alone while its write is not
 	// confirmed: its members differ, and nothing is reported or sent.
 	for range 3 {
-		r.check()
+		r.checkWhile(2, leftOutConfirming)
 		r.clock.add(11 * time.Minute)
 	}
 	if got := r.outcomes("disagree"); len(got) != 0 {
@@ -232,7 +232,7 @@ func TestRoomChecksWaitForAPendingWrite(t *testing.T) {
 	sent := r.lines.Mark()
 	r.waitSetting(0x0a0206, "manual", 22)
 	for range 3 {
-		r.check()
+		r.checkWhile(2, leftOutConfirming)
 		r.clock.add(11 * time.Minute)
 	}
 	if c := r.rt.roomConfirmation(2); c == nil || c.State != confirmPending {

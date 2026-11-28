@@ -69,6 +69,20 @@ class Host(private val target: Target) {
     /** since are the user's audit rows after [mark], oldest first; with [anyone] every row. */
     fun since(mark: Long, anyone: Boolean = false): List<Row> = rows(anyone = anyone).filter { it.id > mark }.sortedBy { it.id }
 
+    /**
+     * revokedByCode waits until the audit has the token [tokenId] revoked
+     * by its code after [mark], a row of nobody's, and fails with the rows
+     * it saw where that does not come within [Wait.WAIT_MS].
+     */
+    fun revokedByCode(mark: Long, tokenId: Long) {
+        var rows: List<Row> = emptyList()
+        val revoked = Wait.within {
+            rows = since(mark, anyone = true)
+            rows.any { it.action == "token.revoke_code" && it.target == "token:$tokenId" && it.result == "ok" }
+        }
+        if (!revoked) fail("the token $tokenId not revoked by its code: $rows")
+    }
+
     /** sessionId is the row of the session [token] at the server (`GET /api/v1/me`'s `token.id`). */
     fun sessionId(token: String): Long {
         val (code, body) = get("api/v1/me", token)

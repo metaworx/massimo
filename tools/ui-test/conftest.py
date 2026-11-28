@@ -89,7 +89,8 @@ test the sessions it made are ended (the autouse fixture ended_sessions).
 
 The guard (autouse) fails a test on any console error, page error or a
 horizontal scroll left at its end; the refused stream of a used_ticket
-test and a stubbed 503 of the discovery are expected.
+test and a stubbed 503 of the discovery are expected, and a console line
+of the host's (HOST_NOISE) is not the page's.
 
 pytest-playwright keeps the screenshot of a failed test (pytest.ini)
 under the directory run.sh names with --output, tools/ui-test/results/,
@@ -129,6 +130,15 @@ TOKEN = os.environ.get("UI_TEST_TOKEN", "")
 LOCALE = {"en": "en-US", "de": "de-DE"}
 HEIGHT = 900
 
+# Console errors of the host, not of the page, which the guard does not
+# count: Chromium fails the requests in flight with
+# net::ERR_NETWORK_CHANGED whenever an address of the host's network
+# changes, as another session's Docker network comes or goes, loopback
+# requests too, and neither Playwright nor Chromium documents a launch
+# option that keeps it from watching for that. A test that fails
+# meanwhile carries the lines in its report.
+HOST_NOISE = ("net::ERR_NETWORK_CHANGED",)
+
 
 class Case:
     """One width and one language."""
@@ -141,15 +151,17 @@ class Case:
 
 class Watch:
     """What the page did that a test or the guard looks at afterwards:
-    the stream requests, the used ticket handed out, and the problems
-    (console errors, page errors). A test that has the server refuse a
-    request on purpose lists it in expected, as (the URL's end, status)."""
+    the stream requests, the used ticket handed out, the problems
+    (console errors, page errors) and the host's console lines
+    (HOST_NOISE). A test that has the server refuse a request on purpose
+    lists it in expected, as (the URL's end, status)."""
 
     def __init__(self):
         self.streams = []
         self.refused = []
         self.problems = []
         self.expected = []
+        self.host = []
 
 
 CASES = {"1100-en": (1100, "en"), "390-en": (390, "en"), "1100-de": (1100, "de"), "390-de": (390, "de")}
@@ -720,7 +732,9 @@ def page(context, case, watch, request):
         expected = m.text.startswith("Failed to load resource") and (
             (watch.refused and USED in src) or (src.endswith("/cubes/discover") and "503" in m.text)
             or any(src.endswith(end) and str(status) in m.text for end, status in watch.expected))
-        if m.type == "error" and not expected:
+        if m.type == "error" and any(n in m.text for n in HOST_NOISE):
+            watch.host.append(f"console: {m.text}")
+        elif m.type == "error" and not expected:
             watch.problems.append(f"console: {m.text}")
 
     page.on("request", lambda r: watch.streams.append(r.url) if "/events?" in r.url else None)
@@ -786,6 +800,8 @@ def pytest_runtest_call(item):
     except BaseException as e:
         if guard is not None and guard.watch.problems:
             e.add_note("the guard's problems meanwhile: " + "; ".join(guard.watch.problems))
+        if guard is not None and guard.watch.host:
+            e.add_note("the host's console lines meanwhile: " + "; ".join(guard.watch.host))
         raise
     if guard is not None:
         guard.verify()

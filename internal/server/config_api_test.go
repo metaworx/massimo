@@ -1176,10 +1176,11 @@ func (r *driftRig) putNewcomer(room uint8) map[string]any {
 }
 
 // settled waits until no structure change is read back any more
-// (structure.go), so that the room checks take the rooms again.
+// (structure.go), nor anything else leaves a room out of the room
+// checks (checkable), so that they take the rooms again.
 func (r *driftRig) settled() {
 	r.t.Helper()
-	testkit.Eventually(r.t, "the structure changes read back", func() bool { return len(r.rt.structureRooms(r.rt.client.Snapshot())) == 0 })
+	r.checkable(nil)
 }
 
 // heldIn is the state held for room (holdReference), false for none.

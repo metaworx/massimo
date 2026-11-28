@@ -6,7 +6,6 @@ package ch.metaworx.massimo
 import android.os.SystemClock
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import org.junit.Assert.assertTrue
-import org.junit.Assert.fail
 import org.junit.Test
 import org.junit.runner.RunWith
 
@@ -81,18 +80,9 @@ class HeldTest : EmulatorTest() {
     }
 
     // anew waits until the activity shown is another than [before]: made anew.
-    private fun anew(before: Int) {
-        val end = SystemClock.uptimeMillis() + ANEW_MS
-        while (SystemClock.uptimeMillis() < end) {
-            if (activity() != before) return
-            SystemClock.sleep(POLL_MS)
-        }
-        fail("the activity was not made anew within ${ANEW_MS / 1000} s")
-    }
+    private fun anew(before: Int) = Wait.until("the activity made anew") { activity() != before }
 
     private companion object {
-        const val ANEW_MS = 15_000L
-        const val POLL_MS = 200L
         const val REFUSALS_MS = 65_000L
     }
 }
