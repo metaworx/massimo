@@ -16,7 +16,7 @@ import json
 import os
 
 from conftest import api_call
-from helpers import named_buttons, safe_route, show_view, wait_until
+from helpers import answered, named_buttons, safe_route, show_view, wait_until
 from test_server_backups import BACKUPS, CARD, KEEP, TARGETS, backup_ids, clean, data_dir, key_set, shown_maint, text
 
 # The fingerprints a stubbed test answers: the host's key, and another one trusted before.
@@ -232,7 +232,7 @@ def test_secret_asked_again_and_http_warned(page, case):
         assert page.evaluate("document.documentElement.scrollWidth") <= case.width, "no horizontal scroll"
         save.click()
         assert secret.evaluate("(i) => i.validity.valueMissing"), "Save stops at it"
-        page.wait_for_timeout(300)
+        answered(page)
         assert not puts, f"nothing sent without it: {puts}"
         secret.fill("second")
         save.click()
