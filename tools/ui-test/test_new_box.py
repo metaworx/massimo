@@ -12,9 +12,8 @@ first owner's tests stub who is in (FirstOwner D16): the suite's server
 has users, whose operator signs in after the turn; the kinds of target are
 the server's own."""
 import json
-import time
 
-from helpers import OPERATOR_PASSWORD, assert_login_card_placed, frames, scaled, scroll_width, wait_held, wait_until
+from helpers import OPERATOR_PASSWORD, assert_login_card_placed, frames, safe_route, scroll_width, settled, wait_held, wait_until
 from test_first_owner import DIALOG_OPEN, OPEN, owner_card, sent, start_page
 
 KEY = "# created: 2026-11-20T02:30:00Z\n# public key: age1placeholder\nAGE-SECRET-KEY-1NOTAREALKEY\n"
@@ -46,8 +45,8 @@ def setup_routes(page, answers, bodies):
         answer = answers[part]
         status, body = answer if isinstance(answer, tuple) else (200, answer)
         route.fulfill(status=status, content_type="application/json", body=json.dumps(body))
-    page.route("**/api/v1/setup/backup", handle)
-    page.route("**/api/v1/setup/backup/*", handle)
+    safe_route(page, "**/api/v1/setup/backup", handle)
+    safe_route(page, "**/api/v1/setup/backup/*", handle)
 
 
 def backup_step(page):
@@ -85,7 +84,7 @@ def test_start_from_a_file(new_context, case, watch, guard):
         if stage["me"] != "users":
             return route.fallback()
         route.fulfill(status=401, content_type="application/json", body='{"error":"authentication required"}')
-    page.route("**/api/v1/me", me_users)
+    safe_route(page, "**/api/v1/me", me_users)
     owner_card(page)
     bodies = {}
     setup_routes(page, {"upload": {"backup": HELD}, "plan": PLAN, "restore": RESTORED}, bodies)
@@ -104,7 +103,7 @@ def test_start_from_a_file(new_context, case, watch, guard):
             held_health.append(route)
             return
         back(route)
-    page.route("**/healthz", healthz)
+    safe_route(page, "**/healthz", healthz)
 
     backup_step(page)
     assert_login_card_placed(page, "the start from a backup")
@@ -135,9 +134,7 @@ def test_start_from_a_file(new_context, case, watch, guard):
     assert page.evaluate("document.querySelector('.confirm-box .confirm-text').textContent === t('newBox.confirm')"), "it asks first"
     assert "restore" not in bodies, "nothing restored before the yes"
     page.locator(".confirm-box .confirm-yes").click()
-    end = time.time() + scaled(5)
-    while "restore" not in bodies and time.time() < end:
-        page.wait_for_timeout(50)
+    settled(page, lambda: "restore" in bodies, bool)
     stage["health"] = "hold"  # the start before was read: the restart's follow is held
     assert bodies.get("restore") == [{"backup": HELD["uuid"], "key_file": KEY.strip(), "take_identity": False, "env": True, "tls": False}], \
         f"the restore's body: {bodies.get('restore')}"
