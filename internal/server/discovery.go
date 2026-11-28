@@ -929,7 +929,7 @@ func (s *Server) wakeDiscovery() {
 func (s *Server) postDiscover(w http.ResponseWriter, r *http.Request) error {
 	run, err := s.discoverAfter(r.Context())
 	if errors.Is(err, errNoDiscoverySocket) {
-		return fail(http.StatusServiceUnavailable, "discovery: %v", err)
+		return refuseSaying(http.StatusServiceUnavailable, "discovery: "+err.Error(), codeDiscoveryPortTaken)
 	}
 	if err != nil {
 		return fail(http.StatusInternalServerError, "discovery: %v", err)

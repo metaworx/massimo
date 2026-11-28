@@ -114,22 +114,24 @@ func (s *Server) putPreference(w http.ResponseWriter, r *http.Request) error {
 		// The notification rules read it: a document they cannot is
 		// refused here, not ignored there (docs/api-v1.md, "Notifications").
 		if _, err := notify.ParsePrefs(json.RawMessage(body)); err != nil {
-			return fail(http.StatusBadRequest, "%v", err)
+			return passed(http.StatusBadRequest, err, codePreferenceValueBad, key)
 		}
 		defer s.refreshNotify()
 	}
 	if key == seenPrefKey && len(body) <= store.MaxPreferenceBytes {
 		// GET /api/v1/log/alerts reads it (logseen.go).
 		if _, err := parseSeen(body); err != nil {
-			return fail(http.StatusBadRequest, "%v", err)
+			return passed(http.StatusBadRequest, err, codePreferenceValueBad, key)
 		}
 	}
 	pr, err := st.SetPreference(r.Context(), p.user.ID, key, json.RawMessage(body))
 	switch {
 	case errors.Is(err, store.ErrValueTooLarge):
-		return fail(http.StatusRequestEntityTooLarge, "%v", err)
-	case errors.Is(err, store.ErrBadValue), errors.Is(err, store.ErrBadKey):
-		return fail(http.StatusBadRequest, "%v", err)
+		return refuseSaying(http.StatusRequestEntityTooLarge, err.Error(), codePreferenceTooLarge, store.MaxPreferenceBytes)
+	case errors.Is(err, store.ErrBadValue):
+		return passed(http.StatusBadRequest, err, codePreferenceValueBad, key)
+	case errors.Is(err, store.ErrBadKey):
+		return refuseSaying(http.StatusBadRequest, err.Error(), codePreferenceUnknown, key)
 	case err != nil:
 		return fail(http.StatusInternalServerError, "%v", err)
 	}

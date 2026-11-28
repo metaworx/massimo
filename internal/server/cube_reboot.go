@@ -65,7 +65,7 @@ func (s *Server) rebootCube(w http.ResponseWriter, r *http.Request) error {
 	defer cancel()
 	res, err := s.sendReboot(ctx, to, serial)
 	if err != nil {
-		return fail(http.StatusBadGateway, "reboot of %s: %v", serial, err)
+		return refuseSaying(http.StatusBadGateway, fmt.Sprintf("reboot of %s: %v", serial, err), codeCubeRebootFailed, serial, err.Error())
 	}
 	rt.client.Rebooting(cubelan.RebootWindow)
 	out := map[string]any{"sent": true, "answered": res.Answered, "status": nil}

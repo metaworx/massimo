@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"errors"
 	"path/filepath"
+	"reflect"
 	"testing"
 	"time"
 
@@ -203,9 +204,10 @@ func TestRebootDelayAndTakeBack(t *testing.T) {
 }
 
 // The API says why the computer cannot be rebooted, in order, each with
-// its code: the system, the owner's switch, the helper, an update at
-// work; a reboot that fails
-// is reported, and the next one may be asked for. Switching the reboot
+// its code, in GET's blocked_code too: the system, the owner's switch,
+// the helper, an update at work; a reboot that fails is reported with
+// its code (reboot_failed, reboot_not_done), and the next one may be
+// asked for. Switching the reboot
 // off takes back one that waits.
 func TestRebootBlocked(t *testing.T) {
 	t.Parallel()
@@ -216,8 +218,8 @@ func TestRebootBlocked(t *testing.T) {
 		opts.Reboot, opts.Update = o, update
 		ts := startServer(t, withOptions(opts)).ts
 		code, text := callAPI(t, ts, "GET", path, "secret", "")
-		if v := decodeReboot(t, text); code != 200 || v.Available || v.Blocked != want {
-			t.Fatalf("GET, want %q: %d %s", want, code, text)
+		if v := decodeReboot(t, text); code != 200 || v.Available || v.Blocked != want || v.BlockedCode != wantCode {
+			t.Fatalf("GET, want %q %s: %d %s", want, wantCode, code, text)
 		}
 		if code, text := callAPI(t, ts, "POST", path, "secret", `{"delay": 0}`); code != 409 || errorOf(text) != want || !refusalHas(t, text, wantCode, "null") {
 			t.Fatalf("POST, want %q, %s: %d %s", want, wantCode, code, text)
@@ -256,7 +258,8 @@ func TestRebootBlocked(t *testing.T) {
 	if !testkit.Within(5*time.Second, func() bool {
 		_, answer = callAPI(t, ts, "GET", path, "secret", "")
 		v := decodeReboot(t, answer)
-		return v.Error == failing.err.Error() && v.Available && v.At == nil
+		return v.Error == failing.err.Error() && v.Code == "reboot_failed" && reflect.DeepEqual(v.Params, map[string]any{"reason": failing.err.Error()}) &&
+			v.Available && v.At == nil
 	}) {
 		t.Fatalf("GET after the failure: %s", answer)
 	}
@@ -270,7 +273,8 @@ func TestRebootBlocked(t *testing.T) {
 	if !testkit.Within(5*time.Second, func() bool {
 		_, answer = callAPI(t, ts, "GET", path, "secret", "")
 		v := decodeReboot(t, answer)
-		return v.Error == "the computer has not rebooted within 50ms; the reboot helper's log says why" && v.Available && !v.Begun
+		return v.Error == "the computer has not rebooted within 50ms; the reboot helper's log says why" && v.Code == "reboot_not_done" &&
+			reflect.DeepEqual(v.Params, map[string]any{"after": "50ms"}) && v.Available && !v.Begun
 	}) {
 		t.Fatalf("GET after a reboot that did not happen: %s", answer)
 	}

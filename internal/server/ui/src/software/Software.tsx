@@ -73,6 +73,11 @@ function historyLine(e: UpdateEntry, newest: boolean): string {
   return parts.join(" · ");
 }
 
+/** blockedText is why updates cannot be started from here, in the page's language by its code (refusalText), else the server's words. */
+function blockedText(u: UpdateInfo): string {
+  return refusalText({ error: u.blocked, code: u.blocked_code, params: u.blocked_params }, "", u.blocked || "");
+}
+
 /**
  * versionLine says the running version and whether a newer release is
  * out on the channel: on a box apt or brew updates, one the package
@@ -94,7 +99,7 @@ function versionLine(u: UpdateInfo): string {
   else if (u.available) parts.push(t("update.available", { version: u.latest || "" }));
   else if (!u.released) parts.push(t("update.upToDate"));
   if (u.released && u.released !== u.held && !u.check_error && !u.source_error) parts.push(t("update.released", { version: u.released, manager }));
-  if (u.available && u.blocked) parts.push(t("update.blocked", { reason: u.blocked }));
+  if (u.available && u.blocked) parts.push(t("update.blocked", { reason: blockedText(u) }));
   return parts.join(" ");
 }
 
@@ -164,7 +169,7 @@ function Auto({ u, auto, win }: { u: UpdateInfo; auto: Setting; win: Setting }) 
   const night = mode.value === "night";
   const said = data.autoSaid;
   let note = night ? t("update.autoNight", { from: from || "", to: to || "" }) : t("update.autoOff");
-  if (off) note = t("update.autoBlocked", { reason: u.blocked || "" });
+  if (off) note = t("update.autoBlocked", { reason: blockedText(u) });
   if (said) note = said();
   const a = u.auto;
   let hint = "";

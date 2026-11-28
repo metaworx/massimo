@@ -24,6 +24,7 @@ package server
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"io"
 	"net/http"
 	"strconv"
@@ -212,7 +213,7 @@ func userIDOf(r *http.Request) int64 {
 func backupID(r *http.Request) (int64, error) {
 	id, err := strconv.ParseInt(r.PathValue("id"), 10, 64)
 	if err != nil || id < 1 {
-		return 0, fail(http.StatusNotFound, "no backup %q", r.PathValue("id"))
+		return 0, refuseSaying(http.StatusNotFound, fmt.Sprintf("no backup %q", r.PathValue("id")), codeBackupUnknown, r.PathValue("id"), r.PathValue("sn"))
 	}
 	return id, nil
 }

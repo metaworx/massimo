@@ -6,6 +6,7 @@ package server
 import (
 	"bytes"
 	"encoding/json"
+	"fmt"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -192,11 +193,17 @@ func TestRestorePlan(t *testing.T) {
 	if code, out := postBackup(t, ts, restoreBase+"/plan", "application/json", marshal(t, g)); code != 400 || !refusalHas(t, out, "restore_backup_no_cube", `{"cube":"KEQ0000100"}`) {
 		t.Fatalf("backup without serial: %d %v", code, out)
 	}
-	// An empty file has its code; a file that does not parse keeps the
-	// parser's words and none.
-	for body, code := range map[string]string{"": "restore_file_empty", `{"version": 99}`: "", `{"cube": [}`: "", "not: [a backup": "", "[1, 2]": ""} {
-		if status, out := postBackup(t, ts, restoreBase+"/plan", "", []byte(body)); status != 400 || !refusalHas(t, out, code, "null") {
-			t.Fatalf("body %q: %d %v, want 400 %q", body, status, out, code)
+	// An empty file has its code; a file that does not parse is
+	// restore_file_bad, the parser's words its English text and its
+	// reason.
+	if status, out := postBackup(t, ts, restoreBase+"/plan", "", nil); status != 400 || !refusalHas(t, out, "restore_file_empty", "null") {
+		t.Fatalf("empty body: %d %v, want 400 restore_file_empty", status, out)
+	}
+	for _, body := range []string{`{"version": 99}`, `{"cube": [}`, "not: [a backup", "[1, 2]"} {
+		status, out := postBackup(t, ts, restoreBase+"/plan", "", []byte(body))
+		reason, _ := strings.CutPrefix(fmt.Sprint(out["error"]), "bad backup file: ")
+		if want, _ := json.Marshal(map[string]string{"reason": reason}); status != 400 || reason == "" || !refusalHas(t, out, "restore_file_bad", string(want)) {
+			t.Fatalf("body %q: %d %v, want 400 restore_file_bad", body, status, out)
 		}
 	}
 	big := append(marshal(t, f), bytes.Repeat([]byte(" "), maxBackupBytes)...)
@@ -290,6 +297,8 @@ func TestRestoreRunSendsThePlan(t *testing.T) {
 	rt.subsMu.Unlock()
 }
 
+// A restore the Cube discards fails at its first step: its run, the
+// step's result and its restore_done line carry the error with its code.
 func TestRestoreFailsWhenTheCubeDiscards(t *testing.T) {
 	t.Parallel()
 	ts := startServer(t, withFake(func(fc *fakecube.Server) { fc.Discard = true })).ts
@@ -305,13 +314,15 @@ func TestRestoreFailsWhenTheCubeDiscards(t *testing.T) {
 		return st["state"] != "running"
 	})
 	res, _ := st["steps"].([]any)[0].(map[string]any)["result"].(map[string]any)
-	if st["state"] != "failed" || st["sent"] != 0.0 || st["error"] == nil || res["ok"] != false || res["discarded"] != true {
+	if st["state"] != "failed" || st["sent"] != 0.0 || st["error"] == nil || res["ok"] != false || res["discarded"] != true ||
+		st["code"] != "command_discarded" || res["code"] != "command_discarded" {
 		t.Fatalf("state %v", st)
 	}
 	// The run reads failed before its restore_done line is written, by
 	// the run and not by the pump: the line is waited for.
 	done, _ := logAfter(t, m, "the restore's end", logLine("restore_done", ""))
-	if done.Restore == nil || done.Restore.State != "failed" || done.Restore.OK || done.Error == "" {
+	if done.Restore == nil || done.Restore.State != "failed" || done.Restore.OK || done.Error == "" || done.Code != "command_discarded" ||
+		done.Restore.Code != "command_discarded" {
 		t.Fatalf("done event %+v", done)
 	}
 }

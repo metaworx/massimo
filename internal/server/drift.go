@@ -984,7 +984,8 @@ func (s *Server) resendRoom(ctx context.Context, rt *runtime, r resend) {
 	}
 	ev := event{Kind: "disagree", Source: "cube", Level: "info", Time: time.Now(), Summary: r.summary("resent")}
 	if err != nil {
-		ev.Level, ev.Summary["outcome"], ev.Error = "warn", "resend_failed", err.Error()
+		ev.Level, ev.Summary["outcome"] = "warn", "resend_failed"
+		ev.setFailure(err)
 	} else {
 		ev.Summary["duty_pct"], ev.Summary["free_slots"] = res.Budget.DutyCyclePct, res.Budget.FreeMemorySlots
 		rt.afterWrite()

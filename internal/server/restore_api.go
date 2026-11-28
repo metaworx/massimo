@@ -64,13 +64,14 @@ type restoreStep struct {
 	Result *stepResult `json:"result,omitempty"`
 }
 
-// stepResult is the outcome of one step.
+// stepResult is the outcome of one step: its error with its code
+// where it failed (failure).
 type stepResult struct {
-	OK        bool           `json:"ok"`
-	Discarded bool           `json:"discarded,omitempty"`
-	Error     string         `json:"error,omitempty"`
-	Budget    cubelan.Budget `json:"budget"`
-	Time      time.Time      `json:"time"`
+	OK        bool `json:"ok"`
+	Discarded bool `json:"discarded,omitempty"`
+	failure
+	Budget cubelan.Budget `json:"budget"`
+	Time   time.Time      `json:"time"`
 }
 
 // restorePlan is the answer of POST …/restore/plan.
@@ -98,7 +99,8 @@ type restoreRun struct {
 	Steps         []restoreStep `json:"steps"`
 	Sent          int           `json:"sent"` // steps the Cube accepted
 	RadioCommands int           `json:"radio_commands"`
-	Error         string        `json:"error,omitempty"`
+	// failure is why a failed run stopped, with its code.
+	failure
 }
 
 // restoreProgress is the payload of the restore_step and restore_done
@@ -111,7 +113,8 @@ type restoreProgress struct {
 	What      string `json:"what,omitempty"`
 	OK        bool   `json:"ok"`
 	Discarded bool   `json:"discarded,omitempty"`
-	Error     string `json:"error,omitempty"`
+	// failure is the step's error, or the run's, with its code.
+	failure
 	// State and Sent come with restore_done: done or failed, and the
 	// steps the Cube accepted.
 	State string `json:"state,omitempty"`
@@ -166,7 +169,8 @@ func (s *Server) startRestore(w http.ResponseWriter, r *http.Request) error {
 	if rt.store != nil && rt.storeID.Load() != 0 {
 		user := userIDOf(r)
 		if _, _, err := s.takeBackup(r.Context(), rt, store.ReasonBeforeRestore, user, ""); err != nil {
-			return s.refuseRestore(rt, fail(http.StatusServiceUnavailable, "the backup before the restore was not stored: %v", err))
+			return s.refuseRestore(rt, refuseSaying(http.StatusServiceUnavailable, "the backup before the restore was not stored: "+err.Error(),
+				codeRestoreBackupUnsaved, refusalOf(err)))
 		}
 		if src.data != nil {
 			format := "json"
@@ -296,7 +300,7 @@ func (s *Server) makeRestorePlan(w http.ResponseWriter, r *http.Request, rt *run
 	}
 	p, err := backup.NewPlan(f, cur, opts)
 	if err != nil {
-		return restorePlan{}, nil, nil, fail(http.StatusBadRequest, "bad backup file: %v", err)
+		return restorePlan{}, nil, nil, refuseSaying(http.StatusBadRequest, "bad backup file: "+err.Error(), codeRestoreFileBad, err.Error())
 	}
 	if ntpErr != nil {
 		p.Notes = append(p.Notes, "the cube's NTP servers were not read ("+ntpErr.Error()+"); they are not compared")
@@ -338,7 +342,7 @@ func readBackup(w http.ResponseWriter, r *http.Request) (*backup.File, []byte, b
 	yaml := isYAML(r.Header.Get("Content-Type")) || trimmed[0] != '{'
 	f, err := backup.Unmarshal(data, yaml)
 	if err != nil {
-		return nil, nil, false, fail(http.StatusBadRequest, "bad backup file: %v", err)
+		return nil, nil, false, refuseSaying(http.StatusBadRequest, "bad backup file: "+err.Error(), codeRestoreFileBad, err.Error())
 	}
 	return f, data, yaml, nil
 }
@@ -517,18 +521,15 @@ func (s *Server) runRestore(ctx context.Context, rt *runtime, run *restoreRun, p
 	w := rt.writer()
 	w.ID = command // every step is a step of the request's command
 	_, err := p.Run(ctx, w, func(i int, st backup.Step, r engine.Result) {
-		res := &stepResult{OK: r.Err == nil, Discarded: r.Discarded, Budget: r.Budget, Time: time.Now()}
-		if r.Err != nil {
-			res.Error = r.Err.Error()
-		}
+		res := &stepResult{OK: r.Err == nil, Discarded: r.Discarded, failure: asFailure(r.Err), Budget: r.Budget, Time: time.Now()}
 		rt.restoreMu.Lock()
 		run.Steps[i].Result = res
 		if res.OK {
 			run.Sent++
 		}
 		rt.restoreMu.Unlock()
-		ev := event{Kind: "restore_step", Error: res.Error, Time: res.Time, Restore: &restoreProgress{ID: run.ID, Step: i + 1, Steps: len(p.Steps),
-			What: st.What, OK: res.OK, Discarded: r.Discarded, Error: res.Error}}
+		ev := event{Kind: "restore_step", Error: res.Error, Code: res.Code, Params: res.Params, Time: res.Time, Restore: &restoreProgress{ID: run.ID, Step: i + 1,
+			Steps: len(p.Steps), What: st.What, OK: res.OK, Discarded: r.Discarded, failure: res.failure}}
 		if st.Command.Target != 0 {
 			ev.Device = st.Command.Target.String()
 		}
@@ -561,15 +562,16 @@ func (s *Server) runRestore(ctx context.Context, rt *runtime, run *restoreRun, p
 	run.Finished = finished
 	run.State = "done"
 	if err != nil {
-		run.State, run.Error = "failed", err.Error()
+		run.State, run.failure = "failed", asFailure(err)
 	}
-	done := restoreProgress{ID: run.ID, Steps: len(run.Steps), OK: err == nil, Error: run.Error, State: run.State, Sent: run.Sent}
+	done := restoreProgress{ID: run.ID, Steps: len(run.Steps), OK: err == nil, failure: run.failure, State: run.State, Sent: run.Sent}
 	rt.restoreMu.Unlock()
-	finishedEv := event{Kind: "restore_done", Error: done.Error, Time: finished, Restore: &done}
+	finishedEv := event{Kind: "restore_done", Error: done.Error, Code: done.Code, Params: done.Params, Time: finished, Restore: &done}
 	if done.Error != "" {
 		finishedEv.Level = "warn"
 	}
 	rt.emit(finishedEv)
-	s.finishCommand(command, err == nil, map[string]any{"id": run.ID, "state": done.State, "sent": done.Sent, "steps": done.Steps, "error": done.Error},
-		restoreAnswer(run.ID, len(p.Steps)))
+	outcome := map[string]any{"id": run.ID, "state": done.State, "sent": done.Sent, "steps": done.Steps, "error": done.Error}
+	done.set(outcome)
+	s.finishCommand(command, err == nil, outcome, restoreAnswer(run.ID, len(p.Steps)))
 }

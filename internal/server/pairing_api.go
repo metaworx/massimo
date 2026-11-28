@@ -52,7 +52,7 @@ func (s *Server) startPairing(w http.ResponseWriter, r *http.Request) error {
 		if errors.Is(err, cubelan.ErrInclusionActive) {
 			return refuse(http.StatusConflict, codePairingRunning)
 		}
-		return fail(http.StatusBadGateway, "%v", err)
+		return cubeRefusal(http.StatusBadGateway, err)
 	}
 	stop() // the API reports through the state and the events
 	writeJSON(w, http.StatusOK, rt.client.Inclusion())
@@ -79,7 +79,7 @@ func (s *Server) stopPairing(w http.ResponseWriter, r *http.Request) error {
 	ctx, cancel := context.WithTimeout(r.Context(), 2*time.Minute)
 	defer cancel()
 	if err := rt.writerOf(ctx).StopPairing(ctx); err != nil {
-		return fail(http.StatusBadGateway, "%v", err)
+		return cubeRefusal(http.StatusBadGateway, err)
 	}
 	writeJSON(w, http.StatusOK, rt.client.Inclusion())
 	return nil

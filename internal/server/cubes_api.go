@@ -112,7 +112,7 @@ func (req cubeRequest) apply(c *store.Cube) error {
 		for _, a := range *req.Hidden {
 			rf, err := cube.ParseRFAddress(strings.TrimSpace(a))
 			if err != nil {
-				return fail(http.StatusBadRequest, "hidden: %v", err)
+				return refuseSaying(http.StatusBadRequest, "hidden: "+err.Error(), codeCubeHiddenBad, strings.TrimSpace(a))
 			}
 			list = append(list, rf.String())
 		}
@@ -142,16 +142,15 @@ func decodeCube(r *http.Request) (cubeRequest, error) {
 	return req, nil
 }
 
-// storeFail maps a store error to a status.
+// storeFail maps a store error of the Cubes to a status and its code
+// (storeCodes), its English text the store's.
 func storeFail(err error) error {
 	var he *httpError
-	switch {
-	case errors.As(err, &he):
+	if errors.As(err, &he) {
 		return err
-	case errors.Is(err, store.ErrNotFound):
-		return fail(http.StatusNotFound, "%v", err)
-	case errors.Is(err, store.ErrExists):
-		return fail(http.StatusConflict, "%v", err)
+	}
+	if refused := storeRefusal(err, err.Error()); refused != nil {
+		return refused
 	}
 	return fail(http.StatusInternalServerError, "%v", err)
 }
@@ -221,7 +220,7 @@ func (s *Server) postCube(w http.ResponseWriter, r *http.Request) error {
 	s.noteRow(row)
 	rt, err := s.addCube(row)
 	if err != nil {
-		return fail(http.StatusConflict, "%v", err)
+		return err // a refusal (CubeFromRow, register)
 	}
 	s.log.Info("cube added", "serial", serial, "address", row.Address, "follow_discovery", row.FollowDiscovery, "restored", req.Restore, "remote", s.clientIP(r))
 	writeJSON(w, http.StatusCreated, s.summary(rt, s.backupCounts(r.Context())))

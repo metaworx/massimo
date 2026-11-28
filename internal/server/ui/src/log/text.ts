@@ -652,10 +652,18 @@ export function logWord(prefix: string, v: unknown): string {
   return s === key ? String(v) : s;
 }
 
-/** logText is a line's whole text: its own, its error, while the Cube was not connected, and who started it. */
+/**
+ * logText is a line's whole text: its own, its error in the language
+ * shown by its code (refusalText), while the Cube was not connected, and
+ * who started it.
+ */
 export function logText(line: LogLine): string {
-  let text = logOwnText(line);
-  if (line.error && text !== line.error) text = text ? text + ": " + line.error : line.error;
+  const own = logOwnText(line);
+  let text = own;
+  if (line.error) {
+    const error = refusalText({ error: line.error, code: line.code, params: line.params || undefined }, line.cubeSerial || state.serial || "", line.error);
+    text = own && own !== line.error ? own + ": " + error : error;
+  }
   if (line.missed && text) text = t("log.whileDisconnected", { text });
   if (line.by || line.who) text = t("log.by", { text, name: (line.who || line.by?.display_name || line.by?.name) as string });
   return text;

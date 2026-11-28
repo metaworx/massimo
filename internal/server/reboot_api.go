@@ -73,16 +73,19 @@ type rebootPlan struct {
 	gen   uint64
 	at    time.Time // when the waiting reboot is asked for; zero: none waits
 	begun bool      // the delay is over and Reboot was called
-	err   string    // why the last one failed
+	err   failure   // why the last one failed, with its code
 }
 
+// rebootView is GET /api/v1/reboot: blocked, why a reboot is refused
+// now, with its code and params (blocking); error, why the last one
+// failed, with its code and params (failure).
 type rebootView struct {
-	Available bool       `json:"available"`
-	By        string     `json:"by,omitempty"`
-	Blocked   string     `json:"blocked,omitempty"`
-	At        *time.Time `json:"at,omitempty"`
-	Begun     bool       `json:"begun,omitempty"`
-	Error     string     `json:"error,omitempty"`
+	Available bool   `json:"available"`
+	By        string `json:"by,omitempty"`
+	blocking
+	At    *time.Time `json:"at,omitempty"`
+	Begun bool       `json:"begun,omitempty"`
+	failure
 }
 
 // SetRebootAllowed changes the owner's switch (cmd/massimo, the settings
@@ -127,7 +130,7 @@ func (s *Server) rebootState(r *http.Request) (v rebootView, why error) {
 	p := &s.reboot
 	p.mu.Lock()
 	allowed, at, begun := p.allowed, p.at, p.begun
-	v.Error, v.Begun = p.err, p.begun
+	v.failure, v.Begun = p.err, p.begun
 	p.mu.Unlock()
 	if !at.IsZero() {
 		v.At = &at
@@ -137,7 +140,7 @@ func (s *Server) rebootState(r *http.Request) (v rebootView, why error) {
 		if o.Blocked != "" {
 			why = refuseSaying(http.StatusConflict, o.Blocked, codeRebootUnavailable)
 		}
-		v.Blocked = why.Error()
+		v.blocking = blockingOf(why)
 		return v, why
 	}
 	helper := ""
@@ -160,9 +163,7 @@ func (s *Server) rebootState(r *http.Request) (v rebootView, why error) {
 	case !s.authenticated(r.Context()) && !fromTheBox(r):
 		why = refuse(http.StatusForbidden, codeRebootOpen)
 	}
-	if why != nil {
-		v.Blocked = why.Error()
-	}
+	v.blocking = blockingOf(why)
 	v.By, v.Available = o.By, why == nil
 	return v, why
 }
@@ -211,7 +212,7 @@ func (s *Server) planReboot(delay time.Duration) (time.Time, bool) {
 	}
 	p.gen++
 	gen := p.gen
-	p.at, p.err = time.Now().Add(delay).UTC(), ""
+	p.at, p.err = time.Now().Add(delay).UTC(), failure{}
 	p.timer = time.AfterFunc(delay, func() { s.rebootNow(gen) })
 	return p.at, true
 }
@@ -232,16 +233,17 @@ func (s *Server) rebootNow(gen uint64) {
 	if err != nil {
 		s.noteStop("")
 		failed := systemEvent("reboot", 0, map[string]any{"by": s.opts.Reboot.By})
-		failed.Level, failed.Error = "error", err.Error()
+		failed.Level = "error"
+		failed.setFailure(err)
 		s.logServer(failed)
-		p.failed(gen, err.Error())
+		p.failed(gen, asFailure(passed(http.StatusInternalServerError, err, codeRebootFailed)))
 		return
 	}
 	// The helper took it; a server still here later did not go down
 	// with the computer, and the next reboot may be asked for.
 	stuck := cmp.Or(s.opts.rebootStuck, defaultRebootStuck)
 	time.AfterFunc(stuck, func() {
-		if p.failed(gen, "the computer has not rebooted within "+stuck.String()+"; the reboot helper's log says why") {
+		if p.failed(gen, asFailure(refuse(http.StatusInternalServerError, codeRebootNotDone, stuck.String()))) {
 			s.log.Error("the computer has not rebooted", "after", stuck.String())
 		}
 	})
@@ -249,7 +251,7 @@ func (s *Server) rebootNow(gen uint64) {
 
 // failed ends the reboot gen with its reason, unless another has
 // followed it; it reports whether it did.
-func (p *rebootPlan) failed(gen uint64, why string) bool {
+func (p *rebootPlan) failed(gen uint64, why failure) bool {
 	p.mu.Lock()
 	defer p.mu.Unlock()
 	if p.gen != gen || !p.begun {

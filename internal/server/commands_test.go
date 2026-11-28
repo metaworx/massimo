@@ -345,7 +345,7 @@ func TestReplayOfADroppedCommand(t *testing.T) {
 	if _, err := st.AddCommand(t.Context(), store.Command{UserID: owner.ID, Key: "key-1", Action: "setpoint", Request: req}); err != nil {
 		t.Fatal(err)
 	}
-	if n, err := st.DropUnfinished(t.Context(), "server restarted"); err != nil || n != 1 {
+	if n, err := st.DropUnfinished(t.Context(), codeServerRestarted.format, codeServerRestarted.name); err != nil || n != 1 {
 		t.Fatalf("dropped %d: %v", n, err)
 	}
 	req2, _ := http.NewRequest("PUT", ts.URL+path, strings.NewReader(body))
@@ -357,7 +357,7 @@ func TestReplayOfADroppedCommand(t *testing.T) {
 	}
 	defer resp.Body.Close()
 	b, _ := io.ReadAll(resp.Body)
-	if resp.StatusCode != 503 || resp.Header.Get("Idempotent-Replayed") != "true" || !strings.Contains(string(b), "server restarted") {
+	if resp.StatusCode != 503 || resp.Header.Get("Idempotent-Replayed") != "true" || string(b) != `{"code":"server_restarted","error":"server restarted"}` {
 		t.Fatalf("the replay: %d %q %s", resp.StatusCode, resp.Header.Get("Idempotent-Replayed"), b)
 	}
 }

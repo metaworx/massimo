@@ -444,6 +444,36 @@ and `params`, the values its text names, by name (AP ErrorCodes):
   shows `error` and goes by the status.
 - An error without a code is input no client sends (a body that does not parse,
   an id out of range) or a failure on the server's side.
+  A route's refusal with `401`, `403`, `404`, `409`, `412`, `413`, `429`, `502`
+  or `503` has one wherever a client can meet it,
+  which `TestErrorCodes` holds the server's sources to.
+- A Go error the server passes on, the store's, a package's or the link's,
+  keeps its own words as `error`, with the code of its kind;
+  one of no kind a client meets keeps none,
+  and a command's that is of no known kind is `command_failed`,
+  its words the `reason`.
+
+**An error kept with a result**,
+of a step or a run that failed and that no refusal answered,
+has the same three fields beside the result's own:
+
+```json
+{"ok": false, "error": "step 3 (…): engine: command discarded by the cube", "code": "command_discarded"}
+```
+
+- So do a command's row and its steps (`GET /api/v1/commands/{id}`)
+  and the replay of its `Idempotency-Key`,
+  a restore's run and steps
+  (`GET …/restore`, the events `restore_step` and `restore_done`),
+  a room configuration's devices, a repair's steps,
+  the log's lines and the stream's events,
+  and the last failed reboot (`GET /api/v1/reboot`).
+- Why an action is refused now, `blocked` of `GET /api/v1/reboot`,
+  `GET /api/v1/restart` and `GET /api/v1/update`,
+  has its code and params beside it as `blocked_code` and `blocked_params`:
+  the refusal a `POST` meets.
+- One kept before the server gave codes has its `error` alone,
+  which a client shows as it is.
 
 The web UI says each code in the page's language (docs/ui.md,
 "Signs, texts and buttons").
@@ -500,6 +530,9 @@ and the Cube's structure, which one change at a time writes:
 | `device_room_needed` | 409 | `device` | a device in no room yet, written without a `room_id` |
 | `device_settings_not_copied` | 502, 409 | `device`, `room`, `reason` | the device is in the room, but copying the room's settings to it stopped, for `reason`, with its status |
 | `setpoint_mode_invalid` | 400 | – | a setpoint's `mode` is none of `auto`, `manual`, `vacation`, `boost` |
+| `device_zero_address` | 400 | – | the path names the radio address 000000, which a Cube may list but is no device |
+| `metadata_not_written` | 400 | `reason` | the Cube's room and device list with the change cannot be encoded, for `reason` |
+| `setpoint_until_invalid` | 400 | – | a vacation's `until` is no `YYYY-MM-DD HH:MM` on the hour or the half hour, or a date out of range |
 
 **A device's and a room's configuration**,
 a value out of the range the original software offers:
@@ -512,6 +545,10 @@ a value out of the range the original software offers:
 | `config_boost_valve_invalid` | 400 | – | `boost_valve_pct` is not 0..100 in steps of 5 |
 | `config_decalc_hour_invalid` | 400 | – | `decalc_hour` is not 0..23 |
 | `config_valve_pct_invalid` | 400 | `field` | `max_valve_pct` or `valve_offset_pct`, `field`, is not 0..100 |
+| `temp_invalid` | 400 | `field` | a temperature, `field` (`temp` of a setpoint), is no multiple of 0.5 from 4.5 to 30.5 °C |
+| `config_decalc_day_invalid` | 400 | – | `decalc_day` is no day of the week |
+| `config_not_encodable` | 400, 502 | `reason` | the settings merged with the device's own cannot be encoded, for `reason`; `502` as a copy's `reason` |
+| `program_day_invalid` | 400 | `day`, `reason` | a day of the week programme cannot be written, for `reason`: too many switch points, times that do not increase, not ending at 24:00, a temperature out of range |
 | `program_changed` | 412 | – | a week programme's `If-Match` names another tag than its current one, which `etag` carries |
 
 **A room's virtual wall thermostat** (see "The virtual wall thermostat"):
@@ -547,6 +584,9 @@ a value out of the range the original software offers:
 | `cube_not_connected` | 502, 503 | – | the server's connection to the Cube is down: a command's result `502`; `503` for a request that needs the connection before it sends, as pairing, a removal, a repair, a backup or a restore |
 | `cube_busy` | 502 | – | another command is waiting for the Cube's reply |
 | `command_timed_out` | 502 | – | the command's time ran out before the Cube answered, waiting for the radio budget or its turn |
+| `cube_no_reply` | 502 | – | the Cube left a line of the command unanswered within the reply timeout |
+| `command_failed` | 502 | `reason` | the command failed for another `reason`, the link's own words: the connection dropped, a reconnect failed |
+| `server_restarted` | 503 | – | a command's row the server's start dropped while its request ran; a replay of its `Idempotency-Key` answers it |
 
 **A Cube added, changed or removed**
 (`POST /api/v1/cubes`, `PUT` and `DELETE /api/v1/cubes/{sn}`),
@@ -565,6 +605,9 @@ its fields as typed in its form:
 | `cube_restore_not_removed` | 409 | `cube` | `POST` with `restore`: the serial has a row that is not removed |
 | `cube_restore_unknown` | 404 | `restore`, `cube` | `POST` with `restore`: the serial has no removed row of that uuid |
 | `cube_not_stored` | 409 | `cube` | the Cube is served for this run only (`-addr`, `-sn`), not from the store, so its row is not changed or removed here |
+| `cube_hidden_bad` | 400, 409 | `address` | an address of `hidden` is no radio address of six hex digits; `409` for a stored row's |
+| `cube_row_not_found` | 404 | – | the store has no row of the Cube, or no removed one of the `restore` |
+| `cube_row_exists` | 409 | – | `POST`: the store has a row of the serial |
 
 **A Cube's refresh and reboot** (`POST …/refresh`, `POST …/reboot`),
 and a change of a Cube that has not said its serial:
@@ -575,6 +618,9 @@ and a change of a Cube that has not said its serial:
 | `cube_address_not_known_yet` | 409 | – | the Cube has no address: none is given, and discovery has not found it |
 | `cube_rebooting` | 409 | – | a refresh while the Cube reboots: its greeting after the reboot reads it again |
 | `cube_reboot_pending` | 409 | `pending` | more radiograms are pending, as the Cube last said, than the request's `pending`: a reboot drops them |
+| `cube_refresh_failed` | 502 | `cube`, `reason` | the refresh's reconnect failed, for `reason`, with the link's state where it is down |
+| `cube_reboot_failed` | 502 | `cube`, `reason` | the R was not sent, for `reason` |
+| `discovery_port_taken` | 503 | – | `POST …/discover`: another program holds the discovery port |
 
 **A Cube's backups and restores** (`…/backups`, `…/restore`):
 
@@ -590,6 +636,8 @@ and a change of a Cube that has not said its serial:
 | `restore_backup_other_cube` | 400 | `from`, `cube` | the backup is of the Cube `from`, not of `cube` |
 | `restore_file_too_large` | 413 | `max` | the file in the body is larger than `max` bytes |
 | `restore_file_empty` | 400 | – | the body is empty |
+| `restore_file_bad` | 400 | `reason` | the file is no backup the server reads, for `reason` |
+| `restore_backup_not_stored` | 503 | `reason` | the backup before the restore was not stored; `reason` is that refusal as an error answer, or its text |
 
 A backup taken or a restore planned while the server is not connected to the Cube
 is refused with `503` and `cube_not_connected`.
@@ -612,6 +660,8 @@ is refused with `503` and `cube_not_connected`.
 | `restart_open` | 403 | – | the server is open, and the request does not come from the box itself |
 | `update_running` | 409 | – | an update is running, which a second update, a restart and a reboot wait for; `error` names the helper's state where it knows it |
 | `reload_no_settings_file` | 409 | – | `POST /api/v1/reload`: the server reads no settings file |
+| `reboot_failed` | – | `reason` | `GET /api/v1/reboot`, the last reboot's `error`: the helper refused it, for `reason` |
+| `reboot_not_done` | – | `after` | `GET /api/v1/reboot`, the last reboot's `error`: the computer is still up after `after` |
 
 **An update** (`POST /api/v1/update`, `PUT /api/v1/update/answer`):
 first why this box starts none from the API, then why not now:
@@ -633,6 +683,8 @@ first why this box starts none from the API, then why not now:
 | `update_not_offered` | 409 | `version`, `offered` | `PUT …/update/answer`: the answer's `version` is not the one offered, `offered` |
 | `update_none_offered` | 409 | `version` | `PUT …/update/answer`: no version is offered |
 | `update_auto_off` | 409 | `setting` | `PUT …/update/answer`, `tonight` or `skip`, while automatic updates are off by the setting `setting` |
+| `update_check_failed` | 502 | `reason` | the check for a release failed, for `reason`, and no release is known |
+| `update_source_failed` | 502 | `source`, `reason` | reading the package source `source` failed, for `reason` |
 
 **The log and the server's facts**:
 
@@ -640,6 +692,7 @@ first why this box starts none from the API, then why not now:
 |------|--------|--------|-----------------|
 | `log_after_beyond` | 409 | `after` | `after` is beyond the log's newest line: the client reads the log again |
 | `config_not_shown` | 503 | – | `GET /api/v1/config`: the server does not show its settings in effect |
+| `integrations_lan_not_asked` | 502 | `reason` | `GET /api/v1/integrations/found?refresh=1`: the LAN was not asked, for `reason` |
 
 **A call through an integration** (see "Acting for an integration's users"),
 whose `error` names the link that refused:
@@ -676,6 +729,9 @@ whose `error` names the link that refused:
 | `repair_hidden_room` | 409 | `device`, `room` | the Cube has the device in its hidden room |
 | `repair_listed_already` | 409 | `device`, `room` | the Cube's list has the device in the room the Cube has |
 | `room_name_needed` | 409 | `room` | a listing into a room the Cube's list does not have, without `room_name`; `room` is also at the top level |
+| `repair_no_other_thermostat` | 409 | `room` | `…/repair/resend`: the room has no other thermostat to take the configuration from |
+| `repair_no_valid_thermostat` | 409 | `room`, `dead` | `…/repair/resend`: the room's `dead` other thermostats have no valid state the Cube holds |
+| `repair_resend_impossible` | 400 | `device`, `reason` | `…/repair/resend`: the device's configuration cannot be built, for `reason` |
 
 **The server's door and the token check** (see "Authentication");
 a token nobody holds and one that ended are one code, as their `error` is one:
@@ -715,6 +771,7 @@ a wrong name and a wrong password are one code, as their `error` is one:
 | `first_owner_not_local` | 403 | – | the first owner is created from an address beyond the local network |
 | `first_owner_password_needed` | 400 | – | the first owner has no password |
 | `first_owner_exists` | 409 | – | another request made the first owner meanwhile |
+| `opaque_no_keys` | 503 | – | the store's OPAQUE keys are not readable |
 
 **Users and their tokens** (see "Users" and "Tokens"):
 
@@ -741,6 +798,15 @@ a wrong name and a wrong password are one code, as their `error` is one:
 | `token_label_length` | 400 | `max` | the key's label is empty or longer than `max` bytes |
 | `token_unknown` | 404 | `user`, `token` | the user has no live token of that id |
 | `token_settings_key` | 409 | – | a revoke of the settings file's `MASSIMO_API_TOKEN` |
+| `user_not_found` | 404 | – | the store has no such user, where the path's name is no longer there |
+| `user_exists` | 409 | – | a user of the name exists |
+| `user_last_owner` | 409 | – | the change would leave no enabled owner without an end date |
+| `user_integration_alone` | 403 | – | the store refuses a way in of its own for an integration's user |
+| `user_expires_at_bad` | 400 | – | `expires_at` is no time in RFC 3339, nor `null` |
+| `password_too_short` | 400 | `min` | the new password has fewer than `min` characters |
+| `password_too_long` | 400 | `max` | the new password has more than `max` characters |
+| `password_has_name` | 400 | – | the new password contains the user's or the server's name, which it does not name |
+| `token_not_found` | 404 | – | the store has no such token |
 
 **Roles and capabilities** (see "Roles" and "Capabilities"):
 
@@ -748,6 +814,11 @@ a wrong name and a wrong password are one code, as their `error` is one:
 |------|--------|--------|-----------------|
 | `capability_unknown` | 400, 404 | `capability` | no capability of that name: in a role's set `400`, as the path's `404` |
 | `role_name_long` | 400 | `max` | the role's name is longer than `max` bytes |
+| `role_not_found` | 404, 400 | – | no role of the key: as the path's `404`, given to a user or as a provider's `auto_role` `400` |
+| `role_exists` | 409 | – | a role of the key exists |
+| `role_in_use` | 409 | – | the role still has users |
+| `role_key_bad` | 400 | – | the key is not a lower-case letter, then up to 31 lower-case letters, digits, `_` and `-` |
+| `role_immutable` | 403 | – | the roles `owner` and `integration` are not changed |
 
 **Sign-in providers and identities** (see "Providers" and "Identities"):
 
@@ -760,6 +831,18 @@ a wrong name and a wrong password are one code, as their `error` is one:
 | `identity_confirm_own_only` | 403 | – | a pending link read, confirmed or dropped for another user |
 | `identity_link_unknown` | 404 | – | no pending link under the code, or it took too long |
 | `identity_taken` | 409 | – | the account is linked to another user |
+| `provider_not_found` | 404 | – | the store has no such provider |
+| `provider_exists` | 409 | – | a provider of the key exists |
+| `provider_bad` | 400 | `reason` | the provider's settings break the store's rule, `reason` |
+| `provider_auto_role_owner` | 400 | `role` | `auto_role` is `owner` |
+| `provider_auto_role_admin` | 400 | `role`, `capability` | `auto_role` holds an administrative capability, `capability` |
+| `provider_issuer_unreached` | 400 | `issuer`, `reason` | an enabled provider's issuer was not reached, for `reason` |
+| `provider_issuer_other` | 400 | `named`, `issuer` | the issuer's document names another issuer, `named` |
+| `provider_unreached` | 502 | `provider`, `reason` | a sign-in or a link: the provider was not reached, for `reason` |
+| `identity_not_found` | 404 | – | the store has no such identity |
+| `identity_exists` | 409 | – | the account is linked already |
+| `identity_used` | 409 | – | the identity was used for a sign-in, so its subject is not changed |
+| `email_bad` | 400 | – | the e-mail is not valid |
 
 **Integrations** (see "Integrations"):
 
@@ -770,6 +853,11 @@ a wrong name and a wrong password are one code, as their `error` is one:
 | `integration_capability_beyond` | 400 | `capability` | `max_caps` names a capability beyond the role `integration` |
 | `integration_name_length` | 400 | `max` | the name is empty or longer than `max` bytes |
 | `integration_unknown` | 404 | `integration` | no integration of that uuid, or a request only |
+| `integration_not_found` | 404 | – | the store has no such integration, or no request under the code |
+| `integration_not_pending` | 410 | – | the integration is no pending request any more |
+| `integration_request_gone` | 410 | – | the request was refused or expired, or its key was collected and used |
+| `integration_requests_waiting` | 429 | – | too many registration requests wait for the owner; `Retry-After` is 60 |
+| `integration_link_bad` | 400 | – | an integration's user linked to a Massimo user that is no user of its own |
 
 **Settings** (see "GET and PUT /api/v1/settings"):
 
@@ -779,6 +867,8 @@ a wrong name and a wrong password are one code, as their `error` is one:
 | `setting_choice_bad` | 400 | `setting`, `choices` | a value not among the setting's `choices`, joined by commas |
 | `setting_duration_range` | 400 | `setting`, `value`, `min`, `max` | a duration outside the setting's range |
 | `setting_duration_range_off` | 400 | `setting`, `value`, `min`, `max` | a duration outside the setting's range, which `0` switches off |
+| `update_window_bad` | 400 | `window`, `example` | `update.auto_window` is no window `HH:MM-HH:MM`, such as `example` |
+| `update_window_short` | 400 | `window`, `min` | `update.auto_window` is shorter than `min` minutes |
 
 **Preferences, notifications and commands**
 (see "Preferences", "Notifications" and "Commands and Idempotency-Key"):
@@ -786,11 +876,15 @@ a wrong name and a wrong password are one code, as their `error` is one:
 | Code | Status | Params | Refused because |
 |------|--------|--------|-----------------|
 | `preference_no_user` | 409 | – | no user is signed in: an open server, or its one token |
-| `preference_unknown` | 404 | `preference` | the user has no preference of that key |
+| `preference_unknown` | 404, 400 | `preference` | the user has no preference of that key; a key the store refuses `400` |
 | `push_subscription_unknown` | 404 | `subscription` | the user has no subscription of that id |
 | `idempotency_running` | 409 | – | the request of the same `Idempotency-Key` still runs |
 | `idempotency_reused` | 422 | – | the `Idempotency-Key` was used for another request |
 | `command_unknown` | 404 | `command` | no command of that id the caller may read |
+| `preference_value_bad` | 400 | `preference`, `reason` | the document is not one the server reads as that preference, for `reason` |
+| `preference_too_large` | 413 | `max` | the preference is larger than `max` bytes |
+| `stream_tickets_too_many` | 503 | – | `POST …/events/ticket`: too many stream tickets are outstanding |
+| `client_gone` | 503 | – | the request ended, its client gone or its time up, before the store answered |
 
 **A revoke by code** (`POST /api/v1/tokens/revoke`):
 
@@ -2089,7 +2183,9 @@ and a step by its radio address, the radio command's:
 A step's `result` also gives `answers`, the Cube's answer to each of its
 lines in order up to the first failure (`S:` for a radio line, `A:` for
 `t:`), and `discarded_line`, the line the Cube discarded, where it
-discarded one.
+discarded one;
+a step that failed has its `error`, with its `code` and `params` where it has
+them ("Errors").
 
 Needs `read`; a user without `audit` sees its own commands only,
 and another's is `404`.
@@ -2103,11 +2199,13 @@ and sends nothing to the Cube; the same key with another request (the method,
 the path, the query or the body differ) is `422`,
 and one whose request is still running `409`.
 A key whose request was running when the server stopped is `503`
-with the row's `{"error": "server restarted"}`, since it got no answer.
+with the row's `{"error": "server restarted", "code": "server_restarted"}`,
+since it got no answer.
 A page that lost the connection while a setpoint was on its way retries
 with the key and learns the outcome without a second radio command.
 A command keeps its answer without `password`, `current_password` and `token`,
-so the replay of a new API key's creation answers without the key.
+so the replay of a new API key's creation answers without the key;
+a refusal keeps its `code`, `params` and `error`.
 The login, the logout, the stream ticket and the preferences take no key
 and are no commands.
 

@@ -36,6 +36,9 @@ export interface LogEvent {
   cube_serial?: string;
   command?: number;
   error?: string;
+  /** The error's code and params where it has them (AP ErrorCodes); an event kept before the codes has its error alone. */
+  code?: string;
+  params?: Record<string, unknown>;
 }
 
 /** LogLine is a line of the view; the text of a state event is made when the line is drawn, in the language shown. */
@@ -65,7 +68,10 @@ export interface LogLine {
   /** The line's Cube under All Cubes (GET /api/v1/log). */
   cubeSerial: string;
   command: number;
+  /** What failed, the server's English text; its code ("" for none) and params, which logText says in the language shown. */
   error: string;
+  code: string;
+  params: Record<string, unknown> | null;
   text: string;
   /** The live lines' count, for a live line of the stream (loadLog finds those that came while it waited). */
   seq?: number;
@@ -105,6 +111,8 @@ export function logLine(ev: LogEvent): LogLine {
     cubeSerial: ev.cube_serial || "", // the line's Cube under All Cubes (GET /api/v1/log)
     command: ev.command || 0,
     error: ev.error || "",
+    code: ev.code || "",
+    params: ev.params || null,
     text: ev.error || "",
   };
 }

@@ -218,7 +218,8 @@ func (s *Server) backupCheck(ctx context.Context, rt *runtime, now time.Time) {
 		w.mu.Unlock()
 		if ctx.Err() == nil {
 			failed := systemEvent("backup", 0, map[string]any{"reason": store.ReasonAuto, "retry_in": (backupRetry * minute).String()})
-			failed.Level, failed.Error = "warn", err.Error()
+			failed.Level = "warn"
+			failed.setFailure(err)
 			rt.emit(failed)
 		}
 	}
@@ -396,7 +397,8 @@ func (s *Server) backupAtStop(ctx context.Context, rt *runtime) {
 		// What the Cube did not give is a warning, what failed here an
 		// error; the windows stay in the store either way.
 		failed := systemEvent("backup", 0, map[string]any{"reason": store.ReasonAuto, "at": "stop"})
-		failed.Level, failed.Error = "error", err.Error()
+		failed.Level = "error"
+		failed.setFailure(err)
 		var he *httpError
 		if errors.As(err, &he) && he.status == http.StatusServiceUnavailable {
 			failed.Level = "warn"
@@ -448,7 +450,7 @@ func (s *Server) takeBackup(ctx context.Context, rt *runtime, reason string, use
 	}
 	f, err := backup.Take(rt.client.Snapshot(), ntp, s.opts.Version, time.Now(), rt.hidden())
 	if err != nil {
-		return store.Backup{}, nil, fail(http.StatusServiceUnavailable, "%v", err)
+		return store.Backup{}, nil, backupNotTaken(err)
 	}
 	data, err := f.Marshal(false)
 	if err != nil {

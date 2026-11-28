@@ -508,6 +508,9 @@ func TestRepairResendRefused(t *testing.T) {
 	nothingOf(t, ts, "/api/v1/cubes/KEQ0000100/devices/0a0b0c/repair/config",
 		"room 1 has no other thermostat the cube holds a valid state for to take the configuration from: its 2 others")
 	nothingOf(t, ts, "/api/v1/cubes/KEQ0000100/devices/0a010d/repair/config", "room 6 has no other thermostat to take the configuration from")
+	// each with its code
+	checkNothing(t, ts, "/api/v1/cubes/KEQ0000100/devices/0a0b0c/repair/config", "repair_no_valid_thermostat", `{"room": 1, "dead": 2}`)
+	checkNothing(t, ts, "/api/v1/cubes/KEQ0000100/devices/0a010d/repair/config", "repair_no_other_thermostat", `{"room": 6}`)
 	if got := received.Since(sent, cubewatch.Except('l')); len(got) != 0 {
 		t.Fatalf("sent %v", lineStrings(got))
 	}

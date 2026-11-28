@@ -145,10 +145,15 @@ var (
 	// ErrBusy is the poll's: it finds another command waiting for its
 	// reply and sends nothing. Send itself waits its turn.
 	ErrBusy = errors.New("cubelan: another command is waiting for its reply")
+	// ErrReplyTimeout is the errors.Is target of Send's error for a
+	// command the Cube did not answer within the reply timeout, whose
+	// own text names the reply and the command (replyTimeout): the API
+	// gives it its code by it (AP ErrorCodes, Block 5).
+	ErrReplyTimeout = errors.New("cubelan: no reply within the reply timeout")
 )
 
 // replyTimeout is Send's error for a command the Cube did not answer
-// within the reply timeout.
+// within the reply timeout; it is ErrReplyTimeout to errors.Is.
 type replyTimeout struct {
 	want, cmd byte
 	after     time.Duration
@@ -157,6 +162,9 @@ type replyTimeout struct {
 func (e *replyTimeout) Error() string {
 	return fmt.Sprintf("cubelan: no %c reply to %c command within %s", e.want, e.cmd, e.after)
 }
+
+// Is reports whether target is ErrReplyTimeout.
+func (e *replyTimeout) Is(target error) bool { return target == ErrReplyTimeout }
 
 // keepAlive finds a dead Cube between polls: after 15 s without traffic
 // a probe every 5 s, and three unanswered ones mark the loss, about 30 s

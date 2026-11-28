@@ -39,13 +39,15 @@ export interface Plan {
   plan: RestorePlan;
 }
 
-/** A restore sent: its id once the server has one, each step's outcome, its state, the steps the Cube took and its error. */
+/** A restore sent: its id once the server has one, each step's outcome, its state, the steps the Cube took and its error, with its code and params where it has them (refusalText says it). */
 export interface Run {
   id: string;
   results: ({ ok: boolean; error?: string } | undefined)[];
   state: string;
   sent?: number;
   error?: string;
+  code?: string;
+  params?: Record<string, unknown>;
 }
 
 /**
@@ -319,7 +321,7 @@ export async function sendRestore(place: string, serial: string): Promise<void> 
 export interface RestoreEvent {
   kind?: string;
   cube?: string;
-  restore?: { id: string; step?: number; ok?: boolean; error?: string; state?: string; sent?: number };
+  restore?: { id: string; step?: number; ok?: boolean; error?: string; code?: string; params?: Record<string, unknown>; state?: string; sent?: number };
 }
 
 /**
@@ -342,6 +344,8 @@ export function restoreEvent(ev: RestoreEvent): void {
     run.state = r.state || (r.ok ? "done" : "failed");
     run.sent = r.sent;
     run.error = r.error;
+    run.code = r.code;
+    run.params = r.params;
     refreshBackups(serial);
   }
   b.run = run;

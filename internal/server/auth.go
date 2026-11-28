@@ -1152,8 +1152,11 @@ func (s *Server) issueTicket(w http.ResponseWriter, r *http.Request) error {
 		return err
 	}
 	id, exp, err := s.tickets.issue(strings.ToLower(r.PathValue("sn")), principalOf(r))
+	if errors.Is(err, errTooManyTickets) {
+		return refuseSaying(http.StatusServiceUnavailable, err.Error(), codeStreamTicketsTooMany)
+	}
 	if err != nil {
-		return fail(http.StatusServiceUnavailable, "%v", err)
+		return fail(http.StatusInternalServerError, "%v", err)
 	}
 	writeJSON(w, http.StatusOK, map[string]any{"ticket": id, "expires_at": exp})
 	return nil

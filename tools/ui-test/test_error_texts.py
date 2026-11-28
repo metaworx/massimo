@@ -8,11 +8,15 @@ TestRoomThermostatRefusals checks as it is sent
 room's tile in German at de and in English at en, the room and the
 thermostat by their names; a code the page has no text for shows the
 server's English error; and neither is put in as markup. The setpoint's
-PUT is answered at its route, so that nothing reaches the fake Cube."""
+PUT is answered at its route, so that nothing reaches the fake Cube.
+
+An error kept with a result (Block 5), the reboot's blocked and its last
+failure and a log line's error, is said by its code alike; one kept
+before the codes, by its English text."""
 import json
 from pathlib import Path
 
-from helpers import wait_until
+from helpers import isolate_log, safe_route, show_view, wait_log_live, wait_until
 
 # Room 2 of greeting.txt, "Büro", whose only thermostat is 0a0109,
 # "Radiator Büro": the room and the thermostat of the Go test's answer.
@@ -82,3 +86,76 @@ def test_unknown_code_says_the_english_error(page, case, watch):
         assert elements == 0, "the parameter is text"
     finally:
         page.unroute(SETPOINT)
+
+
+REBOOT = "**/api/v1/reboot"
+MISSING = "no reboot helper installed: sudo massimo install -reboot-helper"
+KEPT = {
+    "en": ("No reboot from here: no reboot helper is installed: on the box, run sudo massimo install -reboot-helper. "
+           "The last reboot failed: the reboot failed: exit status 1"),
+    "de": ("Von hier aus ist kein Neustart des Computers möglich: kein Neustart-Helfer installiert: auf der Box sudo massimo install "
+           "-reboot-helper ausführen. Der letzte Neustart ist fehlgeschlagen: der Neustart ist fehlgeschlagen: exit status 1"),
+}
+KEPT_BEFORE = {
+    "en": "No reboot from here: " + MISSING + ". The last reboot failed: exit status 1",
+    "de": "Von hier aus ist kein Neustart des Computers möglich: " + MISSING + ". Der letzte Neustart ist fehlgeschlagen: exit status 1",
+}
+
+
+def reboot_says(page, answer):
+    """Maintenance's reboot text once GET /api/v1/reboot answers answer."""
+    page.unroute(REBOOT)
+    safe_route(page, REBOOT, lambda route: route.fulfill(status=200, content_type="application/json", body=json.dumps(answer))
+               if route.request.method == "GET" else route.abort())
+    show_view(page, "tiles")
+    show_view(page, "maint")
+    assert wait_until(page, "(document.getElementById('reboot-text')?.textContent || '').includes('exit status 1')", 5), "the reboot's text"
+    return page.locator("#reboot-text").inner_text()
+
+
+def test_kept_errors_in_the_page_language(page, case):
+    """GET /api/v1/reboot's blocked and its last failure are said by
+    their codes, blocked_code and code, in the page's language; kept
+    without codes, by their English text."""
+    try:
+        text = reboot_says(page, {"available": False, "by": "systemd", "blocked": MISSING, "blocked_code": "reboot_no_helper",
+                                  "error": "exit status 1", "code": "reboot_failed", "params": {"reason": "exit status 1"}})
+        assert text == KEPT[case.lang], f"the reboot's text: {text!r}"
+        text = reboot_says(page, {"available": False, "by": "systemd", "blocked": MISSING, "error": "exit status 1"})
+        assert text == KEPT_BEFORE[case.lang], f"the reboot's text without codes: {text!r}"
+    finally:
+        page.unroute(REBOOT)
+        show_view(page, "tiles")
+
+
+LOGGED = {
+    "en": "the Cube is not connected yet",
+    "de": "der Cube ist noch nicht verbunden",
+}
+
+
+def test_log_line_error_in_the_page_language(page, case, reads):
+    """A log line's error is said by its code in the page's language, as
+    text; a line kept before the codes says its English error."""
+    show_view(page, "log")
+    isolate_log(page, reads)
+    wait_log_live(page)
+    page.evaluate("""() => {
+      const now = () => new Date().toISOString();
+      const send = (kind, ev) => state.events.dispatchEvent(new MessageEvent(kind, { data: JSON.stringify(ev) }));
+      send("backup", { kind: "backup", source: "system", level: "warn", time: now(), summary: { reason: "auto", retry_in: "30m0s" },
+        error: "backup: no greeting from the <b>cube</b> yet", code: "cube_not_connected_yet" });
+      send("restore_done", { kind: "restore_done", source: "system", level: "warn", time: now(),
+        error: "step 1 (names): engine: command <i>discarded</i> by the cube", restore: { id: "r1", steps: 1, ok: false, state: "failed" } });
+    }""")
+    assert wait_until(page, "document.querySelectorAll('#log-lines .log-line.kind-backup').length > 0 && "
+                            "document.querySelectorAll('#log-lines .log-line.kind-restore_done').length > 0", 5), "the two lines"
+    backup = page.locator("#log-lines .log-line.kind-backup").first.locator(".log-text")
+    done = page.locator("#log-lines .log-line.kind-restore_done").first.locator(".log-text")
+    text = backup.inner_text()
+    assert text.endswith(LOGGED[case.lang]), f"the backup's line: {text!r}"
+    assert "greeting" not in text, "not the server's English"
+    text = done.inner_text()
+    assert text.endswith("step 1 (names): engine: command <i>discarded</i> by the cube"), f"the line kept before the codes: {text!r}"
+    assert backup.evaluate("(el) => el.querySelectorAll('b, i').length") == 0 and done.evaluate("(el) => el.querySelectorAll('b, i').length") == 0, "text"
+    show_view(page, "tiles")
