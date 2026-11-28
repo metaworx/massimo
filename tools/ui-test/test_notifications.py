@@ -15,13 +15,12 @@ that a notification the server decides meanwhile reaches no network;
 each test removes what it made, the four cases sharing the server, and
 the page fixture removes the owner's rules before every page."""
 import json
-import time
 import urllib.error
 
 from axe_playwright_python.sync_playwright import Axe
 
 from conftest import api_call
-from helpers import held_timers, show_view, wait_until
+from helpers import held_timers, own_id, safe_route, show_view, wait_until
 
 # The fake push of a browser: a service worker container whose register
 # and ready give a registration with a pushManager, whose subscription
@@ -273,7 +272,7 @@ def test_another_device_removed(page, case):
           return { p256dh: b64(raw), auth: b64(crypto.getRandomValues(new Uint8Array(16))) };
         }""")
         label = f"ui-test phone {case.width}-{case.lang}"
-        api_call("POST", "api/v1/me/push", {"endpoint": f"http://127.0.0.1:9/push/ui-test/phone-{time.time_ns()}", "keys": made, "label": label})
+        api_call("POST", "api/v1/me/push", {"endpoint": f"http://127.0.0.1:9/push/ui-test/phone-{own_id()}", "keys": made, "label": label})
         show_view(page, "notify")
         device = page.locator(".notify-device", has_text=label)
         device.wait_for(state="visible")
@@ -363,7 +362,7 @@ def test_server_backup_failed_for_backup_retry_alone(page, case):
     backup.retry (AP ServerBackup, Block 2), and offered to them alone: a
     user with preferences and no backup.retry has every other row."""
     me = dict(GUEST, capabilities=["read", "preferences"])
-    page.route("**/api/v1/me", lambda route: route.fulfill(status=200, content_type="application/json", body=json.dumps(me)))
+    safe_route(page, "**/api/v1/me", lambda route: route.fulfill(status=200, content_type="application/json", body=json.dumps(me)))
     try:
         page.evaluate("loadMe()")
         show_view(page, "notify")

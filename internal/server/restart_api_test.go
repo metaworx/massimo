@@ -113,7 +113,7 @@ func TestRestartRoutes(t *testing.T) {
 	if resp, text := callWith(t, ts, "POST", path, manager, "{}", headers); resp.StatusCode != 202 || resp.Header.Get("Idempotent-Replayed") != "true" || c.calls.Load() != 1 {
 		t.Fatalf("the retry: %d %s, %d restarts", resp.StatusCode, text, c.calls.Load())
 	}
-	if code, text := callAPI(t, ts, "POST", path, "secret", "{}"); code != 409 || errorOf(text) != "a restart is under way" {
+	if code, text := callAPI(t, ts, "POST", path, "secret", "{}"); code != 409 || errorOf(text) != "a restart is under way" || !refusalHas(t, text, "restart_under_way", "null") {
 		t.Fatalf("a second restart: %d %s", code, text)
 	}
 	if code, text := callAPI(t, ts, "GET", path, "secret", ""); code != 200 || decodeRestart(t, text).Available || decodeRestart(t, text).Blocked != "a restart is under way" {
@@ -426,14 +426,16 @@ func TestRestartBlocked(t *testing.T) {
 	if v := decodeRestart(t, text); code != 200 || v.Available || v.By != "" || v.Blocked != "no service manager would start this server again" {
 		t.Fatalf("no restart configured: %d %s", code, text)
 	}
-	if code, text := callAPI(t, ts, "POST", path, "secret", "{}"); code != 409 || errorOf(text) != "no service manager would start this server again" {
+	if code, text := callAPI(t, ts, "POST", path, "secret", "{}"); code != 409 || errorOf(text) != "no service manager would start this server again" ||
+		!refusalHas(t, text, "restart_unavailable", "null") {
 		t.Fatalf("POST without a restart: %d %s", code, text)
 	}
 
 	opts = storeOptions(t, t.TempDir(), "secret")
 	opts.Restart = RestartOptions{Blocked: "the restart is switched off (-restart off)", Restart: func() error { t.Error("restarted"); return nil }}
 	ts = startServer(t, withOptions(opts)).ts
-	if code, text := callAPI(t, ts, "POST", path, "secret", "{}"); code != 409 || errorOf(text) != "the restart is switched off (-restart off)" {
+	if code, text := callAPI(t, ts, "POST", path, "secret", "{}"); code != 409 || errorOf(text) != "the restart is switched off (-restart off)" ||
+		!refusalHas(t, text, "restart_unavailable", "null") {
 		t.Fatalf("switched off: %d %s", code, text)
 	}
 
@@ -446,7 +448,8 @@ func TestRestartBlocked(t *testing.T) {
 	opts.Restart = RestartOptions{By: "launchd", Restart: c.restart}
 	opts.Update = UpdateOptions{Status: status}
 	ts = startServer(t, withOptions(opts)).ts
-	if code, text := callAPI(t, ts, "POST", path, "secret", "{}"); code != 409 || errorOf(text) != "an update is running, and it restarts the server itself" || c.calls.Load() != 0 {
+	if code, text := callAPI(t, ts, "POST", path, "secret", "{}"); code != 409 || errorOf(text) != "an update is running, and it restarts the server itself" || c.calls.Load() != 0 ||
+		!refusalHas(t, text, "update_running", "null") {
 		t.Fatalf("during an update: %d %s", code, text)
 	}
 
@@ -491,7 +494,7 @@ func TestRestartOpenServer(t *testing.T) {
 		if code, text := sendWith(t, proxied, "GET", path, "", h); code != 200 || decodeRestart(t, text).Available || decodeRestart(t, text).Blocked != openRestartRefused {
 			t.Errorf("GET %v, a trusted proxy: %d %s", h, code, text)
 		}
-		if code, text := sendWith(t, proxied, "POST", path, "{}", h); code != 403 || errorOf(text) != openRestartRefused {
+		if code, text := sendWith(t, proxied, "POST", path, "{}", h); code != 403 || errorOf(text) != openRestartRefused || !refusalHas(t, text, "restart_open", "null") {
 			t.Errorf("POST %v, a trusted proxy: %d %s", h, code, text)
 		}
 	}
@@ -502,7 +505,7 @@ func TestRestartOpenServer(t *testing.T) {
 	req.RemoteAddr = "192.168.1.20:50000"
 	rec := httptest.NewRecorder()
 	s.Handler().ServeHTTP(rec, req)
-	if rec.Code != 403 || errorOf(rec.Body.String()) != openRestartRefused {
+	if rec.Code != 403 || errorOf(rec.Body.String()) != openRestartRefused || !refusalHas(t, rec.Body.String(), "restart_open", "null") {
 		t.Errorf("from the LAN: %d %s", rec.Code, rec.Body.String())
 	}
 	if c.calls.Load() != 0 {
@@ -552,7 +555,7 @@ func TestReloadRoute(t *testing.T) {
 	manager := userToken(t, st, "manager1", store.RoleManager)
 	operator := userToken(t, st, "operator1", store.RoleOperator)
 	path := "/api/v1/reload"
-	if code, text := callAPI(t, ts, "POST", path, "secret", "{}"); code != 409 || errorOf(text) != "this server reads no settings file" {
+	if code, text := callAPI(t, ts, "POST", path, "secret", "{}"); code != 409 || errorOf(text) != "this server reads no settings file" || !refusalHas(t, text, "reload_no_settings_file", "null") {
 		t.Fatalf("without a reloader: %d %s", code, text)
 	}
 	at := time.Date(2026, 11, 8, 19, 52, 0, 0, time.UTC)

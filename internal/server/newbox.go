@@ -558,8 +558,9 @@ func (s *Server) newBoxOptions(w http.ResponseWriter, r *http.Request) (serverba
 // here from the local network too, the window being the first owner's,
 // and the restart following a restore that brought the server's users.
 func (s *Server) newBoxRestart(r *http.Request) restartView {
-	v, open := s.restartState(r)
-	if open {
+	v, why := s.restartState(r)
+	var he *httpError
+	if errors.As(why, &he) && he.code == codeRestartOpen {
 		v.Blocked, v.Available = "", true
 	}
 	return v

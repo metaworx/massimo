@@ -97,6 +97,12 @@ type Store struct {
 	// nanoseconds of the store's clock; 0 before the first.
 	commandsPruned atomic.Int64
 
+	// fileHash is the hash of the settings file's MASSIMO_API_TOKEN that
+	// Bootstrap last applied, nil before it ran and "" for none: the
+	// heirs of a revoke pass over that key (revokeHeirs, AP KeyLife,
+	// Block 2), and so does the idle limit (lifeRule, Block 3, D3-A).
+	fileHash atomic.Pointer[string]
+
 	// seenWritten holds the serials whose last_seen this run has
 	// written, see NoteDiscovered.
 	seenMu      sync.Mutex

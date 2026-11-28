@@ -106,7 +106,7 @@ func (s *Server) settingsState() (file string, at *time.Time, reload func(contex
 func (s *Server) reloadSettings(w http.ResponseWriter, r *http.Request) error {
 	_, _, reload := s.settingsState()
 	if reload == nil {
-		return fail(http.StatusConflict, "this server reads no settings file")
+		return refuse(http.StatusConflict, codeReloadNoSettingsFile)
 	}
 	res, err := reload(r.Context())
 	if err != nil {
@@ -189,27 +189,32 @@ func (s *Server) updateRunning() bool {
 }
 
 // restartState says whether the request could restart the server, and
-// why not; open is set when the reason is an open server.
-func (s *Server) restartState(r *http.Request) (v restartView, open bool) {
+// why not: the refusal a request for it meets, nil where it could, its
+// text the view's blocked; a 403 for an open server's, else a 409.
+func (s *Server) restartState(r *http.Request) (v restartView, why error) {
 	o := s.opts.Restart
 	switch {
 	case o.Restart == nil || o.By == "":
-		v.Blocked = o.Blocked
-		if v.Blocked == "" {
-			v.Blocked = "no service manager would start this server again"
+		why = refuse(http.StatusConflict, codeRestartUnavailable)
+		if o.Blocked != "" {
+			why = refuseSaying(http.StatusConflict, o.Blocked, codeRestartUnavailable)
 		}
-		return v, false
+		v.Blocked = why.Error()
+		return v, why
 	case s.restartGate.asked.Load():
-		v.Blocked = "a restart is under way"
+		why = refuse(http.StatusConflict, codeRestartUnderWay)
 	case s.updateRunning():
-		v.Blocked = "an update is running, and it restarts the server itself"
+		why = refuseSaying(http.StatusConflict, "an update is running, and it restarts the server itself", codeUpdateRunning)
 	case s.rebootWaits():
-		v.Blocked = "a reboot of the computer is waiting"
+		why = refuseSaying(http.StatusConflict, "a reboot of the computer is waiting", codeRebootWaiting)
 	case !s.authenticated(r.Context()) && !fromTheBox(r):
-		v.Blocked, open = openRestartRefused, true
+		why = refuse(http.StatusForbidden, codeRestartOpen)
 	}
-	v.By, v.Available = o.By, v.Blocked == ""
-	return v, open
+	if why != nil {
+		v.Blocked = why.Error()
+	}
+	v.By, v.Available = o.By, why == nil
+	return v, why
 }
 
 func (s *Server) getRestart(w http.ResponseWriter, r *http.Request) error {
@@ -222,14 +227,12 @@ func (s *Server) getRestart(w http.ResponseWriter, r *http.Request) error {
 }
 
 func (s *Server) startRestart(w http.ResponseWriter, r *http.Request) error {
-	v, open := s.restartState(r)
+	v, why := s.restartState(r)
 	switch {
-	case open:
-		return fail(http.StatusForbidden, "%s", v.Blocked)
-	case !v.Available:
-		return fail(http.StatusConflict, "%s", v.Blocked)
+	case why != nil:
+		return why
 	case !s.restartGate.asked.CompareAndSwap(false, true):
-		return fail(http.StatusConflict, "a restart is under way")
+		return refuse(http.StatusConflict, codeRestartUnderWay)
 	}
 	if err := s.restartNow(r, v); err != nil {
 		return fail(http.StatusInternalServerError, "starting the restart: %v", err)

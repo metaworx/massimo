@@ -39,18 +39,18 @@ func (s *Server) startPairing(w http.ResponseWriter, r *http.Request) error {
 	if req.Seconds != nil {
 		timeout = time.Duration(*req.Seconds) * time.Second
 		if timeout < time.Second || timeout > cubeio.MaxPairingTime {
-			return fail(http.StatusBadRequest, "seconds must be 1..%d", int(cubeio.MaxPairingTime.Seconds()))
+			return refuse(http.StatusBadRequest, codePairingSeconds, int(cubeio.MaxPairingTime.Seconds()))
 		}
 	}
 	if !rt.client.Connected() {
-		return fail(http.StatusServiceUnavailable, "cube not connected")
+		return refuseSaying(http.StatusServiceUnavailable, "cube not connected", codeCubeNotConnected)
 	}
 	ctx, cancel := context.WithTimeout(r.Context(), 2*time.Minute)
 	defer cancel()
 	_, stop, err := rt.writerOf(ctx).StartPairing(ctx, timeout)
 	if err != nil {
 		if errors.Is(err, cubelan.ErrInclusionActive) {
-			return fail(http.StatusConflict, "pairing is already running")
+			return refuse(http.StatusConflict, codePairingRunning)
 		}
 		return fail(http.StatusBadGateway, "%v", err)
 	}

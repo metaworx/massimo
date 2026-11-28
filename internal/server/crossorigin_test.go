@@ -46,7 +46,7 @@ func TestCrossOriginWritesRefused(t *testing.T) {
 		"origin of other host": {"Content-Type": plain, "Origin": "https://attacker.example"},
 	} {
 		code, text := sendWith(t, ts, "POST", "/api/v1/users", owner, h)
-		if code != http.StatusForbidden || !strings.Contains(text, "cross-origin request refused") {
+		if !isRefusal(code, text, http.StatusForbidden, "cross_origin_refused", "", "cross-origin request refused") {
 			t.Errorf("%s: %d %s", name, code, text)
 		}
 	}

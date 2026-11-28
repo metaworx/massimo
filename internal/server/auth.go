@@ -203,9 +203,13 @@ type principal struct {
 	// let the principal in, "" for none (stillAdmitted).
 	legacyToken string
 	// integration is the registered integration whose key it is, and
-	// actsFor the integration's user the call acts for (onbehalf.go).
+	// actsFor the integration's user the call acts for (onbehalf.go),
+	// with instance, the installation id the call came from, which its
+	// event stream asks again at each keep-alive (stillActsFor); "" for
+	// every other principal.
 	integration *store.Integration
 	actsFor     *store.IntegrationIdentity
+	instance    string
 }
 
 // realUserID is who makes the principal's calls: the integration's user
@@ -262,7 +266,7 @@ func withPrincipal(r *http.Request, p *principal) *http.Request {
 // does not cover: PUT …/devices/{rf} needs structure for room_id.
 func (s *Server) require(r *http.Request, capability string) error {
 	if !principalOf(r).has(capability) {
-		return fail(http.StatusForbidden, "capability %q required", capability)
+		return refuse(http.StatusForbidden, codeCapabilityRequired, capability)
 	}
 	return nil
 }
@@ -341,7 +345,7 @@ func (s *Server) SetToken(ctx context.Context, token string) error {
 	if err != nil {
 		return err
 	}
-	s.log.Info("api token applied", "owner_created", res.OwnerCreated, "key_added", res.TokenAdded, "revoked", res.Revoked, "auth", s.AuthMode())
+	s.log.Info("api token applied", "owner_created", res.OwnerCreated, "key_added", res.TokenAdded, "revoked", res.Revoked, "heirs", res.Heirs, "auth", s.AuthMode())
 	if res.OwnerCreated {
 		s.tellOpenSetup(ctx, store.BootstrapUser, store.RoleOwner)
 		s.dropNewBox() // the window of a new box has closed (newbox.go)
@@ -483,7 +487,8 @@ func localPeer(ip string) bool {
 }
 
 // openRefused is what a server that asks for no key answers a client
-// beyond its local network.
+// beyond its local network, with the code server_open_local_only
+// (errcodes_users.go).
 const openRefused = "this server is open and answers only its local network; create a user or set MASSIMO_API_TOKEN"
 
 // openAllowed reports whether a server that asks for no key, a store
@@ -800,8 +805,8 @@ const errTooManyTickets = ticketError("too many stream tickets outstanding")
 var errBadToken = errors.New("missing or wrong token")
 
 // errEndedToken is a token the server issued that has ended: revoked,
-// logged out, expired, or a session whose key was revoked
-// (store.TokenEnded). It is refused as errBadToken is, with its words,
+// logged out, expired, or a session whose key was revoked or is past its
+// end (store.TokenEnded). It is refused as errBadToken is, with its words,
 // but is no guess, and does not count toward the lockout (AP MobileApp
 // v1.4, D64-A).
 var errEndedToken = fmt.Errorf("%w: ended", errBadToken)
@@ -812,17 +817,16 @@ func guessed(why error) bool {
 	return errors.Is(why, errBadToken) && !errors.Is(why, errEndedToken)
 }
 
-// forbiddenError carries the words of the refusal, and where a client
-// tells refusals apart by it, a code (integration_disabled, errcodes.go).
-type forbiddenError struct {
-	msg  string
-	code *errCode
-}
+// forbiddenError is the refusal (refuse) of a token whose user may not
+// use the API now: its words, its code and its params (errcodes.go).
+type forbiddenError struct{ he *httpError }
 
-func (e *forbiddenError) Error() string { return e.msg }
+func (e *forbiddenError) Error() string { return e.he.msg }
 
-func forbidden(format string, args ...any) error {
-	return &forbiddenError{msg: fmt.Sprintf(format, args...)}
+// forbidden is a refusal, made by refuse or refuseSaying with 403, as a
+// forbiddenError.
+func forbidden(err error) error {
+	return &forbiddenError{he: err.(*httpError)}
 }
 
 // resolve turns a presented token into a principal, or says why not: a
@@ -839,14 +843,13 @@ func (s *Server) resolve(ctx context.Context, mode authMode, secret, ip string) 
 		return nil, errBadToken
 	}
 	hash := store.HashToken(secret)
+	// A live token alone, its own end and its key's in the rule
+	// (store.TokenByHash, AP KeyLife, Block 2).
 	tok, ok, err := s.opts.Store.TokenByHash(ctx, hash)
 	if err != nil {
 		return nil, err
 	}
 	now := time.Now()
-	if ok && tok.Expired(now) {
-		return nil, errEndedToken
-	}
 	if !ok {
 		return nil, s.unknownToken(ctx, hash, now)
 	}
@@ -854,7 +857,7 @@ func (s *Server) resolve(ctx context.Context, mode authMode, secret, ip string) 
 	if err != nil {
 		return nil, err
 	}
-	s.touch(ctx, tok, ip, now)
+	s.touch(ctx, tok, secret, ip, now)
 	return p, nil
 }
 
@@ -890,17 +893,17 @@ func (s *Server) principalFor(ctx context.Context, tok store.Token, now time.Tim
 		return nil, errBadToken
 	}
 	if u.Disabled {
-		return nil, forbidden("user %s is disabled", u.Name)
+		return nil, forbidden(refuse(http.StatusForbidden, codeUserAccountDisabled, u.Name))
 	}
 	if u.Expired(now) {
-		return nil, forbidden("user %s has expired", u.Name)
+		return nil, forbidden(refuse(http.StatusForbidden, codeUserAccountExpired, u.Name))
 	}
 	caps, off, roleOff, err := st.Effective(ctx, u.Role, capabilities)
 	if err != nil {
 		return nil, err
 	}
 	if roleOff {
-		return nil, forbidden("role %s is disabled", u.Role)
+		return nil, forbidden(refuse(http.StatusForbidden, codeRoleDisabled, u.Role))
 	}
 	p := &principal{mode: modeUsers, user: u, token: tok, caps: setOf(caps), off: setOf(off)}
 	if u.IntegrationID != 0 {
@@ -913,7 +916,7 @@ func (s *Server) principalFor(ctx context.Context, tok store.Token, now time.Tim
 			return nil, err
 		}
 		if !ok || integ.State != store.IntegrationActive {
-			return nil, &forbiddenError{msg: fmt.Sprintf("the integration of user %s is disabled", u.Name), code: codeIntegrationDisabled}
+			return nil, forbidden(refuseSaying(http.StatusForbidden, fmt.Sprintf("the integration of user %s is disabled", u.Name), codeIntegrationDisabled))
 		}
 		p.caps = withinIntegration(p.caps, integ)
 	}
@@ -922,12 +925,17 @@ func (s *Server) principalFor(ctx context.Context, tok store.Token, now time.Tim
 
 // stillAdmitted reports whether the caller an event stream was opened
 // for would be let in now: an open server still open, the one token of a
-// server without a store unchanged, a user's token neither revoked nor
-// expired, its user and role still allowed and holding read, and for a
-// call through an integration for one of its users the chain again
-// (stillActsFor). A store that cannot be read ends the stream, as
-// authorize fails closed. The stream asks at each keep-alive (server.go,
-// events).
+// server without a store unchanged, a user's token alive (neither
+// revoked nor past its end, and a session made from a key only while the
+// key is neither: AP KeyLife, Block 2) and still holding the secret it
+// was let in with, so that a stream opened with a key's old secret, or a
+// ticket taken with it, ends at the key's new secret (store.TokenAliveAs,
+// Block 5), its user and role still allowed and holding read, and for a
+// call through an integration for one of its users the chain and the
+// installation id again (stillActsFor). A store
+// that cannot be read ends the stream, as authorize fails closed. The
+// stream asks at each keep-alive (server.go, events), and authorize when
+// it redeems a stream's ticket.
 func (s *Server) stillAdmitted(ctx context.Context, p *principal) bool {
 	if p == nil {
 		return false
@@ -942,17 +950,11 @@ func (s *Server) stillAdmitted(ctx context.Context, p *principal) bool {
 	if mode != modeUsers {
 		return false
 	}
-	now := time.Now()
-	tok, ok, err := s.opts.Store.Token(ctx, p.token.ID)
-	if err != nil || !ok || !tok.DeletedAt.IsZero() || tok.Expired(now) {
+	tok, ok, err := s.opts.Store.TokenAliveAs(ctx, p.token)
+	if err != nil || !ok {
 		return false
 	}
-	if tok.ParentID != 0 {
-		// A session made from a key lives while the key does.
-		if key, ok, err := s.opts.Store.Token(ctx, tok.ParentID); err != nil || !ok || !key.DeletedAt.IsZero() {
-			return false
-		}
-	}
+	now := time.Now()
 	np, err := s.principalFor(ctx, tok, now)
 	if err != nil || !np.has("read") {
 		return false
@@ -961,17 +963,35 @@ func (s *Server) stillAdmitted(ctx context.Context, p *principal) bool {
 }
 
 // touch records a token's use at most once an hour, and moves a
-// session's end.
-func (s *Server) touch(ctx context.Context, tok store.Token, ip string, now time.Time) {
-	if !tok.LastUsedAt.IsZero() && now.Sub(tok.LastUsedAt) < touchEvery {
+// session's end; a session made from a key records its key's use too,
+// with the same address, so that a phone in use keeps its key under the
+// idle limit (AP KeyLife, Block 3). A token made before the store kept
+// revoke codes gets the hash of its code, from the secret presented, at
+// its first use, whatever touchEvery says (AP MobileApp v1.6, D112-A);
+// the settings file's key gets none and is touched at most once an hour,
+// as no revoke ends it (settingsKey). A token reaches it only once the
+// rule has let it in, so an ended key's use is never written, nor the
+// hash of its code.
+func (s *Server) touch(ctx context.Context, tok store.Token, secret, ip string, now time.Time) {
+	var revoke string
+	if !tok.RevokeKept && !tokenMatches(s.legacyToken(), secret) {
+		revoke = store.HashToken(store.RevokeCode(secret))
+	}
+	if revoke == "" && !tok.LastUsedAt.IsZero() && now.Sub(tok.LastUsedAt) < touchEvery {
 		return
 	}
 	var end time.Time
 	if tok.Kind == store.TokenSession {
 		end = now.Add(SessionLifetime)
 	}
-	if err := s.opts.Store.TouchToken(ctx, tok.ID, ip, end); err != nil {
+	if err := s.opts.Store.TouchToken(ctx, tok.ID, ip, end, revoke); err != nil {
 		s.log.Error("api: token use not recorded", "token", tok.ID, "error", err)
+	}
+	if tok.ParentID != 0 {
+		// The key's use, not its code: the secret presented is the session's.
+		if err := s.opts.Store.TouchToken(ctx, tok.ParentID, ip, time.Time{}, ""); err != nil {
+			s.log.Error("api: key use not recorded", "token", tok.ParentID, "session", tok.ID, "error", err)
+		}
 	}
 }
 
@@ -1009,7 +1029,7 @@ func (s *Server) authorize(w http.ResponseWriter, r *http.Request, capability st
 	if mode == modeOpen || mode == modeLegacy && s.legacyToken() == "" {
 		// A server that asks for no key answers its local network only.
 		if !s.openAllowed(r) {
-			writeError(w, http.StatusForbidden, openRefused)
+			writeRefusal(w, refuse(http.StatusForbidden, codeServerOpenLocalOnly))
 			return nil, false
 		}
 		return &principal{mode: mode}, true
@@ -1025,7 +1045,7 @@ func (s *Server) authorize(w http.ResponseWriter, r *http.Request, capability st
 	key := store.LockoutAddr(ip)
 	if d := s.limiter.lockedFor(ctx, key); d > 0 {
 		w.Header().Set("Retry-After", strconv.Itoa(int(d.Round(time.Second)/time.Second)))
-		writeError(w, http.StatusTooManyRequests, "too many failed token checks from this address; try again later")
+		writeRefusal(w, refuse(http.StatusTooManyRequests, codeAddressLockedOut))
 		return nil, false
 	}
 	var p *principal
@@ -1056,7 +1076,17 @@ func (s *Server) authorize(w http.ResponseWriter, r *http.Request, capability st
 		q := r.URL.Query()
 		ticket, tok := q.Get("ticket"), q.Get("token")
 		if tp, ok := s.tickets.redeem(ticket, strings.ToLower(r.PathValue("sn"))); ok {
-			p = tp
+			// The ticket's caller is asked again before the stream sends
+			// anything, as at each keep-alive: one no longer let in since
+			// the ticket was issued (its key revoked, its user disabled,
+			// another installation accepted) is refused as a token that
+			// ended is, uncounted, and the page's next ticket asks it to
+			// sign in.
+			if s.stillAdmitted(ctx, tp) {
+				p = tp
+			} else {
+				why = errEndedToken
+			}
 		} else {
 			guess = guess || ticket != ""
 			if tok != "" {
@@ -1078,11 +1108,7 @@ func (s *Server) authorize(w http.ResponseWriter, r *http.Request, capability st
 			if guess && s.limiter.fail(ctx, key) {
 				s.logLockout(ip, "tokens")
 			}
-			if fe.code != nil {
-				writeJSON(w, http.StatusForbidden, map[string]any{"error": fe.msg, "code": fe.code.name})
-			} else {
-				writeError(w, http.StatusForbidden, fe.msg)
-			}
+			writeRefusal(w, fe.he)
 		case why != nil && !errors.Is(why, errBadToken):
 			s.log.Error("api: token not resolved", "error", why)
 			writeError(w, http.StatusInternalServerError, "authentication failed; see the log")
@@ -1090,7 +1116,7 @@ func (s *Server) authorize(w http.ResponseWriter, r *http.Request, capability st
 			if guess && s.limiter.fail(ctx, key) {
 				s.logLockout(ip, "tokens")
 			}
-			writeError(w, http.StatusUnauthorized, errBadToken.Error())
+			writeRefusal(w, refuse(http.StatusUnauthorized, codeTokenWrong)) // errBadToken's words
 		}
 		return nil, false
 	}
@@ -1114,23 +1140,31 @@ func (s *Server) authorize(w http.ResponseWriter, r *http.Request, capability st
 			writeJSON(w, http.StatusForbidden, map[string]any{"error": capabilityRequired(capability), "code": codeForbidden.name})
 			return p, false
 		}
-		writeError(w, http.StatusForbidden, capabilityRequired(capability))
+		writeRefusal(w, refuse(http.StatusForbidden, codeCapabilityRequired, capability))
 		return p, false // the audit names who was refused
 	}
 	return p, true
 }
 
 // lockedOut answers a sign-in from an address or for a name that is
-// locked out: 429 with Retry-After, nil when neither is.
+// locked out: 429 with Retry-After, nil when neither is. A key "" is
+// not checked: the revoke by code checks the address alone.
 func (s *Server) lockedOut(w http.ResponseWriter, ctx context.Context, addrKey, userKey string) error {
-	for _, k := range []struct{ key, msg string }{
-		{addrKey, "too many failed token checks from this address; try again later"},
-		{userKey, "too many failed logins for this user; try again later"},
-	} {
-		if d := s.limiter.lockedFor(ctx, k.key); d > 0 {
-			w.Header().Set("Retry-After", strconv.Itoa(int(d.Round(time.Second)/time.Second)))
-			return fail(http.StatusTooManyRequests, "%s", k.msg)
+	locked := func(key string) bool {
+		if key == "" {
+			return false
 		}
+		d := s.limiter.lockedFor(ctx, key)
+		if d > 0 {
+			w.Header().Set("Retry-After", strconv.Itoa(int(d.Round(time.Second)/time.Second)))
+		}
+		return d > 0
+	}
+	switch {
+	case locked(addrKey):
+		return refuse(http.StatusTooManyRequests, codeAddressLockedOut)
+	case locked(userKey):
+		return refuse(http.StatusTooManyRequests, codeUserLockedOut)
 	}
 	return nil
 }

@@ -190,7 +190,7 @@ func (s *Server) postProvider(w http.ResponseWriter, r *http.Request) error {
 		return err
 	}
 	if req.Key == nil {
-		return fail(http.StatusBadRequest, "key is needed")
+		return refuse(http.StatusBadRequest, codeProviderKeyNeeded)
 	}
 	auditTarget(r, "provider:"+strings.ToLower(strings.TrimSpace(*req.Key)))
 	p := store.AuthProvider{Key: *req.Key, Enabled: true}
@@ -234,7 +234,7 @@ func (s *Server) putProvider(w http.ResponseWriter, r *http.Request) error {
 		return providerFail(err)
 	}
 	if !ok {
-		return fail(http.StatusNotFound, "no provider %q", key)
+		return refuse(http.StatusNotFound, codeProviderUnknown, key)
 	}
 	before := now
 	req.apply(&now)
@@ -276,7 +276,7 @@ func (s *Server) deleteProvider(w http.ResponseWriter, r *http.Request) error {
 		return providerFail(err)
 	}
 	if !ok {
-		return fail(http.StatusNotFound, "no provider %q", key)
+		return refuse(http.StatusNotFound, codeProviderUnknown, key)
 	}
 	if err := st.DeleteProvider(r.Context(), key, principalOf(r).userID()); err != nil {
 		return providerFail(err)
@@ -465,7 +465,7 @@ func (s *Server) deleteIdentity(w http.ResponseWriter, r *http.Request) error {
 		if last, err := lastWayIn(r, st, u, gone); err != nil {
 			return providerFail(err)
 		} else if last {
-			return fail(http.StatusConflict, "this is the last way you sign in: set a password or link another account first")
+			return refuse(http.StatusConflict, codeIdentityLastWayIn)
 		}
 	}
 	if err := st.DeleteIdentity(r.Context(), u.ID, id); err != nil {

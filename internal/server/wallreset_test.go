@@ -20,7 +20,7 @@ func eventText(ev event) string {
 
 // A wall thermostat that comes back after a silence on another mode is
 // a wall_reset in the log, as after new batteries (AP LegacyLogs v1.0,
-// Block 12); one that comes back on its mode is not.
+// Block 12), naming its room; one that comes back on its mode is not.
 //
 // Each step waits for the API and then for the pump (pumpSync): the API
 // shows the client's snapshot, which the pump reads only when it comes
@@ -120,8 +120,10 @@ func TestWallReset(t *testing.T) {
 	if reset == nil {
 		t.Fatal("no wall_reset for a return on another mode")
 	}
-	if sum := reset.Summary; sum["mode"] != "auto" || sum["was_mode"] != "manual" || sum["setpoint"] != 5.5 || sum["was_setpoint"] != 6.0 {
-		t.Fatalf("wall_reset summary %v", sum)
+	dv, _ := reset.State.(view.Device)
+	if sum := reset.Summary; sum["mode"] != "auto" || sum["was_mode"] != "manual" || sum["setpoint"] != 5.5 || sum["was_setpoint"] != 6.0 ||
+		dv.RoomID == 0 || sum["room"] != dv.RoomID {
+		t.Fatalf("wall_reset summary %v, the thermostat's room %d", sum, dv.RoomID)
 	}
 	logAfter(t, m, "the wall_reset in the log", logLine("wall_reset", "0a0201"))
 }

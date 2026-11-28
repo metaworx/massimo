@@ -116,7 +116,7 @@ func TestWritersFillUpdatedBy(t *testing.T) {
 			t.Errorf("%s: token origin %q, want %q", what, origin, node)
 		}
 	}
-	revoke("revoked", func(tok Token) error { return s.RevokeToken(ctx, tok.ID) })
+	revoke("revoked", func(tok Token) error { _, err := s.RevokeToken(ctx, tok.ID); return err })
 	revoke("sessions", func(Token) error { return s.RevokeSessions(ctx, anna.ID) })
 	revoke("user removed", func(Token) error { return s.DeleteUser(ctx, "anna", 0) })
 }

@@ -47,9 +47,14 @@ class Host(private val target: Target) {
         }
     }
 
-    /** rows are the user's newest audit rows, at most [limit], newest first. */
-    fun rows(limit: Int = ROWS): List<Row> {
-        val (code, body) = get("api/v1/audit?user=" + URLEncoder.encode(Rig.user, "UTF-8") + "&limit=$limit", Rig.auditKey)
+    /**
+     * rows are the user's newest audit rows, at most [limit], newest first;
+     * with [anyone] every row, those of requests refused before anyone was
+     * known among them, which are one row per address and minute.
+     */
+    fun rows(limit: Int = ROWS, anyone: Boolean = false): List<Row> {
+        val who = if (anyone) "" else "user=" + URLEncoder.encode(Rig.user, "UTF-8") + "&"
+        val (code, body) = get("api/v1/audit?${who}limit=$limit", Rig.auditKey)
         assertEquals("GET /api/v1/audit at ${target.url}", 200, code)
         val a = JSONArray(body)
         return List(a.length()) { i ->
@@ -59,10 +64,10 @@ class Host(private val target: Target) {
     }
 
     /** mark is the newest audit row's id, 0 for none, before a step whose rows [since] reads. */
-    fun mark(): Long = rows(1).firstOrNull()?.id ?: 0
+    fun mark(): Long = rows(1, anyone = true).firstOrNull()?.id ?: 0
 
-    /** since are the user's audit rows after [mark], oldest first. */
-    fun since(mark: Long): List<Row> = rows().filter { it.id > mark }.sortedBy { it.id }
+    /** since are the user's audit rows after [mark], oldest first; with [anyone] every row. */
+    fun since(mark: Long, anyone: Boolean = false): List<Row> = rows(anyone = anyone).filter { it.id > mark }.sortedBy { it.id }
 
     /** sessionId is the row of the session [token] at the server (`GET /api/v1/me`'s `token.id`). */
     fun sessionId(token: String): Long {

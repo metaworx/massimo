@@ -219,25 +219,34 @@ body.signed-out:has(#login-dialog[open]) {
 }
 /* Copying (components.js copyable, copyIcon, copyEl): a text that copies
    on a click shows the pointer and a focus ring; "Copied" shows above it
-   for a moment. The fallback's text area stays out of sight. */
+   for a moment, in the bubble. The fallback's text area stays out of
+   sight. */
 .copyable { cursor: copy; border-radius: 4px; position: relative; }
 .copyable:hover { text-decoration: underline dotted; text-underline-offset: 3px; }
 .copyable:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
-.copyable.copied::after {
-  content: attr(data-copied);
-  position: absolute;
-  left: 50%;
-  bottom: calc(100% + 4px);
-  transform: translateX(-50%);
+/* The bubble (components.js showBubble): a short text for a moment, fixed
+   in the window above its control, where the script places it, or at the
+   window's bottom centre above the safe area without one (.foot); as wide
+   as its text, 8 px inside the window's edges at most; over the toast. */
+.bubble {
+  position: fixed;
+  z-index: 60;
+  width: max-content;
+  max-width: calc(100% - 16px);
   padding: 2px 8px;
   border-radius: 6px;
   background: var(--fg);
   color: var(--bg);
   font-family: system-ui, sans-serif;
   font-size: 0.75rem;
-  white-space: nowrap;
+  text-align: center;
+  overflow-wrap: anywhere;
   pointer-events: none;
-  z-index: 5;
+}
+.bubble.foot {
+  left: 50%;
+  bottom: calc(16px + env(safe-area-inset-bottom, 0px));
+  transform: translateX(-50%);
 }
 .copy-pair { display: inline-flex; align-items: center; gap: 4px; max-width: 100%; min-width: 0; }
 .copy-pair > .mono { overflow-wrap: anywhere; }
@@ -653,11 +662,13 @@ body.scrolled .page-bar { border-bottom-color: var(--line); box-shadow: 0 8px 8p
 .page-link-label { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 @media (max-width: 899px) {
   /* the sections menu's place kept on every page, and the page shown as
-     wide on every page: the longest name (ui/src/chrome/Bar.tsx Switch) */
+     wide on every page: the longest name (ui/src/chrome/Bar.tsx Switch);
+     the page bar's alone, so that the connect page's sections keep their
+     names (.server-tabs) */
   .page-switch { max-width: calc(100% - 48px); }
-  .page-link.current { width: calc(var(--tab-name) + 46px); }
-  .page-link:not(.current) { flex: none; width: 40px; padding: 0; justify-content: center; }
-  .page-link:not(.current) > .page-link-label { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+  .page-switch .page-link.current { width: calc(var(--tab-name) + 46px); }
+  .page-switch .page-link:not(.current) { flex: none; width: 40px; padding: 0; justify-content: center; }
+  .page-switch .page-link:not(.current) > .page-link-label { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
 }
 .menu.sec-menu > summary {
   display: inline-flex;
@@ -2326,8 +2337,20 @@ massimo-week-program { display: contents; }
 /* a grid item's margins collapse with nothing outside it: the first line's
    top margin, which collapsed with the row's above it, would add itself */
 .login-forms > * > :first-child { margin-top: 0; }
-/* Revoke, or in its place the settings file's key's word (shared/tokens.tsx), at the row's end */
-.user-tokens li .revoke-token, .user-tokens li .token-settings { margin-left: auto; }
+/* Change…, New secret and Revoke, or in their place the settings file's
+   key's word (shared/tokens.tsx), at the row's end; a key's Change… form
+   on a line of its own under the row (AP KeyLife, Block 3) */
+.user-tokens li .token-buttons, .user-tokens li .token-settings { margin-left: auto; }
+.user-tokens li .token-buttons { display: inline-flex; flex-wrap: wrap; align-items: center; gap: 6px; }
+.user-tokens li .token-change { flex-basis: 100%; display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }
+.user-tokens li .token-change .actions { margin-left: auto; }
+/* Change…'s end date with No end on a line of their own, wrapping at a
+   phone's width (AP KeyLife, Block 4) */
+.user-tokens li .token-change .token-end-field { flex: 1 1 100%; }
+.user-tokens li .token-change .token-end-field .inline { flex-wrap: wrap; justify-content: flex-end; }
+/* New secret's question on a line of its own under the row, in place of
+   its buttons (AP KeyLife, Block 5) */
+.user-tokens li .confirm-box { flex-basis: 100%; }
 /* the key My profile was opened with (#profile?key=<id>, ui/src/profile/
    store.ts markKey, shared/tokens.tsx): tinted and outlined in the
    accent, in either theme */
@@ -2366,11 +2389,19 @@ massimo-week-program { display: contents; }
 .dev-last { margin-bottom: 10px; }
 
 /* The apps' connect page (connect.html, connect.js, docs/app.md): the
-   servers, each a row whose wide button opens it, its name, its address
-   and what the probe found, the cog its settings under it; the servers
-   found on the network; the address to add; the fingerprint sheet. A
-   reading width, phone first. */
-.connect-main { display: grid; gap: 16px; max-width: 640px; }
+   list's ☰ in the header at the logo's right, where a server's page has
+   its ☰; the servers, each a row whose wide button opens it, its name,
+   its address and what the probe found, the cog its settings under it;
+   the servers found on the network; the address to add; the fingerprint
+   sheet. The page's full width, up to a server's page's 1100 px (AP
+   MobileApp, D92-A), phone first. */
+.connect-top > .brand { flex: 0 1 auto; margin-right: auto; }
+.connect-main { display: grid; gap: 16px; max-width: 1100px; }
+/* the ☰'s first row, the app's version (connect.js initVersion), with its
+   copy icon at the row's end */
+.servers-menu .menu-version { margin: 2px 4px 0 10px; }
+.servers-menu .menu-version #menu-version { min-width: 0; overflow-wrap: anywhere; }
+.servers-menu .menu-version button.copy-icon { margin-left: auto; padding: 0; }
 .notice a { color: inherit; font-weight: 600; }
 .connect-sub { font-size: 0.95rem; font-weight: 600; margin: 0 0 6px; }
 .server-list, .found-servers { list-style: none; margin: 0; padding: 0; display: grid; gap: 8px; }
@@ -2392,11 +2423,31 @@ massimo-week-program { display: contents; }
 /* a server's lines in its settings: the login kept, the session, the
    certificate, each with its button */
 .server-login-kept, .server-fact { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin: 0 0 12px; overflow-wrap: anywhere; }
-/* the list's ☰ in the card's head, its items dropping down from it */
+/* the list's ☰ in the header, its items dropping down from it */
 .menu.nav-menu.servers-menu { position: relative; flex: none; }
 .servers-ask:not(:empty) { margin-top: 10px; }
 .cert-value { overflow-wrap: anywhere; }
 .server-row > .server-panel { flex-basis: 100%; }
+/* a server's settings in three sections (connect.js settingsPanel, AP
+   MobileApp D111-A): the head, the server's name and ✕; the row of tabs
+   as System settings' page row looks (.page-link), never folded to icons,
+   their names alone, the one shown filled, the three on one line at a
+   phone's width in the six languages; Connection's tab with the
+   "changed here" disk while it differs, Login's with a dot while a key or
+   a session is left there, each at its tab's top right corner, taking no
+   room from the names */
+.server-panel-head { display: flex; align-items: center; gap: 8px; margin: 0 0 10px; }
+.server-panel-title { flex: 1 1 auto; min-width: 0; margin: 0; font-size: 1rem; overflow-wrap: anywhere; }
+.server-panel-head .card-close { flex: none; }
+.server-tabs { display: flex; flex-wrap: wrap; gap: 4px; margin: 6px 0 14px; }
+.server-tab { position: relative; flex: 0 1 auto; padding: 0 8px; }
+.server-tab-mark:empty { display: none; }
+.server-tab-mark, .server-tab-left { position: absolute; top: -7px; right: -5px; display: inline-flex; }
+.server-tab .server-tab-unsaved { width: 16px; height: 16px; border-radius: 50%; background: var(--card); }
+.server-tab .server-tab-unsaved.tone-warn { color: var(--warn-mark); }
+.server-tab-left { top: -4px; right: -4px; }
+.server-tab-dot { width: 9px; height: 9px; border-radius: 50%; background: var(--warn-mark); box-shadow: 0 0 0 2px var(--card); }
+.server-cert .cert-address { margin: 0 0 10px; }
 /* Remove server on a line of its own under Cancel and Save, after a rule,
    with what it does above it (connect.js settingsPanel, AP MobileApp F34) */
 .server-remove-box { margin-top: 12px; padding-top: 12px; border-top: 1px solid var(--line); }

@@ -129,6 +129,11 @@ var settleRules = map[string]settleRule{
 	// a device's battery level low (battery.go): the same device's level
 	// ok again, by new batteries marked or by the server's rules
 	"battery": {by: []string{"battery"}, match: batteryOK},
+	// a wall thermostat back on another mode after a silence, as after
+	// new batteries (wallreset.go): its room's members agreeing again,
+	// as the room check finds once it found them differ (drift.go); a
+	// room put right before that check, or without one, by a mark
+	"wall_reset": {by: []string{"disagree"}, match: wallAgreed},
 }
 
 // batteryOK: a later battery event of the same device whose level is ok.

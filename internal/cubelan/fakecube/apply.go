@@ -63,23 +63,37 @@ const (
 )
 
 // apply carries out a radio command the fake acknowledged, after
-// ApplyAfter when it is set, and once a hold ends (HoldApply).
+// ApplyAfter when it is set, and once a hold ends (HoldApply); not where
+// a Reset came in between.
 func (s *Server) apply(m cube.Message) {
 	raw, err := base64.StdEncoding.DecodeString(strings.TrimSpace(m.Data))
 	if err != nil || len(raw) < 11 {
 		return
 	}
+	c := command{raw: raw, gen: s.generation()}
 	if s.ApplyAfter > 0 {
-		time.AfterFunc(s.ApplyAfter, func() { s.applyOrHold(raw) })
+		time.AfterFunc(s.ApplyAfter, func() { s.applyOrHold(c) })
 		return
 	}
-	s.applyOrHold(raw)
+	s.applyOrHold(c)
 }
 
-// applyNow changes the addressed devices' lines for one radio command.
-func (s *Server) applyNow(raw []byte) {
+// command is a radio command acknowledged, with the count of resets at
+// its acknowledgement (Server.gen).
+type command struct {
+	raw []byte
+	gen uint64
+}
+
+// applyNow changes the addressed devices' lines for one radio command,
+// unless a Reset came since it was acknowledged.
+func (s *Server) applyNow(c command) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
+	if c.gen != s.gen {
+		return
+	}
+	raw := c.raw
 	cmd, room := raw[2], raw[9]
 	var targets []cube.RFAddress
 	if raw[1]&0x04 != 0 {

@@ -131,7 +131,7 @@ func (s *Store) liveIntegrationKey(ctx context.Context, i Integration, now time.
 		return false, err
 	}
 	for _, t := range tokens {
-		if t.Kind == TokenAPI && !t.Expired(now) {
+		if t.Kind == TokenAPI && t.Ended == "" { // neither past its end nor ended unused (Tokens, at the store's now)
 			return true, nil
 		}
 	}

@@ -4,18 +4,17 @@
 it reads the schemas of `docs/api-v1-openapi.yaml` (`components.schemas`)
 and writes `internal/server/ui/src/api.d.ts`,
 one exported declaration per schema, in the file's order,
-which `make ui-check` holds the web UI's parts to
-(`docs/ui.md`, "How the page is built").
-git keeps the file, since it changes only with the API;
-a change to a schema writes it again.
+which `make ui-check` holds the web UI's parts to (`docs/ui.md`,
+"How the page is built"). git keeps the file,
+since it changes only with the API; a change to a schema writes it again.
 
 ```sh
 go run ./tools/apitypes          # from the repository's top: writes the file
 go run ./tools/apitypes -check   # exits 1 where the file is not current
 ```
 
-`go test ./...` fails too while the file is not current
-(`TestGeneratedFileCurrent`), naming the command.
+`go test ./...` fails too while the file is not current (`TestGeneratedFileCurrent`),
+naming the command.
 
 The mapping covers what the OpenAPI file uses, and nothing more:
 

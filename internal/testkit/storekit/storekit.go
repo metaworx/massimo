@@ -23,6 +23,7 @@ import (
 	"log/slog"
 	"path/filepath"
 	"testing"
+	"time"
 
 	"go.metaworx.ch/massimo/internal/store"
 	"go.metaworx.ch/massimo/internal/testkit"
@@ -42,6 +43,16 @@ var quiet = slog.New(slog.DiscardHandler)
 // the file holds, are the template's in every copy.
 func Open(t testing.TB, dir string) *store.Store {
 	t.Helper()
+	return OpenAt(t, dir, nil)
+}
+
+// OpenAt is Open with the store's clock now (nil for the real one), for
+// a test that moves the store's time on where the product counts days
+// from the times it wrote, as the idle limit of API keys does (AP
+// KeyLife, Block 3): a testkit.Clock's Now, moved on by its Add. Only
+// the store's own times follow it; a server's stay the real ones.
+func OpenAt(t testing.TB, dir string, now func() time.Time) *store.Store {
+	t.Helper()
 	if dir == "" {
 		dir = t.TempDir()
 	}
@@ -52,7 +63,7 @@ func Open(t testing.TB, dir string) *store.Store {
 	if err != nil {
 		t.Fatal(err)
 	}
-	st, err := store.Open(dir, store.Options{Version: version, Logger: quiet})
+	st, err := store.Open(dir, store.Options{Version: version, Logger: quiet, Now: now})
 	if err != nil {
 		t.Fatal(err)
 	}

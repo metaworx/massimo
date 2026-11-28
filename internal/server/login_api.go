@@ -19,6 +19,7 @@ import (
 	"io"
 	"maps"
 	"net/http"
+	"regexp"
 	"strconv"
 	"strings"
 	"sync"
@@ -100,6 +101,24 @@ type tokenView struct {
 	// settings file's MASSIMO_API_TOKEN: it is changed or removed in the
 	// file, and the API does not revoke it (settingsKey).
 	FromSettings bool `json:"from_settings,omitempty"`
+	// MadeBy is the API key that made a key, as the bearer of its
+	// POST /api/v1/users/{name}/tokens (AP KeyLife, D5-A), absent for a
+	// key made by a session, the command line, the bootstrap or an
+	// integration's approval, and for a session.
+	MadeBy int64 `json:"made_by,omitempty"`
+	// IdleExempt says an API key is kept from the idle limit (AP KeyLife,
+	// D7-A), the settings file's always (D3-A); absent for one held to it
+	// and for a session.
+	IdleExempt bool `json:"idle_exempt,omitempty"`
+	// IdleEndsAt is when an API key ends unused, its last use or its
+	// making plus the setting auth.key_idle_days; absent where the limit
+	// is off, the key kept from it, and for a session. Each use moves it.
+	IdleEndsAt *time.Time `json:"idle_ends_at,omitempty"`
+	// Ended says why an API key has ended, listed to be revoked: idle,
+	// unused past the limit, or expired, past its end date; absent while
+	// it lives (D6-A). It lives again where the limit is raised or turned
+	// off, or the key kept from it.
+	Ended string `json:"ended,omitempty"`
 }
 
 // meView is the answer of GET /api/v1/me.
@@ -146,8 +165,15 @@ func viewUser(u store.User, invitedBy string) userView {
 		InvitedBy: invitedBy, AuthVersion: u.AuthVersion, CreatedAt: u.CreatedAt, UpdatedAt: u.UpdatedAt, LastLoginAt: optTime(u.LastLoginAt)}
 }
 
+// viewToken is t as the API shows it, its life as the store gave it
+// (store.Token.EndsAt): from Tokens, TokenByHash or SetTokenLife.
 func viewToken(t store.Token) tokenView {
-	return tokenView{ID: t.ID, Kind: t.Kind, Label: t.Label, CreatedAt: t.CreatedAt, ExpiresAt: optTime(t.ExpiresAt), LastUsedAt: optTime(t.LastUsedAt), LastUsedFrom: t.LastUsedFrom, KeyID: t.ParentID}
+	v := tokenView{ID: t.ID, Kind: t.Kind, Label: t.Label, CreatedAt: t.CreatedAt, ExpiresAt: optTime(t.ExpiresAt), LastUsedAt: optTime(t.LastUsedAt), LastUsedFrom: t.LastUsedFrom, KeyID: t.ParentID, MadeBy: t.MadeBy,
+		IdleExempt: t.Kind == store.TokenAPI && (t.IdleExempt || t.SettingsKey), IdleEndsAt: optTime(t.IdleEndsAt)}
+	if t.Ended == store.EndedIdle || t.Ended == store.EndedExpired {
+		v.Ended = t.Ended
+	}
+	return v
 }
 
 // signIns holds the addresses with a login running, so that an address
@@ -220,9 +246,9 @@ type loginRequest struct {
 func (s *Server) loginMode(ctx context.Context) error {
 	switch s.authMode(ctx) {
 	case modeLegacy:
-		return fail(http.StatusConflict, "this server has no store: use the API token")
+		return refuse(http.StatusConflict, codeLoginNoStore)
 	case modeOpen:
-		return fail(http.StatusConflict, "no users yet: create the first owner with POST /api/v1/users, or massimo user add")
+		return refuse(http.StatusConflict, codeLoginNoUsers)
 	}
 	return nil
 }
@@ -246,7 +272,7 @@ func (s *Server) login(w http.ResponseWriter, r *http.Request) error {
 	ip := s.clientIP(r)
 	auditTarget(r, "user:"+name)
 	if !st.PasswordLogin(ctx) {
-		return fail(http.StatusForbidden, "the password sign-in is off on this server; sign in from the web UI, or with an API key")
+		return refuse(http.StatusForbidden, codeLoginPasswordOff)
 	}
 	addrKey, userKey := store.LockoutAddr(ip), store.LockoutUser(name)
 	var started *pendingLogin
@@ -270,7 +296,7 @@ func (s *Server) login(w http.ResponseWriter, r *http.Request) error {
 		case full:
 			return passwordBusy(store.ErrBusy)
 		case !ok:
-			return &httpError{status: http.StatusTooManyRequests, msg: "a sign-in from this address is already running; try again when it is done", retryAfter: 1}
+			return withRetryAfter(refuse(http.StatusTooManyRequests, codeLoginRunning), 1)
 		}
 	}
 	defer s.signIns.release(addrKey)
@@ -289,7 +315,7 @@ func (s *Server) login(w http.ResponseWriter, r *http.Request) error {
 		}
 		auditAction(r, "login.failed")
 		s.logSignIn("login_failed", name, 0, ip)
-		return fail(http.StatusUnauthorized, "wrong user or password")
+		return refuse(http.StatusUnauthorized, codeLoginWrong)
 	}
 	u, ok, err := st.User(ctx, name)
 	if err != nil || !ok {
@@ -316,13 +342,15 @@ func (s *Server) login(w http.ResponseWriter, r *http.Request) error {
 // keys are cleared. An integration's user gets none, by whatever it
 // signed in (noWayIn).
 func (s *Server) openSession(w http.ResponseWriter, r *http.Request, u store.User, label string, extra map[string]any, keys ...string) error {
-	return s.openSessionFrom(w, r, u, 0, label, extra, keys...)
+	return s.openSessionFrom(w, r, u, store.Token{}, label, extra, keys...)
 }
 
 // openSessionFrom is openSession for a session made from the API key
-// keyID, which then names the key and ends the key's earlier session; 0
-// for a sign-in.
-func (s *Server) openSessionFrom(w http.ResponseWriter, r *http.Request, u store.User, keyID int64, label string, extra map[string]any, keys ...string) error {
+// key, the request's bearer as it was let in, which then names the key
+// and ends the key's earlier session; one of ID 0 for a sign-in. The
+// session is made only while the key still holds the secret the request
+// was let in with (store.AddKeySessionAs; AP KeyLife, Block 5).
+func (s *Server) openSessionFrom(w http.ResponseWriter, r *http.Request, u store.User, key store.Token, label string, extra map[string]any, keys ...string) error {
 	ctx := r.Context()
 	st := s.opts.Store
 	ip := s.clientIP(r)
@@ -331,9 +359,9 @@ func (s *Server) openSessionFrom(w http.ResponseWriter, r *http.Request, u store
 	case u.IntegrationID != 0:
 		return noWayIn(u)
 	case u.Disabled:
-		return fail(http.StatusForbidden, "user %s is disabled", u.Name)
+		return refuse(http.StatusForbidden, codeUserAccountDisabled, u.Name)
 	case u.Expired(now):
-		return fail(http.StatusForbidden, "user %s has expired", u.Name)
+		return refuse(http.StatusForbidden, codeUserAccountExpired, u.Name)
 	}
 	label = strings.TrimSpace(label)
 	if label == "" {
@@ -345,18 +373,18 @@ func (s *Server) openSessionFrom(w http.ResponseWriter, r *http.Request, u store
 	var tok store.Token
 	var secret string
 	var err error
-	if keyID != 0 {
-		tok, secret, err = st.AddKeySession(ctx, keyID, label, now.Add(SessionLifetime))
+	if key.ID != 0 {
+		tok, secret, err = st.AddKeySessionAs(ctx, key, label, now.Add(SessionLifetime))
 	} else {
 		tok, secret, err = st.AddToken(ctx, u.ID, store.TokenSession, label, now.Add(SessionLifetime))
 	}
 	if errors.Is(err, store.ErrNoToken) {
-		return fail(http.StatusUnauthorized, "%s", errBadToken.Error()) // the key was revoked meanwhile
+		return refuse(http.StatusUnauthorized, codeTokenWrong) // the key was revoked, or given a new secret, meanwhile: errBadToken's words
 	}
 	if err != nil {
 		return fail(http.StatusInternalServerError, "%v", err)
 	}
-	if err := st.TouchToken(ctx, tok.ID, ip, time.Time{}); err != nil {
+	if err := st.TouchToken(ctx, tok.ID, ip, time.Time{}, ""); err != nil {
 		s.log.Warn("api: session not touched", "error", err)
 	}
 	if err := st.NoteLogin(ctx, u.ID); err != nil {
@@ -400,20 +428,20 @@ func (s *Server) loginKey(w http.ResponseWriter, r *http.Request) error {
 	}
 	p := principalOf(r)
 	if !p.named() {
-		return fail(http.StatusConflict, "no users yet: create the first owner with POST /api/v1/users, or massimo user add")
+		return refuse(http.StatusConflict, codeLoginNoUsers)
 	}
 	auditTarget(r, "user:"+p.user.Name)
 	if p.token.Kind != store.TokenAPI {
 		return fail(http.StatusBadRequest, "the bearer is a session, not an API key: a session is made from a key")
 	}
 	if p.integration != nil {
-		return fail(http.StatusForbidden, "a registered integration's key makes no session")
+		return refuse(http.StatusForbidden, codeLoginIntegrationKey)
 	}
 	var req loginKeyRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil && !errors.Is(err, io.EOF) {
 		return fail(http.StatusBadRequest, "bad body: %v", err)
 	}
-	return s.openSessionFrom(w, r, p.user, p.token.ID, req.Label, nil)
+	return s.openSessionFrom(w, r, p.user, p.token, req.Label, nil)
 }
 
 // logout handles POST /api/v1/logout: the session that made the call
@@ -428,7 +456,7 @@ func (s *Server) logout(w http.ResponseWriter, r *http.Request) error {
 		return fail(http.StatusBadRequest, "the token is an API key, not a session: revoke it under the user's tokens")
 	}
 	auditTarget(r, "user:"+p.user.Name)
-	if err := s.opts.Store.RevokeToken(r.Context(), p.token.ID); err != nil {
+	if _, err := s.opts.Store.RevokeToken(r.Context(), p.token.ID); err != nil {
 		return fail(http.StatusInternalServerError, "%v", err)
 	}
 	s.log.Info("api: logout", "user", p.user.Name, "remote", s.clientIP(r))
@@ -436,42 +464,34 @@ func (s *Server) logout(w http.ResponseWriter, r *http.Request) error {
 	return nil
 }
 
-// settingsKeyKept is the refusal of a revoke of the settings file's key.
-const settingsKeyKept = "the token is the settings file's MASSIMO_API_TOKEN: change or remove it in the settings file"
-
-// settingsKeyHeld is the refusal of the removal of the user that holds
-// the settings file's key, a format with the user's name.
-const settingsKeyHeld = "user %s holds the settings file's MASSIMO_API_TOKEN: change or remove it in the settings file first"
-
-// settingsKey is the live API key that is the settings file's
-// MASSIMO_API_TOKEN, with its user's id, ok false where the file has none
-// or the store holds no live key of it. The store keeps each token's
-// hash, unique, so the hash of the token the server holds from the file
-// (legacyToken, which SetToken follows) finds that one row; its label is
-// no mark, any key may carry it. The API ends that key neither by a
-// revoke (AP MobileApp v1.4, D86-A) nor with its user's removal (D89-A):
-// the next start would not add it back, its hash being taken
-// (store.Bootstrap), so it is changed or removed in the file.
+// settingsKey is the API key that is the settings file's
+// MASSIMO_API_TOKEN, not revoked, whatever else of its life, with its
+// user's id, ok false where the file has none or the store holds no such
+// key of it. The store keeps each token's hash, unique, so the hash of
+// the token the server holds from the file (legacyToken, which SetToken
+// follows) finds that one row (store.KeyByHash); its label is no mark,
+// any key may carry it. The API ends that key neither by a revoke (AP
+// MobileApp v1.4, D86-A) nor with its user's removal (D89-A), nor
+// changes its life (AP KeyLife, D3-A), in any state of it: the next
+// start would not add it back, its hash being taken (store.Bootstrap),
+// so it is changed or removed in the file.
 func (s *Server) settingsKey(ctx context.Context) (store.Token, bool, error) {
 	file := s.legacyToken()
 	if file == "" || s.opts.Store == nil {
 		return store.Token{}, false, nil
 	}
-	tok, ok, err := s.opts.Store.TokenByHash(ctx, store.HashToken(file))
-	if err != nil || !ok || tok.Kind != store.TokenAPI {
-		return store.Token{}, false, err
-	}
-	return tok, true, nil
+	return s.opts.Store.KeyByHash(ctx, store.HashToken(file))
 }
 
 // deleteMyToken handles DELETE /api/v1/me/token: the token that makes the
 // call is revoked, a session or an API key, a key's sessions with it (AP
-// MobileApp, D80-B), so that a client revokes what it holds without its
-// user's name or the token's id, as the apps' login by fingerprint does
-// with the key alone. A caller without a token of a user (an open
-// server, the one token of a server without users) is 400, and so is a
-// call an integration's key makes on a user's behalf, which would revoke
-// the integration's own key in that user's name. The settings file's
+// MobileApp, D80-B) and its heirs, which the answer names as
+// deleteToken's does (AP KeyLife, D5-A), so that a client revokes what
+// it holds without its user's name or the token's id, as the apps' login
+// by fingerprint does with the key alone. A caller without a token of a
+// user (an open server, the one token of a server without users) is 400,
+// and so is a call an integration's key makes on a user's behalf, which
+// would revoke the integration's own key in that user's name. The settings file's
 // token (MASSIMO_API_TOKEN) is 409: the next start would not bring the
 // owner's key back, its hash being taken, so it is changed or removed in
 // the settings file.
@@ -484,16 +504,104 @@ func (s *Server) deleteMyToken(w http.ResponseWriter, r *http.Request) error {
 		return fail(http.StatusBadRequest, "a call on a user's behalf revokes nothing: revoke the integration's key without the %s header", OnBehalfHeader)
 	}
 	if file := s.legacyToken(); file != "" && tokenMatches(file, strings.TrimPrefix(r.Header.Get("Authorization"), "Bearer ")) {
-		return fail(http.StatusConflict, settingsKeyKept)
+		return refuse(http.StatusConflict, codeTokenSettingsKey)
 	}
 	auditTarget(r, "token:"+strconv.FormatInt(p.token.ID, 10))
 	auditSubject(r, tokenSubject(p.token, p.user))
-	if err := s.opts.Store.RevokeToken(r.Context(), p.token.ID); err != nil {
+	heirs, err := s.opts.Store.RevokeToken(r.Context(), p.token.ID)
+	if err != nil {
 		return userFail(err)
 	}
-	s.log.Info("token revoked", "user", s.logUserName(r.Context(), p.user), "token", p.token.ID, "kind", p.token.Kind, "by", "itself", "remote", s.clientIP(r))
-	writeJSON(w, http.StatusOK, map[string]any{"ok": true, "id": p.token.ID})
+	s.revoked(w, r, p.token, p.user, heirs, "user", s.logUserName(r.Context(), p.user), "token", p.token.ID, "kind", p.token.Kind, "by", "itself", "remote", s.clientIP(r))
 	return nil
+}
+
+// revokeCodeRequest is the body of POST /api/v1/tokens/revoke.
+type revokeCodeRequest struct {
+	Code string `json:"code"`
+}
+
+// revokeCodeForm is a revoke code as store.RevokeCode makes it: 64
+// lower-case hex digits.
+var revokeCodeForm = regexp.MustCompile(`^[0-9a-f]{64}$`)
+
+// revokeByCode handles POST /api/v1/tokens/revoke, without a token: the
+// live token whose revoke code the body names is revoked, a key's
+// sessions and heirs with it (AP KeyLife, D5-A), for a client that forgot
+// the token without its server answering (AP MobileApp v1.6, D112-A;
+// docs/app.md). It answers 204 whether the code matched or not, so that
+// it tells nobody which codes are live; a malformed body is 400 with
+// revoke_code_malformed; a locked-out address 429. The settings file's
+// key is left live, as no revoke ends it (settingsKey): the store knows
+// it by the hash its bootstrap last applied, which SetToken follows
+// (store.RevokeByCode). A code never counts toward the lockout,
+// matched or not: one that matches nothing is a code taken already, a
+// token that ended by itself or one the server has not seen since its
+// update, and an app's codes would lock its own address out. A match is
+// a row of the audit, a change line and an Info line, which name the
+// heirs where it took any, as a revoke's do (revoked); anything else is
+// counted per address and minute as a refused request is (quietAudit),
+// since anyone may call it. No row nor line carries the code. A server
+// without a store keeps no token to revoke: 204 at once.
+func (s *Server) revokeByCode(w http.ResponseWriter, r *http.Request) error {
+	st := s.opts.Store
+	if st == nil {
+		w.WriteHeader(http.StatusNoContent)
+		return nil
+	}
+	ctx := r.Context()
+	ip := s.clientIP(r)
+	if err := s.lockedOut(w, ctx, store.LockoutAddr(ip), ""); err != nil {
+		s.quietAudit(r, ip, http.StatusTooManyRequests)
+		return err
+	}
+	var req revokeCodeRequest
+	dec := json.NewDecoder(r.Body)
+	dec.DisallowUnknownFields()
+	if err := dec.Decode(&req); err != nil || !revokeCodeForm.MatchString(req.Code) {
+		s.quietAudit(r, ip, http.StatusBadRequest)
+		return refuse(http.StatusBadRequest, codeRevokeCodeMalformed)
+	}
+	tok, heirs, ok, err := st.RevokeByCode(ctx, req.Code)
+	if err != nil {
+		return userFail(err)
+	}
+	if !ok {
+		s.quietAudit(r, ip, http.StatusNoContent)
+		w.WriteHeader(http.StatusNoContent)
+		return nil
+	}
+	// The token is revoked: its user is read for the row and the line
+	// even where the client went away meanwhile.
+	u, _, err := st.UserByID(context.WithoutCancel(ctx), tok.UserID)
+	if err != nil {
+		s.log.Warn("api: user of a token revoked by code not read", "token", tok.ID, "error", err)
+	}
+	auditTarget(r, "token:"+strconv.FormatInt(tok.ID, 10))
+	subject := tokenSubject(tok, u)
+	line := []any{"user", s.logUserName(ctx, u), "token", tok.ID, "kind", tok.Kind, "by", "code", "remote", ip}
+	if len(heirs) > 0 {
+		line = append(line, "heirs", heirs)
+		subject["heirs"] = heirs
+	}
+	auditSubject(r, subject)
+	s.log.Info("token revoked", line...)
+	w.WriteHeader(http.StatusNoContent)
+	return nil
+}
+
+// quietAudit takes a request out of the audit's rows of their own and
+// counts it per address and minute as a refused request is
+// (refusalAudit), in rows apart from the other refused requests, with no
+// change line: a revoke by code that matched no token that may be
+// revoked, or was refused.
+func (s *Server) quietAudit(r *http.Request, ip string, status int) {
+	a := auditOf(r)
+	if a == nil {
+		return
+	}
+	a.skip = true
+	s.codeRefusals.note(r, a.pattern, a.action, ip, status)
 }
 
 // me handles GET /api/v1/me.
@@ -537,7 +645,21 @@ func (s *Server) meOf(r *http.Request, p *principal) (meView, error) {
 	}
 	u := viewUser(p.user, invitedBy)
 	u.Display, u.Integration = userDisplay(ctx, st.Namer(), p.user)
-	tok := viewToken(p.token)
+	// The token as this request leaves it: the row it was let in with is
+	// the one before its use was written (touch), so a key's idle end
+	// would count from its use before, days old maybe (AP KeyLife, Block
+	// 3). It is read again only while it holds the secret the request was
+	// let in with (TokenAliveAs, Block 5), so that a request carrying a
+	// key's old secret never shows the row of its new one; one ended or
+	// given a new secret in between is shown as it was let in.
+	cur, ok, err := st.TokenAliveAs(ctx, p.token)
+	if err != nil {
+		return me, fail(http.StatusInternalServerError, "%v", err)
+	}
+	if !ok {
+		cur = p.token
+	}
+	tok := viewToken(cur)
 	// The role's set with what it includes, as every check takes it
 	// (principal.has).
 	me.User, me.Role, me.Capabilities, me.Token = &u, &roleRef{Key: role.Key, Name: role.Name, Disabled: role.Disabled}, heldCaps(setOf(caps), setOf(off)), &tok

@@ -5,8 +5,8 @@
 `update` and `reboot` each include `restart`, since each restarts the server:
 their holder passes every check of `restart` as a holder of `restart` does,
 and `GET /api/v1/me` lists `restart` beside them.
-`backup.server` includes `backup.retry` alike:
-who makes, pushes and pulls the server's backups sees their state and retries one.
+`backup.server` includes `backup.retry` alike: who makes,
+pushes and pulls the server's backups sees their state and retries one.
 The include is taken at the check, on the set the bounds leave
 (the role's set less the capabilities disabled for every role,
 an integration's ceiling and maximum, a call's level):
