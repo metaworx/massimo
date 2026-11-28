@@ -48,7 +48,9 @@ class OriginsTest {
         val connect = listOf("servers", "save", "remove", "discover", "probe", "trust", "open", "forget", "forgetAll")
         // contract version 3: the sessions the app holds, and its settings
         val v3 = listOf("session", "signOut", "signOutAll", "settings", "saveSettings")
-        for (call in connect + v3) {
+        // contract version 7: the app's version, Exit and Store login (AP MobileApp, Block 19)
+        val v7 = listOf("about", "exit", "keep")
+        for (call in connect + v3 + v7) {
             assertTrue(call, Origins.allowed(Caller.CONNECT, call))
             assertFalse(call, Origins.allowed(Caller.SERVER, call))
         }

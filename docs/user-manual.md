@@ -10,18 +10,22 @@ and how the apps work inside in [app.md](app.md).
 
 The Massimo app opens on its list of servers,
 or straight on the server you chose to open at start.
+The servers are in the order of their names.
 Each server in the list says whether the app reaches it
 (on the LAN, remote, not reachable, or a changed certificate)
 and, in green, who you are signed in as there.
 Touch a server to open it; ⚙, or a long press, opens its settings.
+Pull the list down to check every server again, as ↻ does.
+**Back** closes an open menu or panel first; from the bare list it leaves the app.
 Where the app keeps a login by fingerprint for a server,
 touching it asks for your fingerprint first (below),
 and the sign-in icon beside it opens its sign-in form straight away.
 
 ### The list's menu
 
-**☰**, at the top of the list, holds:
+**☰**, at the top right, beside Massimo's logo, holds:
 
+- the app's version: touch it to copy it.
 - **Add server…**, which shows the card to add one:
   the servers the app finds on your network, and a field for an address.
   The card closes once a server is added, or with **×**.
@@ -30,7 +34,9 @@ and the sign-in icon beside it opens its sign-in form straight away.
 - **Forget all stored credentials**, where a server keeps a login by
   fingerprint; it asks first, under the list,
   and turns every such login off (below).
-- **App settings…**, below.
+- **App settings**, below.
+- **Exit**, which closes the app as swiping it away from the recent apps does:
+  the sessions it held only in memory end at the next start.
 
 ### A server's settings
 
@@ -48,6 +54,8 @@ on the list, and **App settings…** the app's own.
   When the server does not answer, the app shows the list.
 - **Signed in as …** and **Sign out**, where the app is signed in there:
   Sign out ends that session on the server and on the phone.
+  **Store login**, where you signed in without the login by fingerprint,
+  keeps it now: the phone asks for your fingerprint once.
   While the server does not answer, the list's "signed in as …" is grey,
   and the line says that Sign out ends the session there
   the next time the app reaches the server.
@@ -73,6 +81,8 @@ on the list, and **App settings…** the app's own.
   or because a certificate authority the phone knows signed it.
 - **Remove server**, at the foot of the settings under **Cancel** and **Save**,
   takes the server off the list; below.
+
+**Back** with changes not saved asks first: **Discard** them, or **Stay**.
 
 ### App settings
 

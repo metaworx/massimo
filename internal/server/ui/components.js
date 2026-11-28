@@ -559,12 +559,14 @@ function confirmBox(text, { yes, no }, onYes, onNo) {
 // confirmInPlace asks in place of a row of actions, as a panel's Remove
 // does: the question takes the row's place, Yes runs onYes (which
 // returns the removal's promise, see confirmBox), and No and Escape put
-// the row back with the focus on the element of focusSelector in it.
-function confirmInPlace(actions, text, labels, onYes, focusSelector) {
+// the row back with the focus on the element of focusSelector in it,
+// then tell onNo, where given.
+function confirmInPlace(actions, text, labels, onYes, focusSelector, onNo) {
   const box = confirmBox(text, labels, onYes, () => {
     box.replaceWith(actions);
     const el = focusSelector && actions.querySelector(focusSelector);
     if (el) el.focus();
+    if (onNo) onNo();
   });
   actions.replaceWith(box);
   box.focusFirst();

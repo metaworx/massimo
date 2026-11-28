@@ -46,9 +46,10 @@ object Origins {
         return url.substring(0, at)
     }
 
+    // about, exit and keep (contract version 7): the app's version, Exit, and Store login in a server's settings (AP MobileApp, Block 19)
     private val connectCalls = setOf(
         "hello", "servers", "save", "remove", "discover", "probe", "trust", "open", "forget", "forgetAll",
-        "session", "signOut", "signOutAll", "settings", "saveSettings",
+        "session", "signOut", "signOutAll", "settings", "saveSettings", "about", "exit", "keep",
     )
     // openServerSettings and openAppSettings (contract version 5) hand over to the connect page, as connect does: the server's
     // page passes no id and reads nothing of them (AP MobileApp, D73-A)

@@ -2279,11 +2279,19 @@ massimo-week-program { display: contents; }
 .dev-last { margin-bottom: 10px; }
 
 /* The apps' connect page (connect.html, connect.js, docs/app.md): the
-   servers, each a row whose wide button opens it, its name, its address
-   and what the probe found, the cog its settings under it; the servers
-   found on the network; the address to add; the fingerprint sheet. A
-   reading width, phone first. */
-.connect-main { display: grid; gap: 16px; max-width: 640px; }
+   list's ☰ in the header at the logo's right, where a server's page has
+   its ☰; the servers, each a row whose wide button opens it, its name,
+   its address and what the probe found, the cog its settings under it;
+   the servers found on the network; the address to add; the fingerprint
+   sheet. The page's full width, up to a server's page's 1100 px (AP
+   MobileApp, D92-A), phone first. */
+.connect-top > .brand { flex: 0 1 auto; margin-right: auto; }
+.connect-main { display: grid; gap: 16px; max-width: 1100px; }
+/* the ☰'s first row, the app's version (connect.js initVersion), with its
+   copy icon at the row's end */
+.servers-menu .menu-version { margin: 2px 4px 0 10px; }
+.servers-menu .menu-version #menu-version { min-width: 0; overflow-wrap: anywhere; }
+.servers-menu .menu-version button.copy-icon { margin-left: auto; padding: 0; }
 .notice a { color: inherit; font-weight: 600; }
 .connect-sub { font-size: 0.95rem; font-weight: 600; margin: 0 0 6px; }
 .server-list, .found-servers { list-style: none; margin: 0; padding: 0; display: grid; gap: 8px; }
@@ -2305,7 +2313,7 @@ massimo-week-program { display: contents; }
 /* a server's lines in its settings: the login kept, the session, the
    certificate, each with its button */
 .server-login-kept, .server-fact { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin: 0 0 12px; overflow-wrap: anywhere; }
-/* the list's ☰ in the card's head, its items dropping down from it */
+/* the list's ☰ in the header, its items dropping down from it */
 .menu.nav-menu.servers-menu { position: relative; flex: none; }
 .servers-ask:not(:empty) { margin-top: 10px; }
 .cert-value { overflow-wrap: anywhere; }

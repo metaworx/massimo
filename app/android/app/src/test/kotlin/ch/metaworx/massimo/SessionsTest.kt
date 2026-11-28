@@ -19,6 +19,7 @@ import java.net.InetAddress
 import java.net.InetSocketAddress
 import java.net.ServerSocket
 import java.security.cert.CertificateException
+import java.util.concurrent.atomic.AtomicBoolean
 
 /**
  * The sessions the app holds (docs/app.md, contract version 3) against a
@@ -311,6 +312,29 @@ class SessionsTest {
         val left = KeysLeft(servers, logins, api, logged::add)
         val s = servers.save(org.json.JSONObject().put("name", "Home").put("node", "node-a").put("lan", fake.base))
         test(fake, servers, Sessions(keeper, logins, api, { urls, _ -> urls.map { ProbeResult(it, ok = false) } }, left, logged::add), s)
+    }
+
+    @Test
+    fun aCheckTheListsExitStoppedWritesAndRevokesNothing() {
+        // AP MobileApp, Block 19 (D91-A): a check asked for just before Exit, its answer coming after it,
+        // writes no check nor record as held and revokes no key left; once stopped, a check asks nothing
+        FakeServer().use { fake ->
+            val servers = ServerStore(File(tmp.root, "servers.json"))
+            val left = KeysLeft(servers, logins, api, logged::add)
+            val s = servers.save(org.json.JSONObject().put("name", "Home").put("node", "node-a").put("lan", fake.base))
+            val exited = AtomicBoolean(false)
+            val st = Sessions(keeper, logins, api, { urls, _ -> urls.map { ProbeResult(it, ok = false) } }, left, logged::add, Checks(), exited::get)
+            st.put(s, "session-anna")
+            servers.leave(s.id, "anna", 42) // a key left there, which a check of anna's session revokes
+            fake.onRequest = { if (it.startsWith("GET /api/v1/me ")) exited.set(true) }
+            assertNull(st.check(s, fake.base))
+            assertNull("no record as held", servers.get(s.id)!!.held)
+            assertNull("no check kept", st.user(s))
+            assertEquals("the key left still left", 1, servers.get(s.id)!!.unrevoked.size)
+            assertEquals("nothing but the check's own request: ${fake.requests()}", 1, fake.requests().size)
+            assertNull(st.check(s, fake.base))
+            assertEquals("stopped: nothing asked", 1, fake.requests().size)
+        }
     }
 
     @Test

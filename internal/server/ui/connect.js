@@ -2,19 +2,23 @@
 // Copyright (C) 2026 The Massimo Authors
 
 // The Massimo apps' connect page (connect.html, docs/app.md): the
-// servers the app keeps, each probed at its LAN and its remote address,
-// marked where the app holds a session, and opened in the app by a tap,
-// the app asking for the fingerprint first where a login is kept;
-// the list's ☰ (Add server…, Sign out of all, Forget all stored
-// credentials, App settings…); the servers discovery finds and an address
+// servers the app keeps, sorted by the name shown, each probed at its LAN
+// and its remote address, marked where the app holds a session, and
+// opened in the app by a tap, the app asking for the fingerprint first
+// where a login is kept; the list's ☰ in the header (the app's version,
+// Add server…, Sign out of all, Forget all stored credentials, App
+// settings, Exit); the servers discovery finds and an address
 // typed, probed before they are added, in a card shown while the list is
 // empty or from the ☰; the fingerprint sheet of a self-signed
 // certificate; a server's settings with Open at start, its session, its
-// certificate, its login by fingerprint and the keys and sessions of the
-// phone's left valid there, and the row's sign-in icon that opens its
-// sign-in card; the app's
+// certificate, its login by fingerprint with Store login, and the keys and
+// sessions of the phone's left valid there, and the row's sign-in icon
+// that opens its sign-in card; the app's
 // own settings, its appearance; a server's settings or App settings open at
-// the start where a server's ☰ asked for them; the server on the phone where the app has
+// the start where a server's ☰ asked for them; Back, which closes the open
+// menu, then the open panel, through a history entry of the page's own;
+// a pull down in the app, which checks every server again as ↻ does; the
+// server on the phone where the app has
 // it built in; what an action came to, in the page's toast. Everything
 // goes through the app's bridge, window.massimo, whose calls answer with
 // promises and whose events arrive as "massimo" events on window; a
@@ -61,8 +65,30 @@ const conn = {
   open: null, // the id of the server whose settings are open
   opening: false, // a server being opened, its prompt perhaps shown (openServer)
   panel: null, // their form
+  fields: null, // its fields, {name, lan, remote, start, ask, push} (connectionDiffers)
+  discard: null, // the question of settings with changes, while it is asked (closeSettingsAsked)
+  panels: [], // the panels open, "settings", "add" or "app", the one opened last at the end (closeTop)
+  can: true, // the phone has a strong biometric enrolled, as about() said (Store login)
   toastServer: null, // the id of the server the toast says does not answer (say)
 };
+
+// BACK_READY_MS is how long after the page's load the page waits before
+// its first history entry, so that the app's forgetting of the pages
+// before the list (MainActivity onPageFinished, clearHistory) is done.
+const BACK_READY_MS = 500;
+
+// BACK_MS is how long a take-back of the page's history entry waits for
+// its popstate before it ends all the same: there may be no entry left.
+const BACK_MS = 1000;
+
+// back is the page's own history entry (AP MobileApp, Block 19): one
+// while a menu or a panel is open, so that the app's Back reaches the
+// page as a popstate, which closes it (onPopState); none while nothing is
+// open, so that Back leaves the app. entry: it is there; leaving: a
+// take-back of it runs; ask: the question that Back asked, during which
+// there is none; ready: the page may push one; touch: it waits for the
+// user's first touch (awaitTouch).
+const back = { entry: false, leaving: false, ask: null, ready: false, timer: null, touch: false };
 
 // theBridge is the app's bridge on this page, null in a browser.
 function theBridge() {
@@ -314,6 +340,21 @@ function stateBadge(state) {
 // "The login by fingerprint"), "start" the app's default.
 const ASKS = ["return", "start", "logout"];
 
+// shownName is the name a server is shown by: its name, else the host of
+// its address.
+function shownName(s) {
+  return s.name || hostOf(s.lan || s.remote);
+}
+
+// byName are the servers in the order the list shows them (AP MobileApp,
+// D95-A): by the name shown, in the collation of the page's language, case
+// and accents ignored and numbers by their value, "server 9" before
+// "server 10"; the order the app keeps them in stays as it is.
+function byName(servers) {
+  const c = new Intl.Collator(i18n.lang, { sensitivity: "base", numeric: true });
+  return [...servers].sort((a, b) => c.compare(shownName(a), shownName(b)));
+}
+
 // serverRow is a server's row, wired by its id: a tap opens the server,
 // the app asking for the fingerprint first where a login is kept, as its
 // rule says (open, contract version 5); the sign-in icon, where a login is
@@ -355,7 +396,7 @@ function shownDown(p) {
 // is grey while the server is shown down (shownDown).
 function fillRow(li, s) {
   const p = conn.probes[s.id] || { state: "probing" };
-  const name = s.name || hostOf(s.lan || s.remote);
+  const name = shownName(s);
   li.querySelector(".server-name").textContent = name;
   showWhere(li.querySelector(".server-where"), hostOf(p.url || s.lan || s.remote), name);
   const badges = li.querySelector(".server-badges");
@@ -376,23 +417,26 @@ function fillRow(li, s) {
 
 // renderMenu shows the ☰'s entries that do something: Sign out of all
 // where there is a server, Forget all stored credentials where a login
-// is kept, App settings where the app has them.
+// is kept, App settings and Exit where the app has them, the rule before
+// them with them.
 function renderMenu() {
   const any = conn.servers.length > 0;
   $("menu-sign-out-all").classList.toggle("hidden", !(any && can("signOutAll")));
   $("menu-forget-all").classList.toggle("hidden", !conn.servers.some((s) => s.login));
   $("menu-app").classList.toggle("hidden", !can("settings"));
-  $("menu-app-sep").classList.toggle("hidden", !can("settings"));
+  $("menu-exit").classList.toggle("hidden", !can("exit"));
+  $("menu-app-sep").classList.toggle("hidden", !can("settings") && !can("exit"));
 }
 
-// renderServers brings the list up to date row by row, so that a probe
-// that answers keeps the focus and what is typed in the settings; then
-// the ☰ and the Add card.
+// renderServers brings the list up to date row by row, in the order of
+// the names shown (byName), so that a probe that answers keeps the focus
+// and what is typed in the settings; then the ☰ and the Add card, and the
+// page's history entry (syncBack).
 function renderServers() {
   const list = $("server-list");
   const rows = new Map([...list.children].map((li) => [li.dataset.id, li]));
   let prev = null;
-  for (const s of conn.servers) {
+  for (const s of byName(conn.servers)) {
     let li = rows.get(s.id);
     rows.delete(s.id);
     if (!li) li = serverRow(s.id);
@@ -405,6 +449,7 @@ function renderServers() {
   $("servers-empty").classList.toggle("hidden", conn.servers.length > 0);
   renderMenu();
   renderAdd();
+  syncBack();
 }
 
 // openServer opens a server in the app at the address its probe found,
@@ -463,10 +508,70 @@ async function openServer(id, opts, hash) {
 // not their name's field, so that a phone's keyboard stays closed until
 // a field is touched.
 function toggleSettings(id) {
-  conn.open = conn.open === id ? null : id;
-  conn.panel = conn.open ? settingsPanel(serverById(conn.open)) : null;
+  if (!id || conn.open === id) settingsClosed();
+  else {
+    conn.open = id;
+    conn.panel = settingsPanel(serverById(id));
+    panelShown("settings", true);
+    askCan();
+  }
   renderServers();
   if (conn.panel) conn.panel.focus();
+}
+
+// settingsClosed notes that the open settings are gone, closed, or their
+// server saved or removed: none open, and the page's history entry
+// brought up to date (panelShown), so that Back does not reach them.
+function settingsClosed() {
+  conn.open = null;
+  conn.panel = null;
+  conn.fields = null;
+  panelShown("settings", false);
+}
+
+// closeSettings closes the open settings without asking, the focus on
+// their server's cog.
+function closeSettings() {
+  const id = conn.open;
+  if (!id) return;
+  toggleSettings(id);
+  const cog = document.querySelector(`.server-row[data-id="${CSS.escape(id)}"] .server-cog`);
+  if (cog) cog.focus();
+}
+
+// connectionDiffers reports whether the open settings' fields differ from
+// what the app keeps of the server s, field by field (AP MobileApp, D93-A).
+function connectionDiffers(s) {
+  const f = conn.fields;
+  if (!f || !s) return false;
+  const on = (sw) => sw.querySelector("input").checked;
+  return f.name.value.trim() !== (s.name || "") || f.lan.value.trim() !== (s.lan || "") || f.remote.value.trim() !== (s.remote || "") ||
+    on(f.start) !== !!s.start || f.ask.value !== (ASKS.includes(s.ask) ? s.ask : "start") || (!!f.push && on(f.push) !== !!s.push);
+}
+
+// closeSettingsAsked closes the open settings as Back does (viaBack),
+// asking once where their fields differ from what is kept, in place of
+// Cancel and Save, the focus on the question (D93-A): Discard closes them,
+// Stay keeps them, and the page's history entry, which Back took, is
+// there again. A question asked already takes the focus again.
+function closeSettingsAsked(viaBack) {
+  const s = serverById(conn.open);
+  if (!s || !conn.panel || !connectionDiffers(s)) {
+    closeSettings();
+    return;
+  }
+  if (conn.discard && conn.discard.isConnected) {
+    if (viaBack) back.ask = conn.discard;
+    conn.discard.focusFirst();
+    return;
+  }
+  const actions = conn.panel.querySelector(":scope > .actions");
+  conn.discard = confirmInPlace(actions, t("connect.discardQuestion", { name: shownName(s) }), { yes: t("connect.discard"), no: t("leave.stay") },
+    () => closeSettings(), "button[type=submit]", () => {
+      back.ask = null;
+      syncBack();
+    });
+  if (viaBack) back.ask = conn.discard;
 }
 
 function addressInput(value) {
@@ -482,8 +587,9 @@ function addressInput(value) {
 
 // settingsPanel is a server's settings: its name, its two addresses,
 // Open at start, when the fingerprint is asked, its session with Sign
-// out, its certificate and the keys and sessions left valid there (fillFacts), the
-// login by fingerprint kept with its user, its key's id, and Turn off, notifications
+// out, the login by fingerprint kept with its user, its key's id, and
+// Turn off, or Store login, its certificate and the keys and sessions left
+// valid there (fillFacts), notifications
 // where the app has push, Cancel and Save, and under them, after a rule,
 // Remove server with a line that says what it does, whose question warns
 // of a key or a session left.
@@ -531,18 +637,10 @@ function settingsPanel(s) {
     fieldRow(t("connect.ask"), ask, { wide: true, hint: t("connect.askHint") }),
     facts,
   );
-  fillFacts(form, s);
-  if (s.login) {
-    const off = button(t("connect.loginOff"), "server-login-off", () => turnOff(s.id, off, msg));
-    // the kept key's id whenever the app knows it (login_key, contract version 5; AP MobileApp, D66-A)
-    const key = Number.isInteger(s.login_key) && s.login_key > 0 && s.login_key <= MAX_KEY_ID ? s.login_key : 0;
-    const kept = textEl("p", key ? t("connect.loginKeptKey", { name: s.login, id: key }) : t("connect.loginKept", { name: s.login }), "server-login-kept");
-    kept.append(" ", off);
-    form.append(kept);
-  }
   if (push) form.append(fieldRow("", push));
   form.append(msg, formFooter({ submit: t("action.save"), cancel: () => toggleSettings(null) }), removeBox);
-  fillRemove(form, s);
+  conn.fields = { name, lan, remote, start, ask, push };
+  fillFacts(form, s);
   return form;
 }
 
@@ -581,8 +679,7 @@ async function saveSettings(id, form, f) {
   } catch (e) {
     return showResult(f.msg, t("connect.saveFailed", { error: e.message }), false);
   }
-  conn.open = null;
-  conn.panel = null;
+  settingsClosed();
   say(t("connect.saved", { name }));
   probeServer(serverById(id));
 }
@@ -615,10 +712,21 @@ function hasPending(s) {
   return keysLeft(s).some((k) => k.pending === true) || sessionsLeft(s).some((x) => x.pending === true);
 }
 
+// storesLogin reports whether a server's settings offer Store login (AP
+// MobileApp, Block 19): the app holds a session there and keeps no login,
+// and its bridge has keep (contract version 7); where the phone has no
+// strong biometric enrolled (about's can) it is shown, off, its title
+// saying so (showsKeys).
+function storesLogin(s) {
+  return can("keep") && !!s.session && !s.login;
+}
+
 // fillFacts writes what a server's open settings say of it as it stands,
 // under its choices: the session the app holds there, with Sign out,
 // which says while the server does not answer that Sign out ends it there
-// the next time the app reaches the server (F42, D105-A), the
+// the next time the app reaches the server (F42, D105-A), the login by
+// fingerprint kept there, with its user, its key's id and Turn off, or,
+// where the app holds a session and keeps no login, Store login, the
 // certificate the probe found at the address in use, with Certificate…,
 // each key of the phone's left valid there, with Show in My profile,
 // which opens the server's page at My profile with that key marked, off
@@ -629,8 +737,8 @@ function hasPending(s) {
 // where it changed, whether the server is shown down among it (shownDown,
 // which a probe still running leaves as it was), which over plain HTTP
 // nothing else in it tells, so that a probe that answers keeps the focus,
-// the buttons Show in My profile turned on and off in place; and what
-// Remove does (fillRemove).
+// the buttons Show in My profile and Store login turned on and off in
+// place; and what Remove does (fillRemove).
 function fillFacts(form, s) {
   fillRemove(form, s);
   const box = form.querySelector(".server-facts");
@@ -641,17 +749,30 @@ function fillFacts(form, s) {
   const left = keysLeft(s);
   const unended = sessionsLeft(s);
   const down = shownDown(p);
-  const key = JSON.stringify([s.session || "", down, cert && cert.fingerprint, cert && cert.not_after, cert && p.url, left, unended]);
+  const msg = () => form.querySelector(".server-msg");
+  const key = JSON.stringify([s.session || "", s.login || "", s.login_key || 0, storesLogin(s), down, cert && cert.fingerprint, cert && cert.not_after,
+    cert && p.url, left, unended]);
   if (box.dataset.key === key) {
-    showsKeys(box, answers);
+    showsKeys(box, p);
     return;
   }
   box.dataset.key = key;
   clear(box);
   if (s.session) {
-    const out = button(t("connect.signOut"), "server-sign-out", () => signOut(s.id, out, form.querySelector(".server-msg")));
+    const out = button(t("connect.signOut"), "server-sign-out", () => signOut(s.id, out, msg()));
     const line = down ? t("connect.sessionDown", { name: s.session }) : t("connect.sessionLine", { name: s.session });
     box.appendChild(elem("p", "server-fact server-session", line, " ", out));
+  }
+  if (s.login) {
+    const off = button(t("connect.loginOff"), "server-login-off", () => turnOff(s.id, off, msg()));
+    // the kept key's id whenever the app knows it (login_key, contract version 5; AP MobileApp, D66-A)
+    const id = Number.isInteger(s.login_key) && s.login_key > 0 && s.login_key <= MAX_KEY_ID ? s.login_key : 0;
+    const text = id ? t("connect.loginKeptKey", { name: s.login, id }) : t("connect.loginKept", { name: s.login });
+    box.appendChild(elem("p", "server-login-kept", text, " ", off));
+  }
+  if (storesLogin(s)) {
+    const store = button(t("connect.storeLogin"), "server-store-login", () => storeLogin(s.id, store, msg()));
+    box.appendChild(elem("p", "server-fact server-store", store));
   }
   if (cert) {
     const line = t("connect.certLine", { name: commonName(cert.subject) || hostOf(p.url), until: fmtDay(cert.not_after) });
@@ -669,18 +790,58 @@ function fillFacts(form, s) {
     box.appendChild(elem("p", "server-fact server-session-left", text));
   }
   box.classList.toggle("hidden", !box.firstChild);
-  showsKeys(box, answers);
+  showsKeys(box, p);
 }
 
 // showsKeys turns each Show in My profile of the open settings on where
 // the server answers, else off with its title saying why: the page it
-// opens is the server's (AP MobileApp, F33).
-function showsKeys(box, answers) {
+// opens is the server's (AP MobileApp, F33); and Store login so, which is
+// also off where the phone has no strong biometric enrolled (conn.can)
+// and at an address of plain HTTP outside the home network, where the
+// app sends no kept key (D36-A), its title saying what it does where it
+// is on.
+function showsKeys(box, p) {
+  const answers = p.state === "lan" || p.state === "remote";
   const why = answers ? "" : t("connect.keyLeftShowOff");
   for (const b of box.querySelectorAll(".server-key-show")) {
     setOff(b, !answers);
     if (b.title !== why) b.title = why;
   }
+  const store = box.querySelector(".server-store-login");
+  if (store) {
+    const plain = answers && plainOutside(p.url);
+    let title = t("connect.storeLoginTitle");
+    if (!conn.can) title = t("connect.storeLoginNoBiometric");
+    else if (!answers) title = why;
+    else if (plain) title = t("connect.storeLoginPlain");
+    setOff(store, !conn.can || !answers || plain);
+    if (store.title !== title) store.title = title;
+  }
+}
+
+// storeLogin keeps the login by fingerprint for the session the app holds
+// at a server (keep, contract version 7; AP MobileApp, Block 19), at the
+// address the probe found: the app makes a key of the session's user with
+// it and asks for the fingerprint once, as a server's page's sign-in that
+// keeps the login does; a prompt not passed revokes the key again. The
+// list read again shows the login kept; the toast says how it went, and a
+// failure is said in the settings.
+async function storeLogin(id, btn, msg) {
+  const s = serverById(id);
+  const p = conn.probes[id] || {};
+  if (!s || !(p.state === "lan" || p.state === "remote")) return;
+  let kept;
+  try {
+    kept = await whileBusy(btn, () => conn.bridge.keep(id, p.url));
+  } catch (e) {
+    showResult(msg, t("login.keepError", { error: e.message }), false);
+    return;
+  }
+  if (kept === undefined) return; // a second tap while the first runs
+  await loadServers();
+  renderServers();
+  if (kept === true) say(t("connect.storeLoginDone", { name: shownName(s) }));
+  else say(t("login.keepFailed"), { bad: true });
 }
 
 // signOut signs the app out of a server, at the address the probe chose
@@ -775,7 +936,8 @@ function showCert(id) {
 // revokes the key at the address the probe chose, with the session the
 // app holds there or with the key itself after the fingerprint, and
 // signs the app out there); the open settings lose its line and the
-// session's and keep what is typed in them, and the toast says whether
+// session's, drawn again from the list read again (fillFacts), and keep
+// what is typed in them, and the toast says whether
 // the server revoked the key, or whether this Turn off left it, to revoke
 // at the next sign-in there (`left`, contract version 4), or by its revoke
 // code the next time the app reaches the server (`pending`, version 6).
@@ -791,7 +953,6 @@ async function turnOff(id, btn, msg) {
     return;
   }
   await loadServers();
-  dropLoginLine();
   renderServers();
   const name = s ? s.name : "";
   if (res && res.revoked) say(t("connect.loginOffDone", { name }));
@@ -800,16 +961,8 @@ async function turnOff(id, btn, msg) {
   else say(t("connect.loginOffLocal", { name }));
 }
 
-// dropLoginLine takes the line of a kept login out of the open settings
-// once the app forgot it, so that what is typed in them stays.
-function dropLoginLine() {
-  const s = conn.open && serverById(conn.open);
-  const line = conn.panel && conn.panel.querySelector(".server-login-kept");
-  if (line && !(s && s.login)) line.remove();
-}
-
-// menuButton is the summary of the Servers card's ☰, where the focus
-// goes back to once what it opened is done.
+// menuButton is the summary of the list's ☰, in the header, where the
+// focus goes back to once what it opened is done.
 function menuButton() {
   return $("servers-menu").querySelector("summary");
 }
@@ -861,13 +1014,11 @@ function forgetAll() {
     } catch (e) {
       // some may be off already: the list as it stands
       await loadServers();
-      dropLoginLine();
       renderServers();
       say(t("connect.loginOffFailed", { error: e.message }), { bad: true });
       return;
     }
     await loadServers();
-    dropLoginLine();
     renderServers();
     if (!res || !Array.isArray(res.revoked) || !Array.isArray(res.left) || !Array.isArray(res.local)) {
       say(t("connect.forgotAllPhone"));
@@ -909,8 +1060,7 @@ async function removeServer(id, msg) {
   }
   conn.servers = conn.servers.filter((x) => x.id !== id);
   delete conn.probes[id];
-  conn.open = null;
-  conn.panel = null;
+  settingsClosed();
   renderServers();
   const name = s ? s.name || hostOf(s.lan || s.remote) : "";
   const ids = (list) => (Array.isArray(list) ? list.filter((k) => Number.isInteger(k) && k > 0 && k <= MAX_KEY_ID) : []);
@@ -941,6 +1091,7 @@ function renderAdd() {
 // stays closed until the field is touched.
 function openAdd() {
   conn.adding = true;
+  panelShown("add", true);
   renderAdd();
   const card = $("add");
   card.focus({ preventScroll: true });
@@ -953,6 +1104,7 @@ function openAdd() {
 function closeAdd(refocus) {
   conn.adding = false;
   showResult($("add-msg"), "", false);
+  panelShown("add", false);
   renderAdd();
   if (refocus && conn.servers.length) menuButton().focus();
 }
@@ -978,7 +1130,8 @@ function applyAppearance(a) {
 function openApp() {
   const card = $("app-card");
   card.classList.remove("hidden");
-  history.replaceState(null, "", location.pathname + location.search + APP_HASH);
+  history.replaceState(history.state, "", location.pathname + location.search + APP_HASH);
+  panelShown("app", true);
   card.focus({ preventScroll: true });
   card.scrollIntoView({ block: "nearest" });
 }
@@ -986,7 +1139,8 @@ function openApp() {
 function closeApp() {
   $("app-card").classList.add("hidden");
   showResult($("app-msg"), "", false);
-  history.replaceState(null, "", location.pathname + location.search);
+  history.replaceState(history.state, "", location.pathname + location.search);
+  panelShown("app", false);
   menuButton().focus();
 }
 
@@ -1025,19 +1179,213 @@ async function initApp() {
   if (location.hash === APP_HASH) openApp();
 }
 
-// initMenu makes the Servers card's ☰ a dropdown of the page (dropdown,
-// components.js) and wires its entries.
+// initMenu shows the list's ☰ in the header, makes it a dropdown of the
+// page (dropdown, components.js) and wires its entries.
 function initMenu() {
   const menu = $("servers-menu");
+  menu.classList.remove("hidden");
   dropdown(menu);
   menuArrows(menu, ".menu-items button:not(.hidden)");
   $("menu-add").addEventListener("click", openAdd);
   $("menu-sign-out-all").addEventListener("click", signOutAll);
   $("menu-forget-all").addEventListener("click", forgetAll);
   $("menu-app").addEventListener("click", openApp);
+  $("menu-exit").addEventListener("click", exitApp);
   $("add-close").addEventListener("click", () => closeAdd(true));
   $("app-close").addEventListener("click", closeApp);
   $("app-appearance").addEventListener("change", saveAppearance);
+}
+
+// initVersion fills the ☰'s first row where the bridge gives the app's
+// version (about, contract version 7), and notes whether the phone has a
+// strong biometric enrolled (its can, conn.can): Massimo's mark, the version and
+// its copy icon; a tap on either copies the whole version (copied, as
+// every copy goes) and closes the ☰, the focus back on its summary. No
+// row where the bridge has no about, or it gives no version.
+async function initVersion() {
+  if (!can("about")) return;
+  let v = "";
+  try {
+    const a = (await conn.bridge.about()) || {};
+    v = typeof a.version === "string" ? a.version.trim() : "";
+    conn.can = a.can !== false;
+  } catch (e) {
+    return;
+  }
+  if (!v) return;
+  const text = $("menu-version");
+  const name = t("copy.what", { what: t("connect.version", { version: v }) });
+  text.textContent = v;
+  copyable(text, () => v, name);
+  const icon = copyIcon(() => v, name);
+  $("menu-version-row").appendChild(icon);
+  // after the copy's own listener, which keeps the click from the menu's
+  const close = () =>
+    setTimeout(() => {
+      $("servers-menu").open = false;
+      menuButton().focus();
+    }, 0);
+  for (const el of [text, icon]) {
+    el.addEventListener("click", close);
+    el.addEventListener("keydown", (ev) => {
+      if (ev.key === "Enter" || ev.key === " ") close();
+    });
+  }
+  $("menu-version-row").classList.remove("hidden");
+  $("menu-version-sep").classList.remove("hidden");
+}
+
+// askCan reads again whether the phone has a strong biometric enrolled
+// (about's can, contract version 7), as a server's settings open, since
+// the user may have enrolled one meanwhile: Store login follows.
+async function askCan() {
+  if (!can("about")) return;
+  let a;
+  try {
+    a = (await conn.bridge.about()) || {};
+  } catch (e) {
+    return;
+  }
+  const c = a.can !== false;
+  if (c === conn.can) return;
+  conn.can = c;
+  renderServers();
+}
+
+// exitApp ends the app as a swipe from the recent apps does (exit,
+// contract version 7; AP MobileApp, D91-A): the sessions held in memory
+// dropped, each one recorded as held left to its revoke code at the next
+// start's contact, nothing sent to a server, the app out of the recent
+// apps.
+async function exitApp() {
+  try {
+    await conn.bridge.exit();
+  } catch (e) {
+    say(e.message, { bad: true });
+  }
+}
+
+// --- Back -------------------------------------------------------------
+
+// panelShown notes that a panel ("settings", "add" or "app") was opened,
+// the last opened at the end, or closed, and brings the page's history
+// entry up to date (syncBack).
+function panelShown(name, on) {
+  conn.panels = conn.panels.filter((x) => x !== name);
+  if (on) conn.panels.push(name);
+  syncBack();
+}
+
+// counts reports whether a panel open counts for Back: the Add card only
+// where the list is not empty, without which it is always shown.
+function counts(name) {
+  return name !== "add" || conn.servers.length > 0;
+}
+
+// anyOpen reports whether a menu or a panel is open, which Back closes.
+function anyOpen() {
+  return $("servers-menu").open || $("fp-dialog").open || conn.panels.some(counts);
+}
+
+// syncBack brings the page's own history entry up to date (back): one
+// pushed, the address unchanged, as a menu or a panel opens, none while
+// Back's question is asked, and taken back as the last closes by other
+// means than Back, its popstate then the page's own (onPopState); from
+// BACK_READY_MS after the page's load on, while no take-back runs, and
+// once the user has touched the page: an entry a page adds before that is
+// one the WebView's Back passes over, as Chromium's history intervention
+// marks it (a panel opened at the start by the app's handover), so it
+// waits for the first touch (awaitTouch).
+function syncBack() {
+  if (!back.ready || back.leaving) return;
+  const want = anyOpen() && !(back.ask && back.ask.isConnected);
+  if (want && !back.entry) {
+    if (navigator.userActivation && !navigator.userActivation.hasBeenActive) {
+      awaitTouch();
+      return;
+    }
+    history.pushState({ massimo: "open" }, "");
+    back.entry = true;
+  } else if (!want && back.entry) {
+    back.entry = false;
+    back.leaving = true;
+    back.timer = setTimeout(endLeaving, BACK_MS);
+    history.back();
+  }
+}
+
+// awaitTouch has syncBack run again after the user's first touch or key,
+// once (back.touch): the page has been active then.
+function awaitTouch() {
+  if (back.touch) return;
+  back.touch = true;
+  const again = () => {
+    if (!navigator.userActivation.hasBeenActive) return;
+    for (const type of ["pointerup", "click", "keydown"]) document.removeEventListener(type, later, true);
+    syncBack();
+  };
+  const later = () => setTimeout(again, 0);
+  for (const type of ["pointerup", "click", "keydown"]) document.addEventListener(type, later, true);
+}
+
+// endLeaving ends a take-back of the page's history entry: at its
+// popstate, or after BACK_MS where none came.
+function endLeaving() {
+  clearTimeout(back.timer);
+  back.timer = null;
+  back.leaving = false;
+  syncBack();
+}
+
+// keepHash gives the entry Back reached the page's fragment as it
+// stands: App settings' where they are open (openApp), else none.
+function keepHash() {
+  const want = location.pathname + location.search + ($("app-card").classList.contains("hidden") ? "" : APP_HASH);
+  if (location.pathname + location.search + location.hash !== want) history.replaceState(history.state, "", want);
+}
+
+// onPopState takes Back (the app's Back, history.back() in a browser):
+// the end of a take-back of the page's own, or Back, which closes the
+// fingerprint sheet first, as its Cancel does (askTrust resolves false),
+// then the open menu, then the panel opened last (closeTop), a server's
+// settings with changes asking first; the entry is there again where
+// something is still open.
+function onPopState() {
+  if (back.leaving) {
+    keepHash();
+    endLeaving();
+    return;
+  }
+  if (!back.entry) return;
+  back.entry = false;
+  keepHash();
+  if ($("fp-dialog").open) $("fp-dialog").close();
+  else closeTop();
+  syncBack();
+}
+
+// closeTop closes what Back closes: the open menu, the focus back on its
+// summary; else the panel opened last, the focus where its own close puts
+// it.
+function closeTop() {
+  const menu = $("servers-menu");
+  if (menu.open) {
+    menu.open = false;
+    menuButton().focus();
+    return;
+  }
+  const top = conn.panels.filter(counts).pop();
+  if (top === "settings" && !conn.open) panelShown("settings", false); // gone by other means: nothing to close
+  else if (top === "settings") closeSettingsAsked(true);
+  else if (top === "add") closeAdd(true);
+  else if (top === "app") closeApp();
+}
+
+// initBack wires Back: the popstate of the page's entries, and the menu's
+// opening and closing, which push and take back its entry.
+function initBack() {
+  window.addEventListener("popstate", onPopState);
+  $("servers-menu").addEventListener("toggle", syncBack);
 }
 
 // --- adding a server --------------------------------------------------
@@ -1057,7 +1405,8 @@ function showFingerprint(el, fp) {
 // askTrust shows the fingerprint sheet for the server at url and
 // resolves true when the user trusts the certificate: fresh, the
 // server's, for the first time, or in place of old, the one trusted
-// until now, whose change it warns of.
+// until now, whose change it warns of. While it shows, the page has its
+// history entry, and Back closes it as Cancel does.
 function askTrust({ url, old, fresh }) {
   const dlg = $("fp-dialog");
   const params = { address: hostOf(url) };
@@ -1079,9 +1428,11 @@ function askTrust({ url, old, fresh }) {
       $("fp-cancel").onclick = null;
       dlg.onclose = null;
       resolve(trusted);
+      syncBack();
     };
     dlg.showModal();
     $("fp-cancel").focus();
+    syncBack(); // Back closes the sheet as its Cancel does (onPopState)
   });
 }
 
@@ -1329,11 +1680,14 @@ function openFromAddress() {
 
 // --- start ----------------------------------------------------------------
 
-// onBridgeEvent takes the app's events; an unknown type is ignored.
+// onBridgeEvent takes the app's events; an unknown type is ignored. The
+// list pulled down (refresh, contract version 7) checks every server again
+// as ↻ does, ↻ turning meanwhile.
 function onBridgeEvent(ev) {
   const d = (ev && ev.detail) || {};
   if (d.type === "found") onFound(d.service);
   else if (d.type === "network") probeAll();
+  else if (d.type === "refresh") whileBusy($("probe-btn"), probeAll);
   else if (d.type === "core") renderCore(d.status);
 }
 
@@ -1360,6 +1714,8 @@ async function init() {
   $("search-btn").addEventListener("click", search);
   $("cert-close").addEventListener("click", () => $("cert-dialog").close());
   initMenu();
+  initBack();
+  initVersion();
   await loadServers();
   renderServers();
   openFromAddress();
@@ -1372,3 +1728,10 @@ async function init() {
 }
 
 document.addEventListener("DOMContentLoaded", init);
+// the page's history entries from BACK_READY_MS after its load on (syncBack)
+window.addEventListener("load", () =>
+  setTimeout(() => {
+    back.ready = true;
+    if (conn.bridge) syncBack();
+  }, BACK_READY_MS),
+);

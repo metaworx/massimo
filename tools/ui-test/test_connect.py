@@ -1696,3 +1696,362 @@ def test_connect_login_key_id(new_context, case, watch, guard):
     panel = settings_of(page, "Cabin")
     text = panel.locator(".server-login-kept").inner_text()
     assert text.startswith(LOGIN_KEPT[case.lang]) and "45" not in text, f"no id it does not know: {text!r}"
+
+
+# --- the list (AP MobileApp, Block 19) ---------------------------------
+
+APP_VERSION = "0.18.0-alpha.1+3.gfb15396"
+# the ☰'s entries in order, by id, with the rules between them
+MENU_ORDER = ["menu-version-row", "menu-version-sep", "menu-add", "menu-sign-out-all", "menu-forget-all", "menu-app-sep", "menu-app", "menu-exit"]
+MENU_SHOWN = """() => [...document.querySelectorAll('#servers-menu .menu-items > *')].filter((e) => !e.classList.contains('hidden')).map((e) => e.id)"""
+MENU_LABELS = {"en": {"menu-add": "Add server…", "menu-app": "App settings", "menu-exit": "Exit"},
+               "de": {"menu-add": "Server hinzufügen…", "menu-app": "App-Einstellungen", "menu-exit": "Beenden"}}
+# the open ☰'s list inside the window, nothing of it cut or out of it, and
+# the short entries (App settings, Exit) each on one line, at the case's width
+LIST_MENU_FITS = """() => {
+  const list = document.querySelector('#servers-menu .menu-items');
+  const items = list.getBoundingClientRect();
+  const vw = document.documentElement.clientWidth;
+  const out = [...list.querySelectorAll('*')].filter((e) => { const r = e.getBoundingClientRect();
+    return r.width && (r.left < items.left - 0.5 || r.right > items.right + 0.5); }).map((e) => e.id || e.className.baseVal || e.className);
+  const wrapped = [...document.querySelectorAll('#menu-app > span, #menu-exit > span')].filter((n) => {
+    const r = document.createRange();
+    r.selectNodeContents(n);
+    return new Set([...r.getClientRects()].map((x) => Math.round(x.top))).size > 1;
+  }).map((n) => n.parentElement.id);
+  return {inside: items.left >= 0 && items.right <= vw && list.scrollWidth <= list.clientWidth, out, wrapped};
+}"""
+
+
+def test_connect_list_menu(new_context, case, watch, guard):
+    """The list's ☰ in the header at the logo's right, where a server's page
+    has its ☰ (AP MobileApp, D90-A): the app's version first, Massimo's mark
+    and the build's version with its copy icon, then a rule, Add server…,
+    Sign out of all, Forget all stored credentials where a login is kept, a
+    rule, App settings without "…" (D96-A) and Exit; the Servers card keeps
+    ↻ alone. A tap on the version copies it whole and closes ☰, the focus
+    back on it; Exit calls the app (D91-A); the list fits the window at the
+    case's width, each entry on one line, at 390 px in the six languages.
+    An app before contract version 7 has neither the version nor Exit."""
+    config = {"servers": [server("s1", "Home", NODE1, lan=HOME_LAN, login="anna")], "answers": {HOME_LAN: {"node": NODE1}}, "appVersion": APP_VERSION}
+    page = open_connect(new_context, guard, watch, config)
+    page.context.grant_permissions(["clipboard-read", "clipboard-write"], origin=page.evaluate("location.origin"))
+    wait_state(page, "Home", STATE[case.lang]["lan"])
+    menu = page.locator("#servers-menu")
+    assert page.evaluate("document.getElementById('servers-menu').parentElement.matches('header.connect-top')"), "☰ in the header"
+    assert page.evaluate("document.getElementById('servers-menu').previousElementSibling.classList.contains('brand')"), "at the logo's right"
+    m = page.evaluate("""() => { const b = document.querySelector('.connect-top .brand').getBoundingClientRect();
+      const s = document.querySelector('#servers-menu > summary').getBoundingClientRect(); const h = document.querySelector('.connect-top').getBoundingClientRect();
+      return {right: s.left >= b.right, end: Math.abs(h.right - s.right) < 2}; }""")
+    assert m["right"] and m["end"], f"right of the logo, at the header's end: {m}"
+    head = page.locator("#servers .tile-head")
+    assert head.locator("button").count() == 1 and head.locator("#probe-btn").count() == 1 and head.locator("details").count() == 0, "↻ alone in the card's head"
+    assert wait_until(page, "!document.getElementById('menu-version-row').classList.contains('hidden')", 3), "the version row, the bridge giving it"
+    page.locator("#servers-menu > summary").click()
+    page.locator("#menu-add").wait_for(state="visible")
+    assert page.evaluate(MENU_SHOWN) == MENU_ORDER, f"the entries in order: {page.evaluate(MENU_SHOWN)}"
+    for entry, label in MENU_LABELS[case.lang].items():
+        assert page.locator(f"#{entry}").inner_text().strip() == label, f"{entry}: {page.locator(f'#{entry}').inner_text()!r}"
+    row_ = page.locator("#menu-version-row")
+    assert row_.locator("[data-brand] svg").count() == 2, "Massimo's mark before the version"
+    assert page.locator("#menu-version").inner_text() == APP_VERSION, "the build's version, whole"
+    assert row_.locator(".copy-icon").count() == 1 and said(page, "connect.version", version=APP_VERSION) in (row_.locator(".copy-icon").get_attribute("aria-label") or ""), \
+        "its copy icon, named"
+    named_buttons(page, "the list's ☰")
+    assert_axe(page, "the list's ☰")
+    fits = page.evaluate(LIST_MENU_FITS)
+    assert fits["inside"] and not fits["out"] and not fits["wrapped"], f"☰ fits at {case.width} px: {fits}"
+    if case.width == 390:
+        for lang in LANGUAGES:
+            page.evaluate("async (l) => { await setLanguage(l); applyI18n(document); }", lang)
+            fits = page.evaluate(LIST_MENU_FITS)
+            assert fits["inside"] and not fits["out"] and not fits["wrapped"], f"☰ fits in {lang}: {fits}"
+        page.evaluate("async () => { await setLanguage('auto'); applyI18n(document); }")
+
+    # the version: a tap copies it whole and closes ☰, the focus back on it
+    page.evaluate("navigator.clipboard.writeText('')")
+    page.locator("#menu-version").click()
+    assert wait_until(page, f"navigator.clipboard.readText().then((t) => t === {APP_VERSION!r})", 3), "the version copied, whole"
+    assert wait_until(page, "!document.getElementById('servers-menu').open", 3), "☰ closed"
+    assert page.evaluate("document.activeElement === document.querySelector('#servers-menu > summary')"), "the focus back on ☰"
+    # by its copy icon too
+    page.evaluate("navigator.clipboard.writeText('')")
+    page.locator("#servers-menu > summary").click()
+    row_.locator(".copy-icon").click()
+    assert wait_until(page, f"navigator.clipboard.readText().then((t) => t === {APP_VERSION!r})", 3), "the icon copies it"
+    assert wait_until(page, "!document.getElementById('servers-menu').open", 3), "and closes ☰"
+
+    # Exit: the app's call
+    page.locator("#servers-menu > summary").click()
+    page.locator("#menu-exit").click()
+    assert wait_until(page, "window.__fakeBridge.calls.some((c) => c[0] === 'exit')", 3), "Exit calls the app"
+    assert calls(page, "exit") == [["exit"]]
+
+    # an app before contract version 7: neither the version nor Exit
+    older = open_connect(new_context, guard, watch, dict(config, contract=6))
+    wait_state(older, "Home", STATE[case.lang]["lan"])
+    older.locator("#servers-menu > summary").click()
+    older.locator("#menu-add").wait_for(state="visible")
+    shown = older.evaluate(MENU_SHOWN)
+    assert "menu-version-row" not in shown and "menu-exit" not in shown and "about" not in [c[0] for c in calls(older)], f"no version, no Exit: {shown}"
+    assert shown[-1] == "menu-app", f"App settings last: {shown}"
+
+
+def test_connect_width(new_context, case, watch, guard):
+    """The cards take the page's full width, up to a server's page's 1100 px
+    (AP MobileApp, D92-A): wider than the 640 px before at 1100, the whole
+    page's width at 390, without a scroll to the side."""
+    config = {"servers": [server("s1", "Home", NODE1, lan=HOME_LAN)], "answers": {HOME_LAN: {"node": NODE1}}}
+    page = open_connect(new_context, guard, watch, config)
+    wait_state(page, "Home", STATE[case.lang]["lan"])
+    m = page.evaluate("""() => { const main = document.querySelector('.connect-main').getBoundingClientRect();
+      const card = document.getElementById('servers').getBoundingClientRect(); const body = getComputedStyle(document.body);
+      const inner = document.body.clientWidth - parseFloat(body.paddingLeft) - parseFloat(body.paddingRight);
+      return {main: main.width, card: card.width, inner, side: document.documentElement.scrollWidth > document.documentElement.clientWidth}; }""")
+    assert abs(m["card"] - m["inner"]) < 1 and abs(m["main"] - m["inner"]) < 1, f"the cards at the page's width: {m}"
+    if case.width == 1100:
+        assert m["card"] > 640, f"wider than 640 px: {m}"
+    assert not m["side"], f"no scroll to the side: {m}"
+
+
+def test_connect_order(new_context, case, watch, guard):
+    """The servers in the order of the names shown (AP MobileApp, D95-A), in
+    the collation of the page's language, case and accents ignored and
+    numbers by their value, a server without a name by its address; one
+    renamed takes its place; the order the app keeps them in stays."""
+    config = {"servers": [server("s1", "server 10", NODE1, lan=HOME_LAN), server("s2", "Zeta", NODE2, lan=CABIN_LAN),
+                          server("s3", "Ärzte", NODE3, lan=BARN_LAN), server("s4", "server 9", NODE4, lan=SHED_LAN),
+                          server("s5", "alpha", NODE5, lan=ATTIC_LAN), server("s6", "", NODE6, lan="http://192.168.1.90:8099/")],
+              "answers": {HOME_LAN: {"node": NODE1}}}
+    page = open_connect(new_context, guard, watch, config)
+    wait_state(page, "server 10", STATE[case.lang]["lan"])
+    names = lambda: page.evaluate("[...document.querySelectorAll('#server-list .server-name')].map((e) => e.textContent)")  # noqa: E731
+    assert names() == ["192.168.1.90:8099", "alpha", "Ärzte", "server 9", "server 10", "Zeta"], f"by the names shown: {names()}"
+    panel = settings_of(page, "Zeta")
+    panel.locator("input").first.fill("Aaron")
+    panel.locator("button[type=submit]").click()
+    panel.wait_for(state="detached")
+    assert wait_until(page, "[...document.querySelectorAll('#server-list .server-name')].map((e) => e.textContent).join('|') === "
+                            "'192.168.1.90:8099|Aaron|alpha|Ärzte|server 9|server 10'", 3), f"renamed, in its place: {names()}"
+    assert page.evaluate("window.__fakeBridge.servers.map((s) => s.id)") == ["s1", "s2", "s3", "s4", "s5", "s6"], "the app's order as it was"
+
+
+def back_ready(page):
+    """Waits until the page may hold a history entry of its own (back.ready)."""
+    assert wait_until(page, "back.ready", 5), "the page's history entries ready"
+
+
+def entry(page, there=True):
+    """Waits until the page's own history entry is there, or gone."""
+    js = "!!(history.state && history.state.massimo) && back.entry" if there else "!(history.state && history.state.massimo) && !back.entry && !back.leaving"
+    assert wait_until(page, js, 3), f"the page's history entry {'there' if there else 'gone'}"
+
+
+DISCARD = {"en": "Discard", "de": "Verwerfen"}
+STAY = {"en": "Stay", "de": "Bleiben"}
+
+
+def test_connect_back(new_context, case, watch, guard):
+    """Back on the list (AP MobileApp, Block 19; D93-A): a menu or a panel
+    that opens has a history entry of the page's own, the address unchanged,
+    so that Back (history.back() here, the app's Back there) closes the open
+    menu first, then the panel opened last: ☰, a server's settings, the Add
+    card, App settings; settings whose fields differ from what is kept ask
+    once, in place of Cancel and Save, the focus on the question, Stay
+    keeping them with the entry again, Discard closing them; the fingerprint
+    sheet over the Add card closes first, as its Cancel does, nothing added;
+    with nothing open there is no entry, so that Back leaves the app; a
+    panel closed by other means, the settings of a server removed among
+    them, takes its entry back."""
+    selfsigned = "https://192.168.1.14:8443/"
+    config = {"servers": [server("s1", "Home", NODE1, lan=HOME_LAN), server("s2", "Cabin", NODE2, lan=CABIN_LAN)],
+              "answers": {HOME_LAN: {"node": NODE1}, CABIN_LAN: {"node": NODE2}, selfsigned: {"node": NODE3, "fingerprint": FP2, "self_signed": True}}}
+    page = open_connect(new_context, guard, watch, config)
+    wait_state(page, "Home", STATE[case.lang]["lan"])
+    back_ready(page)
+    start = page.evaluate("history.length")
+    entry(page, False)
+
+    # ☰, then Back: closed, the focus on its summary
+    page.locator("#servers-menu > summary").click()
+    entry(page)
+    page.evaluate("history.back()")
+    assert wait_until(page, "!document.getElementById('servers-menu').open", 3), "Back closes ☰"
+    assert page.evaluate("document.activeElement === document.querySelector('#servers-menu > summary')"), "the focus on ☰"
+    entry(page, False)
+
+    # a server's settings, then ☰ over them: Back closes ☰ first, then the settings
+    panel = settings_of(page, "Home")
+    entry(page)
+    page.locator("#servers-menu > summary").click()
+    page.locator("#menu-add").wait_for(state="visible")
+    page.evaluate("history.back()")
+    assert wait_until(page, "!document.getElementById('servers-menu').open", 3), "☰ first"
+    assert panel.is_visible(), "the settings stay"
+    entry(page)
+    page.evaluate("history.back()")
+    panel.wait_for(state="detached")
+    assert page.evaluate("document.activeElement === document.querySelector(\".server-row[data-id='s1'] .server-cog\")"), "the focus on the server's cog"
+    entry(page, False)
+
+    # settings with changes: asked once, Stay, Back again, Discard
+    panel = settings_of(page, "Home")
+    entry(page)
+    panel.locator("input").first.fill("Home sweet")
+    page.evaluate("history.back()")
+    question = panel.locator(".confirm-box")
+    question.wait_for(state="visible")
+    assert page.evaluate("document.activeElement.classList.contains('confirm-no')"), "the focus on the question"
+    assert said(page, "connect.discardQuestion", name="Home") in question.inner_text()
+    assert question.locator(".confirm-yes").inner_text() == DISCARD[case.lang] and question.locator(".confirm-no").inner_text() == STAY[case.lang]
+    assert panel.locator("button[type=submit]").count() == 0, "asked in place of Cancel and Save"
+    entry(page, False)
+    named_buttons(page, "the question of settings with changes")
+    assert_axe(page, "the question of settings with changes")
+    question.locator(".confirm-no").click()
+    question.wait_for(state="detached")
+    assert panel.locator("input").first.input_value() == "Home sweet", "Stay keeps what is typed"
+    entry(page)
+    page.evaluate("history.back()")
+    question.wait_for(state="visible")
+    question.locator(".confirm-yes").click()
+    panel.wait_for(state="detached")
+    assert calls(page, "save") == [], "Discard saves nothing"
+    entry(page, False)
+
+    # the Add card and App settings
+    open_add(page)
+    entry(page)
+    page.evaluate("history.back()")
+    page.locator("#add").wait_for(state="hidden")
+    entry(page, False)
+    # the fingerprint sheet over the Add card: Back closes the sheet alone, as its Cancel does
+    open_add(page)
+    page.locator("#add-address").fill(selfsigned)
+    page.locator("#add-form button[type=submit]").click()
+    page.locator("#fp-dialog").wait_for(state="visible")
+    entry(page)
+    page.evaluate("history.back()")
+    assert wait_until(page, "!document.getElementById('fp-dialog').open", 3), "Back closes the sheet"
+    wait_toast(page, said(page, "connect.notTrusted"), bad=True)
+    assert page.locator("#add").is_visible(), "the Add card stays"
+    entry(page)
+    assert calls(page, "save") == [] and calls(page, "trust") == [], "nothing added"
+    page.locator("#add-close").click()
+    page.locator("#add").wait_for(state="hidden")
+    entry(page, False)
+    close_toast(page)
+    menu_entry(page, "menu-app").click()
+    page.locator("#app-card").wait_for(state="visible")
+    entry(page)
+    assert page.evaluate("location.hash") == "#app-settings"
+    page.evaluate("history.back()")
+    page.locator("#app-card").wait_for(state="hidden")
+    assert page.evaluate("location.hash") == "", "App settings' fragment gone with them"
+    entry(page, False)
+
+    # closed by other means: the entry taken back
+    panel = settings_of(page, "Cabin")
+    entry(page)
+    row(page, "Cabin").locator(".server-cog").click()
+    panel.wait_for(state="detached")
+    entry(page, False)
+    assert row(page, "Home").count() == 1 and page.evaluate("location.pathname").endswith("/ui/connect.html"), "the list stays"
+    # the settings of a server removed: their entry taken back, Back leaves
+    panel = settings_of(page, "Cabin")
+    entry(page)
+    panel.locator(".server-remove").click()
+    panel.locator(".confirm-yes").click()
+    row(page, "Cabin").wait_for(state="detached")
+    entry(page, False)
+    assert page.evaluate("conn.panels") == [], "no panel left open"
+    assert page.evaluate("history.length") <= start + 1, "no entry piled up"
+
+
+STORE_LOGIN = {"en": "Store login", "de": "Anmeldung speichern"}
+
+
+def test_connect_store_login(new_context, case, watch, guard):
+    """Store login in a server's settings (AP MobileApp, Block 19), where the
+    app holds a session there and keeps no login: it calls the app's keep
+    with the address the probe found, the list read again names the login
+    kept and its key, and the toast says it is kept; a prompt not passed
+    says nothing is kept; it is off while the server does not answer, and
+    at an address of plain HTTP outside the home network, and on a phone
+    without a strong biometric enrolled (about's can), its title saying
+    why; there is none without a session, with a login kept, or in an app
+    before contract version 7."""
+    plain = "http://203.0.113.7:8099/"
+    config = {"servers": [server("s1", "Home", NODE1, lan=HOME_LAN, session="anna"), server("s2", "Cabin", NODE2, lan=CABIN_LAN, session="bob", login="bob"),
+                          server("s3", "Office", NODE3, remote=OFFICE_REMOTE, session="carla"), server("s4", "Barn", NODE4, lan=BARN_LAN),
+                          server("s5", "Shed", NODE5, lan=SHED_LAN, session="dora"), server("s6", "Attic", NODE6, remote=plain, session="eve")],
+              "answers": {HOME_LAN: {"node": NODE1}, CABIN_LAN: {"node": NODE2}, BARN_LAN: {"node": NODE4}, SHED_LAN: {"node": NODE5}, plain: {"node": NODE6}},
+              "keys": {"s1": {"user": "anna", "id": 61}}, "storeLogin": [True, False]}
+    page = open_connect(new_context, guard, watch, config)
+    st = STATE[case.lang]
+    for name in ("Home", "Cabin", "Barn", "Shed", "Attic"):
+        wait_state(page, name, st["lan"] if name != "Attic" else st["remote"])
+    wait_state(page, "Office", st["offline"])
+
+    panel = settings_of(page, "Home")
+    store = panel.locator(".server-store-login")
+    assert store.inner_text() == STORE_LOGIN[case.lang] and not store.is_disabled(), "Store login where a session is held and no login kept"
+    assert store.get_attribute("title") == said(page, "connect.storeLoginTitle"), "its title says what it does"
+    named_buttons(page, "a server's settings with Store login")
+    assert_axe(page, "a server's settings with Store login")
+    store.click()
+    assert wait_until(page, "window.__fakeBridge.calls.some((c) => c[0] === 'keep')", 3)
+    assert calls(page, "keep") == [["keep", "s1", HOME_LAN]], "at the address the probe found"
+    wait_toast(page, said(page, "connect.storeLoginDone", name="Home"))
+    kept = panel.locator(".server-login-kept")
+    kept.wait_for(state="visible")
+    assert kept.inner_text().startswith(said(page, "connect.loginKeptKey", name="anna", id=61)), f"the login kept, its key named: {kept.inner_text()!r}"
+    assert panel.locator(".server-store-login").count() == 0 and row(page, "Home").locator(".server-signin").is_visible(), "no Store login now"
+    row(page, "Home").locator(".server-cog").click()
+    close_toast(page)
+
+    # a prompt not passed: nothing kept, said so
+    panel = settings_of(page, "Shed")
+    panel.locator(".server-store-login").click()
+    wait_toast(page, said(page, "login.keepFailed"), bad=True)
+    assert panel.locator(".server-store-login").is_visible() and panel.locator(".server-login-kept").count() == 0, "nothing kept"
+    row(page, "Shed").locator(".server-cog").click()
+    close_toast(page)
+
+    for name, why in (("Office", "connect.keyLeftShowOff"), ("Attic", "connect.storeLoginPlain")):
+        panel = settings_of(page, name)
+        store = panel.locator(".server-store-login")
+        assert store.is_disabled() and store.get_attribute("title") == said(page, why), f"{name}: off, saying why: {store.get_attribute('title')!r}"
+        row(page, name).locator(".server-cog").click()
+    for name in ("Cabin", "Barn"):
+        panel = settings_of(page, name)
+        assert panel.locator(".server-store-login").count() == 0, f"{name}: no Store login"
+        row(page, name).locator(".server-cog").click()
+
+    older = open_connect(new_context, guard, watch, dict(config, contract=6))
+    wait_state(older, "Home", st["lan"])
+    assert settings_of(older, "Home").locator(".server-store-login").count() == 0, "an app before version 7: none"
+
+    # a phone without a strong biometric enrolled: off, its title saying so
+    weak = open_connect(new_context, guard, watch, dict(config, canStrong=False))
+    wait_state(weak, "Home", st["lan"])
+    store = settings_of(weak, "Home", "login").locator(".server-store-login")
+    assert wait_until(weak, "document.querySelector('.server-store-login').disabled", 3), "off without a strong biometric"
+    assert store.get_attribute("title") == said(weak, "connect.storeLoginNoBiometric"), store.get_attribute("title")
+
+
+def test_connect_pull_down(new_context, case, watch, guard):
+    """The list pulled down in the app (the event refresh, contract version
+    7): every server checked again, as ↻ does, ↻ turning meanwhile."""
+    config = {"servers": [server("s1", "Home", NODE1, lan=HOME_LAN), server("s2", "Cabin", NODE2, lan=CABIN_LAN)],
+              "answers": {HOME_LAN: {"node": NODE1}}}
+    page = open_connect(new_context, guard, watch, config)
+    wait_state(page, "Home", STATE[case.lang]["lan"])
+    wait_state(page, "Cabin", STATE[case.lang]["offline"])
+    page.evaluate(f"window.__fakeBridgeConfig.answers[{CABIN_LAN!r}] = {{node: {NODE2!r}}}; window.__fakeBridgeConfig.probeMs = 800")
+    before = len(calls(page, "probe"))
+    page.evaluate("window.dispatchEvent(new CustomEvent('massimo', { detail: { type: 'refresh' } }))")
+    assert wait_until(page, "document.getElementById('probe-btn').classList.contains('busy')", 3), "↻ turns meanwhile"
+    wait_state(page, "Cabin", STATE[case.lang]["lan"])
+    assert len(calls(page, "probe")) == before + 2, "every server checked again"
+    assert wait_until(page, "!document.getElementById('probe-btn').classList.contains('busy')", 3), "↻ stops"

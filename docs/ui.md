@@ -2697,8 +2697,11 @@ The server's sign, when it says an update is out, opens it at Software update.
 ## In the apps
 
 The apps for Android and iOS (docs/app.md) open on a page of their own,
-`ui/connect.html`, or on the server marked **Open at start**:
-the servers the app keeps, each with what it found
+`ui/connect.html`, or on the server marked **Open at start**,
+its cards at the page's full width, up to 1100 px:
+the servers the app keeps, sorted by the name shown,
+case and accents ignored and numbers by their value,
+each with what it found
 when it last looked (on the LAN, remote, not reachable, a changed certificate)
 and, as a green badge, the user the app is signed in as there,
 checked at each look, grey while the server answers at neither address
@@ -2708,12 +2711,17 @@ keeps a login (docs/app.md, "Opening from the list"),
 a cancel opening the server's sign-in card,
 the sign-in icon, where a login is kept, that card without the prompt,
 ⚙ or a long press its settings;
-the Servers card's ☰, with **Add server…**, **Sign out of all**,
+the list's ☰ in the header at the logo's right, where a server's page has its ☰:
+the app's version first, Massimo's mark and the version with its copy icon,
+a tap copying it whole and closing ☰,
+then **Add server…**, **Sign out of all**,
 **Forget all stored credentials** where a login is kept,
 asked first, under the list,
 which revokes each login's key at its server and signs out there,
 as **Turn off** does, its message naming the servers that keep a key,
-and **App settings…**;
+**App settings** and **Exit**, which ends the app as a swipe from the recent
+apps does, the sessions it held ended by their codes at the next start;
+the Servers card keeps ↻, and pulling the list down in the app does what it does;
 the card that adds a server, shown while the list is empty or from the ☰,
 with × and closed once a server is added:
 the servers on the network, searched for as it opens, and an address typed;
@@ -2729,6 +2737,9 @@ the certificate's subject and end with **Certificate…**,
 a dialog with its issuer, names, validity, fingerprint and since when it
 is trusted, the login by fingerprint with **Turn off**,
 which revokes its key and signs out,
+or **Store login** where the app holds a session there and keeps no login,
+which keeps one made with that session after one prompt,
+off while the server does not answer, its title saying why,
 a line for each key of the phone's still valid there with **Show in My profile**,
 which opens the server's page at My profile with the key marked,
 off while the server does not answer, its title saying why,
@@ -2744,6 +2755,9 @@ with a line saying what it does, which turns a kept login off first, or signs ou
 its question and its message naming a key or a session left.
 **App settings** hold the **Appearance**, as the phone, light or dark,
 for that page and for every server's page set to "as the system".
+Back closes the open menu first, then the panel opened last,
+a server's settings with changes asking once, Discard or Stay,
+and leaves the app from the bare list.
 A browser that opens that page sees a line saying it is the app's.
 A server's page in the app is this page,
 except that the app keeps its session in place of the browser,
