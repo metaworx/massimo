@@ -61,6 +61,7 @@ class HeldTest : EmulatorTest() {
         toList()
         // Turn off with a session made from the key: revoked with it, which ends that session too
         openSettings(id)
+        section(id, "login")
         page.click(row(id) + " .server-login-off")
         page.waitFor("!!conn.servers.find((s) => s.id === ${q(id)}) && !conn.servers.find((s) => s.id === ${q(id)}).login", "the login turned off")
         val rows = h.since(mark)

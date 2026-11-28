@@ -4,8 +4,8 @@
 /**
  * @file internal/server/ui/src/shared/icon.tsx
  *
- * An icon, a sign and a mark as parts, as iconEl, markEl and the gone
- * signEl of components.js draw them, drawn once and updated in place; and a button that is an
+ * An icon, a sign and a mark as parts, as iconEl, markEl and signEl of
+ * components.js draw them, drawn once and updated in place; and a button that is an
  * icon alone (iconButton). A mark is an element of
  * its own (use.mark), which is what blinks; it is made again only where
  * its state changes, and then starts its blinking where the mark of its

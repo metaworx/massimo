@@ -83,6 +83,7 @@ class ListTest : EmulatorTest() {
         toList()
         val mark = h.mark()
         openSettings(id)
+        section(id, "login")
         val store = row(id) + " .server-store-login"
         page.waitFor("!!document.querySelector(${q(store)}) && !document.querySelector(${q(store)}).disabled", "Store login, on")
         page.click(store)

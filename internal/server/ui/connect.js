@@ -66,6 +66,7 @@ const conn = {
   opening: false, // a server being opened, its prompt perhaps shown (openServer)
   panel: null, // their form
   fields: null, // its fields, {name, lan, remote, start, ask, push} (connectionDiffers)
+  opened: null, // what they held as the settings opened, or as what is kept last changed (takeKept)
   discard: null, // the question of settings with changes, while it is asked (closeSettingsAsked)
   panels: [], // the panels open, "settings", "add" or "app", the one opened last at the end (closeTop)
   can: true, // the phone has a strong biometric enrolled, as about() said (Store login)
@@ -549,26 +550,111 @@ function connectionDiffers(s) {
     on(f.start) !== !!s.start || f.ask.value !== (ASKS.includes(s.ask) ? s.ask : "start") || (!!f.push && on(f.push) !== !!s.push);
 }
 
-// closeSettingsAsked closes the open settings as Back does (viaBack),
-// asking once where their fields differ from what is kept, in place of
-// Cancel and Save, the focus on the question (D93-A): Discard closes them,
-// Stay keeps them, and the page's history entry, which Back took, is
-// there again. A question asked already takes the focus again.
+// markConnection turns Save and Cancel of the open settings off while
+// Connection holds what is kept (AP MobileApp, D94-A), compared field by
+// field at each input, as the server's forms are, and marks Connection's
+// tab while it differs, AP UnsavedMarks' disk in amber (signEl), named
+// for a screen reader.
+function markConnection() {
+  const panel = conn.panel;
+  if (!panel) return;
+  const differs = connectionDiffers(serverById(conn.open));
+  const form = panel.querySelector(".server-connection");
+  setOff(form.querySelector("button[type=submit]"), !differs);
+  setOff(form.querySelector(".form-cancel"), !differs);
+  const mark = panel.querySelector('.server-tab[data-tab="connection"] .server-tab-mark');
+  if (differs === !!mark.firstChild) return;
+  clear(mark);
+  if (differs) mark.appendChild(signEl("disk", "warn", { cls: "server-tab-unsaved", label: t("problem.unsaved") }));
+}
+
+// keptValues are what the app keeps of a server s as Connection's fields
+// show it: the name, the two addresses, Open at start, when the
+// fingerprint is asked, notifications.
+function keptValues(s) {
+  return { name: s.name || "", lan: s.lan || "", remote: s.remote || "", start: !!s.start, ask: ASKS.includes(s.ask) ? s.ask : "start", push: !!s.push };
+}
+
+// fieldValues are what Connection's fields f hold now, as keptValues has
+// them; push is the kept one where there is no switch for it.
+function fieldValues(f, s) {
+  const on = (sw) => sw.querySelector("input").checked;
+  return { name: f.name.value.trim(), lan: f.lan.value.trim(), remote: f.remote.value.trim(), start: on(f.start), ask: f.ask.value, push: f.push ? on(f.push) : !!s.push };
+}
+
+// setFields gives Connection's fields f the values v, each where it
+// differs; only (a set of keys), where given, the ones to set.
+function setFields(f, v, only) {
+  for (const k of ["name", "lan", "remote"]) if ((!only || only.has(k)) && f[k].value.trim() !== v[k]) f[k].value = v[k];
+  for (const k of ["start", "push"]) if (f[k] && (!only || only.has(k))) f[k].querySelector("input").checked = v[k];
+  if ((!only || only.has("ask")) && f.ask.value !== v.ask) f.ask.value = v.ask;
+}
+
+// takeKept gives each of Connection's fields what the app keeps of the
+// server s now, where the field still holds what the settings opened
+// with (conn.opened): a name discovery heard or a LAN address found
+// again, saved while the settings are open (takeHeardName, maybeMoveLan),
+// is no change of the user's, so that it neither marks Connection nor
+// is written back by Save; a field the user changed keeps the change.
+function takeKept(s) {
+  const f = conn.fields;
+  const was = conn.opened;
+  if (!f || !was || !s) return;
+  const now = keptValues(s);
+  const has = fieldValues(f, s);
+  const take = new Set(Object.keys(now).filter((k) => now[k] !== was[k] && has[k] === was[k]));
+  if (take.size) setFields(f, now, take);
+  conn.opened = now;
+}
+
+// resetConnection gives Connection's fields what the app keeps of its
+// server again: Cancel.
+function resetConnection() {
+  const s = serverById(conn.open);
+  const f = conn.fields;
+  if (!s || !f) return;
+  conn.opened = keptValues(s);
+  setFields(f, conn.opened);
+  showResult(conn.panel.querySelector(".server-connection .server-msg"), "", false);
+  markConnection();
+}
+
+// showSection shows one section of a server's settings, key connection,
+// login or certificate (AP MobileApp, D111-A), and hides the others,
+// its tab filled and selected; the draft, the focus and the lines drawn in
+// place outlive a switch, every section staying built.
+function showSection(panel, key) {
+  for (const tab of panel.querySelectorAll(".server-tab")) {
+    const on = tab.dataset.tab === key;
+    tab.classList.toggle("current", on);
+    tab.setAttribute("aria-selected", String(on));
+  }
+  for (const sec of panel.querySelectorAll(".server-section")) sec.classList.toggle("hidden", sec.dataset.section !== key);
+}
+
+// closeSettingsAsked closes the open settings as Back does (viaBack) and
+// as their ✕ does, asking once where Connection's fields differ from what
+// is kept (D93-A, D94-A): Connection shown first where another section is,
+// the question in place of its Cancel and Save, the focus on it; Discard
+// closes them, Stay keeps them, and the page's history entry, which Back
+// took, is there again. A question asked already takes the focus again.
 function closeSettingsAsked(viaBack) {
   const s = serverById(conn.open);
   if (!s || !conn.panel || !connectionDiffers(s)) {
     closeSettings();
     return;
   }
+  showSection(conn.panel, "connection");
   if (conn.discard && conn.discard.isConnected) {
     if (viaBack) back.ask = conn.discard;
     conn.discard.focusFirst();
     return;
   }
-  const actions = conn.panel.querySelector(":scope > .actions");
+  const actions = conn.panel.querySelector(".server-connection > .actions");
   conn.discard = confirmInPlace(actions, t("connect.discardQuestion", { name: shownName(s) }), { yes: t("connect.discard"), no: t("leave.stay") },
     () => closeSettings(), "button[type=submit]", () => {
       back.ask = null;
+      markConnection(); // the fields as they stand now, put back meanwhile perhaps
       syncBack();
     });
   if (viaBack) back.ask = conn.discard;
@@ -585,15 +671,23 @@ function addressInput(value) {
   return i;
 }
 
-// settingsPanel is a server's settings: its name, its two addresses,
-// Open at start, when the fingerprint is asked, its session with Sign
-// out, the login by fingerprint kept with its user, its key's id, and
-// Turn off, or Store login, its certificate and the keys and sessions left
-// valid there (fillFacts), notifications
-// where the app has push, Cancel and Save, and under them, after a rule,
-// Remove server with a line that says what it does, whose question warns
-// of a key or a session left.
-// The panel itself takes the focus (toggleSettings).
+// sectionSeq numbers the settings' sections, for their tabs' ids.
+let sectionSeq = 0;
+
+// settingsPanel is a server's settings (AP MobileApp, D111-A), a panel
+// with a head, the server's name and a labelled ✕, which closes it as
+// Back does; a row of tabs, built with the roles of a tab list; and three
+// sections, all built as it opens and hidden but the one shown,
+// Connection first: Connection, the form, with the name, the two
+// addresses, Open at start, notifications where the app has push, when
+// the fingerprint is asked, the message line, Cancel and Save, off while
+// it holds what is kept, and under them, after a rule, Remove server
+// with a line that says what it does, whose question warns of a key or a
+// session left; Login, its session with Sign out, the login by
+// fingerprint kept with its user, its key's id and Turn off, or Store
+// login, and the keys and sessions left valid there, each acting at once
+// (fillLogin); Certificate, the certificate in place (fillCert). The
+// panel itself takes the focus (toggleSettings).
 function settingsPanel(s) {
   const name = document.createElement("input");
   name.type = "text";
@@ -611,11 +705,13 @@ function settingsPanel(s) {
   }
   ask.value = ASKS.includes(s.ask) ? s.ask : "start";
   const push = conn.bridge.push ? switchEl(t("connect.push"), s.push, null, "push") : null;
-  const msg = textEl("p", "", "small cubes-msg server-msg hidden");
-  msg.setAttribute("role", "status");
-  const form = formEl(() => saveSettings(s.id, form, { name, lan, remote, start, ask, push, msg }), "panel server-panel");
-  form.tabIndex = -1;
-  form.setAttribute("aria-label", t("connect.settingsOf", { name: s.name }));
+  const lineOf = () => {
+    const m = textEl("p", "", "small cubes-msg server-msg hidden");
+    m.setAttribute("role", "status");
+    return m;
+  };
+  const msg = lineOf();
+  const form = formEl(() => saveSettings(s.id, form, { name, lan, remote, start, ask, push, msg }), "server-connection");
   const remove = button(t("connect.removeServer"), "server-remove", () => {
     const now = serverById(s.id) || s;
     const left = keysLeft(now);
@@ -628,27 +724,62 @@ function settingsPanel(s) {
   // Remove on a line of its own under Cancel and Save, after a rule, with
   // what it does (AP MobileApp, F34); its line follows the login (fillFacts)
   const removeBox = elem("div", "server-remove-box", textEl("p", "", "small muted server-remove-hint"), elem("div", "actions", remove));
-  const facts = elem("div", "server-facts");
   form.append(
     fieldRow(t("connect.name"), name, { wide: true }),
     fieldRow(t("connect.lan"), lan, { wide: true, hint: t("connect.lanHint") }),
     fieldRow(t("connect.remote"), remote, { wide: true, hint: t("connect.remoteHint") }),
     fieldRow("", start, { hint: t("connect.startHint") }),
-    fieldRow(t("connect.ask"), ask, { wide: true, hint: t("connect.askHint") }),
-    facts,
   );
   if (push) form.append(fieldRow("", push));
-  form.append(msg, formFooter({ submit: t("action.save"), cancel: () => toggleSettings(null) }), removeBox);
+  form.append(fieldRow(t("connect.ask"), ask, { wide: true, hint: t("connect.askHint") }),
+    msg, formFooter({ submit: t("action.save"), cancel: resetConnection }), removeBox);
+  form.addEventListener("input", markConnection);
+  form.addEventListener("change", markConnection);
+  // Login and Certificate are no forms: Enter in a field saves Connection alone
+  const login = elem("div", "server-section server-login", elem("div", "server-facts"), lineOf());
+  const cert = elem("div", "server-section server-certificate");
+  const panel = elem("div", "panel server-panel");
+  panel.tabIndex = -1;
+  panel.setAttribute("aria-label", t("connect.settingsOf", { name: s.name }));
+  const close = button("×", { cls: "icon-btn card-close server-close", aria: t("action.close"), title: t("action.close") }, () => closeSettingsAsked(false));
+  const head = elem("div", "server-panel-head", textEl("h3", shownName(s), "server-panel-title"), close);
+  const tabs = elem("div", "server-tabs");
+  tabs.setAttribute("role", "tablist");
+  tabs.setAttribute("aria-label", t("connect.sections"));
+  const n = ++sectionSeq;
+  // a form takes no role of its own: Connection's tab panel holds it
+  const connection = elem("div", "server-section", form);
+  const sections = [["connection", t("connect.tab.connection"), connection], ["login", t("connect.tab.login"), login], ["certificate", t("connect.tab.certificate"), cert]];
+  for (const [key, label, sec] of sections) {
+    const tab = button("", { cls: "page-link server-tab" }, () => showSection(panel, key));
+    tab.dataset.tab = key;
+    tab.id = `server-tab-${n}-${key}`;
+    tab.setAttribute("role", "tab");
+    tab.setAttribute("aria-controls", `server-section-${n}-${key}`);
+    tab.append(textEl("span", label, "page-link-label"));
+    // Connection's mark while it differs (markConnection), Login's dot while a key or a session is left (fillLogin)
+    if (key === "connection") tab.append(elem("span", "server-tab-mark"));
+    if (key === "login") tab.append(elem("span", "server-tab-left hidden", elem("span", "server-tab-dot"), textEl("span", t("connect.tab.leftMark"), "visually-hidden")));
+    tabs.append(tab);
+    sec.id = `server-section-${n}-${key}`;
+    sec.dataset.section = key;
+    sec.setAttribute("role", "tabpanel");
+    sec.setAttribute("aria-labelledby", tab.id);
+  }
+  panel.append(head, tabs, connection, login, cert);
   conn.fields = { name, lan, remote, start, ask, push };
-  fillFacts(form, s);
-  return form;
+  conn.opened = keptValues(s);
+  conn.discard = null;
+  showSection(panel, "connection");
+  fillFacts(panel, s);
+  return panel;
 }
 
 // fillRemove says under the rule what Remove does: the server leaves the
 // list, and where it answers the app is signed out there, the kept
 // login's key revoked first where one is kept.
-function fillRemove(form, s) {
-  const hint = form.querySelector(".server-remove-hint");
+function fillRemove(panel, s) {
+  const hint = panel.querySelector(".server-remove-hint");
   const text = s.login ? t("connect.removeHintLogin") : t("connect.removeHint");
   if (hint && hint.textContent !== text) hint.textContent = text;
 }
@@ -721,37 +852,52 @@ function storesLogin(s) {
   return can("keep") && !!s.session && !s.login;
 }
 
-// fillFacts writes what a server's open settings say of it as it stands,
-// under its choices: the session the app holds there, with Sign out,
+// fillFacts writes what a server's open settings say of it as it stands:
+// what Remove does (fillRemove), the Login section (fillLogin), the
+// Certificate section (fillCert), the name in the head, what Connection's
+// untouched fields take of what is kept now (takeKept), and whether
+// Connection differs from it (markConnection).
+function fillFacts(panel, s) {
+  fillRemove(panel, s);
+  fillLogin(panel, s);
+  fillCert(panel, s);
+  const title = panel.querySelector(".server-panel-title");
+  if (title && title.textContent !== shownName(s)) title.textContent = shownName(s);
+  if (panel !== conn.panel) return;
+  takeKept(s);
+  markConnection();
+}
+
+// fillLogin writes the Login section of a server's open settings (AP
+// MobileApp, D111-A): the session the app holds there, with Sign out,
 // which says while the server does not answer that Sign out ends it there
 // the next time the app reaches the server (F42, D105-A), the login by
 // fingerprint kept there, with its user, its key's id and Turn off, or,
-// where the app holds a session and keeps no login, Store login, the
-// certificate the probe found at the address in use, with Certificate…,
+// where the app holds a session and keeps no login, Store login,
 // each key of the phone's left valid there, with Show in My profile,
 // which opens the server's page at My profile with that key marked, off
 // while the server does not answer, its title saying why (AP MobileApp,
 // F33), and each session of the phone's left valid there, a key or a
 // session whose revoke code waits saying that it ends the next time the app
-// reaches the server (`pending`, contract version 6); drawn again only
+// reaches the server (`pending`, contract version 6), and a line where
+// there is none of these; each acts at once, and none touches
+// Connection's draft. While a key or a session is left there, Login's tab
+// carries a dot, named for a screen reader. Drawn again only
 // where it changed, whether the server is shown down among it (shownDown,
 // which a probe still running leaves as it was), which over plain HTTP
 // nothing else in it tells, so that a probe that answers keeps the focus,
 // the buttons Show in My profile and Store login turned on and off in
-// place; and what Remove does (fillRemove).
-function fillFacts(form, s) {
-  fillRemove(form, s);
-  const box = form.querySelector(".server-facts");
+// place.
+function fillLogin(panel, s) {
+  const box = panel.querySelector(".server-login .server-facts");
   if (!box) return;
   const p = conn.probes[s.id] || {};
-  const answers = p.state === "lan" || p.state === "remote";
-  const cert = answers && p.cert && p.cert.not_after ? p.cert : null;
   const left = keysLeft(s);
   const unended = sessionsLeft(s);
   const down = shownDown(p);
-  const msg = () => form.querySelector(".server-msg");
-  const key = JSON.stringify([s.session || "", s.login || "", s.login_key || 0, storesLogin(s), down, cert && cert.fingerprint, cert && cert.not_after,
-    cert && p.url, left, unended]);
+  const msg = () => panel.querySelector(".server-login .server-msg");
+  panel.querySelector(".server-tab-left").classList.toggle("hidden", !left.length && !unended.length);
+  const key = JSON.stringify([s.session || "", s.login || "", s.login_key || 0, storesLogin(s), down, left, unended]);
   if (box.dataset.key === key) {
     showsKeys(box, p);
     return;
@@ -774,11 +920,6 @@ function fillFacts(form, s) {
     const store = button(t("connect.storeLogin"), "server-store-login", () => storeLogin(s.id, store, msg()));
     box.appendChild(elem("p", "server-fact server-store", store));
   }
-  if (cert) {
-    const line = t("connect.certLine", { name: commonName(cert.subject) || hostOf(p.url), until: fmtDay(cert.not_after) });
-    const show = button(t("connect.certButton"), "server-cert-open", () => showCert(s.id));
-    box.appendChild(elem("p", "server-fact server-cert", line, " ", show));
-  }
   for (const k of left) {
     const show = button(t("connect.keyLeftShow"), { cls: "server-key-show", aria: t("connect.keyLeftShowLabel", { id: k.id }) },
       () => openServer(s.id, null, "#profile?key=" + k.id));
@@ -789,7 +930,7 @@ function fillFacts(form, s) {
     const text = x.pending === true ? t("connect.sessionPending", { id: x.id, name: x.user }) : t("connect.sessionLeft", { id: x.id, name: x.user });
     box.appendChild(elem("p", "server-fact server-session-left", text));
   }
-  box.classList.toggle("hidden", !box.firstChild);
+  if (!box.firstChild) box.appendChild(textEl("p", t("connect.loginNone"), "muted server-fact server-login-none"));
   showsKeys(box, p);
 }
 
@@ -885,51 +1026,90 @@ async function signOutAll() {
   say(t("connect.signedOutAll"));
 }
 
-// commonName is the common name (CN) of a distinguished name as the app
-// writes it (RFC 4514, "CN=massimo,O=Massimo"), "" for none.
-function commonName(dn) {
-  const m = /(?:^|,)\s*CN=((?:\\.|[^,\\])*)/i.exec(dn || "");
-  return m ? m[1].replace(/\\(.)/g, "$1").trim() : "";
-}
-
-// fmtDay is a time the app gives (RFC 3339) as a day in the page's
-// language; fmtWhen the same with the time of day. Anything else stays
-// as it is.
-function fmtDay(iso) {
-  const d = new Date(iso);
-  return isNaN(d) ? String(iso || "") : new Intl.DateTimeFormat(i18n.lang, { dateStyle: "medium" }).format(d);
-}
-
+// fmtWhen is a time the app gives (RFC 3339) as a day and the time of
+// day in the page's language. Anything else stays as it is.
 function fmtWhen(iso) {
   const d = new Date(iso);
   return isNaN(d) ? String(iso || "") : new Intl.DateTimeFormat(i18n.lang, { dateStyle: "medium", timeStyle: "short" }).format(d);
 }
 
-// showCert shows a server's certificate as its probe found it at the
-// address in use: its subject, issuer, names, validity and fingerprint,
-// and since when it is trusted: since the user compared its fingerprint
-// (trust), or by the phone, a certificate authority having signed it.
-function showCert(id) {
-  const s = serverById(id);
-  const p = conn.probes[id] || {};
-  const c = p.cert;
-  if (!s || !c) return;
-  const none = "—";
-  $("cert-address").textContent = hostOf(p.url);
-  $("cert-subject").textContent = c.subject || none;
-  $("cert-issuer").textContent = c.self_signed ? t("connect.cert.selfSigned") : c.issuer || none;
-  $("cert-names").textContent = c.names.length ? c.names.join(", ") : none;
-  $("cert-from").textContent = c.not_before ? fmtWhen(c.not_before) : none;
-  $("cert-until").textContent = c.not_after ? fmtWhen(c.not_after) : none;
-  showFingerprint($("cert-fp"), c.fingerprint);
-  let trusted = t("connect.cert.trustedSystem");
-  if (s.fp && s.fp.toUpperCase() === c.fingerprint.toUpperCase()) {
-    trusted = s.trusted_at ? t("connect.cert.trustedSince", { when: fmtWhen(s.trusted_at) }) : t("connect.cert.trustedPinned");
+// fillCert writes the Certificate section of a server's open settings
+// (AP MobileApp, D111-A), what the certificate's dialog showed, in place
+// (tpl-cert): until a probe has answered, that the certificate shows once
+// the server answers; where the certificate changed, the one trusted and
+// the new one; where the server answers over HTTPS, the certificate the
+// probe found at the address in use, its subject, issuer, names, validity
+// and fingerprint, and since when it is trusted: since the user compared
+// its fingerprint (trust), or by the phone, a certificate authority
+// having signed it; where it does not answer, the fingerprint pinned and
+// since when (connect.certPinned), or where none is pinned that the
+// certificate shows once it answers (connect.certWaiting); over plain
+// HTTP, that there is none (connect.certPlain). Drawn again only where it
+// changed; a probe still running keeps what the last one found.
+function fillCert(panel, s) {
+  const box = panel.querySelector(".server-certificate");
+  if (!box) return;
+  const p = conn.probes[s.id] || {};
+  let st = p.state;
+  if (st === undefined || st === "probing") {
+    if (box.dataset.key) return;
+    // the settings open while a probe runs: what the last one found, where it is not lost with it, else waiting
+    st = p.was === "offline" ? "offline" : "probing";
   }
-  $("cert-trusted").textContent = trusted;
-  const dlg = $("cert-dialog");
-  dlg.showModal();
-  $("cert-close").focus();
+  const answers = st === "lan" || st === "remote";
+  const c = answers ? p.cert : null;
+  const plain = (answers && !c) || (!answers && !s.fp && [s.lan, s.remote].filter(Boolean).every((u) => u.startsWith("http:")));
+  let kind = c ? "cert" : plain ? "plain" : s.fp ? "pinned" : "waiting";
+  if (st === "probing") kind = "waiting";
+  if (st === "cert") kind = "changed";
+  const key = JSON.stringify([kind, c, answers ? p.url : "", s.fp || "", s.trusted_at || "", kind === "changed" ? p.fingerprint : ""]);
+  if (box.dataset.key === key) return;
+  box.dataset.key = key;
+  clear(box);
+  if (kind === "changed") {
+    // the server shows another certificate than the one trusted: both, the trusted one first
+    const row = (label, fp, cls) => {
+      const v = textEl("span", "", "mono tls-fp " + cls);
+      showFingerprint(v, fp);
+      return elem("div", "fp-row", textEl("span", label, "muted small"), v);
+    };
+    box.appendChild(textEl("p", t("connect.fpChangedTitle"), "server-fact warn-text server-cert-changed"));
+    if (s.fp) box.appendChild(row(t("connect.fpOld"), s.fp, "cert-fp-old"));
+    box.appendChild(row(t("connect.fpNew"), p.fingerprint || "", "cert-fp-new"));
+    return;
+  }
+  if (kind === "plain") {
+    box.appendChild(textEl("p", t("connect.certPlain"), "muted server-fact server-cert-none"));
+    return;
+  }
+  if (kind === "waiting") {
+    box.appendChild(textEl("p", t("connect.certWaiting"), "muted server-fact server-cert-none"));
+    return;
+  }
+  const facts = fromTemplate("tpl-cert");
+  const set = (cls, text) => {
+    facts.querySelector("." + cls).textContent = text;
+  };
+  const sinceTrusted = () => (s.trusted_at ? t("connect.cert.trustedSince", { when: fmtWhen(s.trusted_at) }) : t("connect.cert.trustedPinned"));
+  if (kind === "pinned") {
+    // the server does not answer: the fingerprint pinned, and since when
+    for (const row of facts.querySelectorAll(".cert-of-probe")) row.remove();
+    facts.prepend(textEl("p", t("connect.certPinned"), "muted small server-cert-pinned"));
+    showFingerprint(facts.querySelector(".cert-fp"), s.fp);
+    set("cert-trusted", sinceTrusted());
+  } else {
+    const none = "—";
+    set("cert-address", hostOf(p.url));
+    set("cert-subject", c.subject || none);
+    set("cert-issuer", c.self_signed ? t("connect.cert.selfSigned") : c.issuer || none);
+    set("cert-names", c.names.length ? c.names.join(", ") : none);
+    set("cert-from", c.not_before ? fmtWhen(c.not_before) : none);
+    set("cert-until", c.not_after ? fmtWhen(c.not_after) : none);
+    showFingerprint(facts.querySelector(".cert-fp"), c.fingerprint);
+    const pinned = s.fp && s.fp.toUpperCase() === c.fingerprint.toUpperCase();
+    set("cert-trusted", pinned ? sinceTrusted() : t("connect.cert.trustedSystem"));
+  }
+  box.appendChild(facts);
 }
 
 // turnOff turns a server's login by fingerprint off (forget, which
@@ -1712,7 +1892,6 @@ async function init() {
   $("add-address").addEventListener("input", warnPlain);
   $("probe-btn").addEventListener("click", (ev) => whileBusy(ev.currentTarget, probeAll));
   $("search-btn").addEventListener("click", search);
-  $("cert-close").addEventListener("click", () => $("cert-dialog").close());
   initMenu();
   initBack();
   initVersion();

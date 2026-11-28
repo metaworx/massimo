@@ -79,35 +79,59 @@ up to the 1100 px of a server's page (AP MobileApp, D92-A):
   An address typed that is not one is said under the field,
   and a server's open settings keep their own line;
 - **a server's settings**, which take the focus themselves, not the name's
-  field, for the keyboard's sake: the name, the LAN and the remote address,
-  **Open at start** (`start`: the app opens this server at its start, in
-  place of the list; one server at most, the first added until the user
-  chooses),
-  "Ask for the fingerprint" (`ask`: each time the app comes back, when the
-  app starts, or only after a logout),
-  the session the app holds there with its user and **Sign out** (`session`),
-  the certificate of an HTTPS address in use, its subject's name and its end,
-  with **Certificate…**, a dialog with its subject, issuer, names, validity,
-  SHA-256 fingerprint and since when it is trusted (`trusted_at`),
-  the login by fingerprint with the user's name and **Turn off** where one
-  is kept (`login`), or **Store login** where the app holds a session there
-  and keeps no login (`keep`, version 7): the key made with that session at
-  the address the probe found and the fingerprint asked once, as a sign-in
-  that keeps the login makes it, off while the server does not answer,
-  where the phone has no strong biometric enrolled (`about`'s `can`) and
-  at an address of plain HTTP outside the private ranges, its title saying
-  why, its toast saying the login is kept,
-  a line for each key of the phone's still valid there, its id and user,
-  with **Show in My profile**, which opens the server's page at My profile
-  with the key marked (`unrevoked`), off while the probe finds the server
-  at neither address, its title saying why (AP MobileApp, F33),
-  "Notify me on this phone" (`push`, where the app has push),
-  Cancel and Save, and under them, after a rule, **Remove server** on a
-  line of its own (F34), with a line saying what it does:
-  the server leaves the list, and where it answers the phone is signed out
-  there first, a kept login turned off first as **Turn off** does;
-  its question says so and warns of a key left,
-  its toast naming the keys still valid there;
+  field, for the keyboard's sake: a head with the server's name and a
+  labelled ✕, which closes them as Back does, and three sections switched by
+  a row of tabs in the look of the server's settings pages, their names
+  alone, with the roles of a tab list (AP MobileApp, D111-A),
+  all built as the settings open and hidden but the one shown,
+  so that what is typed outlives a switch; Connection first:
+  - **Connection**, the form: the name, the LAN and the remote address,
+    **Open at start** (`start`: the app opens this server at its start, in
+    place of the list; one server at most, the first added until the user
+    chooses), "Notify me on this phone" (`push`, where the app has push),
+    "Ask for the fingerprint" (`ask`: each time the app comes back, when the
+    app starts, or only after a logout);
+    Cancel and Save, off while the form holds what is kept, compared field
+    by field at each input, Cancel giving the fields what is kept again
+    (D94-A), its tab carrying the "changed here" disk while it differs;
+    a field still holding what the settings opened with takes what is kept
+    where it changed meanwhile (a name discovery heard, a LAN address found
+    again), no change of the user's;
+    and under them, after a rule, **Remove server** on a
+    line of its own (F34), with a line saying what it does:
+    the server leaves the list, and where it answers the phone is signed out
+    there first, a kept login turned off first as **Turn off** does;
+    its question says so and warns of a key left,
+    its toast naming the keys still valid there;
+  - **Login**, no form, each line acting at once:
+    the session the app holds there with its user and **Sign out** (`session`),
+    the login by fingerprint with the user's name and **Turn off** where one
+    is kept (`login`), or **Store login** where the app holds a session there
+    and keeps no login (`keep`, version 7): the key made with that session at
+    the address the probe found and the fingerprint asked once, as a sign-in
+    that keeps the login makes it, off while the server does not answer,
+    where the phone has no strong biometric enrolled (`about`'s `can`) and
+    at an address of plain HTTP outside the private ranges, its title saying
+    why, its toast saying the login is kept;
+    a line for each key of the phone's still valid there, its id and user,
+    with **Show in My profile**, which opens the server's page at My profile
+    with the key marked (`unrevoked`), off while the probe finds the server
+    at neither address, its title saying why (AP MobileApp, F33),
+    and for each session left (`unended`); a line where there is none of
+    these; its tab carries a dot, named for a screen reader, while a key or
+    a session is left there;
+  - **Certificate**, no form: the certificate of an HTTPS address in use,
+    in place (`tpl-cert`), its address, subject, issuer or "self-signed",
+    names, validity, SHA-256 fingerprint and since when it is trusted
+    (`trusted_at`); until a probe has answered, that the certificate shows
+    once the server answers; where the certificate changed, the one trusted
+    and the new one; where the server does not answer, the fingerprint pinned
+    and since when, or where none is, that the certificate shows once the
+    server answers; over plain HTTP, that there is none.
+
+  Back or ✕ while Connection differs from what is kept shows Connection and
+  asks there once (D93-A, below); the other ways the settings close
+  (another server's cog, a tap on a row) close them without asking;
 - **App settings**, from the ☰, with ×: **Appearance**, as the phone, light
   or dark, for the list and for every server's page whose own appearance is
   "as the system" (`settings`);
@@ -124,8 +148,9 @@ up to the 1100 px of a server's page (AP MobileApp, D92-A):
   the adapter's Back (`web.goBack()`, on while the WebView can go back)
   reaches the page as a `popstate`, which closes the open menu first, then
   the panel opened last, the fingerprint sheet before them, as its Cancel
-  does; a server's settings whose fields differ from what
-  is kept ask once, in place of Cancel and Save, the focus on the question:
+  does; a server's settings whose Connection differs from
+  what is kept show Connection and ask once, in place of its Cancel and Save,
+  the focus on the question:
   **Discard**, or **Stay**, which pushes the entry again (D93-A);
   a menu or a panel closed by other means takes its entry back,
   so that with nothing open there is none, and Back leaves the app;
@@ -386,8 +411,8 @@ An unknown `type` is ignored by the page.
   **Sign out** calls `signOut(id, url)` with the address the probe chose,
   and **Sign out of all** `signOutAll()`.
 - **The certificate.**
-  The probe's result at the address in use gives a server's settings the
-  certificate's line and dialog; "trusted since" is `trusted_at` where the
+  The probe's result at the address in use gives a server's settings their
+  Certificate section; "trusted since" is `trusted_at` where the
   certificate is the one pinned, and the phone's certificate authorities
   where none is pinned.
 - **The login by fingerprint** is the next section's:

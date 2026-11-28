@@ -301,7 +301,7 @@ def test_connect_settings(new_context, case, watch, guard):
     panel.wait_for(state="detached")
     home.locator(".server-cog").click()
     panel.wait_for(state="visible")
-    assert page.evaluate("document.activeElement.tagName") == "FORM", "the panel takes the focus again"
+    assert page.evaluate("document.activeElement.classList.contains('server-panel')"), "the panel takes the focus again"
     assert panel.locator("input[name=push]").count() == 1, "the notification switch, the app having push"
     assert panel.locator("input").first.input_value() == "Home"
     assert not panel.locator("input[name=start]").is_checked(), "Open at start is another server's"
@@ -332,12 +332,13 @@ def test_connect_settings(new_context, case, watch, guard):
     assert panel.locator("input[name=start]").is_checked()
     # Remove server on a line of its own under Cancel and Save, after a rule, with what it does (AP MobileApp, F34)
     box = panel.locator(".server-remove-box")
-    assert panel.evaluate("""(f) => f.lastElementChild.classList.contains('server-remove-box')
+    connection = panel.locator(".server-connection")
+    assert connection.evaluate("""(f) => f.lastElementChild.classList.contains('server-remove-box')
       && f.lastElementChild.previousElementSibling.classList.contains('actions')"""), "under the form's footer, last"
     assert panel.locator(".server-remove").count() == 1 and box.locator(".server-remove").count() == 1, "out of the footer"
     assert box.locator(".server-remove").inner_text() == REMOVE_SERVER[case.lang]
     assert box.locator(".server-remove-hint").inner_text() == REMOVE_HINT[case.lang], "the line saying what it does"
-    m = panel.evaluate("""(f) => { const foot = f.querySelector(':scope > .actions').getBoundingClientRect();
+    m = connection.evaluate("""(f) => { const foot = f.querySelector(':scope > .actions').getBoundingClientRect();
       const box = f.querySelector('.server-remove-box'); const r = box.getBoundingClientRect(); const cs = getComputedStyle(box);
       return {below: r.top >= foot.bottom, rule: cs.borderTopStyle === 'solid' && parseFloat(cs.borderTopWidth) >= 1}; }""")
     assert m["below"] and m["rule"], f"below Cancel and Save, after a rule: {m}"
@@ -347,7 +348,7 @@ def test_connect_settings(new_context, case, watch, guard):
     question = box.locator(".confirm-box")
     question.wait_for(state="visible")
     assert REMOVE_QUESTION[case.lang] in question.inner_text(), f"its question as before: {question.inner_text()!r}"
-    assert panel.locator(":scope > .actions button[type=submit]").is_visible(), "asked in Remove's place, Save stays"
+    assert panel.locator(".server-connection > .actions button[type=submit]").is_visible(), "asked in Remove's place, Save stays"
     page.locator(".confirm-box .confirm-no").click()
     box.locator(".server-remove").wait_for(state="visible")
     assert page.evaluate("document.activeElement.classList.contains('server-remove')"), "No gives the focus back to Remove server"
@@ -589,6 +590,7 @@ def test_connect_login_by_fingerprint(new_context, case, watch, guard):
     home.locator(".server-cog").click()
     panel = home.locator(".server-panel")
     panel.wait_for(state="visible")
+    open_section(panel, "login")
     assert "anna" in panel.locator(".server-login-kept").inner_text()
     panel.locator(".server-login-off").click()
     assert wait_until(page, "window.__fakeBridge.calls.some((c) => c[0] === 'forget')", 3)
@@ -656,12 +658,24 @@ def close_toast(page):
     assert toast_gone(page)
 
 
-def settings_of(page, name):
-    """Opens a server's settings from its cog and gives the panel."""
+def settings_of(page, name, section=None):
+    """Opens a server's settings from its cog and gives the panel, with
+    section ("login", "certificate") that section shown, else Connection,
+    the first."""
     r = row(page, name)
     r.locator(".server-cog").click()
     panel = r.locator(".server-panel")
     panel.wait_for(state="visible")
+    if section:
+        open_section(panel, section)
+    return panel
+
+
+def open_section(panel, key):
+    """Shows a section of a server's open settings by its tab (AP
+    MobileApp, D111-A) and gives the panel."""
+    panel.locator(f".server-tab[data-tab='{key}']").click()
+    panel.locator(f".server-section[data-section='{key}']").wait_for(state="visible")
     return panel
 
 
@@ -695,7 +709,7 @@ def test_connect_keys_left(new_context, case, watch, guard):
 
     # Turn off that cannot revoke, at an address that answers: the toast
     # says so, the line comes at once
-    panel = settings_of(page, "Home")
+    panel = settings_of(page, "Home", "login")
     assert panel.locator(".server-key-left").count() == 0, "no key left yet"
     panel.locator(".server-login-off").click()
     wait_toast(page, LOGIN_OFF_LEFT[case.lang])
@@ -705,7 +719,7 @@ def test_connect_keys_left(new_context, case, watch, guard):
     row(page, "Home").locator(".server-cog").click()
     close_toast(page)
     # and at none: Attic does not answer, its key left all the same
-    panel = settings_of(page, "Attic")
+    panel = settings_of(page, "Attic", "login")
     panel.locator(".server-login-off").click()
     wait_toast(page, LOGIN_OFF_LEFT[case.lang])
     assert calls(page, "forget")[-1] == ["forget", "s6", ""]
@@ -736,8 +750,9 @@ def test_connect_keys_left(new_context, case, watch, guard):
     close_toast(page)
 
     # Remove warns of a key left; No keeps the server
-    panel = settings_of(page, "Office")
+    panel = settings_of(page, "Office", "login")
     assert KEY_LEFT[case.lang].format(id=47, user="anna") in panel.locator(".server-key-left").inner_text()
+    open_section(panel, "connection")
     panel.locator(".server-remove").click()
     box = page.locator(".confirm-box")
     box.wait_for(state="visible")
@@ -767,7 +782,7 @@ def test_connect_keys_left(new_context, case, watch, guard):
     close_toast(page)
 
     # Cabin's key left, shown in its settings and in My profile
-    panel = settings_of(page, "Cabin")
+    panel = settings_of(page, "Cabin", "login")
     line = panel.locator(".server-key-left")
     assert line.count() == 1 and KEY_LEFT[case.lang].format(id=46, user="bob") in line.inner_text()
     show = line.locator(".server-key-show")
@@ -814,7 +829,7 @@ def test_connect_turn_off_and_remove_say_how_the_key_went(new_context, case, wat
     page = open_connect(new_context, guard, watch, config)
     wait_state(page, "Home", STATE[case.lang]["lan"])
     wait_state(page, "Barn", STATE[case.lang]["lan"])
-    panel = settings_of(page, "Home")
+    panel = settings_of(page, "Home", "login")
     panel.locator(".server-login-off").click()
     wait_toast(page, LOGIN_OFF_LOCAL[case.lang])
     assert panel.locator(".server-key-left").count() == 0, "nothing left by an id it does not know"
@@ -922,18 +937,22 @@ def test_connect_sessions(new_context, case, watch, guard):
     home = row(page, "Home")
     home.locator(".server-cog").click()
     panel = home.locator(".server-panel")
+    panel.wait_for(state="visible")
+    panel.locator("input").first.fill("Home sweet")
+    open_section(panel, "login")
     line = panel.locator(".server-session")
     line.wait_for()
     assert "anna" in line.inner_text()
     named_buttons(page, "a server's session")
     assert_axe(page, "a server's session")
-    panel.locator("input").first.fill("Home sweet")
     line.locator(".server-sign-out").click()
     wait_toast(page, "Home")
     assert calls(page, "signOut") == [["signOut", "s1", HOME_LAN]], "signed out where the probe found it"
     line.wait_for(state="detached")
     assert home.locator(".session-badge").count() == 0, "and the mark is gone"
     assert panel.locator("input").first.input_value() == "Home sweet", "the settings keep what is typed"
+    open_section(panel, "connection")
+    assert panel.locator("input").first.input_value() == "Home sweet", "and show it again in Connection"
     home.locator(".server-cog").click()
     panel.wait_for(state="detached")
 
@@ -971,7 +990,7 @@ def test_connect_sessions_left(new_context, case, watch, guard):
     wait_state(page, "Home", st["lan"])
     wait_state(page, "Cabin", st["offline"])
 
-    panel = settings_of(page, "Office")
+    panel = settings_of(page, "Office", "login")
     line = panel.locator(".server-session-left")
     assert line.count() == 1 and SESSION_LEFT[case.lang].format(id=11, user="carl") in line.inner_text(), "the session left named"
     named_buttons(page, "a server's settings with a session left")
@@ -979,7 +998,7 @@ def test_connect_sessions_left(new_context, case, watch, guard):
     row(page, "Office").locator(".server-cog").click()
 
     # Sign out with the server not answering: the session left, its line at once
-    panel = settings_of(page, "Cabin")
+    panel = settings_of(page, "Cabin", "login")
     panel.locator(".server-sign-out").click()
     assert wait_until(page, "window.__fakeBridge.calls.some((c) => c[0] === 'signOut')", 3)
     assert calls(page, "signOut") == [["signOut", "s2", ""]], "no address that answers"
@@ -1056,21 +1075,23 @@ def test_connect_server_down_and_revoke_codes(new_context, case, watch, guard):
     assert "fill-ok" not in office_badge and "mode" in office_badge, f"grey where it does not: {office_badge}"
 
     # Office, over HTTPS, down: the session's line and the key pending
-    panel = settings_of(page, "Office")
+    panel = settings_of(page, "Office", "login")
     assert panel.locator(".server-session").inner_text().startswith(said(page, "connect.sessionDown", name="bob")), panel.locator(".server-session").inner_text()
     assert said(page, "connect.keyPending", id=12, name="bob") in panel.locator(".server-key-left").inner_text()
     named_buttons(page, "a server's settings while it does not answer")
     assert_axe(page, "a server's settings while it does not answer")
     if case.width == 390:
         for lang in LANGUAGES:
-            page.evaluate("async (l) => { await setLanguage(l); applyI18n(document); const id = conn.open; toggleSettings(id); toggleSettings(id); }", lang)
+            page.evaluate("async (l) => { await setLanguage(l); applyI18n(document); const id = conn.open; toggleSettings(id); toggleSettings(id); "
+                          "showSection(conn.panel, 'login'); }", lang)
             panel = row(page, "Office").locator(".server-panel")
             panel.wait_for(state="visible")
             assert panel.locator(".server-session").inner_text().startswith(said(page, "connect.sessionDown", name="bob")), f"in {lang}"
             assert said(page, "connect.keyPending", id=12, name="bob") in panel.locator(".server-key-left").inner_text(), f"in {lang}"
             cut = page.evaluate(FITS, ".server-panel .server-fact, .server-row .session-badge")
             assert not cut, f"cut or out of the window in {lang}: {cut}"
-        page.evaluate("async () => { await setLanguage('auto'); applyI18n(document); const id = conn.open; toggleSettings(id); toggleSettings(id); }")
+        page.evaluate("async () => { await setLanguage('auto'); applyI18n(document); const id = conn.open; toggleSettings(id); toggleSettings(id); "
+                      "showSection(conn.panel, 'login'); }")
         panel = row(page, "Office").locator(".server-panel")
         panel.wait_for(state="visible")
 
@@ -1083,7 +1104,7 @@ def test_connect_server_down_and_revoke_codes(new_context, case, watch, guard):
     close_toast(page)
 
     # Home, over plain HTTP, its settings open: a probe still running keeps what the last one found
-    panel = settings_of(page, "Home")
+    panel = settings_of(page, "Home", "login")
     assert panel.locator(".server-session").inner_text().startswith(said(page, "connect.sessionLine", name="anna"))
     page.evaluate("document.querySelector('.server-panel .server-session').__kept = true")
     page.evaluate("window.__fakeBridgeConfig.probeMs = 1500")
@@ -1105,7 +1126,7 @@ def test_connect_server_down_and_revoke_codes(new_context, case, watch, guard):
     row(page, "Home").locator(".server-cog").click()
 
     # Turn off while it does not answer: its key left with its code
-    panel = settings_of(page, "Cabin")
+    panel = settings_of(page, "Cabin", "login")
     panel.locator(".server-login-off").click()
     wait_toast(page, said(page, "connect.loginOffPending", name="Cabin"))
     close_toast(page)
@@ -1126,51 +1147,229 @@ def test_connect_server_down_and_revoke_codes(new_context, case, watch, guard):
 
 
 def test_connect_certificate(new_context, case, watch, guard):
-    """A server reached over HTTPS shows its certificate in its settings:
-    a line with its subject's name and the end of its validity, and
-    Certificate…, a dialog with the subject, the issuer, the names, the
-    validity, the fingerprint and since when it is trusted (AP MobileApp,
-    D51-B); a server over plain HTTP has no such line."""
+    """A server's Certificate section (AP MobileApp, D111-A; D51-B) shows in
+    place what the certificate's dialog showed: over HTTPS the address in
+    use, the subject, the issuer or "self-signed", the names, the validity,
+    the fingerprint and since when it is trusted; while the server does not
+    answer, the fingerprint pinned and since when, or, where none is pinned,
+    that it shows once the server answers; where the certificate changed,
+    the one trusted and the new one, said so; while the first probe runs,
+    that it shows once the server answers; over plain HTTP, that there is
+    none; the dialog and Certificate… are gone. At 390 px nothing of it is
+    cut or out of the window in the six languages."""
     lan = "https://192.168.1.10:8443/"
+    shed = "https://shed.example.org/"
+    barn = "https://192.168.1.50:8443/"
     config = {
-        "servers": [server("s1", "Home", NODE1, lan=lan, fp=FP1, trusted_at="2026-11-20T08:30:00Z"), server("s2", "Cabin", NODE2, lan=CABIN_LAN)],
+        "servers": [server("s1", "Home", NODE1, lan=lan, fp=FP1, trusted_at="2026-11-20T08:30:00Z"), server("s2", "Cabin", NODE2, lan=CABIN_LAN),
+                    server("s3", "Office", NODE3, remote=OFFICE_REMOTE, fp=FP2, trusted_at="2026-11-21T09:00:00Z"), server("s4", "Shed", NODE4, remote=shed),
+                    server("s5", "Barn", NODE5, lan=barn, fp=FP1, trusted_at="2026-11-20T08:30:00Z")],
         "answers": {lan: {"node": NODE1, "fingerprint": FP1, "self_signed": True, "subject": "CN=massimo.local", "names": ["massimo.local", "192.168.1.10"],
                           "not_before": "2026-11-01T12:00:00Z", "not_after": "2027-11-01T12:00:00Z"},
-                    CABIN_LAN: {"node": NODE2}},
+                    CABIN_LAN: {"node": NODE2}, barn: {"node": NODE5, "fingerprint": FP2, "self_signed": True}},
     }
     page = open_connect(new_context, guard, watch, config)
-    wait_state(page, "Home", STATE[case.lang]["lan"])
-    wait_state(page, "Cabin", STATE[case.lang]["lan"])
-    cabin = row(page, "Cabin")
-    cabin.locator(".server-cog").click()
-    cabin.locator(".server-panel").wait_for(state="visible")
-    assert cabin.locator(".server-cert").count() == 0, "plain HTTP: no certificate"
-    cabin.locator(".server-cog").click()
+    st = STATE[case.lang]
+    wait_state(page, "Home", st["lan"])
+    wait_state(page, "Cabin", st["lan"])
+    wait_state(page, "Office", st["offline"])
+    wait_state(page, "Shed", st["offline"])
+    wait_state(page, "Barn", st["cert"])
+    assert page.locator("#cert-dialog").count() == 0 and page.locator("dialog").count() == 1, "no certificate's dialog, the fingerprint sheet alone"
+    panel = settings_of(page, "Cabin", "certificate")
+    sec = panel.locator(".server-certificate")
+    assert sec.inner_text() == said(page, "connect.certPlain") and sec.locator(".server-cert").count() == 0, f"plain HTTP: none: {sec.inner_text()!r}"
+    row(page, "Cabin").locator(".server-cog").click()
 
-    home = row(page, "Home")
-    home.locator(".server-cog").click()
-    line = home.locator(".server-panel .server-cert")
-    line.wait_for()
-    assert "massimo.local" in line.inner_text() and "2027" in line.inner_text(), f"its subject's name and its end: {line.inner_text()!r}"
-    named_buttons(page, "a server's certificate line")
-    line.locator(".server-cert-open").click()
-    dlg = page.locator("#cert-dialog")
-    dlg.wait_for(state="visible")
-    assert page.locator("#cert-subject").inner_text() == "CN=massimo.local"
-    assert page.locator("#cert-issuer").inner_text() == CERT_SELF[case.lang]
-    assert page.locator("#cert-names").inner_text() == "massimo.local, 192.168.1.10"
-    assert "2026" in page.locator("#cert-from").inner_text() and "2027" in page.locator("#cert-until").inner_text()
-    assert page.locator("#cert-fp").inner_text() == FP1
-    assert "2026" in page.locator("#cert-trusted").inner_text(), "since when it is trusted"
-    assert page.evaluate("document.activeElement.id") == "cert-close"
-    named_buttons(page, "the certificate's dialog")
-    assert_axe(page, "the certificate's dialog")
-    page.locator("#cert-close").click()
-    dlg.wait_for(state="hidden")
-    line.locator(".server-cert-open").click()
-    dlg.wait_for(state="visible")
-    page.keyboard.press("Escape")
-    dlg.wait_for(state="hidden")
+    panel = settings_of(page, "Home", "certificate")
+    sec = panel.locator(".server-certificate")
+    assert panel.locator(".server-cert-open").count() == 0, "no Certificate… any more"
+    assert sec.locator(".cert-address").inner_text() == "192.168.1.10:8443", "the address in use"
+    assert sec.locator(".cert-subject").inner_text() == "CN=massimo.local"
+    assert sec.locator(".cert-issuer").inner_text() == CERT_SELF[case.lang]
+    assert sec.locator(".cert-names").inner_text() == "massimo.local, 192.168.1.10"
+    assert "2026" in sec.locator(".cert-from").inner_text() and "2027" in sec.locator(".cert-until").inner_text()
+    assert sec.locator(".cert-fp").inner_text() == FP1
+    assert "2026" in sec.locator(".cert-trusted").inner_text(), "since when it is trusted"
+    named_buttons(page, "a server's Certificate section")
+    assert_axe(page, "a server's Certificate section")
+    if case.width == 390:
+        for lang in LANGUAGES:
+            page.evaluate("async (l) => { await setLanguage(l); applyI18n(document); const id = conn.open; toggleSettings(id); toggleSettings(id); "
+                          "showSection(conn.panel, 'certificate'); }", lang)
+            row(page, "Home").locator(".server-certificate .cert-fp").wait_for(state="visible")
+            cut = page.evaluate(FITS, ".server-panel .server-certificate, .server-panel .server-certificate *")
+            assert not cut, f"cut or out of the window in {lang}: {cut}"
+        page.evaluate("async () => { await setLanguage('auto'); applyI18n(document); }")
+    row(page, "Home").locator(".server-cog").click()
+
+    # the server does not answer: the fingerprint pinned, and since when
+    panel = settings_of(page, "Office", "certificate")
+    sec = panel.locator(".server-certificate")
+    assert sec.locator(".server-cert-pinned").inner_text() == said(page, "connect.certPinned")
+    assert sec.locator(".cert-fp").inner_text() == FP2 and "2026" in sec.locator(".cert-trusted").inner_text(), "the pinned fingerprint, since when"
+    assert sec.locator(".cert-subject").count() == 0 and sec.locator(".cert-address").count() == 0, "nothing of a probe"
+    assert_axe(page, "the Certificate section of a server that does not answer")
+    row(page, "Office").locator(".server-cog").click()
+    panel = settings_of(page, "Shed", "certificate")
+    assert panel.locator(".server-certificate").inner_text() == said(page, "connect.certWaiting"), "none pinned: it shows once the server answers"
+    row(page, "Shed").locator(".server-cog").click()
+
+    # the certificate changed: the one trusted and the new one, said so; nothing of a server that does not answer
+    panel = settings_of(page, "Barn", "certificate")
+    sec = panel.locator(".server-certificate")
+    assert sec.locator(".server-cert-changed").inner_text() == said(page, "connect.fpChangedTitle"), sec.inner_text()
+    assert sec.locator(".cert-fp-old").inner_text() == FP1 and sec.locator(".cert-fp-new").inner_text() == FP2, "both fingerprints"
+    assert said(page, "connect.certPinned") not in sec.inner_text(), "not said to be down"
+    assert_axe(page, "the Certificate section of a changed certificate")
+
+    # while the first probe runs: that the certificate shows once the server answers, then the certificate
+    slow = open_connect(new_context, guard, watch, dict(config, probeMs=1500))
+    assert wait_until(slow, "!!conn.probes.s1 && conn.probes.s1.state === 'probing'", 3)
+    panel = settings_of(slow, "Home", "certificate")
+    assert panel.locator(".server-certificate").inner_text() == said(slow, "connect.certWaiting"), "waiting, not down"
+    panel.locator(".server-certificate .cert-fp").wait_for(state="visible", timeout=8000)
+    assert panel.locator(".server-certificate .cert-fp").inner_text() == FP1
+
+
+TABS = {"en": ["Connection", "Login", "Certificate"], "de": ["Verbindung", "Anmeldung", "Zertifikat"]}
+# the tabs of the open settings on one line, inside the panel, none cut short
+TABS_FIT = """() => {
+  const panel = document.querySelector('.server-panel').getBoundingClientRect();
+  const tabs = [...document.querySelectorAll('.server-panel .server-tab')];
+  const tops = new Set(tabs.map((b) => Math.round(b.getBoundingClientRect().top)));
+  const cut = tabs.filter((b) => { const l = b.querySelector('.page-link-label'); return l.scrollWidth > l.clientWidth + 1; }).map((b) => b.dataset.tab);
+  const out = tabs.filter((b) => { const r = b.getBoundingClientRect(); return r.left < panel.left - 0.5 || r.right > panel.right + 0.5; }).map((b) => b.dataset.tab);
+  return {lines: tops.size, cut, out};
+}"""
+
+
+def test_connect_sections(new_context, case, watch, guard):
+    """A server's settings in three sections (AP MobileApp, D111-A, D93-A,
+    D94-A): a head with the server's name and a labelled ✕; a tab list named
+    for a screen reader, Connection, Login and Certificate, each a tab of the
+    section it controls, Connection first and shown, the names on one line
+    at 390 px in the six languages, none cut short; Save and Cancel off
+    until a change and off again when it is undone, Cancel giving the fields
+    what is kept again; a switch between the sections keeping what is typed;
+    Connection's tab marked while it differs; Login's tab with a dot while a
+    key or a session is left there, gone when none is; Login's actions
+    without a Save; Back and ✕, each from Login and from Certificate,
+    Connection changed, showing Connection with the question, the focus on
+    it; Stay with the field put back meanwhile leaving Save and Cancel off;
+    ✕ closing settings without changes."""
+    config = {"servers": [server("s1", "Home", NODE1, lan=HOME_LAN, session="anna", unrevoked=[{"user": "anna", "id": 47}]),
+                          server("s2", "Cabin", NODE2, lan=CABIN_LAN)],
+              "answers": {HOME_LAN: {"node": NODE1}, CABIN_LAN: {"node": NODE2}}, "sessions": {"s1": "carl"}}
+    page = open_connect(new_context, guard, watch, config)
+    wait_state(page, "Home", STATE[case.lang]["lan"])
+    back_ready(page)
+    panel = settings_of(page, "Home")
+    head = panel.locator(".server-panel-head")
+    assert head.locator(".server-panel-title").inner_text() == "Home", "the server's name in the head"
+    close = head.locator(".server-close")
+    assert close.get_attribute("aria-label") == said(page, "action.close") and close.get_attribute("title") == said(page, "action.close"), "✕ labelled"
+    tablist = panel.locator(".server-tabs")
+    assert tablist.get_attribute("role") == "tablist" and tablist.get_attribute("aria-label") == said(page, "connect.sections")
+    tabs = panel.locator(".server-tab")
+    assert [tabs.nth(i).locator(".page-link-label").inner_text() for i in range(3)] == TABS[case.lang], "Connection, Login, Certificate"
+    roles = panel.evaluate("""(p) => [...p.querySelectorAll('.server-tab')].map((b) => { const sec = document.getElementById(b.getAttribute('aria-controls'));
+      return [b.getAttribute('role'), b.getAttribute('aria-selected'), !!sec && sec.getAttribute('role') === 'tabpanel' && sec.getAttribute('aria-labelledby') === b.id,
+              !!sec && !sec.classList.contains('hidden')]; })""")
+    assert roles == [["tab", "true", True, True], ["tab", "false", True, False], ["tab", "false", True, False]], f"the roles, Connection shown: {roles}"
+    assert "current" in (tabs.nth(0).get_attribute("class") or ""), "Connection's tab filled"
+    save, cancel = panel.locator(".server-connection button[type=submit]"), panel.locator(".server-connection .form-cancel")
+    assert save.is_disabled() and cancel.is_disabled(), "Save and Cancel off while it holds what is kept"
+    login = tabs.nth(1)
+    assert login.locator(".server-tab-left").is_visible() and said(page, "connect.tab.leftMark") in login.text_content(), "Login's dot, named"
+    named_buttons(page, "a server's settings in sections")
+    assert_axe(page, "a server's Connection section")
+    fit = page.evaluate(TABS_FIT)
+    assert fit["lines"] == 1 and not fit["cut"] and not fit["out"], f"the tabs on one line, none cut: {fit}"
+    if case.width == 390:
+        for lang in LANGUAGES:
+            page.evaluate("async (l) => { await setLanguage(l); applyI18n(document); const id = conn.open; toggleSettings(id); toggleSettings(id); }", lang)
+            row(page, "Home").locator(".server-tab").first.wait_for(state="visible")
+            fit = page.evaluate(TABS_FIT)
+            assert fit["lines"] == 1 and not fit["cut"] and not fit["out"], f"the tabs on one line, none cut in {lang}: {fit}"
+        page.evaluate("async () => { await setLanguage('auto'); applyI18n(document); const id = conn.open; toggleSettings(id); toggleSettings(id); }")
+        panel.wait_for(state="visible")
+
+    # a change: Save and Cancel on, Connection's tab marked; a switch keeps it; undone: off again
+    name = panel.locator(".server-connection input").first
+    name.fill("Home sweet")
+    assert not save.is_disabled() and not cancel.is_disabled(), "on once it differs"
+    mark = tabs.nth(0).locator(".server-tab-unsaved")
+    assert mark.count() == 1 and mark.get_attribute("aria-label") == said(page, "problem.unsaved"), "Connection's tab marked"
+    open_section(panel, "login")
+    assert not panel.locator(".server-connection").is_visible(), "one section at a time"
+    assert_axe(page, "a server's Login section")
+    open_section(panel, "certificate")
+    assert_axe(page, "a server's Certificate section")
+    open_section(panel, "connection")
+    assert name.input_value() == "Home sweet", "a switch keeps what is typed"
+    name.fill("Home")
+    assert save.is_disabled() and cancel.is_disabled() and mark.count() == 0, "off again, unmarked, once it is undone"
+    panel.locator(".server-connection select[name=ask]").select_option("logout")
+    assert not save.is_disabled()
+    cancel.click()
+    assert panel.locator(".server-connection select[name=ask]").input_value() == "start" and save.is_disabled() and mark.count() == 0, "Cancel: what is kept again"
+    assert panel.is_visible(), "the settings stay open"
+
+    # Login's actions without a Save: Sign out at once, Connection's draft kept
+    name.fill("Home sweet")
+    open_section(panel, "login")
+    panel.locator(".server-sign-out").click()
+    wait_toast(page, "Home")
+    assert calls(page, "save") == [], "nothing saved"
+    assert name.input_value() == "Home sweet" and mark.count() == 1, "Connection's draft and mark kept"
+    close_toast(page)
+
+    # Back and ✕ from Login and from Certificate, Connection changed: Connection shown with the question, the focus on it
+    question = panel.locator(".server-connection .confirm-box")
+    for key, how in (("login", "back"), ("login", "close"), ("certificate", "back"), ("certificate", "close")):
+        open_section(panel, key)
+        entry(page)
+        if how == "back":
+            page.evaluate("history.back()")
+        else:
+            close.click()
+        question.wait_for(state="visible")
+        assert panel.locator(f".server-section[data-section='{key}']").is_hidden() and panel.locator(".server-connection").is_visible(), \
+            f"{how} from {key}: Connection shown"
+        assert page.evaluate("document.activeElement.classList.contains('confirm-no')"), f"{how} from {key}: the focus on the question"
+        question.locator(".confirm-no").click()
+        question.wait_for(state="detached")
+    entry(page)
+    # Stay once the field was put back meanwhile: Save and Cancel off, no mark (markConnection)
+    page.evaluate("history.back()")
+    question.wait_for(state="visible")
+    name.fill("Home")
+    question.locator(".confirm-no").click()
+    question.wait_for(state="detached")
+    assert save.is_disabled() and cancel.is_disabled() and mark.count() == 0, "as kept: off, unmarked"
+    name.fill("Home sweet")
+    # Discard closes
+    open_section(panel, "certificate")
+    close.click()
+    question.wait_for(state="visible")
+    question.locator(".confirm-yes").click()
+    panel.wait_for(state="detached")
+    assert calls(page, "save") == [], "Discard saves nothing"
+    entry(page, False)
+
+    # ✕ without changes closes at once, the focus on the cog
+    panel = settings_of(page, "Cabin")
+    panel.locator(".server-close").click()
+    panel.wait_for(state="detached")
+    assert page.evaluate("document.activeElement === document.querySelector(\".server-row[data-id='s2'] .server-cog\")"), "the focus on the cog"
+
+    # Login's dot goes with the last key left
+    panel = settings_of(page, "Home")
+    dot = panel.locator(".server-tab[data-tab='login'] .server-tab-left")
+    assert dot.is_visible()
+    page.evaluate("() => { window.__fakeBridgeConfig.sessions = { s1: 'anna' }; window.dispatchEvent(new CustomEvent('massimo', { detail: { type: 'network' } })); }")
+    assert wait_until(page, "document.querySelector(\".server-row[data-id='s1'] .server-tab-left\").classList.contains('hidden')", 5), "no dot once none is left"
 
 
 def test_connect_app_settings(new_context, case, watch, guard):
@@ -1690,10 +1889,10 @@ def test_connect_login_key_id(new_context, case, watch, guard):
               "answers": {HOME_LAN: {"node": NODE1}, CABIN_LAN: {"node": NODE2}}}
     page = open_connect(new_context, guard, watch, config)
     wait_state(page, "Home", STATE[case.lang]["lan"])
-    panel = settings_of(page, "Home")
+    panel = settings_of(page, "Home", "login")
     assert panel.locator(".server-login-kept").inner_text().startswith(LOGIN_KEPT_KEY[case.lang]), panel.locator(".server-login-kept").inner_text()
     row(page, "Home").locator(".server-cog").click()
-    panel = settings_of(page, "Cabin")
+    panel = settings_of(page, "Cabin", "login")
     text = panel.locator(".server-login-kept").inner_text()
     assert text.startswith(LOGIN_KEPT[case.lang]) and "45" not in text, f"no id it does not know: {text!r}"
 
@@ -1993,7 +2192,7 @@ def test_connect_store_login(new_context, case, watch, guard):
         wait_state(page, name, st["lan"] if name != "Attic" else st["remote"])
     wait_state(page, "Office", st["offline"])
 
-    panel = settings_of(page, "Home")
+    panel = settings_of(page, "Home", "login")
     store = panel.locator(".server-store-login")
     assert store.inner_text() == STORE_LOGIN[case.lang] and not store.is_disabled(), "Store login where a session is held and no login kept"
     assert store.get_attribute("title") == said(page, "connect.storeLoginTitle"), "its title says what it does"
@@ -2011,7 +2210,7 @@ def test_connect_store_login(new_context, case, watch, guard):
     close_toast(page)
 
     # a prompt not passed: nothing kept, said so
-    panel = settings_of(page, "Shed")
+    panel = settings_of(page, "Shed", "login")
     panel.locator(".server-store-login").click()
     wait_toast(page, said(page, "login.keepFailed"), bad=True)
     assert panel.locator(".server-store-login").is_visible() and panel.locator(".server-login-kept").count() == 0, "nothing kept"
@@ -2019,7 +2218,7 @@ def test_connect_store_login(new_context, case, watch, guard):
     close_toast(page)
 
     for name, why in (("Office", "connect.keyLeftShowOff"), ("Attic", "connect.storeLoginPlain")):
-        panel = settings_of(page, name)
+        panel = settings_of(page, name, "login")
         store = panel.locator(".server-store-login")
         assert store.is_disabled() and store.get_attribute("title") == said(page, why), f"{name}: off, saying why: {store.get_attribute('title')!r}"
         row(page, name).locator(".server-cog").click()
@@ -2055,3 +2254,40 @@ def test_connect_pull_down(new_context, case, watch, guard):
     wait_state(page, "Cabin", STATE[case.lang]["lan"])
     assert len(calls(page, "probe")) == before + 2, "every server checked again"
     assert wait_until(page, "!document.getElementById('probe-btn').classList.contains('busy')", 3), "↻ stops"
+
+
+def test_connect_kept_meanwhile(new_context, case, watch, guard):
+    """What the app keeps of a server changing while its settings are open
+    (AP MobileApp, D94-A, D93-A): a name discovery heard for a server named
+    by its address is taken into the name's field, untouched, as a change of
+    the app's, not the user's: Save and Cancel stay off, Connection is not
+    marked, Back asks nothing; a field the user changed keeps the change."""
+    lan = "http://192.168.1.12:8099/"
+    config = {"servers": [server("s1", "192.168.1.12:8099", NODE1, lan=lan)], "answers": {lan: {"node": NODE1}}}
+    page = open_connect(new_context, guard, watch, config)
+    wait_state(page, "192.168.1.12:8099", STATE[case.lang]["lan"])
+    back_ready(page)
+    settings_of(page, "192.168.1.12:8099")
+    panel = page.locator(".server-row[data-id='s1'] .server-panel")  # by its id: its name changes
+    entry(page)
+    heard = f"window.dispatchEvent(new CustomEvent('massimo', {{ detail: {{ type: 'found', service: {{ name: '%s', host: '192.168.1.12', port: 8099, node: '{NODE1}', tls: false }} }} }}))"
+    page.evaluate(heard % "Kitchen")
+    assert wait_until(page, "conn.servers[0].name === 'Kitchen'", 3), "the name heard saved"
+    name = panel.locator(".server-connection input").first
+    assert wait_until(page, "document.querySelector('.server-connection input').value === 'Kitchen'", 3), "the field takes it"
+    save = panel.locator(".server-connection button[type=submit]")
+    assert save.is_disabled() and panel.locator(".server-connection .form-cancel").is_disabled(), "Save and Cancel off"
+    assert panel.locator(".server-tab-unsaved").count() == 0, "Connection not marked"
+    assert panel.locator(".server-panel-title").inner_text() == "Kitchen", "the head named anew"
+    page.evaluate("history.back()")
+    panel.wait_for(state="detached")
+    assert calls(page, "save")[-1][1]["name"] == "Kitchen" and len(calls(page, "save")) == 1, "nothing written back"
+
+    # a field the user changed keeps the change; the others take what is kept
+    settings_of(page, "Kitchen")
+    remote = panel.locator(".server-connection input").nth(2)
+    remote.fill("https://kitchen.example.net/")
+    page.evaluate("keepServer(Object.assign({}, conn.servers[0], { name: 'Pantry' })); renderServers()")
+    assert wait_until(page, "document.querySelector('.server-connection input').value === 'Pantry'", 3)
+    assert remote.input_value() == "https://kitchen.example.net/", "the user's change kept"
+    assert not save.is_disabled() and panel.locator(".server-tab-unsaved").count() == 1, "Connection differs by the user's change"
