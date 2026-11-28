@@ -1127,7 +1127,7 @@
   "log.kind.slots": "Speicherplätze",
   "log.kind.mismatch": "Raumliste",
   "log.kind.battery": "Batterie",
-  "log.kind.wall_reset": "Wandthermostat zurückgesetzt",
+  "log.kind.wall_reset": "Wandthermostat: Modus zurückgesetzt",
   "log.kind.error_reset": "Kommunikationsstörung zurückgesetzt",
   "log.kind.error_watch": "Fehlerüberwachung",
   "log.kind.login": "Anmeldung",

@@ -1128,7 +1128,7 @@
   "log.kind.slots": "geheugenplaatsen",
   "log.kind.mismatch": "kamerlijst",
   "log.kind.battery": "batterij",
-  "log.kind.wall_reset": "wandthermostaat teruggezet",
+  "log.kind.wall_reset": "modus van wandthermostaat teruggezet",
   "log.kind.error_reset": "communicatiefout teruggezet",
   "log.kind.error_watch": "foutbewaking",
   "log.kind.login": "aanmelding",
