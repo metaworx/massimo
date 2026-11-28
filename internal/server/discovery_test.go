@@ -5,8 +5,8 @@ package server
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
+	"log/slog"
 	"net"
 	"net/http"
 	"net/http/httptest"
@@ -17,6 +17,7 @@ import (
 	"time"
 
 	"go.metaworx.ch/massimo/internal/announce"
+	"go.metaworx.ch/massimo/internal/cubelan"
 	"go.metaworx.ch/massimo/internal/cubelan/fakecube"
 	"go.metaworx.ch/massimo/internal/protocol/cube"
 	"go.metaworx.ch/massimo/internal/sharedport"
@@ -591,65 +592,19 @@ func TestFailedRunChangesNothing(t *testing.T) {
 // answers discovery from, and follows it when it changes.
 func TestCubeConfiguredBySerialFollowsItsAddress(t *testing.T) {
 	t.Parallel()
-	greeting := recorded(t)
-	// Two homes for the same Cube on one port, 127.0.0.2 and 127.0.0.3
-	// (other addresses than this host's own, which mean its own proxy).
-	first := &fakecube.Server{Greeting: greeting}
-	addr, err := first.Start("127.0.0.2:0")
-	if err != nil {
-		testkit.BindOrSkip(t, err)
-	}
-	defer first.Close()
-	_, portStr, _ := net.SplitHostPort(addr)
-	port, _ := strconv.Atoi(portStr)
-	second := &fakecube.Server{Greeting: greeting}
-	if _, err := second.Start("127.0.0.3:" + portStr); err != nil {
-		testkit.BindOrSkip(t, err)
-	}
-	defer second.Close()
-	at2, err := fakecube.StartDiscovery("127.0.0.2:0", "KEQ0000100", 0x0a0107)
-	if err != nil {
-		testkit.BindOrSkip(t, err)
-	}
-	defer at2.Close()
-	at3, err := fakecube.StartDiscovery("127.0.0.3:0", "KEQ0000100", 0x0a0107)
-	if err != nil {
-		testkit.BindOrSkip(t, err)
-	}
-	defer at3.Close()
-	at3.SetSilent(true)
-
-	ts := startServer(t, discovering(Options{CubePort: port, DiscoveryAddr: "127.0.0.1:0", DiscoveryTargets: []string{at2.Addr(), at3.Addr()}}),
-		withCubes(CubeConfig{Serial: "KEQ0000100"})).ts
 	// The first run at the start finds it; no interval is needed for that.
-	cube := func() map[string]any {
-		var cubes []map[string]any
-		getJSON(t, ts, "", "/api/v1/cubes", &cubes)
-		if len(cubes) == 0 {
-			return nil
-		}
-		return cubes[0]
-	}
-	testkit.Eventually(t, "the cube at 127.0.0.2", func() bool {
-		c := cube()
-		return c != nil && c["connected"] == true && c["address"] == addr
-	})
+	m := startMovingCube(t, 0)
 	// It moves: the next run finds it at 127.0.0.3 and reconnects.
-	at2.SetSilent(true)
-	at3.SetSilent(false)
-	first.Close()
-	postDiscovery(t, ts)
-	testkit.Eventually(t, "the cube at 127.0.0.3", func() bool {
-		c := cube()
-		return c != nil && c["connected"] == true && c["address"] == "127.0.0.3:"+portStr && second.Connections() == 1
-	})
-	if c := cube(); c["configured"] != true {
-		t.Fatalf("cube %v", c)
-	}
-	var cubes []json.RawMessage
-	getJSON(t, ts, "", "/api/v1/cubes", &cubes)
+	moved := m.move()
+	postDiscovery(t, m.ts)
+	m.movedTo3(moved)
+	var cubes []map[string]any
+	getJSON(t, m.ts, "", "/api/v1/cubes", &cubes)
 	if len(cubes) != 1 {
-		t.Fatalf("a configured cube also listed as found: %s", cubes)
+		t.Fatalf("a configured cube also listed as found: %v", cubes)
+	}
+	if cubes[0]["configured"] != true {
+		t.Fatalf("cube %v", cubes[0])
 	}
 }
 
@@ -685,7 +640,11 @@ func noRunGoing(s *Server) bool {
 // movingCube is a Cube configured by serial only, connected at
 // 127.0.0.2 with no run going, which can move to 127.0.0.3 on the same
 // port: its two homes, their discovery responders (the one at 127.0.0.3
-// silent), and a request counter among the targets.
+// silent), a request counter among the targets, and the server's log
+// at Debug, where its client's tries are. The client's backoff is 50
+// ms in place of a second: a dial refused around the move doubles it,
+// and from a second the next tries came two and four seconds later,
+// past the wait for the move on a loaded host.
 type movingCube struct {
 	t             *testing.T
 	ts            *httptest.Server
@@ -694,6 +653,7 @@ type movingCube struct {
 	at2, at3      *fakecube.DiscoveryResponder
 	port          string
 	requests      func() int
+	log           *testkit.Watch[testkit.Record]
 }
 
 func startMovingCube(t *testing.T, retry time.Duration) *movingCube {
@@ -722,9 +682,10 @@ func startMovingCube(t *testing.T, retry time.Duration) *movingCube {
 	m.at3.SetSilent(true)
 	counter, requests := requestCounter(t)
 	m.requests = requests
-	r := startServer(t, discovering(Options{CubePort: port, AddressRetry: retry,
-		DiscoveryAddr: "127.0.0.1:0", DiscoveryTargets: []string{m.at2.Addr(), m.at3.Addr(), counter}}), withCubes(CubeConfig{Serial: "KEQ0000100"}))
-	m.ts, m.s = r.ts, r.s
+	r := startServer(t, withLog(slog.LevelDebug), discovering(Options{CubePort: port, AddressRetry: retry,
+		DiscoveryAddr: "127.0.0.1:0", DiscoveryTargets: []string{m.at2.Addr(), m.at3.Addr(), counter},
+		cubeOptions: func(o *cubelan.Options) { o.Backoff = 50 * time.Millisecond }}), withCubes(CubeConfig{Serial: "KEQ0000100"}))
+	m.ts, m.s, m.log = r.ts, r.s, r.log
 	testkit.Eventually(t, "the cube at 127.0.0.2", func() bool { return m.at(addr) })
 	testkit.Eventually(t, "the run at the start to end", func() bool { return noRunGoing(m.s) })
 	return m
@@ -737,18 +698,63 @@ func (m *movingCube) at(addr string) bool {
 	return len(cubes) == 1 && cubes[0]["connected"] == true && cubes[0]["address"] == addr
 }
 
+// moveMark is what came before a move: the connections the new home
+// had taken, and the server's log.
+type moveMark struct {
+	conns int
+	log   testkit.Cursor
+}
+
+// mark is the mark before a move the test makes itself.
+func (m *movingCube) mark() moveMark {
+	return moveMark{conns: m.second.Connections(), log: m.log.Mark()}
+}
+
+// move moves the Cube from 127.0.0.2 to 127.0.0.3: the old home falls
+// silent and closes, the new one answers discovery. It returns the mark
+// before it.
+func (m *movingCube) move() moveMark {
+	mark := m.mark()
+	m.at2.SetSilent(true)
+	m.at3.SetSilent(false)
+	m.first.Close()
+	return mark
+}
+
+// movedTo3 waits until the Cube is connected at 127.0.0.3, the new
+// home having taken a connection since the mark: the connections since
+// the move, not one in all, since a client that connected there twice,
+// as after a reply timeout on a loaded host, is there all the same.
+// The failure says what the API showed, the connections to each home,
+// and the server's lines of the Cube since the mark, the client's
+// tries among them, so that a slow reconnect is told from a second one.
+func (m *movingCube) movedTo3(mark moveMark) {
+	m.t.Helper()
+	addr := "127.0.0.3:" + m.port
+	var seen string
+	if testkit.Within(testkit.Wait, func() bool {
+		at := m.at(addr)
+		since := m.second.Connections() - mark.conns
+		seen = fmt.Sprintf("connected there %v, %d connection(s) to 127.0.0.3 since the move, %d to 127.0.0.2 in all", at, since, m.first.Connections())
+		return at && since > 0
+	}) {
+		return
+	}
+	var lines []string
+	for _, rec := range m.log.Since(mark.log, testkit.Contains("source=cube")) {
+		lines = append(lines, rec.String())
+	}
+	m.t.Fatalf("timed out after %v waiting for the cube at %s: %s; the cube's lines since the move:\n%s",
+		testkit.Scale(testkit.Wait), addr, seen, strings.Join(lines, "\n"))
+}
+
 // A Cube configured by serial that is lost is searched for at once,
 // and followed to its new address without a call of the API: the minute
 // between searches is left as it is.
 func TestALostCubeIsSearchedForAtOnce(t *testing.T) {
 	t.Parallel()
 	m := startMovingCube(t, 0)
-	m.at2.SetSilent(true)
-	m.at3.SetSilent(false)
-	m.first.Close()
-	testkit.Eventually(t, "the cube at 127.0.0.3", func() bool {
-		return m.at("127.0.0.3:"+m.port) && m.second.Connections() == 1
-	})
+	m.movedTo3(m.move())
 }
 
 // A Cube still lost after the search at the loss is searched for again
@@ -757,7 +763,7 @@ func TestALostCubeIsSearchedForWhileLost(t *testing.T) {
 	t.Parallel()
 	m := startMovingCube(t, 200*time.Millisecond)
 	m.at2.SetSilent(true)
-	before := m.requests()
+	before, moved := m.requests(), m.mark()
 	m.first.Close()
 	// The search at the loss hears nobody: both homes are silent.
 	testkit.Eventually(t, "a search after the loss", func() bool { return m.requests() > before && noRunGoing(m.s) })
@@ -765,9 +771,7 @@ func TestALostCubeIsSearchedForWhileLost(t *testing.T) {
 		t.Fatal("followed to a silent address")
 	}
 	m.at3.SetSilent(false)
-	testkit.Eventually(t, "the cube at 127.0.0.3", func() bool {
-		return m.at("127.0.0.3:"+m.port) && m.second.Connections() == 1
-	})
+	m.movedTo3(moved)
 	// Back, it is no longer searched for.
 	testkit.Eventually(t, "the last run to end", func() bool { return noRunGoing(m.s) })
 	time.Sleep(600 * time.Millisecond) // a run asked for before it was back
