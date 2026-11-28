@@ -633,12 +633,24 @@ under My profile → Sessions and keys by the phone's name, ends the session.
   **Remove** posts the server's codes where it answers,
   and keeps those still to post in `gone.json`, a file of its own:
   the server's id, node, addresses and pinned fingerprint with the codes,
+  each code with the token it ends, its user, its id and, a session's,
+  when it was made, never a secret (D117-A);
   never listed nor opened; the app probes those addresses at its start and
   each time the list is shown, and posts the codes only where the probe
   finds the server at its node, so that an address given to another host
-  spends none. Each goes on `204` or a server that takes none,
+  spends none.
+  Where it does not find it there and the removed server has a node,
+  it probes each server of the list with that node too,
+  at that server's addresses and with its pin,
+  and posts the codes at the first that answers with the node (D117-A).
+  Adding or saving a server whose node is a removed one's takes that one's
+  codes back into its entry, as the keys and sessions left there with their
+  codes, which its next contact posts, and drops them from `gone.json`;
+  a code kept before its token was kept with it stays there.
+  A removed server without a node is found at its own addresses alone.
+  Each goes on `204` or a server that takes none,
   a session's 30 days after it was left, and every code 90 days after the
-  Remove at the latest (D116-A).
+  Remove at the latest (D116-A), which then bounds only a server never seen again.
   No code ever reaches the phone's log.
 - **A logout the server would refuse** (F41, D100-A).
   The server ends a session itself where the app makes the next session

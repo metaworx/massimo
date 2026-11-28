@@ -324,6 +324,7 @@ In the suite's own run `EnrollTest` passes at once.
 | `CodesTest.removeWhileTheServerIsDownEndsItsSessionWhereItIsFoundAgain` | Remove while the server does not answer keeps the session's code in `gone.json`, posted where the server is found again at its node | 21 |
 | `CodesTest.aKeyLeftWithoutItsCodeIsRevokedAtTheSignInAndSaidSo` | a key left from a login kept before version 6, without a code, is revoked at the next sign-in, and My profile's toast says so | 21 |
 | `CodesTest.aKeyLeftWithItsCodeIsTakenAtTheProbeAndNoToastShows` | a key left with its code is taken at the probe, and no toast shows | 21 |
+| `CodesTest.aServerAddedAgainWithItsNodeTakesItsCodesBack` | Remove while the server does not answer, then the server added again with its node: `save`'s answer shows the session left waiting, `gone.json` holds it no more, and the next contact ends it by its code (D117-A) | 20 |
 | `ConnectPageTest` (two tests) | the connect page and the bridge at contract version 7, a server's call refused | 3, 19 |
 | `EnrollTest.aFingerIsEnrolled` | the finger enrolled through Settings, run alone before the others | 18 |
 
