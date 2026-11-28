@@ -16,7 +16,7 @@ before the codes, by its English text."""
 import json
 from pathlib import Path
 
-from helpers import isolate_log, show_view, wait_log_live, wait_until
+from helpers import isolate_log, safe_route, show_view, wait_log_live, wait_until
 
 # Room 2 of greeting.txt, "Büro", whose only thermostat is 0a0109,
 # "Radiator Büro": the room and the thermostat of the Go test's answer.
@@ -105,7 +105,7 @@ KEPT_BEFORE = {
 def reboot_says(page, answer):
     """Maintenance's reboot text once GET /api/v1/reboot answers answer."""
     page.unroute(REBOOT)
-    page.route(REBOOT, lambda route: route.fulfill(status=200, content_type="application/json", body=json.dumps(answer))
+    safe_route(page, REBOOT, lambda route: route.fulfill(status=200, content_type="application/json", body=json.dumps(answer))
                if route.request.method == "GET" else route.abort())
     show_view(page, "tiles")
     show_view(page, "maint")
