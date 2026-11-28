@@ -219,11 +219,12 @@ makes, sweeps and keeps it (`tools/workdir/README.md`; AP EmulatorRuns, D3-B).
 
 `conftest.py` also holds `api_call`, a request of the test's own to the API,
 `clear_preferences`, which the page fixture calls,
-and `server_holds_settings(holds, token=None, **values)`,
-which sets whether the server holds a user's settings,
+and `server_holds_settings(holds, token=None, schemes=(), **values)`,
+which sets whether the server holds a user's settings and colour schemes,
 the page fixture's user's unless a token is given:
 with `holds` the preference `ui`, the values given over the page's defaults,
-without it none (AP SteadyTests v1.1, D14-A).
+and the preference `schemes`, the list of the schemes given, empty by default;
+without it neither (AP SteadyTests v1.1, D14-A, and v1.2, Block 19).
 A sign-in and a page's load take what it holds, and hand a server that holds
 none the browser's, so a test whose outcome depends on which sets it
 (`docs/ui-testing.md`, section 9).
@@ -1075,7 +1076,8 @@ Node is not needed.
   is held while a test checks it after more than one look
   (`with held_timers(page, "copied"):`), not raced.
 - A test whose outcome depends on whether the server holds the user's settings
-  at a sign-in or a load sets it (`server_holds_settings` of `conftest.py`),
+  or colour schemes at a sign-in or a load sets it
+  (`server_holds_settings` of `conftest.py`),
   while the page is signed out or right before the load,
   rather than taking what the page's own pushes or an earlier test left;
   where the outcome must hold in both, it is parametrised over both.

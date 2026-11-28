@@ -95,14 +95,18 @@ function leftOf(until: number): number {
 /**
  * apply takes the server's pairing state, the answer of GET, POST and
  * DELETE …/pairing. The devices of a pairing this page did not see
- * running are not shown; the end of one it saw is said.
+ * running are not shown; the end of one it saw is said. known is, for a
+ * read, the devices the page listed when it asked (loadPairing): one
+ * listed since, by a paired event or a later answer, that the answer
+ * lacks joined after the answer was given, and stays listed, its form
+ * the one it was (since).
  */
-function apply(serial: string, st: PairingState | null): void {
+function apply(serial: string, st: PairingState | null, known?: NewDevice[]): void {
   const f = flowOf(serial);
   const was = f.active;
   f.active = !!st?.active;
   f.until = Date.parse(st?.until || "") || 0;
-  if (f.active || was) listed(f, st?.paired || []);
+  if (f.active || was) listed(f, since(st?.paired || [], f.paired, known));
   if (f.active) f.form = false;
   if (was && !f.active) f.msg = { text: tn("pairing.ended", f.paired.length), ok: true };
   f.left = leftOf(f.until);
@@ -111,18 +115,36 @@ function apply(serial: string, st: PairingState | null): void {
 }
 
 /**
+ * since is the devices an answer lists, answer, and after them those the
+ * page lists now, now, that it did not list when it asked, known, and
+ * the answer lacks: a device a paired event listed after the read was
+ * asked for, whose answer the page takes after the event (AP SteadyTests
+ * v1.2, Block 21), which would otherwise be dropped until the pairing
+ * ends, since the stream open on the shown Cube brings no other read.
+ * Without known, the answer's.
+ */
+function since(answer: NewDevice[], now: NewDevice[], known?: NewDevice[]): NewDevice[] {
+  if (!known) return answer;
+  const has = (list: NewDevice[], d: NewDevice) => list.some((x) => x.rf_address === d.rf_address);
+  const later = now.filter((d) => !has(known, d) && !has(answer, d));
+  return later.length ? [...answer, ...later] : answer;
+}
+
+/**
  * loadPairing asks for a Cube's pairing state. Three failures in a row
  * while it runs end the countdown, which would ask on forever, and say
- * why.
+ * why. Its answer keeps the devices listed after it was asked for
+ * (apply).
  */
 export async function loadPairing(serial: string): Promise<void> {
   const f = flowOf(serial);
   const sn = session();
+  const known = f.paired;
   try {
     const st = await api<PairingState>("GET", cubePath(serial) + "/pairing");
     if (!stillSession(sn)) return; // an answer after a sign-out starts no countdown
     failures.set(serial, 0);
-    apply(serial, st);
+    apply(serial, st, known);
   } catch (e) {
     if (!stillSession(sn)) return;
     const n = (failures.get(serial) || 0) + 1;

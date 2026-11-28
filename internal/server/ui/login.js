@@ -348,7 +348,7 @@ async function forgetSession(synced) {
   state.me = null;
   MassimoParts.signedOut(); // the session's number first, then every region's forgetting; who is in is null already (state.me is the parts' signal)
   const language = synced ? forgetUserSettings() : null; // applied at once, its language's table awaited below
-  prefsSync.held = null; // the settings that held were the user's who left
+  prefsSync.held = { ui: null, schemes: null }; // the settings and schemes that held were the user's who left
   forgetNotSent();
   MassimoParts.rooms.closeHouse();
   hideToast(); // components.js: nothing a toast says of the user who left stays
@@ -705,37 +705,56 @@ function canSync() {
 }
 
 // prefsSync holds the preferences waiting for their second to be sent
-// (timer, keys) and held, the user's settings that hold: as the server
-// took them last or gave them (pushPreferences, loadPreferences), else as
-// the browser kept them before the first change since (noteHeld); null
-// where the page knows none. A change whose push met a 401 goes back to
-// them (takeBack).
-const prefsSync = { timer: null, keys: new Set(), held: null };
+// (timer, keys) and held, by preference (ui, schemes), the user's
+// settings and schemes that hold: as the server took them last or gave
+// them (pushPreferences, loadPreferences), else as the browser kept them
+// before the first change since (noteHeld); null where the page knows
+// none. A change whose push met a 401 goes back to them (takeBack).
+const prefsSync = { timer: null, keys: new Set(), held: { ui: null, schemes: null } };
 
 // PREFS_DELAY is how long a change waits for the next before it goes to
 // the server, so that a poll interval typed digit by digit is one write.
 const PREFS_DELAY = 1000;
 
-// noteHeld keeps the user's settings as the browser has them before a
-// change as the ones that hold, where the page knows none (prefsSync):
-// those of a server that has not taken any yet, which a sign-in would
-// hand the browser's (loadPreferences). setSetting of app.js calls it.
-function noteHeld() {
-  if (!prefsSync.held && canSync()) prefsSync.held = storedSettings(); // app.js
+// keptPreference is a preference as the browser keeps it: ui the user's
+// values (storedSettings of app.js), schemes the user's schemes
+// (storedSchemes of theme.js), which are the ones before a change while
+// it is made.
+function keptPreference(key) {
+  return key === "ui" ? storedSettings() : schemesDocument(storedSchemes());
 }
 
-// takeBack takes back a change whose push met a 401, which the page said
-// was not sent (AP SteadyTests v1.1, D14-A): each setting the push sent
-// otherwise than the settings that hold (prefsSync.held) goes back to
-// theirs, where the browser still keeps what was sent, and the page shows
-// it. So that "not sent" stays true, the page does not send the change
-// later by itself: not with a later push, nor with the browser's settings
-// that a sign-in hands a server without the user's; the user makes it
-// again. A setting changed again since keeps its new value, which a push
-// of its own sends.
-function takeBack(sent) {
-  const held = prefsSync.held;
+// noteHeld keeps a preference, ui or schemes, as the browser has it
+// before a change as the one that holds, where the page knows none
+// (prefsSync): that of a server that has not taken one yet, which a
+// sign-in would hand the browser's (loadPreferences). setSetting of
+// app.js and storeCustomSchemes of theme.js call it.
+function noteHeld(key) {
+  if (!prefsSync.held[key] && canSync()) prefsSync.held[key] = keptPreference(key);
+}
+
+// takeBack takes back a change of a preference, ui or schemes, whose push
+// met a 401, which the page said was not sent (AP SteadyTests v1.1,
+// D14-A; v1.2, Block 19): what the push sent otherwise than what holds
+// (prefsSync.held) goes back to it, where the browser still keeps what
+// was sent, and the page shows it: each setting, and each colour scheme,
+// one added going (takeBackSchemes of theme.js). So that "not sent" stays
+// true, the page does not send the change later by itself: not with a
+// later push, nor with the browser's settings and schemes that a sign-in
+// hands a server without the user's; the user makes it again. A setting
+// or a scheme changed again since keeps its change, which a push of its
+// own sends.
+function takeBack(key, sent) {
+  const held = prefsSync.held[key];
   if (!held) return Promise.resolve();
+  const back = key === "ui" ? takeBackSettings(sent, held) : takeBackSchemes(sent, held); // theme.js
+  return back ? applyStoredSettings() : Promise.resolve();
+}
+
+// takeBackSettings takes back each setting the push sent otherwise than
+// held where the browser still keeps what was sent (takeBack); it returns
+// whether one went back.
+function takeBackSettings(sent, held) {
   const now = storedSettings(); // app.js
   let back = false;
   for (const k of SETTING_KEYS) {
@@ -744,7 +763,7 @@ function takeBack(sent) {
       back = true;
     }
   }
-  return back ? applyStoredSettings() : Promise.resolve();
+  return back;
 }
 
 // schedulePreferences sends a preference (ui or schemes) to the server
@@ -773,18 +792,19 @@ function preferenceBody(key) {
   return key === "ui" ? storedSettings() : schemesDocument(); // app.js, theme.js
 }
 
-// pushPreferences sends the preferences scheduled. The settings sent are
-// then the ones that hold; a 401 takes their change back (takeBack).
+// pushPreferences sends the preferences scheduled. The settings and the
+// schemes sent are then the ones that hold; a 401 takes their change back
+// (takeBack).
 async function pushPreferences() {
   for (const key of takeScheduled()) {
     const n = MassimoParts.session();
     const body = preferenceBody(key);
     try {
       await api("PUT", "api/v1/me/preferences/" + key, body);
-      if (key === "ui" && MassimoParts.stillSession(n)) prefsSync.held = body;
+      if (MassimoParts.stillSession(n)) prefsSync.held[key] = body;
     } catch (e) {
       if (!MassimoParts.stillSession(n)) return;
-      if (key === "ui" && e.status === 401) await takeBack(body); // said not sent (app.js notSent), and not sent later
+      if (e.status === 401) await takeBack(key, body); // said not sent (app.js notSent), and not sent later
       showMessage(t("prefs.saveFailed", { error: e.message }), false);
     }
   }
@@ -808,8 +828,8 @@ function flushPreferences() {
 // applied where this device does not keep its own. What the server lacks
 // it learns from the browser, so that the first sign-in keeps the
 // settings and the schemes the browser had; a change said not sent is no
-// longer among them (takeBack). The server's ui is then the settings
-// that hold (prefsSync.held).
+// longer among them (takeBack). The server's ui and schemes are then the
+// ones that hold (prefsSync.held).
 async function loadPreferences() {
   if (!canSync()) return;
   const n = MassimoParts.session();
@@ -822,6 +842,7 @@ async function loadPreferences() {
   if (!MassimoParts.stillSession(n)) return; // the settings of the user before
   if (prefs.schemes) {
     takeSchemes(prefs.schemes); // theme.js
+    prefsSync.held.schemes = schemesDocument();
   } else if (themeState.custom.length) {
     schedulePreferences("schemes");
   }
@@ -831,7 +852,7 @@ async function loadPreferences() {
       const v = validSetting(k, ui[k]);
       if (v !== undefined) storeUserSetting(k, v);
     }
-    prefsSync.held = storedSettings(); // app.js
+    prefsSync.held.ui = storedSettings(); // app.js
   } else {
     schedulePreferences("ui");
   }

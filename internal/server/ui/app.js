@@ -227,7 +227,7 @@ function setSetting(key, v) {
     storeDeviceOverrides(d);
     return;
   }
-  noteHeld(); // login.js: the settings before the change, where the page knows none that hold
+  noteHeld("ui"); // login.js: the settings before the change, where the page knows none that hold
   storeUserSetting(key, v);
   schedulePreferences("ui");
 }
@@ -1088,18 +1088,25 @@ async function connectEvents() {
   if (loginPromise && loginPromise.ask && loginPromise.ask.still) return;
   closeEvents();
   const gen = eventsGen;
-  if (!state.serial) return;
-  let ticket;
-  try {
-    ticket = (await api("POST", base() + "/events/ticket")).ticket;
-  } catch (e) {
-    if (gen === eventsGen) retryEvents(gen);
-    return;
-  }
-  if (gen !== eventsGen) return; // another connect or close came first
-  const serial = state.serial;
+  // A ticket opens the stream of the Cube it was asked for alone: where
+  // another Cube is shown once it comes, chosen meanwhile or the one asked
+  // for gone from the list (loadCubes), it is dropped and the shown Cube's
+  // is asked for, rather than open that Cube's stream with it, which the
+  // server refuses (AP SteadyTests v1.2, Block 20).
+  let serial, ticket;
+  do {
+    serial = state.serial;
+    if (!serial) return;
+    try {
+      ticket = (await api("POST", "api/v1/cubes/" + encodeURIComponent(serial) + "/events/ticket")).ticket;
+    } catch (e) {
+      if (gen === eventsGen) retryEvents(gen);
+      return;
+    }
+    if (gen !== eventsGen) return; // another connect or close came first
+  } while (state.serial !== serial);
   const resume = eventsLast && eventsLast.serial === serial ? eventsLast.id : "";
-  const es = new EventSource(base() + "/events?devices=all&ticket=" + encodeURIComponent(ticket) +
+  const es = new EventSource("api/v1/cubes/" + encodeURIComponent(serial) + "/events?devices=all&ticket=" + encodeURIComponent(ticket) +
     (resume ? "&last_event_id=" + encodeURIComponent(resume) : ""));
   state.events = es;
   // on adds a listener that first notes the event's id for the next stream.

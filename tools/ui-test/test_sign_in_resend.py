@@ -23,8 +23,9 @@ open, where the server held none of the user's or a push waited for the
 sign-in, so a test of a settings change waits for that push itself
 (sent_requests, wait_held of helpers.py) before it counts, and sets
 which the server holds (server_holds_settings of conftest.py): a
-settings change refused goes back to the value that held, and the page
-sends it in neither case (AP SteadyTests v1.1, D14-A)."""
+settings change refused goes back to the value that held, and a colour
+scheme refused to the schemes that held, and the page sends it in
+neither case (AP SteadyTests v1.1, D14-A, and v1.2, Block 19)."""
 import json
 import time
 
@@ -307,6 +308,67 @@ def test_message_line_after_the_sign_in(page, case, watch, holds):
     assert page.evaluate(shown), f"the field shows {was} after the sign-in"
     assert all(b.get("poll") != 37 for b in bodies), f"no push after the refusal carries the change: {bodies}"
     assert len(refusal.sent) == 1, f"the change is not sent again: {len(refusal.sent)}, with {bodies}"
+
+
+# A scheme on the page: kept in the browser, chosen, offered by My settings' choice.
+SCHEME_ON_PAGE = """(n) => [themeState.custom.some((c) => c.name === n), state.settings.scheme === 'custom:' + n,
+  [...document.querySelectorAll('#scheme-select option')].some((o) => o.value === 'custom:' + n)]"""
+
+
+@pytest.mark.parametrize("holds", [True, False], ids=["server-holds", "server-holds-none"])
+def test_a_refused_scheme_goes_back(page, case, watch, tmp_path, holds):
+    """A colour scheme imported, kept and chosen, whose push meets a 401,
+    goes back as it is refused, as a setting does (AP SteadyTests v1.2,
+    Block 19, D19-B): it is no longer kept, chosen or offered, and the page
+    is in the colours that held; the page sends it neither with a later
+    push nor with the schemes a sign-in hands a server that holds none of
+    the user's. The test sets whether the server holds the user's settings
+    and schemes at the sign-in (server_holds_settings). Fails on the page
+    before: the browser kept the scheme, and where the server held none,
+    the sign-in handed it over."""
+    name = f"Refused {case.width}-{case.lang}"
+    watch.expected.extend([("/me/preferences/schemes", 401), ("/me/preferences/ui", 401)])
+    seen = tickets(page)
+    pushes = sent_requests(page, "PUT", "**/api/v1/me/preferences/schemes")
+
+    def carries(r):
+        return any(s.get("name") == name for s in (r.post_data_json or {}).get("schemes") or [])
+
+    refusal = Refusal(page, "**/api/v1/me/preferences/schemes", "PUT", match=carries)
+    # the page's start pushes the browser's settings to a server without them a second after it read them: gone before
+    # the change, so that the change is a push of its own
+    assert wait_until(page, "!prefsSync.timer", 5), "the page's start has pushed its settings"
+    bg = "getComputedStyle(document.documentElement).getPropertyValue('--bg').trim()"
+    was = page.evaluate(bg)
+    doc = page.evaluate("(n) => Object.assign(schemeDoc(schemeById('massimo')), { name: n })", name)
+    doc["light"]["bg"] = doc["dark"]["bg"] = "#112233"
+    f = tmp_path / "scheme.json"
+    f.write_text(json.dumps(doc))
+    show_view(page, "prefs")
+    page.locator("#scheme-file").set_input_files(str(f))
+    assert wait_held(page, refusal.sent), "the scheme's push meets the 401"
+    assert wait_until(page, DIALOG_OPEN, 5), "the sign-in opens"
+    gone = f"({SCHEME_ON_PAGE})({json.dumps(name)}).every((x) => !x)"
+    assert wait_until(page, gone, 5), f"the scheme goes back as it is refused, not kept, chosen or offered: {page.evaluate(SCHEME_ON_PAGE, name)}"
+    assert page.evaluate(bg) == was, f"the page in the colours that held: {page.evaluate(bg)}"
+    refused = len(pushes)
+    server_holds_settings(holds)  # the page is signed out: no push of its own reaches the server before the sign-in
+    before = len(seen)
+    sign_in_key(page)
+    back(page, seen, before)
+    # the sign-in read the settings and schemes before the stream opened (afterLogin): a server that held none is handed
+    # the browser's, a second later, the schemes first, the push the scheme could go with
+    assert wait_until(page, "!prefsSync.timer", 5), "no push of the settings waits"
+    ok, prefs = settled(page, lambda: api_call("GET", "api/v1/me/preferences") or {}, lambda p: p.get("ui") is not None)
+    assert ok, "the server holds the user's settings: kept, or handed over at the sign-in"
+    frames(page)
+    bodies = [p.post_data_json or {} for p in pushes[refused:]]
+    held = [s.get("name") for s in (prefs.get("schemes") or {}).get("schemes") or []]
+    assert name not in held, f"the server does not hold the scheme: {held}, the pushes {bodies}"
+    on_page = page.evaluate(SCHEME_ON_PAGE, name)
+    assert not any(on_page), f"nor does the page keep, choose or offer it: {on_page}"
+    assert not any(carries(p) for p in pushes[refused:]), f"no push after the refusal carries the scheme: {bodies}"
+    assert len(refusal.sent) == 1, f"the scheme is not sent again: {len(refusal.sent)}, with {bodies}"
 
 
 def test_stepped_setpoint_dropped_at_the_sign_in(new_context, case, watch, guard):

@@ -296,22 +296,27 @@ SETTINGS_DEFAULTS = {"poll": 10, "expert": False, "clock": "browser", "lang": "a
                      "blink": "system", "iconWindow": "sash", "iconRadio": "wifi"}
 
 
-def server_holds_settings(holds, token=None, **values):
+def server_holds_settings(holds, token=None, schemes=(), **values):
     """Sets whether the server holds the settings of the token's user, the
-    test token's (the page fixture's user) unless another is given: with
-    holds, the preference ui with values over the page's defaults
-    (SETTINGS_DEFAULTS); without, none, as clear_preferences leaves it.
-    A sign-in and a page's load take the settings the server holds, and
-    hand a server that holds none the browser's (loadPreferences of
-    login.js), so a test whose outcome depends on which sets it at the
-    moment that decides, rather than taking what the page's own pushes or
-    an earlier test left (docs/ui-testing.md, section 9; AP SteadyTests
-    v1.1, D14-A): while its page is signed out, or before the load,
-    where no push of the page's own comes after it."""
+    test token's (the page fixture's user) unless another is given, its
+    settings and its colour schemes: with holds, the preference ui with
+    values over the page's defaults (SETTINGS_DEFAULTS), and the list of
+    the user's schemes, the preference schemes, with the schemes given,
+    massimo-scheme/1 documents, none by default; without, neither, as
+    clear_preferences leaves them. A sign-in and a page's load take the
+    settings and the list of schemes the server holds, and hand a server
+    that holds none the browser's (loadPreferences of login.js), so a test
+    whose outcome depends on which sets it at the moment that decides,
+    rather than taking what the page's own pushes or an earlier test left
+    (docs/ui-testing.md, section 9; AP SteadyTests v1.1, D14-A, and v1.2,
+    Block 19): while its page is signed out, or before the load, where no
+    push of the page's own comes after it."""
     if holds:
         api_call("PUT", "api/v1/me/preferences/ui", {**SETTINGS_DEFAULTS, **values}, token=token)
+        api_call("PUT", "api/v1/me/preferences/schemes", {"format": "massimo-schemes/1", "schemes": list(schemes)}, token=token)
     else:
-        api_call("DELETE", "api/v1/me/preferences/ui", token=token)
+        for key in ("ui", "schemes"):
+            api_call("DELETE", "api/v1/me/preferences/" + key, token=token)
 
 
 @pytest.fixture
