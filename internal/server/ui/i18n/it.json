@@ -960,7 +960,7 @@
   "log.kind.slots": "slot di memoria",
   "log.kind.mismatch": "elenco stanze",
   "log.kind.battery": "batteria",
-  "log.kind.wall_reset": "termostato a parete reimpostato",
+  "log.kind.wall_reset": "modalità del termostato a parete reimpostata",
   "log.kind.error_reset": "errore di comunicazione reimpostato",
   "log.kind.error_watch": "sorveglianza errori",
   "log.kind.login": "accesso",

@@ -958,7 +958,7 @@
   "log.kind.slots": "memory slots",
   "log.kind.mismatch": "room list",
   "log.kind.battery": "battery",
-  "log.kind.wall_reset": "wall thermostat reset",
+  "log.kind.wall_reset": "wall thermostat mode reset",
   "log.kind.error_reset": "communication error reset",
   "log.kind.error_watch": "error watch",
   "log.kind.login": "sign-in",
