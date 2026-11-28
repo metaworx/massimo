@@ -290,7 +290,9 @@ func TestPutToken(t *testing.T) {
 	put("no field", "secret", "anna", annaKey.ID, `{}`, 400, "nothing to change")
 	put("an unknown field", "secret", "anna", annaKey.ID, `{"idle_exempt": true, "label": "x"}`, 400, "bad body")
 	put("a session", "secret", "anna", annaSession.ID, `{"idle_exempt": true}`, 400, "is a session")
-	put("the settings file's key", "secret", store.BootstrapUser, file, `{"idle_exempt": false}`, 409, "settings file")
+	if text := put("the settings file's key", "secret", store.BootstrapUser, file, `{"idle_exempt": false}`, 409, "settings file"); answerCode(text) != "token_settings_key" {
+		t.Errorf("the settings file's key: %s, want token_settings_key", text)
+	}
 	put("the bearer that very key", ownSecret, store.BootstrapUser, ownKey.ID, `{"idle_exempt": true}`, 403, "its own life")
 	put("a key's user who manages nobody", annaSecret, "anna", annaOther.ID, `{"idle_exempt": true}`, 403, "only who manages user anna")
 	put("a key's user who manages nobody, false", annaSecret, "anna", annaOther.ID, `{"idle_exempt": false}`, 403, "only who manages user anna")
@@ -298,8 +300,14 @@ func TestPutToken(t *testing.T) {
 	put("a manager of guests, an operator's key", manager, "anna", annaKey.ID, `{"idle_exempt": true}`, 403, "")
 	put("an integration's key kept", "secret", i.UUID+":", integ[0].ID, `{"idle_exempt": true}`, 400, "always held to the idle limit")
 	put("an integration's key held to it, as it is", "secret", i.UUID+":", integ[0].ID, `{"idle_exempt": false}`, 200, "")
-	put("another user's token", "secret", "gina", annaKey.ID, `{"idle_exempt": true}`, 404, "")
-	put("no such token", "secret", "anna", 9999, `{"idle_exempt": true}`, 404, "")
+	for what, c := range map[string]struct {
+		user string
+		id   int64
+	}{"another user's token": {"gina", annaKey.ID}, "no such token": {"anna", 9999}} {
+		if text := put(what, "secret", c.user, c.id, `{"idle_exempt": true}`, 404, "has no token"); answerCode(text) != "token_unknown" {
+			t.Errorf("%s: %s, want token_unknown", what, text)
+		}
+	}
 	if _, err := st.RevokeToken(ctx, annaOther.ID); err != nil {
 		t.Fatal(err)
 	}

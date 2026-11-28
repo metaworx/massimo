@@ -942,7 +942,7 @@ paths:
         token. An integration's user gets
         none (403): it acts through its integration alone. With an API key as the bearer, the new key names
         it (made_by) and goes with its revoke; a bearer key revoked or ended after the request was let in
-        makes none (401).
+        makes none (401, token_wrong).
       parameters: [{$ref: "#/components/parameters/name"}, {$ref: "#/components/parameters/idempotencyKey"}]
       requestBody:
         required: true
