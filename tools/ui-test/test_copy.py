@@ -6,7 +6,7 @@ needs, where the browser gives it no clipboard, which gives the focus back
 where it was. And the bubble that says "Copied" (components.js
 showBubble): above its control, below it at the window's top, at the
 window's foot without one, said once for a screen reader."""
-from helpers import BUBBLE_STATUS, bubble, bubble_at, held_timers, scaled, wait_bubble_at, wait_until
+from helpers import BUBBLE_STATUS, bubble, bubble_at, held_timers, scaled, wait_bubble_at, wait_bubble_foot, wait_until
 
 DONE = {"en": "Copied", "de": "Kopiert"}
 
@@ -226,6 +226,48 @@ def test_bubble_at_the_foot(page, case):
         assert b["z"] > toast, f"over the toast: {b['z']} > {toast}"
     finally:
         page.evaluate("() => { hideBubble(); hideToast(); }")
+
+
+def test_a_copy_at_the_foot(page, case):
+    """A copy whose control closes with the menu it is in says it at the
+    window's foot (copyable's and copyIcon's foot, a ☰'s version row; AP
+    MobileApp, D115-D), the text and its icon alike; a failed copy there
+    too, in its own words. Fails on the page before: the bubble above the
+    control, which the menu's closing takes away."""
+    page.context.grant_permissions(["clipboard-read", "clipboard-write"], origin=page.evaluate("location.origin"))
+    page.evaluate("""() => {
+      const span = textEl('span', 'KEQ0000101', 'mono');
+      span.id = 'test-foot';
+      copyable(span, () => 'KEQ0000101', 'the serial', { foot: true });
+      const icon = copyIcon(() => 'KEQ0000101', 'the serial', { foot: true });
+      icon.id = 'test-foot-icon';
+      document.querySelector('main').prepend(elem('span', 'copy-pair', span, icon));
+    }""")
+    try:
+        with held_timers(page, "copied"):
+            for sel in ("#test-foot", "#test-foot-icon"):
+                page.evaluate("navigator.clipboard.writeText('')")
+                page.locator(sel).click()
+                assert wait_until(page, "navigator.clipboard.readText().then((t) => t === 'KEQ0000101')", 3), f"{sel} copies"
+                where = wait_bubble_foot(page, DONE[case.lang])
+                assert where == "foot", f"{sel}: Copied at the window's foot: {where}"
+        # refused: its words, at the foot as well
+        page.evaluate("""() => {
+          window.__clip = navigator.clipboard;
+          Object.defineProperty(navigator, "clipboard", { value: { writeText: () => Promise.reject(new Error('no')) }, configurable: true });
+          window.__exec = document.execCommand;
+          document.execCommand = () => false;
+        }""")
+        with held_timers(page, "copied"):
+            page.locator("#test-foot").click()
+            where = wait_bubble_foot(page, page.evaluate("t('copy.failed')"))
+            assert where == "foot", f"a failed copy said at the foot: {where}"
+    finally:
+        page.evaluate("""() => {
+          if (window.__clip) Object.defineProperty(navigator, "clipboard", { value: window.__clip, configurable: true });
+          if (window.__exec) document.execCommand = window.__exec;
+          document.querySelector('#test-foot')?.closest('.copy-pair')?.remove();
+        }""")
 
 
 def test_bubble_said_once(page, case):

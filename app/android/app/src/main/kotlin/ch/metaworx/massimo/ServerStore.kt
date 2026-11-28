@@ -233,7 +233,8 @@ class ServerStore(private val file: File, private val now: () -> String = { nowU
      * [trust] set them, `unrevoked` as [leave] and [revoked] set it,
      * `unended` as [leaveSession] and [ended], and `held` as [hold] set it,
      * all dropped where the node changed: those keys and sessions are
-     * another server's.
+     * another server's; a removed server's of the node it has now are
+     * taken back by [Codes.adopt] (AP MobileApp, D117-A).
      * `start` true turns it off at every other server; the first server
      * added opens at start whatever it says.
      */
@@ -343,6 +344,58 @@ class ServerStore(private val file: File, private val now: () -> String = { nowU
         if (rest.size == servers[at].unended.size) return
         servers[at] = servers[at].copy(unended = rest)
         write()
+    }
+
+    /**
+     * takeBack takes a removed server's revoke [codes] into the server [id],
+     * which has its node (AP MobileApp, D117-A): each a key or a session
+     * left there, with its user, id, `created_at` and code, as [leave] and
+     * [leaveSession] note them, an entry noted already keeping itself and
+     * taking the code where it had none and was not taken; a code without a
+     * user or id is passed over ([GoneCode.takeable]). It reports whether
+     * the server is kept, the codes then in its entry, written; false for a
+     * server not kept. A write that fails leaves the entry as it was, and
+     * throws.
+     */
+    @Synchronized
+    fun takeBack(id: String, codes: List<GoneCode>): Boolean {
+        val at = servers.indexOfFirst { it.id == id }
+        if (at < 0) return false
+        val before = servers[at]
+        var keys = before.unrevoked
+        var sessions = before.unended
+        for (c in codes) {
+            if (!c.takeable() || !RevokeCode.valid(c.code)) continue
+            if (c.session) {
+                val left = SessionLeft(c.user, c.id, c.createdAt, c.code, leftAt = c.leftAt)
+                val had = sessions.firstOrNull { it.same(left) }
+                sessions = when {
+                    had == null -> sessions + left
+                    had.code.isNotEmpty() || had.taken -> sessions
+                    else -> sessions.map { if (it.same(left)) it.copy(code = c.code, leftAt = it.leftAt.ifEmpty { c.leftAt }) else it }
+                }
+            } else {
+                val key = KeyLeft(c.user, c.id, c.code)
+                val had = keys.firstOrNull { it.same(key) }
+                keys = when {
+                    had == null -> keys + key
+                    had.code.isNotEmpty() || had.taken -> keys
+                    else -> keys.map { if (it.same(key)) it.copy(code = c.code) else it }
+                }
+            }
+        }
+        // compared entry by entry with what each says of its code, since an entry equals another by its token alone
+        val same = keys.map { it.fileJson().toString() } == before.unrevoked.map { it.fileJson().toString() } &&
+            sessions.map { it.fileJson().toString() } == before.unended.map { it.fileJson().toString() }
+        if (same) return true
+        servers[at] = before.copy(unrevoked = keys, unended = sessions)
+        try {
+            write()
+        } catch (e: IOException) {
+            servers[at] = before
+            throw e
+        }
+        return true
     }
 
     /**

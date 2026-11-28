@@ -49,9 +49,9 @@ declare global {
   } | null;
   /** In the app, the way back to its servers (Select server); null in a browser. */
   function appConnect(): (() => Promise<unknown>) | null;
-  /** In the app, the way to this server's settings on the app's own page (☰'s This server's settings…, contract version 5); null in a browser and in an app before it. */
+  /** In the app, the way to this server's settings on the app's own page (☰'s This server's settings, contract version 5); null in a browser and in an app before it. */
   function appServerSettings(): (() => Promise<unknown>) | null;
-  /** In the app, the way to the app's settings on its own page (☰'s App settings…, contract version 5); null in a browser and in an app before it. */
+  /** In the app, the way to the app's settings on its own page (☰'s App settings, contract version 5); null in a browser and in an app before it. */
   function appAppSettings(): (() => Promise<unknown>) | null;
   /** A sign-in askLogin opened, which the sign-in's card hands back to finishSignIn: who was in, the pushes held, its end; whether it opened on the first owner's form, and its dismissal (Skip for now). */
   interface SignInAsk {

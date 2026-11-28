@@ -11,7 +11,7 @@ import pytest
 
 from conftest import URL, address_failures, api_call
 from helpers import (KEY_COPY, NAME_BAD, NAME_TAKEN, assert_busy, cleanup, close_fold, copies, frames, grant_clipboard, hold, icon_after_last_line, named_buttons,
-                     open_fold, own_id, safe_route, scroll_width, show_view, sign_out, stub_me, undo, wait_held, wait_until)
+                     held_timers, open_fold, own_id, safe_route, scroll_width, show_view, sign_out, stub_me, undo, wait_held, wait_until)
 
 
 def test_users_and_roles(page, case):
@@ -378,6 +378,38 @@ def test_profile_of_an_integrations_user(page, case, reads):
         page.evaluate("history.replaceState(null, '', location.pathname)")
         page.reload()
         page.wait_for_selector(".room", timeout=10000)
+    show_view(page, "tiles")
+
+
+def test_profile_failure_in_the_toast(page, case, watch):
+    """A request under My profile that fails, a Revoke the server does not
+    take, says so in the page's toast, in red, as well as on the card's
+    line, which keeps it once the toast has gone (AP MobileApp, D104-A,
+    F45): the line is at the card's foot, out of view where the card is
+    long. Fails on the page before: the line alone."""
+    other = api_call("POST", "api/v1/users/owner/tokens", {"label": f"ui-test-profile-toast-{case.width}-{case.lang}"})
+    path = f"**/api/v1/users/owner/tokens/{other['id']}"
+    watch.expected.append((f"/api/v1/users/owner/tokens/{other['id']}", 503))  # the refusal is the test's
+    routed = safe_route(page, path, lambda route: route.fulfill(status=503, content_type="application/json", body='{"error": "the store is busy"}')
+                        if route.request.method == "DELETE" else route.fallback())
+    try:
+        show_view(page, "profile")
+        row = page.locator(f"#profile-tokens .user-tokens li[data-id='{other['id']}']")
+        row.wait_for(timeout=5000)
+        with held_timers(page, "toast"):
+            row.locator(".revoke-token").click()
+            assert wait_until(page, "!document.getElementById('toast').classList.contains('hidden')", 5), "the toast shows"
+            toast = page.evaluate("[document.getElementById('toast-body').textContent, document.getElementById('toast').classList.contains('bad')]")
+            line = page.locator("#profile-msg")
+            assert wait_until(page, "document.getElementById('profile-msg').classList.contains('bad')", 3), "the card's line says it too, in red"
+            assert toast[1] and "the store is busy" in toast[0], f"the failure in the toast, in red: {toast}"
+            assert toast[0] == line.inner_text().strip(), f"the same words on the line: {toast[0]!r}, {line.inner_text()!r}"
+        assert wait_until(page, "document.getElementById('toast').classList.contains('hidden')", 3), "the toast gone"
+        assert line.is_visible() and "the store is busy" in line.inner_text(), "the line keeps it"
+        assert row.is_visible(), "the key still listed"
+    finally:
+        page.unroute(path, routed)
+        api_call("DELETE", "api/v1/users/owner/tokens/%d" % other["id"])
     show_view(page, "tiles")
 
 

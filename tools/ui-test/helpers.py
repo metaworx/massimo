@@ -32,7 +32,8 @@ boxes at one moment, for a check that compares where they are.
 grant_clipboard and copies check what a shared Copy puts into the
 clipboard and how it is named; icon_after_last_line where its icon
 sits. bubble, bubble_at and wait_bubble_at look at the page's bubble
-(showBubble of components.js), where it shows against its control.
+(showBubble of components.js), where it shows against its control, and
+wait_bubble_foot at one shown at the window's foot.
 
 Every wait of this kit, and the page fixture's, lasts its seconds times
 UI_TEST_SCALE (scaled), a positive number, 1 where it is not set: a
@@ -1617,6 +1618,34 @@ def wait_bubble_at(page, sel, text, seconds=3):
     while True:
         where = bubble_at(page, sel, text)
         if where in ("above", "below") or time.time() >= end:
+            return where
+        page.wait_for_timeout(50)
+
+
+# Whether the bubble saying text shows at the window's foot, as showBubble
+# shows it without a control: "foot" where it does, centred and 16 px
+# above the window's bottom, inside the window; else what is wrong.
+BUBBLE_FOOT = """(text) => {
+  const b = document.getElementById('bubble');
+  if (!b || !b.getClientRects().length) return 'no bubble';
+  if (b.textContent !== text) return 'it says ' + JSON.stringify(b.textContent);
+  const r = b.getBoundingClientRect();
+  const w = document.documentElement.clientWidth, h = document.documentElement.clientHeight;
+  if (!b.classList.contains('foot')) return 'at a control: ' + JSON.stringify(r);
+  if (Math.abs((r.left + r.right) / 2 - w / 2) > 1 || Math.abs(h - 16 - r.bottom) > 1 || r.left < -0.5 || r.right > w + 0.5) return 'not at the foot: ' + JSON.stringify(r);
+  return 'foot';
+}"""
+
+
+def wait_bubble_foot(page, text, seconds=3):
+    """Waits, for seconds (scaled), until the bubble says text at the
+    window's foot (BUBBLE_FOOT), and returns "foot", or what was wrong at
+    the last look: a copy that closes the menu its control is in says it
+    there (AP MobileApp, D115-D)."""
+    end = time.time() + scaled(seconds)
+    while True:
+        where = page.evaluate(BUBBLE_FOOT, text)
+        if where == "foot" or time.time() >= end:
             return where
         page.wait_for_timeout(50)
 

@@ -175,6 +175,10 @@ body:not(.expert) .expert-only { display: none !important; }
    copies itself; a rule under it */
 .menu-version { display: flex; align-items: center; gap: 8px; margin: 2px 10px 0; color: var(--muted); }
 .menu-version #version-short { display: block; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+/* ☰'s version with its copy icon (shared/server.tsx VersionRow), the icon
+   at the row's end, as the app's list has its own (AP MobileApp, Block 20) */
+.menu-version > .copy-pair { flex: 1 1 auto; }
+.menu-version > .copy-pair > button.copy-icon { margin-left: auto; }
 .menu-brand { --brand-cover: var(--card); display: inline-grid; flex: none; }
 .menu-brand > svg { grid-area: 1 / 1; height: 16px; overflow: visible; }
 .menu-brand .brand-logo { display: none; }
@@ -1828,12 +1832,15 @@ dialog::backdrop { background: rgba(0, 0, 0, 0.45); }
    signed-out page's flow, centred there, its title under the logo. */
 #login-dialog[open] { position: static; margin: 0 auto; }
 .login-title { text-align: center; }
-/* in the app, the server under the title (ui/src/signin/Server.tsx): its
+/* in the app, the server above the title (ui/src/signin/Server.tsx): its
    name and its address on a line that wraps at a phone's width, the ⓘ at
-   its end, and under it the facts the ⓘ shows, each copied with a tap */
-.login-server { margin: -6px 0 12px; text-align: center; }
+   the address's end in one box with it, so that no line breaks between
+   them, and under it the facts the ⓘ shows, each copied with a tap or by
+   its icon (AP MobileApp, Block 20) */
+.login-server { margin: -14px 0 10px; text-align: center; }
 .login-server-line { display: flex; flex-wrap: wrap; align-items: center; justify-content: center; gap: 0 8px; margin: 0; }
 .login-server-name { font-weight: 600; min-width: 0; overflow-wrap: anywhere; }
+.login-server-where { display: inline-flex; align-items: center; min-width: 0; max-width: 100%; }
 .login-server-address { min-width: 0; color: var(--muted); overflow-wrap: anywhere; }
 button.login-server-more { display: inline-flex; flex: none; align-items: center; justify-content: center; width: 32px; height: 32px; padding: 0; border: 0; background: none; color: var(--muted); }
 button.login-server-more:hover, button.login-server-more:focus-visible, button.login-server-more[aria-expanded="true"] { color: var(--accent); }
@@ -1841,6 +1848,10 @@ button.login-server-more .ni { width: 18px; height: 18px; }
 .login-server-facts { display: grid; grid-template-columns: max-content minmax(0, 1fr); gap: 4px 10px; margin: 4px 0 0; text-align: left; }
 .login-server-facts dt { color: var(--muted); font-size: 0.85rem; }
 .login-server-facts dd { margin: 0; min-width: 0; overflow-wrap: anywhere; }
+/* the first owner's command under its text (ui/src/signin/Owner.tsx), in
+   monospace, never wrapped, its copy icon after it */
+.setup-command { margin: -4px 0 12px; }
+.setup-command-text { white-space: nowrap; }
 /* its ☰, the language and the mode: drawn as the header's, at the end of
    the row of the ways to sign in, dropping down from the card's right
    edge */
@@ -1910,6 +1921,14 @@ button.pw-dice .ni { width: 20px; height: 20px; }
    as a refused value's, and its line, sign and words, in the same red */
 .pw-box > input[aria-invalid="true"] { border-color: var(--bad); outline-color: var(--bad); }
 .pw-rule-line.refused, .pw-rule-line.refused .pw-rule-sign { color: var(--bad); }
+/* a new password's repetition that differs from it (NewPassword; AP
+   MobileApp, D98-A): its box outlined as above, and the line under it in
+   the same red while the two differ, its place, as tall as its text,
+   kept while it is empty, so that nothing under it moves as it comes and
+   goes */
+.pw-problem { display: grid; flex-basis: 100%; margin: 2px 0 0; color: var(--bad); }
+.pw-problem > span { grid-area: 1 / 1; }
+.pw-problem-room { visibility: hidden; }
 /* a switch's label beside it, the switch at the left */
 dialog label.switch { flex-direction: row; align-items: center; align-self: flex-start; gap: 8px; }
 dialog .actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 8px; }

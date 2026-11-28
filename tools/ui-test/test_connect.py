@@ -14,7 +14,7 @@ leave valid, the sessions the app holds with Sign out and Sign out of
 all, a server's certificate, App settings with the appearance, the card
 of the server on the phone; a browser without the bridge; and the
 server's page taking its token from the bridge and handing it back, its
-login by fingerprint and "Select server…" (docs/app.md, contract
+login by fingerprint and "Select server" (docs/app.md, contract
 version 4).
 axe-core (axe-playwright-python) finds no violation on the connect page
 in each of its states the tests open.
@@ -29,8 +29,8 @@ import os
 from axe_playwright_python.sync_playwright import Axe
 
 from conftest import TOKEN, URL, api_call, clear_preferences
-from helpers import (OPERATOR_PASSWORD, assert_login_card_centred, assert_login_row, cleanup, held_timers, named_buttons, open_personal_page, settled,
-                     undo, wait_until)
+from helpers import (OPERATOR_PASSWORD, assert_login_card_centred, assert_login_row, cleanup, frames, held_timers, named_buttons, open_personal_page, settled,
+                     undo, wait_bubble_foot, wait_until)
 
 CONNECT = URL + "ui/connect.html"
 FAKE_BRIDGE = os.path.join(os.path.dirname(os.path.abspath(__file__)), "fake_bridge.js")
@@ -882,7 +882,7 @@ CERT_SELF = {"en": "the certificate itself (self-signed)", "de": "das Zertifikat
 
 def test_connect_menu_and_add_card(new_context, case, watch, guard):
     """The Servers card's ☰ (AP MobileApp, F21, F22): Add server…, Sign
-    out of all and App settings…, Forget all stored credentials only where
+    out of all and App settings, Forget all stored credentials only where
     a login is kept. Add server… shows the Add card, which takes the focus
     and not its address field, searches as it opens, and closes with ×;
     the last server removed leaves the card shown without ×."""
@@ -1449,7 +1449,7 @@ def server_page(new_context, guard, watch, login, token=None, address="", more=N
     return page
 
 
-SELECT_SERVER = {"en": "Select server…", "de": "Server wählen…"}
+SELECT_SERVER = {"en": "Select server", "de": "Server wählen"}
 # the sign-in card's title in the suite's two languages and in the four
 # others, for the row in each (FR/IT/NL/PL machine-translated)
 TITLES = {"en": "Sign in", "de": "Anmelden"}
@@ -1466,7 +1466,7 @@ def test_server_page_keeps_the_login(new_context, case, watch, guard):
     the phone can and nothing is kept; a sign-in with it on asks the app
     to keep the login, a prompt not passed offers Try again and Sign in
     without it, and the second try keeps it; Cancel, left of each form's
-    Sign in, and Select server…, last in the card's ☰, go back to the
+    Sign in, and Select server, last in the card's ☰, go back to the
     app's servers (AP MobileApp, D54-C), as the Cube choice's entry and
     the main ☰'s do once signed in. The console is not watched: the
     page's requests without a token are refused on purpose, as in
@@ -1483,10 +1483,10 @@ def test_server_page_keeps_the_login(new_context, case, watch, guard):
     named_buttons(page, "the sign-in in the app")
     cancel.click()
     assert connects(page, 1), "Cancel calls the app"
-    # the card's ☰, Select server… last in it (AP MobileApp, Block 13: F13)
+    # the card's ☰, Select server last in it (AP MobileApp, Block 13: F13)
     page.locator("#login-menu summary").click()
     last = page.locator("#login-menu .menu-items > :last-child")
-    assert last.get_attribute("id") == "login-menu-servers" and last.is_visible(), "Select server…, last in the card's ☰"
+    assert last.get_attribute("id") == "login-menu-servers" and last.is_visible(), "Select server, last in the card's ☰"
     assert last.inner_text().strip() == SELECT_SERVER[case.lang]
     last.click()
     assert connects(page, 2), "the card's ☰ calls the app, as Cancel does"
@@ -1514,21 +1514,63 @@ def test_server_page_keeps_the_login(new_context, case, watch, guard):
     assert not page.evaluate("document.getElementById('login-dialog').open"), "and the page is signed in"
 
     # Signed in: the Cube choice ends with Select server, and the main ☰
-    # has it just before Sign out.
+    # has it after Personal settings, App settings and This server's
+    # settings, between two rules, Sign out last (AP MobileApp, Block 20).
     page.locator("#cube-menu summary").click()
     entry = page.locator("#cube-menu .menu-items button[data-value='__servers']")
     entry.wait_for(state="visible")
     entry.click()
-    assert connects(page, 4), "the Cube choice's Select server…"
+    assert connects(page, 4), "the Cube choice's Select server"
     page.locator("#nav-menu summary").click()
     servers = page.locator("#menu-servers")
     servers.wait_for(state="visible")
-    order = page.evaluate("""() => { const ids = []; let e = document.getElementById('menu-servers');
-      for (let i = 0; e && i < 4; i++, e = e.nextElementSibling) ids.push(e.id); return ids; }""")
-    assert order == ["menu-servers", "menu-server-settings", "menu-app-settings", "menu-logout"], f"then the app's two settings, Sign out last: {order}"
+    order = page.evaluate("""() => { const ids = []; let e = document.getElementById('menu-me');
+      for (let i = 0; e && i < 7; i++, e = e.nextElementSibling) if (e.getClientRects().length) ids.push(e.id); return ids; }""")
+    assert order == ["menu-me", "menu-app-sep", "menu-app-settings", "menu-server-settings", "menu-servers", "menu-out-sep", "menu-logout"], \
+        f"the app's two settings, then Select server, between two rules, Sign out last: {order}"
     assert servers.inner_text().strip() == SELECT_SERVER[case.lang], "named as the card's ☰ names it"
     servers.click()
-    assert connects(page, 5), "the main ☰'s Select server…"
+    assert connects(page, 5), "the main ☰'s Select server"
+
+
+def test_server_page_sign_out_shows_the_list(new_context, case, watch, guard):
+    """Sign out on a server's page in the app, from ☰ and from the
+    personal page, ends the session, forgets it in the app, and shows the
+    app's list (connect) in place of that server's sign-in card (AP
+    MobileApp, Block 20); where the app does not take the page there, its
+    connect failing, the card shows, as in a browser (test_main_menu.py)."""
+    page = server_page(new_context, guard, watch, {"status": {"can": True, "user": "", "ask": "start", "plain": False}})
+    page.locator("#login-dialog[open]").wait_for()
+    page.locator("#login-user").fill("operator")
+    page.locator("#login-password").fill(OPERATOR_PASSWORD)
+    page.locator("#login-form button[type=submit]").click()
+    page.wait_for_selector(".room", timeout=10000)
+    session = page.evaluate("state.token")
+    page.locator("#nav-menu summary").click()
+    page.locator("#menu-logout").click()
+    assert connects(page, 1), "the app's list"
+    assert calls(page, "setToken")[-1] == ["setToken", None], "the session forgotten in the app"
+    names = [c[0] for c in calls(page)]
+    assert names.index("connect") > len(names) - 1 - names[::-1].index("setToken"), f"the list after the app forgot it: {names}"
+    # the list asked for, logout returns at once: its promise and a frame later the card would be open
+    page.evaluate("() => tokenAnswer()")
+    frames(page)
+    assert not page.evaluate("document.getElementById('login-dialog').open"), "no sign-in card"
+    code = page.evaluate("(tok) => fetch('api/v1/me', { headers: { Authorization: 'Bearer ' + tok } }).then((r) => r.status)", session)
+    assert code == 401, f"the session ended at the server: {code}"
+
+    # the personal page's Sign out alike; an app that does not take the page there: the card
+    page.evaluate("() => { window.massimo.connect = () => { window.__fakeBridge.calls.push(['connect']); return Promise.reject(new Error('no list')); }; }")
+    page.evaluate("() => { askLogin(); }")
+    page.locator("#login-dialog[open]").wait_for()
+    page.locator("#login-user").fill("operator")
+    page.locator("#login-password").fill(OPERATOR_PASSWORD)
+    page.locator("#login-form button[type=submit]").click()
+    page.wait_for_selector(".room", timeout=10000)
+    open_personal_page(page)
+    page.locator("#logout-btn").click()
+    assert connects(page, 2), "the personal page's Sign out asks for the list too"
+    assert wait_until(page, "document.getElementById('login-dialog').open", 5), "refused: the sign-in card, as in a browser"
 
 
 def test_server_page_login_by_fingerprint(new_context, case, watch, guard):
@@ -1626,7 +1668,7 @@ def test_server_page_first_owner_keeps_the_login(new_context, case, watch, guard
         page.unroute("**/api/v1/me")
 
 
-APP_ENTRIES = {"en": ["This server's settings…", "App settings…"], "de": ["Einstellungen dieses Servers…", "App-Einstellungen…"]}
+APP_ENTRIES = {"en": ["This server's settings", "App settings"], "de": ["Einstellungen dieses Servers", "App-Einstellungen"]}
 LANGS = ("en", "de", "fr", "it", "nl", "pl")
 
 # ☰ inside the window, and the app's entries each on one line (counted by a Range over its label), at the case's width
@@ -1647,18 +1689,22 @@ MENU_FITS = """() => {
 
 
 def test_server_page_menu_app_entries(new_context, case, watch, guard):
-    """In the app ☰ has, after Select server…, This server's settings…
-    and App settings… (AP MobileApp, D73-A), each where the bridge has
-    its call, each calling it with nothing of the page's: the bridge
-    fills the server in; they fit ☰ at the case's width in the six
-    languages; an app before contract version 5 has neither."""
+    """In the app ☰ has App settings and This server's settings before
+    Select server (AP MobileApp, D73-A; Block 20), none with "…" (D96-A),
+    each where the bridge has its call, each calling it with nothing of
+    the page's: the bridge fills the server in; they fit ☰ at the case's
+    width in the six languages; an app before contract version 5 has
+    neither."""
     page = server_page(new_context, guard, watch, {"status": {"can": True, "user": "", "ask": "start", "plain": False}}, token=TOKEN)
     page.wait_for_selector(".room", timeout=10000)
     page.locator("#nav-menu summary").click()
     entries = [page.locator("#menu-server-settings"), page.locator("#menu-app-settings")]
     for e in entries:
         e.wait_for(state="visible")
-    assert [e.inner_text().strip() for e in entries] == APP_ENTRIES[case.lang], "named"
+    assert [e.inner_text().strip() for e in entries] == APP_ENTRIES[case.lang], "named, without \"…\""
+    for lang in LANGS:
+        texts = page.evaluate("(l) => fetch('ui/i18n/' + l + '.json').then((r) => r.json()).then((d) => [d['app.selectServer'], d['app.serverSettings'], d['app.appSettings']])", lang)
+        assert not any(x.endswith("…") for x in texts), f"no \"…\" in {lang}: {texts}"
     assert [e.locator("svg use").get_attribute("href") for e in entries] == ["#icon-cog", "#icon-sliders"], "with their icons"
     named_buttons(page, "☰ in the app")
     for lang in LANGS:
@@ -1672,10 +1718,10 @@ def test_server_page_menu_app_entries(new_context, case, watch, guard):
     if page.locator("#nav-menu").get_attribute("open") is None:
         page.locator("#nav-menu summary").click()
     entries[0].click()
-    assert wait_until(page, "window.__fakeBridge.calls.some((c) => c[0] === 'openServerSettings')", 3), "This server's settings… calls the app"
+    assert wait_until(page, "window.__fakeBridge.calls.some((c) => c[0] === 'openServerSettings')", 3), "This server's settings calls the app"
     page.locator("#nav-menu summary").click()
     entries[1].click()
-    assert wait_until(page, "window.__fakeBridge.calls.some((c) => c[0] === 'openAppSettings')", 3), "App settings… calls the app"
+    assert wait_until(page, "window.__fakeBridge.calls.some((c) => c[0] === 'openAppSettings')", 3), "App settings calls the app"
     assert [c for c in calls(page) if c[0].startswith("open")] == [["openServerSettings"], ["openAppSettings"]], "each once, with no argument"
 
     # the entries are the bridge's calls, a login by fingerprint configured or not
@@ -1744,16 +1790,30 @@ LINE_FITS = """() => {
 }"""
 
 
+# the ⓘ on the line of the address's last text, right after it: no line breaks between the two (AP MobileApp, Block 20)
+INFO_BY_ADDRESS = """() => {
+  const a = document.getElementById('login-server-address');
+  const i = document.getElementById('login-server-more');
+  const r = document.createRange();
+  r.selectNodeContents(a);
+  const rects = [...r.getClientRects()];
+  const last = rects[rects.length - 1];
+  const b = i.getBoundingClientRect();
+  return b.top < last.bottom && b.bottom > last.top && b.left >= last.right - 0.5 && b.left - last.right < 12;
+}"""
+
+
 def test_server_page_names_its_server(new_context, case, watch, guard):
     """In the app the sign-in card names the server it signs in to (AP
-    MobileApp, F31, D62-A), on a line of its own after the title, whose
-    text stays the title's: the server's name and the full address the
-    page was opened at, the name once where it is the address, with a
-    labelled ⓘ that shows the instance id and the pinned fingerprint,
-    each copied with a tap, an empty one left out and the ⓘ too where
-    both are, the ⓘ closed again at the next opening; the line and its
-    facts fit the card at 390 px in the six languages; a browser shows
-    no line."""
+    MobileApp, F31, D62-A), on a line of its own before the title (Block
+    20), whose text stays the title's: the server's name and the full
+    address the page was opened at, the name once where it is the
+    address, with a labelled ⓘ after the address, on its line, that
+    shows the instance id and the pinned fingerprint, each copied with a
+    tap and by its icon, an empty one left out and the ⓘ too where both
+    are, the ⓘ closed again at the next opening; the line and its facts
+    fit the card at 390 px in the six languages, the ⓘ on the address's
+    line; a browser shows no line."""
     address = URL.rstrip("/")
     status = {"can": True, "user": "", "ask": "start", "plain": False, "server": {"name": "Home", "url": URL, "node": NODE1, "fp": FP1}}
     page = server_page(new_context, guard, watch, {"status": status})
@@ -1761,7 +1821,7 @@ def test_server_page_names_its_server(new_context, case, watch, guard):
     page.locator("#login-dialog[open]").wait_for()
     line = page.locator("#login-server")
     line.wait_for(state="visible")
-    assert page.evaluate("document.getElementById('login-title').nextElementSibling.id") == "login-server", "a line of its own after the title"
+    assert page.evaluate("document.getElementById('login-title').previousElementSibling.id") == "login-server", "a line of its own before the title"
     assert page.locator("#login-title").inner_text() == TITLES[case.lang], "the title's text as it was"
     assert page.locator("#login-server-name").inner_text() == "Home"
     assert page.locator("#login-server-address").inner_text() == address, "the full address the page was opened at"
@@ -1780,8 +1840,14 @@ def test_server_page_names_its_server(new_context, case, watch, guard):
         page.evaluate("navigator.clipboard.writeText('')")
         page.locator(fact).click()
         assert wait_until(page, f"navigator.clipboard.readText().then((t) => t === {value!r})", 3), f"{fact} copied with a tap"
+        icon = page.locator(f"dd:has(> .copy-pair > {fact}) .copy-icon")
+        assert icon.count() == 1 and icon.is_visible(), f"{fact} with its copy icon"
+        page.evaluate("navigator.clipboard.writeText('')")
+        icon.click()
+        assert wait_until(page, f"navigator.clipboard.readText().then((t) => t === {value!r})", 3), f"{fact} copied by its icon"
     fits = page.evaluate(LINE_FITS)
     assert not fits["out"] and not fits["wide"], f"the line and its facts inside the card: {fits}"
+    assert page.evaluate(INFO_BY_ADDRESS), "the ⓘ on the address's last line"
     if case.width == 390:
         page.locator("#login-menu summary").click()
         for lang, title in OTHER_TITLES.items():
@@ -1789,6 +1855,7 @@ def test_server_page_names_its_server(new_context, case, watch, guard):
             assert wait_until(page, f"document.getElementById('login-title').textContent === {title!r}", 5), f"the card in {lang}"
             fits = page.evaluate(LINE_FITS)
             assert not fits["out"] and not fits["wide"], f"the line and its facts inside the card in {lang}: {fits}"
+            assert page.evaluate(INFO_BY_ADDRESS), f"the ⓘ on the address's last line in {lang}"
         page.locator("#login-lang").select_option("auto")
         assert wait_until(page, f"document.getElementById('login-title').textContent === {TITLES[case.lang]!r}", 5)
         page.keyboard.press("Escape")
@@ -1997,18 +2064,26 @@ def test_connect_list_menu(new_context, case, watch, guard):
             assert fits["inside"] and not fits["out"] and not fits["wrapped"], f"☰ fits in {lang}: {fits}"
         page.evaluate("async () => { await setLanguage('auto'); applyI18n(document); }")
 
-    # the version: a tap copies it whole and closes ☰, the focus back on it
+    # the version: a tap copies it whole and closes ☰, the focus back on it, "Copied" at the window's foot, not over
+    # the row, which goes with ☰ (AP MobileApp, D115-D)
+    done = said(page, "copy.done")
     page.evaluate("navigator.clipboard.writeText('')")
-    page.locator("#menu-version").click()
-    assert wait_until(page, f"navigator.clipboard.readText().then((t) => t === {APP_VERSION!r})", 3), "the version copied, whole"
-    assert wait_until(page, "!document.getElementById('servers-menu').open", 3), "☰ closed"
-    assert page.evaluate("document.activeElement === document.querySelector('#servers-menu > summary')"), "the focus back on ☰"
+    with held_timers(page, "copied"):
+        page.locator("#menu-version").click()
+        assert wait_until(page, f"navigator.clipboard.readText().then((t) => t === {APP_VERSION!r})", 3), "the version copied, whole"
+        assert wait_until(page, "!document.getElementById('servers-menu').open", 3), "☰ closed"
+        assert page.evaluate("document.activeElement === document.querySelector('#servers-menu > summary')"), "the focus back on ☰"
+        where = wait_bubble_foot(page, done)
+        assert where == "foot", f"Copied at the window's foot once ☰ closed: {where}"
     # by its copy icon too
     page.evaluate("navigator.clipboard.writeText('')")
     page.locator("#servers-menu > summary").click()
-    row_.locator(".copy-icon").click()
-    assert wait_until(page, f"navigator.clipboard.readText().then((t) => t === {APP_VERSION!r})", 3), "the icon copies it"
-    assert wait_until(page, "!document.getElementById('servers-menu').open", 3), "and closes ☰"
+    with held_timers(page, "copied"):
+        row_.locator(".copy-icon").click()
+        assert wait_until(page, f"navigator.clipboard.readText().then((t) => t === {APP_VERSION!r})", 3), "the icon copies it"
+        assert wait_until(page, "!document.getElementById('servers-menu').open", 3), "and closes ☰"
+        where = wait_bubble_foot(page, done)
+        assert where == "foot", f"the icon's Copied at the window's foot too: {where}"
 
     # Exit: the app's call
     page.locator("#servers-menu > summary").click()
