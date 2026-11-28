@@ -71,6 +71,9 @@ class OriginsTest {
         assertEquals("#settings=0123456789abcdef01234567", Origins.settingsOf("0123456789abcdef01234567"))
         assertEquals("#settings=a%26b%23c", Origins.settingsOf("a&b#c"))
         assertEquals("#app-settings", Origins.APP_SETTINGS)
+        // contract version 7: the server whose page failed to load (AP MobileApp, D108-A)
+        assertEquals("#unreachable=0123456789abcdef01234567", Origins.unreachableOf("0123456789abcdef01234567"))
+        assertEquals("#unreachable=a%26b%23c", Origins.unreachableOf("a&b#c"))
     }
 
     @Test
@@ -78,6 +81,7 @@ class OriginsTest {
         // the settings the list opens at its start are the bridge's handover alone
         assertEquals(Origins.CONNECT_URL, Origins.byPage(Origins.CONNECT_URL + "#settings=0123456789abcdef01234567"))
         assertEquals(Origins.CONNECT_URL, Origins.byPage(Origins.CONNECT_URL + Origins.APP_SETTINGS))
+        assertEquals(Origins.CONNECT_URL, Origins.byPage(Origins.CONNECT_URL + Origins.unreachableOf("0123456789abcdef01234567")))
         assertNull("the list alone goes as it is", Origins.byPage(Origins.CONNECT_URL))
         assertNull("another origin is not the shell's", Origins.byPage("https://massimo.example.net/#settings=x"))
         // a form posted to the list keeps its fragment past shouldOverrideUrlLoading: the shell serves GET alone

@@ -7,6 +7,8 @@ import android.app.ActivityManager
 import android.os.SystemClock
 import android.webkit.WebView
 import androidx.test.ext.junit.runners.AndroidJUnit4
+import androidx.test.uiautomator.By
+import androidx.test.uiautomator.Until
 import org.json.JSONArray
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
@@ -20,8 +22,14 @@ import org.junit.runner.RunWith
  * list's ☰ ends the app's task, and the session it dropped is ended by its
  * code at the next start; Back closes ☰, then a server's settings, and leaves
  * the app from the bare list; Store login keeps the login of the session
- * held with one prompt, its key made at the server; and the list pulled down
- * checks every server again.
+ * held with one prompt, its key made at the server; the list pulled down
+ * checks every server again; and a server's page that fails to load gives
+ * way to the list, which says the server does not answer (D108-A). The
+ * server gone after the list's probe found it is one whose address the app
+ * holds closed, its probe's finding kept, since nothing stops the host's
+ * serve (CodesTest); and a certificate that changed keeps its own dialog,
+ * the list then saying nothing of a server that does not answer, the
+ * change stood in for by another certificate pinned.
  */
 @RunWith(AndroidJUnit4::class)
 class ListTest : EmulatorTest() {
@@ -110,6 +118,51 @@ class ListTest : EmulatorTest() {
         page.waitFor("conn.probeSeq[${q(id)}] > $before && conn.probes[${q(id)}].state === 'lan'", "the server checked again")
     }
 
+    @Test
+    fun aPageThatFailsToLoadReturnsToTheList() {
+        val t = Rig.a
+        val id = add(t, A)
+        ready(id)
+        // gone since the list's probe found it: its address closed in the app, the probe's finding kept
+        page.run(
+            "const s = conn.servers.find((x) => x.id === ${q(id)}); keepServer(await massimo.save(Object.assign({}, s, { lan: ${q(CLOSED)} }))); " +
+                "conn.probeSeq[${q(id)}] += 1; conn.probes[${q(id)}] = { state: 'lan', url: ${q(CLOSED)} }; return 1;",
+            "the server's address closed after its probe",
+        )
+        page.click(row(id) + " .server-open")
+        page.waitFor(
+            "location.href === ${q(Origins.CONNECT_URL)} && typeof conn === 'object' && !!conn.bridge && !!conn.probes[${q(id)}] && conn.probes[${q(id)}].state === 'offline'",
+            "back at the list, the server not reachable",
+        )
+        val said = page.run("return t('connect.unreachable', { name: ${q(A)} });", "the toast's text") as String
+        page.waitFor(
+            "!document.getElementById('toast').classList.contains('hidden') && document.getElementById('toast').textContent.includes(${q(said)})",
+            "the toast saying it does not answer",
+        )
+        assertEquals("the handover left in the address", "\"\"", page.eval("location.hash", "the address's fragment"))
+    }
+
+    @Test
+    fun aCertificateThatChangedKeepsItsDialogAndSaysNothingOfAnAnswer() {
+        val t = Rig.a
+        val id = add(t, A)
+        ready(id)
+        // another certificate pinned than the server's: the WebView refuses the server's as a changed one, the probe's finding kept
+        page.run(
+            "await massimo.trust(${q(id)}, ${q(OTHER_FP)}); keepServer(Object.assign({}, conn.servers.find((x) => x.id === ${q(id)}), { fp: ${q(OTHER_FP)} })); " +
+                "conn.probeSeq[${q(id)}] += 1; conn.probes[${q(id)}] = { state: 'lan', url: ${q(t.url)} }; return 1;",
+            "another certificate pinned",
+        )
+        page.click(row(id) + " .server-open")
+        val title = Rig.app.getString(R.string.cert_changed_title)
+        if (!Rig.device.wait(Until.hasObject(By.text(title)), DIALOG_MS)) fail("no dialog \"$title\"; the system shows: ${Prompt.systemTexts()}")
+        Rig.device.findObject(By.res("android", "button1"))?.click() ?: fail("no OK on the dialog")
+        list()
+        assertEquals("no handover of a server that does not answer", "\"\"", page.eval("location.hash", "the address's fragment"))
+        SystemClock.sleep(NO_TOAST_MS)
+        assertEquals("a toast of a server that does not answer", "true", page.eval("document.getElementById('toast').classList.contains('hidden')", "the toast"))
+    }
+
     // entry waits until the page holds its own history entry, a menu or a panel open.
     private fun entry() = page.waitFor("!!(history.state && history.state.massimo) && back.entry", "the page's history entry")
 
@@ -152,6 +205,10 @@ class ListTest : EmulatorTest() {
     }
 
     private companion object {
+        const val CLOSED = "https://127.0.0.1:9/"
+        val OTHER_FP = "SHA256:" + List(32) { "00" }.joinToString(":")
+        const val DIALOG_MS = 20_000L
+        const val NO_TOAST_MS = 2000L
         const val SWIPE_STEPS = 40
         const val TASKS_MS = 10_000L
         const val CODE_MS = 20_000L

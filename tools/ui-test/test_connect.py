@@ -2291,3 +2291,115 @@ def test_connect_kept_meanwhile(new_context, case, watch, guard):
     assert wait_until(page, "document.querySelector('.server-connection input').value === 'Pantry'", 3)
     assert remote.input_value() == "https://kitchen.example.net/", "the user's change kept"
     assert not save.is_disabled() and panel.locator(".server-tab-unsaved").count() == 1, "Connection differs by the user's change"
+
+
+def test_connect_unreachable_from_address(new_context, case, watch, guard):
+    """The app loads the connect page with #unreachable=<id> where that
+    server's page failed to load (AP MobileApp, D108-A, F48; contract
+    version 7): the page takes the fragment from the address, probes the
+    server at once and says in the toast that it does not answer, with the
+    probe's reason, a probe that finds it taking the toast back; an id that
+    is not the list's says nothing, and a server that answers now neither."""
+    config = {"servers": [server("s1", "Home", NODE1, lan=HOME_LAN), server("s2", "Cabin", NODE2, lan=CABIN_LAN)], "answers": {HOME_LAN: {"node": NODE1}}}
+    ctx = new_context()
+    ctx.add_init_script(f"window.__fakeBridgeConfig = {json.dumps(config)};")
+    ctx.add_init_script(path=FAKE_BRIDGE)
+    page = ctx.new_page()
+    guard.page = page
+    page.set_default_timeout(5000)
+    page.on("console", lambda m: watch.problems.append(f"console: {m.text}") if m.type == "error" else None)
+    page.on("pageerror", lambda e: watch.problems.append(f"page error: {e}"))
+    page.goto(CONNECT + "#unreachable=s2")
+    wait_state(page, "Cabin", STATE[case.lang]["offline"])
+    wait_toast(page, said(page, "connect.unreachable", name="Cabin"), bad=True)
+    assert "connection refused" in page.locator("#toast").inner_text(), "with the probe's reason"
+    assert page.evaluate("location.hash") == "", "the fragment taken from the address"
+    assert calls(page, "open") == [], "nothing opened"
+    assert_axe(page, "the list after a page that failed to load")
+    page.evaluate(f"window.__fakeBridgeConfig.answers[{CABIN_LAN!r}] = {{node: {NODE2!r}}}")
+    page.locator("#probe-btn").click()
+    wait_state(page, "Cabin", STATE[case.lang]["lan"])
+    assert toast_gone(page), "a probe that finds it takes the toast back"
+
+    for address in ("#unreachable=nope", "#unreachable=s1"):
+        page.goto("about:blank")
+        page.goto(CONNECT + address)
+        wait_state(page, "Home", STATE[case.lang]["lan"])
+        page.wait_for_timeout(300)
+        assert page.locator("#toast").is_hidden(), f"{address}: nothing said"
+        assert page.evaluate("location.hash") == ""
+
+    # a server without a name is named by its address; a newer probe that replaces the first is waited for
+    nameless = open_connect(new_context, guard, watch, dict(config, servers=config["servers"] + [server("s3", "", NODE3, lan="http://192.168.1.90:8099/")],
+                                                            probeMs=600))
+    nameless.goto("about:blank")
+    nameless.goto(CONNECT + "#unreachable=s3")
+    nameless.wait_for_timeout(200)
+    nameless.evaluate("window.dispatchEvent(new CustomEvent('massimo', { detail: { type: 'network' } }))")
+    wait_toast(nameless, said(nameless, "connect.unreachable", name="192.168.1.90:8099"), bad=True)
+
+
+def test_connect_show_in_profile_probes_first(new_context, case, watch, guard):
+    """Show in My profile probes the server first (AP MobileApp, D108-A,
+    F48): where it answers now, My profile opens with the key marked; where
+    it went down since the list's last probe, nothing opens, the toast says
+    it does not answer, and the button turns off with its title. Turn off
+    and Sign out that the server did not answer probe it again. A newer
+    probe that replaces Show's own is waited for, not taken for a server
+    that does not answer."""
+    config = {"servers": [server("s1", "Home", NODE1, lan=HOME_LAN, session="anna", unrevoked=[{"user": "anna", "id": 47}]),
+                          server("s2", "Cabin", NODE2, lan=CABIN_LAN, login="bob", session="bob")],
+              "answers": {HOME_LAN: {"node": NODE1}, CABIN_LAN: {"node": NODE2}}, "sessions": {"s1": "carl", "s2": "bob"}, "keys": {"s2": {"user": "bob", "id": 52}},
+              "unrevokable": ["s2"]}
+    page = open_connect(new_context, guard, watch, config)
+    wait_state(page, "Home", STATE[case.lang]["lan"])
+    panel = settings_of(page, "Home", "login")
+    show = panel.locator(".server-key-show")
+    before = len(calls(page, "probe"))
+    show.click()
+    assert wait_until(page, "window.__fakeBridge.calls.some((c) => c[0] === 'open')", 3)
+    got = calls(page)
+    probe_at = max(i for i, c in enumerate(got) if c[0] == "probe")
+    open_at = next(i for i, c in enumerate(got) if c[0] == "open")
+    assert len(calls(page, "probe")) == before + 1 and probe_at < open_at, f"probed first: {got[-4:]}"
+    assert calls(page, "open") == [["open", "s1", HOME_LAN + "#profile?key=47"]]
+
+    # a newer probe replaces Show's own: waited for, the page opened, no toast
+    assert wait_until(page, "!conn.opening", 3)
+    page.evaluate("window.__fakeBridgeConfig.probeMs = 600")
+    show.click()
+    page.wait_for_timeout(100)
+    page.evaluate("window.dispatchEvent(new CustomEvent('massimo', { detail: { type: 'network' } }))")
+    assert wait_until(page, "window.__fakeBridge.calls.filter((c) => c[0] === 'open').length === 2", 5), "opened once the newer probe answered"
+    assert page.locator("#toast").is_hidden(), "nothing said"
+    page.evaluate("window.__fakeBridgeConfig.probeMs = 30")
+
+    # gone since the last probe: nothing opens, the toast says so, the button off
+    page.evaluate(f"delete window.__fakeBridgeConfig.answers[{HOME_LAN!r}]")
+    assert wait_until(page, "!conn.opening", 3)
+    show.click()
+    wait_toast(page, said(page, "connect.unreachable", name="Home"), bad=True)
+    assert len(calls(page, "open")) == 2, "nothing more opened"
+    assert wait_until(page, "document.querySelector(\".server-row[data-id='s1'] .server-key-show\").disabled", 3), "the button off"
+    assert show.get_attribute("title") == SHOW_OFF[case.lang], "its title saying why"
+    row(page, "Home").locator(".server-cog").click()
+    close_toast(page)
+
+    # Turn off and Sign out that the server did not answer: probed again
+    page.evaluate(f"delete window.__fakeBridgeConfig.answers[{CABIN_LAN!r}]")
+    probes_of = lambda url: len([c for c in calls(page, "probe") if url in c[1]])  # noqa: E731
+    panel = settings_of(page, "Cabin", "login")
+    before = probes_of(CABIN_LAN)
+    panel.locator(".server-login-off").click()
+    wait_toast(page, "Cabin")
+    assert wait_until(page, f"window.__fakeBridge.calls.filter((c) => c[0] === 'probe' && c[1].includes({CABIN_LAN!r})).length > {before}", 3), \
+        "Turn off that the server did not answer probes it again"
+    wait_state(page, "Cabin", STATE[case.lang]["offline"])
+    row(page, "Cabin").locator(".server-cog").click()
+    close_toast(page)
+    panel = settings_of(page, "Home", "login")
+    before = probes_of(HOME_LAN)
+    panel.locator(".server-sign-out").click()
+    wait_toast(page, "Home")
+    assert wait_until(page, f"window.__fakeBridge.calls.filter((c) => c[0] === 'probe' && c[1].includes({HOME_LAN!r})).length > {before}", 3), \
+        "Sign out that the server did not answer probes it again"

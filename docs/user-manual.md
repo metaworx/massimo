@@ -15,6 +15,8 @@ Each server in the list says whether the app reaches it
 (on the LAN, remote, not reachable, or a changed certificate)
 and, in green, who you are signed in as there.
 Touch a server to open it; ⚙, or a long press, opens its settings.
+A server's page that does not load brings you back to the list,
+which says that the server does not answer.
 Pull the list down to check every server again, as ↻ does.
 **Back** closes an open menu or panel first; from the bare list it leaves the app.
 Where the app keeps a login by fingerprint for a server,
@@ -84,7 +86,7 @@ They have three tabs, **Connection** first; ✕ at the top closes them.
 - **A key of this phone is still valid here**, where Turn off or Forget all
   could not remove the phone's key at the server,
   or the phone no longer opens its login, or a new certificate was trusted:
-  **Show in My profile** opens the server at My profile,
+  **Show in My profile** checks the server, then opens it at My profile,
   the key marked, to revoke it there;
   it is off while the server does not answer.
 

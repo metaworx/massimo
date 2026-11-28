@@ -15,7 +15,8 @@
 // sessions of the phone's left valid there, and the row's sign-in icon
 // that opens its sign-in card; the app's
 // own settings, its appearance; a server's settings or App settings open at
-// the start where a server's ☰ asked for them; Back, which closes the open
+// the start where a server's ☰ asked for them; a server whose page failed
+// to load said not to answer; Back, which closes the open
 // menu, then the open panel, through a history entry of the page's own;
 // a pull down in the app, which checks every server again as ↻ does; the
 // server on the phone where the app has
@@ -49,6 +50,12 @@ const APP_HASH = "#app-settings";
 // server's ☰, This server's settings… (contract version 5): that server's
 // settings open at the page's start (openFromAddress).
 const SETTINGS_HASH = /^#settings=([A-Za-z0-9_.~-]{1,64})$/;
+
+// UNREACHABLE_HASH is the fragment the app loads the page with where a
+// server's page failed to load (contract version 7; AP MobileApp, D108-A):
+// that server is probed at the page's start and said not to answer
+// (unreachableFromAddress).
+const UNREACHABLE_HASH = /^#unreachable=([A-Za-z0-9_.~-]{1,64})$/;
 
 const conn = {
   bridge: null, // window.massimo
@@ -475,7 +482,7 @@ async function openServer(id, opts, hash) {
       if (opts) await conn.bridge.open(s.id, url, opts);
       else await conn.bridge.open(s.id, url);
     } catch (e) {
-      say(t("connect.openFailed", { name: s.name, error: e.message }), { bad: true });
+      say(t("connect.openFailed", { name: shownName(s), error: e.message }), { bad: true });
       if (s.login) {
         await loadServers();
         renderServers();
@@ -499,7 +506,7 @@ async function openServer(id, opts, hash) {
   await probeServer(serverById(id));
   const q = conn.probes[id] || {};
   if (q.state === "lan" || q.state === "remote" || (q.state === "cert" && p.state !== "cert")) return openServer(id, opts, hash);
-  say(t("connect.unreachable", { name: s.name }) + (q.error ? " " + q.error : ""), { bad: true, server: id });
+  say(t("connect.unreachable", { name: shownName(s) }) + (q.error ? " " + q.error : ""), { bad: true, server: id });
 }
 
 // --- a server's settings ----------------------------------------------
@@ -922,7 +929,7 @@ function fillLogin(panel, s) {
   }
   for (const k of left) {
     const show = button(t("connect.keyLeftShow"), { cls: "server-key-show", aria: t("connect.keyLeftShowLabel", { id: k.id }) },
-      () => openServer(s.id, null, "#profile?key=" + k.id));
+      () => showInProfile(s.id, k.id, show));
     const text = k.pending === true ? t("connect.keyPending", { id: k.id, name: k.user }) : t("connect.keyLeft", { id: k.id, name: k.user });
     box.appendChild(elem("p", "server-fact server-key-left", text, " ", show));
   }
@@ -960,6 +967,32 @@ function showsKeys(box, p) {
   }
 }
 
+// probed waits until the latest probe of the server id has answered: a
+// newer probe replaces one still running (probeSeq), whose answer then
+// counts for nothing; 10 s at most, a probe taking 4 s at an address.
+async function probed(id) {
+  for (let i = 0; i < 200 && (conn.probes[id] || {}).state === "probing"; i++) await new Promise((resolve) => setTimeout(resolve, 50));
+}
+
+// showInProfile opens a server's page at My profile with the key keyId
+// marked (`#profile?key=<id>`, contract version 4), once a probe has found
+// the server now, the latest where a newer one replaced its own (probed)
+// (AP MobileApp, D108-A, F48): the list's last probe may be older than
+// the server's fall. Where it does not answer, the toast says
+// so with the probe's reason, the button off with its title (showsKeys);
+// a certificate that changed asks first, as a tap does (openServer).
+async function showInProfile(id, keyId, btn) {
+  await whileBusy(btn, async () => {
+    await probeServer(serverById(id));
+    await probed(id);
+  });
+  const s = serverById(id);
+  const q = conn.probes[id] || {};
+  if (!s) return;
+  if (q.state === "lan" || q.state === "remote" || q.state === "cert") return openServer(id, null, "#profile?key=" + keyId);
+  say(t("connect.unreachable", { name: shownName(s) }) + (q.error ? " " + q.error : ""), { bad: true, server: id });
+}
+
 // storeLogin keeps the login by fingerprint for the session the app holds
 // at a server (keep, contract version 7; AP MobileApp, Block 19), at the
 // address the probe found: the app makes a key of the session's user with
@@ -991,7 +1024,8 @@ async function storeLogin(id, btn, msg) {
 // server did not end it (the list read again: its unended, contract
 // version 5) and keep what is typed in them, and the toast says whether
 // the server ended it, and where it did not whether its revoke code ends
-// it the next time the app reaches the server (`pending`, version 6).
+// it the next time the app reaches the server (`pending`, version 6); a
+// server that did not end it is probed again (AP MobileApp, D108-A).
 async function signOut(id, btn, msg) {
   const s = serverById(id);
   const p = conn.probes[id] || {};
@@ -1010,6 +1044,8 @@ async function signOut(id, btn, msg) {
   if (res && res.ended) say(t("connect.signedOut", { name }));
   else if (res && res.pending === true) say(t("connect.signedOutPending", { name }));
   else say(t("connect.signedOutLocal", { name }));
+  // the server did not answer: probed again, so that what needs it turns off at once (D108-A)
+  if (!(res && res.ended)) probeServer(serverById(id));
 }
 
 // signOutAll signs the app out of every server (signOutAll), from the ☰.
@@ -1120,7 +1156,8 @@ function fillCert(panel, s) {
 // what is typed in them, and the toast says whether
 // the server revoked the key, or whether this Turn off left it, to revoke
 // at the next sign-in there (`left`, contract version 4), or by its revoke
-// code the next time the app reaches the server (`pending`, version 6).
+// code the next time the app reaches the server (`pending`, version 6); a
+// server that did not revoke it is probed again (AP MobileApp, D108-A).
 async function turnOff(id, btn, msg) {
   const s = serverById(id);
   const p = conn.probes[id] || {};
@@ -1139,6 +1176,8 @@ async function turnOff(id, btn, msg) {
   else if (res && res.pending === true) say(t("connect.loginOffPending", { name }));
   else if (res && res.left === true) say(t("connect.loginOffLeft", { name }));
   else say(t("connect.loginOffLocal", { name }));
+  // the server did not revoke the key: probed again (D108-A)
+  if (!(res && res.revoked)) probeServer(serverById(id));
 }
 
 // menuButton is the summary of the list's ☰, in the header, where the
@@ -1236,6 +1275,7 @@ async function removeServer(id, msg) {
     showResult(msg, t("connect.removeFailed", { error: e.message }), false);
     await loadServers();
     renderServers();
+    probeServer(serverById(id)); // the server stays, perhaps gone since the last probe (D108-A)
     return;
   }
   conn.servers = conn.servers.filter((x) => x.id !== id);
@@ -1845,6 +1885,31 @@ async function initCore() {
   }
 }
 
+// unreachableFromAddress takes the fragment #unreachable=<id> from the
+// page's address, with which the app loads the page where that server's
+// page failed to load (contract version 7; AP MobileApp, D108-A), and gives
+// the id where it is the list's, else null.
+function unreachableFromAddress() {
+  const m = UNREACHABLE_HASH.exec(location.hash);
+  if (!m) return null;
+  history.replaceState(history.state, "", location.pathname + location.search);
+  return serverById(m[1]) ? m[1] : null;
+}
+
+// sayUnreachable says in the toast, once the probe at the page's start has
+// run, and a newer one that replaced it (probed), that the server id whose
+// page failed to load does not answer, with
+// the probe's reason, as a tap's failed probe does (openServer), the toast
+// tied to the server, so that a probe that finds it takes the toast back;
+// nothing where it answers now.
+async function sayUnreachable(id) {
+  await probed(id);
+  const s = serverById(id);
+  const q = conn.probes[id] || {};
+  if (!s || q.state === "lan" || q.state === "remote") return;
+  say(t("connect.unreachable", { name: shownName(s) }) + (q.error ? " " + q.error : ""), { bad: true, server: id });
+}
+
 // openFromAddress opens the settings of the server the page's address
 // names, #settings=<id>, as the app loads it from that server's ☰ (AP
 // MobileApp, D73-A), and takes the fragment from the address; an id that
@@ -1898,7 +1963,8 @@ async function init() {
   await loadServers();
   renderServers();
   openFromAddress();
-  probeAll();
+  const down = unreachableFromAddress();
+  probeAll().then(() => down && sayUnreachable(down));
   // at the start for the saved servers too: a LAN address that changed,
   // and the names discovery hears (onFound)
   search();

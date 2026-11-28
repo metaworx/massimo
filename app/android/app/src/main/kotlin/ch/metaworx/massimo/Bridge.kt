@@ -172,6 +172,18 @@ class Bridge(
         if (next !== o) current.compareAndSet(o, next)
     }
 
+    /**
+     * failed takes a main frame of [origin] that failed to load (MainActivity's
+     * onReceivedError; AP MobileApp, D108-A): where it is the opened
+     * server's, the opening is dropped and its server's id returned, for the
+     * list's handover `#unreachable=<id>`; null for any other origin.
+     */
+    fun failed(origin: String?): String? {
+        val o = opened ?: return null
+        if (origin == null || origin != o.origin || !current.compareAndSet(o, null)) return null
+        return o.id
+    }
+
     /** covers reports whether the page of [origin] is guarded and signed in, with a session the cover keeps from others; not one at its card, the session withheld. */
     fun covers(origin: String?): Boolean = guarded(origin) && opened?.let { !it.withheld && keeper.inMemory(it.id) } == true
 

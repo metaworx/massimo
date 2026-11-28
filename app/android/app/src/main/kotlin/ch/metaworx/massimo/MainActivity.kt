@@ -28,6 +28,7 @@ import android.webkit.RenderProcessGoneDetail
 import android.webkit.SslErrorHandler
 import android.webkit.ValueCallback
 import android.webkit.WebChromeClient
+import android.webkit.WebResourceError
 import android.webkit.WebResourceRequest
 import android.webkit.WebResourceResponse
 import android.webkit.WebSettings
@@ -68,7 +69,9 @@ import java.util.concurrent.atomic.AtomicBoolean
  * (App settings, D53-A) is AppCompat's night mode, which the theme's
  * android:isLightTheme hands on to the WebView's prefers-color-scheme. The
  * list pulled down checks every server again (the event `refresh`), and its
- * ☰'s Exit ends the task (AP MobileApp, Block 19).
+ * ☰'s Exit ends the task (AP MobileApp, Block 19), and a server's page that
+ * fails to load gives way to the list, which says the server does not
+ * answer (D108-A).
  */
 class MainActivity : AppCompatActivity() {
     private val main = Handler(Looper.getMainLooper())
@@ -458,6 +461,22 @@ class MainActivity : AppCompatActivity() {
             back.isEnabled = view.canGoBack()
             // the list shown: a removed server's revoke codes where the probe finds it (D112-A)
             bridge.postGone()
+        }
+
+        // A main frame of the opened server's origin that fails to load (the
+        // server gone since the list's probe, a page's own link to it) shows
+        // the list, not the WebView's own error page: the opening dropped,
+        // the list given the server's id (#unreachable=<id>), which it probes
+        // and says it does not answer (D108-A). A certificate refused says so
+        // in its own dialog first (onReceivedSslError), which loads the list;
+        // a load given up for the list's own (ERR_ABORTED) is no failure. The
+        // origin alone says whose load failed (Bridge.failed), whatever the
+        // WebView has told of the page's start by then.
+        override fun onReceivedError(view: WebView, request: WebResourceRequest, error: WebResourceError) {
+            if (!request.isForMainFrame || warned) return
+            if (error.description?.toString()?.contains("ERR_ABORTED") == true) return
+            val id = bridge.failed(Origins.of(request.url.toString())) ?: return
+            main.post { if (!isFinishing && !isDestroyed) web.loadUrl(Origins.CONNECT_URL + Origins.unreachableOf(id)) }
         }
 
         // A certificate the system does not trust is the server's where it

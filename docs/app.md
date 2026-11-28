@@ -114,8 +114,11 @@ up to the 1100 px of a server's page (AP MobileApp, D92-A):
     at an address of plain HTTP outside the private ranges, its title saying
     why, its toast saying the login is kept;
     a line for each key of the phone's still valid there, its id and user,
-    with **Show in My profile**, which opens the server's page at My profile
-    with the key marked (`unrevoked`), off while the probe finds the server
+    with **Show in My profile**, which probes the server first, waiting for
+    a newer probe that replaces its own, and opens
+    the server's page at My profile with the key marked (`unrevoked`) only
+    where it answers now, else says in the toast that it does not answer
+    (D108-A), off while the probe finds the server
     at neither address, its title saying why (AP MobileApp, F33),
     and for each session left (`unended`); a line where there is none of
     these; its tab carries a dot, named for a screen reader, while a key or
@@ -158,6 +161,10 @@ up to the 1100 px of a server's page (AP MobileApp, D92-A):
   opens that server's settings at its start and takes the fragment from the
   address, an id not in the list opening nothing; with `#app-settings`,
   App settings (version 5, `openServerSettings` and `openAppSettings`);
+  with `#unreachable=<id>`, where that server's page failed to load
+  (version 7), the page probes that server at its start and says in the
+  toast that it does not answer, with the probe's reason, as a tap's failed
+  probe does, the toast tied to the server;
   the adapter loads it so at the bridge's handover alone: a page's own link
   or script to the page loads it without its fragment (Android
   `shouldOverrideUrlLoading`, `Origins.byPage`), a form posted there, which
@@ -225,8 +232,12 @@ the page sees only what follows.
   before its check; and a fingerprint tap's session checked at once.
   Version 7 (AP MobileApp v1.6, Block 19) adds on the connect page
   `about()`, the app's version, `exit()`, the list's Exit,
-  `keep(id, url)`, Store login, and the event `refresh`, the list pulled
-  down.
+  `keep(id, url)`, Store login, the event `refresh`, the list pulled
+  down, and the handover `#unreachable=<id>`: a server's page whose main
+  frame fails to load gives way to the list (Android `onReceivedError` for
+  the opened server's origin, the opening dropped; AP MobileApp, D108-A),
+  so that no way into a server's page ends on the WebView's own error page;
+  a certificate refused keeps its own dialog.
 - **Where the bridge exists, and with what:**
   - on the connect page, the shell's own origin: every call below
     but `token` and `setToken`;
@@ -422,7 +433,11 @@ An unknown `type` is ignored by the page.
   the row's sign-in icon with `open(id, url, {signIn: true})`;
   an opening that rejects reads the list again, a kept key refused being gone;
   **Turn off** calls `forget(id, url)` with the address the probe chose,
-  and "Forget all stored credentials" `forgetAll()`.
+  and "Forget all stored credentials" `forgetAll()`;
+  a Turn off or a Sign out the server did not answer, and a Remove that
+  failed, probe the server again, so that what needs it turns off at once;
+  a tap opens where the last probe found the server, its page coming back
+  to the list where it fails to load (D109-A).
 - **The keys left.**
   A server's settings show each of its `unrevoked` keys,
   and **Show in My profile** opens `<address>#profile?key=<id>` at the

@@ -2747,7 +2747,8 @@ or **Store login** where the app holds a session there and keeps no login,
 which keeps one made with that session after one prompt,
 off while the server does not answer, its title saying why,
 a line for each key of the phone's still valid there with **Show in My profile**,
-which opens the server's page at My profile with the key marked,
+which checks the server first and opens its page at My profile with the key marked,
+or says it does not answer,
 off while the server does not answer, its title saying why,
 a line for each session of the phone's still valid there,
 which the app forgot without the server ending it,
@@ -2763,6 +2764,8 @@ the fingerprint pinned while the server does not answer,
 and over plain HTTP that there is none.
 **App settings** hold the **Appearance**, as the phone, light or dark,
 for that page and for every server's page set to "as the system".
+A server's page that fails to load gives way to the list,
+which says that the server does not answer and why.
 Back closes the open menu first, then the panel opened last,
 a server's settings with changes asking once, Discard or Stay,
 and leaves the app from the bare list.

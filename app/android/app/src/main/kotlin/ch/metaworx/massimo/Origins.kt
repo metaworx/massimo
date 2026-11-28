@@ -24,6 +24,14 @@ object Origins {
     fun settingsOf(id: String): String = "#settings=" + URLEncoder.encode(id, "UTF-8")
 
     /**
+     * unreachableOf is the connect page's fragment of the server [id] whose
+     * page failed to load (contract version 7; AP MobileApp, D108-A): the
+     * list probes it at its start and says it does not answer, with the
+     * probe's reason (connect.js unreachableFromAddress).
+     */
+    fun unreachableOf(id: String): String = "#unreachable=" + URLEncoder.encode(id, "UTF-8")
+
+    /**
      * appServes reports whether the shell serves a request of [method] on
      * its own origin: GET alone. A form a page posts there would keep its
      * fragment, since shouldOverrideUrlLoading is not called for a POST
