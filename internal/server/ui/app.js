@@ -227,7 +227,7 @@ function setSetting(key, v) {
     storeDeviceOverrides(d);
     return;
   }
-  noteHeld(); // login.js: the settings before the change, where the page knows none that hold
+  noteHeld("ui"); // login.js: the settings before the change, where the page knows none that hold
   storeUserSetting(key, v);
   schedulePreferences("ui");
 }

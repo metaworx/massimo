@@ -460,6 +460,9 @@ which its field then shows:
 the page sends it neither with a later push nor with the settings a sign-in
 hands a server that holds none of the user's,
 and the user makes it again if they want it (AP SteadyTests v1.1, D14-A).
+A colour scheme saved, imported or deleted so goes back the same way
+to the schemes that held, the choice and the page's colours with it
+(AP SteadyTests v1.2, Block 19).
 A setpoint stepped and still waiting for its two seconds is dropped as the sign-in opens,
 and its tile says so; a settings change waiting for its second waits for the sign-in.
 For the same user a form's draft stays, so that it is one click on **Save** again,
@@ -2868,7 +2871,7 @@ which reads the written name alone), by the places the table names, each of them
 | `state.settings` | `loadSettings` (at the start and at every applying of the settings), `setSetting` | a `live` object, a signal per setting |
 | `state.device` | `loadSettings` (as this browser keeps them), `storeDeviceOverrides` | the settings kept for this device alone, a signal |
 | `state.me` | `loadMe` and a sign-out's `forgetSession` (login.js) | the signal `me` of `shared/me.ts` itself |
-| `themeState.custom`, `.draft`, `.base` | `themeState.custom` by theme.js (the schemes taken, saved, imported, forgotten) and the scheme editor's Delete; `.draft` and `.base` by the scheme editor (`prefs/scheme.ts`) | signals |
+| `themeState.custom`, `.draft`, `.base` | `themeState.custom` by theme.js (the schemes taken, saved, imported, forgotten, taken back at a refused push) and the scheme editor's Delete; `.draft` and `.base` by the scheme editor (`prefs/scheme.ts`) | signals |
 
 What stays plain, and why: `state.details` (a cache of a device's detail, no part draws
 from it), `state.repliedAt` and `state.lastPoll` (written at every request and poll;
