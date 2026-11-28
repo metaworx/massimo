@@ -663,13 +663,15 @@ def test_a_double_click_on_yes_removes_once(page, case):
 
 
 def test_a_refused_removal_says_the_servers_words(page, case, watch):
-    """A removal the server refuses (409) says the server's words in the
-    users' line, as a failure, and the user's panel stays, Remove in place
-    of the question again: here the words for the user that holds the
-    settings file's key (AP MobileApp v1.4, D89-A). The test makes the
-    user and answers its DELETE itself, so that nothing is removed and the
-    suite's own owner, which holds that key, is never asked for; the
-    server's refusal is TestSettingsFileKeyHolder's."""
+    """A removal the server refuses (409) says the refusal in the users'
+    line, in the page's language from its code (AP ErrorCodes), as a
+    failure, and the user's panel stays, Remove in place of the question
+    again: here the words for the user that holds the settings file's key
+    (AP MobileApp v1.4, D89-A). The test makes the user and answers its
+    DELETE itself, with the server's body, so that nothing is removed and
+    the suite's own owner, which holds that key, is never asked for; the
+    server's refusal is TestSettingsFileKeyHolder's and
+    TestUserRefusalCodes'."""
     name = f"held-{case.width}-{case.lang}"
     remove_user(name)
     api_call("POST", "api/v1/users", {"name": name, "role": "viewer", "password": "kept-pass"})
@@ -680,7 +682,8 @@ def test_a_refused_removal_says_the_servers_words(page, case, watch):
     def refuse(route):
         if route.request.method == "DELETE":
             deletes.append(route.request.url)
-            route.fulfill(status=409, content_type="application/json", body=json.dumps({"error": words}))
+            route.fulfill(status=409, content_type="application/json",
+                          body=json.dumps({"error": words, "code": "user_holds_settings_key", "params": {"user": name}}))
         else:
             route.continue_()
 
@@ -694,9 +697,11 @@ def test_a_refused_removal_says_the_servers_words(page, case, watch):
         panel.locator(".remove-user").click()
         panel.locator(".confirm-box .confirm-yes").click()
         line = page.locator("#users-msg")
-        assert wait_until(page, "document.getElementById('users-msg').textContent.includes(%r)" % words, 5), \
-            f"the users' line says the server's words: {line.text_content()}"
-        assert line.text_content() == f"{name}: {words}", f"after the user's name, as the page's other failures: {line.text_content()}"
+        said = page.evaluate("(n) => t('err.user_holds_settings_key', { user: n })", name)
+        assert said != words, "the page's own text, not the server's English"
+        assert wait_until(page, "document.getElementById('users-msg').textContent.includes(%r)" % said, 5), \
+            f"the users' line says the refusal: {line.text_content()}"
+        assert line.text_content() == f"{name}: {said}", f"after the user's name, as the page's other failures: {line.text_content()}"
         assert "bad" in line.get_attribute("class").split(), "as a failure"
         assert len(deletes) == 1, f"one DELETE: {deletes}"
         assert panel.count() == 1 and panel.locator(".confirm-box").count() == 0 and panel.locator(".remove-user").is_visible(), \

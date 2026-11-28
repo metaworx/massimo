@@ -256,7 +256,7 @@ func withPrincipal(r *http.Request, p *principal) *http.Request {
 // does not cover: PUT …/devices/{rf} needs structure for room_id.
 func (s *Server) require(r *http.Request, capability string) error {
 	if !principalOf(r).has(capability) {
-		return fail(http.StatusForbidden, "capability %q required", capability)
+		return refuse(http.StatusForbidden, codeCapabilityRequired, capability)
 	}
 	return nil
 }
@@ -476,7 +476,8 @@ func localPeer(ip string) bool {
 }
 
 // openRefused is what a server that asks for no key answers a client
-// beyond its local network.
+// beyond its local network, with the code server_open_local_only
+// (errcodes_users.go).
 const openRefused = "this server is open and answers only its local network; create a user or set MASSIMO_API_TOKEN"
 
 // openAllowed reports whether a server that asks for no key, a store
@@ -805,17 +806,16 @@ func guessed(why error) bool {
 	return errors.Is(why, errBadToken) && !errors.Is(why, errEndedToken)
 }
 
-// forbiddenError carries the words of the refusal, and where a client
-// tells refusals apart by it, a code (integration_disabled, errcodes.go).
-type forbiddenError struct {
-	msg  string
-	code *errCode
-}
+// forbiddenError is the refusal (refuse) of a token whose user may not
+// use the API now: its words, its code and its params (errcodes.go).
+type forbiddenError struct{ he *httpError }
 
-func (e *forbiddenError) Error() string { return e.msg }
+func (e *forbiddenError) Error() string { return e.he.msg }
 
-func forbidden(format string, args ...any) error {
-	return &forbiddenError{msg: fmt.Sprintf(format, args...)}
+// forbidden is a refusal, made by refuse or refuseSaying with 403, as a
+// forbiddenError.
+func forbidden(err error) error {
+	return &forbiddenError{he: err.(*httpError)}
 }
 
 // resolve turns a presented token into a principal, or says why not: a
@@ -883,17 +883,17 @@ func (s *Server) principalFor(ctx context.Context, tok store.Token, now time.Tim
 		return nil, errBadToken
 	}
 	if u.Disabled {
-		return nil, forbidden("user %s is disabled", u.Name)
+		return nil, forbidden(refuse(http.StatusForbidden, codeUserAccountDisabled, u.Name))
 	}
 	if u.Expired(now) {
-		return nil, forbidden("user %s has expired", u.Name)
+		return nil, forbidden(refuse(http.StatusForbidden, codeUserAccountExpired, u.Name))
 	}
 	caps, off, roleOff, err := st.Effective(ctx, u.Role, capabilities)
 	if err != nil {
 		return nil, err
 	}
 	if roleOff {
-		return nil, forbidden("role %s is disabled", u.Role)
+		return nil, forbidden(refuse(http.StatusForbidden, codeRoleDisabled, u.Role))
 	}
 	p := &principal{mode: modeUsers, user: u, token: tok, caps: setOf(caps), off: setOf(off)}
 	if u.IntegrationID != 0 {
@@ -906,7 +906,7 @@ func (s *Server) principalFor(ctx context.Context, tok store.Token, now time.Tim
 			return nil, err
 		}
 		if !ok || integ.State != store.IntegrationActive {
-			return nil, &forbiddenError{msg: fmt.Sprintf("the integration of user %s is disabled", u.Name), code: codeIntegrationDisabled}
+			return nil, forbidden(refuseSaying(http.StatusForbidden, fmt.Sprintf("the integration of user %s is disabled", u.Name), codeIntegrationDisabled))
 		}
 		p.caps = withinIntegration(p.caps, integ)
 	}
@@ -1008,7 +1008,7 @@ func (s *Server) authorize(w http.ResponseWriter, r *http.Request, capability st
 	if mode == modeOpen || mode == modeLegacy && s.legacyToken() == "" {
 		// A server that asks for no key answers its local network only.
 		if !s.openAllowed(r) {
-			writeError(w, http.StatusForbidden, openRefused)
+			writeRefusal(w, refuse(http.StatusForbidden, codeServerOpenLocalOnly))
 			return nil, false
 		}
 		return &principal{mode: mode}, true
@@ -1024,7 +1024,7 @@ func (s *Server) authorize(w http.ResponseWriter, r *http.Request, capability st
 	key := store.LockoutAddr(ip)
 	if d := s.limiter.lockedFor(ctx, key); d > 0 {
 		w.Header().Set("Retry-After", strconv.Itoa(int(d.Round(time.Second)/time.Second)))
-		writeError(w, http.StatusTooManyRequests, "too many failed token checks from this address; try again later")
+		writeRefusal(w, refuse(http.StatusTooManyRequests, codeAddressLockedOut))
 		return nil, false
 	}
 	var p *principal
@@ -1087,11 +1087,7 @@ func (s *Server) authorize(w http.ResponseWriter, r *http.Request, capability st
 			if guess && s.limiter.fail(ctx, key) {
 				s.logLockout(ip, "tokens")
 			}
-			if fe.code != nil {
-				writeJSON(w, http.StatusForbidden, map[string]any{"error": fe.msg, "code": fe.code.name})
-			} else {
-				writeError(w, http.StatusForbidden, fe.msg)
-			}
+			writeRefusal(w, fe.he)
 		case why != nil && !errors.Is(why, errBadToken):
 			s.log.Error("api: token not resolved", "error", why)
 			writeError(w, http.StatusInternalServerError, "authentication failed; see the log")
@@ -1099,7 +1095,7 @@ func (s *Server) authorize(w http.ResponseWriter, r *http.Request, capability st
 			if guess && s.limiter.fail(ctx, key) {
 				s.logLockout(ip, "tokens")
 			}
-			writeError(w, http.StatusUnauthorized, errBadToken.Error())
+			writeRefusal(w, refuse(http.StatusUnauthorized, codeTokenWrong)) // errBadToken's words
 		}
 		return nil, false
 	}
@@ -1119,7 +1115,7 @@ func (s *Server) authorize(w http.ResponseWriter, r *http.Request, capability st
 			writeJSON(w, http.StatusForbidden, map[string]any{"error": capabilityRequired(capability), "code": codeForbidden.name})
 			return p, false
 		}
-		writeError(w, http.StatusForbidden, capabilityRequired(capability))
+		writeRefusal(w, refuse(http.StatusForbidden, codeCapabilityRequired, capability))
 		return p, false // the audit names who was refused
 	}
 	return p, true
@@ -1129,17 +1125,21 @@ func (s *Server) authorize(w http.ResponseWriter, r *http.Request, capability st
 // locked out: 429 with Retry-After, nil when neither is. A key "" is
 // not checked: the revoke by code checks the address alone.
 func (s *Server) lockedOut(w http.ResponseWriter, ctx context.Context, addrKey, userKey string) error {
-	for _, k := range []struct{ key, msg string }{
-		{addrKey, "too many failed token checks from this address; try again later"},
-		{userKey, "too many failed logins for this user; try again later"},
-	} {
-		if k.key == "" {
-			continue
+	locked := func(key string) bool {
+		if key == "" {
+			return false
 		}
-		if d := s.limiter.lockedFor(ctx, k.key); d > 0 {
+		d := s.limiter.lockedFor(ctx, key)
+		if d > 0 {
 			w.Header().Set("Retry-After", strconv.Itoa(int(d.Round(time.Second)/time.Second)))
-			return fail(http.StatusTooManyRequests, "%s", k.msg)
 		}
+		return d > 0
+	}
+	switch {
+	case locked(addrKey):
+		return refuse(http.StatusTooManyRequests, codeAddressLockedOut)
+	case locked(userKey):
+		return refuse(http.StatusTooManyRequests, codeUserLockedOut)
 	}
 	return nil
 }

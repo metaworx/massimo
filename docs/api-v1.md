@@ -677,6 +677,121 @@ whose `error` names the link that refused:
 | `repair_listed_already` | 409 | `device`, `room` | the Cube's list has the device in the room the Cube has |
 | `room_name_needed` | 409 | `room` | a listing into a room the Cube's list does not have, without `room_name`; `room` is also at the top level |
 
+**The server's door and the token check** (see "Authentication");
+a token nobody holds and one that ended are one code, as their `error` is one:
+
+| Code | Status | Params | Refused because |
+|------|--------|--------|-----------------|
+| `server_open_local_only` | 403 | – | the server is open and the client is beyond its local network |
+| `cross_origin_refused` | 403 | – | another site's page sent the write |
+| `token_wrong` | 401 | – | the token is missing, nobody's, or ended: revoked, logged out or expired |
+| `address_locked_out` | 429 | – | too many failed token checks or sign-ins from the address; `Retry-After` says for how long |
+| `user_locked_out` | 429 | – | too many failed sign-ins for the name; `Retry-After` says for how long |
+| `user_account_disabled` | 403 | `user` | the token's or the sign-in's user is disabled |
+| `user_account_expired` | 403 | `user` | the token's or the sign-in's user is past its end date |
+| `role_disabled` | 403 | `role` | the token's user's role is disabled |
+| `capability_required` | 403 | `capability` | the caller lacks the capability, outside a call through an integration (`forbidden`) |
+
+**The sign-ins** (see the sign-in routes);
+a wrong name and a wrong password are one code, as their `error` is one:
+
+| Code | Status | Params | Refused because |
+|------|--------|--------|-----------------|
+| `login_no_store` | 409 | – | the server has no store: it takes its API token |
+| `login_no_users` | 409 | – | the server has no users yet |
+| `login_password_off` | 403 | – | the password sign-in is off (`auth.password_login`) |
+| `login_running` | 429 | – | a sign-in from the address is running; `Retry-After` is 1 |
+| `login_wrong` | 401 | – | a wrong name or password |
+| `login_not_started` | 401 | – | no sign-in by OPAQUE was started under `login`, or it took too long |
+| `login_integration_key` | 403 | – | a registered integration's key asks for a session |
+| `password_busy` | 503 | – | the store runs as many password checks as it takes; `Retry-After` is 5 |
+| `oidc_code_unknown` | 401 | – | no sign-in through a provider under the code, or it took too long |
+| `oidc_user_gone` | 401 | – | the user of the sign-in through a provider was removed since |
+
+**The first owner** (see "Users"):
+
+| Code | Status | Params | Refused because |
+|------|--------|--------|-----------------|
+| `first_owner_not_local` | 403 | – | the first owner is created from an address beyond the local network |
+| `first_owner_password_needed` | 400 | – | the first owner has no password |
+| `first_owner_exists` | 409 | – | another request made the first owner meanwhile |
+
+**Users and their tokens** (see "Users" and "Tokens"):
+
+| Code | Status | Params | Refused because |
+|------|--------|--------|-----------------|
+| `user_no_store` | 503 | – | the server has no store, so no users |
+| `user_unknown` | 404 | `user` | no user of that name |
+| `user_name_bad` | 400 | – | the name breaks the rule of a user's name; `error` names it |
+| `user_display_name_long` | 400 | `max` | the display name is longer than `max` bytes |
+| `user_integration_no_way_in` | 403 | `user` | a key, a password or an identity for an integration's user |
+| `user_integration_guest` | 403 | `user` | an integration's guest, which its integration and holders of `integrations` or `users` change |
+| `user_integration_own` | 403 | `user`, `integration` | the removal of an integration's own user, which the integration's removal keeps |
+| `user_owner_only` | 403 | – | an owner changed by one who is no owner |
+| `user_holds_settings_key` | 409 | `user` | the removal of the user that holds the settings file's `MASSIMO_API_TOKEN` |
+| `integration_own_users_only` | 403 | – | a call through an integration for a user that is not its integration's |
+| `role_beyond_yours` | 403 | `role` | a user or a role with capabilities the caller's role lacks |
+| `role_beyond_integration` | 403 | `role` | a role beyond the maximum of the user's integration |
+| `role_integration_only` | 403 | – | the role `integration` for a user that is no integration's |
+| `role_owner_only` | 403 | – | the role `owner` given by one who is no owner |
+| `capability_required_to_give` | 403 | `capability`, `role` | the role given needs `capability` of the caller |
+| `capability_required_to_create` | 403 | `capability`, `role` | the user created with the role needs `capability` of the caller |
+| `password_proof_wrong` | 403 | – | the proof of the current password is wrong, used or too old |
+| `password_current_wrong` | 403 | – | `current_password` is wrong |
+| `token_label_length` | 400 | `max` | the key's label is empty or longer than `max` bytes |
+| `token_unknown` | 404 | `user`, `token` | the user has no live token of that id |
+| `token_settings_key` | 409 | – | a revoke of the settings file's `MASSIMO_API_TOKEN` |
+
+**Roles and capabilities** (see "Roles" and "Capabilities"):
+
+| Code | Status | Params | Refused because |
+|------|--------|--------|-----------------|
+| `capability_unknown` | 400, 404 | `capability` | no capability of that name: in a role's set `400`, as the path's `404` |
+| `role_name_long` | 400 | `max` | the role's name is longer than `max` bytes |
+
+**Sign-in providers and identities** (see "Providers" and "Identities"):
+
+| Code | Status | Params | Refused because |
+|------|--------|--------|-----------------|
+| `provider_unknown` | 404 | `provider` | no provider of that key, or for a sign-in or a link none enabled |
+| `provider_key_needed` | 400 | – | a new provider without `key` |
+| `identity_last_way_in` | 409 | – | a user's removal of the last way it signs in |
+| `identity_link_own_only` | 403 | – | a link started for another user |
+| `identity_confirm_own_only` | 403 | – | a pending link read, confirmed or dropped for another user |
+| `identity_link_unknown` | 404 | – | no pending link under the code, or it took too long |
+| `identity_taken` | 409 | – | the account is linked to another user |
+
+**Integrations** (see "Integrations"):
+
+| Code | Status | Params | Refused because |
+|------|--------|--------|-----------------|
+| `integration_requests_off` | 403 | `setting` | the server takes no registration requests |
+| `integration_requests_too_many` | 429 | – | too many registration requests from the address; `Retry-After` is 60 |
+| `integration_capability_beyond` | 400 | `capability` | `max_caps` names a capability beyond the role `integration` |
+| `integration_name_length` | 400 | `max` | the name is empty or longer than `max` bytes |
+| `integration_unknown` | 404 | `integration` | no integration of that uuid, or a request only |
+
+**Settings** (see "GET and PUT /api/v1/settings"):
+
+| Code | Status | Params | Refused because |
+|------|--------|--------|-----------------|
+| `setting_keep_open_users` | 409 | `setting` | `auth.keep_open` on a server with users |
+| `setting_choice_bad` | 400 | `setting`, `choices` | a value not among the setting's `choices`, joined by commas |
+| `setting_duration_range` | 400 | `setting`, `value`, `min`, `max` | a duration outside the setting's range |
+| `setting_duration_range_off` | 400 | `setting`, `value`, `min`, `max` | a duration outside the setting's range, which `0` switches off |
+
+**Preferences, notifications and commands**
+(see "Preferences", "Notifications" and "Commands and Idempotency-Key"):
+
+| Code | Status | Params | Refused because |
+|------|--------|--------|-----------------|
+| `preference_no_user` | 409 | – | no user is signed in: an open server, or its one token |
+| `preference_unknown` | 404 | `preference` | the user has no preference of that key |
+| `push_subscription_unknown` | 404 | `subscription` | the user has no subscription of that id |
+| `idempotency_running` | 409 | – | the request of the same `Idempotency-Key` still runs |
+| `idempotency_reused` | 422 | – | the `Idempotency-Key` was used for another request |
+| `command_unknown` | 404 | `command` | no command of that id the caller may read |
+
 **A revoke by code** (`POST /api/v1/tokens/revoke`):
 
 | Code | Status | Params | Refused because |

@@ -33,7 +33,8 @@ func TestIntegrationRoleIsTheCeiling(t *testing.T) {
 			t.Errorf("the ceiling holds %s", c)
 		}
 	}
-	if code, text := callAPI(t, ts, "POST", "/api/v1/users", "secret", `{"name":"ha","role":"integration"}`); code != 403 || errorOf(text) != "the role integration is an integration's and its users' alone" {
+	if code, text := callAPI(t, ts, "POST", "/api/v1/users", "secret", `{"name":"ha","role":"integration"}`); !isRefusal(code, text, 403, "role_integration_only", "",
+		"the role integration is an integration's and its users' alone") {
 		t.Fatalf("a user with the role integration: %d %s", code, text)
 	}
 	callAPI(t, ts, "POST", "/api/v1/users", "secret", `{"name":"anna","role":"viewer"}`)
