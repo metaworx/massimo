@@ -7,8 +7,12 @@ Show password and Hide password and pressed while it shows, keyboard
 operable; it turns the field's type between password and text, keeping
 its value, its caret and its autocomplete; the password hidden again at
 each opening of the sign-in card and at the submit. Every password
-field has it: the sign-in's, the first owner's two, My profile's three
-and System settings → Users'; an API key's field has none. The server's
+field has it: the sign-in's, the first owner's and My profile's new
+password, one eye for the password and its repetition, which shows and
+hides both (AP MobileApp, Block 20), My profile's current one and System
+settings → Users'; an API key's field has none. The repetition of a new
+password is outlined in red while it differs, a line under it saying so
+(D98-A). The server's
 setting auth.password_reveal turns it off, as /healthz says before
 anyone signs in: then no field shows the eye, and the browser's own eye
 stays hidden; System settings → Users has its switch, and the page's
@@ -103,27 +107,34 @@ def reopen(page, on=None):
     frames(page)
 
 
-def check_eye(page, case, field, value):
+def check_eye(page, case, field, value, pair=None):
     """The field's eye turns it to text and back, the value, the caret and
     the autocomplete kept and the focus in the field, by a click and by
-    the keyboard."""
+    the keyboard; with pair, the repetition's field, which has no eye of
+    its own and turns with it."""
     eye = eye_of(page, field)
     eye.wait_for(state="visible")
     s = state(page, field)
     hidden(s, case, field)
-    assert s["inside"] and s["controls"] == field, f"{field}: the eye inside its box at its right end: {s}"
+    controls = field + (" " + pair if pair else "")
+    assert s["inside"] and s["controls"] == controls, f"{field}: the eye inside its box at its right end, naming what it turns: {s}"
     page.locator("#" + field).fill(value)
     page.locator("#" + field).evaluate("(el) => { el.focus(); el.setSelectionRange(2, 3); }")
     auto = s["autocomplete"]
     eye.click()
     s = state(page, field)
     shown(s, case, field)
+    if pair:
+        p = state(page, pair)
+        assert p["type"] == "text" and not p["eye"], f"{pair}: shown with {field}, no eye of its own: {p}"
     assert s["value"] == value and s["autocomplete"] == auto, f"{field}: the value and the autocomplete kept: {s}"
     assert s["keyboard"] == ["off", "none", "false"], f"{field}: shown as text, the keyboard asked for no correction: {s}"
     assert s["focused"] and s["caret"] == [2, 3], f"{field}: the focus and the caret where they were: {s}"
     eye.click()
     s = state(page, field)
     hidden(s, case, field)
+    if pair:
+        assert state(page, pair)["type"] == "password", f"{pair}: hidden with {field}"
     assert s["value"] == value and s["focused"] and s["caret"] == [2, 3], f"{field}: back, all kept: {s}"
     # the keyboard: the eye after its field, Space and Enter turn it
     eye.focus()
@@ -168,23 +179,91 @@ def test_the_sign_in_password_eye(new_context, case, watch, guard):
 
 
 def test_the_first_owners_password_eyes(new_context, case, watch, guard):
-    """The first owner's two password fields each have their eye, each
-    turning its own field alone, both hidden again at the next opening."""
+    """The first owner's password has one eye, which shows and hides the
+    password and its repetition together, the repetition drawing none (AP
+    MobileApp, Block 20); both hidden again at the next opening."""
     page = start_page(new_context, guard, watch, OPEN)
     owner_card(page)
-    check_eye(page, case, "setup-password", "own-pass")
-    check_eye(page, case, "setup-again", "own-pass")
+    assert eye_of(page, "setup-again").count() == 0, "no eye on the repetition"
+    page.locator("#setup-again").fill("own-pass")
+    check_eye(page, case, "setup-password", "own-pass", pair="setup-again")
     eye_of(page, "setup-password").click()
-    assert state(page, "setup-password")["type"] == "text" and state(page, "setup-again")["type"] == "password", "each its own field"
-    named_buttons(page, "the first owner's form with its eyes")
+    assert state(page, "setup-password")["type"] == "text" and state(page, "setup-again")["type"] == "text", "both shown"
+    named_buttons(page, "the first owner's form with its eye")
     reopen(page, "owner")
     owner_card(page)
     hidden(state(page, "setup-password"), case, "at the next opening")
+    assert state(page, "setup-again")["type"] == "password", "the repetition too"
+
+
+# The repetition's look: whether it is marked invalid, its line's text
+# where it has one, and whether its box is outlined in the page's red.
+AGAIN = """(id) => {
+  const f = document.getElementById(id);
+  const line = document.getElementById(id + '-problem');
+  const bad = getComputedStyle(document.body).getPropertyValue('--bad').trim();
+  const probe = document.createElement('span');
+  probe.style.color = bad;
+  document.body.appendChild(probe);
+  const red = getComputedStyle(probe).color;
+  probe.remove();
+  return {invalid: f.getAttribute('aria-invalid'), line: line ? line.textContent : null, described: f.getAttribute('aria-describedby'),
+          outlined: getComputedStyle(f).borderTopColor === red, lineRed: line ? getComputedStyle(line).color === red : null,
+          below: line ? Math.round(line.parentElement.getBoundingClientRect().bottom) : null};
+}"""
+
+
+def check_repetition(page, first, again, what):
+    """The repetition of a new password outlined in red while it is not
+    empty and differs from the first, \"The two passwords differ.\" under
+    it, both gone as the two match (D98-A), the line's place kept, so that
+    nothing under it moves."""
+    mismatch = page.evaluate("t('setup.mismatch')")
+    page.locator("#" + first).fill("own-pass-01")
+    s = page.evaluate(AGAIN, again)
+    assert s["invalid"] is None and s["line"] == "" and not s["outlined"], f"{what}: nothing while the repetition is empty: {s}"
+    place = s["below"]
+    page.locator("#" + again).fill("own-pass-0")
+    s = page.evaluate(AGAIN, again)
+    assert s["invalid"] == "true" and s["line"] == mismatch and s["described"] == again + "-problem", f"{what}: marked while it differs: {s}"
+    assert s["outlined"] and s["lineRed"], f"{what}: in red: {s}"
+    assert s["below"] == place, f"{what}: the line in its place, nothing under it moved: {s['below']} vs {place}"
+    page.locator("#" + again).press("1")
+    s = page.evaluate(AGAIN, again)
+    assert s["invalid"] is None and s["line"] == "" and not s["outlined"] and s["below"] == place, f"{what}: gone as they match, its place kept: {s}"
+    page.locator("#" + first).fill("own-pass-02")
+    s = page.evaluate(AGAIN, again)
+    assert s["invalid"] == "true" and s["line"] == mismatch, f"{what}: a change of the first marks it again: {s}"
+    page.locator("#" + again).fill("")
+    assert page.evaluate(AGAIN, again)["line"] == "", f"{what}: emptied, nothing"
+
+
+def test_the_repetition_that_differs(new_context, case, watch, guard):
+    """On the first owner's form and My profile's change of password, the
+    new password's two users, the repetition is outlined in red while it
+    differs from the password, with its line under it, both gone as the two
+    match, and none again at the card's next opening."""
+    page = start_page(new_context, guard, watch, OPEN)
+    owner_card(page)
+    check_repetition(page, "setup-password", "setup-again", "the first owner's form")
+    page.locator("#setup-password").fill("own-pass-01")
+    page.locator("#setup-again").fill("own-pass-0")
+    assert page.evaluate(AGAIN, "setup-again")["line"] != ""
+    reopen(page, "owner")
+    owner_card(page)
+    assert page.evaluate(AGAIN, "setup-again")["line"] == "", "none at the next opening"
+
+    page = fresh_page(new_context, guard, watch)
+    sign_in(page, "operator", OPERATOR_PASSWORD)
+    show_view(page, "profile")
+    open_fold(page, "#me-password")
+    page.locator("#me-new").wait_for(state="visible")
+    check_repetition(page, "me-new", "me-again", "My profile")
 
 
 def test_my_profiles_password_eyes(new_context, case, watch, guard):
-    """My profile's change of password, the current one and the new one
-    twice, each with its eye; the values typed kept; a password shown is
+    """My profile's change of password, the current one with its eye and
+    the new one twice with one eye for both; the values typed kept; a password shown is
     hidden again when the fold is closed and opened, the field drawn, also
     where the two come before the page takes the first, as one toggle
     event, as a loaded page meets them; hidden in the very task that
@@ -197,8 +276,10 @@ def test_my_profiles_password_eyes(new_context, case, watch, guard):
     show_view(page, "profile")
     open_fold(page, "#me-password")
     page.locator("#me-new").wait_for(state="visible")
-    for field in ("me-current", "me-new", "me-again"):
-        check_eye(page, case, field, "not-set-" + field)
+    check_eye(page, case, "me-current", "not-set-me-current")
+    assert eye_of(page, "me-again").count() == 0, "no eye on the repetition"
+    page.locator("#me-again").fill("not-set-me-again")
+    check_eye(page, case, "me-new", "not-set-me-new", pair="me-again")
     named_buttons(page, "My profile's password with its eyes")
     eye_of(page, "me-new").click()
     shown(state(page, "me-new"), case, "before the fold closes")

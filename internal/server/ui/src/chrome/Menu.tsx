@@ -9,15 +9,19 @@
  * with every page but Rooms, at every width, each for the roles that may
  * open it (their needs-* classes, login.js applyCaps): the log; the
  * settings pages; Personal settings, named after who is in in its
- * tooltip; in the app Select server, and after it This server's
- * settings… and App settings…, each where the app has its call, which hand
- * over to the app's own page as Select server does (AP MobileApp, D73-A);
- * and Sign out, as the personal page's
- * button says it, or on a server without users where the owner can be
- * created from here Create the owner…, which opens the sign-in card with
- * its form and gives the focus back to ☰'s button when it is left (AP
- * FirstOwner, D9). Its first row is Massimo's icon and the server's
- * version, which copies itself, a rule under it. ☰ carries the worse of
+ * tooltip; a rule, then in the app App settings, This server's settings,
+ * each where the app has its call, which hand over to the app's own page
+ * as Select server does (AP MobileApp, D73-A), and Select server, none
+ * with "…", since each only opens a page (D96-A), and a rule; and Sign
+ * out, as the personal page's button says it, or on a server without
+ * users where the owner can be created from here Create the owner…,
+ * which opens the sign-in card with its form and gives the focus back to
+ * ☰'s button when it is left (AP FirstOwner, D9). In a browser, without
+ * the app's three, the two rules draw as one, the second left out, and
+ * neither stands where nothing follows it (AP MobileApp, Block 20). Its
+ * first row is Massimo's icon and the server's version, which copies
+ * itself and closes ☰, its word at the window's foot (D115-D), a rule
+ * under it. ☰ carries the worse of
  * the log's mark and the unsaved settings' (AP UnsavedMarks, Block 5), an
  * entry the disk where a page it leads to holds a form unsaved or failed
  * (shared/forms.ts), and its name and tooltip say both. The entry of the
@@ -27,6 +31,7 @@
  */
 
 import { toAppSettings, toServerSettings, toServers } from "../shared/app";
+import { hid } from "../shared/cls";
 import { unsavedTone } from "../shared/forms";
 import { Icon, IconButton, Mark, Sign } from "../shared/icon";
 import { useLang } from "../shared/lang";
@@ -67,6 +72,10 @@ function Menu({ view }: { view: string }) {
   const serverSettings = !!appServerSettings();
   const appSettings = !!appAppSettings();
   const owner = firstOwnerOf(me.value);
+  // the rules around the app's three: the first where anything follows it, the second where the app's three show and
+  // Sign out or Create the owner follows them, so that a browser has one, and none stands at ☰'s end
+  const last = !!who.signOut || !!owner;
+  const inApp = servers || serverSettings || appSettings;
   const entry = (p: (typeof MENU_PAGES)[number]) => (
     <MenuItem key={p.view} id={p.id} cls={p.needs || undefined} current={view === p.view ? "page" : undefined}
       icon={p.view === "log" ? <Sign kind="log" state={log.tone} blink="log-sign" /> : <Icon symbol={p.icon} cls="ni" />}
@@ -89,12 +98,14 @@ function Menu({ view }: { view: string }) {
       {MENU_PAGES.slice(1, 5).map(entry)}
       <hr class="menu-sep" />
       {entry(MENU_PAGES[5])}
-      <MenuItem id="menu-servers" cls={servers ? undefined : "hidden"} icon={<Icon symbol="icon-servers" cls="ni" />} label={t("app.selectServer")}
-        onClick={toServers} />
-      <MenuItem id="menu-server-settings" cls={serverSettings ? undefined : "hidden"} icon={<Icon symbol="icon-cog" cls="ni" />}
-        label={t("app.serverSettings")} onClick={toServerSettings} />
+      <hr id="menu-app-sep" class={"menu-sep" + hid(!inApp && !last)} />
       <MenuItem id="menu-app-settings" cls={appSettings ? undefined : "hidden"} icon={<Icon symbol="icon-sliders" cls="ni" />}
         label={t("app.appSettings")} onClick={toAppSettings} />
+      <MenuItem id="menu-server-settings" cls={serverSettings ? undefined : "hidden"} icon={<Icon symbol="icon-cog" cls="ni" />}
+        label={t("app.serverSettings")} onClick={toServerSettings} />
+      <MenuItem id="menu-servers" cls={servers ? undefined : "hidden"} icon={<Icon symbol="icon-servers" cls="ni" />} label={t("app.selectServer")}
+        onClick={toServers} />
+      <hr id="menu-out-sep" class={"menu-sep" + hid(!inApp || !last)} />
       <MenuItem id="menu-logout" cls={who.signOut ? undefined : "hidden"} icon={<Icon symbol={who.icon} cls="ni" useId="menu-logout-icon" />}
         label={who.signOut || t("me.signOut")} labelId="menu-logout-label" onClick={() => logout()} />
       <MenuItem id="menu-owner" cls={owner ? undefined : "hidden"} icon={<Icon symbol="icon-user" cls="ni" />} label={t("setup.ask")}

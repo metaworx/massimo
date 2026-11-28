@@ -420,8 +420,8 @@ def test_keep_open_measures(new_context, case, watch, guard, app):
 
 
 def test_the_server_named_on_the_owner_steps(new_context, case, watch, guard):
-    """In the app the server's line under the card's title (AP MobileApp,
-    D62-A) shows on the first owner's form and on the confirmation that
+    """In the app the server's line above the card's title (AP MobileApp,
+    D62-A; Block 20) shows on the first owner's form and on the confirmation that
     keeps the server open alike, the title's text each step's own, and
     the card stays where it is as the steps turn."""
     app = dict(APP, status=dict(APP["status"], server={"name": "Home", "url": URL, "node": "11111111-1111-4111-8111-111111111111", "fp": ""}))
@@ -429,7 +429,7 @@ def test_the_server_named_on_the_owner_steps(new_context, case, watch, guard):
     owner_card(page)
     line = page.locator("#login-server")
     line.wait_for(state="visible")
-    assert page.evaluate("document.getElementById('login-title').nextElementSibling.id") == "login-server", "after the title"
+    assert page.evaluate("document.getElementById('login-title').previousElementSibling.id") == "login-server", "before the title"
     assert page.evaluate("document.getElementById('login-title').textContent === t('setup.title')"), "the form's title alone"
     before = page.evaluate(LOGIN_BOX)
     keep_step(page)

@@ -48,7 +48,7 @@ while **Create the owner** turns, every way out of the card is off,
 and another request's refusal does not turn the card (AP AccessEnds, D1).
 The password form holds the one password field, its fields named,
 so that a password manager such as KeePassXC fills it.
-Every password field of the page, the sign-in's, the first owner's two,
+Every password field of the page, the sign-in's, the first owner's,
 My profile's and System settings → Users',
 has an eye at its right end (AP MobileApp, D84-A):
 a closed eye while the password is hidden,
@@ -57,6 +57,15 @@ labelled **Show password** and **Hide password**,
 a button the keyboard reaches after its field; it keeps what is typed,
 the caret and the field's focus,
 and the password is hidden again at the submit and at each opening of the sign-in card.
+A new password typed twice,
+the first owner's and My profile's **Change password**,
+has one eye, on the first field, which shows and hides both;
+the repetition has none (AP MobileApp, Block 20).
+The repetition is outlined in red while it is not empty and differs from the first,
+**The two passwords differ.** on a line under it, its description,
+both gone as the two match (D98-A), the line's place kept,
+so that nothing under it moves as it comes and goes;
+the submit says it as before.
 Once the card has closed on a sign-in or a new owner and the page's first reads after it,
 of who is in and of the user's settings, have settled,
 its password fields and the API key's are emptied (AP LooseEnds, D13, D41-A):
@@ -232,14 +241,14 @@ or the account in none of the groups the provider admits.
 The app shows no such button yet:
 the providers refuse a sign-in inside an app's page.
 In the app the card names the server it signs in to,
-on a line of its own under its title,
+on a line of its own above its title (AP MobileApp, Block 20),
 in place of the address bar the app has not (`login.status()`'s `server`,
 docs/app.md):
 the server's name as the app's list has it and the full address the page was
 opened at (`https://host:port`), the name once where it is the address, and ⓘ,
-"About this server",
+"About this server", right after the address, no line breaking between them,
 which shows the server's instance id (its `node`) and the certificate's
-fingerprint the app pinned, each copied with a tap,
+fingerprint the app pinned, each copied with a tap or by its copy icon,
 one the app does not have left out; the line shows on the sign-in,
 the first owner's form and the confirmation that keeps the server open alike,
 the ⓘ closed again at each opening; a browser shows none,
@@ -257,14 +266,14 @@ named with the user's name,
 which signs in at once with a new session from the key,
 the password staying the form chosen,
 its spinner in the icon's place while it runs, the other ways' **Sign in**,
-Cancel and **Select server…** off meanwhile,
+Cancel and **Select server** off meanwhile,
 as while the first owner is created (AP AccessEnds, D1):
 the app ends the session it held as it keeps the fingerprint's,
 so that no other way's session is made beside it,
 and it does not start while the password's or the key's sign-in runs;
 a line instead of both where the page is open over plain HTTP outside the home network,
-where the app sends no key; **Select server…**, back to the app's servers,
-last in the card's ☰; and **Cancel** left of each **Sign in**,
+where the app sends no key; **Select server**, back to the app's servers,
+last in the card's ☰ (no "…", D96-A); and **Cancel** left of each **Sign in**,
 the password's and the key's, and of the first owner's **Create the owner**,
 which goes back there too:
 with **Open at start** the card is the app's first page,
@@ -294,7 +303,11 @@ an integration's users do not count,
 so an integration approved on an open server leaves it open (AP LooseEnds, D1):
 the card is titled that there are no users yet,
 and has the form that creates the first owner instead of the ways to sign in:
-its name, its password typed twice and, in the app, the switch and Cancel;
+its text, then the command that creates the owner on the box,
+`massimo user add`, on a line of its own, in monospace and never wrapped,
+copied by a tap or by its icon (AP MobileApp, Block 20);
+its name, its password typed twice with one eye,
+and, in the app, the switch and Cancel;
 its ☰ as at a sign-in, no provider.
 Its fields are emptied at each opening,
 and its two passwords once the owner is made,
@@ -462,6 +475,9 @@ which its field then shows:
 the page sends it neither with a later push nor with the settings a sign-in
 hands a server that holds none of the user's,
 and the user makes it again if they want it (AP SteadyTests v1.1, D14-A).
+A colour scheme saved, imported or deleted so goes back the same way
+to the schemes that held, the choice and the page's colours with it
+(AP SteadyTests v1.2, Block 19).
 A setpoint stepped and still waiting for its two seconds is dropped as the sign-in opens,
 and its tile says so;
 a settings change waiting for its second waits for the sign-in.
@@ -553,7 +569,7 @@ The compacted header has **↑**, back to the top, first of the page buttons:
   a blue cube is the sign of the Cubes found and not served.
   Open, it stays open when data comes in, the focus where it was,
   and shows what came: a Cube's new name, a problem, a Cube found.
-  In the app the list ends with **Select server…**, which shows the app's
+  In the app the list ends with **Select server**, which shows the app's
   servers (docs/app.md).
   The search's entry, **Search for new Cubes…**,
   asks the server to look for Cubes on the LAN (about two seconds;
@@ -620,8 +636,12 @@ The compacted header has **↑**, back to the top, first of the page buttons:
   until nothing is left to list and the list says so,
   the green check in the pill.
 - **The version** is ☰'s first row, short and small, after Massimo's icon,
-  a rule under it; its tooltip is the whole version,
-  "(server version)", and a click copies it.
+  its copy icon at the row's end, a rule under it;
+  its tooltip is the whole version, "(server version)",
+  and a click on it or on its icon copies the whole version and closes ☰,
+  the focus back on ☰'s button;
+  "Copied" shows at the window's foot,
+  since a bubble above the row would go with ☰ (AP MobileApp, Block 20, D115-D).
   While the sign-in's card is open there is no header:
   the version is at the card's foot and first in its ☰.
   The Cube's clock is in the Cube's facts, under System settings → **Cubes**:
@@ -635,18 +655,25 @@ The compacted header has **↑**, back to the top, first of the page buttons:
   **System settings**, for a role with one of its capabilities, **Maintenance**,
   for those and a role with `update`, `restart` or `reboot`,
   and **System info**, for every role with `read`; **Personal settings**,
-  its tooltip naming whose they are, by display name and login,
-  in the app **Select server…**, back to the app's servers,
-  then **This server's settings…** and **App settings…**,
-  which show the app's own page with that server's settings open,
-  or its App settings (docs/app.md; AP MobileApp, D73-A):
+  its tooltip naming whose they are, by display name and login;
+  a rule, then in the app **App settings** and **This server's settings**,
+  which show the app's own page with its App settings,
+  or that server's settings open (docs/app.md; AP MobileApp, D73-A):
   the server's page neither reads nor saves them,
-  each shown where the app has its call;
+  each shown where the app has its call,
+  and **Select server**, back to the app's servers,
+  none of the three with "…", since each only opens a page (D96-A),
+  and a rule after them;
   and **Sign out** (Forget key for an API key or the token,
   none on an open server),
   or on a server without users where the owner can be created from here **Create
   the owner…**, which opens the sign-in card with its form (FirstOwner D9),
   in the accent and bold, as the personal page's button.
+  In a browser, without the app's three, the two rules draw as one,
+  and no rule stands at ☰'s end where nothing follows it (Block 20).
+  In the app **Sign out** shows the app's list once the session is ended and forgotten,
+  in place of that server's sign-in card;
+  where the app does not take the page there, the card shows, as in a browser.
   It is highlighted while one of its pages is shown, as a page button is,
   that page's entry marked current.
   While the log holds a warning or an error not yet settled or marked seen (see Log),
@@ -1563,7 +1590,12 @@ open the page at their card.
 **My profile** is for a user signed in (not on an open server,
 nor with the server's API token).
 Behind the last button of each group below, an ⓘ opens what its buttons do,
-as the settings' ⓘ do:
+as the settings' ⓘ do.
+What a change of the card's comes to is said on the line at the card's foot;
+a failure also in the page's toast, in red (AP MobileApp, D104-A, F45),
+since that line may be out of view on a long card,
+as after a Revoke the server did not answer;
+the line keeps it once the toast has gone:
 
 - **Display name**, the name the personal page and the users list show,
   with **Reset** and **Save**, off while it is the one stored.
@@ -1577,7 +1609,9 @@ as the settings' ⓘ do:
   A user with keys only, such as the owner made from `MASSIMO_API_TOKEN`,
   has **Set a password** instead, without a current one, and a line saying
   that it lets the user sign in by name in any browser.
-  The new password has the rule's line under it;
+  The new password has the rule's line under it,
+  and one eye for it and its repetition,
+  which is outlined in red while it differs (above, at the sign-in);
   a Save the rule refuses says so there, puts the focus in it,
   and sends nothing.
   **Reset** empties the fields;
@@ -1879,6 +1913,7 @@ and a line of the settings file that comes to differ while the panel is shown
 gets its notice with **Take the file's value**.
 The pairing is part of the panel and follows in place too:
 the countdown counts down in its line, a device that joins is added under it,
+and stays where an answer of the pairing asked for before it joined comes after it,
 and the time typed and a joined device's name and room stay, with the focus,
 through the countdown, a pairing event, a device that joins and a poll;
 what a joined device's form holds stays while the panel moves
@@ -1952,7 +1987,8 @@ and that with that header the server reads the proxy's certificate;
 a page on HTTPS from a server without TLS says "(proxied)" too,
 and that `-trusted-proxies` would show more.
 The server's version copies on a click, or by its copy icon, whole,
-with what it was built with (the header's does too, without the icon);
+with what it was built with (☰'s does too, closing ☰,
+its "Copied" at the window's foot);
 so do each Cube proxy's serial, the serial it answers discovery with ("as …",
 where it answers discovery) and its address,
 which the original software connects to.
@@ -2909,9 +2945,11 @@ A browser that opens that page sees a line saying it is the app's.
 A server's page in the app is this page,
 except that the app keeps its session in place of the browser,
 behind the phone's fingerprint or PIN where the server's settings in the app ask for it,
-the sign-in card names the server under its title, and ☰ has **Select server…**,
-**This server's settings…** and **App settings…**, which show the app's page,
-the last two with that server's settings or App settings open.
+the sign-in card names the server above its title,
+☰ has **App settings**, **This server's settings** and **Select server**,
+which show the app's page,
+the first two with App settings or that server's settings open,
+and **Sign out** shows the app's list (AP MobileApp, Block 20).
 
 ## How the page is built
 
@@ -3050,7 +3088,7 @@ each of them:
 | `state.settings` | `loadSettings` (at the start and at every applying of the settings), `setSetting` | a `live` object, a signal per setting |
 | `state.device` | `loadSettings` (as this browser keeps them), `storeDeviceOverrides` | the settings kept for this device alone, a signal |
 | `state.me` | `loadMe` and a sign-out's `forgetSession` (login.js) | the signal `me` of `shared/me.ts` itself |
-| `themeState.custom`, `.draft`, `.base` | `themeState.custom` by theme.js (the schemes taken, saved, imported, forgotten) and the scheme editor's Delete; `.draft` and `.base` by the scheme editor (`prefs/scheme.ts`) | signals |
+| `themeState.custom`, `.draft`, `.base` | `themeState.custom` by theme.js (the schemes taken, saved, imported, forgotten, taken back at a refused push) and the scheme editor's Delete; `.draft` and `.base` by the scheme editor (`prefs/scheme.ts`) | signals |
 
 What stays plain, and why: `state.details` (a cache of a device's detail,
 no part draws from it),
@@ -3165,7 +3203,12 @@ and wires with `addEventListener`; no script uses `innerHTML`.
 
 `app.js` opens the event stream with a ticket,
 none while a card the user opened holds a running page still (`connectEvents`,
-AP FirstOwner D35), and hands each kind on:
+AP FirstOwner D35);
+a ticket opens the stream of the Cube it was asked for alone:
+where another Cube is shown once it comes, chosen meanwhile
+or the one asked for gone from the list,
+the page drops it and asks for the shown Cube's (AP SteadyTests v1.2, Block 20).
+It hands each kind on:
 `state` to `updateDevice` and the log; `battery` to `updateBattery` (rooms.js,
 the device's level alone), the log and `MassimoParts.serverEvent`; `hello`,
 `disconnected` and `slots` to `loadCubes`, `metadata`, `device_forgotten`,
@@ -3214,7 +3257,10 @@ which `copied` calls):
 above the control the user acted on, centred on it as far as the window lets it,
 8 px inside the window's edges at most,
 and below the control where the window has no room above it;
-at the window's bottom centre, above the safe area, where no control is given.
+at the window's bottom centre, above the safe area, where no control is given:
+the version rows of the server's ☰ and of the app's list's ☰ say it there,
+since a tap on them closes the menu that holds them (AP MobileApp, D115-D;
+`copyable`'s and `copyIcon`'s `foot`, the parts' `Copy` with `foot`).
 It stays 1.4 s, unless told otherwise, and a newer bubble takes its place;
 it goes earlier at a scroll that moves its control, the page's or a box's,
 and once the control has left the page or is hidden,
@@ -3343,7 +3389,7 @@ for the first owner's toast and the log's `open_setup` line.
 | `live`, `liveMap` | `live.ts` | objects whose properties are signals, for what a region keeps per place; the plain code reads and writes them as before | `init`; `make`, then `of(key)`, `forget(key)` (what it was kept for is gone), `clear()` |
 | `lang`, `useLang`, `languageChanged`, `tParts`, `joinParts`, `languageOptions` | `lang.ts` | the page's language as a signal, raised by `applyLanguage` (`MassimoParts.language`, `languageChanged`); a text with parts in it (`tNodes`); parts joined with " · ", the empty ones left out; the choices of the language, from the browser first (My settings, the sign-in's ☰) | `key`, `texts`, `parts`; `parts`, `lead` (" · " before the first too) |
 | `ModeSelect` | `mode.tsx` | the mode's choice, light, dark or as the system, `state.settings.theme`, a choice to `chooseMode` (Appearance, the sign-in's ☰) | `id`, `label`, `help`, `wide` |
-| `version`, `VersionRow` | `server.tsx` | the server's version as `/healthz` gave it when the page loaded (`MassimoParts.chrome.version`), the sign-in card's foot reading it; a ☰'s first row, Massimo's mark and the short version, ☰'s copying the whole, the sign-in card's as text | `id` (the version's element), `copy` |
+| `version`, `VersionRow` | `server.tsx` | the server's version as `/healthz` gave it when the page loaded (`MassimoParts.chrome.version`), the sign-in card's foot reading it; a ☰'s first row, Massimo's mark and the short version, ☰'s copying the whole with its copy icon, closing ☰ and saying it at the window's foot (AP MobileApp, D115-D), the sign-in card's as text | `id` (the version's element), `copy` |
 | `update`, `updateOut`, `updateLatest` | `update.ts` | the update's state as Software update last read it, null before (UiParts D219): whether a newer version is out and which, for the server's sign in the header and Software update's card | — |
 | `useLook`, `useIcons`, `iconsChanged` | `look.ts` | what every part's drawing reads beside its data, the language and the icons chosen (`useLook`); the icons chosen for the window and the radio alone, as a signal raised by `redrawSigns` (`MassimoParts.icons`, `iconsChanged`), which `Sign` reads | – |
 | `Island` | `island.tsx` | a plain piece inside a part: an element the part draws empty and plain code fills, again where a key or the language changed | `tag` (div, p, span), `cls`, `keys`, `fill(el)` |
@@ -3413,15 +3459,15 @@ for the first owner's toast and the log's `open_setup` line.
 | `FileButton` | `file.tsx` | a button that opens the browser's choice of a file of the types it accepts, the same file again too | `id` (the button's), `cls`, `label`, `accept`, `off`, `inputId` and `inputLabel` (the input's id and its name in the page's language: the Appearance card's Import…), `onFile(file)` |
 | `Adder` | `adder.tsx` | the end of a list that adds an item: the new item's form in its place while shown, the button that shows it hidden meanwhile, the focus in the form's first field when it comes, in the drawing's own turn, and back on the button when it goes (Users, Roles, Sign-in providers) | `id` (the button's), `formId` (the form's place), `label`, `shown`, `set(shown)`, the form as children |
 | `UserNameField`, `useNameCheck`, `wordNameError` | `username.tsx` | a new user's login name (Add a user, the first owner's form): checked 2 s after the last keystroke and when left, the store's rule and the names in use; a fixed name clears the line at once; the server's refusal worded alike (a 409, the code `user_name_bad`) | `label`, `id`, `msgId` (the line under it, which describes it), `value` and `set` (Add a user's), or neither, the field not controlled and read through `inputRef` (the first owner's, UiParts D210), `nc` (`useNameCheck(taken)`: `problem`, `say`, `check(v)`, `typed(v)`), `name` (the input's, Add a user's alone), `autocomplete`, `placeholder`, `inputRef`, `typed` (told of each keystroke and change event: the first owner's password line, whose rule takes the name) |
-| `PasswordInput`, `PasswordField`, `reveal` | `password.tsx` | a password's input with its eye, every password field's (AP MobileApp, D84-A): the button at the field's right end, inside its box, labelled Show password and Hide password, `aria-pressed`, that turns the type between `password` and `text`, the value, the caret and the `autocomplete` kept, the click keeping the focus in the field; hidden again at each change of `reset` (the card's openings, a fold's open state) and at the form's submit, in the capture before the form's handler, and when switched off, the type never turned inside a closed fold, but as it opens; no eye while `reveal`, the setting `auth.password_reveal` as `/healthz` says it (`MassimoParts.chrome.reveal`), is not `true`; the field in its row | `id`, `name`, `autocomplete`, `value` and `set`, or `inputRef`, `required`, `disabled`, `placeholder`, `reset`, `describedBy` (the line that describes it), `typed` (told of each keystroke and change event), `invalid`; the row's `label`, `hint`, `cls`, `rule` (the rule's context words: given, its line under the field, following the value, or the keystrokes, change events and the value at each refusal of a field not controlled, empty again at each change of `reset`), `refused` (the caller's count of the submits the rule refused: the line says so until the next key, the field marked invalid, while its value is still refused), `suggest` (with `rule`, the dice before the eye, labelled by what its next press gives, Suggest five words or Suggest twenty characters: a press fills the field with a suggestion, `shared/suggest.ts`, five words at the first press and at each new start, then twenty characters and five words by turns, each press turning it whatever it fills and a key leaving it, drawn again where the rule refuses it, a controlled field by `set`, one not controlled by its element and an input event, shows it as text while the field holds it, not after an edit, a change by the form, a submit or a new start, and whole in a line right under the field (`<id>-shown`, `translate="no"`), a `Copy` of it with its icon, `quiet`, keyed by the suggestion, both named Copy the password, and writes the rule's line anew; the shown line's place, two lines tall, comes with the first press, empty while the suggestion is not shown, the line emptied as the dialog the field is in closes; a suggestion drawn while another press, a key, a submit, a change from outside (Reset, a save), a new start or a sign-out came, or after either field changed, fills nothing; the line's place, once there, stays through keys; the list not had says so, any other failure that no suggestion could be made), `also` (the form's other field: `set` filled with the suggestion, `get` what it holds) |
-| `NewPassword`, `newPasswordProblem` | `password.tsx` | a new password typed twice (My profile's Change password, the first owner's form), each field with its eye, the rule's line under the first, free fields of the caller's own state, never a draft, or fields not controlled, read through their refs (the first owner's, UiParts D210); the pair's one check, the rule first (its line says it, the focus then in the first field), then the mismatch, then none typed | `ids` (the two inputs'), `names` (their name attributes, My profile's alone), `label` (the first's), `value`, `set`, `again`, `setAgain` and `inputRef` (the first's), or instead `inputRefs` (the two inputs' refs), `required`, `reset`, `context` (the rule's words), `refused` (the submits the rule refused), `suggest` (the first field's dice, its suggestion filling the second too); `password`, `again`, `context` |
+| `PasswordInput`, `PasswordField`, `reveal` | `password.tsx` | a password's input with its eye, every password field's (AP MobileApp, D84-A): the button at the field's right end, inside its box, labelled Show password and Hide password, `aria-pressed`, that turns the type between `password` and `text`, the value, the caret and the `autocomplete` kept, the click keeping the focus in the field; hidden again at each change of `reset` (the card's openings, a fold's open state) and at the form's submit, in the capture before the form's handler, and when switched off, the type never turned inside a closed fold, but as it opens; no eye while `reveal`, the setting `auth.password_reveal` as `/healthz` says it (`MassimoParts.chrome.reveal`), is not `true`; the field in its row | `id`, `name`, `autocomplete`, `value` and `set`, or `inputRef`, `required`, `disabled`, `placeholder`, `reset`, `describedBy` (the line that describes it), `typed` (told of each keystroke and change event), `invalid`, `shown` (the state whether the password shows, held by the caller, so that two fields turn together), `eye` (false: no eye of its own), `controls` (the other fields its eye turns); the row's `label`, `hint`, `cls`, `rule` (the rule's context words: given, its line under the field, following the value, or the keystrokes, change events and the value at each refusal of a field not controlled, empty again at each change of `reset`), `refused` (the caller's count of the submits the rule refused: the line says so until the next key, the field marked invalid, while its value is still refused), `suggest` (with `rule`, the dice before the eye, labelled by what its next press gives, Suggest five words or Suggest twenty characters: a press fills the field with a suggestion, `shared/suggest.ts`, five words at the first press and at each new start, then twenty characters and five words by turns, each press turning it whatever it fills and a key leaving it, drawn again where the rule refuses it, a controlled field by `set`, one not controlled by its element and an input event, shows it as text while the field holds it, not after an edit, a change by the form, a submit or a new start, and whole in a line right under the field (`<id>-shown`, `translate="no"`), a `Copy` of it with its icon, `quiet`, keyed by the suggestion, both named Copy the password, and writes the rule's line anew; the shown line's place, two lines tall, comes with the first press, empty while the suggestion is not shown, the line emptied as the dialog the field is in closes; a suggestion drawn while another press, a key, a submit, a change from outside (Reset, a save), a new start or a sign-out came, or after either field changed, fills nothing; the line's place, once there, stays through keys; the list not had says so, any other failure that no suggestion could be made), `also` (the form's other field: `set` filled with the suggestion, `get` what it holds), `problem` (what is wrong with the value now, "" for nothing: a red line under the field, `<id>-problem`, its description, the field marked invalid while it says something), `room` (the longest text that line may say, whose place it keeps while empty) |
+| `NewPassword`, `newPasswordProblem` | `password.tsx` | a new password typed twice (My profile's Change password, the first owner's form), one eye, the first field's, showing and hiding both (`PasswordInput`'s `shown`, `eye={false}` on the second, AP MobileApp, Block 20), the second outlined in red with "The two passwords differ." under it (`PasswordField`'s `problem`) while it is not empty and differs (D98-A), the rule's line under the first, free fields of the caller's own state, never a draft, or fields not controlled, read through their refs (the first owner's, UiParts D210); the pair's one check, the rule first (its line says it, the focus then in the first field), then the mismatch, then none typed | `ids` (the two inputs'), `names` (their name attributes, My profile's alone), `label` (the first's), `value`, `set`, `again`, `setAgain` and `inputRef` (the first's), or instead `inputRefs` (the two inputs' refs), `required`, `reset`, `context` (the rule's words), `refused` (the submits the rule refused), `suggest` (the first field's dice, its suggestion filling the second too); `password`, `again`, `context` |
 | `passwordProblem`, `passwordRefusal`, `serverNames`, `hostWord`, `passwordSaid`, `PasswordRule` | `password.tsx` | the rule of a new password, as Go's `internal/password` holds it (AP PasswordRules, D7-A, D50-A): `too_short` below 8 code points, `too_long` above 64, then `context` where it contains a word of the names given, `massimo` or `maxcube` (each name and each run of letters in it, of 4 letters or more, compared lower-cased a code point at a time), `""` where it may be set, the answers of its `testdata/cases.json`, which the UI test gives it through `MassimoParts.passwordProblem`; `passwordRefusal`, the rule with the server's names beside the user's, which every form asks; `serverNames`, the first label of the page's host (`hostWord`, none for an IP address or `localhost`, as Go's `HostWord` answers the hosts of `cases.json` through `MassimoParts.hostWord`) and in the app the name it gives the server; a refusal's words, while typed or for a refused submit; the line under a new password's field (D6-A), drawn by `PasswordField`'s `rule`: the hint with an i while empty, the refusal with a warning's sign or a tick, a refused submit until the next key, what it says of a suggestion (shown, the list not loaded, none found), never the password, a status region written only when what it says changes, its place the tallest of its texts | `password`, `context`; `password`, `names`; `host`; `answer`, `refused`; `id`, `value`, `context`, `refused`, `note`, `fresh` (raised at each suggestion: the line emptied and written again) |
 | `suggestPassword`, `words`, `chars`, `wordList` | `suggest.ts` | a suggested password (AP PasswordRules, D14-A to D19-A): five words of EFF's long list joined by "-" or twenty characters of the 56 letters and digits without `0 O o 1 l I`, picked by `crypto.getRandomValues` without bias (a word's 32-bit number at or above floor(2^32 / 7776) × 7776, a character's byte at or above 224, drawn again), drawn again where the rule given refuses it, at most 20 times, null after; the list `/ui/words-en.txt` fetched once at the first suggestion of words, a fetch running shared, taken only as 7,776 lines of the list's form (`a-z`, `-` inside, none twice), one that fails a `ListError`, tried again at the next; which kind a press asks for is its field's (`PasswordField`), nothing kept in the browser; `MassimoParts.suggestPassword`, so that the UI test draws a thousand | `kind`, `refused(password)`; `list`; —; — |
 | `toServers` | `app.ts` | back to the app's servers where the page is in the app (`appConnect` of `login.js`): ☰'s Select server, the sign-in's ☰ and Cancels, the first owner's Cancel | |
-| `toServerSettings`, `toAppSettings` | `app.ts` | to this server's settings and to the app's on the app's own page (`appServerSettings` and `appAppSettings` of `login.js`, contract version 5): ☰'s two entries after Select server | |
+| `toServerSettings`, `toAppSettings` | `app.ts` | to this server's settings and to the app's on the app's own page (`appServerSettings` and `appAppSettings` of `login.js`, contract version 5): ☰'s two entries before Select server | |
 | `app`, `readApp`, `appKeyId`, `signInRevoked` | `app.ts` | the app's status of the login by fingerprint, a signal read again at each opening of the sign-in, a fingerprint refused, the first owner's form and My profile shown (`login.status`), null in a browser; its key of this device's id, 0 for none; the ids of what the last sign-in's `setToken` revoked, `[]` in a browser (`tokenAnswer` of `login.js`) | `st` (the status) |
 | `KvList`, `CountList` | `kv.tsx` | a list of facts, a name and its value each, every fact given, the caller leaving out those it does not show; a list of counts by name, sorted, in columns | `facts` (`[name, value, mono]`); `counts` |
-| `Copy`, `CopyIcon`, `CopyPair` | `copy.tsx` | a text that copies itself, a copy icon (`copyEl`, `copyIcon`); something with its copy icon after it, a text or a link (an address served: an integration's, System info's) | `text`, `value` (what it copies, where it is not the text), `label` (named "Copy …"), `name` (its whole name in its place: the server's version, a suggested password's Copy the password, the key just made's Copy the key), `icon`, `quiet` (the text hidden from a screen reader inside it, the name alone told, given only with `name`: a suggested password), `cls`, `id`; `get`, `label`; `get`, `label`, what it follows as children |
+| `Copy`, `CopyIcon`, `CopyPair` | `copy.tsx` | a text that copies itself, a copy icon (`copyEl`, `copyIcon`); something with its copy icon after it, a text or a link (an address served: an integration's, System info's) | `text`, `value` (what it copies, where it is not the text), `label` (named "Copy …"), `name` (its whole name in its place: the server's version, a suggested password's Copy the password, the key just made's Copy the key), `icon`, `quiet` (the text hidden from a screen reader inside it, the name alone told, given only with `name`: a suggested password), `cls`, `id`, `foot` (the bubble at the window's foot, where the copy closes the menu its control is in: a ☰'s version row, AP MobileApp, D115-D), `after` (told of the control once the copy has started: the version row's, which closes its menu); `get`, `label`, `foot`, `after`; `get`, `label`, `foot`, `after`, what it follows as children |
 | `Link` | `link.tsx` | a link in a tab of its own, the text alone for a url that is not http(s) | `url`, `text`, `cls` |
 | `DeviceIds` | `device.tsx` | a device's serial and radio address | `serial`, `rf`, `always` |
 | `fmtSetpoint`, `TEMP_OFF` | `setpoint.tsx` | a setpoint as the devices' displays show it, OFF for 4.5 °C without a unit, else as `fmtTemp` gives it, no ON for 30.5 °C, in every text that shows one (a tile's SET, a device row, More, a write's result, the log's "OFF (4.5 °C)"); the number fields keep 4.5; `fmtSetpoint` of `app.js` is the plain scripts' | `v`, `unit` |
@@ -3553,6 +3599,8 @@ the last outcome, Start's or Stop's request under way,
 the seconds left, which its timer moves on every second,
 asking for the state every third second where the stream does not report it,
 and what each joined device's form keeps, made where the device is listed;
+a read's answer lists its devices and keeps those listed since it was asked for
+that it lacks, a paired event's among them (AP SteadyTests v1.2, Block 21);
 the Cube's rooms its forms offer, read from `GET …/rooms` for every Cube,
 the shown one too;
 and what it sends, as `pairing.js` sent it;
@@ -3808,9 +3856,12 @@ which `header.js` hands it as `MassimoParts.chrome.version(v)`,
 and its entries from the pages' store (`ui/src/shared/pages.ts`) and who is in
 (`ui/src/shared/me.ts`), worded by its `whoOf`,
 as the personal page's row words it: Sign out or Forget key,
-and whose Personal settings they are; in the app Select server,
-by `appConnect` of `login.js`, This server's settings… and App settings…,
-by its `appServerSettings` and `appAppSettings`, and Sign out by its `logout`.
+and whose Personal settings they are;
+in the app App settings and This server's settings,
+by its `appAppSettings` and `appServerSettings`, and Select server,
+by `appConnect` of `login.js`, between two rules, one in a browser,
+and Sign out by its `logout`,
+which in the app shows the app's list by `appConnect`.
 My settings (`ui/src/prefs/`,
 AP UiParts Block 13) draws their rows into `#prefs-rows` as `parts.js` loads,
 before `init` applies the settings; the rows read `state.settings`,
@@ -4031,7 +4082,7 @@ a card opened again before the reads settle has emptied its fields at the openin
 and nothing empties what is typed in it then.
 The app's status of the login by fingerprint is read at each opening and after a
 fingerprint refused (`app.ts`),
-and with it the server the line under the title names (`Server.tsx`,
+and with it the server the line above the title names (`Server.tsx`,
 `serverOf` of `signin/app.ts`), its ⓘ closed at each opening;
 the fingerprint's button and Sign in turn until the sign-in has settled,
 and the button stays the same element while the system's prompt is open;

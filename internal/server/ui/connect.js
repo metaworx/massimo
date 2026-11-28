@@ -43,11 +43,11 @@ const APPEARANCES = ["system", "light", "dark"];
 // APP_HASH is the page's address's fragment while App settings are open,
 // so that the page the app loads again once it took a new appearance
 // opens them again; the app loads the page with it from a server's ☰,
-// App settings… (contract version 5).
+// App settings (contract version 5).
 const APP_HASH = "#app-settings";
 
 // SETTINGS_HASH is the fragment the app loads the page with from a
-// server's ☰, This server's settings… (contract version 5): that server's
+// server's ☰, This server's settings (contract version 5): that server's
 // settings open at the page's start (openFromAddress).
 const SETTINGS_HASH = /^#settings=([A-Za-z0-9_.~-]{1,64})$/;
 
@@ -1420,8 +1420,9 @@ function initMenu() {
 // version (about, contract version 7), and notes whether the phone has a
 // strong biometric enrolled (its can, conn.can): Massimo's mark, the version and
 // its copy icon; a tap on either copies the whole version (copied, as
-// every copy goes) and closes the ☰, the focus back on its summary. No
-// row where the bridge has no about, or it gives no version.
+// every copy goes, its word at the window's foot, since the ☰ it was in
+// closes: AP MobileApp, D115-D) and closes the ☰, the focus back on its
+// summary. No row where the bridge has no about, or it gives no version.
 async function initVersion() {
   if (!can("about")) return;
   let v = "";
@@ -1436,8 +1437,8 @@ async function initVersion() {
   const text = $("menu-version");
   const name = t("copy.what", { what: t("connect.version", { version: v }) });
   text.textContent = v;
-  copyable(text, () => v, name);
-  const icon = copyIcon(() => v, name);
+  copyable(text, () => v, name, { foot: true });
+  const icon = copyIcon(() => v, name, { foot: true });
   $("menu-version-row").appendChild(icon);
   // after the copy's own listener, which keeps the click from the menu's
   const close = () =>
