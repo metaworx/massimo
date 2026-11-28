@@ -1127,7 +1127,8 @@ An integration is registered by the owner, without a key typed anywhere:
    the integration's maximum, within the role `integration` and all of it
    by default; `"attach": "<uuid>"` makes the request an integration of the
    same kind that was registered before, with its users, links and maximum,
-   as after a key lost or revoked.
+   as after a key lost or revoked,
+   and gives it the request's installation id as an acceptance does (below).
    `POST …/refuse` refuses it.
 3. The integration collects its key:
    `GET /api/v1/integrations/requests/{id}?code=K7Q2PX`,
@@ -1169,6 +1170,12 @@ its users, links and maximum kept for a request from the same installation.
 A call that came with another installation id than the accepted one is
 refused and the id recorded as `pending_instance`, which
 `POST …/accept-instance` accepts.
+The installation accepted before then loses the event streams it opened for
+the integration's users, each at its next keep-alive,
+as its calls are refused (AP LinkedRemoval, D4-A),
+also where an attach gave the integration another installation id;
+the integration's own stream, without the header,
+carries no installation id and is not held to one.
 
 **On the LAN.**
 A server that announces itself (README.md, "Server") also looks for
@@ -1276,8 +1283,9 @@ on a server with regular users: on an open server the header is not read
   with the role and the state the owner left it (D2-A).
   An event stream opened for one ends at its next keep-alive,
   once it is removed, disabled, unlinked or linked anew,
-  or its own or its linked user is removed, disabled or past its end
-  ("GET /api/v1/cubes/{sn}/events").
+  its own or its linked user is removed, disabled or past its end,
+  or another installation id than the one the stream came from is accepted
+  or attached ("GET /api/v1/cubes/{sn}/events").
   Its own user and its system user are not removed ("Users", above).
 - **Without the header** the key acts as the integration itself:
   its role and its maximum (an integration's own polls and stream),
@@ -4535,8 +4543,9 @@ At each keep-alive, every 30 seconds,
 the server asks whether the stream's caller would be let in now,
 and ends the stream when not:
 a key revoked or expired, a user or role disabled,
-for a call through an integration for one of its users
-a chain that no longer lets it in or that acts as another user now
+for a call through an integration for one of its users a chain that no longer lets it in,
+that acts as another user now
+or that came from another installation than the one accepted or attached
 ("Acting for an integration's users"),
 a server that was open when the stream opened and has a user since,
 or, without a store, another token.
@@ -4550,6 +4559,12 @@ A single-use ticket for that Cube's event stream, valid for a minute:
 {"ticket": "9f86d081884c7d659a2feaa0c55ad015a3bf4f1b2b0b822c", "expires_at": "2026-11-05T15:31:12+01:00"}
 ```
 
+The stream's `?ticket=` asks first, as each keep-alive does,
+whether the ticket's caller would still be let in:
+a ticket whose key was revoked since it was issued,
+or whose caller is no longer let in for another reason,
+is refused `401` as a token that ended is, counting toward no lockout,
+and the stream sends nothing.
 Without a token configured the stream is open and the ticket not needed,
 but the route answers all the same.
 

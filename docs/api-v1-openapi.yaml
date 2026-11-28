@@ -1299,8 +1299,9 @@ paths:
         max_caps, the integration's maximum, within the role integration;
         all of it by default. attach, an integration of the same kind, makes
         the request that integration again, with its users, links and
-        maximum. Either way the integration collects its key within ten
-        minutes.
+        maximum, and gives it the request's installation id, as
+        accept-instance does. Either way the integration collects its key
+        within ten minutes.
       parameters: [{$ref: "#/components/parameters/integrationUUID"}]
       requestBody:
         content:
@@ -1335,7 +1336,7 @@ paths:
     post:
       summary: Accept the installation id last seen
       x-capability: integrations
-      description: A call that came with another installation id than the accepted one was refused and recorded as pending_instance; this accepts it.
+      description: A call that came with another installation id than the accepted one was refused and recorded as pending_instance; this accepts it. The installation accepted before then loses the event streams it opened for the integration's users, each at its next keep-alive; the integration's own stream, without the header, goes on.
       parameters: [{$ref: "#/components/parameters/integrationUUID"}]
       responses:
         "200":
@@ -3570,7 +3571,11 @@ paths:
       x-capability: read
       description: |
         Valid for one connection to this Cube's event stream within a
-        minute, so that the token never goes into a URL.
+        minute, so that the token never goes into a URL. It opens the
+        stream only while its caller would still be let in: one whose key
+        was revoked since, or who is no longer let in for another reason,
+        is refused 401 as a token that ended is, counting toward no
+        lockout.
       parameters: [{$ref: "#/components/parameters/sn"}]
       responses:
         "200":
