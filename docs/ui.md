@@ -455,6 +455,11 @@ What the page was reading when the session ended it reads again after the sign-i
 what the user did, a setpoint, a save, a deletion, any request but a read,
 is never sent again, whoever signs in and however much later:
 it fails at once, red where its result shows, as not sent since the user was signed out.
+A settings change so refused goes back at once to the value that held,
+which its field then shows:
+the page sends it neither with a later push nor with the settings a sign-in
+hands a server that holds none of the user's,
+and the user makes it again if they want it (AP SteadyTests v1.1, D14-A).
 A setpoint stepped and still waiting for its two seconds is dropped as the sign-in opens,
 and its tile says so; a settings change waiting for its second waits for the sign-in.
 For the same user a form's draft stays, so that it is one click on **Save** again,

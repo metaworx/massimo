@@ -262,6 +262,17 @@ makes, sweeps and keeps it (`tools/workdir/README.md`; AP EmulatorRuns, D3-B).
   (`helpers.Stream`): `stream.mark()`, `stream.wait(what, kind, …)`,
   which on a timeout says what came since the mark, and `stream.since(mark)`.
 
+`conftest.py` also holds `api_call`, a request of the test's own to the API,
+`clear_preferences`, which the page fixture calls,
+and `server_holds_settings(holds, token=None, **values)`,
+which sets whether the server holds a user's settings,
+the page fixture's user's unless a token is given:
+with `holds` the preference `ui`, the values given over the page's defaults,
+without it none (AP SteadyTests v1.1, D14-A).
+A sign-in and a page's load take what it holds, and hand a server that holds
+none the browser's, so a test whose outcome depends on which sets it
+(`docs/ui-testing.md`, section 9).
+
 The page fixture puts `helpers.PAGE_KIT` into the page before its own
 scripts: it records the events the page's listeners take, for `stream`,
 and lets `isolate_log` and `wait_log_live` work on the log;
@@ -662,6 +673,9 @@ hence `failed_checks_forgotten`.
   it fails at once and says so where its result shows, also once the page
   is back, a setpoint, a backup's file, a Cube's and a role's Save, a
   settings change on the page's message line and a deletion among them;
+  a settings change so refused goes back to the value that held and is
+  not sent after the sign-in, whether or not the server holds the user's
+  settings then (AP SteadyTests v1.1, D14-A);
   a read is sent again, and the stream's ticket waits for the sign-in;
   a stepped setpoint is dropped as the sign-in opens; another user sees and
   sends nothing of the first one's; and a read sent while the card is open,
@@ -1108,6 +1122,11 @@ Node is not needed.
 - A state the page takes back on a timer of its own, "Copied" or the toast,
   is held while a test checks it after more than one look
   (`with held_timers(page, "copied"):`), not raced.
+- A test whose outcome depends on whether the server holds the user's settings
+  at a sign-in or a load sets it (`server_holds_settings` of `conftest.py`),
+  while the page is signed out or right before the load,
+  rather than taking what the page's own pushes or an earlier test left;
+  where the outcome must hold in both, it is parametrised over both.
 - What a reload or a click brings is waited for,
   not looked at once right after another wait:
   the page goes on after the moment the first wait saw
