@@ -153,7 +153,7 @@ the field shows about three and a half of five words at 390 px.
 It is in the page's font at 16 px, to be read and copied by hand, broken after a "-",
 and it copies itself as the page's other strings do (AP AccessEnds, D44-A):
 a tap or a click on it, or Enter or Space, copies the suggestion,
-**Copied** showing above it and said in the page's status region,
+**Copied** showing above it in the page's bubble and said in its status region,
 over plain HTTP by the browser's copy command, as every copy of the page;
 its copy icon does the same,
 right after the words while they take one line,
@@ -1567,7 +1567,7 @@ as the settings' ⓘ do:
   **Create key** shows the new key once,
   and it copies as the page's other strings do (AP KeyLife, D1-A):
   a tap or a click on it, or Enter or Space, copies the key,
-  **Copied** showing above it and said in the page's status region;
+  **Copied** showing above it in the page's bubble and said in its status region;
   its copy icon does the same, right after the key's last line.
   Both are named **Copy the key**, not by the key,
   so that neither a screen reader nor the tooltip says it again.
@@ -1869,8 +1869,10 @@ The server's version copies on a click, or by its copy icon, whole, with
 what it was built with (the header's does too, without the icon);
 so do each Cube proxy's serial, the serial it answers discovery with ("as …",
 where it answers discovery) and its address, which the original software connects to.
-A copy says "Copied"; on a page served over plain HTTP the browser gives no
-clipboard to the page, and the copy goes through its copy command instead,
+A copy says "Copied" in the page's bubble above what it copied
+(below it at the window's top, "Signs, texts and buttons");
+on a page served over plain HTTP the browser gives no clipboard to the page,
+and the copy goes through its copy command instead,
 the focus given back to where it was.
 At its end, for a holder of `settings`,
 **Store** opens to what `massimo store info` shows:
@@ -1922,7 +1924,7 @@ The page is drawn in place as its facts are read again,
 while a certificate is being read and each time the page is shown,
 and as its clock ticks:
 the folds stay open, a text selected stays selected
-and a copy says "Copied" until it fades.
+and a copy's bubble says "Copied" at it until it fades.
 A sign-out forgets the facts, the store, the settings in effect and the credits,
 and ends the readings of a certificate;
 the next user who opens the page reads them again.
@@ -2942,7 +2944,8 @@ in the order the page loads them:
   the connect page loads it too;
 - `components.js`, the builders the connect page, `login.js`, `config.js`' kit and
   `app.js`' help build with, and what the parts call of the page's
-  (the menus' placing, a copy, a toast, a sign's blinking, a result line);
+  (the menus' placing, a copy, a bubble, a toast, a sign's blinking,
+  a result line);
 - `app.js`, the core: the state, the storage and the settings with their scopes,
   the API with the token and the 401, the helpers the plain scripts and the parts
   share (a temperature, help, the Cube clock), and a setpoint as the devices show it,
@@ -3040,6 +3043,22 @@ its entries one format at every level:
 the icon in a column of its own, the name and a grey detail beside it,
 the badges under the name, and the entries under it (`subs`) indented to the name,
 a line down from its icon.
+A short text that says what was done, such as "Copied",
+shows for a moment in the page's bubble (`showBubble` of `components.js`,
+which `copied` calls):
+above the control the user acted on, centred on it as far as the window lets it,
+8 px inside the window's edges at most,
+and below the control where the window has no room above it;
+at the window's bottom centre, above the safe area, where no control is given.
+It stays 1.4 s, unless told otherwise, and a newer bubble takes its place;
+it goes earlier at a scroll that moves its control, the page's or a box's,
+and once the control has left the page or is hidden,
+so that it never says over a new element what was done to the one before
+(a suggested password's Copy, drawn anew at each suggestion).
+It is one element, made at the first bubble,
+on the page and the connect page alike,
+over the toast and everything else of the page, hidden from a screen reader;
+its text is said once in the page's polite live region beside it.
 A button that sends a request is busy from its click until the answer:
 off, with a turning ring after its text, and `aria-busy` (`BusyButton`, `useBusy`),
 so that a second click or Enter sends nothing.
