@@ -960,14 +960,7 @@ paths:
           description: The key
           content:
             application/json:
-              schema:
-                type: object
-                properties:
-                  token: {type: string, description: "The secret, shown once"}
-                  id: {type: integer}
-                  kind: {type: string, enum: [api]}
-                  label: {type: string}
-                  created_at: {type: string, format: date-time}
+              schema: {$ref: "#/components/schemas/NewKey"}
         "400": {$ref: "#/components/responses/BadRequest"}
         "401": {$ref: "#/components/responses/Unauthorized"}
         "403": {$ref: "#/components/responses/Forbidden"}
@@ -1067,6 +1060,54 @@ paths:
               schema: {$ref: "#/components/schemas/Error"}
         "409":
           description: The token is the settings file's MASSIMO_API_TOKEN
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/Error"}
+        "429": {$ref: "#/components/responses/LockedOut"}
+        "503": {$ref: "#/components/responses/NoStore"}
+  /api/v1/users/{name}/tokens/{id}/rekey:
+    post:
+      summary: Give an API key a new secret
+      x-capability: users
+      description: |
+        A live API key gets a new secret, shown once in token, as POST
+        …/tokens shows a new key (AP KeyLife, Block 5; AP MobileApp,
+        D76-A, D81-A): its id, label, end date, exclusion from the idle
+        limit, maker and heirs stay. Whatever holds the old secret is
+        refused: the old secret is answered 401 as a token that ended,
+        which counts toward no lockout, and the key's session ends,
+        unless it is the caller's own, made from that key. Its revoke
+        code is the new secret's (POST /api/v1/tokens/revoke), which ends
+        the key and its heirs; the old secret's code ends nothing. For the key's
+        user and who manages it. A session is 400; the settings file's
+        key (from_settings in the list) 409, since the next start would
+        not add the file's token back; an integration's key 403, since
+        the integration learns its key by its approval's code alone; the
+        bearer that very key 403: a key changes nothing of its own life;
+        a key that has ended 409: it takes one once it lives again. The
+        request has no body. A retry with the same Idempotency-Key
+        answers 200 without token and gives no other. Audited as
+        token.rekey.
+      parameters:
+        - {$ref: "#/components/parameters/idempotencyKey"}
+        - {$ref: "#/components/parameters/name"}
+        - {name: id, in: path, required: true, description: The key's id from the list, schema: {type: integer}}
+      responses:
+        "200":
+          description: The key with its new secret
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/NewKey"}
+        "400": {$ref: "#/components/responses/BadRequest"}
+        "401": {$ref: "#/components/responses/Unauthorized"}
+        "403": {$ref: "#/components/responses/Forbidden"}
+        "404":
+          description: No such user, or no such live token of the user
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/Error"}
+        "409":
+          description: The key is the settings file's MASSIMO_API_TOKEN, or it has ended
           content:
             application/json:
               schema: {$ref: "#/components/schemas/Error"}
@@ -5002,6 +5043,16 @@ components:
           type: string
           enum: [idle, expired]
           description: "Why an API key has ended, listed to be revoked: idle, unused past the limit; expired, past its end date. Absent while it lives. It lives again where the limit is raised or turned off, the key kept from it, or its end date moved later or removed (AP KeyLife, D6-A); its use never brings it back"
+    NewKey:
+      type: object
+      description: "An API key with its secret, shown once: made by POST /api/v1/users/{name}/tokens, or given a new secret by POST …/tokens/{id}/rekey (AP KeyLife, Block 5); a retry with the same Idempotency-Key answers without token"
+      required: [id, kind, label, created_at]
+      properties:
+        token: {type: string, description: "The secret, shown once; the store keeps its hash"}
+        id: {type: integer}
+        kind: {type: string, enum: [api]}
+        label: {type: string}
+        created_at: {type: string, format: date-time, description: "When the key was made; a new secret keeps it"}
     TokenHeirs:
       type: array
       description: "The ids of the keys a revoke took with the token, the keys it made and theirs (made_by), oldest first; [] for none"

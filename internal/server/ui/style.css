@@ -2250,9 +2250,9 @@ massimo-week-program { display: contents; }
 /* a grid item's margins collapse with nothing outside it: the first line's
    top margin, which collapsed with the row's above it, would add itself */
 .login-forms > * > :first-child { margin-top: 0; }
-/* Change… and Revoke, or in their place the settings file's key's word
-   (shared/tokens.tsx), at the row's end; a key's Change… form on a line
-   of its own under the row (AP KeyLife, Block 3) */
+/* Change…, New secret and Revoke, or in their place the settings file's
+   key's word (shared/tokens.tsx), at the row's end; a key's Change… form
+   on a line of its own under the row (AP KeyLife, Block 3) */
 .user-tokens li .token-buttons, .user-tokens li .token-settings { margin-left: auto; }
 .user-tokens li .token-buttons { display: inline-flex; flex-wrap: wrap; align-items: center; gap: 6px; }
 .user-tokens li .token-change { flex-basis: 100%; display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }
@@ -2261,6 +2261,9 @@ massimo-week-program { display: contents; }
    phone's width (AP KeyLife, Block 4) */
 .user-tokens li .token-change .token-end-field { flex: 1 1 100%; }
 .user-tokens li .token-change .token-end-field .inline { flex-wrap: wrap; justify-content: flex-end; }
+/* New secret's question on a line of its own under the row, in place of
+   its buttons (AP KeyLife, Block 5) */
+.user-tokens li .confirm-box { flex-basis: 100%; }
 /* the key My profile was opened with (#profile?key=<id>, ui/src/profile/
    store.ts markKey, shared/tokens.tsx): tinted and outlined in the
    accent, in either theme */

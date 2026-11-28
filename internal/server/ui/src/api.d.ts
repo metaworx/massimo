@@ -740,6 +740,25 @@ export interface Token {
 }
 
 /**
+ * An API key with its secret, shown once: made by POST
+ * /api/v1/users/{name}/tokens, or given a new secret by POST
+ * …/tokens/{id}/rekey (AP KeyLife, Block 5); a retry with the same
+ * Idempotency-Key answers without token
+ */
+export interface NewKey {
+  /** The secret, shown once; the store keeps its hash */
+  token?: string;
+  id: number;
+  kind: "api";
+  label: string;
+  /**
+   * When the key was made; a new secret keeps it
+   * @format date-time
+   */
+  created_at: string;
+}
+
+/**
  * The ids of the keys a revoke took with the token, the keys it made and theirs
  * (made_by), oldest first; [] for none
  */

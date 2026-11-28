@@ -472,6 +472,14 @@ the app never sets one, since its key is made by the page's session without one,
 and the key itself may not move its own end date;
 where the date is moved later before the app's next login,
 that login goes through.
+So does a key given a new secret elsewhere (AP KeyLife, Block 5):
+the phone keeps the old secret,
+which the server answers `401` as a token that ended,
+so the next login by fingerprint is refused and the app forgets the kept login;
+the key's session, made by an earlier login, ends with the new secret.
+The page in the app offers no New secret on this device's key (the status' `key_id`),
+nor on the key its session was made from,
+since the phone would keep the old secret: nothing to build in the app.
 
 - **Enabling.**
   The sign-in form asks `login.status()` when it is drawn,

@@ -916,9 +916,12 @@ func (s *Server) principalFor(ctx context.Context, tok store.Token, now time.Tim
 // for would be let in now: an open server still open, the one token of a
 // server without a store unchanged, a user's token alive (neither
 // revoked nor past its end, and a session made from a key only while the
-// key is neither: store.TokenAlive), its user and role still allowed and
-// holding read, and for a call through an integration for one of its
-// users the chain and the installation id again (stillActsFor). A store
+// key is neither: AP KeyLife, Block 2) and still holding the secret it
+// was let in with, so that a stream opened with a key's old secret, or a
+// ticket taken with it, ends at the key's new secret (store.TokenAliveAs,
+// Block 5), its user and role still allowed and holding read, and for a
+// call through an integration for one of its users the chain and the
+// installation id again (stillActsFor). A store
 // that cannot be read ends the stream, as authorize fails closed. The
 // stream asks at each keep-alive (server.go, events), and authorize when
 // it redeems a stream's ticket.
@@ -936,7 +939,7 @@ func (s *Server) stillAdmitted(ctx context.Context, p *principal) bool {
 	if mode != modeUsers {
 		return false
 	}
-	tok, ok, err := s.opts.Store.TokenAlive(ctx, p.token.ID)
+	tok, ok, err := s.opts.Store.TokenAliveAs(ctx, p.token)
 	if err != nil || !ok {
 		return false
 	}

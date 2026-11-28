@@ -17,7 +17,8 @@ import (
 )
 
 // idleView is what a test reads of a token's answer: its life (AP
-// KeyLife, Blocks 3 and 4).
+// KeyLife, Blocks 3 and 4), and its maker (Block 2), which a new secret
+// keeps (Block 5).
 type idleView struct {
 	ID           int64      `json:"id"`
 	Kind         string     `json:"kind"`
@@ -28,6 +29,7 @@ type idleView struct {
 	IdleEndsAt   *time.Time `json:"idle_ends_at"`
 	Ended        string     `json:"ended"`
 	FromSettings bool       `json:"from_settings"`
+	MadeBy       int64      `json:"made_by"`
 }
 
 // tokensOf lists a user's tokens as the API answers them, by id.

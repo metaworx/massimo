@@ -13,7 +13,7 @@
  * read is the caller's to drop where its answer comes too late.
  */
 
-import type { Identity, Token, TokenHeirs } from "../api";
+import type { Identity, NewKey, Token, TokenHeirs } from "../api";
 import type { OkText } from "./action";
 
 /**
@@ -88,6 +88,19 @@ export interface TokenLife {
 /** setTokenLife changes the life of one of a user's API keys (PUT, AP KeyLife, Blocks 3 and 4): kept from the idle limit or held to it again, its end date set, moved or removed. */
 export function setTokenLife(run: Run, name: string, tk: Token, life: TokenLife): Promise<boolean> {
   return run(name, () => api("PUT", userPath(name, "/tokens/" + tk.id), life), t("users.keyChanged", { id: tk.id }));
+}
+
+/**
+ * rekeyToken gives one of a user's API keys a new secret (POST
+ * …/tokens/{id}/rekey, AP KeyLife, Block 5), its id and label kept: the
+ * secret, which the server shows once, goes to shown alone, before the
+ * caller reads again, as createKey's key does; it is kept nowhere else.
+ */
+export function rekeyToken(run: Run, name: string, tk: Token, shown: (key: string) => void): Promise<boolean> {
+  return run(name, async () => {
+    const res = await api<NewKey>("POST", userPath(name, "/tokens/" + tk.id + "/rekey"));
+    shown(res.token || "");
+  }, t("users.newSecretMade", { id: tk.id }));
 }
 
 /** loadIdentities reads a user's identities at the sign-in providers. */

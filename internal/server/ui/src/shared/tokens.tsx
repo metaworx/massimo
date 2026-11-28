@@ -44,13 +44,19 @@
  * for who keeps alone, and never on the settings file's key nor the key
  * the page is signed in with; a date half typed in Ends, which reads as
  * empty, makes no key and changes no end, the message line saying why.
- * Moved from System settings' users (AP
- * UiParts, Block 13), its texts the users.… keys both places use.
+ * New secret (Block 5), for the same callers, on a live API key's row,
+ * asks first, then gives the key a new secret, shown once in the box of
+ * the key just made under "The new secret of key …"; never on an
+ * integration's key, the settings file's, the key the page is signed in
+ * with, nor the key its session was made from or, in the app, the key
+ * the phone keeps, whose kept login the old secret would fail (AP
+ * KeyLife, Block 5). Moved from System settings' users (AP UiParts,
+ * Block 13), its texts the users.… keys both places use.
  */
 
 import { useEffect, useLayoutEffect, useRef, useState } from "preact/hooks";
 import type { Token, User } from "../api";
-import { createKey, loadTokens, revokeOwn, revokeToken, setTokenLife, type Run, type TokenLife } from "./account";
+import { createKey, loadTokens, rekeyToken, revokeOwn, revokeToken, setTokenLife, type Run, type TokenLife } from "./account";
 import { app, appKeyId, signInRevoked } from "./app";
 import { Age, Badge } from "./badge";
 import { hid } from "./cls";
@@ -59,7 +65,7 @@ import { DateTime, Field, FormFooter, Switch, TextField, useDraft } from "./fiel
 import { useHelp } from "./help";
 import { useLang } from "./lang";
 import { isMe, own } from "./me";
-import { BusyButton, useBusy } from "./question";
+import { BusyButton, Question, useAsk, useBusy } from "./question";
 import { session, stillSession } from "./session";
 import { fmtWhen, isoOf, localOf } from "./time";
 
@@ -186,23 +192,36 @@ function KeyChange({ u, tk, run, done, keeps, ends, id, say }: {
  * Change… (KeyChange), with the switch where keeps and the end date where
  * ends, but the settings file's key and the key the page is signed in
  * with, a key changing nothing of its own life (AP KeyLife, D4-A); Cancel
- * and a Save taken give the focus back to Change…. idBase is the start of
- * the ids of its fields; say is the caller's message line, for what
- * Change… refuses itself.
+ * and a Save taken give the focus back to Change…. Where rekeys, a live
+ * API key's row has New secret (AP KeyLife, Block 5), which asks in place
+ * of the row's buttons (Question) and, at Yes, gives the key a new secret
+ * (rekeyToken), handed to rekeyed with the key's id, the focus back on New
+ * secret once the question goes; never on the settings file's key, the
+ * key the page is signed in with, the key its session was made from, nor,
+ * in the app, the key the phone keeps, which would hold the old secret.
+ * The question says that the keys made with the key stay, heirs of them
+ * by number where the list holds some (made_by), and that Revoke ends a
+ * key and the keys made with it.
+ * idBase is the start of the ids of its fields; say is the caller's
+ * message line, for what Change… refuses itself.
  */
-function TokenRow({ u, tk, labels, run, marked, deviceKey, keeps, ends, idBase, say }: {
+function TokenRow({ u, tk, labels, heirs, run, marked, deviceKey, keeps, ends, rekeys, rekeyed, idBase, say }: {
   u: User;
   tk: Token;
   labels: Map<number, string>;
+  heirs: number;
   run: Run;
   marked: boolean;
   deviceKey: number;
   keeps: boolean;
   ends: boolean;
+  rekeys: boolean;
+  rekeyed: (key: string, id: number) => void;
   idBase: string;
   say: (text: string, ok: boolean) => void;
 }) {
   const [changing, setChanging] = useState(false);
+  const ask = useAsk<HTMLButtonElement>();
   const changeRef = useRef<HTMLButtonElement>(null);
   const back = useRef(false);
   const kind = t("users.kind." + tk.kind);
@@ -213,6 +232,9 @@ function TokenRow({ u, tk, labels, run, marked, deviceKey, keeps, ends, idBase, 
   const tag = current ? "users.thisDevice" : device ? "users.thisDeviceKey" : itsKey ? "users.itsKey" : "";
   const cls = [current ? "token-current" : device ? "token-device-key" : itsKey ? "token-its-key" : "", marked ? "token-marked" : ""].filter(Boolean).join(" ") || undefined;
   const changeable = (keeps || ends) && tk.kind === "api" && !tk.from_settings && !current;
+  // a live key's, but the one this page or the phone holds: its holder would keep the old secret
+  const renewable = rekeys && tk.kind === "api" && !tk.from_settings && !tk.ended && !current && !device && !itsKey;
+  const asking = renewable && ask.asking;
   // the form closed: the focus back on Change…, in the drawing that shows it again
   useLayoutEffect(() => {
     if (!changing && back.current) {
@@ -235,23 +257,42 @@ function TokenRow({ u, tk, labels, run, marked, deviceKey, keeps, ends, idBase, 
       {tk.from_settings
         ? <span class="muted small token-settings">{t("users.fromSettings")}</span>
         : (
-          <span class="token-buttons">
+          <span class={"token-buttons" + hid(asking)}>
             {changeable && (
               <button ref={changeRef} type="button" class={"change-key" + hid(changing)} aria-label={t("users.changeKeyLabel", { label: tk.label || kind })}
                 onClick={() => setChanging(true)}>
                 {t("users.changeKey")}
               </button>
             )}
+            {renewable && (
+              <button ref={ask.ref} type="button" class={"new-secret" + hid(changing)} aria-label={t("users.newSecretLabel", { label: tk.label || kind })}
+                onClick={ask.ask}>
+                {t("users.newSecret")}
+              </button>
+            )}
             <BusyButton cls="revoke-token" label={t("users.revoke")} aria={t("users.revokeLabel", { label: tk.label || kind })}
               run={() => (current ? revokeOwn(u.name, tk) : revokeToken(run, u.name, tk))} />
           </span>
         )}
+      {asking && (
+        <Question text={heirs ? t("users.newSecretAskHeirs", { label: tk.label || kind, n: heirs }) : t("users.newSecretAsk", { label: tk.label || kind })} yes={t("users.newSecret")} no={t("action.cancel")} onNo={() => ask.done()}
+          boxRef={ask.box} onYes={async () => {
+            await rekeyToken(run, u.name, tk, (key) => rekeyed(key, tk.id));
+            ask.done();
+          }} />
+      )}
       {changeable && changing && <KeyChange u={u} tk={tk} run={run} keeps={keeps} ends={ends} id={idBase + "-end-" + tk.id} say={say} done={() => {
         back.current = true;
         setChanging(false);
       }} />}
     </li>
   );
+}
+
+/** Shown is what the box of the key just made shows: the secret, and the id of the key given it as a new secret, null for a key just made. */
+interface Shown {
+  key: string;
+  id: number | null;
 }
 
 /**
@@ -273,7 +314,10 @@ function TokenRow({ u, tk, labels, run, marked, deviceKey, keeps, ends, idBase, 
  * Change…; ends says that the caller may move the user's keys' end
  * dates, the user itself or who manages it (Block 4, D4-A): each key's
  * Change…, an integration's key's too. Create key's field Ends, empty for
- * none, is the part's own state until a key is made.
+ * none, is the part's own state until a key is made. The same callers
+ * give a key a new secret, an integration's key none (Block 5): it is
+ * shown in the box of the key just made, under "The new secret of key …",
+ * by the read that follows, as a key just made is.
  */
 export function Tokens({ u, off, open, reads, run, say, labelId, help, marked, drawn, listOnly, keeps = false, ends = false }: {
   u: User;
@@ -295,8 +339,9 @@ export function Tokens({ u, off, open, reads, run, say, labelId, help, marked, d
   const helps = useHelp(help || "", t("users.tokens"));
   const [list, setList] = useState<Token[] | null>(null);
   const [error, setError] = useState("");
-  const [shown, setShown] = useState<string | null>(null);
-  const made = useRef<string | null>(null);
+  // the key just made, or a key's new secret with the key's id (null for a key just made), shown by the read that follows alone
+  const [shown, setShown] = useState<Shown | null>(null);
+  const made = useRef<Shown | null>(null);
   const [label, setLabel] = useState("");
   const [keep, setKeep] = useState(false);
   const [end, setEnd] = useState("");
@@ -331,6 +376,13 @@ export function Tokens({ u, off, open, reads, run, say, labelId, help, marked, d
     if (list && drawn) drawn(ul.current?.querySelector<HTMLElement>("li.token-marked") || null);
   }, [list]);
   const labels = new Map((list || []).map((tk) => [tk.id, tk.label || t("users.kind." + tk.kind)]));
+  const rekeys = ends && !listOnly;
+  // the keys each key made, as the list holds them (made_by): New secret's question names how many stay
+  const heirs = new Map<number, number>();
+  for (const tk of list || []) if (tk.made_by) heirs.set(tk.made_by, (heirs.get(tk.made_by) || 0) + 1);
+  const rekeyed = (key: string, id: number) => {
+    made.current = key ? { key, id } : null;
+  };
   const make = async () => {
     const l = label.trim();
     if (!l) {
@@ -343,7 +395,7 @@ export function Tokens({ u, off, open, reads, run, say, labelId, help, marked, d
       endRef.current?.focus();
       return;
     }
-    if (await createKey(run, u.name, l, (key) => { made.current = key; }, keeps && keep, isoOf(end))) {
+    if (await createKey(run, u.name, l, (key) => { made.current = key ? { key, id: null } : null; }, keeps && keep, isoOf(end))) {
       setLabel("");
       setKeep(false);
       setEnd("");
@@ -356,15 +408,15 @@ export function Tokens({ u, off, open, reads, run, say, labelId, help, marked, d
         {error && <li class="muted small bad">{error}</li>}
         {list && !list.length && <li class="muted small">{t("users.tokensNone")}</li>}
         {(list || []).map((tk) => (
-          <TokenRow key={tk.id} u={u} tk={tk} labels={labels} run={run} marked={tk.kind === "api" && tk.id === marked} deviceKey={deviceKey} keeps={keeps && !listOnly}
-            ends={ends} idBase={labelId} say={say} />
+          <TokenRow key={tk.id} u={u} tk={tk} labels={labels} heirs={heirs.get(tk.id) || 0} run={run} marked={tk.kind === "api" && tk.id === marked} deviceKey={deviceKey} keeps={keeps && !listOnly}
+            ends={ends} rekeys={rekeys} rekeyed={rekeyed} idBase={labelId} say={say} />
         ))}
       </ul>
       {!listOnly && (
         <>
           <div class={"user-key-box" + hid(!shown)}>
-            <p class="small">{t("users.keyShown")}</p>
-            <p><Copy key={shown || ""} text={shown || ""} name={t("users.keyCopy")} icon cls="mono user-key" /></p>
+            <p class="small user-key-what">{shown && shown.id !== null ? t("users.newSecretShown", { id: shown.id }) : t("users.keyShown")}</p>
+            <p><Copy key={shown ? shown.key : ""} text={shown ? shown.key : ""} name={t("users.keyCopy")} icon cls="mono user-key" /></p>
           </div>
           <TextField label={t("users.newKey")} id={labelId} name="label" maxLength={64} placeholder={t("users.keyLabel")} value={label} set={setLabel} />
           {keeps && <Switch label={t("users.keepUnused")} id={labelId + "-keep"} name="idle_exempt" cls="key-keep" checked={keep} onChange={setKeep} />}

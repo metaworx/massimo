@@ -119,6 +119,48 @@ func TestStreamEndsWhenItsCallerIsNotLetIn(t *testing.T) {
 	testkit.Eventually(t, "the end of the stream of a key's session at the key's end", ofKey.Ended)
 }
 
+// A stream opened with a key's old secret ends at the key's new secret
+// (AP KeyLife, Block 5), as at a revoke, though the key keeps its id: one
+// opened by the Bearer header and one opened with a ticket taken with the
+// old secret; a ticket taken with it and redeemed after the new secret
+// opens none, 401 counted toward no lockout, as the redemption asks the
+// caller again (stillAdmitted, AP LinkedRemoval). A stream of another key
+// goes on, and the new secret opens one.
+func TestStreamEndsAtANewSecret(t *testing.T) {
+	t.Parallel()
+	r := startServer(t, withOptions(storeOptions(t, t.TempDir(), "")))
+	ts, s := r.ts, r.s
+	s.streamKeepAlive.Store(int64(30 * time.Millisecond))
+	st := s.opts.Store
+	old := userToken(t, st, "viewer1", store.RoleViewer)
+	other := userToken(t, st, "viewer2", store.RoleViewer)
+	key, ok, err := st.TokenByHash(t.Context(), store.HashToken(old))
+	if err != nil || !ok {
+		t.Fatalf("the key: %v %v", ok, err)
+	}
+	byBearer := openStream(t, ts, old)
+	byTicket := openTicketStream(t, ts, ticketFor(t, ts, old, "KEQ0000100"))
+	later := ticketFor(t, ts, old, "KEQ0000100")
+	stays := openStream(t, ts, other)
+	for what, w := range map[string]*testkit.Watch[testkit.Event]{"by the header": byBearer, "by a ticket": byTicket} {
+		w.Await(t, 0, "a keep-alive of the stream "+what+", before the new secret", isKeepAlive)
+	}
+	_, secret, err := st.RekeyToken(t.Context(), key.ID, 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	testkit.Eventually(t, "the end of the stream opened by the header with the old secret", byBearer.Ended)
+	testkit.Eventually(t, "the end of the stream opened with a ticket taken with the old secret", byTicket.Ended)
+	if code, text := callAPI(t, ts, "GET", "/api/v1/cubes/KEQ0000100/events?ticket="+later, "", ""); code != 401 {
+		t.Errorf("a ticket taken with the old secret, redeemed after the new one: %d %s", code, text)
+	}
+	if keys, err := st.Lockout(DefaultAuthFailures, DefaultAuthWindow, DefaultAuthLockout).Keys(t.Context()); err != nil || len(keys) != 0 {
+		t.Errorf("the late ticket counted toward a lockout: %v %v", keys, err)
+	}
+	stays.AwaitN(t, stays.Mark(), "three keep-alives of another key's stream, after the new secret", 3, isKeepAlive)
+	openStream(t, ts, secret).Await(t, 0, "a keep-alive of a stream opened with the new secret", isKeepAlive)
+}
+
 func mustUser(t *testing.T, st *store.Store, name string) store.User {
 	t.Helper()
 	u, ok, err := st.User(t.Context(), name)

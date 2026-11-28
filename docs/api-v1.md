@@ -263,7 +263,7 @@ and the OpenAPI file carries each operation's as `x-capability`:
 | `restore` | plan and run a restore, delete a kept backup | `POST …/restore/plan`, `POST …/restore`, `DELETE …/backups/{id}` |
 | `repair` | the repairs of a Cube's rooms and devices: their communication errors reset, a device's configuration re-sent from its room, a device placed or listed where the Cube and its list disagree, a room's master named, a room re-linked; "unlink all and re-link" needs `structure` as well ("Repairs", below) | `GET`/`POST …/repair/…`; `GET`/`POST …/repair/unlink-relink` with `structure` as well |
 | `guests` | create, invite, change, disable and remove users whose role is `guest`, and give them an end date: regular ones, or for a call through an integration that integration's own, which makes no user ("Users", below) | the users routes, `GET`/`POST`/`PUT`/`DELETE /api/v1/users…`, for those users |
-| `users` | every user: create, role, disable, password, tokens, the identities they sign in with | `GET`/`POST /api/v1/users`, `GET`/`PUT`/`DELETE …/users/{name}`, `GET`/`POST …/users/{name}/tokens`, `PUT`/`DELETE …/users/{name}/tokens/{id}`, `POST …/users/{name}/register`, `GET`/`POST`/`PUT`/`DELETE …/users/{name}/identities…` |
+| `users` | every user: create, role, disable, password, tokens, the identities they sign in with | `GET`/`POST /api/v1/users`, `GET`/`PUT`/`DELETE …/users/{name}`, `GET`/`POST …/users/{name}/tokens`, `PUT`/`DELETE …/users/{name}/tokens/{id}`, `POST …/users/{name}/tokens/{id}/rekey`, `POST …/users/{name}/register`, `GET`/`POST`/`PUT`/`DELETE …/users/{name}/identities…` |
 | `passwords` | set the password of a user (the manager's by default) | `GET /api/v1/users`, `GET …/users/{name}`, `PUT …/users/{name}` with a password, `POST …/users/{name}/register` |
 | `roles` | a role's capabilities and name, create and delete roles | `GET`/`POST /api/v1/roles`, `PUT`/`DELETE /api/v1/roles/{key}` |
 | `roles.disable` | disable and enable a role | `PUT /api/v1/roles/{key}/disabled` |
@@ -351,6 +351,7 @@ a page before its sign-in, or a scanner behind a proxy not in
 Nor does a token the server issued and that has ended:
 a session revoked, logged out or past its end, a revoked key,
 a key past its end date or ended unused (`auth.key_idle_days`, Tokens),
+the old secret of a key given a new one (`POST …/tokens/{id}/rekey`, Tokens),
 a session whose key was revoked, is past its end or ended unused,
 or the token of a removed user
 is answered `401` with the words of a wrong token, and counts as none,
@@ -742,7 +743,7 @@ a wrong name and a wrong password are one code, as their `error` is one:
 | `password_current_wrong` | 403 | – | `current_password` is wrong |
 | `token_label_length` | 400 | `max` | the key's label is empty or longer than `max` bytes |
 | `token_unknown` | 404 | `user`, `token` | the user has no live token of that id |
-| `token_settings_key` | 409 | – | a revoke of the settings file's `MASSIMO_API_TOKEN`, or a change of its life (`PUT …/tokens/{id}`) |
+| `token_settings_key` | 409 | – | a revoke of the settings file's `MASSIMO_API_TOKEN`, a change of its life (`PUT …/tokens/{id}`) or a new secret for it (`POST …/tokens/{id}/rekey`) |
 
 **Roles and capabilities** (see "Roles" and "Capabilities"):
 
@@ -793,6 +794,21 @@ a wrong name and a wrong password are one code, as their `error` is one:
 | `idempotency_running` | 409 | – | the request of the same `Idempotency-Key` still runs |
 | `idempotency_reused` | 422 | – | the `Idempotency-Key` was used for another request |
 | `command_unknown` | 404 | `command` | no command of that id the caller may read |
+
+**An API key's life and its new secret** (AP KeyLife; see "Tokens"):
+
+| Code | Status | Params | Refused because |
+|------|--------|--------|-----------------|
+| `key_end_passed` | 400 | `expires_at` | `POST …/tokens` or `PUT …/tokens/{id}` with an end date not in the future, `expires_at` as the server read it |
+| `end_date_year_one` | 400 | `expires_at` | an `expires_at` that reads as the zero time (`0001-01-01T00:00:00Z`), which would else mean none: a key's or a user's |
+| `key_keep_forbidden` | 403 | `user` | `idle_exempt` at `POST …/tokens` or `PUT …/tokens/{id}` from a caller that does not manage the key's user |
+| `key_life_session` | 400 | `token` | `PUT …/tokens/{id}` of a session, whose life is its own 30 days |
+| `key_life_integration_kept` | 400 | – | `idle_exempt: true` for an integration's key, always held to the idle limit |
+| `key_life_own_key` | 403 | – | `PUT …/tokens/{id}` whose bearer is that very key |
+| `new_secret_session` | 400 | `token` | `POST …/tokens/{id}/rekey` of a session |
+| `new_secret_integration` | 403 | – | `POST …/tokens/{id}/rekey` of an integration's key |
+| `new_secret_own_key` | 403 | – | `POST …/tokens/{id}/rekey` whose bearer is that very key |
+| `new_secret_ended` | 409 | `key` | `POST …/tokens/{id}/rekey` of a key that has ended, by its end date or unused |
 
 **A revoke by code** (`POST /api/v1/tokens/revoke`):
 
@@ -1308,7 +1324,8 @@ the key is changed or removed in the settings file first
 ### Tokens: /api/v1/users/{name}/tokens
 
 `GET` and `POST /api/v1/users/{name}/tokens`;
-`PUT` and `DELETE /api/v1/users/{name}/tokens/{id}`.
+`PUT` and `DELETE /api/v1/users/{name}/tokens/{id}`;
+`POST /api/v1/users/{name}/tokens/{id}/rekey`.
 A user's sessions and API keys, as `GET /api/v1/me` shows the one presented;
 the same rules of access as the user.
 
@@ -1446,6 +1463,53 @@ an end date that who manages the user set included.
 A user or a key with no right to the user is `403`, as for its other fields.
 The change is audited as `token.update`,
 its change line from and to (`null` for none).
+
+`POST …/tokens/{id}/rekey`, with no body, gives a live API key a new secret
+(AP KeyLife v1.0, Block 5; AP MobileApp, D76-A, D81-A),
+the way back to a key whose secret is lost, since none is shown again,
+and the way to refuse whatever holds the key's secret now without making another key.
+The keys made with the key (its heirs, `made_by`) stay:
+for a secret that may have leaked, Revoke ends a key and the keys made with it.
+It answers `200` as `POST` answers `201`, the new secret shown once,
+the command keeping the answer without `token`
+and a retry with its `Idempotency-Key` answering without it and giving no other:
+
+```json
+{"token": "…", "id": 4, "kind": "api", "label": "Loxone", "created_at": "…"}
+```
+
+The key keeps its row: its id, label, making, last use, end date,
+exclusion from the idle limit, maker and heirs stay.
+Its revoke code is the new secret's (`POST /api/v1/tokens/revoke`),
+which ends the key and its heirs;
+the old secret's code ends nothing (`204`), and the key lives on.
+The old secret is answered `401` as a token that ended,
+which counts toward no lockout (Authentication);
+an event stream opened with it, or with a ticket taken with it,
+ends at its next keep-alive,
+and such a ticket redeemed after the new secret opens none (`401`),
+and a request let in with it just before the new secret
+makes no session (`POST /api/v1/login/key`) and no key (`POST …/tokens`) after it,
+answered `401`;
+the key's session ends, with what it subscribed to push,
+unless it is the caller's own, made from that key,
+which stays; what the key itself subscribed to push goes.
+The key's user may, signed in or with another of its keys,
+or a session made from the key, and so may who manages the user;
+never the bearer that very key (`403`): a key changes nothing of its own life.
+A session is `400`;
+the settings file's key `409`,
+since the next start would not add the file's token back, its hash being taken;
+an integration's key `403`:
+the integration learns its key by its approval's code alone,
+and registers again once it is revoked;
+a key that has ended, by its end date or unused, `409`:
+it takes one once it lives again (D6-A);
+a token of another user, or one revoked, `404`.
+It is audited as `token.rekey`, with a change line naming the key,
+and logged, neither with a secret.
+In the app, a key given a new secret elsewhere ends the login by fingerprint
+at its next use, as a revoked one does (docs/app.md).
 
 ### Identities: /api/v1/users/{name}/identities
 
